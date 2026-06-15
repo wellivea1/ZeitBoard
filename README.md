@@ -17,7 +17,6 @@ scripts                     Reproducible setup, development, and fixture generat
 testdata                    Synthetic observations and projected sharing fixtures
 ```
 
-The application is deliberately isolated from the neighboring Zeitlog and Zeitdex workspaces. No code, branding, or repository history is shared.
 
 ## Phase-one status
 
