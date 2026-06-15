@@ -22,9 +22,9 @@ esac
 
 run_contracts() {
   if [[ "$ACTION" == fixtures ]]; then
-    python3 "$ROOT/scripts/generate-testdata.py"
+    (cd "$ROOT/tools" && GOWORK=off go run ./cmd/genfixtures)
   else
-    python3 "$ROOT/scripts/generate-testdata.py" --check
+    (cd "$ROOT/tools" && GOWORK=off go run ./cmd/genfixtures -check)
     "$ROOT/scripts/validate-contracts.sh"
   fi
 }

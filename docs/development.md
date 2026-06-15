@@ -2,9 +2,8 @@
 
 ## Prerequisites
 
-- Go 1.26.x for the root module and Wails service.
+- Go 1.26.x for the root module, the Wails service, and the contract/fixture tooling.
 - Node.js 24.16.0 and its bundled npm for the checked-in frontend lockfile.
-- Python 3.11 or newer for deterministic fixture tooling.
 - JDK 17 through 21 for Android; CI uses 17 and Android Studio's bundled JDK 21 is supported.
 - Wails system prerequisites when running the desktop shell.
 
@@ -49,6 +48,9 @@ present component that fails its command causes the script to fail.
 
 ## Fixture and contract checks
 
-`python scripts/generate-testdata.py --check` detects fixture drift. CI also
-validates each fixture against its corresponding v1 JSON Schema. Test and demo
-data must remain synthetic.
+The contract and fixture tooling is a Go module under `tools/`. From `tools/`,
+`go run ./cmd/genfixtures -check` detects fixture drift (omit `-check` to
+regenerate), and `go test ./...` validates every schema against the draft
+2020-12 metaschema and every fixture against its v1 JSON Schema (including
+negative cases). `go run ./cmd/validatecontracts` runs the validation alone.
+CI runs the same checks. Test and demo data must remain synthetic.

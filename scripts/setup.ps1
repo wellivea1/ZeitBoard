@@ -3,7 +3,6 @@ param()
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
-$ToolsVenv = Join-Path $Root ".tools\venv"
 $ToolsBin = Join-Path $Root ".tools\bin"
 $LocalNode = Join-Path $Root ".tools\node-v24.16.0-win-x64"
 if (-not (Get-Command "node" -ErrorAction SilentlyContinue) -and -not (Test-Path (Join-Path $LocalNode "node.exe"))) {
@@ -55,18 +54,9 @@ function Assert-Version {
 
 Push-Location $Root
 try {
-    $python = Require-Command "python"
-    Assert-Version "Python" (& $python.Source --version 2>&1) "Python 3\.(1[1-9]|[2-9][0-9])\."
-
-    if (-not (Test-Path $ToolsVenv)) {
-        & $python.Source -m venv $ToolsVenv
-    }
-    $venvPython = Join-Path $ToolsVenv "Scripts\python.exe"
-    & $venvPython -m pip install --disable-pip-version-check --quiet "check-jsonschema==0.37.3"
-
     $goModules = @()
     if (Test-Path (Join-Path $Root "go.mod")) { $goModules += Get-Item (Join-Path $Root "go.mod") }
-    $goSearchRoots = @("core", "apps") | ForEach-Object { Join-Path $Root $_ } | Where-Object { Test-Path $_ }
+    $goSearchRoots = @("core", "apps", "tools") | ForEach-Object { Join-Path $Root $_ } | Where-Object { Test-Path $_ }
     if ($goSearchRoots) {
         $goModules += Get-ChildItem -Path $goSearchRoots -Filter "go.mod" -Recurse -File -ErrorAction SilentlyContinue |
             Where-Object { $_.FullName -notmatch '[\\/]node_modules[\\/]' }
@@ -126,7 +116,18 @@ try {
         & $gradleWrapper --version
     }
 
-    & $venvPython (Join-Path $Root "scripts\generate-testdata.py") --check
+    # tools is an isolated module (not in go.work); GOWORK=off builds it standalone.
+    $prevGoWork = $env:GOWORK
+    $env:GOWORK = "off"
+    Push-Location (Join-Path $Root "tools")
+    try {
+        & go run ./cmd/genfixtures -check
+        if ($LASTEXITCODE -ne 0) { throw "Fixture drift detected." }
+    }
+    finally {
+        Pop-Location
+        $env:GOWORK = $prevGoWork
+    }
     Write-Host "Setup complete. Run .\scripts\dev.ps1 -Action check -Component all"
 }
 finally {

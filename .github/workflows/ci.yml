@@ -21,21 +21,20 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
-          python-version: "3.13.14"
+          go-version: "1.26.4"
+          cache: true
+          cache-dependency-path: tools/go.sum
 
-      - name: Install contract validator
-        run: python -m pip install --disable-pip-version-check "check-jsonschema==0.37.3"
-
-      - name: Check generator and fixture drift
+      - name: Check fixture drift and validate contracts
+        working-directory: tools
+        env:
+          GOWORK: "off"
         run: |
-          python -m py_compile scripts/generate-testdata.py
-          python scripts/generate-testdata.py --check
-
-      - name: Validate schemas and examples
-        run: bash scripts/validate-contracts.sh
+          go run ./cmd/genfixtures -check
+          go test ./...
 
       - name: Enforce network-free trusted prototype
         shell: bash

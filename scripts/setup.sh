@@ -2,7 +2,6 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VENV="$ROOT/.tools/venv"
 TOOLS_BIN="$ROOT/.tools/bin"
 LOCAL_NODE="$ROOT/.tools/node-v24.16.0-linux-x64/bin"
 if ! command -v node >/dev/null 2>&1 && [[ ! -x "$LOCAL_NODE/node" ]]; then
@@ -33,24 +32,11 @@ require_command() {
 
 cd "$ROOT"
 
-require_command python3
-PYTHON_VERSION="$(python3 --version 2>&1)"
-if [[ ! "$PYTHON_VERSION" =~ ^Python\ 3\.1[1-9]\. && ! "$PYTHON_VERSION" =~ ^Python\ 3\.[2-9][0-9]\. ]]; then
-  echo "Python 3.11 or newer is required; found $PYTHON_VERSION" >&2
-  exit 1
-fi
-echo "Python: $PYTHON_VERSION"
-
-if [[ ! -d "$VENV" ]]; then
-  python3 -m venv "$VENV"
-fi
-"$VENV/bin/python" -m pip install --disable-pip-version-check --quiet "check-jsonschema==0.37.3"
-
 GO_MODULES=()
 [[ -f go.mod ]] && GO_MODULES+=("$ROOT/go.mod")
 while IFS= read -r -d '' module; do
   GO_MODULES+=("$module")
-done < <(find core apps -path '*/node_modules' -prune -o -name go.mod -type f -print0 2>/dev/null)
+done < <(find core apps tools -path '*/node_modules' -prune -o -name go.mod -type f -print0 2>/dev/null)
 if (( ${#GO_MODULES[@]} > 0 )); then
   require_command go
   GO_VERSION="$(go version)"
@@ -104,5 +90,5 @@ if [[ -f apps/android/gradlew ]]; then
   bash apps/android/gradlew --version
 fi
 
-"$VENV/bin/python" scripts/generate-testdata.py --check
+(cd "$ROOT/tools" && GOWORK=off go run ./cmd/genfixtures -check)
 echo "Setup complete. Run bash scripts/dev.sh check all"

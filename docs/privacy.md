@@ -48,7 +48,7 @@ trusted website is static, synthetic, and makes no network request.
 ## Development data
 
 Fixtures, tests, screenshots, demos, and static assets contain synthetic data
-only. `scripts/generate-testdata.py` is deterministic and checks trusted-view
+only. The `tools/` fixture generator is deterministic and checks trusted-view
 fixtures for forbidden private keys. Real exports must never be committed,
 attached to issues, or used in CI.
 

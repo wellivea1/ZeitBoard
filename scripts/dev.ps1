@@ -25,11 +25,28 @@ if (-not $env:ANDROID_HOME -and (Test-Path $UserAndroidSdk)) {
 }
 
 function Invoke-Contracts {
-    if ($Action -eq "fixtures") {
-        python (Join-Path $Root "scripts\generate-testdata.py")
-        return
+    # tools is an isolated module (not in go.work); GOWORK=off builds it standalone.
+    $toolsDir = Join-Path $Root "tools"
+    $prevGoWork = $env:GOWORK
+    $env:GOWORK = "off"
+    try {
+        if ($Action -eq "fixtures") {
+            Push-Location $toolsDir
+            try {
+                & go run ./cmd/genfixtures
+                if ($LASTEXITCODE -ne 0) { throw "Fixture generation failed." }
+            }
+            finally { Pop-Location }
+            return
+        }
+        Push-Location $toolsDir
+        try {
+            & go run ./cmd/genfixtures -check
+            if ($LASTEXITCODE -ne 0) { throw "Fixture drift detected." }
+        }
+        finally { Pop-Location }
     }
-    python (Join-Path $Root "scripts\generate-testdata.py") --check
+    finally { $env:GOWORK = $prevGoWork }
     & (Join-Path $Root "scripts\validate-contracts.ps1")
 }
 
