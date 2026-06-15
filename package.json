@@ -1,5 +1,5 @@
 {
-  "name": "non24-planner",
+  "name": "zeitboard",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,8 +9,8 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
-    "dev:desktop": "npm run dev --workspace @non24/desktop-frontend",
-    "dev:trusted": "npm run dev --workspace @non24/trusted-web-prototype",
+    "dev:desktop": "npm run dev --workspace @zeitboard/desktop-frontend",
+    "dev:trusted": "npm run dev --workspace @zeitboard/trusted-web-prototype",
     "format": "prettier --write package.json tsconfig.base.json eslint.config.js .prettierrc.json apps/desktop/frontend apps/trusted-web-prototype",
     "format:check": "prettier --check package.json tsconfig.base.json eslint.config.js .prettierrc.json apps/desktop/frontend apps/trusted-web-prototype",
     "lint": "eslint apps/desktop/frontend apps/trusted-web-prototype",

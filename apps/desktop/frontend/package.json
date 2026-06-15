@@ -1,5 +1,5 @@
 {
-  "name": "@non24/desktop-frontend",
+  "name": "@zeitboard/desktop-frontend",
   "version": "0.1.0",
   "private": true,
   "type": "module",

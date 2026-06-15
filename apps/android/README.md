@@ -1,6 +1,6 @@
 # Android companion scaffold
 
-Native Kotlin and Jetpack Compose phase-one companion for Non-24 Planner.
+Native Kotlin and Jetpack Compose phase-one companion for ZeitBoard.
 
 ## Toolchain
 

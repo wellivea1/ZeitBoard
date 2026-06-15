@@ -1,6 +1,6 @@
-# Non-24 Planner
+# ZeitBoard
 
-Non-24 Planner is an early local-first scheduling prototype for people whose sleep-wake timing is free-running or highly irregular. It estimates an **observed sleep-wake rhythm** from user-controlled data, forecasts uncertain sleep and waking windows, and uses those forecasts to propose useful times for flexible tasks.
+ZeitBoard is an early local-first scheduling prototype for people whose sleep-wake timing is free-running or highly irregular. It estimates an **observed sleep-wake rhythm** from user-controlled data, forecasts uncertain sleep and waking windows, and uses those forecasts to propose useful times for flexible tasks.
 
 This repository is a phase-one scaffold. It is not a medical device, does not estimate DLMO or exact circadian phase, and does not recommend medication, light, melatonin, stimulant, hypnotic, meal, or exercise timing.
 

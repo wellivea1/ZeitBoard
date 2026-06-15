@@ -6,7 +6,7 @@
     "log_level": "info"
   },
   "storage": {
-    "database_path": "./data/non24.db"
+    "database_path": "./data/zeitboard.db"
   },
   "collectors": {
     "windows_activity": {

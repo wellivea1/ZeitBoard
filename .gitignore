@@ -23,7 +23,7 @@ __pycache__/
 
 # Android
 .gradle/
-**/build/
+apps/android/**/build/
 local.properties
 captures/
 *.jks

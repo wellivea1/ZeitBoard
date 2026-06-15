@@ -173,7 +173,7 @@ func (controller *windowsController) run() {
 	controller.mu.Unlock()
 
 	data := notifyIconData{Size: uint32(unsafe.Sizeof(notifyIconData{})), Window: window, ID: 1, Flags: nifMessage | nifIcon | nifTip, Callback: wmTray, Icon: icon}
-	copy(data.Tip[:], syscall.StringToUTF16("Non-24 Planner - double-click to open"))
+	copy(data.Tip[:], syscall.StringToUTF16("ZeitBoard - double-click to open"))
 	if result, _, callErr := procShellNotifyIcon.Call(nimAdd, uintptr(unsafe.Pointer(&data))); result == 0 {
 		controller.ready <- errors.New("add Windows tray icon: " + callErr.Error())
 		procDestroyWindow.Call(window)
@@ -237,7 +237,7 @@ func (controller *windowsController) showMenu(window uintptr) {
 		return
 	}
 	defer procDestroyMenu.Call(menu)
-	show, _ := syscall.UTF16PtrFromString("Open Non-24 Planner")
+	show, _ := syscall.UTF16PtrFromString("Open ZeitBoard")
 	quit, _ := syscall.UTF16PtrFromString("Quit")
 	procAppendMenu.Call(menu, mfString, idShow, uintptr(unsafe.Pointer(show)))
 	procAppendMenu.Call(menu, mfString, idQuit, uintptr(unsafe.Pointer(quit)))

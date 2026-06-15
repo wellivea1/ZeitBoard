@@ -174,7 +174,7 @@ export default function App() {
             <span />
           </span>
           <span>
-            <strong>Non-24</strong>
+            <strong>ZeitBoard</strong>
             <small>Trusted view</small>
           </span>
         </a>

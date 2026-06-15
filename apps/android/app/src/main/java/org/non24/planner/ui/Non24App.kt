@@ -121,7 +121,7 @@ fun Non24App(
                 Column {
                     Surface(shadowElevation = 2.dp) {
                         Text(
-                            text = "Non-24 Planner",
+                            text = "ZeitBoard",
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.SemiBold,

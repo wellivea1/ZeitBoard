@@ -35,7 +35,7 @@ private fun PermissionsRationale() {
         ) {
             Text("Health Connect privacy", style = MaterialTheme.typography.headlineSmall)
             Text(
-                "Non-24 Planner requests read-only access to sleep sessions so you can review " +
+                "ZeitBoard requests read-only access to sleep sessions so you can review " +
                     "imported sleep and add local corrections.",
             )
             Text(

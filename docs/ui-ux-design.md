@@ -1,4 +1,4 @@
-# Non-24 Planner — UI/UX & Product Design Specification
+# ZeitBoard — UI/UX & Product Design Specification
 
 **Status:** Design handoff, phase one → phase two.
 **Audience:** Codex (implementation), core/contract authors, future usability research.
@@ -52,7 +52,7 @@ document should be amended.
 
 ## 1. Executive summary
 
-Non-24 Planner helps a person whose sleep-wake timing drifts a little later (or earlier)
+ZeitBoard helps a person whose sleep-wake timing drifts a little later (or earlier)
 every day answer three plain questions, on demand and at a glance:
 
 - **Am I likely awake, asleep, or is it uncertain right now?**
@@ -230,7 +230,7 @@ strip, content pane.
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
-│ [≡]  Non-24 Planner            ● Likely awake · 4h 12m since wake   [◐][?] │  ← global status strip
+│ [≡]  ZeitBoard            ● Likely awake · 4h 12m since wake   [◐][?] │  ← global status strip
 ├───────────────┬────────────────────────────────────────────────────────────┤
 │ ◎ Overview    │                                                            │
 │ ▦ Calendar    │                  CONTENT PANE                              │

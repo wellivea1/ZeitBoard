@@ -15,7 +15,7 @@ var assets embed.FS
 func main() {
 	application := NewApp()
 	err := wails.Run(&options.App{
-		Title:             "Non-24 Planner",
+		Title:             "ZeitBoard",
 		Width:             1180,
 		Height:            760,
 		MinWidth:          900,

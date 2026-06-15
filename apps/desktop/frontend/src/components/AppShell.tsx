@@ -56,12 +56,12 @@ export function AppShell({ screen, children }: { screen: ScreenId; children: Rea
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <a className="brand" href="#/overview" aria-label="Non-24 Planner overview">
+        <a className="brand" href="#/overview" aria-label="ZeitBoard overview">
           <span className="brand-mark" aria-hidden="true">
             <span />
           </span>
           <span>
-            <strong>Non-24</strong>
+            <strong>ZeitBoard</strong>
             <small>Planner</small>
           </span>
         </a>
