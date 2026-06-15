@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Schedule request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "created_at", "zone_id", "estimate_id", "tasks", "fixed_events"],
+  "properties": {
+    "schema_version": {"$ref": "common.schema.json#/$defs/schemaVersion"},
+    "request_id": {"$ref": "common.schema.json#/$defs/identifier"},
+    "created_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+    "zone_id": {"$ref": "common.schema.json#/$defs/zoneId"},
+    "estimate_id": {"$ref": "common.schema.json#/$defs/identifier"},
+    "tasks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["task_id", "duration_minutes", "earliest_at", "latest_at", "preference"],
+        "properties": {
+          "task_id": {"$ref": "common.schema.json#/$defs/identifier"},
+          "duration_minutes": {"type": "integer", "minimum": 5, "maximum": 720},
+          "earliest_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+          "latest_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+          "preference": {
+            "type": "string",
+            "enum": ["predicted_waking_window", "daytime", "any_available"]
+          }
+        }
+      }
+    },
+    "fixed_events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["event_id", "start_at", "end_at"],
+        "properties": {
+          "event_id": {"$ref": "common.schema.json#/$defs/identifier"},
+          "start_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+          "end_at": {"$ref": "common.schema.json#/$defs/timestamp"}
+        }
+      }
+    }
+  }
+}

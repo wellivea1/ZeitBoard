@@ -1,0 +1,50 @@
+{
+  "schema_version": "v1",
+  "status": "estimated",
+  "generated_at": "2026-03-15T00:00:00Z",
+  "algorithm_version": "theil-sen-sleep-start-v1",
+  "estimate_id": "estimate_synthetic_01",
+  "observed_sleep_start_drift_minutes_per_cycle": 50,
+  "median_sleep_duration_minutes": 480,
+  "support": {
+    "observation_count": 10,
+    "cycle_count": 10,
+    "first_observation_at": "2026-03-05T04:30:00Z",
+    "last_observation_at": "2026-03-14T12:00:00Z"
+  },
+  "confidence": {
+    "level": "medium",
+    "reasons": [
+      "ten principal synthetic sleep episodes support the estimate",
+      "forecast uncertainty widens with horizon"
+    ]
+  },
+  "forecasts": [
+    {
+      "cycle_index": 11,
+      "predicted_sleep_window": {
+        "earliest_at": "2026-03-15T12:20:00Z",
+        "latest_at": "2026-03-15T13:20:00Z",
+        "zone_id": "America/New_York"
+      },
+      "predicted_waking_window": {
+        "earliest_at": "2026-03-15T20:05:00Z",
+        "latest_at": "2026-03-15T21:35:00Z",
+        "zone_id": "America/New_York"
+      }
+    },
+    {
+      "cycle_index": 12,
+      "predicted_sleep_window": {
+        "earliest_at": "2026-03-16T12:55:00Z",
+        "latest_at": "2026-03-16T14:25:00Z",
+        "zone_id": "America/New_York"
+      },
+      "predicted_waking_window": {
+        "earliest_at": "2026-03-16T20:40:00Z",
+        "latest_at": "2026-03-16T22:40:00Z",
+        "zone_id": "America/New_York"
+      }
+    }
+  ]
+}

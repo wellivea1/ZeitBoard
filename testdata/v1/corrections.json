@@ -1,0 +1,24 @@
+{
+  "schema_version": "v1",
+  "generated_at": "2026-03-15T00:00:00Z",
+  "corrections": [
+    {
+      "correction_id": "cor_sleep_04_start",
+      "target_observation_id": "obs_sleep_04",
+      "created_at": "2026-03-08T08:25:00Z",
+      "reason": "user_edit",
+      "changes": {
+        "start_at": "2026-03-08T07:10:00Z"
+      }
+    },
+    {
+      "correction_id": "cor_nap_excluded",
+      "target_observation_id": "obs_sleep_nap_01",
+      "created_at": "2026-03-12T08:00:00Z",
+      "reason": "user_edit",
+      "changes": {
+        "excluded": true
+      }
+    }
+  ]
+}

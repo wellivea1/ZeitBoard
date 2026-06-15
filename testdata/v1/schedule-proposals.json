@@ -1,0 +1,33 @@
+{
+  "schema_version": "v1",
+  "request_id": "schedule_request_01",
+  "generated_at": "2026-03-15T00:00:00Z",
+  "algorithm_version": "deterministic-proposal-v1",
+  "proposals": [
+    {
+      "proposal_id": "proposal_task_01",
+      "task_id": "task_flexible_01",
+      "start_at": "2026-03-15T21:20:00Z",
+      "end_at": "2026-03-15T21:50:00Z",
+      "zone_id": "America/New_York",
+      "confidence": {
+        "level": "medium",
+        "reasons": [
+          "proposal uses an uncertain predicted waking window"
+        ]
+      },
+      "explanation_codes": [
+        "within_predicted_waking_window",
+        "avoids_fixed_event",
+        "within_task_bounds",
+        "uncertainty_buffer_applied"
+      ]
+    }
+  ],
+  "unplaced": [
+    {
+      "task_id": "task_flexible_02",
+      "reason": "no_available_interval"
+    }
+  ]
+}

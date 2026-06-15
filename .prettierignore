@@ -1,0 +1,5 @@
+dist/
+coverage/
+node_modules/
+apps/desktop/frontend/wailsjs/
+package-lock.json

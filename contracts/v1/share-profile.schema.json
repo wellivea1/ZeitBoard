@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Local trusted sharing profile v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "profile_id", "state", "created_at", "expires_at", "permissions"],
+  "properties": {
+    "schema_version": {"$ref": "common.schema.json#/$defs/schemaVersion"},
+    "profile_id": {"$ref": "common.schema.json#/$defs/identifier"},
+    "state": {"type": "string", "enum": ["active", "revoked", "expired"]},
+    "created_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+    "expires_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+    "permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["predicted_sleep_window", "predicted_waking_window", "confidence", "availability"],
+      "properties": {
+        "predicted_sleep_window": {"type": "boolean", "default": false},
+        "predicted_waking_window": {"type": "boolean", "default": false},
+        "confidence": {"type": "boolean", "default": false},
+        "availability": {"type": "boolean", "default": false}
+      }
+    }
+  }
+}

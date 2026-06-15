@@ -1,0 +1,30 @@
+.idea/
+.vscode/
+.tools/
+.env
+*.local
+*.log
+*.db
+*.db-shm
+*.db-wal
+coverage/
+dist/
+node_modules/
+
+# Go/Wails
+bin/
+build/bin/
+apps/desktop/build/bin/
+apps/desktop/frontend/wailsjs/
+apps/desktop/frontend/package.json.md5
+apps/desktop/*.exe
+__pycache__/
+*.pyc
+
+# Android
+.gradle/
+**/build/
+local.properties
+captures/
+*.jks
+*.keystore

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Schedule proposals v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "request_id", "generated_at", "algorithm_version", "proposals", "unplaced"],
+  "properties": {
+    "schema_version": {"$ref": "common.schema.json#/$defs/schemaVersion"},
+    "request_id": {"$ref": "common.schema.json#/$defs/identifier"},
+    "generated_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+    "algorithm_version": {"type": "string", "minLength": 1, "maxLength": 64},
+    "proposals": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["proposal_id", "task_id", "start_at", "end_at", "zone_id", "confidence", "explanation_codes"],
+        "properties": {
+          "proposal_id": {"$ref": "common.schema.json#/$defs/identifier"},
+          "task_id": {"$ref": "common.schema.json#/$defs/identifier"},
+          "start_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+          "end_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+          "zone_id": {"$ref": "common.schema.json#/$defs/zoneId"},
+          "confidence": {"$ref": "common.schema.json#/$defs/confidence"},
+          "explanation_codes": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": ["within_predicted_waking_window", "avoids_fixed_event", "within_task_bounds", "uncertainty_buffer_applied"]
+            }
+          }
+        }
+      }
+    },
+    "unplaced": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["task_id", "reason"],
+        "properties": {
+          "task_id": {"$ref": "common.schema.json#/$defs/identifier"},
+          "reason": {
+            "type": "string",
+            "enum": ["no_available_interval", "outside_forecast_horizon", "estimate_unavailable", "invalid_constraints"]
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Observation set v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "generated_at", "observations"],
+  "properties": {
+    "schema_version": {
+      "$ref": "common.schema.json#/$defs/schemaVersion"
+    },
+    "generated_at": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "observations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/observation"
+      }
+    }
+  },
+  "$defs": {
+    "observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observation_id", "kind", "start_at", "end_at", "zone_id", "provenance"],
+      "properties": {
+        "observation_id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["sleep_episode", "activity_interval"]
+        },
+        "start_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "end_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "zone_id": {
+          "$ref": "common.schema.json#/$defs/zoneId"
+        },
+        "sleep": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["classification"],
+          "properties": {
+            "classification": {
+              "type": "string",
+              "enum": ["principal", "nap", "unknown"]
+            }
+          }
+        },
+        "activity": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["level"],
+          "properties": {
+            "level": {
+              "type": "string",
+              "enum": ["idle", "active", "unknown"]
+            }
+          }
+        },
+        "provenance": {
+          "$ref": "common.schema.json#/$defs/provenance"
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {
+            "kind": {"const": "sleep_episode"}
+          },
+          "required": ["sleep"],
+          "not": {"required": ["activity"]}
+        },
+        {
+          "properties": {
+            "kind": {"const": "activity_interval"}
+          },
+          "required": ["activity"],
+          "not": {"required": ["sleep"]}
+        }
+      ]
+    }
+  }
+}

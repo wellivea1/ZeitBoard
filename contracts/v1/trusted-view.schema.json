@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Minimized trusted view v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "generated_at", "expires_at", "granted_fields", "notice"],
+  "properties": {
+    "schema_version": {"$ref": "common.schema.json#/$defs/schemaVersion"},
+    "generated_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+    "expires_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+    "granted_fields": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": ["predicted_sleep_window", "predicted_waking_window", "confidence", "availability"]
+      }
+    },
+    "predicted_sleep_window": {"$ref": "#/$defs/minimizedWindow"},
+    "predicted_waking_window": {"$ref": "#/$defs/minimizedWindow"},
+    "confidence": {"type": "string", "enum": ["low", "medium", "high"]},
+    "availability": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["start_at", "end_at"],
+        "properties": {
+          "start_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+          "end_at": {"$ref": "common.schema.json#/$defs/timestamp"}
+        }
+      }
+    },
+    "notice": {
+      "const": "Estimated windows are uncertain and are not medical advice."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {"granted_fields": {"contains": {"const": "predicted_sleep_window"}}},
+        "required": ["granted_fields"]
+      },
+      "then": {"required": ["predicted_sleep_window"]},
+      "else": {"not": {"required": ["predicted_sleep_window"]}}
+    },
+    {
+      "if": {
+        "properties": {"granted_fields": {"contains": {"const": "predicted_waking_window"}}},
+        "required": ["granted_fields"]
+      },
+      "then": {"required": ["predicted_waking_window"]},
+      "else": {"not": {"required": ["predicted_waking_window"]}}
+    },
+    {
+      "if": {
+        "properties": {"granted_fields": {"contains": {"const": "confidence"}}},
+        "required": ["granted_fields"]
+      },
+      "then": {"required": ["confidence"]},
+      "else": {"not": {"required": ["confidence"]}}
+    },
+    {
+      "if": {
+        "properties": {"granted_fields": {"contains": {"const": "availability"}}},
+        "required": ["granted_fields"]
+      },
+      "then": {"required": ["availability"]},
+      "else": {"not": {"required": ["availability"]}}
+    }
+  ],
+  "$defs": {
+    "minimizedWindow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["earliest_at", "latest_at"],
+      "properties": {
+        "earliest_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+        "latest_at": {"$ref": "common.schema.json#/$defs/timestamp"}
+      }
+    }
+  }
+}

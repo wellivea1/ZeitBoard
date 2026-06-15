@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Estimated sleep-wake phase result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "status", "generated_at", "algorithm_version"],
+  "properties": {
+    "schema_version": {
+      "$ref": "common.schema.json#/$defs/schemaVersion"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["estimated", "refused"]
+    },
+    "generated_at": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "algorithm_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "estimate_id": {
+      "$ref": "common.schema.json#/$defs/identifier"
+    },
+    "observed_sleep_start_drift_minutes_per_cycle": {
+      "type": "number",
+      "minimum": -720,
+      "maximum": 720
+    },
+    "median_sleep_duration_minutes": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1440
+    },
+    "support": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["observation_count", "cycle_count", "first_observation_at", "last_observation_at"],
+      "properties": {
+        "observation_count": {"type": "integer", "minimum": 1},
+        "cycle_count": {"type": "integer", "minimum": 1},
+        "first_observation_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+        "last_observation_at": {"$ref": "common.schema.json#/$defs/timestamp"}
+      }
+    },
+    "confidence": {
+      "$ref": "common.schema.json#/$defs/confidence"
+    },
+    "forecasts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["cycle_index", "predicted_sleep_window", "predicted_waking_window"],
+        "properties": {
+          "cycle_index": {"type": "integer", "minimum": 1},
+          "predicted_sleep_window": {"$ref": "common.schema.json#/$defs/uncertainWindow"},
+          "predicted_waking_window": {"$ref": "common.schema.json#/$defs/uncertainWindow"}
+        }
+      }
+    },
+    "refusal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": ["insufficient_data", "ambiguous_cycle_index", "conflicting_observations", "unsupported_input"]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        }
+      }
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {"status": {"const": "estimated"}},
+      "required": ["estimate_id", "observed_sleep_start_drift_minutes_per_cycle", "median_sleep_duration_minutes", "support", "confidence", "forecasts"],
+      "not": {"required": ["refusal"]}
+    },
+    {
+      "properties": {"status": {"const": "refused"}},
+      "required": ["refusal"],
+      "not": {
+        "anyOf": [
+          {"required": ["estimate_id"]},
+          {"required": ["forecasts"]},
+          {"required": ["observed_sleep_start_drift_minutes_per_cycle"]}
+        ]
+      }
+    }
+  ]
+}

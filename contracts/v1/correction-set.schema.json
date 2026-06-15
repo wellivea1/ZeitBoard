@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Append-only correction set v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "generated_at", "corrections"],
+  "properties": {
+    "schema_version": {
+      "$ref": "common.schema.json#/$defs/schemaVersion"
+    },
+    "generated_at": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "corrections": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/correction"
+      }
+    }
+  },
+  "$defs": {
+    "correction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["correction_id", "target_observation_id", "created_at", "reason", "changes"],
+      "properties": {
+        "correction_id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "target_observation_id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "supersedes_correction_id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "created_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "reason": {
+          "type": "string",
+          "enum": ["user_edit", "duplicate", "invalid_range", "source_conflict"]
+        },
+        "changes": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "start_at": {
+              "$ref": "common.schema.json#/$defs/timestamp"
+            },
+            "end_at": {
+              "$ref": "common.schema.json#/$defs/timestamp"
+            },
+            "sleep_classification": {
+              "type": "string",
+              "enum": ["principal", "nap", "unknown"]
+            },
+            "excluded": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    }
+  }
+}

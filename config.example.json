@@ -1,0 +1,28 @@
+{
+  "schema_version": "v1",
+  "app": {
+    "time_zone": "America/New_York",
+    "fixture_mode": true,
+    "log_level": "info"
+  },
+  "storage": {
+    "database_path": "./data/non24.db"
+  },
+  "collectors": {
+    "windows_activity": {
+      "enabled": false,
+      "sample_interval_seconds": 60
+    },
+    "health_connect": {
+      "enabled": false
+    }
+  },
+  "estimation": {
+    "minimum_principal_sleep_episodes": 7,
+    "forecast_cycles": 3
+  },
+  "sharing": {
+    "enabled": false,
+    "default_profile_ttl_hours": 24
+  }
+}

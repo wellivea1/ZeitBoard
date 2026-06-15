@@ -1,0 +1,197 @@
+package scheduling
+
+import (
+	"errors"
+	"fmt"
+	"sort"
+	"time"
+
+	"non24.app/core/domain"
+)
+
+var ErrNoReliableWindow = errors.New("no reliable scheduling window")
+
+type Proposal struct {
+	TaskID        domain.FlexibleTaskID      `json:"taskId"`
+	Window        domain.TimeRange           `json:"window"`
+	EstimateID    domain.PhaseEstimateID     `json:"estimateId"`
+	Confidence    domain.InferenceConfidence `json:"confidence"`
+	Explanation   string                     `json:"explanation"`
+	NeedsApproval bool                       `json:"needsApproval"`
+	CreatedAt     time.Time                  `json:"createdAt"`
+}
+
+type Request struct {
+	Task         domain.FlexibleTask
+	Availability []domain.AvailabilityWindow
+	Events       []domain.CalendarEvent
+	WakeAnchor   *domain.WakeAnchor
+	Now          time.Time
+}
+
+type Scheduler struct{}
+
+func (Scheduler) Propose(request Request) (Proposal, error) {
+	if request.Task.EstimatedDuration <= 0 {
+		return Proposal{}, errors.New("task duration must be positive")
+	}
+	constraint := request.Task.Constraint
+	var candidates []candidate
+	for _, availability := range request.Availability {
+		if availability.Kind != domain.AvailabilityPredictedWake && availability.Kind != domain.AvailabilityFunctional && availability.Kind != domain.AvailabilityFree {
+			continue
+		}
+		if domain.ConfidenceRank(availability.Confidence.Level) < domain.ConfidenceRank(constraint.MinimumConfidence) {
+			continue
+		}
+		ranges := []domain.TimeRange{availability.Interval}
+		ranges = applyHardBounds(ranges, request)
+		if constraint.BusinessHours {
+			ranges = intersectBusinessHours(ranges, constraint)
+		}
+		ranges = subtractEvents(ranges, request.Events)
+		for _, interval := range ranges {
+			if interval.Duration() >= request.Task.EstimatedDuration {
+				candidates = append(candidates, candidate{interval: interval, availability: availability})
+			}
+		}
+	}
+	if len(candidates) == 0 {
+		return Proposal{}, ErrNoReliableWindow
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].interval.Start.UTC.Before(candidates[j].interval.Start.UTC)
+	})
+	selected := candidates[0]
+	end, _ := domain.NewZonedInstant(selected.interval.Start.UTC.Add(request.Task.EstimatedDuration), selected.interval.Start.ZoneID)
+	return Proposal{
+		TaskID:        request.Task.ID,
+		Window:        domain.TimeRange{Start: selected.interval.Start, End: end},
+		EstimateID:    selected.availability.EstimateID,
+		Confidence:    selected.availability.Confidence,
+		Explanation:   fmt.Sprintf("Earliest deterministic fit in a %s window after applying fixed events and task constraints.", selected.availability.Kind),
+		NeedsApproval: constraint.RequiresApproval || !constraint.AllowAutomaticMovement,
+		CreatedAt:     time.Now().UTC(),
+	}, nil
+}
+
+type candidate struct {
+	interval     domain.TimeRange
+	availability domain.AvailabilityWindow
+}
+
+func applyHardBounds(ranges []domain.TimeRange, request Request) []domain.TimeRange {
+	constraint := request.Task.Constraint
+	earliest := request.Now.UTC()
+	if constraint.EarliestStart != nil && constraint.EarliestStart.UTC.After(earliest) {
+		earliest = constraint.EarliestStart.UTC
+	}
+	if constraint.PreferredAfterWake != nil && request.WakeAnchor != nil {
+		preferred := request.WakeAnchor.At.UTC.Add(*constraint.PreferredAfterWake)
+		if preferred.After(earliest) {
+			earliest = preferred
+		}
+	}
+	var latest time.Time
+	if constraint.Deadline != nil {
+		latest = constraint.Deadline.UTC
+	}
+	if constraint.LatestFinish != nil && (latest.IsZero() || constraint.LatestFinish.UTC.Before(latest)) {
+		latest = constraint.LatestFinish.UTC
+	}
+	var result []domain.TimeRange
+	for _, interval := range ranges {
+		start := interval.Start.UTC
+		end := interval.End.UTC
+		if earliest.After(start) {
+			start = earliest
+		}
+		if !latest.IsZero() && latest.Before(end) {
+			end = latest
+		}
+		if !end.After(start) {
+			continue
+		}
+		startInstant, _ := domain.NewZonedInstant(start, interval.Start.ZoneID)
+		endInstant, _ := domain.NewZonedInstant(end, interval.End.ZoneID)
+		result = append(result, domain.TimeRange{Start: startInstant, End: endInstant})
+	}
+	return result
+}
+
+func intersectBusinessHours(ranges []domain.TimeRange, constraint domain.TaskConstraint) []domain.TimeRange {
+	startClock := constraint.BusinessStartLocal
+	endClock := constraint.BusinessEndLocal
+	if startClock == "" {
+		startClock = "09:00"
+	}
+	if endClock == "" {
+		endClock = "17:00"
+	}
+	startParsed, startErr := time.Parse("15:04", startClock)
+	endParsed, endErr := time.Parse("15:04", endClock)
+	if startErr != nil || endErr != nil {
+		return nil
+	}
+	var result []domain.TimeRange
+	for _, interval := range ranges {
+		location, err := time.LoadLocation(interval.Start.ZoneID)
+		if err != nil {
+			continue
+		}
+		localStart := interval.Start.UTC.In(location)
+		localEnd := interval.End.UTC.In(location)
+		day := time.Date(localStart.Year(), localStart.Month(), localStart.Day(), 0, 0, 0, 0, location)
+		lastDay := time.Date(localEnd.Year(), localEnd.Month(), localEnd.Day(), 0, 0, 0, 0, location)
+		for !day.After(lastDay) {
+			businessStart := time.Date(day.Year(), day.Month(), day.Day(), startParsed.Hour(), startParsed.Minute(), 0, 0, location)
+			businessEnd := time.Date(day.Year(), day.Month(), day.Day(), endParsed.Hour(), endParsed.Minute(), 0, 0, location)
+			start := maxInstant(interval.Start.UTC, businessStart.UTC())
+			end := minInstant(interval.End.UTC, businessEnd.UTC())
+			if end.After(start) {
+				startInstant, _ := domain.NewZonedInstant(start, interval.Start.ZoneID)
+				endInstant, _ := domain.NewZonedInstant(end, interval.Start.ZoneID)
+				result = append(result, domain.TimeRange{Start: startInstant, End: endInstant})
+			}
+			day = day.AddDate(0, 0, 1)
+		}
+	}
+	return result
+}
+
+func subtractEvents(ranges []domain.TimeRange, events []domain.CalendarEvent) []domain.TimeRange {
+	result := append([]domain.TimeRange(nil), ranges...)
+	for _, event := range events {
+		var next []domain.TimeRange
+		for _, interval := range result {
+			if !interval.Overlaps(event.Interval) {
+				next = append(next, interval)
+				continue
+			}
+			if event.Interval.Start.UTC.After(interval.Start.UTC) {
+				end, _ := domain.NewZonedInstant(event.Interval.Start.UTC, interval.Start.ZoneID)
+				next = append(next, domain.TimeRange{Start: interval.Start, End: end})
+			}
+			if event.Interval.End.UTC.Before(interval.End.UTC) {
+				start, _ := domain.NewZonedInstant(event.Interval.End.UTC, interval.Start.ZoneID)
+				next = append(next, domain.TimeRange{Start: start, End: interval.End})
+			}
+		}
+		result = next
+	}
+	return result
+}
+
+func maxInstant(left, right time.Time) time.Time {
+	if right.After(left) {
+		return right
+	}
+	return left
+}
+
+func minInstant(left, right time.Time) time.Time {
+	if right.Before(left) {
+		return right
+	}
+	return left
+}

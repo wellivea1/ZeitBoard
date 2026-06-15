@@ -1,0 +1,185 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts-and-fixtures:
+    name: Contracts and synthetic fixtures
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.13.14"
+
+      - name: Install contract validator
+        run: python -m pip install --disable-pip-version-check "check-jsonschema==0.37.3"
+
+      - name: Check generator and fixture drift
+        run: |
+          python -m py_compile scripts/generate-testdata.py
+          python scripts/generate-testdata.py --check
+
+      - name: Validate schemas and examples
+        run: bash scripts/validate-contracts.sh
+
+      - name: Enforce network-free trusted prototype
+        shell: bash
+        run: |
+          if [[ -d apps/trusted-web-prototype/src ]] && \
+             grep -REn '(fetch\(|XMLHttpRequest|WebSocket|EventSource|sendBeacon)' apps/trusted-web-prototype/src; then
+            echo "The phase-one trusted prototype must not perform network requests." >&2
+            exit 1
+          fi
+
+  go:
+    name: Go (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: core
+            os: ubuntu-latest
+            path: core
+          - name: desktop-service
+            os: windows-latest
+            path: apps/desktop
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Detect Go module
+        id: detect
+        shell: bash
+        run: |
+          if [[ -f "${{ matrix.path }}/go.mod" ]]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "${{ matrix.path }}/go.mod is not present; this Go check is skipped."
+          fi
+
+      - name: Set up Go
+        if: steps.detect.outputs.present == 'true'
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: "1.26.4"
+          cache: true
+          cache-dependency-path: ${{ matrix.path }}/go.sum
+
+      - name: Check formatting
+        if: steps.detect.outputs.present == 'true'
+        shell: bash
+        run: |
+          files="$(find "${{ matrix.path }}" -name '*.go' -type f -print 2>/dev/null || true)"
+          [[ -z "$files" ]] || test -z "$(printf '%s\n' "$files" | xargs gofmt -l)"
+
+      - name: Test and vet
+        if: steps.detect.outputs.present == 'true'
+        working-directory: ${{ matrix.path }}
+        run: |
+          go test ./...
+          go vet ./...
+
+  web:
+    name: Web build (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: desktop
+            path: apps/desktop/frontend
+          - name: trusted-view
+            path: apps/trusted-web-prototype
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Detect web package
+        id: detect
+        shell: bash
+        run: |
+          if [[ -f "${{ matrix.path }}/package.json" ]]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+            if [[ ! -f package-lock.json ]]; then
+              echo "The root package-lock.json is required for npm workspaces." >&2
+              exit 1
+            fi
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "${{ matrix.path }} is not present; web checks are skipped."
+          fi
+
+      - name: Set up Node.js
+        if: steps.detect.outputs.present == 'true'
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24.16.0"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install locked dependencies
+        if: steps.detect.outputs.present == 'true'
+        run: npm ci
+
+      - name: Test when configured
+        if: steps.detect.outputs.present == 'true'
+        run: npm --prefix "${{ matrix.path }}" run test --if-present
+
+      - name: Lint web workspaces
+        if: steps.detect.outputs.present == 'true' && matrix.name == 'desktop'
+        run: npm run lint
+
+      - name: Build
+        if: steps.detect.outputs.present == 'true'
+        run: npm --prefix "${{ matrix.path }}" run build
+
+  android:
+    name: Android JVM tests, lint, and debug APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Detect Android project
+        id: detect
+        shell: bash
+        run: |
+          if [[ -f apps/android/gradlew ]]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "Android Gradle wrapper is not present; Android checks are skipped."
+          fi
+
+      - name: Set up JDK 17
+        if: steps.detect.outputs.present == 'true'
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle cache
+        if: steps.detect.outputs.present == 'true'
+        uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
+
+      - name: Test, lint, and assemble
+        if: steps.detect.outputs.present == 'true'
+        working-directory: apps/android
+        run: bash ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug

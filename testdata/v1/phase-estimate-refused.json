@@ -1,0 +1,10 @@
+{
+  "schema_version": "v1",
+  "status": "refused",
+  "generated_at": "2026-03-15T00:00:00Z",
+  "algorithm_version": "theil-sen-sleep-start-v1",
+  "refusal": {
+    "code": "insufficient_data",
+    "message": "Need at least seven usable principal sleep episodes; found three."
+  }
+}
