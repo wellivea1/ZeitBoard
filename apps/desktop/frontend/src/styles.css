@@ -15,8 +15,8 @@
 
   /* Core surfaces */
   --ink: #24302d;
-  --muted: #68736f;
-  --subtle: #8c9591;
+  --muted: #5b655f;
+  --subtle: #666f6a;
   --line: #dedfd8;
   --paper: #fffefa;
   --canvas: #f5f3ee;
@@ -60,7 +60,7 @@
   --button-secondary-border: #cfd5d0;
 
   /* Charts */
-  --actogram-observed: #6f8c82;
+  --actogram-observed: #5a786d;
   --actogram-observed-text: #fff;
   --actogram-inferred-text: #475c55;
   --actogram-inferred: repeating-linear-gradient(90deg, #cbd8d2 0 5px, #edf1ee 5px 8px);
@@ -102,7 +102,7 @@
   color-scheme: dark;
   --ink: #e8eae5;
   --muted: #a5ada7;
-  --subtle: #7c857f;
+  --subtle: #959d97;
   --line: #3b4541;
   --paper: #1e2522;
   --canvas: #161b19;
@@ -144,7 +144,7 @@
 
   --actogram-observed: #6f8c82;
   --actogram-observed-text: #0f1412;
-  --actogram-inferred-text: #c5d4cd;
+  --actogram-inferred-text: #d0dbd4;
   --actogram-inferred: repeating-linear-gradient(90deg, #4a5f57 0 5px, #2a3834 5px 8px);
   --actogram-forecast-text: #b8c9c1;
   --actogram-forecast: repeating-linear-gradient(90deg, #3f544d 0 7px, #25332e 7px 12px);
@@ -1013,7 +1013,7 @@ button {
   font-size: 13px;
 }
 .undo-toast button {
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 10px;
   color: var(--sage-dark);
   background: none;
@@ -1204,7 +1204,7 @@ button {
   gap: 8px;
 }
 .actogram-controls label {
-  min-height: 32px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
