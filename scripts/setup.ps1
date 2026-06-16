@@ -105,7 +105,10 @@ try {
     if (Test-Path $gradleWrapper) {
         $localProperties = Join-Path $androidRoot "local.properties"
         if (-not (Test-Path $localProperties) -and $env:ANDROID_HOME) {
-            "sdk.dir=$($env:ANDROID_HOME.Replace('\', '/'))" | Set-Content -Encoding ASCII -LiteralPath $localProperties
+            # Java .properties require the drive colon (and backslashes) escaped;
+            # otherwise Android lint's PropertyEscape rule fails the build.
+            $sdkDir = $env:ANDROID_HOME.Replace('\', '/').Replace(':', '\:')
+            "sdk.dir=$sdkDir" | Set-Content -Encoding ASCII -LiteralPath $localProperties
         }
         $java = Require-Command "java"
         $previousPreference = $ErrorActionPreference
