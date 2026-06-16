@@ -39,6 +39,34 @@ Make the local single-user experience trustworthy and legible.
 - Light/dark parity and independent reduced-stimulation controls.
 - Evaluate local DB encryption and OS credential storage.
 
+**Desktop theme, reduced-stimulation, and accessibility consolidation**
+- Add an Auto / Light / Dark appearance selector to desktop Settings, backed by a
+  small theme module that applies `data-theme="light|dark"` to `<html>`,
+  persists the choice, follows `prefers-color-scheme` in Auto, and applies before
+  first paint.
+- Add an independent reduced-stimulation toggle backed by `data-reduced="true"`;
+  it must work in both light and dark themes, never force dark mode, persist
+  locally, soften motion/saturation/contrast/density, and continue honoring
+  `prefers-reduced-motion`.
+- Extend the existing CSS custom property system rather than creating a parallel
+  palette. Audit theme-relevant hardcoded colors in the desktop stylesheet so
+  dark mode can override app chrome, panels, charts, status/confidence states,
+  actogram/drift visuals, and trust-loop UI without invisible text or broken
+  contrast.
+- Close the desktop WCAG 2.2 AA gaps across Overview, Calendar, Tasks,
+  Approvals, Rhythm, Medications, Sharing, Data Sources, and Settings: body text
+  contrast, visible focus rings, 44px interactive targets, logical keyboard
+  order, non-color-only status/confidence/conflict/origin cues, and polite live
+  status announcements where state changes are surfaced.
+- Validate with desktop tests for theme and reduced-stimulation persistence,
+  full frontend quality checks, `scripts/dev.ps1 -Action check -Component
+  desktop`, contrast spot-checks in both themes, and in-app browser smoke checks
+  for Overview, Approvals, and Rhythm in light, dark, and reduced-stimulation
+  combinations.
+- Out of scope for this pass: Android theming, trusted-web prototype theming,
+  backend/data changes, and new screens. Track those separately after the
+  desktop consolidation lands.
+
 **Sleep chart visualizer** (new — low risk; visualizes existing local data only)
 - A dedicated **Rhythm** area (absorbs the current Timeline) with three views:
   **Actogram** (double-plotted sleep bands showing the free-running diagonal,
@@ -64,8 +92,9 @@ with fixture-backed Approvals, Rhythm tabs, a double-plotted actogram with
 widening forecast bands, a sleep-onset Drift chart, source conflict/missingness
 review, correction diff and undo affordance, refusal copy, and an Overview
 review strip. Persistent proposal state, real import refresh, backend
-correction undo, real data wiring for the visualizer, and full onboarding remain
-phase-two work.
+correction undo, real data wiring for the visualizer, desktop theming,
+independent reduced-stimulation, the accessibility consolidation pass, and full
+onboarding remain phase-two work.
 
 Exit criteria: a fatigued user can read current state, recent drift, and the
 next predicted windows in seconds; every chart has a non-visual equivalent;
