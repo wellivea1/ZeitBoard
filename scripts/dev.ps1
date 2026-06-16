@@ -10,7 +10,7 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $LocalNode = Join-Path $Root ".tools\node-v24.16.0-win-x64"
 $LocalWails = Join-Path $Root ".tools\bin\wails.exe"
-if (-not (Get-Command "node" -ErrorAction SilentlyContinue) -and (Test-Path (Join-Path $LocalNode "node.exe"))) {
+if (Test-Path (Join-Path $LocalNode "node.exe")) {
     $env:PATH = "$LocalNode;$env:PATH"
 }
 $StudioJava = "C:\Program Files\Android\Android Studio\jbr"
@@ -43,6 +43,14 @@ function Invoke-Contracts {
         try {
             & go run ./cmd/genfixtures -check
             if ($LASTEXITCODE -ne 0) { throw "Fixture drift detected." }
+            if ($Action -in @("check", "test")) {
+                & go test ./...
+                if ($LASTEXITCODE -ne 0) { throw "Tools module tests failed." }
+            }
+            if ($Action -eq "check") {
+                & go vet ./...
+                if ($LASTEXITCODE -ne 0) { throw "Tools module vet failed." }
+            }
         }
         finally { Pop-Location }
     }

@@ -45,6 +45,26 @@ jobs:
             exit 1
           fi
 
+      - name: Guard separate-project boundary
+        shell: bash
+        run: |
+          # Markdown/docs may cite the sibling Zeit-prefixed projects as design
+          # references (including the requested actogram reference); guard only
+          # non-markdown files (code, config, identity) against accidental leakage.
+          legacy_a='zeit''log'
+          legacy_b='zeit''dex'
+          if grep -RInEi "\b(${legacy_a}|${legacy_b})\b" \
+              --exclude-dir=.git \
+              --exclude-dir=.tools \
+              --exclude-dir=node_modules \
+              --exclude-dir=build \
+              --exclude-dir=dist \
+              --exclude='*.md' \
+              .; then
+            echo "Unexpected legacy project reference found in code/config; keep this repo separate." >&2
+            exit 1
+          fi
+
   go:
     name: Go (${{ matrix.name }})
     runs-on: ${{ matrix.os }}

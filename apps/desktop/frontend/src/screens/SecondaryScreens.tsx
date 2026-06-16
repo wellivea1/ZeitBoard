@@ -1,7 +1,131 @@
+import { useState, type KeyboardEvent } from "react";
 import { Icon } from "../components/Icon";
 import { PageHeader, PlaceholderNotice } from "../components/AppShell";
+import {
+  correctionPreviewFixture,
+  proposalFixtures,
+  refusalFixture,
+  sourceConflictFixtures,
+  unplacedTaskFixture,
+  type ChangeProposalFixture,
+  type ProposalOrigin,
+  type SourceConflictFixture,
+} from "../data/phaseTwo";
+import type { ConfidenceLevel } from "../data/overview";
 
 const days = ["Mon 15", "Tue 16", "Wed 17", "Thu 18", "Fri 19"];
+
+const confidenceSegments: Record<ConfidenceLevel, number> = { Low: 1, Medium: 2, High: 3 };
+const originLabels: Record<ProposalOrigin, string> = {
+  scheduler: "Scheduler",
+  assistant: "Assistant",
+  sync_conflict: "Sync conflict",
+};
+
+function ConfidenceDots({ value }: { value: ConfidenceLevel }) {
+  const filled = confidenceSegments[value];
+  return (
+    <span className="proposal-confidence" aria-label={`${value} confidence`}>
+      {[0, 1, 2].map((index) => (
+        <span key={index} data-muted={index >= filled || undefined} />
+      ))}
+    </span>
+  );
+}
+
+function ProposalCard({ proposal }: { proposal: ChangeProposalFixture }) {
+  return (
+    <article className="panel proposal-card" data-origin={proposal.origin}>
+      <div className="proposal-header">
+        <span className="proposal-kind">{proposal.kind}</span>
+        <div>
+          <p className="section-kicker">{originLabels[proposal.origin]} proposal</p>
+          <h2>{proposal.title}</h2>
+        </div>
+        <ConfidenceDots value={proposal.confidence} />
+      </div>
+      <p className="proposal-change">
+        {proposal.from && <span>From {proposal.from}</span>}
+        <strong>To {proposal.to}</strong>
+        <small>{proposal.rhythmContext}</small>
+      </p>
+      <div className="proposal-reasons" aria-label="Proposal reasons">
+        {proposal.reasonLabels.map((reason) => (
+          <span className="task-chip" key={reason}>
+            {reason}
+          </span>
+        ))}
+      </div>
+      <p className="proposal-meta">
+        {proposal.createdLabel} - {proposal.expiresLabel}
+      </p>
+      <div className="approval-actions">
+        <button className="button secondary" type="button">
+          Reject proposal
+        </button>
+        <button className="button secondary" type="button">
+          Modify
+        </button>
+        <button className="button primary" type="button">
+          Accept proposal
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function SourceConflictList({
+  conflicts,
+  labelledBy,
+}: {
+  conflicts: SourceConflictFixture[];
+  labelledBy: string;
+}) {
+  return (
+    <div className="conflict-list" aria-labelledby={labelledBy}>
+      {conflicts.map((conflict) => (
+        <article className="conflict-row" data-state={conflict.state} key={conflict.id}>
+          <div>
+            <span className="state-pill">{conflict.state}</span>
+            <h3>{conflict.title}</h3>
+            <p>{conflict.detail}</p>
+          </div>
+          <small>
+            {conflict.source} - {conflict.nextAction}
+          </small>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function CorrectionInspector() {
+  return (
+    <aside className="panel correction-inspector" aria-labelledby="correction-title">
+      <div className="panel-heading">
+        <div>
+          <p className="section-kicker">Corrections</p>
+          <h2 id="correction-title">{correctionPreviewFixture.title}</h2>
+        </div>
+      </div>
+      <dl className="correction-diff">
+        <div>
+          <dt>Source interval</dt>
+          <dd>{correctionPreviewFixture.sourceInterval}</dd>
+        </div>
+        <div>
+          <dt>Effective interval</dt>
+          <dd>{correctionPreviewFixture.effectiveInterval}</dd>
+        </div>
+      </dl>
+      <p className="diff-note">{correctionPreviewFixture.diffLabel}</p>
+      <small>{correctionPreviewFixture.historyLabel}</small>
+      <button className="button secondary undo-button" type="button">
+        {correctionPreviewFixture.undoLabel}
+      </button>
+    </aside>
+  );
+}
 
 export function CalendarScreen() {
   return (
@@ -71,39 +195,114 @@ export function TasksScreen() {
         }
       />
       <PlaceholderNotice>
-        Task suggestions are synthetic and demonstrate scheduling constraints only.
+        Task suggestions are synthetic. They create proposals only; no calendar or task change is
+        applied automatically.
       </PlaceholderNotice>
-      <section className="panel table-panel">
-        <div className="filter-row" aria-label="Task filters">
+      <section className="screen-grid" aria-label="Task planning and approvals">
+        <section
+          className="panel phase-two-panel approval-summary"
+          aria-labelledby="approval-title"
+        >
+          <div className="panel-heading">
+            <div>
+              <p className="section-kicker">Proposal review</p>
+              <h2 id="approval-title">Approval queue</h2>
+            </div>
+            <a href="#/approvals">
+              Open all <Icon name="chevron" />
+            </a>
+          </div>
+          <p className="phase-two-copy">
+            {proposalFixtures.length} pending proposals are waiting for explicit approval.
+          </p>
+          {proposalFixtures.slice(0, 1).map((proposal) => (
+            <ProposalCard proposal={proposal} key={proposal.id} />
+          ))}
+        </section>
+
+        <section className="panel table-panel task-list-panel">
+          <div className="filter-row" aria-label="Task filters">
+            <button className="filter active" type="button">
+              Open 4
+            </button>
+            <button className="filter" type="button">
+              Scheduled 2
+            </button>
+            <button className="filter" type="button">
+              Done
+            </button>
+          </div>
+          <div className="task-table" role="table" aria-label="Open tasks">
+            <div className="task-row task-head" role="row">
+              <span role="columnheader">Task</span>
+              <span role="columnheader">Demand</span>
+              <span role="columnheader">Duration</span>
+              <span role="columnheader">Timing</span>
+            </div>
+            {taskRows.map(([task, demand, duration, timing]) => (
+              <div className="task-row" role="row" key={task}>
+                <span role="cell">
+                  <span className="empty-check" aria-hidden="true" />
+                  {task}
+                </span>
+                <span role="cell">{demand}</span>
+                <span role="cell">{duration}</span>
+                <span role="cell">
+                  <span className="task-chip">{timing}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <aside className="panel unplaced-panel" aria-labelledby="unplaced-title">
+          <p className="section-kicker">Not proposed</p>
+          <h2 id="unplaced-title">{unplacedTaskFixture.title}</h2>
+          <p>{unplacedTaskFixture.reason}</p>
+          <small>{unplacedTaskFixture.nextAction}</small>
+        </aside>
+      </section>
+    </>
+  );
+}
+
+export function ApprovalsScreen() {
+  return (
+    <>
+      <PageHeader
+        title="Approvals"
+        description={`${proposalFixtures.length} pending proposals. Review, modify, approve, or reject each change before anything moves.`}
+        actions={
+          <button className="button secondary" type="button">
+            Approve low-risk
+          </button>
+        }
+      />
+      <PlaceholderNotice>
+        Approving here would create an audited change with undo. Fixed and imported events remain
+        immutable.
+      </PlaceholderNotice>
+      <section className="screen-grid approval-screen" aria-label="Pending approval queue">
+        <div className="panel approval-filter" aria-label="Approval filters">
           <button className="filter active" type="button">
-            Open 4
+            All {proposalFixtures.length}
           </button>
           <button className="filter" type="button">
-            Scheduled 2
+            Scheduler 1
           </button>
           <button className="filter" type="button">
-            Done
+            Assistant 1
+          </button>
+          <button className="filter" type="button">
+            Sync 0
+          </button>
+          <button className="filter sort-filter" type="button">
+            Sort by expiry
           </button>
         </div>
-        <div className="task-table" role="table" aria-label="Open tasks">
-          <div className="task-row task-head" role="row">
-            <span role="columnheader">Task</span>
-            <span role="columnheader">Demand</span>
-            <span role="columnheader">Duration</span>
-            <span role="columnheader">Timing</span>
-          </div>
-          {taskRows.map(([task, demand, duration, timing]) => (
-            <div className="task-row" role="row" key={task}>
-              <span role="cell">
-                <span className="empty-check" aria-hidden="true" />
-                {task}
-              </span>
-              <span role="cell">{demand}</span>
-              <span role="cell">{duration}</span>
-              <span role="cell">
-                <span className="task-chip">{timing}</span>
-              </span>
-            </div>
+        <div className="proposal-stack">
+          {proposalFixtures.map((proposal) => (
+            <ProposalCard proposal={proposal} key={proposal.id} />
           ))}
         </div>
       </section>
@@ -120,47 +319,184 @@ const timelineRows = [
   { day: "Jun 10", start: 6, width: 33, quality: "Complete" },
 ];
 
-export function TimelineScreen() {
+type RhythmTab = "actogram" | "drift" | "sources";
+
+const rhythmTabs: { id: RhythmTab; label: string }[] = [
+  { id: "actogram", label: "Actogram" },
+  { id: "drift", label: "Drift" },
+  { id: "sources", label: "Sources" },
+];
+
+export function RhythmScreen() {
+  const [tab, setTab] = useState<RhythmTab>("actogram");
+
+  const onTabKey = (event: KeyboardEvent<HTMLDivElement>) => {
+    const index = rhythmTabs.findIndex((item) => item.id === tab);
+    let nextIndex: number;
+    if (event.key === "ArrowRight") nextIndex = (index + 1) % rhythmTabs.length;
+    else if (event.key === "ArrowLeft")
+      nextIndex = (index - 1 + rhythmTabs.length) % rhythmTabs.length;
+    else if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = rhythmTabs.length - 1;
+    else return;
+    event.preventDefault();
+    const next = rhythmTabs[nextIndex];
+    if (next) setTab(next.id);
+  };
+
   return (
     <>
       <PageHeader
-        title="Timeline"
-        description="Inspect synthetic sleep-wake observations, corrections, and estimate uncertainty."
+        title="Rhythm"
+        description="Inspect synthetic sleep-wake observations, correction history, and estimate uncertainty."
       />
       <PlaceholderNotice>
-        This preview distinguishes imported, estimated, and incomplete observations.
+        This read-only preview distinguishes imported, estimated, corrected, and incomplete
+        observations.
       </PlaceholderNotice>
-      <section className="panel timeline-panel" aria-labelledby="observation-title">
-        <div className="panel-heading">
-          <div>
-            <p className="section-kicker">Last six cycles</p>
-            <h2 id="observation-title">Sleep observations</h2>
-          </div>
-          <span className="legend">
-            <i /> Observed sleep
-          </span>
-        </div>
-        <div className="timeline-axis" aria-hidden="true">
-          <span>12 AM</span>
-          <span>6 AM</span>
-          <span>12 PM</span>
-          <span>6 PM</span>
-          <span>12 AM</span>
-        </div>
-        <div className="actogram">
-          {timelineRows.map((row) => (
-            <div className="actogram-row" key={row.day}>
-              <time>{row.day}</time>
-              <div className="actogram-track">
-                <span
-                  style={{ left: `${row.start}%`, width: `${row.width}%` }}
-                  data-quality={row.quality}
-                />
-              </div>
-              <small>{row.quality}</small>
-            </div>
+      <section className="screen-grid rhythm-screen" aria-label="Rhythm review">
+        <div
+          className="panel rhythm-tabs"
+          role="tablist"
+          aria-label="Rhythm views"
+          onKeyDown={onTabKey}
+        >
+          {rhythmTabs.map((item) => (
+            <button
+              key={item.id}
+              className={`filter${tab === item.id ? " active" : ""}`}
+              type="button"
+              role="tab"
+              id={`rhythm-tab-${item.id}`}
+              aria-selected={tab === item.id}
+              aria-controls={`rhythm-panel-${item.id}`}
+              tabIndex={tab === item.id ? 0 : -1}
+              onClick={() => setTab(item.id)}
+            >
+              {item.label}
+            </button>
           ))}
         </div>
+
+        {tab === "actogram" && (
+          <div
+            className="rhythm-panel"
+            role="tabpanel"
+            id="rhythm-panel-actogram"
+            aria-labelledby="rhythm-tab-actogram"
+          >
+            <section className="panel timeline-panel" aria-labelledby="observation-title">
+              <div className="panel-heading">
+                <div>
+                  <p className="section-kicker">Last six cycles</p>
+                  <h2 id="observation-title">Sleep observations</h2>
+                </div>
+                <span className="legend">
+                  <i /> Observed sleep
+                </span>
+              </div>
+              <div className="timeline-axis" aria-hidden="true">
+                <span>12 AM</span>
+                <span>6 AM</span>
+                <span>12 PM</span>
+                <span>6 PM</span>
+                <span>12 AM</span>
+              </div>
+              <div className="actogram">
+                {timelineRows.map((row) => (
+                  <div className="actogram-row" key={row.day}>
+                    <time>{row.day}</time>
+                    <div className="actogram-track">
+                      <span
+                        style={{ left: `${row.start}%`, width: `${row.width}%` }}
+                        data-quality={row.quality}
+                      />
+                    </div>
+                    <small>{row.quality}</small>
+                  </div>
+                ))}
+              </div>
+              <table className="sr-table">
+                <caption>Sleep observation table</caption>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Quality</th>
+                    <th>Relative start</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {timelineRows.map((row) => (
+                    <tr key={row.day}>
+                      <td>{row.day}</td>
+                      <td>{row.quality}</td>
+                      <td>{row.start}% of the day</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </section>
+          </div>
+        )}
+
+        {tab === "drift" && (
+          <div
+            className="rhythm-panel"
+            role="tabpanel"
+            id="rhythm-panel-drift"
+            aria-labelledby="rhythm-tab-drift"
+          >
+            <section className="panel drift-placeholder" aria-labelledby="drift-title">
+              <p className="section-kicker">Phase / drift</p>
+              <h2 id="drift-title">Drift trend</h2>
+              <p>
+                The sleep-onset drift chart arrives with the sleep visualizer (roadmap phase two).
+                For now, the Actogram tab shows recent sleep and the Overview shows the current
+                drift estimate.
+              </p>
+            </section>
+          </div>
+        )}
+
+        {tab === "sources" && (
+          <div
+            className="rhythm-panel"
+            role="tabpanel"
+            id="rhythm-panel-sources"
+            aria-labelledby="rhythm-tab-sources"
+          >
+            <CorrectionInspector />
+
+            <section className="panel refusal-panel" aria-labelledby="refusal-title">
+              <p className="section-kicker">{refusalFixture.code}</p>
+              <h2 id="refusal-title">{refusalFixture.title}</h2>
+              <p>{refusalFixture.message}</p>
+              <div className="proposal-reasons" aria-label="Refusal actions">
+                {refusalFixture.actions.map((action) => (
+                  <span className="task-chip" key={action}>
+                    {action}
+                  </span>
+                ))}
+              </div>
+            </section>
+
+            <section
+              className="panel source-conflicts-panel"
+              aria-labelledby="source-conflicts-title"
+            >
+              <div className="panel-heading">
+                <div>
+                  <p className="section-kicker">Sources</p>
+                  <h2 id="source-conflicts-title">Source conflicts and missingness</h2>
+                </div>
+              </div>
+              <SourceConflictList
+                conflicts={sourceConflictFixtures}
+                labelledBy="source-conflicts-title"
+              />
+            </section>
+          </div>
+        )}
       </section>
     </>
   );
@@ -290,46 +626,60 @@ export function DataSourcesScreen() {
         title="Data Sources"
         description="Review local inputs and the boundary around each permission."
       />
-      <section className="panel source-list" aria-label="Data source status">
-        <article>
-          <div className="source-mark">
-            <Icon name="clock" />
+      <section className="screen-grid data-source-screen" aria-label="Data source review">
+        <section className="panel source-conflicts-panel" aria-labelledby="data-conflicts-title">
+          <div className="panel-heading">
+            <div>
+              <p className="section-kicker">Estimate inputs</p>
+              <h2 id="data-conflicts-title">Source conflicts and missingness</h2>
+            </div>
           </div>
-          <div>
-            <h2>Manual sleep log</h2>
-            <p>3 entries this week - last entry today</p>
-          </div>
-          <span className="source-status connected">Available</span>
-          <button className="button secondary" type="button">
-            Manage
-          </button>
-        </article>
-        <article>
-          <div className="source-mark">
-            <Icon name="calendar" />
-          </div>
-          <div>
-            <h2>Local calendar</h2>
-            <p>Fixed event times only - private titles stay local</p>
-          </div>
-          <span className="source-status connected">Connected</span>
-          <button className="button secondary" type="button">
-            Manage
-          </button>
-        </article>
-        <article>
-          <div className="source-mark">
-            <Icon name="sources" />
-          </div>
-          <div>
-            <h2>Device activity</h2>
-            <p>Not connected - optional supporting observation</p>
-          </div>
-          <span className="source-status">Off</span>
-          <button className="button secondary" type="button">
-            Set up
-          </button>
-        </article>
+          <SourceConflictList
+            conflicts={sourceConflictFixtures}
+            labelledBy="data-conflicts-title"
+          />
+        </section>
+        <section className="panel source-list source-status-panel" aria-label="Data source status">
+          <article>
+            <div className="source-mark">
+              <Icon name="clock" />
+            </div>
+            <div>
+              <h2>Manual sleep log</h2>
+              <p>3 entries this week - last entry today</p>
+            </div>
+            <span className="source-status connected">Available</span>
+            <button className="button secondary" type="button">
+              Manage
+            </button>
+          </article>
+          <article>
+            <div className="source-mark">
+              <Icon name="calendar" />
+            </div>
+            <div>
+              <h2>Local calendar</h2>
+              <p>Fixed event times only - private titles stay local</p>
+            </div>
+            <span className="source-status connected">Connected</span>
+            <button className="button secondary" type="button">
+              Manage
+            </button>
+          </article>
+          <article>
+            <div className="source-mark">
+              <Icon name="sources" />
+            </div>
+            <div>
+              <h2>Device activity</h2>
+              <p>Not connected - optional supporting observation</p>
+            </div>
+            <span className="source-status">Off</span>
+            <button className="button secondary" type="button">
+              Set up
+            </button>
+          </article>
+        </section>
       </section>
     </>
   );

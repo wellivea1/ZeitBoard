@@ -6,7 +6,7 @@ ACTION="${1:-check}"
 COMPONENT="${2:-all}"
 LOCAL_WAILS="$ROOT/.tools/bin/wails"
 LOCAL_NODE="$ROOT/.tools/node-v24.16.0-linux-x64/bin"
-if ! command -v node >/dev/null 2>&1 && [[ -x "$LOCAL_NODE/node" ]]; then
+if [[ -x "$LOCAL_NODE/node" ]]; then
   export PATH="$LOCAL_NODE:$PATH"
 fi
 
@@ -25,6 +25,12 @@ run_contracts() {
     (cd "$ROOT/tools" && GOWORK=off go run ./cmd/genfixtures)
   else
     (cd "$ROOT/tools" && GOWORK=off go run ./cmd/genfixtures -check)
+    if [[ "$ACTION" == check || "$ACTION" == test ]]; then
+      (cd "$ROOT/tools" && GOWORK=off go test ./...)
+    fi
+    if [[ "$ACTION" == check ]]; then
+      (cd "$ROOT/tools" && GOWORK=off go vet ./...)
+    fi
     "$ROOT/scripts/validate-contracts.sh"
   fi
 }

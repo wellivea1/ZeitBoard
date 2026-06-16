@@ -3,6 +3,7 @@ import { Icon, type IconName } from "../components/Icon";
 import { PageHeader } from "../components/AppShell";
 import { loadOverview } from "../data/backend";
 import { overviewFixture } from "../data/fixture";
+import { proposalFixtures, refusalFixture, sourceConflictFixtures } from "../data/phaseTwo";
 import type { ConfidenceLevel, OverviewSource } from "../data/overview";
 
 interface MetricCardProps {
@@ -135,6 +136,25 @@ export function OverviewScreen() {
         />
       </section>
 
+      <section className="panel trust-strip" aria-labelledby="trust-strip-title">
+        <div>
+          <p className="section-kicker">Trust loop</p>
+          <h2 id="trust-strip-title">Review before anything changes</h2>
+          <p>
+            {proposalFixtures.length} proposals are pending approval and{" "}
+            {sourceConflictFixtures.length} source issues need review. {refusalFixture.message}
+          </p>
+        </div>
+        <div className="trust-actions">
+          <a className="button secondary" href="#/approvals">
+            Review proposals
+          </a>
+          <a className="button secondary" href="#/rhythm">
+            Review rhythm
+          </a>
+        </div>
+      </section>
+
       <div className="overview-columns">
         <section className="panel schedule-panel" aria-labelledby="today-title">
           <div className="panel-heading">
@@ -187,7 +207,7 @@ export function OverviewScreen() {
           </div>
           <ConfidenceMeter value={overview.confidence.level} />
           <p>{overview.confidence.reason}</p>
-          <a href="#/timeline">
+          <a href="#/rhythm">
             Review observations <Icon name="chevron" />
           </a>
         </aside>

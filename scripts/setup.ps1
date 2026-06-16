@@ -5,7 +5,7 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 $ToolsBin = Join-Path $Root ".tools\bin"
 $LocalNode = Join-Path $Root ".tools\node-v24.16.0-win-x64"
-if (-not (Get-Command "node" -ErrorAction SilentlyContinue) -and -not (Test-Path (Join-Path $LocalNode "node.exe"))) {
+if (-not (Test-Path (Join-Path $LocalNode "node.exe"))) {
     $toolsRoot = Join-Path $Root ".tools"
     $archive = Join-Path $toolsRoot "node-v24.16.0-win-x64.zip"
     New-Item -ItemType Directory -Force -Path $toolsRoot | Out-Null
@@ -17,7 +17,7 @@ if (-not (Get-Command "node" -ErrorAction SilentlyContinue) -and -not (Test-Path
     Expand-Archive -LiteralPath $archive -DestinationPath $toolsRoot -Force
     Remove-Item -LiteralPath $archive
 }
-if (-not (Get-Command "node" -ErrorAction SilentlyContinue) -and (Test-Path (Join-Path $LocalNode "node.exe"))) {
+if (Test-Path (Join-Path $LocalNode "node.exe")) {
     $env:PATH = "$LocalNode;$env:PATH"
 }
 $StudioJava = "C:\Program Files\Android\Android Studio\jbr"

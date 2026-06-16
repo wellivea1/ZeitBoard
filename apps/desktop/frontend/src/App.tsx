@@ -4,10 +4,11 @@ import {
   CalendarScreen,
   DataSourcesScreen,
   MedicationsScreen,
+  ApprovalsScreen,
+  RhythmScreen,
   SettingsScreen,
   SharingScreen,
   TasksScreen,
-  TimelineScreen,
 } from "./screens/SecondaryScreens";
 
 export default function App() {
@@ -17,7 +18,8 @@ export default function App() {
     overview: <OverviewScreen />,
     calendar: <CalendarScreen />,
     tasks: <TasksScreen />,
-    timeline: <TimelineScreen />,
+    approvals: <ApprovalsScreen />,
+    rhythm: <RhythmScreen />,
     medications: <MedicationsScreen />,
     sharing: <SharingScreen />,
     "data-sources": <DataSourcesScreen />,

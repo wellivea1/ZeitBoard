@@ -6,13 +6,15 @@ interface NavItem {
   id: ScreenId;
   label: string;
   icon: IconName;
+  badge?: string;
 }
 
 const primaryNavigation: NavItem[] = [
   { id: "overview", label: "Overview", icon: "overview" },
   { id: "calendar", label: "Calendar", icon: "calendar" },
   { id: "tasks", label: "Tasks", icon: "tasks" },
-  { id: "timeline", label: "Timeline", icon: "timeline" },
+  { id: "approvals", label: "Approvals", icon: "approvals", badge: "2" },
+  { id: "rhythm", label: "Rhythm", icon: "timeline" },
   { id: "medications", label: "Medications", icon: "medications" },
   { id: "sharing", label: "Sharing", icon: "sharing" },
   { id: "data-sources", label: "Data Sources", icon: "sources" },
@@ -21,8 +23,9 @@ const primaryNavigation: NavItem[] = [
 const screenIds = new Set<ScreenId>([...primaryNavigation.map((item) => item.id), "settings"]);
 
 function readScreenFromHash(): ScreenId {
-  const candidate = window.location.hash.replace(/^#\/?/, "") as ScreenId;
-  return screenIds.has(candidate) ? candidate : "overview";
+  const candidate = window.location.hash.replace(/^#\/?/, "");
+  if (candidate === "timeline") return "rhythm";
+  return screenIds.has(candidate as ScreenId) ? (candidate as ScreenId) : "overview";
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -48,6 +51,11 @@ function NavigationLink({ item, active }: { item: NavItem; active: boolean }) {
     >
       <Icon name={item.icon} />
       <span>{item.label}</span>
+      {item.badge && (
+        <span className="nav-badge" aria-label={`${item.badge} pending`}>
+          {item.badge}
+        </span>
+      )}
     </a>
   );
 }

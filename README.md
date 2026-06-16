@@ -4,6 +4,8 @@ ZeitBoard is an early local-first scheduling prototype for people whose sleep-wa
 
 This repository is a phase-one scaffold. It is not a medical device, does not estimate DLMO or exact circadian phase, and does not recommend medication, light, melatonin, stimulant, hypnotic, meal, or exercise timing.
 
+ZeitBoard is a separate project from the neighboring Zeitlog and Zeitdex workspaces. The shared `zeit` prefix is intentional branding, not shared code, history, or product scope.
+
 ## Repository layout
 
 ```text
@@ -40,14 +42,13 @@ Direct component commands:
 
 ```powershell
 go test ./core/... ./apps/desktop/...
-npm ci
-npm run lint
-npm run typecheck
-npm test
-npm run build
 .\scripts\dev.ps1 -Action build -Component desktop
 .\scripts\dev.ps1 -Action build -Component android
 ```
+
+The setup and development scripts prefer the pinned local Node.js runtime under
+`.tools`. If running npm directly in a fresh shell, first put
+`.tools\node-v24.16.0-win-x64` on `PATH`, or use the scripts above.
 
 See [docs/development.md](docs/development.md) for Linux commands,
 [docs/verification.md](docs/verification.md) for the verified environment, and

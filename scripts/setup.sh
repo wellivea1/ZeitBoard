@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TOOLS_BIN="$ROOT/.tools/bin"
 LOCAL_NODE="$ROOT/.tools/node-v24.16.0-linux-x64/bin"
-if ! command -v node >/dev/null 2>&1 && [[ ! -x "$LOCAL_NODE/node" ]]; then
+if [[ ! -x "$LOCAL_NODE/node" ]]; then
   require_bootstrap_error=""
   command -v curl >/dev/null 2>&1 || require_bootstrap_error="curl"
   command -v sha256sum >/dev/null 2>&1 || require_bootstrap_error="${require_bootstrap_error:+$require_bootstrap_error, }sha256sum"
@@ -19,7 +19,7 @@ if ! command -v node >/dev/null 2>&1 && [[ ! -x "$LOCAL_NODE/node" ]]; then
   tar -xJf "$archive" -C "$ROOT/.tools"
   rm -f "$archive"
 fi
-if ! command -v node >/dev/null 2>&1 && [[ -x "$LOCAL_NODE/node" ]]; then
+if [[ -x "$LOCAL_NODE/node" ]]; then
   export PATH="$LOCAL_NODE:$PATH"
 fi
 
