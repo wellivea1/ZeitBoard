@@ -336,6 +336,11 @@ Tabs (Panel, span 12, 44px):  [ Actogram* ] [ Drift ] [ Sources ]
 
 ### 3.2 Actogram (double-plot) — exact spec
 
+> This is the in-app Rhythm actogram. For the **clinical longitudinal actogram**
+> (one row per calendar date over months/years, a 6 pm/noon day-start anchor,
+> single-plot, intervention annotations, and clinician PDF export) modelled on the
+> real reference sleep logs, see **§3.6**.
+
 ```
 ┌ Panel (span 12, min-height 560px, padding s24) ───────────────────────────────┐
 │ Header row (height 32, margin-bottom s20):                                     │
@@ -442,6 +447,98 @@ Acceptance:
    grayscale render test (state still distinguishable).
 3. Actogram double-plot makes a constant-drift rhythm read as a straight diagonal.
 4. The Rhythm screen makes no network request and reads only local data.
+
+### 3.6 Automatic sleep charting (clinician actogram + export)
+
+**Why this exists.** The canonical reference is a real patient record spanning
+2021–2023 in two forms: (a) a hand-kept clinical **"Sleep Log"** (Raleigh
+Neurology) — days as rows, **1-hour columns**, sleep shaded by hand, with a
+hand-drawn legend (`✱` = sleep disruption; `melatonin 1 mg nightly 9 pm`;
+`melatonin + morning light-therapy lamp`); and (b) a **computer-generated
+actogram** ("Sleep Chart …") — blue sleep bands, one row per calendar day, a
+**6 pm-anchored 24 h** axis, showing the free-running diagonal (SleepGraph /
+sleepdiary style). The goal: ZeitBoard **auto-produces that clinical actogram from
+imported data** so the user never hand-charts again, and **exports a printable
+record for a sleep clinician**.
+
+> **Privacy (hard rule):** that example is the user's private health data. Never
+> commit it, screenshot it into the repo, or derive fixtures from it. All chart
+> fixtures stay synthetic (AGENTS.md). The renders used to design this were deleted.
+
+This reuses the §3.2 actogram engine with a **clinical longitudinal mode**,
+**annotation overlays**, and **export**. Additions:
+
+**1) Clinical orientation & calendar rows**
+- **Day-start anchor** (setting): default **6:00 pm** (noon optional) so a
+  nocturnal sleep period is never split at a row edge — the clinical convention in
+  the reference. Single-plot **24 h** is the clinician default; the §3.2 double-plot
+  stays available (it makes the Non-24 diagonal continuous).
+- **One row per calendar date** across the whole selected range (not "last N
+  cycles"): weekday label (`27 Wed`, weekends emphasized), **month-boundary
+  separators** (`October 2023`), and a subtle background band on weekend/month-edge
+  rows — matching the reference.
+- **Ranges:** week / month / custom / **all** (the reference spans ~2 years);
+  virtualize long ranges and paginate per month for print.
+
+**2) Annotation overlays — auto from logged data, observations never advice**
+- **Sleep disruptions / awakenings** (`✱`): a marker inside the sleep band, from
+  wearable wake-after-sleep-onset or a manual "mark disruption."
+- **Medication markers** (e.g. melatonin): a glyph at the dose's civil time on that
+  day's row, from the existing medication log (ui-ux-design.md §9.6). Label is the
+  user's own text. **No dosing or timing advice — recording only.**
+- **Light-therapy / other intervention markers**: a glyph from a *user-logged*
+  intervention event. ZeitBoard records that the user did it; it never recommends
+  light, melatonin, meals, or exercise (AGENTS.md).
+- Each chart shows a legend listing **exactly the annotation types present** (mirrors
+  the hand-drawn legend). Inferred sleep stays hatched; confidence stays ordinal.
+- **Forecast off by default in clinical mode** — a clinician wants observed history,
+  not predictions, unless explicitly turned on.
+
+**3) Automatic pipeline (data → chart; read-only, local)**
+- Sources: Health Connect / wearable (Fitbit etc.) / manual / file-import sleep
+  episodes → effective observations (after corrections) → bands. Same import +
+  correction layers the app already has; the chart is a pure projection — **no new
+  estimation**, gaps render as empty "no data" rows, never invented sleep.
+- Reference implementation to mirror: **Zeitlog's SleepGraph** (the user's
+  sleepdiary-derived actogram) produces exactly the digital example; ZeitBoard
+  brings it native, fed by the same imports. The *automatic* part depends on the
+  phase-2 import hardening already on the roadmap.
+
+**4) Clinician export (the artifact's real purpose)**
+- **Export to printable PDF** (and PNG): the longitudinal actogram, paginated by
+  month, with the legend, date range, generation date, a provenance/units footer,
+  and the standard "estimated windows are uncertain and not medical advice" notice.
+  This is the "bring to your sleep doctor" deliverable; ties to Reports/Export
+  (ui-ux-design.md §9.11) and the clinician persona.
+- Optional **clinical sleep-log template** export: a blank or filled grid in the
+  familiar days × 1-hour layout for clinicians who expect that form.
+- **Redaction controls:** the export carries no diagnosis or location; medication
+  markers may be included or redacted at the user's choice.
+- Export is a deliberate, confirmed action (it leaves the device only when the user
+  saves/shares); **never auto-upload**.
+
+**5) Contract additions (name fields; add schemas + an ADR; fixtures synthetic)**
+- Reuse `observation-set` `sleep_episode` for bands. Add an **annotation set**:
+  `{kind: 'disruption'|'medication'|'light_therapy'|'note', at (timestamp+zone_id),
+  label, provenance}` — disruptions/interventions as user-logged observations;
+  medication markers map from existing medication events.
+- A **chart-export request** DTO: `{range:{from,to}, orientation:'24h'|'48h',
+  day_start_hour, include:{forecast,medication,disruption,light_therapy},
+  redactions[]}`.
+
+**6) Acceptance (testable)**
+1. A multi-month synthetic fixture renders one row per calendar date with month
+   separators and weekend emphasis; a constant-drift fixture shows the diagonal; the
+   6 pm anchor keeps nocturnal sleep uncut (no band split at a row edge).
+2. Disruption / medication / light markers appear at the correct civil position from
+   logged events; the per-chart legend lists exactly those present and omits absent
+   types.
+3. Gaps render as empty "no data" rows; inferred sleep stays visually distinct; no
+   invented sleep.
+4. Export produces a paginated PDF with legend + range + notice; redaction toggles
+   remove the chosen layers; export requires explicit confirmation and makes no
+   network call.
+5. A screen-reader table covers every row including annotations; grayscale-safe.
 
 ---
 

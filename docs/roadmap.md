@@ -50,6 +50,14 @@ Make the local single-user experience trustworthy and legible.
 - No new data sources, no network: this is a read-only projection of
   observations, corrections, and the current estimate. Spec:
   [`ui-ux-feature-specs.md` §3](ui-ux-feature-specs.md).
+- **Automatic clinical charting + clinician export:** auto-generate the
+  longitudinal clinical actogram (one row per calendar date, configurable day-start
+  anchor, single- or double-plot) with intervention/medication/disruption
+  annotations from logged data, and export a printable, redaction-controlled PDF
+  for a sleep clinician — replacing hand-kept sleep logs. Recording only; never a
+  light/melatonin recommendation. Leans on the import hardening above. Reference
+  format = real clinical sleep logs + a SleepGraph-style actogram, kept out of the
+  repo as private data. Spec: [`ui-ux-feature-specs.md` §3.6](ui-ux-feature-specs.md).
 
 Current implementation status: the first desktop trust-loop slice is in place
 with fixture-backed Approvals, Rhythm tabs, a double-plotted actogram with
