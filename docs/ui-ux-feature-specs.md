@@ -449,8 +449,14 @@ Acceptance:
 
 A local-first assistant that **manages the schedule by creating approval-queue
 proposals** (never applying changes) and **answers questions about local data**
-(never medical advice). Inspirations: an OpenCode-style transcript with inline
-tool/action cards; a board-style pending queue for the changes it proposes.
+(never medical advice). It reuses the proven local-first LLM-chat design already
+shipping in **NoobBoard** (the user's local-first Go dashboard, whose
+`docs/llm-policy.md` and `docs/opencode-evaluation.md` document the model): a
+provider abstraction that defaults to off/local, strict-JSON **allowlisted
+actions the server resolves** (the model itself mutates nothing), redacted
+role-scoped context, and a Codex/OpenCode-style approval step. The transcript
+shows inline action cards; the resulting changes land in the §2 approval queue.
+The backend/safety contract is §4.6 — implement it, not just the visible chat.
 
 ### 4.1 Where it lives
 
@@ -556,6 +562,90 @@ Acceptance:
    it and shows the consent note.
 5. Composer: Enter sends, Shift+Enter newlines, 44px send target, disabled while
    responding.
+
+### 4.6 Assistant backend & safety architecture (grounded in NoobBoard)
+
+NoobBoard — the user's local-first Go dashboard — already ships a working LLM
+chat with the exact guarantees ZeitBoard needs. Reuse its model (narrowed from
+infra-repair to scheduling); the patterns below are written out so this spec is
+self-contained.
+
+**Pipeline** (adapt NoobBoard's `telemetry → collectors → rules → facts →
+redaction → role-scoped context → strict JSON → audit`):
+
+```
+local observations + corrections + current estimate
+  → redaction + PHI/role scoping (no med names, no raw behavioral timestamps,
+    no calendar text beyond what the request needs)
+  → bounded, prioritized context builder (the question's tasks/dates first)
+  → LLM call (strict JSON: an allowlisted action + structured target, OR answer-only)
+  → SERVER resolves the action id against ZeitBoard's action registry → change-proposal
+  → approval queue (human)  [+ optional reviewer-model gate, see below]
+  → audit
+```
+
+**Hard rules (copy NoobBoard's, narrowed to scheduling):**
+
+- **Provider defaults to off/local.** With no cloud provider configured the
+  assistant answers only from local data and never fabricates; cloud providers
+  (OpenAI/Anthropic) are opt-in in Settings, called via plain HTTP (no SDK), and
+  surfaced by the header dot (§4.3). Deterministic dev uses fixtures, never a mock
+  answer generator.
+- **The model mutates nothing.** It returns only a schema-allowlisted
+  `recommended_action` ∈ `{propose_move_task, propose_place_task,
+  propose_reminder_shift, answer_only}` plus a structured target (task id /
+  window). The **server** resolves it into a `change-proposal`; unknown or
+  unresolved targets become a non-actionable `unknown` result that opens no
+  approval. (NoobBoard: `recommended_action_id` + `recommended_action_target` →
+  server-resolved `agent_plan`.)
+- **No tools touch raw data, credentials, files, or the network by default.** If a
+  read-only "look up my schedule" tool is ever added, gate it like NoobBoard's
+  read-only status tools: allowlisted names, a hard call budget, redaction on
+  every result, fail-closed on unknown/oversized/invalid.
+- **Signed, one-use approval token.** Approving a proposal (from chat or the
+  Approvals screen) references a short-lived server-signed token (proposal id,
+  action id, actor, resolved target, replay nonce) and is rate-limited and
+  audited identically either way.
+- **Optional reviewer gate — for any future auto-apply only.** If the user ever
+  enables auto-apply for low-risk moves, a separate reviewer model must return
+  PASS over the redacted state + allowlisted `docs/*` references before it runs;
+  reviewer failure/denial fails closed and is audited. ZeitBoard's default stays
+  human approval, so this is an extra layer, never the gate. (NoobBoard
+  `action_auto_review`.)
+- **Credentials never leave their lane.** Settings reads expose only booleans
+  (e.g. `assistant_connected`); raw keys/tokens are never returned, logged,
+  notified, or placed in LLM context. A connected backend proves a credential
+  exists — it is NOT authorization to change the schedule.
+- **Bounded, never-truncated-to-garbage context.** On overflow, compact/shrink
+  older detail and retry one smaller request (OpenCode pattern); never split into
+  chunks or emit invalid JSON.
+- **No web access** in the assistant path (OpenCode's discovery/retrieval split
+  stays off; a future research feature would be separate, allowlisted, audited).
+- **Usage limits are calm, not crashes.** A provider quota/rate-limit error
+  surfaces as a plain message ("the assistant's service hit its usage limit") and
+  the assistant falls back to local answers.
+
+**UI consequences (from NoobBoard `docs/ux-compact.md`):**
+
+- **Omit, don't disable.** When no usable assistant backend exists, hide the
+  assistant entry entirely — never show a dead/disabled chat box. (Local parsing
+  for scheduling/Q&A counts as usable; cloud features are additive.)
+- **Plain language, enforced like a banned-term audit.** Assistant output obeys
+  the product language rules — rhythm-relative plain terms, civil time primary,
+  never clinical jargon (`DLMO`, `circadian phase`) or medical advice.
+- **44px** for Send and every action control (NoobBoard flagged a 40–42px send as
+  a real bug).
+- **Disclose the backend** truthfully; if asked "where does my data go?", answer
+  from the active backend.
+
+**Acceptance additions:**
+6. With no cloud provider configured, the assistant still answers local questions
+   and creates proposals via local parsing; zero network requests carry health data.
+7. Model output is validated against the allowlisted action schema; any
+   non-conforming/unknown action yields `answer_only`/`unknown` and creates no proposal.
+8. Approving from chat consumes a one-use signed token, audited identically to the
+   Approvals screen.
+9. When no backend is usable, the assistant entry is absent (not a disabled box).
 
 ---
 
