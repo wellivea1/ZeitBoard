@@ -4,6 +4,9 @@
 **Audience:** Codex (implementation), core/contract authors, future usability research.
 **Scope:** Windows desktop (Wails + React), Android companion (Kotlin/Compose), trusted-person web view (static, mobile-first).
 **Not in scope:** Production code, visual mockup PNGs, brand wordmark.
+**Companion:** build-ready, placement-first specs for the calendar sync + approval queue,
+sleep-chart visualizer, and conversational assistant live in
+[`ui-ux-feature-specs.md`](ui-ux-feature-specs.md); phasing is in [`roadmap.md`](roadmap.md).
 
 This document is grounded in the existing repository contracts (`contracts/v1/*`), the
 `OverviewDTO` already exposed by `apps/desktop/app.go`, and the product-language rules in
