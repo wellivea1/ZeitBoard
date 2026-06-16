@@ -43,7 +43,17 @@ describe("desktop navigation", () => {
 
     expect(screen.getByRole("heading", { name: "Rhythm" })).toBeVisible();
     // Actogram is the default tab; correction/source review lives under Sources.
-    expect(screen.getByRole("heading", { name: "Sleep observations" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Double-plot actogram" })).toBeVisible();
+    expect(
+      screen.getByText(
+        "Approximate. Forecast widens with time and is shown as ranges, not hard lines.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("img", {
+        name: "Predicted sleep window: Jun 18, Jun 18, 11:21 PM earliest to Jun 19, 5:27 AM latest, 6 hr 6 min window, Forecast cycle 3, Low confidence",
+      }),
+    ).toBeVisible();
     expect(screen.queryByRole("heading", { name: "Correction inspector" })).toBeNull();
 
     fireEvent.click(screen.getByRole("tab", { name: "Sources" }));
@@ -52,6 +62,25 @@ describe("desktop navigation", () => {
     expect(screen.getByRole("button", { name: "Undo correction" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Source conflicts and missingness" })).toBeVisible();
     expect(screen.getByText("Wearable sleep overlaps desktop activity")).toBeVisible();
+  });
+
+  it("renders the rhythm drift visualizer instead of a placeholder", () => {
+    window.location.hash = "#/rhythm";
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Drift" }));
+
+    expect(screen.getByRole("heading", { name: "Sleep-onset drift" })).toBeVisible();
+    expect(screen.getAllByText("+48 min per cycle").length).toBeGreaterThan(0);
+    expect(screen.getByText("Theil-Sen fit")).toBeVisible();
+    expect(
+      screen.getByText(
+        "Y-axis is unwrapped so the free-running trend stays readable across midnight.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.queryByText("The sleep-onset drift chart arrives with the sleep visualizer"),
+    ).toBeNull();
   });
 
   it("keeps the legacy timeline route usable as Rhythm", () => {

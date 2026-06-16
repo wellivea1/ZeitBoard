@@ -51,6 +51,14 @@ Make the local single-user experience trustworthy and legible.
   observations, corrections, and the current estimate. Spec:
   [`ui-ux-feature-specs.md` §3](ui-ux-feature-specs.md).
 
+Current implementation status: the first desktop trust-loop slice is in place
+with fixture-backed Approvals, Rhythm tabs, a double-plotted actogram with
+widening forecast bands, a sleep-onset Drift chart, source conflict/missingness
+review, correction diff and undo affordance, refusal copy, and an Overview
+review strip. Persistent proposal state, real import refresh, backend
+correction undo, real data wiring for the visualizer, and full onboarding remain
+phase-two work.
+
 Exit criteria: a fatigued user can read current state, recent drift, and the
 next predicted windows in seconds; every chart has a non-visual equivalent;
 usability research (synthetic/participant-controlled data) shows no one reads an

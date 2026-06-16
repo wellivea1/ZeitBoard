@@ -739,7 +739,8 @@ button {
 .correction-inspector,
 .refusal-panel,
 .source-conflicts-panel,
-.drift-placeholder {
+.drift-panel,
+.actogram-panel {
   padding: 24px 26px;
 }
 .phase-two-copy,
@@ -941,6 +942,295 @@ button {
   height: 7px;
   background: #728e84;
   border-radius: 3px;
+}
+.actogram-panel {
+  min-height: 560px;
+}
+.actogram-heading {
+  align-items: center;
+}
+.actogram-controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.actogram-controls label {
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 750;
+}
+.actogram-controls input {
+  accent-color: var(--sage);
+}
+.actogram-chart {
+  overflow-x: auto;
+}
+.actogram-visual-axis,
+.actogram-visual-row {
+  min-width: 760px;
+  display: grid;
+  grid-template-columns: 64px minmax(620px, 1fr) 76px;
+  gap: 12px;
+}
+.actogram-visual-axis {
+  padding-bottom: 9px;
+  color: var(--subtle);
+  font-size: 9px;
+}
+.actogram-visual-axis span {
+  grid-column: 2;
+  margin-left: var(--axis-position);
+}
+.actogram-visual-axis span:nth-child(1) {
+  --axis-position: 0%;
+}
+.actogram-visual-axis span:nth-child(2) {
+  --axis-position: 12.5%;
+}
+.actogram-visual-axis span:nth-child(3) {
+  --axis-position: 25%;
+}
+.actogram-visual-axis span:nth-child(4) {
+  --axis-position: 37.5%;
+}
+.actogram-visual-axis span:nth-child(5) {
+  --axis-position: 50%;
+}
+.actogram-visual-axis span:nth-child(6) {
+  --axis-position: 62.5%;
+}
+.actogram-visual-axis span:nth-child(7) {
+  --axis-position: 75%;
+}
+.actogram-visual-axis span:nth-child(8) {
+  --axis-position: 87.5%;
+}
+.actogram-visual-axis span:nth-child(9) {
+  --axis-position: 98%;
+}
+.actogram-visual-grid {
+  display: grid;
+  gap: 6px;
+}
+.actogram-visual-row {
+  min-height: var(--row-pitch);
+  align-items: center;
+}
+.actogram-visual-row time {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 750;
+  text-align: right;
+}
+.actogram-visual-row small {
+  color: var(--subtle);
+  font-size: 10px;
+}
+.actogram-visual-track {
+  position: relative;
+  height: 22px;
+  overflow: hidden;
+  background-image:
+    linear-gradient(
+      to right,
+      transparent calc(50% - 1px),
+      #cdd3cf calc(50% - 1px),
+      #cdd3cf 50%,
+      transparent 50%
+    ),
+    linear-gradient(to right, #ecece7 1px, transparent 1px);
+  background-size:
+    100% 100%,
+    12.5% 100%;
+  border-radius: 4px;
+}
+.actogram-band {
+  position: absolute;
+  top: 4px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  color: #fff;
+  background: #6f8c82;
+  border-radius: 3px;
+  white-space: nowrap;
+  font-size: 8px;
+  font-weight: 750;
+}
+.actogram-band span {
+  padding: 0 6px;
+}
+.actogram-band.is-inferred {
+  color: #475c55;
+  background: repeating-linear-gradient(90deg, #cbd8d2 0 5px, #edf1ee 5px 8px);
+}
+.actogram-band.is-corrected {
+  border-left: 3px solid var(--sage-dark);
+}
+.actogram-band.is-nap {
+  top: 7px;
+  height: 8px;
+}
+.actogram-band.is-forecast {
+  color: #4e615a;
+  background: repeating-linear-gradient(90deg, #d8e5de 0 7px, #edf3ef 7px 12px);
+  border: 1px solid #bdd1c6;
+  opacity: 0.82;
+}
+.actogram-band.is-original {
+  color: transparent;
+  background: #9ca9a4;
+  opacity: 0.35;
+}
+.actogram-band.is-duplicate {
+  opacity: 0.35;
+}
+.actogram-now-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--sage);
+  box-shadow: 0 0 0 1px var(--sage-soft);
+}
+.actogram-now-line {
+  min-width: 760px;
+  height: 22px;
+  display: grid;
+  grid-template-columns: 64px minmax(620px, 1fr) 76px;
+  gap: 12px;
+  align-items: center;
+}
+.actogram-now-line::before {
+  content: "";
+  grid-column: 2;
+  height: 1px;
+  background: var(--sage);
+}
+.actogram-now-line span {
+  grid-column: 3;
+  color: var(--sage-dark);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.actogram-footer {
+  margin-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.actogram-footer span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.actogram-footer i {
+  width: 20px;
+  height: 8px;
+  display: inline-block;
+  border-radius: 3px;
+}
+.actogram-footer p {
+  flex-basis: 100%;
+  margin: 2px 0 0;
+  color: var(--subtle);
+  font-size: 10px;
+}
+.legend-observed,
+.legend-point {
+  background: #6f8c82;
+}
+.legend-inferred {
+  background: repeating-linear-gradient(90deg, #cbd8d2 0 5px, #edf1ee 5px 8px);
+}
+.legend-forecast,
+.legend-band {
+  background: repeating-linear-gradient(90deg, #d8e5de 0 7px, #edf3ef 7px 12px);
+  border: 1px solid #bdd1c6;
+}
+.legend-fit {
+  height: 2px;
+  background: var(--sage);
+}
+.drift-panel {
+  min-height: 420px;
+}
+.drift-summary {
+  display: grid;
+  justify-items: end;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 10px;
+}
+.drift-summary strong {
+  color: var(--sage-dark);
+  font-size: 13px;
+}
+.drift-body {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+}
+.drift-y-axis {
+  height: 300px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: var(--subtle);
+  font-size: 9px;
+  text-align: right;
+}
+.drift-chart {
+  min-height: 330px;
+  display: grid;
+  grid-template-rows: 300px 30px;
+}
+.drift-svg {
+  width: 100%;
+  height: 300px;
+  overflow: visible;
+  background-image: linear-gradient(to right, #f0f0eb 1px, transparent 1px);
+  background-size: 20% 100%;
+  border-left: 1px solid #cfd5d0;
+  border-bottom: 1px solid #cfd5d0;
+}
+.drift-gridline {
+  stroke: #ecece7;
+  stroke-width: 0.45;
+}
+.drift-band {
+  fill: rgba(85, 118, 107, 0.15);
+  stroke: none;
+}
+.drift-fit {
+  fill: none;
+  stroke: var(--sage);
+  stroke-width: 0.9;
+}
+.drift-point {
+  fill: var(--sage-dark);
+  stroke: var(--paper);
+  stroke-width: 0.6;
+}
+.drift-x-axis {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  color: var(--subtle);
+  font-size: 9px;
+}
+.drift-x-axis span {
+  text-align: center;
 }
 .timeline-axis {
   margin-left: 76px;

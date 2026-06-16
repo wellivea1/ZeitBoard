@@ -22,6 +22,24 @@ described phase-two or research feature is already implemented.
 - Windows collection is deliberately minimal and privacy-safe. Android requests
   only Health Connect sleep access and retains a fixture repository fallback.
 
+## Phase-two trust-loop slice
+
+- The desktop shell now exposes the phase-two navigation shape: **Approvals**
+  and **Rhythm**, while the legacy `#/timeline` hash still resolves to Rhythm.
+- The first fixture-driven trust-loop UI is implemented: proposal review cards,
+  source conflict and missingness visibility, a correction inspector with
+  forecast diff and undo affordance, refusal-state copy, and an Overview
+  review-before-change strip.
+- Rhythm has keyboard-addressable Actogram, Drift, and Sources tabs. The
+  fixture-backed visualizer includes a 48-hour double-plotted actogram with
+  widening forecast bands, a sleep-onset drift chart with Theil-Sen fit and
+  uncertainty band, and screen-reader table alternatives. Sources contains
+  correction/provenance review.
+- This is not yet a backend-persistent approval system. Accept/reject/modify,
+  correction undo, import refresh, proposal expiry, and audit recording are UI
+  affordances backed by synthetic fixtures until the phase-two contracts and
+  services are added.
+
 ## Deferred analysis work
 
 - Probabilistic multi-source sleep/wake inference and calibrated boundary-error
@@ -37,14 +55,15 @@ described phase-two or research feature is already implemented.
 
 ## Deferred product and validation work
 
-- Full onboarding, Reports, correction inspectors, proposal acceptance/undo,
-  dark theme, reduced-stimulation controls, and the complete accessibility
-  acceptance matrix from `ui-ux-design.md`.
+- Full onboarding, Reports, backend-backed correction editing, persistent
+  proposal acceptance/undo, dark theme, reduced-stimulation controls, and the
+  complete accessibility acceptance matrix from `ui-ux-design.md`.
 - A real sharing relay, passcodes, access logs, and remote revocation transport.
 - Emulator/device validation, real-world pilot validation, calibration plots,
   benchmark reporting, and the complete 20-scenario synthetic generator.
 
-Phase two should implement the trust loop first: source conflict visibility,
-manual correction with forecast diff and undo, refusal UI, and deterministic
-task proposal review. This preserves the specifications' central safety rule:
-the software must decline to guess when evidence is inadequate.
+Phase two should continue hardening the trust loop first: connect the visible
+fixture affordances to versioned contracts and local services, then add source
+conflict scoring, persistent correction history, audited proposal state, and
+import refresh behavior. This preserves the specifications' central safety
+rule: the software must decline to guess when evidence is inadequate.

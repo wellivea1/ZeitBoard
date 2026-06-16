@@ -5,10 +5,14 @@ import {
   correctionPreviewFixture,
   proposalFixtures,
   refusalFixture,
+  rhythmActogramFixture,
+  rhythmDriftFixture,
   sourceConflictFixtures,
   unplacedTaskFixture,
   type ChangeProposalFixture,
   type ProposalOrigin,
+  type RhythmDriftPointFixture,
+  type RhythmSleepBandFixture,
   type SourceConflictFixture,
 } from "../data/phaseTwo";
 import type { ConfidenceLevel } from "../data/overview";
@@ -124,6 +128,301 @@ function CorrectionInspector() {
         {correctionPreviewFixture.undoLabel}
       </button>
     </aside>
+  );
+}
+
+const DOUBLE_PLOT_HOURS = 48;
+
+function hourToPercent(hour: number) {
+  return `${(hour / DOUBLE_PLOT_HOURS) * 100}%`;
+}
+
+function bandStyle(startHour: number, durationHours: number) {
+  return {
+    left: hourToPercent(startHour),
+    width: `${(durationHours / DOUBLE_PLOT_HOURS) * 100}%`,
+  };
+}
+
+function bandAriaLabel(band: RhythmSleepBandFixture) {
+  const prefix = band.kind === "forecast" ? "Predicted sleep window" : "Sleep interval";
+  return `${prefix}: ${band.day}, ${band.startLabel} to ${band.wakeLabel}, ${band.durationLabel}, ${band.source}, ${band.confidence} confidence`;
+}
+
+function ActogramBand({
+  band,
+  duplicate = false,
+}: {
+  band: RhythmSleepBandFixture;
+  duplicate?: boolean;
+}) {
+  const startHour = duplicate ? band.startHour + 24 : band.startHour;
+  return (
+    <span
+      className={`actogram-band is-${band.kind}${duplicate ? " is-duplicate" : ""}`}
+      style={bandStyle(startHour, band.durationHours)}
+      tabIndex={duplicate ? undefined : 0}
+      aria-hidden={duplicate || undefined}
+      aria-label={duplicate ? undefined : bandAriaLabel(band)}
+      role={duplicate ? undefined : "img"}
+    >
+      {!duplicate && (
+        <span>{band.kind === "forecast" ? "Predicted sleep window" : band.source}</span>
+      )}
+    </span>
+  );
+}
+
+function ActogramRow({ band }: { band: RhythmSleepBandFixture }) {
+  const duplicateFits = band.startHour + 24 < DOUBLE_PLOT_HOURS;
+  const showNowTick = band.day === rhythmActogramFixture.now.day;
+
+  return (
+    <div className="actogram-visual-row">
+      <time>{band.day}</time>
+      <div className="actogram-visual-track">
+        {band.originalStartHour !== undefined && band.originalDurationHours !== undefined && (
+          <span
+            className="actogram-band is-original"
+            style={bandStyle(band.originalStartHour, band.originalDurationHours)}
+            aria-hidden="true"
+            title={band.originalLabel}
+          />
+        )}
+        <ActogramBand band={band} />
+        {duplicateFits && <ActogramBand band={band} duplicate />}
+        {showNowTick && (
+          <span
+            className="actogram-now-tick"
+            style={{ left: hourToPercent(rhythmActogramFixture.now.hour) }}
+            aria-hidden="true"
+          />
+        )}
+      </div>
+      <small>{band.confidence}</small>
+    </div>
+  );
+}
+
+function ActogramPanel() {
+  const [showForecast, setShowForecast] = useState(true);
+  const forecastRows = showForecast ? rhythmActogramFixture.forecastRows : [];
+  const allBands = [...rhythmActogramFixture.observedRows, ...forecastRows];
+
+  return (
+    <section className="panel actogram-panel" aria-labelledby="actogram-title">
+      <div className="panel-heading actogram-heading">
+        <div>
+          <p className="section-kicker">Recent cycles</p>
+          <h2 id="actogram-title">Double-plot actogram</h2>
+        </div>
+        <div className="actogram-controls">
+          <label>
+            <input
+              type="checkbox"
+              checked={showForecast}
+              onChange={(event) => setShowForecast(event.target.checked)}
+            />{" "}
+            Show forecast
+          </label>
+        </div>
+      </div>
+
+      <div className="actogram-chart" role="img" aria-label={rhythmActogramFixture.summary}>
+        <div className="actogram-visual-axis" aria-hidden="true">
+          <span>0</span>
+          <span>6</span>
+          <span>12</span>
+          <span>18</span>
+          <span>0 (24)</span>
+          <span>6</span>
+          <span>12</span>
+          <span>18</span>
+          <span>0 (48)</span>
+        </div>
+        <div className="actogram-visual-grid">
+          {rhythmActogramFixture.observedRows.map((band) => (
+            <ActogramRow band={band} key={band.id} />
+          ))}
+          {showForecast && (
+            <div className="actogram-now-line" aria-hidden="true">
+              <span>{rhythmActogramFixture.now.label}</span>
+            </div>
+          )}
+          {forecastRows.map((band) => (
+            <ActogramRow band={band} key={band.id} />
+          ))}
+        </div>
+      </div>
+
+      <div className="actogram-footer">
+        <span>
+          <i className="legend-observed" /> observed
+        </span>
+        <span>
+          <i className="legend-inferred" /> inferred
+        </span>
+        <span>
+          <i className="legend-forecast" /> predicted
+        </span>
+        <span>| now</span>
+        <p>Approximate. Forecast widens with time and is shown as ranges, not hard lines.</p>
+      </div>
+
+      <table className="sr-table">
+        <caption>Actogram sleep and forecast table</caption>
+        <thead>
+          <tr>
+            <th>Day</th>
+            <th>Sleep start</th>
+            <th>Wake</th>
+            <th>Duration</th>
+            <th>Source</th>
+            <th>Confidence</th>
+          </tr>
+        </thead>
+        <tbody>
+          {allBands.map((band) => (
+            <tr key={band.id}>
+              <td>{band.day}</td>
+              <td>{band.startLabel}</td>
+              <td>{band.wakeLabel}</td>
+              <td>{band.durationLabel}</td>
+              <td>{band.source}</td>
+              <td>{band.confidence}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
+function scaleDriftX(index: number, points: RhythmDriftPointFixture[]) {
+  if (points.length === 1) return 50;
+  return 8 + (index / (points.length - 1)) * 84;
+}
+
+function scaleDriftY(hour: number) {
+  const { yMinHour, yMaxHour } = rhythmDriftFixture;
+  const normalized = (hour - yMinHour) / (yMaxHour - yMinHour);
+  return 90 - normalized * 72;
+}
+
+function DriftPanel() {
+  const points = rhythmDriftFixture.points;
+  const fitPoints = points
+    .map((point, index) => `${scaleDriftX(index, points)},${scaleDriftY(point.fitHour)}`)
+    .join(" ");
+  const bandPoints = [
+    ...points.map(
+      (point, index) => `${scaleDriftX(index, points)},${scaleDriftY(point.bandHighHour)}`,
+    ),
+    ...[...points]
+      .reverse()
+      .map(
+        (point, reverseIndex) =>
+          `${scaleDriftX(points.length - 1 - reverseIndex, points)},${scaleDriftY(point.bandLowHour)}`,
+      ),
+  ].join(" ");
+  const gridHours = [18, 20, 22, 24];
+
+  return (
+    <section className="panel drift-panel" aria-labelledby="drift-title">
+      <div className="panel-heading">
+        <div>
+          <p className="section-kicker">Phase / drift</p>
+          <h2 id="drift-title">{rhythmDriftFixture.title}</h2>
+        </div>
+        <div className="drift-summary">
+          <strong>{rhythmDriftFixture.slopeLabel}</strong>
+          <span>{rhythmDriftFixture.confidence} confidence</span>
+        </div>
+      </div>
+
+      <div className="drift-body">
+        <div className="drift-y-axis" aria-hidden="true">
+          <span>12 AM</span>
+          <span>10 PM</span>
+          <span>8 PM</span>
+          <span>6 PM</span>
+        </div>
+        <div className="drift-chart" role="img" aria-label={rhythmDriftFixture.summary}>
+          <svg
+            className="drift-svg"
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+          >
+            {gridHours.map((hour) => (
+              <line
+                className="drift-gridline"
+                x1="0"
+                x2="100"
+                y1={scaleDriftY(hour)}
+                y2={scaleDriftY(hour)}
+                vectorEffect="non-scaling-stroke"
+                key={hour}
+              />
+            ))}
+            <polygon className="drift-band" points={bandPoints} />
+            <polyline className="drift-fit" points={fitPoints} vectorEffect="non-scaling-stroke" />
+            {points.map((point, index) => (
+              <circle
+                className="drift-point"
+                cx={scaleDriftX(index, points)}
+                cy={scaleDriftY(point.onsetHour)}
+                r="1.7"
+                vectorEffect="non-scaling-stroke"
+                key={point.id}
+              />
+            ))}
+          </svg>
+          <div className="drift-x-axis" aria-hidden="true">
+            {points.map((point) => (
+              <span key={point.id}>{point.day}</span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="actogram-footer">
+        <span>
+          <i className="legend-point" /> observed onset
+        </span>
+        <span>
+          <i className="legend-fit" /> Theil-Sen fit
+        </span>
+        <span>
+          <i className="legend-band" /> uncertainty band
+        </span>
+        <p>Y-axis is unwrapped so the free-running trend stays readable across midnight.</p>
+      </div>
+
+      <table className="sr-table">
+        <caption>Drift trend table</caption>
+        <thead>
+          <tr>
+            <th>Day</th>
+            <th>Sleep onset</th>
+            <th>Source</th>
+            <th>Confidence</th>
+            <th>Fit</th>
+          </tr>
+        </thead>
+        <tbody>
+          {points.map((point) => (
+            <tr key={point.id}>
+              <td>{point.day}</td>
+              <td>{point.onsetLabel}</td>
+              <td>{point.source}</td>
+              <td>{point.confidence}</td>
+              <td>{rhythmDriftFixture.slopeLabel}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
   );
 }
 
@@ -310,15 +609,6 @@ export function ApprovalsScreen() {
   );
 }
 
-const timelineRows = [
-  { day: "Jun 15", start: 21, width: 31, quality: "Complete" },
-  { day: "Jun 14", start: 18, width: 32, quality: "Complete" },
-  { day: "Jun 13", start: 15, width: 29, quality: "Estimated" },
-  { day: "Jun 12", start: 12, width: 34, quality: "Complete" },
-  { day: "Jun 11", start: 9, width: 31, quality: "Incomplete" },
-  { day: "Jun 10", start: 6, width: 33, quality: "Complete" },
-];
-
 type RhythmTab = "actogram" | "drift" | "sources";
 
 const rhythmTabs: { id: RhythmTab; label: string }[] = [
@@ -385,57 +675,7 @@ export function RhythmScreen() {
             id="rhythm-panel-actogram"
             aria-labelledby="rhythm-tab-actogram"
           >
-            <section className="panel timeline-panel" aria-labelledby="observation-title">
-              <div className="panel-heading">
-                <div>
-                  <p className="section-kicker">Last six cycles</p>
-                  <h2 id="observation-title">Sleep observations</h2>
-                </div>
-                <span className="legend">
-                  <i /> Observed sleep
-                </span>
-              </div>
-              <div className="timeline-axis" aria-hidden="true">
-                <span>12 AM</span>
-                <span>6 AM</span>
-                <span>12 PM</span>
-                <span>6 PM</span>
-                <span>12 AM</span>
-              </div>
-              <div className="actogram">
-                {timelineRows.map((row) => (
-                  <div className="actogram-row" key={row.day}>
-                    <time>{row.day}</time>
-                    <div className="actogram-track">
-                      <span
-                        style={{ left: `${row.start}%`, width: `${row.width}%` }}
-                        data-quality={row.quality}
-                      />
-                    </div>
-                    <small>{row.quality}</small>
-                  </div>
-                ))}
-              </div>
-              <table className="sr-table">
-                <caption>Sleep observation table</caption>
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Quality</th>
-                    <th>Relative start</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {timelineRows.map((row) => (
-                    <tr key={row.day}>
-                      <td>{row.day}</td>
-                      <td>{row.quality}</td>
-                      <td>{row.start}% of the day</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </section>
+            <ActogramPanel />
           </div>
         )}
 
@@ -446,15 +686,7 @@ export function RhythmScreen() {
             id="rhythm-panel-drift"
             aria-labelledby="rhythm-tab-drift"
           >
-            <section className="panel drift-placeholder" aria-labelledby="drift-title">
-              <p className="section-kicker">Phase / drift</p>
-              <h2 id="drift-title">Drift trend</h2>
-              <p>
-                The sleep-onset drift chart arrives with the sleep visualizer (roadmap phase two).
-                For now, the Actogram tab shows recent sleep and the Overview shows the current
-                drift estimate.
-              </p>
-            </section>
+            <DriftPanel />
           </div>
         )}
 
