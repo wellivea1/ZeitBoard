@@ -1,9 +1,18 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import App from "./App";
+import { AppearanceProvider } from "./theme/AppearanceProvider";
 
 beforeEach(() => {
   window.location.hash = "#/overview";
+  localStorage.clear();
+  document.documentElement.removeAttribute("data-theme");
+  document.documentElement.removeAttribute("data-reduced");
+  const metaTheme =
+    document.querySelector('meta[name="theme-color"]') ??
+    document.head.appendChild(document.createElement("meta"));
+  metaTheme.setAttribute("name", "theme-color");
+  metaTheme.setAttribute("content", "#f3f0e9");
 });
 
 describe("desktop navigation", () => {
@@ -96,5 +105,40 @@ describe("desktop navigation", () => {
 
     expect(screen.getByText("Permission missing")).toBeVisible();
     expect(screen.getByText("Last sync is stale")).toBeVisible();
+  });
+
+  it("applies Settings appearance controls through the visible UI", () => {
+    window.location.hash = "#/settings";
+    render(
+      <AppearanceProvider>
+        <App />
+      </AppearanceProvider>,
+    );
+
+    const appearance = screen.getByRole("combobox", { name: "Appearance" });
+    const reduced = screen.getByRole("checkbox", { name: /Reduced stimulation/ });
+
+    expect(appearance).toHaveValue("auto");
+    expect(reduced).not.toBeChecked();
+
+    fireEvent.change(appearance, { target: { value: "dark" } });
+    fireEvent.click(reduced);
+
+    expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+    expect(document.documentElement).toHaveAttribute("data-reduced", "true");
+    expect(document.querySelector('meta[name="theme-color"]')).toHaveAttribute(
+      "content",
+      "#161b19",
+    );
+    expect(localStorage.getItem("zeitboard-theme")).toBe("dark");
+    expect(localStorage.getItem("zeitboard-reduced")).toBe("true");
+
+    fireEvent.change(appearance, { target: { value: "light" } });
+
+    expect(document.documentElement).toHaveAttribute("data-theme", "light");
+    expect(document.querySelector('meta[name="theme-color"]')).toHaveAttribute(
+      "content",
+      "#f3f0e9",
+    );
   });
 });

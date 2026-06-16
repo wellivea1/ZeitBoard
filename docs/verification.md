@@ -6,7 +6,7 @@ Most recent local verification: Windows 11 on 2026-06-16.
 
 - `scripts/dev.ps1 -Action check -Component all`: contract validation, Go
   formatting/tests/vet, both web production builds, and Android `check`.
-- Frontend quality checks: Prettier check, ESLint, TypeScript, 10 desktop tests,
+- Frontend quality checks: Prettier check, ESLint, TypeScript, 26 desktop tests,
   and 6 trusted-view tests.
 - Contract tooling: deterministic fixture drift check, schema validation, tools
   module tests, and tools module vet.
@@ -18,6 +18,10 @@ Most recent local verification: Windows 11 on 2026-06-16.
   handle.
 - Android debug build:
   `apps/android/app/build/outputs/apk/debug/app-debug.apk`.
+- Desktop theming/reduced-stimulation: unit tests for theme and reduced-
+  stimulation persistence, `useAppearance` integration tests, and manual
+  verification that the Settings controls apply `data-theme` and `data-reduced`
+  attributes and persist across reload.
 
 ## Previously verified environment setup and artifacts
 

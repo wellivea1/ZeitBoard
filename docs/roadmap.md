@@ -91,10 +91,12 @@ Current implementation status: the first desktop trust-loop slice is in place
 with fixture-backed Approvals, Rhythm tabs, a double-plotted actogram with
 widening forecast bands, a sleep-onset Drift chart, source conflict/missingness
 review, correction diff and undo affordance, refusal copy, and an Overview
-review strip. Persistent proposal state, real import refresh, backend
-correction undo, real data wiring for the visualizer, desktop theming,
-independent reduced-stimulation, the accessibility consolidation pass, and full
-onboarding remain phase-two work.
+review strip. Desktop theming (Auto/Light/Dark) and an independent
+reduced-stimulation toggle are implemented with before-first-paint application,
+`localStorage` persistence, extended CSS custom properties, and tests.
+Persistent proposal state, real import refresh, backend correction undo, real
+data wiring for the visualizer, the remaining accessibility consolidation pass,
+and full onboarding remain phase-two work.
 
 Exit criteria: a fatigued user can read current state, recent drift, and the
 next predicted windows in seconds; every chart has a non-visual equivalent;

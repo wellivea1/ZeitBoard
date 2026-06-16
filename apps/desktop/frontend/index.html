@@ -5,6 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#f3f0e9" />
     <title>ZeitBoard</title>
+    <script>
+      (function () {
+        try {
+          var theme = localStorage.getItem("zeitboard-theme") || "auto";
+          var effective =
+            theme === "dark"
+              ? "dark"
+              : theme === "light"
+                ? "light"
+                : window.matchMedia("(prefers-color-scheme: dark)").matches
+                  ? "dark"
+                  : "light";
+          document.documentElement.setAttribute("data-theme", effective);
+          if (localStorage.getItem("zeitboard-reduced") === "true") {
+            document.documentElement.setAttribute("data-reduced", "true");
+          }
+          var metaTheme = document.querySelector('meta[name="theme-color"]');
+          if (metaTheme) {
+            metaTheme.setAttribute("content", effective === "dark" ? "#161b19" : "#f3f0e9");
+          }
+        } catch (e) {
+          // localStorage may be unavailable in some contexts; fall back to light theme.
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

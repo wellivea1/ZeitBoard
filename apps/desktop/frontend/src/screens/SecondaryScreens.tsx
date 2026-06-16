@@ -1,6 +1,8 @@
 import { useState, type KeyboardEvent } from "react";
 import { Icon } from "../components/Icon";
 import { PageHeader, PlaceholderNotice } from "../components/AppShell";
+import { useAppearanceContext } from "../theme/AppearanceProvider";
+import type { ThemePreference } from "../theme/theme";
 import {
   correctionPreviewFixture,
   proposalFixtures,
@@ -918,6 +920,8 @@ export function DataSourcesScreen() {
 }
 
 export function SettingsScreen() {
+  const { theme, reducedStimulation, setTheme, setReducedStimulation } = useAppearanceContext();
+
   return (
     <>
       <PageHeader
@@ -943,6 +947,28 @@ export function SettingsScreen() {
               <option value="monday">Monday</option>
               <option value="sunday">Sunday</option>
             </select>
+          </label>
+          <label>
+            Appearance
+            <select
+              value={theme}
+              onChange={(event) => setTheme(event.target.value as ThemePreference)}
+            >
+              <option value="auto">Auto</option>
+              <option value="light">Light</option>
+              <option value="dark">Dark</option>
+            </select>
+          </label>
+          <label className="toggle-row settings-row">
+            <span>
+              <strong>Reduced stimulation</strong>
+              <small>Soften motion, saturation, and contrast. Works in light and dark modes.</small>
+            </span>
+            <input
+              type="checkbox"
+              checked={reducedStimulation}
+              onChange={(event) => setReducedStimulation(event.target.checked)}
+            />
           </label>
         </div>
         <div className="panel settings-section">
