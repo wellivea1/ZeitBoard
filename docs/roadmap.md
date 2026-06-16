@@ -99,7 +99,8 @@ data wiring for the visualizer, the remaining accessibility consolidation pass,
 and full onboarding remain phase-two work.
 
 Exit criteria: a fatigued user can read current state, recent drift, and the
-next predicted windows in seconds; every chart has a non-visual equivalent;
+next predicted windows in seconds; the app is fully operable with a screen reader
+and keyboard, with a non-visual equivalent for every chart;
 usability research (synthetic/participant-controlled data) shows no one reads an
 estimate as exact.
 
@@ -174,8 +175,12 @@ device; the active backend is always disclosed in the UI.
 
 - **Uncertainty system:** ranges not points; ordinal confidence; non-color-only
   encodings — applied to every new chart, proposal, and assistant answer.
-- **Accessibility:** keyboard, screen-reader, reduced-stimulation, and 44px
-  touch targets are acceptance criteria for each new surface, not a later pass.
+- **Accessibility — screen-reader + keyboard is a priority:** non-visual use is a
+  primary mode because many people with Non-24 are totally blind. A screen-reader
+  text/table equivalent for every chart, an accessible name on every control,
+  polite live-region announcements, non-color-only cues, keyboard-complete
+  operation, reduced-stimulation, and 44px targets are acceptance criteria for each
+  new surface, not a later pass. See `accessibility.md`.
 - **Privacy & threat model:** each feature that adds a data source, a network
   call, or an external surface updates `privacy.md` and `threat-model.md` before
   it ships.

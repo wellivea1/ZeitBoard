@@ -16,6 +16,12 @@
 - Android consumes observations and estimates through repositories/contracts; it does not reimplement estimation.
 - Sharing uses explicit allowlisted projection DTOs. Never serialize the private domain model directly.
 
+## Accessibility
+
+- Screen-reader + keyboard operation is a **first-class mode**: many people with Non-24 are totally blind, so non-visual users are core, not edge. See `docs/accessibility.md`.
+- Ship a text/table equivalent for every chart or visual-only element; give every control an accessible name; announce meaningful state changes via polite live regions; never convey meaning by color or position alone.
+- New or changed UI must be keyboard- and screen-reader-operable before it ships, with its non-visual equivalent in the same change. Target WCAG 2.2 AA on desktop and Android (TalkBack).
+
 ## Privacy
 
 - Local-first, no analytics, telemetry, tracking SDKs, or health-data upload by default.

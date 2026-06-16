@@ -104,6 +104,12 @@ Everything else in the brief is adopted.
 
 These are ranked. When two conflict, the lower number wins.
 
+> **Baseline assumed by every principle below — non-visual parity.** The product
+> must be fully operable and understandable with a screen reader and keyboard,
+> with no information carried by color or spatial position alone. Many people with
+> Non-24 are totally blind, so screen-reader use is a *primary* mode, not an
+> accommodation. See §18 and [`accessibility.md`](accessibility.md).
+
 1. **One-glance truth.** The top of every primary screen answers that screen's main
    question in one sentence a tired person can parse. Everything else is secondary.
 2. **Civil time is the spine.** Real clock time and date are always present and primary.
@@ -174,6 +180,18 @@ No wearable; only phone + occasional manual logs. Lots of gaps and false sleep d
 - **Needs:** fast manual correction that doesn't destroy source data; honest "insufficient
   data"; clear sense of what each source adds.
 - **Fails if:** the app pretends to know, or correcting feels like data-entry punishment.
+
+### 3.6 Noor — totally blind Non-24 user (co-primary; screen-reader only)
+
+Blind since birth; uses the app entirely via a screen reader + keyboard (desktop) and
+TalkBack (Android), never seeing a chart. Blindness is a leading cause of Non-24, so Noor is
+as central as Maya — not an edge case.
+- **JTBD:** "Read me, out loud and in order, whether I'm likely awake, how long until my next
+  predicted sleep window, and what's pending — without me ever needing to see a chart."
+- **Needs:** every chart as a navigable table; an accessible name on every control; spoken
+  state changes; complete keyboard operation; civil times announced explicitly.
+- **Fails if:** any actogram/drift/calendar is visual-only, a control is unlabeled, meaning is
+  carried by color or position, or a state change happens silently.
 
 ---
 
@@ -1028,14 +1046,23 @@ Target **WCAG 2.2 AA**. This product's users are disproportionately likely to be
 photophobic, or cognitively impaired *at the moment of use*, so accessibility is core, not
 polish.
 
+**Non-visual use is a primary mode.** A large share of people with Non-24 are totally blind
+(the rhythm free-runs without light reaching the circadian clock), so screen-reader + keyboard
+operation is a core path, not an accommodation. Every screen here must be fully usable with no
+sighted vision — the commitment and non-negotiables live in [`accessibility.md`](accessibility.md),
+and the blind co-primary persona is §3.6.
+
 - **Keyboard (desktop):** full operability; logical focus order top-to-bottom matching
   visual hierarchy; visible focus ring (`focus-ring` token, ≥ 3:1); `Esc` closes
   sheets/dialogs; no keyboard traps; shortcuts for Confirm-wake and Log-dose.
-- **Screen readers:** semantic roles; status uses `aria-live="polite"` for the status badge
-  so a changed state is announced without stealing focus; the actogram exposes a **table /
-  text alternative** ("Sat: sleep 2:00 AM–9:30 AM, source wearable, corrected") because a
-  raster chart is otherwise opaque. Android: full TalkBack labels, `stateDescription` for
-  status, content descriptions for every source/confirmation marker.
+- **Screen readers (primary path):** semantic roles + an accessible name on every control,
+  icon-only button, tab, and input. **Every chart/visual ships a table or text equivalent** —
+  actogram, drift chart, calendar overlay, confidence meter, status dot — e.g. "Sat: sleep
+  2:00 AM–9:30 AM, source wearable, corrected"; a chart with no text equivalent is incomplete.
+  Meaningful state changes (current rhythm state, an approval applied, a refusal) announce via
+  `aria-live="polite"` without stealing focus, and civil times are spoken explicitly (never
+  inferred from chart position). Android: full TalkBack labels, `stateDescription` for status,
+  content descriptions for every source/confirmation marker. Detail: [`accessibility.md`](accessibility.md).
 - **Non-color status:** every status carries icon + text + (often) shape/pattern. The app
   is fully usable in grayscale.
 - **Contrast & scaling:** ≥ 4.5:1 text; supports OS font scale to 200%+ with reflow; no
