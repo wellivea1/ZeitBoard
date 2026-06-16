@@ -1,4 +1,5 @@
 import { AppShell, useScreenNavigation } from "./components/AppShell";
+import { ApprovalsProvider } from "./state/approvals";
 import { OverviewScreen } from "./screens/OverviewScreen";
 import {
   CalendarScreen,
@@ -27,11 +28,11 @@ export default function App() {
   }[screen];
 
   return (
-    <>
+    <ApprovalsProvider>
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
       <AppShell screen={screen}>{content}</AppShell>
-    </>
+    </ApprovalsProvider>
   );
 }

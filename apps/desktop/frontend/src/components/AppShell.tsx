@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Icon, type IconName } from "./Icon";
+import { useApprovals } from "../state/approvals";
 import type { ScreenId } from "../types";
 
 interface NavItem {
@@ -13,7 +14,7 @@ const primaryNavigation: NavItem[] = [
   { id: "overview", label: "Overview", icon: "overview" },
   { id: "calendar", label: "Calendar", icon: "calendar" },
   { id: "tasks", label: "Tasks", icon: "tasks" },
-  { id: "approvals", label: "Approvals", icon: "approvals", badge: "2" },
+  { id: "approvals", label: "Approvals", icon: "approvals" },
   { id: "rhythm", label: "Rhythm", icon: "timeline" },
   { id: "medications", label: "Medications", icon: "medications" },
   { id: "sharing", label: "Sharing", icon: "sharing" },
@@ -61,6 +62,7 @@ function NavigationLink({ item, active }: { item: NavItem; active: boolean }) {
 }
 
 export function AppShell({ screen, children }: { screen: ScreenId; children: ReactNode }) {
+  const { pendingCount } = useApprovals();
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -76,7 +78,15 @@ export function AppShell({ screen, children }: { screen: ScreenId; children: Rea
 
         <nav className="primary-nav" aria-label="Primary navigation">
           {primaryNavigation.map((item) => (
-            <NavigationLink key={item.id} item={item} active={screen === item.id} />
+            <NavigationLink
+              key={item.id}
+              item={
+                item.id === "approvals" && pendingCount > 0
+                  ? { ...item, badge: String(pendingCount) }
+                  : item
+              }
+              active={screen === item.id}
+            />
           ))}
         </nav>
 

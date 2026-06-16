@@ -46,6 +46,33 @@ describe("desktop navigation", () => {
     expect(screen.getAllByRole("button", { name: "Reject proposal" })).toHaveLength(2);
   });
 
+  it("approves a proposal, updates the queue and badge, and supports undo", () => {
+    window.location.hash = "#/approvals";
+    render(<App />);
+
+    expect(screen.getByLabelText("2 pending")).toBeVisible();
+    fireEvent.click(screen.getAllByRole("button", { name: "Accept proposal" })[0] as HTMLElement);
+
+    expect(screen.queryByText("Email Dr. Okafor")).toBeNull();
+    expect(screen.getAllByRole("button", { name: "Accept proposal" })).toHaveLength(1);
+    expect(screen.getByLabelText("1 pending")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    expect(screen.getByText("Email Dr. Okafor")).toBeVisible();
+    expect(screen.getAllByRole("button", { name: "Accept proposal" })).toHaveLength(2);
+  });
+
+  it("shows the empty state once every proposal is decided", () => {
+    window.location.hash = "#/approvals";
+    render(<App />);
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Accept proposal" })[0] as HTMLElement);
+    fireEvent.click(screen.getAllByRole("button", { name: "Reject proposal" })[0] as HTMLElement);
+
+    expect(screen.getByRole("heading", { name: "Nothing waiting for approval" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Accept proposal" })).toBeNull();
+  });
+
   it("switches rhythm tabs between actogram and source review", () => {
     window.location.hash = "#/rhythm";
     render(<App />);

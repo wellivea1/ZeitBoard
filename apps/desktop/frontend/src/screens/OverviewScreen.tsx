@@ -3,7 +3,8 @@ import { Icon, type IconName } from "../components/Icon";
 import { PageHeader } from "../components/AppShell";
 import { loadOverview } from "../data/backend";
 import { overviewFixture } from "../data/fixture";
-import { proposalFixtures, refusalFixture, sourceConflictFixtures } from "../data/phaseTwo";
+import { refusalFixture, sourceConflictFixtures } from "../data/phaseTwo";
+import { useApprovals } from "../state/approvals";
 import type { ConfidenceLevel, OverviewSource } from "../data/overview";
 
 interface MetricCardProps {
@@ -58,6 +59,7 @@ function stateTone(state: string): StateTone {
 export function OverviewScreen() {
   const [overview, setOverview] = useState(overviewFixture);
   const [mode, setMode] = useState<OverviewSource>("fixture");
+  const { pendingCount } = useApprovals();
 
   useEffect(() => {
     let current = true;
@@ -141,8 +143,8 @@ export function OverviewScreen() {
           <p className="section-kicker">Trust loop</p>
           <h2 id="trust-strip-title">Review before anything changes</h2>
           <p>
-            {proposalFixtures.length} proposals are pending approval and{" "}
-            {sourceConflictFixtures.length} source issues need review. {refusalFixture.message}
+            {pendingCount} pending {pendingCount === 1 ? "proposal" : "proposals"} and{" "}
+            {sourceConflictFixtures.length} source issues to review. {refusalFixture.message}
           </p>
         </div>
         <div className="trust-actions">

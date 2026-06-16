@@ -3,9 +3,9 @@ import { Icon } from "../components/Icon";
 import { PageHeader, PlaceholderNotice } from "../components/AppShell";
 import { useAppearanceContext } from "../theme/AppearanceProvider";
 import type { ThemePreference } from "../theme/theme";
+import { useApprovals } from "../state/approvals";
 import {
   correctionPreviewFixture,
-  proposalFixtures,
   refusalFixture,
   rhythmActogramFixture,
   rhythmDriftFixture,
@@ -40,6 +40,7 @@ function ConfidenceDots({ value }: { value: ConfidenceLevel }) {
 }
 
 function ProposalCard({ proposal }: { proposal: ChangeProposalFixture }) {
+  const { decide } = useApprovals();
   return (
     <article className="panel proposal-card" data-origin={proposal.origin}>
       <div className="proposal-header">
@@ -66,13 +67,18 @@ function ProposalCard({ proposal }: { proposal: ChangeProposalFixture }) {
         {proposal.createdLabel} - {proposal.expiresLabel}
       </p>
       <div className="approval-actions">
-        <button className="button secondary" type="button">
+        <button
+          className="button secondary"
+          type="button"
+          onClick={() => decide(proposal.id, "rejected")}
+        >
           Reject proposal
         </button>
-        <button className="button secondary" type="button">
-          Modify
-        </button>
-        <button className="button primary" type="button">
+        <button
+          className="button primary"
+          type="button"
+          onClick={() => decide(proposal.id, "approved")}
+        >
           Accept proposal
         </button>
       </div>
@@ -484,6 +490,7 @@ const taskRows = [
 ];
 
 export function TasksScreen() {
+  const { pending, pendingCount } = useApprovals();
   return (
     <>
       <PageHeader
@@ -514,9 +521,11 @@ export function TasksScreen() {
             </a>
           </div>
           <p className="phase-two-copy">
-            {proposalFixtures.length} pending proposals are waiting for explicit approval.
+            {pendingCount > 0
+              ? `${pendingCount} pending ${pendingCount === 1 ? "proposal is" : "proposals are"} waiting for explicit approval.`
+              : "No proposals are waiting for approval."}
           </p>
-          {proposalFixtures.slice(0, 1).map((proposal) => (
+          {pending.slice(0, 1).map((proposal) => (
             <ProposalCard proposal={proposal} key={proposal.id} />
           ))}
         </section>
@@ -568,44 +577,46 @@ export function TasksScreen() {
 }
 
 export function ApprovalsScreen() {
+  const { pending, pendingCount } = useApprovals();
+  const byOrigin = (origin: ProposalOrigin) =>
+    pending.filter((proposal) => proposal.origin === origin).length;
   return (
     <>
       <PageHeader
         title="Approvals"
-        description={`${proposalFixtures.length} pending proposals. Review, modify, approve, or reject each change before anything moves.`}
-        actions={
-          <button className="button secondary" type="button">
-            Approve low-risk
-          </button>
+        description={
+          pendingCount > 0
+            ? `${pendingCount} pending ${pendingCount === 1 ? "proposal" : "proposals"}. Approve or reject each change before anything moves.`
+            : "Nothing is waiting for your approval right now."
         }
       />
       <PlaceholderNotice>
-        Approving here would create an audited change with undo. Fixed and imported events remain
-        immutable.
+        Approving or rejecting updates the queue with one-tap undo. Fixed and imported events remain
+        immutable; nothing is written to a calendar yet.
       </PlaceholderNotice>
       <section className="screen-grid approval-screen" aria-label="Pending approval queue">
-        <div className="panel approval-filter" aria-label="Approval filters">
-          <button className="filter active" type="button">
-            All {proposalFixtures.length}
-          </button>
-          <button className="filter" type="button">
-            Scheduler 1
-          </button>
-          <button className="filter" type="button">
-            Assistant 1
-          </button>
-          <button className="filter" type="button">
-            Sync 0
-          </button>
-          <button className="filter sort-filter" type="button">
-            Sort by expiry
-          </button>
+        <div className="panel approval-filter" aria-label="Pending proposals by origin">
+          <span>All {pendingCount}</span>
+          <span>Scheduler {byOrigin("scheduler")}</span>
+          <span>Assistant {byOrigin("assistant")}</span>
+          <span>Sync {byOrigin("sync_conflict")}</span>
         </div>
-        <div className="proposal-stack">
-          {proposalFixtures.map((proposal) => (
-            <ProposalCard proposal={proposal} key={proposal.id} />
-          ))}
-        </div>
+        {pendingCount > 0 ? (
+          <div className="proposal-stack">
+            {pending.map((proposal) => (
+              <ProposalCard proposal={proposal} key={proposal.id} />
+            ))}
+          </div>
+        ) : (
+          <div className="panel empty-state">
+            <p className="section-kicker">All clear</p>
+            <h2>Nothing waiting for approval</h2>
+            <p>
+              Proposals from the planner and assistant appear here. Nothing changes until you
+              approve it.
+            </p>
+          </div>
+        )}
       </section>
     </>
   );
