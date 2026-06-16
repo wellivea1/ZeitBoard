@@ -1,4 +1,5 @@
-# Placeholder so `//go:embed all:frontend/dist` in main.go resolves before the
-# frontend is built (the Go-only CI job and fresh clones do not run a build).
-# Real build output (index.html, assets/) is produced by `npm run build` and
-# stays git-ignored; this file is never overwritten by a build.
+# Placeholder so the desktop Go embed (//go:embed all:frontend/dist in main.go)
+# resolves before the frontend is built (the Go-only CI job and fresh clones do
+# not run a build). Real build output (index.html, assets/) is git-ignored.
+# vite empties dist/ on build, so the hook in vite.config.ts re-creates this
+# file to keep it tracked.
