@@ -139,6 +139,15 @@ func (a *App) GetOverview() (OverviewDTO, error) {
 	}, nil
 }
 
+// GetRhythm projects the same synthetic sessions and fit that GetOverview uses
+// into the Rhythm actogram and drift series, so both screens reflect one engine.
+func (a *App) GetRhythm() (estimation.RhythmProjection, error) {
+	now := time.Now().UTC().Truncate(time.Minute)
+	zone := "America/New_York"
+	sessions := fixtureSessions(now, zone)
+	return (estimation.RobustEstimator{}).Project(context.Background(), sessions, now)
+}
+
 func fixtureSessions(now time.Time, zone string) []domain.SleepSession {
 	period := 25 * time.Hour
 	lastStart := now.Add(-12 * time.Hour)
@@ -147,7 +156,8 @@ func fixtureSessions(now time.Time, zone string) []domain.SleepSession {
 		start := lastStart.Add(-time.Duration(11-i) * period)
 		evidence := domain.Evidence{Acquisition: domain.AcquisitionManual, Status: domain.StatusUserConfirmed}
 		sessions[i] = domain.SleepSession{
-			ID: domain.SleepSessionID(fmt.Sprintf("fixture-sleep-%02d", i+1)),
+			ID:          domain.SleepSessionID(fmt.Sprintf("fixture-sleep-%02d", i+1)),
+			SourceLabel: "Manual sleep log",
 			Intervals: []domain.SleepInterval{{
 				Interval:      domain.TimeRange{Start: domain.MustZonedInstant(start, zone), End: domain.MustZonedInstant(start.Add(8*time.Hour), zone)},
 				StartEvidence: evidence, EndEvidence: evidence,

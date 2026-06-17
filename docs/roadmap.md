@@ -91,12 +91,20 @@ Current implementation status: the first desktop trust-loop slice is in place
 with fixture-backed Approvals, Rhythm tabs, a double-plotted actogram with
 widening forecast bands, a sleep-onset Drift chart, source conflict/missingness
 review, correction diff and undo affordance, refusal copy, and an Overview
-review strip. Desktop theming (Auto/Light/Dark) and an independent
+review strip. The Rhythm visualizer is now **engine-backed**: the actogram bands,
+the Theil-Sen drift fit and its robust uncertainty band, the widening forecast,
+the slope/confidence labels, and the drift chart's y-range are all derived by the
+Go estimation engine (`estimation.Project`, exposed over the `GetRhythm` Wails
+binding) over the same sessions the Overview uses, so the two screens never
+disagree; the screen falls back to the shared fixture when the service is
+unavailable and shows whether it is running on the local estimate or sample data.
+The engine still runs over synthetic sessions — wiring real imported observations
+is Phase 3. Desktop theming (Auto/Light/Dark) and an independent
 reduced-stimulation toggle are implemented with before-first-paint application,
-`localStorage` persistence, extended CSS custom properties, and tests.
-Persistent proposal state, real import refresh, backend correction undo, real
-data wiring for the visualizer, the remaining accessibility consolidation pass,
-and full onboarding remain phase-two work.
+`localStorage` persistence, extended CSS custom properties, and tests; the WCAG
+2.2 AA contrast/target-size consolidation pass has landed with a regression test.
+Persistent proposal state, real import refresh, backend correction undo, and full
+onboarding remain phase-two work.
 
 Exit criteria: a fatigued user can read current state, recent drift, and the
 next predicted windows in seconds; the app is fully operable with a screen reader

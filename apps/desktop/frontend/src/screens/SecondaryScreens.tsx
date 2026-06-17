@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 import { Icon } from "../components/Icon";
 import { PageHeader, PlaceholderNotice } from "../components/AppShell";
 import { useAppearanceContext } from "../theme/AppearanceProvider";
@@ -7,8 +7,6 @@ import { useApprovals } from "../state/approvals";
 import {
   correctionPreviewFixture,
   refusalFixture,
-  rhythmActogramFixture,
-  rhythmDriftFixture,
   sourceConflictFixtures,
   unplacedTaskFixture,
   type ChangeProposalFixture,
@@ -17,7 +15,13 @@ import {
   type RhythmSleepBandFixture,
   type SourceConflictFixture,
 } from "../data/phaseTwo";
-import type { ConfidenceLevel } from "../data/overview";
+import {
+  loadRhythm,
+  rhythmFixture,
+  type RhythmActogram,
+  type RhythmDrift,
+} from "../data/rhythm";
+import type { ConfidenceLevel, OverviewSource } from "../data/overview";
 
 const days = ["Mon 15", "Tue 16", "Wed 17", "Thu 18", "Fri 19"];
 
@@ -181,9 +185,9 @@ function ActogramBand({
   );
 }
 
-function ActogramRow({ band }: { band: RhythmSleepBandFixture }) {
+function ActogramRow({ band, now }: { band: RhythmSleepBandFixture; now: RhythmActogram["now"] }) {
   const duplicateFits = band.startHour + 24 < DOUBLE_PLOT_HOURS;
-  const showNowTick = band.day === rhythmActogramFixture.now.day;
+  const showNowTick = band.day === now.day;
 
   return (
     <div className="actogram-visual-row">
@@ -202,7 +206,7 @@ function ActogramRow({ band }: { band: RhythmSleepBandFixture }) {
         {showNowTick && (
           <span
             className="actogram-now-tick"
-            style={{ left: hourToPercent(rhythmActogramFixture.now.hour) }}
+            style={{ left: hourToPercent(now.hour) }}
             aria-hidden="true"
           />
         )}
@@ -212,10 +216,10 @@ function ActogramRow({ band }: { band: RhythmSleepBandFixture }) {
   );
 }
 
-function ActogramPanel() {
+function ActogramPanel({ actogram }: { actogram: RhythmActogram }) {
   const [showForecast, setShowForecast] = useState(true);
-  const forecastRows = showForecast ? rhythmActogramFixture.forecastRows : [];
-  const allBands = [...rhythmActogramFixture.observedRows, ...forecastRows];
+  const forecastRows = showForecast ? actogram.forecastRows : [];
+  const allBands = [...actogram.observedRows, ...forecastRows];
 
   return (
     <section className="panel actogram-panel" aria-labelledby="actogram-title">
@@ -236,7 +240,7 @@ function ActogramPanel() {
         </div>
       </div>
 
-      <div className="actogram-chart" role="img" aria-label={rhythmActogramFixture.summary}>
+      <div className="actogram-chart" role="img" aria-label={actogram.summary}>
         <div className="actogram-visual-axis" aria-hidden="true">
           <span>0</span>
           <span>6</span>
@@ -249,16 +253,16 @@ function ActogramPanel() {
           <span>0 (48)</span>
         </div>
         <div className="actogram-visual-grid">
-          {rhythmActogramFixture.observedRows.map((band) => (
-            <ActogramRow band={band} key={band.id} />
+          {actogram.observedRows.map((band) => (
+            <ActogramRow band={band} now={actogram.now} key={band.id} />
           ))}
           {showForecast && (
             <div className="actogram-now-line" aria-hidden="true">
-              <span>{rhythmActogramFixture.now.label}</span>
+              <span>{actogram.now.label}</span>
             </div>
           )}
           {forecastRows.map((band) => (
-            <ActogramRow band={band} key={band.id} />
+            <ActogramRow band={band} now={actogram.now} key={band.id} />
           ))}
         </div>
       </div>
@@ -311,64 +315,88 @@ function scaleDriftX(index: number, points: RhythmDriftPointFixture[]) {
   return 8 + (index / (points.length - 1)) * 84;
 }
 
-function scaleDriftY(hour: number) {
-  const { yMinHour, yMaxHour } = rhythmDriftFixture;
+function scaleDriftY(hour: number, yMinHour: number, yMaxHour: number) {
   const normalized = (hour - yMinHour) / (yMaxHour - yMinHour);
   return 90 - normalized * 72;
 }
 
-function DriftPanel() {
-  const points = rhythmDriftFixture.points;
+// Format an unwrapped onset hour (which may run below 0 or above 24) back to a
+// civil clock label for the dynamic y-axis ticks.
+function formatClockHour(hour: number) {
+  const normalized = ((hour % 24) + 24) % 24;
+  let display = Math.floor(normalized);
+  let minute = Math.round((normalized - display) * 60);
+  if (minute === 60) {
+    display = (display + 1) % 24;
+    minute = 0;
+  }
+  const period = display >= 12 ? "PM" : "AM";
+  const hour12 = display % 12 === 0 ? 12 : display % 12;
+  return minute === 0
+    ? `${hour12} ${period}`
+    : `${hour12}:${String(minute).padStart(2, "0")} ${period}`;
+}
+
+const DRIFT_TICKS = 4;
+
+function DriftPanel({ drift }: { drift: RhythmDrift }) {
+  const points = drift.points;
+  const { yMinHour, yMaxHour } = drift;
+  // Ticks run top (latest onset) to bottom (earliest), derived from the data
+  // range so genuinely free-running onsets are never clipped.
+  const ticks = Array.from(
+    { length: DRIFT_TICKS },
+    (_, i) => yMaxHour - (i / (DRIFT_TICKS - 1)) * (yMaxHour - yMinHour),
+  );
   const fitPoints = points
-    .map((point, index) => `${scaleDriftX(index, points)},${scaleDriftY(point.fitHour)}`)
+    .map((point, index) => `${scaleDriftX(index, points)},${scaleDriftY(point.fitHour, yMinHour, yMaxHour)}`)
     .join(" ");
   const bandPoints = [
     ...points.map(
-      (point, index) => `${scaleDriftX(index, points)},${scaleDriftY(point.bandHighHour)}`,
+      (point, index) =>
+        `${scaleDriftX(index, points)},${scaleDriftY(point.bandHighHour, yMinHour, yMaxHour)}`,
     ),
     ...[...points]
       .reverse()
       .map(
         (point, reverseIndex) =>
-          `${scaleDriftX(points.length - 1 - reverseIndex, points)},${scaleDriftY(point.bandLowHour)}`,
+          `${scaleDriftX(points.length - 1 - reverseIndex, points)},${scaleDriftY(point.bandLowHour, yMinHour, yMaxHour)}`,
       ),
   ].join(" ");
-  const gridHours = [18, 20, 22, 24];
 
   return (
     <section className="panel drift-panel" aria-labelledby="drift-title">
       <div className="panel-heading">
         <div>
           <p className="section-kicker">Phase / drift</p>
-          <h2 id="drift-title">{rhythmDriftFixture.title}</h2>
+          <h2 id="drift-title">{drift.title}</h2>
         </div>
         <div className="drift-summary">
-          <strong>{rhythmDriftFixture.slopeLabel}</strong>
-          <span>{rhythmDriftFixture.confidence} confidence</span>
+          <strong>{drift.slopeLabel}</strong>
+          <span>{drift.confidence} confidence</span>
         </div>
       </div>
 
       <div className="drift-body">
         <div className="drift-y-axis" aria-hidden="true">
-          <span>12 AM</span>
-          <span>10 PM</span>
-          <span>8 PM</span>
-          <span>6 PM</span>
+          {ticks.map((hour) => (
+            <span key={hour}>{formatClockHour(hour)}</span>
+          ))}
         </div>
-        <div className="drift-chart" role="img" aria-label={rhythmDriftFixture.summary}>
+        <div className="drift-chart" role="img" aria-label={drift.summary}>
           <svg
             className="drift-svg"
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
             aria-hidden="true"
           >
-            {gridHours.map((hour) => (
+            {ticks.map((hour) => (
               <line
                 className="drift-gridline"
                 x1="0"
                 x2="100"
-                y1={scaleDriftY(hour)}
-                y2={scaleDriftY(hour)}
+                y1={scaleDriftY(hour, yMinHour, yMaxHour)}
+                y2={scaleDriftY(hour, yMinHour, yMaxHour)}
                 vectorEffect="non-scaling-stroke"
                 key={hour}
               />
@@ -379,7 +407,7 @@ function DriftPanel() {
               <circle
                 className="drift-point"
                 cx={scaleDriftX(index, points)}
-                cy={scaleDriftY(point.onsetHour)}
+                cy={scaleDriftY(point.onsetHour, yMinHour, yMaxHour)}
                 r="1.7"
                 vectorEffect="non-scaling-stroke"
                 key={point.id}
@@ -425,7 +453,7 @@ function DriftPanel() {
               <td>{point.onsetLabel}</td>
               <td>{point.source}</td>
               <td>{point.confidence}</td>
-              <td>{rhythmDriftFixture.slopeLabel}</td>
+              <td>{drift.slopeLabel}</td>
             </tr>
           ))}
         </tbody>
@@ -632,6 +660,21 @@ const rhythmTabs: { id: RhythmTab; label: string }[] = [
 
 export function RhythmScreen() {
   const [tab, setTab] = useState<RhythmTab>("actogram");
+  const [rhythm, setRhythm] = useState(rhythmFixture);
+  const [mode, setMode] = useState<OverviewSource>("fixture");
+
+  useEffect(() => {
+    let current = true;
+    void loadRhythm().then((result) => {
+      if (current) {
+        setRhythm(result.data);
+        setMode(result.source);
+      }
+    });
+    return () => {
+      current = false;
+    };
+  }, []);
 
   const onTabKey = (event: KeyboardEvent<HTMLDivElement>) => {
     const index = rhythmTabs.findIndex((item) => item.id === tab);
@@ -651,11 +694,18 @@ export function RhythmScreen() {
     <>
       <PageHeader
         title="Rhythm"
-        description="Inspect synthetic sleep-wake observations, correction history, and estimate uncertainty."
+        description="Inspect sleep-wake observations, correction history, and estimate uncertainty."
+        actions={
+          <div className="status-cluster">
+            <span className="sync-dot" data-mode={mode} aria-hidden="true" />
+            <span>{mode === "backend" ? "Local estimate" : "Sample data"}</span>
+          </div>
+        }
       />
       <PlaceholderNotice>
-        This read-only preview distinguishes imported, estimated, corrected, and incomplete
-        observations.
+        {mode === "backend"
+          ? "The actogram, drift fit, and forecast below are computed by the local estimation engine."
+          : "This read-only preview distinguishes imported, estimated, corrected, and incomplete observations."}
       </PlaceholderNotice>
       <section className="screen-grid rhythm-screen" aria-label="Rhythm review">
         <div
@@ -688,7 +738,7 @@ export function RhythmScreen() {
             id="rhythm-panel-actogram"
             aria-labelledby="rhythm-tab-actogram"
           >
-            <ActogramPanel />
+            <ActogramPanel actogram={rhythm.actogram} />
           </div>
         )}
 
@@ -699,7 +749,7 @@ export function RhythmScreen() {
             id="rhythm-panel-drift"
             aria-labelledby="rhythm-tab-drift"
           >
-            <DriftPanel />
+            <DriftPanel drift={rhythm.drift} />
           </div>
         )}
 
