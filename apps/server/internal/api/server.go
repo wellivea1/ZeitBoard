@@ -10,9 +10,12 @@ import (
 	"strings"
 	"time"
 
+	"non24.app/core/domain"
 	"non24.app/server/internal/assistant"
 	"non24.app/server/internal/auth"
+	"non24.app/server/internal/projection"
 	"non24.app/server/internal/provider"
+	"non24.app/server/internal/readmodel"
 	"non24.app/server/internal/store"
 	syncmodel "non24.app/server/internal/sync"
 )
@@ -59,6 +62,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /v1/assistant/message", s.requireDevice(http.HandlerFunc(s.handleAssistantMessage)))
 	mux.Handle("GET /v1/proposals", s.requireDevice(http.HandlerFunc(s.handleListProposals)))
 	mux.Handle("POST /v1/proposals/{id}/decision", s.requireDevice(http.HandlerFunc(s.handleProposalDecision)))
+	mux.Handle("GET /v1/overview", s.requireDevice(http.HandlerFunc(s.handleOverview)))
+	mux.Handle("GET /v1/rhythm", s.requireDevice(http.HandlerFunc(s.handleRhythm)))
+	mux.Handle("GET /v1/accuracy", s.requireDevice(http.HandlerFunc(s.handleAccuracy)))
 	mux.Handle("POST /v1/sync/push", s.requireDevice(http.HandlerFunc(s.handlePush)))
 	mux.Handle("GET /v1/sync/pull", s.requireDevice(http.HandlerFunc(s.handlePull)))
 	return mux
@@ -167,6 +173,56 @@ func (s *Server) handleProposalDecision(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
+	sessions, err := s.effectiveSleepSessions(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "overview projection failed")
+		return
+	}
+	response, err := s.projectionService().Overview(r.Context(), sessions)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "overview projection failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) handleRhythm(w http.ResponseWriter, r *http.Request) {
+	sessions, err := s.effectiveSleepSessions(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "rhythm projection failed")
+		return
+	}
+	response, err := s.projectionService().Rhythm(r.Context(), sessions)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "rhythm projection failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) handleAccuracy(w http.ResponseWriter, r *http.Request) {
+	sessions, err := s.effectiveSleepSessions(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "accuracy projection failed")
+		return
+	}
+	response, err := s.projectionService().Accuracy(r.Context(), sessions)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "accuracy projection failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, response)
+}
+
+func (s *Server) effectiveSleepSessions(ctx context.Context) ([]domain.SleepSession, error) {
+	return (readmodel.SleepReader{Store: s.store}).EffectiveSleepSessions(ctx)
+}
+
+func (s *Server) projectionService() projection.Service {
+	return projection.Service{Now: s.now}
 }
 
 type registerDeviceRequest struct {

@@ -37,6 +37,9 @@ var fixturePairs = []struct{ schema, fixture string }{
 	{"share-profile.schema.json", "share-profile-allowlisted.json"},
 	{"trusted-view.schema.json", "trusted-view-default-deny.json"},
 	{"trusted-view.schema.json", "trusted-view.json"},
+	{"overview.schema.json", "overview.json"},
+	{"rhythm.schema.json", "rhythm.json"},
+	{"accuracy.schema.json", "accuracy.json"},
 }
 
 // Set holds the compiled contract schemas for a repository checkout.

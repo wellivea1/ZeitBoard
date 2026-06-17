@@ -1,0 +1,20 @@
+{
+  "schema_version": "v1",
+  "status": "estimated",
+  "report": {
+    "evaluations": 3,
+    "refusals": 0,
+    "medianAbsErrorHours": 0,
+    "meanAbsErrorHours": 0,
+    "p90AbsErrorHours": 0,
+    "hitRate": 1,
+    "calibration": [
+      {
+        "level": "medium",
+        "count": 3,
+        "hitRate": 1,
+        "medianAbsErrorHours": 0
+      }
+    ]
+  }
+}

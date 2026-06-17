@@ -1,0 +1,18 @@
+{
+  "schema_version": "v1",
+  "status": "estimated",
+  "currentEstimatedState": "Likely awake",
+  "timeSinceWake": "19 hours 30 minutes",
+  "predictedNextSleepWindow": "Mar 15, 8:20 AM EDT to Mar 15, 5:35 PM EDT",
+  "driftEstimate": "+50 minutes per observed sleep cycle",
+  "confidence": "medium",
+  "confidenceReasons": [
+    "10 usable principal sleep episodes",
+    "robust residual spread about 0s"
+  ],
+  "nextUsefulTaskWindow": "Task sync is not configured yet.",
+  "sharingStatus": "Server projection only; trusted sharing remains default-deny.",
+  "medicationEvents": [],
+  "fixtureMode": false,
+  "disclaimer": "Estimates describe observed sleep-wake timing and uncertainty. This application does not provide medical advice."
+}

@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Server overview projection v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "status", "medicationEvents", "fixtureMode", "disclaimer"],
+  "properties": {
+    "schema_version": {"$ref": "common.schema.json#/$defs/schemaVersion"},
+    "status": {
+      "type": "string",
+      "enum": ["estimated", "refused"]
+    },
+    "refusal": {"$ref": "#/$defs/refusal"},
+    "currentEstimatedState": {"type": "string", "minLength": 1, "maxLength": 120},
+    "timeSinceWake": {"type": "string", "minLength": 1, "maxLength": 80},
+    "predictedNextSleepWindow": {"type": "string", "minLength": 1, "maxLength": 160},
+    "driftEstimate": {"type": "string", "minLength": 1, "maxLength": 120},
+    "confidence": {"type": "string", "enum": ["low", "medium", "high"]},
+    "confidenceReasons": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1, "maxLength": 160}
+    },
+    "nextUsefulTaskWindow": {"type": "string", "minLength": 1, "maxLength": 160},
+    "sharingStatus": {"type": "string", "minLength": 1, "maxLength": 200},
+    "medicationEvents": {
+      "type": "array",
+      "maxItems": 0,
+      "items": false
+    },
+    "fixtureMode": {"type": "boolean"},
+    "disclaimer": {"type": "string", "minLength": 1, "maxLength": 240}
+  },
+  "oneOf": [
+    {
+      "properties": {"status": {"const": "estimated"}},
+      "required": [
+        "currentEstimatedState",
+        "timeSinceWake",
+        "predictedNextSleepWindow",
+        "driftEstimate",
+        "confidence",
+        "confidenceReasons",
+        "nextUsefulTaskWindow",
+        "sharingStatus"
+      ],
+      "not": {"required": ["refusal"]}
+    },
+    {
+      "properties": {"status": {"const": "refused"}},
+      "required": ["refusal"],
+      "not": {
+        "anyOf": [
+          {"required": ["currentEstimatedState"]},
+          {"required": ["predictedNextSleepWindow"]},
+          {"required": ["driftEstimate"]}
+        ]
+      }
+    }
+  ],
+  "$defs": {
+    "refusal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": ["insufficient_data", "ambiguous_cycle_index", "conflicting_observations", "unsupported_input"]
+        },
+        "message": {"type": "string", "minLength": 1, "maxLength": 240}
+      }
+    }
+  }
+}

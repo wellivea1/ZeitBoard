@@ -1,0 +1,95 @@
+{
+  "schema_version": "v1",
+  "status": "estimated",
+  "projection": {
+    "fixtureMode": false,
+    "actogramSummary": "Double-plotted actogram of synced sleep with widening predicted sleep windows, all derived from the server estimate.",
+    "observedRows": [
+      {
+        "id": "observed-1",
+        "day": "Mar 14",
+        "startHour": 7.67,
+        "durationHours": 8,
+        "kind": "observed",
+        "startLabel": "Mar 14, 7:40 AM",
+        "wakeLabel": "Mar 14, 3:40 PM",
+        "durationLabel": "8 hr 0 min",
+        "source": "Synthetic sleep",
+        "confidence": "High"
+      },
+      {
+        "id": "observed-2",
+        "day": "Mar 13",
+        "startHour": 6.83,
+        "durationHours": 8,
+        "kind": "observed",
+        "startLabel": "Mar 13, 6:50 AM",
+        "wakeLabel": "Mar 13, 2:50 PM",
+        "durationLabel": "8 hr 0 min",
+        "source": "Synthetic sleep",
+        "confidence": "High"
+      }
+    ],
+    "forecastRows": [
+      {
+        "id": "forecast-1",
+        "day": "Mar 15",
+        "startHour": 8.33,
+        "durationHours": 9.25,
+        "kind": "forecast",
+        "startLabel": "Mar 15, 8:20 AM earliest",
+        "wakeLabel": "Mar 15, 5:35 PM latest",
+        "durationLabel": "9 hr 15 min window",
+        "source": "Forecast cycle 1",
+        "confidence": "Medium"
+      },
+      {
+        "id": "forecast-2",
+        "day": "Mar 16",
+        "startHour": 9,
+        "durationHours": 9.75,
+        "kind": "forecast",
+        "startLabel": "Mar 16, 9:00 AM earliest",
+        "wakeLabel": "Mar 16, 6:45 PM latest",
+        "durationLabel": "9 hr 45 min window",
+        "source": "Forecast cycle 2",
+        "confidence": "Medium"
+      }
+    ],
+    "now": {
+      "label": "now",
+      "day": "Mar 15",
+      "hour": 12
+    },
+    "driftTitle": "Sleep-onset drift",
+    "slopeLabel": "+50 min per cycle",
+    "driftConfidence": "Medium",
+    "driftSummary": "Sleep onset drifts later by about 50 minutes per observed sleep cycle with medium confidence.",
+    "yMinHour": 2.5,
+    "yMaxHour": 10.5,
+    "driftPoints": [
+      {
+        "id": "drift-1",
+        "day": "Mar 5",
+        "onsetHour": 4.5,
+        "fitHour": 4.5,
+        "bandLowHour": 4,
+        "bandHighHour": 5,
+        "onsetLabel": "4:30 AM",
+        "source": "Synthetic sleep",
+        "confidence": "High"
+      },
+      {
+        "id": "drift-2",
+        "day": "Mar 6",
+        "onsetHour": 5.33,
+        "fitHour": 5.33,
+        "bandLowHour": 4.83,
+        "bandHighHour": 5.83,
+        "onsetLabel": "5:20 AM",
+        "source": "Synthetic sleep",
+        "confidence": "High"
+      }
+    ]
+  }
+}

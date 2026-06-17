@@ -89,7 +89,10 @@ web research.
 
 ## Next Steps
 
-Milestone 3 should expose the same action registry to the agent-accessible interface from
-ADR-0006: a local MCP connector first, optional Claude/ChatGPT skill wrappers later, live
-voice supplied by the client, and the same redaction, propose-only, approval-token, and
-audit rules.
+Milestone 3 is the server-side estimation/read-projection layer described in
+[ADR-0011](0011-server-side-estimation.md): the backend computes estimates from synced
+sleep data and exposes overview, rhythm, and accuracy projections without raw records.
+Milestone 4 should then expose those read projections plus the M2 propose-only action
+registry to the agent-accessible interface from ADR-0006: a local MCP connector first,
+optional Claude/ChatGPT skill wrappers later, live voice supplied by the client, and the
+same redaction, propose-only, approval-token, and audit rules.

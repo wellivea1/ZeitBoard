@@ -5,8 +5,8 @@
 > [ADR-0008](decisions/0008-self-hostable-backend-byok-llm.md)). The backend is **entirely
 > self-hostable** (the project operates no service and collects no telemetry); the user's
 > data syncs to *their own* instance, and the assistant LLM is **bring-your-own-key**. The
-> Milestone 1 sync path and Milestone 2 BYOK assistant backend are implemented; the MCP
-> connector/skill layer remains future work.
+> Milestone 1 sync path, Milestone 2 BYOK assistant backend, and Milestone 3 server-side
+> read projections are implemented; the MCP connector/skill layer remains future work.
 > Not legal advice.
 
 ## Commitments
@@ -63,8 +63,10 @@ trusted-view URLs. Debug logging does not relax this rule.
 
 Sharing is default-deny. Every field is separately allowlisted, profiles expire,
 and revoked or expired profiles produce no view. Projection code constructs the
-trusted DTO field by field and never serializes the private model. The phase-one
-trusted website is static, synthetic, and makes no network request.
+trusted DTO field by field and never serializes the private model. Server-side overview,
+rhythm, and accuracy projections are authenticated read DTOs built from the decrypted
+sync store and omit raw sync payloads, source record IDs, notes, medication names, and
+tokens. The phase-one trusted website is static, synthetic, and makes no network request.
 
 ## Development data
 

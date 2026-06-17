@@ -240,7 +240,10 @@ state + propose actions) through the allowlisted, redacted capability layer.**
   strict v1 sync validation, idempotent append-only push/pull, and AES-256-GCM encrypted
   payload storage. Backend Milestone 2 has landed too: BYOK providers, redacted assistant
   context, strict JSON action validation, pending proposals, one-use approval tokens,
-  provider disclosure, device revocation, and encrypted proposal/audit storage. The MCP
+  provider disclosure, device revocation, and encrypted proposal/audit storage. Backend
+  Milestone 3 has landed: the server derives effective sleep sessions from synced
+  observations/corrections, computes estimates with the core engine, and exposes
+  authenticated overview, rhythm, and accuracy projections with typed refusals. The MCP
   connector/skill layer remains the next backend workstream.
 - **Contracts:** new surfaces extend the versioned schemas (and an ADR) rather
   than inventing UI-only data.

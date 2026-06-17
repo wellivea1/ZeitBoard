@@ -1,0 +1,147 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Server rhythm projection v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "status"],
+  "properties": {
+    "schema_version": {"$ref": "common.schema.json#/$defs/schemaVersion"},
+    "status": {
+      "type": "string",
+      "enum": ["estimated", "refused"]
+    },
+    "refusal": {"$ref": "#/$defs/refusal"},
+    "projection": {"$ref": "#/$defs/projection"}
+  },
+  "oneOf": [
+    {
+      "properties": {"status": {"const": "estimated"}},
+      "required": ["projection"],
+      "not": {"required": ["refusal"]}
+    },
+    {
+      "properties": {"status": {"const": "refused"}},
+      "required": ["refusal"],
+      "not": {"required": ["projection"]}
+    }
+  ],
+  "$defs": {
+    "refusal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "type": "string",
+          "enum": ["insufficient_data", "ambiguous_cycle_index", "conflicting_observations", "unsupported_input"]
+        },
+        "message": {"type": "string", "minLength": 1, "maxLength": 240}
+      }
+    },
+    "projection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fixtureMode",
+        "actogramSummary",
+        "observedRows",
+        "forecastRows",
+        "now",
+        "driftTitle",
+        "slopeLabel",
+        "driftConfidence",
+        "driftSummary",
+        "yMinHour",
+        "yMaxHour",
+        "driftPoints"
+      ],
+      "properties": {
+        "fixtureMode": {"type": "boolean"},
+        "actogramSummary": {"type": "string", "minLength": 1, "maxLength": 240},
+        "observedRows": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/rhythmBand"}
+        },
+        "forecastRows": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/rhythmBand"}
+        },
+        "now": {"$ref": "#/$defs/rhythmNow"},
+        "driftTitle": {"type": "string", "minLength": 1, "maxLength": 120},
+        "slopeLabel": {"type": "string", "minLength": 1, "maxLength": 80},
+        "driftConfidence": {"type": "string", "enum": ["Low", "Medium", "High"]},
+        "driftSummary": {"type": "string", "minLength": 1, "maxLength": 240},
+        "yMinHour": {"type": "number"},
+        "yMaxHour": {"type": "number"},
+        "driftPoints": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/driftPoint"}
+        }
+      }
+    },
+    "rhythmBand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "day",
+        "startHour",
+        "durationHours",
+        "kind",
+        "startLabel",
+        "wakeLabel",
+        "durationLabel",
+        "source",
+        "confidence"
+      ],
+      "properties": {
+        "id": {"type": "string", "pattern": "^(observed|forecast)-[0-9]+$"},
+        "day": {"type": "string", "minLength": 1, "maxLength": 24},
+        "startHour": {"type": "number"},
+        "durationHours": {"type": "number", "minimum": 0},
+        "kind": {"type": "string", "enum": ["observed", "corrected", "inferred", "nap", "forecast"]},
+        "startLabel": {"type": "string", "minLength": 1, "maxLength": 80},
+        "wakeLabel": {"type": "string", "minLength": 1, "maxLength": 80},
+        "durationLabel": {"type": "string", "minLength": 1, "maxLength": 80},
+        "source": {"type": "string", "minLength": 1, "maxLength": 80},
+        "confidence": {"type": "string", "enum": ["Low", "Medium", "High"]}
+      }
+    },
+    "rhythmNow": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "day", "hour"],
+      "properties": {
+        "label": {"type": "string", "minLength": 1, "maxLength": 24},
+        "day": {"type": "string", "minLength": 1, "maxLength": 24},
+        "hour": {"type": "number"}
+      }
+    },
+    "driftPoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "day",
+        "onsetHour",
+        "fitHour",
+        "bandLowHour",
+        "bandHighHour",
+        "onsetLabel",
+        "source",
+        "confidence"
+      ],
+      "properties": {
+        "id": {"type": "string", "pattern": "^drift-[0-9]+$"},
+        "day": {"type": "string", "minLength": 1, "maxLength": 24},
+        "onsetHour": {"type": "number"},
+        "fitHour": {"type": "number"},
+        "bandLowHour": {"type": "number"},
+        "bandHighHour": {"type": "number"},
+        "onsetLabel": {"type": "string", "minLength": 1, "maxLength": 40},
+        "source": {"type": "string", "minLength": 1, "maxLength": 80},
+        "confidence": {"type": "string", "enum": ["Low", "Medium", "High"]}
+      }
+    }
+  }
+}

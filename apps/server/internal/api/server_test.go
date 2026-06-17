@@ -292,6 +292,151 @@ func TestAssistantProposalDecisionEndpointRequiresOneUseToken(t *testing.T) {
 	}
 }
 
+func TestProjectionEndpointsUseServerEstimateFromSyncedSleep(t *testing.T) {
+	h := newTestHarness(t)
+	token := h.registerDevice(t, "desktop")
+	start := time.Date(2026, 2, 23, 1, 0, 0, 0, time.UTC)
+	h.pushRecords(t, token, driftingSleepRecords(10, start, 24*time.Hour+50*time.Minute, 8*time.Hour)...)
+
+	status, body := h.request(t, http.MethodGet, "/v1/overview", token, "")
+	if status != http.StatusOK {
+		t.Fatalf("overview status = %d body = %s", status, body)
+	}
+	var overview struct {
+		Status                   string `json:"status"`
+		CurrentEstimatedState    string `json:"currentEstimatedState"`
+		TimeSinceWake            string `json:"timeSinceWake"`
+		PredictedNextSleepWindow string `json:"predictedNextSleepWindow"`
+		DriftEstimate            string `json:"driftEstimate"`
+		Confidence               string `json:"confidence"`
+		FixtureMode              bool   `json:"fixtureMode"`
+	}
+	if err := json.Unmarshal(body, &overview); err != nil {
+		t.Fatal(err)
+	}
+	if overview.Status != "estimated" || overview.FixtureMode {
+		t.Fatalf("overview response = %+v", overview)
+	}
+	if !strings.Contains(overview.DriftEstimate, "+50") {
+		t.Fatalf("overview drift = %q, want +50 minutes", overview.DriftEstimate)
+	}
+	if overview.CurrentEstimatedState == "" || overview.TimeSinceWake == "" || overview.PredictedNextSleepWindow == "" {
+		t.Fatalf("overview missing speakable fields: %+v", overview)
+	}
+	assertNoForbiddenProjectionFields(t, body)
+
+	status, body = h.request(t, http.MethodGet, "/v1/rhythm", token, "")
+	if status != http.StatusOK {
+		t.Fatalf("rhythm status = %d body = %s", status, body)
+	}
+	var rhythm struct {
+		Status     string `json:"status"`
+		Projection struct {
+			FixtureMode  bool   `json:"fixtureMode"`
+			SlopeLabel   string `json:"slopeLabel"`
+			ForecastRows []struct {
+				DurationHours float64 `json:"durationHours"`
+			} `json:"forecastRows"`
+			ObservedRows []struct {
+				ID string `json:"id"`
+			} `json:"observedRows"`
+			DriftPoints []struct {
+				ID string `json:"id"`
+			} `json:"driftPoints"`
+		} `json:"projection"`
+	}
+	if err := json.Unmarshal(body, &rhythm); err != nil {
+		t.Fatal(err)
+	}
+	if rhythm.Status != "estimated" || rhythm.Projection.FixtureMode {
+		t.Fatalf("rhythm response = %+v", rhythm)
+	}
+	if !strings.Contains(rhythm.Projection.SlopeLabel, "+50") {
+		t.Fatalf("rhythm slope label = %q, want +50 minutes", rhythm.Projection.SlopeLabel)
+	}
+	if len(rhythm.Projection.ForecastRows) < 2 {
+		t.Fatalf("forecast rows = %d, want at least 2", len(rhythm.Projection.ForecastRows))
+	}
+	if rhythm.Projection.ForecastRows[1].DurationHours <= rhythm.Projection.ForecastRows[0].DurationHours {
+		t.Fatalf("forecast did not widen: first=%v second=%v", rhythm.Projection.ForecastRows[0].DurationHours, rhythm.Projection.ForecastRows[1].DurationHours)
+	}
+	if len(rhythm.Projection.ObservedRows) < 7 || len(rhythm.Projection.DriftPoints) < 7 {
+		t.Fatalf("rhythm missing screen-reader equivalent rows: %+v", rhythm.Projection)
+	}
+	if !strings.HasPrefix(rhythm.Projection.ObservedRows[0].ID, "observed-") || !strings.HasPrefix(rhythm.Projection.DriftPoints[0].ID, "drift-") {
+		t.Fatalf("rhythm IDs were not sanitized: %+v %+v", rhythm.Projection.ObservedRows[0], rhythm.Projection.DriftPoints[0])
+	}
+	assertNoForbiddenProjectionFields(t, body)
+
+	status, body = h.request(t, http.MethodGet, "/v1/accuracy", token, "")
+	if status != http.StatusOK {
+		t.Fatalf("accuracy status = %d body = %s", status, body)
+	}
+	var accuracy struct {
+		Status string `json:"status"`
+		Report struct {
+			Evaluations int     `json:"evaluations"`
+			HitRate     float64 `json:"hitRate"`
+		} `json:"report"`
+	}
+	if err := json.Unmarshal(body, &accuracy); err != nil {
+		t.Fatal(err)
+	}
+	if accuracy.Status != "estimated" || accuracy.Report.Evaluations == 0 {
+		t.Fatalf("accuracy response = %+v", accuracy)
+	}
+	assertNoForbiddenProjectionFields(t, body)
+}
+
+func TestProjectionEndpointsRefuseInsufficientDataWithoutFabricatingEstimate(t *testing.T) {
+	h := newTestHarness(t)
+	token := h.registerDevice(t, "desktop")
+	start := time.Date(2026, 3, 1, 4, 0, 0, 0, time.UTC)
+	h.pushRecords(t, token, driftingSleepRecords(3, start, 24*time.Hour+50*time.Minute, 8*time.Hour)...)
+
+	for _, path := range []string{"/v1/overview", "/v1/rhythm", "/v1/accuracy"} {
+		status, body := h.request(t, http.MethodGet, path, token, "")
+		if status != http.StatusOK {
+			t.Fatalf("%s status = %d body = %s", path, status, body)
+		}
+		var response struct {
+			Status  string `json:"status"`
+			Refusal struct {
+				Code string `json:"code"`
+			} `json:"refusal"`
+		}
+		if err := json.Unmarshal(body, &response); err != nil {
+			t.Fatal(err)
+		}
+		if response.Status != "refused" || response.Refusal.Code != "insufficient_data" {
+			t.Fatalf("%s refusal = %+v body = %s", path, response, body)
+		}
+		if path == "/v1/overview" && bytes.Contains(body, []byte("currentEstimatedState")) {
+			t.Fatalf("overview refusal fabricated estimate fields: %s", body)
+		}
+		assertNoForbiddenProjectionFields(t, body)
+	}
+}
+
+func TestProjectionEndpointsRequireAuthAndRejectRevokedTokens(t *testing.T) {
+	h := newTestHarness(t)
+	first := h.registerDeviceFull(t, "desktop")
+	second := h.registerDeviceFull(t, "phone")
+
+	status, _ := h.request(t, http.MethodGet, "/v1/overview", "", "")
+	if status != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated overview status = %d, want %d", status, http.StatusUnauthorized)
+	}
+	status, body := h.request(t, http.MethodPost, "/v1/devices/"+second.DeviceID+"/revoke", first.Token, "")
+	if status != http.StatusOK {
+		t.Fatalf("revoke status = %d body = %s", status, body)
+	}
+	status, _ = h.request(t, http.MethodGet, "/v1/rhythm", second.Token, "")
+	if status != http.StatusUnauthorized {
+		t.Fatalf("revoked rhythm status = %d, want %d", status, http.StatusUnauthorized)
+	}
+}
+
 func (h *testHarness) registerDevice(t *testing.T, label string) string {
 	t.Helper()
 	return h.registerDeviceFull(t, label).Token
@@ -346,6 +491,14 @@ func (h *testHarness) request(t *testing.T, method, path, token, body string) (i
 	return resp.StatusCode, data
 }
 
+func (h *testHarness) pushRecords(t *testing.T, token string, records ...string) {
+	t.Helper()
+	status, body := h.request(t, http.MethodPost, "/v1/sync/push", token, syncBatch(records...))
+	if status != http.StatusOK {
+		t.Fatalf("push status = %d body = %s", status, body)
+	}
+}
+
 func syncBatch(records ...string) string {
 	return `{"schema_version":"v1","records":[` + strings.Join(records, ",") + `]}`
 }
@@ -356,6 +509,52 @@ func syncRecord(id, kind, payload string) string {
 
 func observationPayload(id, sourceRecordID string) string {
 	return fmt.Sprintf(`{"observation_id":%q,"kind":"sleep_episode","start_at":"2026-03-05T04:30:00Z","end_at":"2026-03-05T12:30:00Z","zone_id":"America/New_York","sleep":{"classification":"principal"},"provenance":{"acquisition_method":"synthetic","evidence_status":"directly_observed","recorded_at":"2026-03-05T12:35:00Z","source_record_id":%q}}`, id, sourceRecordID)
+}
+
+func driftingSleepRecords(count int, start time.Time, period, duration time.Duration) []string {
+	records := make([]string, 0, count)
+	for i := 0; i < count; i++ {
+		id := fmt.Sprintf("obs_sleep_%02d", i)
+		sleepStart := start.Add(time.Duration(i) * period)
+		records = append(records, syncRecord(id, "observation", sleepObservationPayloadAt(id, sleepStart, sleepStart.Add(duration), fmt.Sprintf("sync-source-%02d", i))))
+	}
+	return records
+}
+
+func sleepObservationPayloadAt(id string, start, end time.Time, sourceRecordID string) string {
+	return fmt.Sprintf(
+		`{"observation_id":%q,"kind":"sleep_episode","start_at":%q,"end_at":%q,"zone_id":"America/New_York","sleep":{"classification":"principal"},"provenance":{"acquisition_method":"synthetic","evidence_status":"directly_observed","recorded_at":%q,"source_record_id":%q}}`,
+		id,
+		start.UTC().Format(time.RFC3339),
+		end.UTC().Format(time.RFC3339),
+		end.UTC().Add(5*time.Minute).Format(time.RFC3339),
+		sourceRecordID,
+	)
+}
+
+func assertNoForbiddenProjectionFields(t *testing.T, body []byte) {
+	t.Helper()
+	lower := strings.ToLower(string(body))
+	for _, forbidden := range []string{
+		`"payload"`,
+		`"source_record_id"`,
+		`"sourceids"`,
+		`"observation_id"`,
+		`"observationids"`,
+		"obs_sleep_",
+		"sync-source",
+		`"inputsessionids"`,
+		`"algorithmversion"`,
+		`"zoneid"`,
+		`"utc"`,
+		`"notes"`,
+		`"diagnosis"`,
+		`"token"`,
+	} {
+		if strings.Contains(lower, forbidden) {
+			t.Fatalf("projection leaked forbidden field/value %q in %s", forbidden, body)
+		}
+	}
 }
 
 func assistantRequestBody() string {

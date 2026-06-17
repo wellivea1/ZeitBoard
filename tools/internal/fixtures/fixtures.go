@@ -244,6 +244,106 @@ type trustedView struct {
 	Notice                string           `json:"notice"`
 }
 
+type medicationEvent struct {
+	Medication     string `json:"medication"`
+	CivilTime      string `json:"civilTime"`
+	RelativeToWake string `json:"relativeToWake"`
+}
+
+type overviewProjection struct {
+	SchemaVersion            string            `json:"schema_version"`
+	Status                   string            `json:"status"`
+	Refusal                  *refusal          `json:"refusal,omitempty"`
+	CurrentEstimatedState    string            `json:"currentEstimatedState,omitempty"`
+	TimeSinceWake            string            `json:"timeSinceWake,omitempty"`
+	PredictedNextSleepWindow string            `json:"predictedNextSleepWindow,omitempty"`
+	DriftEstimate            string            `json:"driftEstimate,omitempty"`
+	Confidence               string            `json:"confidence,omitempty"`
+	ConfidenceReasons        []string          `json:"confidenceReasons,omitempty"`
+	NextUsefulTaskWindow     string            `json:"nextUsefulTaskWindow,omitempty"`
+	SharingStatus            string            `json:"sharingStatus,omitempty"`
+	MedicationEvents         []medicationEvent `json:"medicationEvents"`
+	FixtureMode              bool              `json:"fixtureMode"`
+	Disclaimer               string            `json:"disclaimer"`
+}
+
+type rhythmBand struct {
+	ID            string  `json:"id"`
+	Day           string  `json:"day"`
+	StartHour     float64 `json:"startHour"`
+	DurationHours float64 `json:"durationHours"`
+	Kind          string  `json:"kind"`
+	StartLabel    string  `json:"startLabel"`
+	WakeLabel     string  `json:"wakeLabel"`
+	DurationLabel string  `json:"durationLabel"`
+	Source        string  `json:"source"`
+	Confidence    string  `json:"confidence"`
+}
+
+type rhythmNow struct {
+	Label string  `json:"label"`
+	Day   string  `json:"day"`
+	Hour  float64 `json:"hour"`
+}
+
+type rhythmDriftPoint struct {
+	ID           string  `json:"id"`
+	Day          string  `json:"day"`
+	OnsetHour    float64 `json:"onsetHour"`
+	FitHour      float64 `json:"fitHour"`
+	BandLowHour  float64 `json:"bandLowHour"`
+	BandHighHour float64 `json:"bandHighHour"`
+	OnsetLabel   string  `json:"onsetLabel"`
+	Source       string  `json:"source"`
+	Confidence   string  `json:"confidence"`
+}
+
+type rhythmProjectionBody struct {
+	FixtureMode     bool               `json:"fixtureMode"`
+	ActogramSummary string             `json:"actogramSummary"`
+	ObservedRows    []rhythmBand       `json:"observedRows"`
+	ForecastRows    []rhythmBand       `json:"forecastRows"`
+	Now             rhythmNow          `json:"now"`
+	DriftTitle      string             `json:"driftTitle"`
+	SlopeLabel      string             `json:"slopeLabel"`
+	DriftConfidence string             `json:"driftConfidence"`
+	DriftSummary    string             `json:"driftSummary"`
+	YMinHour        float64            `json:"yMinHour"`
+	YMaxHour        float64            `json:"yMaxHour"`
+	DriftPoints     []rhythmDriftPoint `json:"driftPoints"`
+}
+
+type rhythmProjection struct {
+	SchemaVersion string                `json:"schema_version"`
+	Status        string                `json:"status"`
+	Refusal       *refusal              `json:"refusal,omitempty"`
+	Projection    *rhythmProjectionBody `json:"projection,omitempty"`
+}
+
+type calibrationBucket struct {
+	Level               string  `json:"level"`
+	Count               int     `json:"count"`
+	HitRate             float64 `json:"hitRate"`
+	MedianAbsErrorHours float64 `json:"medianAbsErrorHours"`
+}
+
+type accuracyReport struct {
+	Evaluations         int                 `json:"evaluations"`
+	Refusals            int                 `json:"refusals"`
+	MedianAbsErrorHours float64             `json:"medianAbsErrorHours"`
+	MeanAbsErrorHours   float64             `json:"meanAbsErrorHours"`
+	P90AbsErrorHours    float64             `json:"p90AbsErrorHours"`
+	HitRate             float64             `json:"hitRate"`
+	Calibration         []calibrationBucket `json:"calibration"`
+}
+
+type accuracyProjection struct {
+	SchemaVersion string          `json:"schema_version"`
+	Status        string          `json:"status"`
+	Refusal       *refusal        `json:"refusal,omitempty"`
+	Report        *accuracyReport `json:"report,omitempty"`
+}
+
 func uncertain(center time.Time, radius int) uncertainWindow {
 	return uncertainWindow{
 		EarliestAt: ts(center.Add(-minutes(radius))),
@@ -536,6 +636,138 @@ func Build() ([]File, error) {
 		Notice:                notice,
 	}
 
+	overviewFixture := overviewProjection{
+		SchemaVersion:            "v1",
+		Status:                   "estimated",
+		CurrentEstimatedState:    "Likely awake",
+		TimeSinceWake:            "19 hours 30 minutes",
+		PredictedNextSleepWindow: "Mar 15, 8:20 AM EDT to Mar 15, 5:35 PM EDT",
+		DriftEstimate:            "+50 minutes per observed sleep cycle",
+		Confidence:               "medium",
+		ConfidenceReasons: []string{
+			"10 usable principal sleep episodes",
+			"robust residual spread about 0s",
+		},
+		NextUsefulTaskWindow: "Task sync is not configured yet.",
+		SharingStatus:        "Server projection only; trusted sharing remains default-deny.",
+		MedicationEvents:     []medicationEvent{},
+		FixtureMode:          false,
+		Disclaimer:           "Estimates describe observed sleep-wake timing and uncertainty. This application does not provide medical advice.",
+	}
+
+	rhythmFixture := rhythmProjection{
+		SchemaVersion: "v1",
+		Status:        "estimated",
+		Projection: &rhythmProjectionBody{
+			FixtureMode:     false,
+			ActogramSummary: "Double-plotted actogram of synced sleep with widening predicted sleep windows, all derived from the server estimate.",
+			ObservedRows: []rhythmBand{
+				{
+					ID:            "observed-1",
+					Day:           "Mar 14",
+					StartHour:     7.67,
+					DurationHours: 8,
+					Kind:          "observed",
+					StartLabel:    "Mar 14, 7:40 AM",
+					WakeLabel:     "Mar 14, 3:40 PM",
+					DurationLabel: "8 hr 0 min",
+					Source:        "Synthetic sleep",
+					Confidence:    "High",
+				},
+				{
+					ID:            "observed-2",
+					Day:           "Mar 13",
+					StartHour:     6.83,
+					DurationHours: 8,
+					Kind:          "observed",
+					StartLabel:    "Mar 13, 6:50 AM",
+					WakeLabel:     "Mar 13, 2:50 PM",
+					DurationLabel: "8 hr 0 min",
+					Source:        "Synthetic sleep",
+					Confidence:    "High",
+				},
+			},
+			ForecastRows: []rhythmBand{
+				{
+					ID:            "forecast-1",
+					Day:           "Mar 15",
+					StartHour:     8.33,
+					DurationHours: 9.25,
+					Kind:          "forecast",
+					StartLabel:    "Mar 15, 8:20 AM earliest",
+					WakeLabel:     "Mar 15, 5:35 PM latest",
+					DurationLabel: "9 hr 15 min window",
+					Source:        "Forecast cycle 1",
+					Confidence:    "Medium",
+				},
+				{
+					ID:            "forecast-2",
+					Day:           "Mar 16",
+					StartHour:     9,
+					DurationHours: 9.75,
+					Kind:          "forecast",
+					StartLabel:    "Mar 16, 9:00 AM earliest",
+					WakeLabel:     "Mar 16, 6:45 PM latest",
+					DurationLabel: "9 hr 45 min window",
+					Source:        "Forecast cycle 2",
+					Confidence:    "Medium",
+				},
+			},
+			Now:             rhythmNow{Label: "now", Day: "Mar 15", Hour: 12},
+			DriftTitle:      "Sleep-onset drift",
+			SlopeLabel:      "+50 min per cycle",
+			DriftConfidence: "Medium",
+			DriftSummary:    "Sleep onset drifts later by about 50 minutes per observed sleep cycle with medium confidence.",
+			YMinHour:        2.5,
+			YMaxHour:        10.5,
+			DriftPoints: []rhythmDriftPoint{
+				{
+					ID:           "drift-1",
+					Day:          "Mar 5",
+					OnsetHour:    4.5,
+					FitHour:      4.5,
+					BandLowHour:  4,
+					BandHighHour: 5,
+					OnsetLabel:   "4:30 AM",
+					Source:       "Synthetic sleep",
+					Confidence:   "High",
+				},
+				{
+					ID:           "drift-2",
+					Day:          "Mar 6",
+					OnsetHour:    5.33,
+					FitHour:      5.33,
+					BandLowHour:  4.83,
+					BandHighHour: 5.83,
+					OnsetLabel:   "5:20 AM",
+					Source:       "Synthetic sleep",
+					Confidence:   "High",
+				},
+			},
+		},
+	}
+
+	accuracyFixture := accuracyProjection{
+		SchemaVersion: "v1",
+		Status:        "estimated",
+		Report: &accuracyReport{
+			Evaluations:         3,
+			Refusals:            0,
+			MedianAbsErrorHours: 0,
+			MeanAbsErrorHours:   0,
+			P90AbsErrorHours:    0,
+			HitRate:             1,
+			Calibration: []calibrationBucket{
+				{
+					Level:               "medium",
+					Count:               3,
+					HitRate:             1,
+					MedianAbsErrorHours: 0,
+				},
+			},
+		},
+	}
+
 	ordered := []struct {
 		name  string
 		value any
@@ -552,6 +784,9 @@ func Build() ([]File, error) {
 		{"share-profile-allowlisted.json", shareProfileAllowlisted},
 		{"trusted-view-default-deny.json", trustedViewDefaultDeny},
 		{"trusted-view.json", trustedViewFixture},
+		{"overview.json", overviewFixture},
+		{"rhythm.json", rhythmFixture},
+		{"accuracy.json", accuracyFixture},
 	}
 
 	files := make([]File, 0, len(ordered))

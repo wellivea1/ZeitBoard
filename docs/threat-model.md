@@ -68,9 +68,12 @@ daemon with TLS serving, per-device bearer tokens, token-hash storage, strict sy
 validation, idempotent append-only records, and AES-256-GCM encrypted payloads at rest.
 The **Milestone 2 BYOK provider layer and assistant backend** are implemented with
 provider disclosure, strict JSON action validation, redacted context, pending proposals,
-one-use approval tokens, and encrypted proposal/audit storage. The **MCP/skill agent
-connector and live trusted-view transport do not exist yet**; their rows remain design
-requirements for those future workstreams, not current guarantees.
+one-use approval tokens, and encrypted proposal/audit storage. The **Milestone 3
+server-side read layer** is implemented with effective sleep-session replay from synced
+observations/corrections, core-engine overview/rhythm/accuracy projections, typed
+estimation refusals, and authenticated access. The **MCP/skill agent connector and live
+trusted-view transport do not exist yet**; their rows remain design requirements for
+those future workstreams, not current guarantees.
 
 ## Threats and mitigations
 
@@ -81,6 +84,7 @@ requirements for those future workstreams, not current guarantees.
 | Server host compromise or stolen backup | Full private history disclosed | Operator-keyed AES-256-GCM payload encryption at rest; no project telemetry; self-hosting runbook covers TLS, key handling, and encrypted backups |
 | BYOK credential leak | Provider key stolen or abused | Provider keys are loaded from env or secret files, never returned by status APIs, never logged, never placed in LLM context, and never projected |
 | Over-broad context to the LLM provider | Health data over-exposed to a third party | The assistant builds role-scoped context field-by-field, omitting medication names, diagnosis, raw behavioral timestamps, full calendar text, tokens, and secrets; provider status discloses the active provider/model |
+| Server read projection leak | Synced private records exposed through read APIs | Overview/rhythm/accuracy endpoints require device auth, replay only decrypted store records internally, return projection DTOs instead of sync envelopes, sanitize internal observation IDs, and test for forbidden fields |
 | Assistant or agent mutation | Schedule changed without consent | Model emits only allowlisted actions the server resolves into proposals; approval queue; one-use signed token; no direct mutation path (tested) |
 | Malicious external agent (MCP/skill) | Exfiltration or unauthorized change | Allowlisted read projections only (never the raw model); propose-only; call budget; fail-closed on unknown/oversized/invalid |
 | Malicious import (Takeout / My Activity) | Resource exhaustion; misleading inference | Size limits, strict schemas, bounded strings/arrays, transactional validation; inferred sleep marked low-confidence (`inferred`), never overclaimed |

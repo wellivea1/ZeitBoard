@@ -19,3 +19,8 @@ a schema explicitly says otherwise.
 serialization of the private model and deliberately has no extension point for
 medication, diagnosis, raw activity, provenance, location, identifiers, or
 calendar text.
+
+`overview.schema.json`, `rhythm.schema.json`, and `accuracy.schema.json` cover the
+authenticated server read projections. They are also projection contracts, not raw sync
+or domain-model serialization: refusals are typed, observation/source IDs are omitted,
+and the rhythm chart uses presentation row IDs plus civil-time labels.
