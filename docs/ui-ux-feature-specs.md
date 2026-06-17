@@ -544,6 +544,15 @@ This reuses the §3.2 actogram engine with a **clinical longitudinal mode**,
 
 ## 4. Feature C — Conversational assistant (chatbox)
 
+> **Backend default updated by [ADR-0007](decisions/0007-connected-cloud-architecture.md).**
+> The product is now connected/cloud, so the **cloud LLM is the standard backend** — the
+> "provider defaults to off/local" wording in §4.4 and §4.6 is superseded (a local/offline
+> mode may remain as a *fallback*, not the default). Everything else in §4.4/§4.6 still
+> holds and should be implemented as written: the model only emits allowlisted actions the
+> **server** resolves (it mutates nothing), every change goes through the approval queue,
+> context is redacted/role-scoped, and the active backend is always disclosed. Additionally,
+> the cloud provider must not train on or retain the context (DPA / zero-retention tier).
+
 A local-first assistant that **manages the schedule by creating approval-queue
 proposals** (never applying changes) and **answers questions about local data**
 (never medical advice). It reuses the proven local-first LLM-chat design already

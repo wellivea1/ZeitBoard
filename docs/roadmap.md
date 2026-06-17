@@ -170,8 +170,10 @@ write-back is off by default and passes a security review before enablement.
 
 ## Phase 4 — Conversational assistant (chatbox)
 
-A local-first assistant to manage the schedule and answer questions about one's
-own data — proposing, never applying, and never advising medically.
+An assistant to manage the schedule and answer questions about one's own data —
+proposing, never applying, and never advising medically. Per
+[ADR-0007](decisions/0007-connected-cloud-architecture.md) the assistant is
+**cloud-backed by default** (a local/offline mode may remain as a fallback).
 
 - **Manage the calendar by conversation.** The assistant turns requests
   ("find me 90 min for taxes before Friday, not right after I wake") into
@@ -182,11 +184,10 @@ own data — proposing, never applying, and never advising medically.
   drift, next predicted windows, what a proposal means, why a task moved — always
   with uncertainty and civil time, and a hard refusal boundary on diagnosis,
   prescribing, dosing, and treatment timing.
-- **Backend decision is a gated milestone.** Default is local/offline parsing
-  with no health data leaving the device. Any cloud LLM is opt-in, off by
-  default, scoped to the minimum non-identifying context, and requires its own
-  privacy review and threat-model update (same bar as the relay). The UI always
-  shows whether the assistant is running locally or via a connected service.
+- **Cloud LLM is the standard backend (ADR-0007).** Context sent to the provider is
+  minimized and redacted, the provider must not train on or retain it, and the active
+  backend is always disclosed in the UI. The model still only *proposes* (approval gate)
+  and never advises medically; an optional local/offline mode may remain as a fallback.
 - **The assistant's action registry doubles as an agent-accessible interface.** The
   same allowlisted, *propose-only*, redacted capability layer the in-app assistant
   uses is exposed to an external agent so the whole app can be driven non-visually by
@@ -202,10 +203,10 @@ agent interface = [ADR-0006](decisions/0006-agent-accessible-interface.md).
 
 Exit criteria: the assistant cannot mutate the schedule except by creating
 approval-queue proposals; it refuses medical questions with a consistent,
-non-alarming script; with the default backend, no health payload leaves the
-device; the active backend is always disclosed in the UI; **every feature is
-operable non-visually by an agent (read state + propose actions) through the
-allowlisted, redacted capability layer**, with a local MCP path that needs no cloud.
+non-alarming script; context sent to the cloud backend is minimized and redacted
+(and the provider does not train on or retain it); the active backend is always
+disclosed in the UI; **every feature is operable non-visually by an agent (read
+state + propose actions) through the allowlisted, redacted capability layer.**
 
 ---
 
@@ -225,9 +226,13 @@ allowlisted, redacted capability layer**, with a local MCP path that needs no cl
   (a local MCP connector or a Claude/ChatGPT skill), not a transcription of the charts;
   cloud agents are opt-in and gated like any connected backend. This is a standing
   design constraint, not a later pass. See ADR-0006 and Phase 4.
-- **Privacy & threat model:** each feature that adds a data source, a network
-  call, or an external surface updates `privacy.md` and `threat-model.md` before
-  it ships.
+- **Privacy & threat model:** the product is a **connected cloud app**
+  ([ADR-0007](decisions/0007-connected-cloud-architecture.md)) — the user's data syncs
+  to their account and a cloud LLM is a standard backend, with explicit consent for
+  special-category health data, encryption in transit + at rest, and export/deletion. A
+  **sync backend/server is a new workstream** and a prerequisite for companion↔server
+  sync (none exists yet). `privacy.md` and `threat-model.md` are under revision per
+  ADR-0007; each feature that adds a data source or external surface updates them.
 - **Contracts:** new surfaces extend the versioned schemas (and an ADR) rather
   than inventing UI-only data.
 
@@ -237,6 +242,8 @@ allowlisted, redacted capability layer**, with a local MCP path that needs no cl
 
 No phase includes: exact circadian phase/DLMO claims; autonomous health
 recommendations; the assistant or scheduler applying changes without approval;
-hidden background collection; advertising; data brokerage; default cloud upload;
-or a default cloud LLM. Any of these would require a new product scope, privacy
-review, threat model, and user-consent design.
+hidden background collection; advertising; or data brokerage. Each would require a
+new product scope and user-consent design. (Cloud sync of the user's data to their
+account and a cloud LLM backend are now **in scope** per
+[ADR-0007](decisions/0007-connected-cloud-architecture.md) — gated by explicit
+consent, encryption, and export/deletion — and are no longer non-goals.)

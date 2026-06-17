@@ -1,5 +1,12 @@
 # Threat model
 
+> **⚠ Under revision per [ADR-0007](decisions/0007-connected-cloud-architecture.md).**
+> This model assumes a local-first app where "no health payload leaves the device." That
+> invariant no longer holds: the product is a connected cloud app that syncs the private
+> model to the user's account and uses a cloud LLM. This document needs a rewrite to add
+> accounts/auth, server-side storage of identifiable health data, cloud-provider access,
+> transport, and the LLM provider's data handling as in-scope assets and surfaces.
+
 ## Scope and assets
 
 Phase one protects local observations, corrections, estimates, schedules,

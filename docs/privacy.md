@@ -1,9 +1,18 @@
 # Privacy
 
+> **⚠ Under revision per [ADR-0007](decisions/0007-connected-cloud-architecture.md).**
+> The product is now a connected cloud app (the user's data syncs to their account; a
+> cloud LLM is a standard backend). The sections below describe the superseded
+> local-first/offline model and will be rewritten once the backend/identity model and
+> LLM provider are chosen. What carries over: explicit consent for special-category
+> health data, user export + deletion, encryption in transit and at rest, no
+> advertising or data brokerage, and default-deny *sharing to other people*.
+
 ## Commitments
 
-- Local-first operation with no analytics, telemetry, tracking SDKs, or health
-  data upload by default.
+- Connected cloud operation ([ADR-0007](decisions/0007-connected-cloud-architecture.md)):
+  the user's data syncs to their account and a cloud LLM is a standard backend. No
+  advertising, data brokerage, or third-party tracking SDKs.
 - User-controlled acquisition, correction, export, sharing, and deletion.
 - Data minimization at collection, storage, logging, projection, and testing.
 - Explicit consent and least privilege for every platform permission.

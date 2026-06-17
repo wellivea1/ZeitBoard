@@ -25,8 +25,8 @@
 
 ## Privacy
 
-- Local-first, no analytics, telemetry, tracking SDKs, or health-data upload by default.
-- Never collect keystrokes, typed content, screenshots, browser history, or active-window titles by default.
+- **Connected cloud app (ADR-0007):** the user's data syncs to their account over an authenticated, encrypted channel and a cloud LLM is a standard backend. No advertising, data brokerage, or third-party tracking SDKs. Health/circadian data is special-category — collect and process it only with explicit consent, and provide user export and deletion.
+- Never collect keystrokes, typed content, screenshots, browser history, or active-window titles; collection is permission-gated and user-initiated.
 - Do not log health payloads, notes, medication names, calendar content, tokens, or exact behavioral timestamps.
 - Fixtures, screenshots, static web assets, and tests must contain synthetic data only.
 

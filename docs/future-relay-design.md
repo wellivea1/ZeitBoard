@@ -1,5 +1,12 @@
 # Future relay design
 
+> **⚠ Superseded for sync by [ADR-0007](decisions/0007-connected-cloud-architecture.md).**
+> The relay was designed as a minimal, projection-only transport that "never accepts the
+> private domain model" — explicitly *not* a sync engine. The product now syncs the
+> private model to the user's cloud account via a real backend, which replaces the relay
+> for sync. The relay design below may still inform the *trusted-view sharing* path
+> (sharing to other people, which stays default-deny and projection-only).
+
 ## Status
 
 Exploratory only. Phase one has no relay, public sharing endpoint, remote
