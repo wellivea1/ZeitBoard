@@ -16,7 +16,7 @@ case "$ACTION" in
 esac
 
 case "$COMPONENT" in
-  all|contracts|core|desktop|trusted-web|android) ;;
+  all|contracts|core|server|desktop|trusted-web|android) ;;
   *) echo "Unknown component: $COMPONENT" >&2; exit 2 ;;
 esac
 
@@ -40,7 +40,7 @@ run_core() {
   [[ -f "$ROOT/go.mod" ]] && modules+=("$ROOT/go.mod")
   while IFS= read -r -d '' module; do
     modules+=("$module")
-  done < <(find "$ROOT/core" "$ROOT/apps" -path '*/node_modules' -prune -o -name go.mod -type f -print0 2>/dev/null)
+  done < <(find "$ROOT/core" "$ROOT/apps/desktop" -path '*/node_modules' -prune -o -name go.mod -type f -print0 2>/dev/null)
   if (( ${#modules[@]} == 0 )); then
     echo "Skipping core: no Go modules are present."
     return
@@ -65,6 +65,25 @@ run_core() {
         (cd "$(dirname "$module")" && go build ./...)
       done
       ;;
+  esac
+}
+
+run_server() {
+  local server="$ROOT/apps/server"
+  if [[ ! -f "$server/go.mod" ]]; then
+    echo "Skipping server: go.mod is not present."
+    return
+  fi
+  case "$ACTION" in
+    check)
+      unformatted="$(find "$server" -name '*.go' -type f -print0 2>/dev/null | xargs -0 -r gofmt -l)"
+      [[ -z "$unformatted" ]] || { echo "gofmt required:" >&2; echo "$unformatted" >&2; exit 1; }
+      (cd "$server" && go test ./... && go vet ./...)
+      ;;
+    test) (cd "$server" && go test ./...) ;;
+    build) (cd "$server" && go build ./...) ;;
+    dev) (cd "$server" && go run ./cmd/zeitboardd) ;;
+    fixtures) return ;;
   esac
 }
 
@@ -140,7 +159,7 @@ if [[ "$ACTION" == dev && "$COMPONENT" == all ]]; then
 fi
 
 if [[ "$COMPONENT" == all ]]; then
-  COMPONENTS=(contracts core desktop trusted-web android)
+  COMPONENTS=(contracts core server desktop trusted-web android)
 else
   COMPONENTS=("$COMPONENT")
 fi
@@ -149,6 +168,7 @@ for item in "${COMPONENTS[@]}"; do
   case "$item" in
     contracts) run_contracts ;;
     core) run_core ;;
+    server) run_server ;;
     desktop) run_desktop ;;
     trusted-web) run_web "$ROOT/apps/trusted-web-prototype" "trusted web" ;;
     android) run_android ;;

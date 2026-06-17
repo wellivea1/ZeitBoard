@@ -75,6 +75,9 @@ jobs:
           - name: core
             os: ubuntu-latest
             path: core
+          - name: server
+            os: ubuntu-latest
+            path: apps/server
           - name: desktop-service
             os: windows-latest
             path: apps/desktop

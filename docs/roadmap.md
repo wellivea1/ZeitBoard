@@ -235,9 +235,10 @@ state + propose actions) through the allowlisted, redacted capability layer.**
   self-hostable** Go backend syncs the user's data to *their own* instance (TLS,
   encrypted at rest), and the assistant LLM is **bring-your-own-key, multi-provider**
   (no shipped keys). The project runs no service and collects no telemetry; the operator
-  is the data controller. Legal scope **US / North Carolina**. The **self-hostable
-  backend + BYOK provider layer is the gating new workstream** (none exists yet);
-  `privacy.md`/`threat-model.md` are under revision per ADR-0007/0008.
+  is the data controller. Legal scope **US / North Carolina**. Backend Milestone 1 has
+  landed: `apps/server` provides authenticated device enrollment, TLS sync endpoints,
+  strict v1 sync validation, idempotent append-only push/pull, and AES-256-GCM encrypted
+  payload storage. The BYOK provider layer remains the next backend workstream.
 - **Contracts:** new surfaces extend the versioned schemas (and an ADR) rather
   than inventing UI-only data.
 

@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Sync batch v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "cursor", "records"],
+  "properties": {
+    "schema_version": {
+      "$ref": "common.schema.json#/$defs/schemaVersion"
+    },
+    "cursor": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "records": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "$ref": "#/$defs/envelope"
+      }
+    }
+  },
+  "$defs": {
+    "envelope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["seq", "recordId", "kind", "deviceId", "createdAt", "payload"],
+      "properties": {
+        "seq": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "recordId": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["observation", "correction"]
+        },
+        "deviceId": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "createdAt": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "payload": {
+          "oneOf": [
+            {
+              "$ref": "observation-set.schema.json#/$defs/observation"
+            },
+            {
+              "$ref": "correction-set.schema.json#/$defs/correction"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "observation"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "$ref": "observation-set.schema.json#/$defs/observation"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "correction"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "$ref": "correction-set.schema.json#/$defs/correction"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

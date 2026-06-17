@@ -4,9 +4,9 @@
 > ([ADR-0007](decisions/0007-connected-cloud-architecture.md) +
 > [ADR-0008](decisions/0008-self-hostable-backend-byok-llm.md)). The backend is **entirely
 > self-hostable** (the project operates no service and collects no telemetry); the user's
-> data syncs to *their own* instance, and the assistant LLM is **bring-your-own-key**. Some
-> sections below still describe the original local-first scaffold and are being updated;
-> `threat-model.md` still needs a full rewrite around the self-hosted-instance boundary.
+> data syncs to *their own* instance, and the assistant LLM is **bring-your-own-key**. The
+> Milestone 1 backend sync path is implemented; the BYOK LLM provider layer remains
+> future work.
 > Not legal advice.
 
 ## Commitments

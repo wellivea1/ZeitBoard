@@ -2,7 +2,7 @@
 param(
     [ValidateSet("check", "test", "build", "dev", "fixtures")]
     [string]$Action = "check",
-    [ValidateSet("all", "contracts", "core", "desktop", "trusted-web", "android")]
+    [ValidateSet("all", "contracts", "core", "server", "desktop", "trusted-web", "android")]
     [string]$Component = "all"
 )
 
@@ -61,7 +61,7 @@ function Invoke-Contracts {
 function Invoke-Core {
     $moduleFiles = @()
     if (Test-Path (Join-Path $Root "go.mod")) { $moduleFiles += Get-Item (Join-Path $Root "go.mod") }
-    $goSearchRoots = @("core", "apps") | ForEach-Object { Join-Path $Root $_ } | Where-Object { Test-Path $_ }
+    $goSearchRoots = @("core", "apps\desktop") | ForEach-Object { Join-Path $Root $_ } | Where-Object { Test-Path $_ }
     if ($goSearchRoots) {
         $moduleFiles += Get-ChildItem -Path $goSearchRoots -Filter "go.mod" -Recurse -File -ErrorAction SilentlyContinue |
             Where-Object { $_.FullName -notmatch '[\\/]node_modules[\\/]' }
@@ -100,6 +100,42 @@ function Invoke-Core {
             Push-Location (Join-Path $Root "core")
             try { go test ./... }
             finally { Pop-Location }
+        }
+    }
+    finally { Pop-Location }
+}
+
+function Invoke-Server {
+    $serverRoot = Join-Path $Root "apps\server"
+    if (-not (Test-Path (Join-Path $serverRoot "go.mod"))) {
+        Write-Host "Skipping server: go.mod is not present."
+        return
+    }
+    Push-Location $serverRoot
+    try {
+        if ($Action -eq "check") {
+            $goFiles = Get-ChildItem -Path $serverRoot -Filter "*.go" -Recurse -File -ErrorAction SilentlyContinue
+            $unformatted = @()
+            foreach ($file in $goFiles) {
+                $result = gofmt -l $file.FullName
+                if ($result) { $unformatted += $result }
+            }
+            if ($unformatted) { throw "gofmt required: $($unformatted -join ', ')" }
+            go test ./...
+            if ($LASTEXITCODE -ne 0) { throw "Server tests failed." }
+            go vet ./...
+            if ($LASTEXITCODE -ne 0) { throw "Server vet failed." }
+        }
+        elseif ($Action -eq "test") {
+            go test ./...
+            if ($LASTEXITCODE -ne 0) { throw "Server tests failed." }
+        }
+        elseif ($Action -eq "build") {
+            go build ./...
+            if ($LASTEXITCODE -ne 0) { throw "Server build failed." }
+        }
+        elseif ($Action -eq "dev") {
+            go run ./cmd/zeitboardd
         }
     }
     finally { Pop-Location }
@@ -173,7 +209,7 @@ if ($Action -eq "dev" -and $Component -eq "all") {
 }
 
 $components = if ($Component -eq "all") {
-    @("contracts", "core", "desktop", "trusted-web", "android")
+    @("contracts", "core", "server", "desktop", "trusted-web", "android")
 } else {
     @($Component)
 }
@@ -182,6 +218,7 @@ foreach ($item in $components) {
     switch ($item) {
         "contracts" { Invoke-Contracts }
         "core" { Invoke-Core }
+        "server" { Invoke-Server }
         "desktop" { Invoke-Desktop }
         "trusted-web" { Invoke-Web (Join-Path $Root "apps\trusted-web-prototype") "trusted web" }
         "android" { Invoke-Android }

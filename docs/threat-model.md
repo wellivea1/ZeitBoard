@@ -63,17 +63,19 @@ operator against their own data, and nation-state adversaries.
 
 The **local core** mitigations below are implemented (append-only model, projection
 allowlist, typed refusal, deterministic fixtures, the agent/assistant propose-only
-contract spec). The **sync backend, BYOK provider layer, and live trusted-view
-transport do not exist yet** — their rows are **design requirements** for those
-workstreams, not current guarantees.
+contract spec). The **Milestone 1 sync backend** is implemented as a self-hosted Go
+daemon with TLS serving, per-device bearer tokens, token-hash storage, strict sync
+validation, idempotent append-only records, and AES-256-GCM encrypted payloads at rest.
+The **BYOK provider layer and live trusted-view transport do not exist yet**; their rows
+remain design requirements for those future workstreams, not current guarantees.
 
 ## Threats and mitigations
 
 | Threat | Impact | Mitigation |
 | --- | --- | --- |
 | Over-broad platform permission | Unrelated private data becomes accessible | Request only required permissions; collection permission-gated and user-initiated; isolate adapters |
-| Unauthenticated or MITM sync | Private model intercepted or altered in transit | Mutual authentication + TLS; per-device credentials; integrity-checked, replay-resistant sync *(design requirement)* |
-| Server host compromise or stolen backup | Full private history disclosed | Operator-keyed encryption at rest; least-privilege server; no project telemetry; hardening + backup-encryption runbook *(design requirement)* |
+| Unauthenticated or MITM sync | Private model intercepted or altered in transit | TLS serving; per-device bearer credentials; token hashes stored server-side; repeated record IDs are idempotent no-ops and conflicting payloads are rejected |
+| Server host compromise or stolen backup | Full private history disclosed | Operator-keyed AES-256-GCM payload encryption at rest; no project telemetry; self-hosting runbook covers TLS, key handling, and encrypted backups |
 | BYOK credential leak | Provider key stolen or abused | Credentials in OS keychain / server secret store; never logged, never placed in LLM context, never projected *(design requirement)* |
 | Over-broad context to the LLM provider | Health data over-exposed to a third party | Minimize + redact context (no medication names, raw timestamps, or unneeded calendar text; role-scoped); disclose the active provider; provider choice/terms are the user's *(design requirement)* |
 | Assistant or agent mutation | Schedule changed without consent | Model emits only allowlisted actions the server resolves into proposals; approval queue; one-use signed token; no direct mutation path (tested) |

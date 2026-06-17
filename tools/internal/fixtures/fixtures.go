@@ -83,6 +83,21 @@ type correctionSet struct {
 	Corrections   []correction `json:"corrections"`
 }
 
+type syncRecord struct {
+	Seq       int    `json:"seq"`
+	RecordID  string `json:"recordId"`
+	Kind      string `json:"kind"`
+	DeviceID  string `json:"deviceId"`
+	CreatedAt string `json:"createdAt"`
+	Payload   any    `json:"payload"`
+}
+
+type syncBatch struct {
+	SchemaVersion string       `json:"schema_version"`
+	Cursor        int          `json:"cursor"`
+	Records       []syncRecord `json:"records"`
+}
+
 type support struct {
 	ObservationCount   int    `json:"observation_count"`
 	CycleCount         int    `json:"cycle_count"`
@@ -316,6 +331,29 @@ func Build() ([]File, error) {
 		},
 	}
 
+	syncBatchFixture := syncBatch{
+		SchemaVersion: "v1",
+		Cursor:        2,
+		Records: []syncRecord{
+			{
+				Seq:       1,
+				RecordID:  observationsFixture.Observations[0].ObservationID,
+				Kind:      "observation",
+				DeviceID:  "device_desktop_01",
+				CreatedAt: observationsFixture.Observations[0].Provenance.RecordedAt,
+				Payload:   observationsFixture.Observations[0],
+			},
+			{
+				Seq:       2,
+				RecordID:  correctionsFixture.Corrections[0].CorrectionID,
+				Kind:      "correction",
+				DeviceID:  "device_android_01",
+				CreatedAt: correctionsFixture.Corrections[0].CreatedAt,
+				Payload:   correctionsFixture.Corrections[0],
+			},
+		},
+	}
+
 	estimateFixture := phaseEstimate{
 		SchemaVersion:                      "v1",
 		Status:                             "estimated",
@@ -475,6 +513,7 @@ func Build() ([]File, error) {
 	}{
 		{"observations.json", observationsFixture},
 		{"corrections.json", correctionsFixture},
+		{"sync-batch.json", syncBatchFixture},
 		{"phase-estimate.json", estimateFixture},
 		{"phase-estimate-refused.json", refusedEstimateFixture},
 		{"schedule-request.json", scheduleRequestFixture},

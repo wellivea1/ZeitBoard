@@ -1,0 +1,45 @@
+{
+  "schema_version": "v1",
+  "cursor": 2,
+  "records": [
+    {
+      "seq": 1,
+      "recordId": "obs_sleep_01",
+      "kind": "observation",
+      "deviceId": "device_desktop_01",
+      "createdAt": "2026-03-05T12:35:00Z",
+      "payload": {
+        "observation_id": "obs_sleep_01",
+        "kind": "sleep_episode",
+        "start_at": "2026-03-05T04:30:00Z",
+        "end_at": "2026-03-05T12:30:00Z",
+        "zone_id": "America/New_York",
+        "sleep": {
+          "classification": "principal"
+        },
+        "provenance": {
+          "acquisition_method": "synthetic",
+          "evidence_status": "directly_observed",
+          "recorded_at": "2026-03-05T12:35:00Z",
+          "source_record_id": "synthetic-sleep-01"
+        }
+      }
+    },
+    {
+      "seq": 2,
+      "recordId": "cor_sleep_04_start",
+      "kind": "correction",
+      "deviceId": "device_android_01",
+      "createdAt": "2026-03-08T08:25:00Z",
+      "payload": {
+        "correction_id": "cor_sleep_04_start",
+        "target_observation_id": "obs_sleep_04",
+        "created_at": "2026-03-08T08:25:00Z",
+        "reason": "user_edit",
+        "changes": {
+          "start_at": "2026-03-08T07:10:00Z"
+        }
+      }
+    }
+  ]
+}
