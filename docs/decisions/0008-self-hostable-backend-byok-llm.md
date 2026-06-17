@@ -56,5 +56,6 @@ but neither vendor-hosted nor vendor-keyed.
 
 `privacy.md` and `threat-model.md` are reframed to the self-host / BYOK / US-NC model.
 ADR-0009 records the Milestone 1 sync backend design, and `apps/server` implements that
-authenticated encrypted sync path. The **BYOK provider layer** remains the next backend
-workstream before assistant features can use external providers.
+authenticated encrypted sync path. ADR-0010 records the Milestone 2 assistant backend
+design, and `apps/server` implements BYOK provider transport plus propose-only assistant
+actions. The MCP connector/skill layer remains future work.

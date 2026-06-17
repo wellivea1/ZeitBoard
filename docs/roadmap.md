@@ -238,7 +238,10 @@ state + propose actions) through the allowlisted, redacted capability layer.**
   is the data controller. Legal scope **US / North Carolina**. Backend Milestone 1 has
   landed: `apps/server` provides authenticated device enrollment, TLS sync endpoints,
   strict v1 sync validation, idempotent append-only push/pull, and AES-256-GCM encrypted
-  payload storage. The BYOK provider layer remains the next backend workstream.
+  payload storage. Backend Milestone 2 has landed too: BYOK providers, redacted assistant
+  context, strict JSON action validation, pending proposals, one-use approval tokens,
+  provider disclosure, device revocation, and encrypted proposal/audit storage. The MCP
+  connector/skill layer remains the next backend workstream.
 - **Contracts:** new surfaces extend the versioned schemas (and an ADR) rather
   than inventing UI-only data.
 

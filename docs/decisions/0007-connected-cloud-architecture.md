@@ -68,4 +68,6 @@ user-sovereign model: connected, but self-hosted and self-keyed.
 
 Recorded as accepted (owner decision). ADR-0008 defines the self-hosted/BYOK posture.
 ADR-0009 records the Milestone 1 sync backend design, and `apps/server` implements that
-authenticated encrypted sync path. The BYOK provider layer remains future work.
+authenticated encrypted sync path. ADR-0010 records the Milestone 2 assistant backend
+design, and `apps/server` implements BYOK provider transport plus propose-only assistant
+actions. The MCP connector/skill layer remains future work.

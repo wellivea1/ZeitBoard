@@ -66,8 +66,11 @@ allowlist, typed refusal, deterministic fixtures, the agent/assistant propose-on
 contract spec). The **Milestone 1 sync backend** is implemented as a self-hosted Go
 daemon with TLS serving, per-device bearer tokens, token-hash storage, strict sync
 validation, idempotent append-only records, and AES-256-GCM encrypted payloads at rest.
-The **BYOK provider layer and live trusted-view transport do not exist yet**; their rows
-remain design requirements for those future workstreams, not current guarantees.
+The **Milestone 2 BYOK provider layer and assistant backend** are implemented with
+provider disclosure, strict JSON action validation, redacted context, pending proposals,
+one-use approval tokens, and encrypted proposal/audit storage. The **MCP/skill agent
+connector and live trusted-view transport do not exist yet**; their rows remain design
+requirements for those future workstreams, not current guarantees.
 
 ## Threats and mitigations
 
@@ -76,8 +79,8 @@ remain design requirements for those future workstreams, not current guarantees.
 | Over-broad platform permission | Unrelated private data becomes accessible | Request only required permissions; collection permission-gated and user-initiated; isolate adapters |
 | Unauthenticated or MITM sync | Private model intercepted or altered in transit | TLS serving; per-device bearer credentials; token hashes stored server-side; repeated record IDs are idempotent no-ops and conflicting payloads are rejected |
 | Server host compromise or stolen backup | Full private history disclosed | Operator-keyed AES-256-GCM payload encryption at rest; no project telemetry; self-hosting runbook covers TLS, key handling, and encrypted backups |
-| BYOK credential leak | Provider key stolen or abused | Credentials in OS keychain / server secret store; never logged, never placed in LLM context, never projected *(design requirement)* |
-| Over-broad context to the LLM provider | Health data over-exposed to a third party | Minimize + redact context (no medication names, raw timestamps, or unneeded calendar text; role-scoped); disclose the active provider; provider choice/terms are the user's *(design requirement)* |
+| BYOK credential leak | Provider key stolen or abused | Provider keys are loaded from env or secret files, never returned by status APIs, never logged, never placed in LLM context, and never projected |
+| Over-broad context to the LLM provider | Health data over-exposed to a third party | The assistant builds role-scoped context field-by-field, omitting medication names, diagnosis, raw behavioral timestamps, full calendar text, tokens, and secrets; provider status discloses the active provider/model |
 | Assistant or agent mutation | Schedule changed without consent | Model emits only allowlisted actions the server resolves into proposals; approval queue; one-use signed token; no direct mutation path (tested) |
 | Malicious external agent (MCP/skill) | Exfiltration or unauthorized change | Allowlisted read projections only (never the raw model); propose-only; call budget; fail-closed on unknown/oversized/invalid |
 | Malicious import (Takeout / My Activity) | Resource exhaustion; misleading inference | Size limits, strict schemas, bounded strings/arrays, transactional validation; inferred sleep marked low-confidence (`inferred`), never overclaimed |

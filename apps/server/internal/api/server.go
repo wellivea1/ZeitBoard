@@ -10,7 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"non24.app/server/internal/assistant"
 	"non24.app/server/internal/auth"
+	"non24.app/server/internal/provider"
 	"non24.app/server/internal/store"
 	syncmodel "non24.app/server/internal/sync"
 )
@@ -20,26 +22,147 @@ const maxDeviceBodyBytes = 16 * 1024
 type Server struct {
 	store            *store.Store
 	enrollmentSecret string
+	assistant        *assistant.Service
 	now              func() time.Time
 }
 
 type deviceContextKey struct{}
 
-func New(st *store.Store, enrollmentSecret string) *Server {
-	return &Server{
+type Option func(*Server)
+
+func WithProvider(llm provider.LLM, status provider.Status) Option {
+	return func(s *Server) {
+		s.assistant = assistant.New(llm, status, s.store)
+	}
+}
+
+func New(st *store.Store, enrollmentSecret string, opts ...Option) *Server {
+	server := &Server{
 		store:            st,
 		enrollmentSecret: enrollmentSecret,
 		now:              func() time.Time { return time.Now().UTC() },
 	}
+	server.assistant = assistant.New(provider.DisabledClient{}, provider.DisabledClient{}.Status(), st)
+	for _, opt := range opts {
+		opt(server)
+	}
+	return server
 }
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", s.handleHealth)
 	mux.HandleFunc("POST /v1/devices", s.handleDevices)
+	mux.Handle("GET /v1/devices", s.requireDevice(http.HandlerFunc(s.handleListDevices)))
+	mux.Handle("POST /v1/devices/{id}/revoke", s.requireDevice(http.HandlerFunc(s.handleRevokeDevice)))
+	mux.Handle("GET /v1/status", s.requireDevice(http.HandlerFunc(s.handleStatus)))
+	mux.Handle("POST /v1/assistant/message", s.requireDevice(http.HandlerFunc(s.handleAssistantMessage)))
+	mux.Handle("GET /v1/proposals", s.requireDevice(http.HandlerFunc(s.handleListProposals)))
+	mux.Handle("POST /v1/proposals/{id}/decision", s.requireDevice(http.HandlerFunc(s.handleProposalDecision)))
 	mux.Handle("POST /v1/sync/push", s.requireDevice(http.HandlerFunc(s.handlePush)))
 	mux.Handle("GET /v1/sync/pull", s.requireDevice(http.HandlerFunc(s.handlePull)))
 	return mux
+}
+
+func (s *Server) handleListDevices(w http.ResponseWriter, r *http.Request) {
+	devices, err := s.store.ListDevices(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "device list failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"schema_version": syncmodel.SchemaVersion,
+		"devices":        devices,
+	})
+}
+
+func (s *Server) handleRevokeDevice(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSpace(r.PathValue("id"))
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "device id is required")
+		return
+	}
+	if err := s.store.RevokeDevice(r.Context(), id, s.now()); err != nil {
+		if errors.Is(err, store.ErrDeviceNotFound) {
+			writeError(w, http.StatusNotFound, "device not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "device revoke failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"schema_version": syncmodel.SchemaVersion, "status": "revoked"})
+}
+
+func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"schema_version": syncmodel.SchemaVersion,
+		"assistant":      s.assistant.Status(),
+	})
+}
+
+func (s *Server) handleAssistantMessage(w http.ResponseWriter, r *http.Request) {
+	device := deviceFromContext(r.Context())
+	var req assistant.MessageRequest
+	if err := decodeBody(w, r, syncmodel.MaxRequestBytes, &req); err != nil {
+		writeDecodeError(w, err)
+		return
+	}
+	resp, err := s.assistant.HandleMessage(r.Context(), device, req)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid assistant request")
+		return
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) handleListProposals(w http.ResponseWriter, r *http.Request) {
+	records, err := s.store.ListProposals(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "proposal list failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"schema_version": syncmodel.SchemaVersion,
+		"proposals":      records,
+	})
+}
+
+type proposalDecisionRequest struct {
+	Decision string `json:"decision"`
+	Token    string `json:"token"`
+}
+
+func (s *Server) handleProposalDecision(w http.ResponseWriter, r *http.Request) {
+	device := deviceFromContext(r.Context())
+	id := strings.TrimSpace(r.PathValue("id"))
+	var req proposalDecisionRequest
+	if err := decodeBody(w, r, maxDeviceBodyBytes, &req); err != nil {
+		writeDecodeError(w, err)
+		return
+	}
+	status := store.ProposalStatus(req.Decision)
+	record, err := s.store.DecideProposal(r.Context(), id, device.ID, status, req.Token, s.now(), json.RawMessage(`{"source":"api"}`))
+	switch {
+	case errors.Is(err, store.ErrExpiredApprovalToken):
+		writeError(w, http.StatusGone, "approval token expired")
+		return
+	case errors.Is(err, store.ErrUsedApprovalToken), errors.Is(err, store.ErrProposalNotPending):
+		writeError(w, http.StatusConflict, "proposal already decided")
+		return
+	case errors.Is(err, store.ErrInvalidApprovalToken):
+		writeError(w, http.StatusUnauthorized, "invalid approval token")
+		return
+	case errors.Is(err, store.ErrProposalNotFound):
+		writeError(w, http.StatusNotFound, "proposal not found")
+		return
+	case err != nil:
+		writeError(w, http.StatusBadRequest, "proposal decision failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"schema_version": syncmodel.SchemaVersion,
+		"proposal":       record,
+	})
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {

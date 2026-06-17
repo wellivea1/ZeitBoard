@@ -32,18 +32,32 @@ const (
 	EnvDataKeyFile          = "ZEITBOARD_DATA_KEY_FILE"
 	EnvEnrollmentSecret     = "ZEITBOARD_ENROLLMENT_SECRET"
 	EnvEnrollmentSecretFile = "ZEITBOARD_ENROLLMENT_SECRET_FILE"
+	EnvLLMProvider          = "ZEITBOARD_LLM_PROVIDER"
+	EnvLLMModel             = "ZEITBOARD_LLM_MODEL"
+	EnvLLMAPIKey            = "ZEITBOARD_LLM_API_KEY"
+	EnvLLMAPIKeyFile        = "ZEITBOARD_LLM_API_KEY_FILE"
+	EnvLLMEndpoint          = "ZEITBOARD_LLM_ENDPOINT"
 )
 
 type Config struct {
-	ListenAddress         string `json:"listenAddress"`
-	TLSCertPath           string `json:"tlsCertPath"`
-	TLSKeyPath            string `json:"tlsKeyPath"`
-	DataDir               string `json:"dataDir"`
-	DataKeyFile           string `json:"dataKeyFile"`
-	EnrollmentSecretFile  string `json:"enrollmentSecretFile"`
-	DataKey               []byte `json:"-"`
-	EnrollmentSecret      string `json:"-"`
-	UsesSelfSignedDevCert bool   `json:"-"`
+	ListenAddress         string          `json:"listenAddress"`
+	TLSCertPath           string          `json:"tlsCertPath"`
+	TLSKeyPath            string          `json:"tlsKeyPath"`
+	DataDir               string          `json:"dataDir"`
+	DataKeyFile           string          `json:"dataKeyFile"`
+	EnrollmentSecretFile  string          `json:"enrollmentSecretFile"`
+	DataKey               []byte          `json:"-"`
+	EnrollmentSecret      string          `json:"-"`
+	Assistant             AssistantConfig `json:"assistant"`
+	UsesSelfSignedDevCert bool            `json:"-"`
+}
+
+type AssistantConfig struct {
+	Provider   string `json:"provider"`
+	Model      string `json:"model"`
+	APIKeyFile string `json:"apiKeyFile"`
+	Endpoint   string `json:"endpoint"`
+	APIKey     string `json:"-"`
 }
 
 func Load(path string) (Config, error) {
@@ -66,6 +80,10 @@ func Load(path string) (Config, error) {
 	overrideString(&cfg.DataDir, EnvDataDir)
 	overrideString(&cfg.DataKeyFile, EnvDataKeyFile)
 	overrideString(&cfg.EnrollmentSecretFile, EnvEnrollmentSecretFile)
+	overrideString(&cfg.Assistant.Provider, EnvLLMProvider)
+	overrideString(&cfg.Assistant.Model, EnvLLMModel)
+	overrideString(&cfg.Assistant.APIKeyFile, EnvLLMAPIKeyFile)
+	overrideString(&cfg.Assistant.Endpoint, EnvLLMEndpoint)
 
 	dataKey, err := loadDataKey(cfg.DataKeyFile)
 	if err != nil {
@@ -81,6 +99,14 @@ func Load(path string) (Config, error) {
 		return Config{}, errors.New("enrollment secret must be at least 16 bytes")
 	}
 	cfg.EnrollmentSecret = secret
+	apiKey, err := loadOptionalSecret(EnvLLMAPIKey, cfg.Assistant.APIKeyFile)
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.Assistant.APIKey = apiKey
+	if cfg.Assistant.Provider == "" {
+		cfg.Assistant.Provider = "disabled"
+	}
 
 	if cfg.ListenAddress == "" {
 		cfg.ListenAddress = defaultListenAddress
@@ -201,6 +227,20 @@ func loadSecret(envName, path string) (string, error) {
 		return "", errors.New("enrollment secret is empty")
 	}
 	return value, nil
+}
+
+func loadOptionalSecret(envName, path string) (string, error) {
+	if value := strings.TrimSpace(os.Getenv(envName)); value != "" {
+		return value, nil
+	}
+	if path == "" {
+		return "", nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("read assistant API key file: %w", err)
+	}
+	return strings.TrimSpace(string(data)), nil
 }
 
 func isLocalAddress(addr string) bool {

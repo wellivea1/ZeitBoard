@@ -11,6 +11,7 @@ import (
 
 	"non24.app/server/internal/api"
 	"non24.app/server/internal/config"
+	"non24.app/server/internal/provider"
 	"non24.app/server/internal/store"
 )
 
@@ -28,11 +29,20 @@ func main() {
 	}
 	defer st.Close()
 
+	llm, providerStatus, err := provider.New(provider.Config{
+		Name:     provider.Name(cfg.Assistant.Provider),
+		Model:    cfg.Assistant.Model,
+		APIKey:   cfg.Assistant.APIKey,
+		Endpoint: cfg.Assistant.Endpoint,
+	})
+	if err != nil {
+		log.Fatalf("configure provider: %v", err)
+	}
 	tlsConfig, err := cfg.TLSConfig()
 	if err != nil {
 		log.Fatalf("configure TLS: %v", err)
 	}
-	handler := api.New(st, cfg.EnrollmentSecret).Handler()
+	handler := api.New(st, cfg.EnrollmentSecret, api.WithProvider(llm, providerStatus)).Handler()
 	server := &http.Server{
 		Addr:              cfg.ListenAddress,
 		Handler:           handler,

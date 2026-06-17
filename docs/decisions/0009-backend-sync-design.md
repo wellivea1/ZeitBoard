@@ -103,8 +103,6 @@ calendar write-back.
 
 ## Next Steps
 
-M2 should add the BYOK provider layer behind a small `provider.LLM` interface using
-plain HTTP and no bundled keys. It should expose strict-JSON, allowlisted,
-propose-only actions that resolve to change proposals behind the existing approval
-gate. M3 should add the agent/MCP connector from ADR-0006 on top of the same
-capability layer.
+M2 is recorded in ADR-0010 and implements the BYOK provider layer plus the propose-only
+assistant backend. M3 should add the agent/MCP connector from ADR-0006 on top of the same
+capability layer, with the same redaction, proposal, approval-token, and audit rules.

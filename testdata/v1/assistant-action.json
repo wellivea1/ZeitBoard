@@ -1,0 +1,12 @@
+{
+  "schema_version": "v1",
+  "recommended_action": "propose_place_task",
+  "target": {
+    "task_id": "task_flexible_01",
+    "earliest_start_at": "2026-03-15T21:20:00Z",
+    "latest_finish_at": "2026-03-16T11:40:00Z",
+    "duration_minutes": 30,
+    "preferred_after_wake_minutes": 90
+  },
+  "answer": "I can queue a schedule proposal inside a predicted waking window."
+}

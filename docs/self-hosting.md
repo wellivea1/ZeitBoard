@@ -26,7 +26,13 @@ variables override file values.
   "tlsKeyPath": "",
   "dataDir": "data",
   "dataKeyFile": "secrets/data-key.txt",
-  "enrollmentSecretFile": "secrets/enrollment-secret.txt"
+  "enrollmentSecretFile": "secrets/enrollment-secret.txt",
+  "assistant": {
+    "provider": "disabled",
+    "model": "",
+    "apiKeyFile": "",
+    "endpoint": ""
+  }
 }
 ```
 
@@ -42,8 +48,14 @@ Keys:
 | n/a | `ZEITBOARD_DATA_KEY` | Yes, unless key file is set | The at-rest encryption key value. |
 | `enrollmentSecretFile` | `ZEITBOARD_ENROLLMENT_SECRET_FILE` | Yes, unless env secret is set | File containing the device enrollment secret. |
 | n/a | `ZEITBOARD_ENROLLMENT_SECRET` | Yes, unless secret file is set | Secret used only to enroll new devices. |
+| `assistant.provider` | `ZEITBOARD_LLM_PROVIDER` | No | `disabled`, `openai`, `anthropic`, `openrouter`, or `opencode_zen`. |
+| `assistant.model` | `ZEITBOARD_LLM_MODEL` | Required when a provider is enabled | Provider model name. |
+| `assistant.apiKeyFile` | `ZEITBOARD_LLM_API_KEY_FILE` | Required when provider key env is absent | File containing the provider API key. |
+| n/a | `ZEITBOARD_LLM_API_KEY` | Required when a provider is enabled and no key file is set | Provider API key; never returned by status APIs. |
+| `assistant.endpoint` | `ZEITBOARD_LLM_ENDPOINT` | Required for `opencode_zen`, optional override otherwise | Plain HTTPS endpoint for the provider transport. |
 
-Do not commit key files, enrollment secrets, device tokens, or real config files.
+Do not commit key files, enrollment secrets, device tokens, provider keys, or real config
+files.
 
 ## Generate Secrets
 
@@ -114,8 +126,16 @@ cannot be recovered. Backups should be encrypted independently and stored separa
 from the live host. SQLite sidecar files such as `-wal` and `-shm` are part of the data
 directory and must be protected too.
 
+## Assistant Provider Traffic
+
+With `assistant.provider` set to `disabled`, assistant requests do not make provider
+network calls. When the operator configures OpenAI, Anthropic, OpenRouter, or OpenCode
+Zen, the daemon sends only the assistant's minimized redacted context to that provider
+using the operator's key. Provider credentials are not returned by `/v1/status`, are not
+placed in model context, and are not written to fixtures.
+
 ## Network And Telemetry
 
-Milestone 1 makes no outbound calls and has no telemetry path. The only network surface
-is the TLS listener configured by the operator. Future BYOK LLM provider traffic is
-out of scope for M1 and requires its own review before implementation.
+The project has no telemetry path. The daemon listens on the TLS address configured by
+the operator. Outbound network calls occur only when the operator enables a BYOK
+assistant provider; arbitrary web access is not exposed to the assistant path.

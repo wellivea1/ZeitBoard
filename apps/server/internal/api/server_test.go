@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"non24.app/server/internal/provider"
 	"non24.app/server/internal/store"
 	syncmodel "non24.app/server/internal/sync"
 )
@@ -29,14 +30,14 @@ type testHarness struct {
 	closeOnce stdsync.Once
 }
 
-func newTestHarness(t *testing.T) *testHarness {
+func newTestHarness(t *testing.T, opts ...Option) *testHarness {
 	t.Helper()
 	dir := t.TempDir()
 	st, err := store.Open(filepath.Join(dir, "zeitboardd.db"), bytes.Repeat([]byte{7}, 32))
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := New(st, enrollmentSecret)
+	srv := New(st, enrollmentSecret, opts...)
 	srv.now = func() time.Time { return time.Date(2026, 3, 5, 12, 0, 0, 0, time.UTC) }
 	httpServer := httptest.NewTLSServer(srv.Handler())
 	h := &testHarness{dir: dir, st: st, server: httpServer, client: httpServer.Client()}
@@ -49,6 +50,20 @@ func (h *testHarness) Close() {
 		h.server.Close()
 		_ = h.st.Close()
 	})
+}
+
+type apiFakeProvider struct {
+	response string
+	calls    int
+}
+
+func (f *apiFakeProvider) Complete(_ context.Context, _ provider.Request) (provider.Response, error) {
+	f.calls++
+	return provider.Response{Text: f.response}, nil
+}
+
+func (f *apiFakeProvider) Status() provider.Status {
+	return provider.Status{Configured: true, Provider: "fake", Model: "fake-model"}
 }
 
 func TestSyncRequiresAuthAndRegisteredDeviceCanPushAndPull(t *testing.T) {
@@ -206,7 +221,88 @@ func TestMalformedAndOversizedBatchesDoNotMutateLog(t *testing.T) {
 	}
 }
 
+func TestDeviceListAndRevokeRejectsRevokedToken(t *testing.T) {
+	h := newTestHarness(t)
+	first := h.registerDeviceFull(t, "desktop")
+	second := h.registerDeviceFull(t, "phone")
+
+	status, body := h.request(t, http.MethodGet, "/v1/devices", first.Token, "")
+	if status != http.StatusOK {
+		t.Fatalf("list status = %d body = %s", status, body)
+	}
+	if !bytes.Contains(body, []byte(first.DeviceID)) || !bytes.Contains(body, []byte(second.DeviceID)) {
+		t.Fatalf("device list missing registered devices: %s", body)
+	}
+	status, body = h.request(t, http.MethodPost, "/v1/devices/"+second.DeviceID+"/revoke", first.Token, "")
+	if status != http.StatusOK {
+		t.Fatalf("revoke status = %d body = %s", status, body)
+	}
+	status, _ = h.request(t, http.MethodGet, "/v1/status", second.Token, "")
+	if status != http.StatusUnauthorized {
+		t.Fatalf("revoked token status = %d, want %d", status, http.StatusUnauthorized)
+	}
+}
+
+func TestStatusDisclosesProviderWithoutSecrets(t *testing.T) {
+	fake := &apiFakeProvider{response: `{"schema_version":"v1","recommended_action":"answer_only","answer":"ok"}`}
+	h := newTestHarness(t, WithProvider(fake, fake.Status()))
+	token := h.registerDevice(t, "desktop")
+
+	status, body := h.request(t, http.MethodGet, "/v1/status", token, "")
+	if status != http.StatusOK {
+		t.Fatalf("status endpoint = %d body = %s", status, body)
+	}
+	if !bytes.Contains(body, []byte(`"provider":"fake"`)) || !bytes.Contains(body, []byte(`"model":"fake-model"`)) {
+		t.Fatalf("provider disclosure missing: %s", body)
+	}
+	if bytes.Contains(bytes.ToLower(body), []byte("key")) || bytes.Contains(bytes.ToLower(body), []byte("token")) {
+		t.Fatalf("provider disclosure leaked secret-shaped fields: %s", body)
+	}
+}
+
+func TestAssistantProposalDecisionEndpointRequiresOneUseToken(t *testing.T) {
+	fake := &apiFakeProvider{response: `{"schema_version":"v1","recommended_action":"propose_place_task","target":{"task_id":"task_flexible_01"},"answer":"Queued for approval."}`}
+	h := newTestHarness(t, WithProvider(fake, fake.Status()))
+	token := h.registerDevice(t, "desktop")
+
+	status, body := h.request(t, http.MethodPost, "/v1/assistant/message", token, assistantRequestBody())
+	if status != http.StatusOK {
+		t.Fatalf("assistant status = %d body = %s", status, body)
+	}
+	var assistantResp struct {
+		Proposals []struct {
+			ProposalID    string `json:"proposalId"`
+			DecisionToken string `json:"decisionToken"`
+		} `json:"proposals"`
+	}
+	if err := json.Unmarshal(body, &assistantResp); err != nil {
+		t.Fatal(err)
+	}
+	if len(assistantResp.Proposals) != 1 || assistantResp.Proposals[0].DecisionToken == "" {
+		t.Fatalf("assistant response missing proposal token: %s", body)
+	}
+	decision := fmt.Sprintf(`{"decision":"approved","token":%q}`, assistantResp.Proposals[0].DecisionToken)
+	status, body = h.request(t, http.MethodPost, "/v1/proposals/"+assistantResp.Proposals[0].ProposalID+"/decision", token, decision)
+	if status != http.StatusOK {
+		t.Fatalf("decision status = %d body = %s", status, body)
+	}
+	status, _ = h.request(t, http.MethodPost, "/v1/proposals/"+assistantResp.Proposals[0].ProposalID+"/decision", token, decision)
+	if status != http.StatusConflict {
+		t.Fatalf("replay status = %d, want %d", status, http.StatusConflict)
+	}
+}
+
 func (h *testHarness) registerDevice(t *testing.T, label string) string {
+	t.Helper()
+	return h.registerDeviceFull(t, label).Token
+}
+
+type registeredDevice struct {
+	DeviceID string
+	Token    string
+}
+
+func (h *testHarness) registerDeviceFull(t *testing.T, label string) registeredDevice {
 	t.Helper()
 	body := fmt.Sprintf(`{"enrollmentSecret":%q,"label":%q}`, enrollmentSecret, label)
 	status, data := h.request(t, http.MethodPost, "/v1/devices", "", body)
@@ -223,7 +319,7 @@ func (h *testHarness) registerDevice(t *testing.T, label string) string {
 	if resp.DeviceID == "" || resp.Token == "" {
 		t.Fatalf("register response missing credentials: %+v", resp)
 	}
-	return resp.Token
+	return registeredDevice{DeviceID: resp.DeviceID, Token: resp.Token}
 }
 
 func (h *testHarness) request(t *testing.T, method, path, token, body string) (int, []byte) {
@@ -260,4 +356,36 @@ func syncRecord(id, kind, payload string) string {
 
 func observationPayload(id, sourceRecordID string) string {
 	return fmt.Sprintf(`{"observation_id":%q,"kind":"sleep_episode","start_at":"2026-03-05T04:30:00Z","end_at":"2026-03-05T12:30:00Z","zone_id":"America/New_York","sleep":{"classification":"principal"},"provenance":{"acquisition_method":"synthetic","evidence_status":"directly_observed","recorded_at":"2026-03-05T12:35:00Z","source_record_id":%q}}`, id, sourceRecordID)
+}
+
+func assistantRequestBody() string {
+	return `{
+  "schema_version": "v1",
+  "message": "Find 30 minutes for taxes before tomorrow.",
+  "context": {
+    "zone_id": "America/New_York",
+    "now": "2026-03-05T12:00:00Z",
+    "estimate_id": "estimate_synthetic_01",
+    "tasks": [{
+      "task_id": "task_flexible_01",
+      "duration_minutes": 30,
+      "earliest_start_at": "2026-03-05T15:00:00Z",
+      "latest_finish_at": "2026-03-06T01:00:00Z",
+      "minimum_confidence": "low"
+    }],
+    "availability": [{
+      "kind": "predicted_wake",
+      "start_at": "2026-03-05T14:30:00Z",
+      "end_at": "2026-03-06T02:30:00Z",
+      "zone_id": "America/New_York",
+      "confidence": "medium"
+    }],
+    "fixed_events": [{
+      "event_id": "event_fixed_01",
+      "start_at": "2026-03-05T16:00:00Z",
+      "end_at": "2026-03-05T17:00:00Z",
+      "zone_id": "America/New_York"
+    }]
+  }
+}`
 }

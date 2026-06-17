@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Assistant action v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "recommended_action"],
+  "properties": {
+    "schema_version": {
+      "$ref": "common.schema.json#/$defs/schemaVersion"
+    },
+    "recommended_action": {
+      "type": "string",
+      "enum": ["propose_move_task", "propose_place_task", "propose_reminder_shift", "answer_only"]
+    },
+    "target": {
+      "$ref": "#/$defs/target"
+    },
+    "answer": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 800
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "recommended_action": {
+            "const": "answer_only"
+          }
+        },
+        "required": ["recommended_action"]
+      },
+      "then": {
+        "not": {
+          "required": ["target"]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "recommended_action": {
+            "enum": ["propose_move_task", "propose_place_task", "propose_reminder_shift"]
+          }
+        },
+        "required": ["recommended_action"]
+      },
+      "then": {
+        "required": ["target"]
+      }
+    }
+  ],
+  "$defs": {
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_id"],
+      "properties": {
+        "task_id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "earliest_start_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "latest_finish_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "duration_minutes": {
+          "type": "integer",
+          "minimum": 5,
+          "maximum": 1440
+        },
+        "preferred_after_wake_minutes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1440
+        },
+        "reminder_id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        }
+      }
+    }
+  }
+}

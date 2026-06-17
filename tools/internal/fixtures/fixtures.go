@@ -98,6 +98,22 @@ type syncBatch struct {
 	Records       []syncRecord `json:"records"`
 }
 
+type assistantActionTarget struct {
+	TaskID                    string `json:"task_id"`
+	EarliestStartAt           string `json:"earliest_start_at,omitempty"`
+	LatestFinishAt            string `json:"latest_finish_at,omitempty"`
+	DurationMinutes           int    `json:"duration_minutes,omitempty"`
+	PreferredAfterWakeMinutes int    `json:"preferred_after_wake_minutes,omitempty"`
+	ReminderID                string `json:"reminder_id,omitempty"`
+}
+
+type assistantAction struct {
+	SchemaVersion     string                 `json:"schema_version"`
+	RecommendedAction string                 `json:"recommended_action"`
+	Target            *assistantActionTarget `json:"target,omitempty"`
+	Answer            string                 `json:"answer,omitempty"`
+}
+
 type support struct {
 	ObservationCount   int    `json:"observation_count"`
 	CycleCount         int    `json:"cycle_count"`
@@ -354,6 +370,19 @@ func Build() ([]File, error) {
 		},
 	}
 
+	assistantActionFixture := assistantAction{
+		SchemaVersion:     "v1",
+		RecommendedAction: "propose_place_task",
+		Target: &assistantActionTarget{
+			TaskID:                    "task_flexible_01",
+			EarliestStartAt:           ts(forecastWake1.Add(minutes(30))),
+			LatestFinishAt:            ts(forecastSleep2.Add(-2 * time.Hour)),
+			DurationMinutes:           30,
+			PreferredAfterWakeMinutes: 90,
+		},
+		Answer: "I can queue a schedule proposal inside a predicted waking window.",
+	}
+
 	estimateFixture := phaseEstimate{
 		SchemaVersion:                      "v1",
 		Status:                             "estimated",
@@ -514,6 +543,7 @@ func Build() ([]File, error) {
 		{"observations.json", observationsFixture},
 		{"corrections.json", correctionsFixture},
 		{"sync-batch.json", syncBatchFixture},
+		{"assistant-action.json", assistantActionFixture},
 		{"phase-estimate.json", estimateFixture},
 		{"phase-estimate-refused.json", refusedEstimateFixture},
 		{"schedule-request.json", scheduleRequestFixture},
