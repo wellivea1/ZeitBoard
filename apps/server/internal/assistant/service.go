@@ -119,23 +119,55 @@ func parseModelAction(text string) (modelAction, error) {
 	if err := dec.Decode(&action); err != nil {
 		return modelAction{}, err
 	}
+	if err := validateAction(action); err != nil {
+		return modelAction{}, err
+	}
+	action.Answer = safeAnswer(action.Answer)
+	return action, nil
+}
+
+func validateAction(action modelAction) error {
 	if action.SchemaVersion != SchemaVersion {
-		return modelAction{}, errors.New("unsupported action schema version")
+		return errors.New("unsupported action schema version")
 	}
 	switch action.RecommendedAction {
 	case "answer_only":
 		if action.Target != nil {
-			return modelAction{}, errors.New("answer_only must not include a target")
+			return errors.New("answer_only must not include a target")
 		}
 	case "propose_move_task", "propose_place_task", "propose_reminder_shift":
 		if action.Target == nil || action.Target.TaskID == "" {
-			return modelAction{}, errors.New("proposal action requires a task target")
+			return errors.New("proposal action requires a task target")
 		}
 	default:
-		return modelAction{}, errors.New("unknown recommended action")
+		return errors.New("unknown recommended action")
 	}
-	action.Answer = safeAnswer(action.Answer)
-	return action, nil
+	return nil
+}
+
+func (s *Service) HandleDirectProposal(ctx context.Context, device store.Device, req DirectProposalRequest) (MessageResponse, error) {
+	if req.SchemaVersion != SchemaVersion {
+		return MessageResponse{}, errors.New("unsupported schema version")
+	}
+	action := modelAction{
+		SchemaVersion:     req.SchemaVersion,
+		RecommendedAction: req.RecommendedAction,
+		Target:            req.Target,
+		Answer:            safeAnswer(req.Answer),
+	}
+	if err := validateAction(action); err != nil {
+		return MessageResponse{}, err
+	}
+	if action.RecommendedAction == "answer_only" {
+		return MessageResponse{}, errors.New("direct proposal requires a propose action")
+	}
+	if req.Context.ZoneID == "" {
+		req.Context.ZoneID = "UTC"
+	}
+	if req.Context.Now.IsZero() {
+		req.Context.Now = s.now()
+	}
+	return s.createPendingProposal(ctx, device, req.Context, action, "agent")
 }
 
 func (s *Service) resolveAction(ctx context.Context, device store.Device, req MessageRequest, action modelAction) (MessageResponse, error) {
@@ -154,6 +186,18 @@ func (s *Service) resolveAction(ctx context.Context, device store.Device, req Me
 		}
 		return s.answer(ResultUnknown, action.RecommendedAction, answer), nil
 	}
+	return s.storePendingProposal(ctx, device, action, proposal, "assistant")
+}
+
+func (s *Service) createPendingProposal(ctx context.Context, device store.Device, input PlanningContext, action modelAction, source string) (MessageResponse, error) {
+	proposal, err := s.resolveProposal(input, action)
+	if err != nil {
+		return MessageResponse{}, err
+	}
+	return s.storePendingProposal(ctx, device, action, proposal, source)
+}
+
+func (s *Service) storePendingProposal(ctx context.Context, device store.Device, action modelAction, proposal scheduling.Proposal, source string) (MessageResponse, error) {
 	proposalID, err := newID("proposal")
 	if err != nil {
 		return MessageResponse{}, err
@@ -186,7 +230,10 @@ func (s *Service) resolveAction(ctx context.Context, device store.Device, req Me
 	if err != nil {
 		return MessageResponse{}, err
 	}
-	audit := json.RawMessage(`{"source":"assistant","event":"proposal_created"}`)
+	audit, err := json.Marshal(map[string]string{"source": source, "event": "proposal_created"})
+	if err != nil {
+		return MessageResponse{}, err
+	}
 	record, err := s.store.CreateProposal(ctx, store.ProposalInput{
 		ID:        proposalID,
 		ActionID:  action.RecommendedAction,
@@ -200,8 +247,10 @@ func (s *Service) resolveAction(ctx context.Context, device store.Device, req Me
 		return MessageResponse{}, err
 	}
 	answer := action.Answer
-	if answer == "" {
-		answer = "I queued a schedule proposal for approval."
+	if source != "assistant" {
+		answer = withHumanApprovalNotice(answer)
+	} else if answer == "" {
+		answer = "I queued a schedule proposal for approval. It awaits human approval."
 	}
 	return MessageResponse{
 		SchemaVersion: SchemaVersion,
@@ -216,6 +265,17 @@ func (s *Service) resolveAction(ctx context.Context, device store.Device, req Me
 			Payload:       record.Payload,
 		}},
 	}, nil
+}
+
+func withHumanApprovalNotice(answer string) string {
+	answer = strings.TrimSpace(answer)
+	if answer == "" {
+		return "I queued a schedule proposal for approval. It awaits human approval."
+	}
+	if strings.Contains(strings.ToLower(answer), "human approval") {
+		return answer
+	}
+	return answer + " It awaits human approval."
 }
 
 func (s *Service) resolveProposal(input PlanningContext, action modelAction) (scheduling.Proposal, error) {

@@ -292,6 +292,78 @@ func TestAssistantProposalDecisionEndpointRequiresOneUseToken(t *testing.T) {
 	}
 }
 
+func TestDirectProposalEndpointCreatesPendingProposalWithoutLLM(t *testing.T) {
+	fake := &apiFakeProvider{response: `{"schema_version":"v1","recommended_action":"answer_only","answer":"should not be called"}`}
+	h := newTestHarness(t, WithProvider(fake, fake.Status()))
+	token := h.registerDevice(t, "desktop")
+
+	status, body := h.request(t, http.MethodPost, "/v1/proposals", token, directProposalRequestBody("propose_place_task"))
+	if status != http.StatusCreated {
+		t.Fatalf("direct proposal status = %d body = %s", status, body)
+	}
+	if fake.calls != 0 {
+		t.Fatalf("direct proposal called LLM provider %d times, want 0", fake.calls)
+	}
+	var resp struct {
+		Result    string `json:"result"`
+		Action    string `json:"action"`
+		Answer    string `json:"answer"`
+		Proposals []struct {
+			ProposalID    string               `json:"proposalId"`
+			Status        store.ProposalStatus `json:"status"`
+			DecisionToken string               `json:"decisionToken"`
+		} `json:"proposals"`
+	}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Result != "proposal_pending" || resp.Action != "propose_place_task" || len(resp.Proposals) != 1 {
+		t.Fatalf("direct proposal response = %+v", resp)
+	}
+	if resp.Proposals[0].Status != store.ProposalPending || resp.Proposals[0].DecisionToken == "" {
+		t.Fatalf("proposal summary = %+v, want pending with one-use token", resp.Proposals[0])
+	}
+	if !bytes.Contains([]byte(resp.Answer), []byte("human approval")) {
+		t.Fatalf("direct proposal answer should mention human approval: %q", resp.Answer)
+	}
+	count, err := h.st.CountProposals(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("proposal count = %d, want 1", count)
+	}
+
+	decision := fmt.Sprintf(`{"decision":"approved","token":%q}`, resp.Proposals[0].DecisionToken)
+	status, body = h.request(t, http.MethodPost, "/v1/proposals/"+resp.Proposals[0].ProposalID+"/decision", token, decision)
+	if status != http.StatusOK {
+		t.Fatalf("human decision status = %d body = %s", status, body)
+	}
+	status, _ = h.request(t, http.MethodPost, "/v1/proposals/"+resp.Proposals[0].ProposalID+"/decision", token, decision)
+	if status != http.StatusConflict {
+		t.Fatalf("decision replay status = %d, want %d", status, http.StatusConflict)
+	}
+}
+
+func TestDirectProposalEndpointRequiresAuthAndRejectsRevokedToken(t *testing.T) {
+	h := newTestHarness(t)
+	first := h.registerDeviceFull(t, "desktop")
+	second := h.registerDeviceFull(t, "phone")
+
+	status, _ := h.request(t, http.MethodPost, "/v1/proposals", "", directProposalRequestBody("propose_place_task"))
+	if status != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated direct proposal status = %d, want %d", status, http.StatusUnauthorized)
+	}
+	status, body := h.request(t, http.MethodPost, "/v1/devices/"+second.DeviceID+"/revoke", first.Token, "")
+	if status != http.StatusOK {
+		t.Fatalf("revoke status = %d body = %s", status, body)
+	}
+	status, _ = h.request(t, http.MethodPost, "/v1/proposals", second.Token, directProposalRequestBody("propose_place_task"))
+	if status != http.StatusUnauthorized {
+		t.Fatalf("revoked direct proposal status = %d, want %d", status, http.StatusUnauthorized)
+	}
+}
+
 func TestProjectionEndpointsUseServerEstimateFromSyncedSleep(t *testing.T) {
 	h := newTestHarness(t)
 	token := h.registerDevice(t, "desktop")
@@ -509,6 +581,39 @@ func syncRecord(id, kind, payload string) string {
 
 func observationPayload(id, sourceRecordID string) string {
 	return fmt.Sprintf(`{"observation_id":%q,"kind":"sleep_episode","start_at":"2026-03-05T04:30:00Z","end_at":"2026-03-05T12:30:00Z","zone_id":"America/New_York","sleep":{"classification":"principal"},"provenance":{"acquisition_method":"synthetic","evidence_status":"directly_observed","recorded_at":"2026-03-05T12:35:00Z","source_record_id":%q}}`, id, sourceRecordID)
+}
+
+func directProposalRequestBody(action string) string {
+	return fmt.Sprintf(`{
+  "schema_version": "v1",
+  "recommended_action": %q,
+  "target": {"task_id":"task_flexible_01"},
+  "context": {
+    "zone_id": "America/New_York",
+    "now": "2026-03-05T12:00:00Z",
+    "estimate_id": "estimate_synthetic_01",
+    "tasks": [{
+      "task_id": "task_flexible_01",
+      "duration_minutes": 30,
+      "earliest_start_at": "2026-03-05T15:00:00Z",
+      "latest_finish_at": "2026-03-06T01:00:00Z",
+      "minimum_confidence": "low"
+    }],
+    "availability": [{
+      "kind": "predicted_wake",
+      "start_at": "2026-03-05T14:30:00Z",
+      "end_at": "2026-03-06T02:30:00Z",
+      "zone_id": "America/New_York",
+      "confidence": "medium"
+    }],
+    "fixed_events": [{
+      "event_id": "event_fixed_01",
+      "start_at": "2026-03-05T16:00:00Z",
+      "end_at": "2026-03-05T17:00:00Z",
+      "zone_id": "America/New_York"
+    }]
+  }
+}`, action)
 }
 
 func driftingSleepRecords(count int, start time.Time, period, duration time.Duration) []string {

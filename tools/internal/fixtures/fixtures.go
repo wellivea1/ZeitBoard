@@ -114,6 +114,46 @@ type assistantAction struct {
 	Answer            string                 `json:"answer,omitempty"`
 }
 
+type directTask struct {
+	TaskID            string `json:"task_id"`
+	DurationMinutes   int    `json:"duration_minutes"`
+	EarliestStartAt   string `json:"earliest_start_at,omitempty"`
+	LatestFinishAt    string `json:"latest_finish_at,omitempty"`
+	MinimumConfidence string `json:"minimum_confidence,omitempty"`
+}
+
+type directAvailability struct {
+	Kind       string `json:"kind"`
+	StartAt    string `json:"start_at"`
+	EndAt      string `json:"end_at"`
+	ZoneID     string `json:"zone_id"`
+	Confidence string `json:"confidence"`
+}
+
+type directFixedEvent struct {
+	EventID string `json:"event_id"`
+	StartAt string `json:"start_at"`
+	EndAt   string `json:"end_at"`
+	ZoneID  string `json:"zone_id"`
+}
+
+type directPlanningContext struct {
+	ZoneID       string               `json:"zone_id"`
+	Now          string               `json:"now"`
+	EstimateID   string               `json:"estimate_id,omitempty"`
+	Tasks        []directTask         `json:"tasks"`
+	Availability []directAvailability `json:"availability"`
+	FixedEvents  []directFixedEvent   `json:"fixed_events,omitempty"`
+}
+
+type directProposalRequest struct {
+	SchemaVersion     string                `json:"schema_version"`
+	RecommendedAction string                `json:"recommended_action"`
+	Target            assistantActionTarget `json:"target"`
+	Answer            string                `json:"answer,omitempty"`
+	Context           directPlanningContext `json:"context"`
+}
+
 type support struct {
 	ObservationCount   int    `json:"observation_count"`
 	CycleCount         int    `json:"cycle_count"`
@@ -215,6 +255,37 @@ type scheduleProposals struct {
 	AlgorithmVersion string     `json:"algorithm_version"`
 	Proposals        []proposal `json:"proposals"`
 	Unplaced         []unplaced `json:"unplaced"`
+}
+
+type providerStatus struct {
+	Configured bool   `json:"configured"`
+	Provider   string `json:"provider"`
+	Model      string `json:"model,omitempty"`
+}
+
+type storedProposal struct {
+	ProposalID        string            `json:"proposal_id"`
+	ActionID          string            `json:"action_id"`
+	ScheduleProposals scheduleProposals `json:"schedule_proposals"`
+	Answer            string            `json:"answer,omitempty"`
+	CreatedAt         string            `json:"created_at"`
+	ExpiresAt         string            `json:"expires_at"`
+}
+
+type proposalSummary struct {
+	ProposalID    string         `json:"proposalId"`
+	Status        string         `json:"status"`
+	DecisionToken string         `json:"decisionToken"`
+	Payload       storedProposal `json:"payload"`
+}
+
+type directProposalResponse struct {
+	SchemaVersion string            `json:"schema_version"`
+	Backend       providerStatus    `json:"backend"`
+	Result        string            `json:"result"`
+	Action        string            `json:"action"`
+	Answer        string            `json:"answer"`
+	Proposals     []proposalSummary `json:"proposals"`
 }
 
 type permissions struct {
@@ -483,6 +554,43 @@ func Build() ([]File, error) {
 		Answer: "I can queue a schedule proposal inside a predicted waking window.",
 	}
 
+	directProposalRequestFixture := directProposalRequest{
+		SchemaVersion:     "v1",
+		RecommendedAction: "propose_place_task",
+		Target:            assistantActionTarget{TaskID: "task_flexible_01"},
+		Context: directPlanningContext{
+			ZoneID:     zoneID,
+			Now:        ts(generatedAt),
+			EstimateID: "estimate_synthetic_01",
+			Tasks: []directTask{
+				{
+					TaskID:            "task_flexible_01",
+					DurationMinutes:   30,
+					EarliestStartAt:   ts(forecastWake1.Add(minutes(30))),
+					LatestFinishAt:    ts(forecastSleep2.Add(-2 * time.Hour)),
+					MinimumConfidence: "low",
+				},
+			},
+			Availability: []directAvailability{
+				{
+					Kind:       "predicted_wake",
+					StartAt:    ts(forecastWake1),
+					EndAt:      ts(forecastSleep2.Add(-1 * time.Hour)),
+					ZoneID:     zoneID,
+					Confidence: "medium",
+				},
+			},
+			FixedEvents: []directFixedEvent{
+				{
+					EventID: "event_fixed_01",
+					StartAt: ts(forecastWake1.Add(2 * time.Hour)),
+					EndAt:   ts(forecastWake1.Add(3 * time.Hour)),
+					ZoneID:  zoneID,
+				},
+			},
+		},
+	}
+
 	estimateFixture := phaseEstimate{
 		SchemaVersion:                      "v1",
 		Status:                             "estimated",
@@ -587,6 +695,28 @@ func Build() ([]File, error) {
 		},
 		Unplaced: []unplaced{
 			{TaskID: "task_flexible_02", Reason: "no_available_interval"},
+		},
+	}
+
+	directProposalResponseFixture := directProposalResponse{
+		SchemaVersion: "v1",
+		Backend:       providerStatus{Configured: false, Provider: "disabled"},
+		Result:        "proposal_pending",
+		Action:        "propose_place_task",
+		Answer:        "I queued a schedule proposal for approval. It awaits human approval.",
+		Proposals: []proposalSummary{
+			{
+				ProposalID:    "proposal_task_01",
+				Status:        "pending",
+				DecisionToken: "fixture_decision_token_01",
+				Payload: storedProposal{
+					ProposalID:        "proposal_task_01",
+					ActionID:          "propose_place_task",
+					ScheduleProposals: scheduleProposalsFixture,
+					CreatedAt:         ts(generatedAt),
+					ExpiresAt:         ts(generatedAt.Add(15 * time.Minute)),
+				},
+			},
 		},
 	}
 
@@ -776,10 +906,12 @@ func Build() ([]File, error) {
 		{"corrections.json", correctionsFixture},
 		{"sync-batch.json", syncBatchFixture},
 		{"assistant-action.json", assistantActionFixture},
+		{"direct-proposal-request.json", directProposalRequestFixture},
 		{"phase-estimate.json", estimateFixture},
 		{"phase-estimate-refused.json", refusedEstimateFixture},
 		{"schedule-request.json", scheduleRequestFixture},
 		{"schedule-proposals.json", scheduleProposalsFixture},
+		{"proposal-response.json", directProposalResponseFixture},
 		{"share-profile-default-deny.json", shareProfileDefaultDeny},
 		{"share-profile-allowlisted.json", shareProfileAllowlisted},
 		{"trusted-view-default-deny.json", trustedViewDefaultDeny},

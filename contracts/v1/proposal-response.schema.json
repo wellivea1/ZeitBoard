@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Proposal response v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "backend", "result", "action", "answer", "proposals"],
+  "properties": {
+    "schema_version": {"$ref": "common.schema.json#/$defs/schemaVersion"},
+    "backend": {"$ref": "#/$defs/backendStatus"},
+    "result": {"type": "string", "enum": ["proposal_pending"]},
+    "action": {"type": "string", "enum": ["propose_move_task", "propose_place_task", "propose_reminder_shift"]},
+    "answer": {"type": "string", "minLength": 1, "maxLength": 800},
+    "proposals": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/proposalSummary"}
+    }
+  },
+  "$defs": {
+    "backendStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["configured", "provider"],
+      "properties": {
+        "configured": {"type": "boolean"},
+        "provider": {"type": "string", "enum": ["disabled", "openai", "anthropic", "openrouter", "opencode_zen", "fake"]},
+        "model": {"type": "string", "minLength": 1, "maxLength": 120}
+      }
+    },
+    "proposalSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["proposalId", "status", "decisionToken", "payload"],
+      "properties": {
+        "proposalId": {"$ref": "common.schema.json#/$defs/identifier"},
+        "status": {"type": "string", "const": "pending"},
+        "decisionToken": {"type": "string", "minLength": 16, "maxLength": 4096},
+        "payload": {"$ref": "#/$defs/storedProposalPayload"}
+      }
+    },
+    "storedProposalPayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["proposal_id", "action_id", "schedule_proposals", "created_at", "expires_at"],
+      "properties": {
+        "proposal_id": {"$ref": "common.schema.json#/$defs/identifier"},
+        "action_id": {"type": "string", "enum": ["propose_move_task", "propose_place_task", "propose_reminder_shift"]},
+        "schedule_proposals": {"$ref": "schedule-proposals.schema.json"},
+        "answer": {"type": "string", "maxLength": 800},
+        "created_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+        "expires_at": {"$ref": "common.schema.json#/$defs/timestamp"}
+      }
+    }
+  }
+}

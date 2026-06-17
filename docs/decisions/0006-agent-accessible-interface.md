@@ -1,6 +1,6 @@
 # ADR 0006: Agent-accessible interface (the non-visual modality)
 
-- Status: proposed
+- Status: accepted
 - Date: 2026-06-17
 
 ## Context
@@ -82,8 +82,7 @@ opt-in tier.
 
 ## Status / next steps
 
-Proposed direction, not yet built. Sequencing: it builds naturally on the Phase 4
-assistant (shared action registry) and should land after real-data ingestion (Phase 3)
-so the agent has real state to read. A concrete tool/action schema and a privacy/threat
-addendum for the cloud path are required before implementation; this ADR moves to
-`accepted` when that design is written.
+Accepted. The local MCP connector is implemented in
+[ADR-0012](0012-mcp-agent-connector.md): it exposes M3 read projections and M2
+propose-only actions through a stateless local adapter. Cloud skill packaging remains a
+future opt-in layer and requires its own privacy/threat review before shipment.

@@ -1,0 +1,38 @@
+{
+  "schema_version": "v1",
+  "recommended_action": "propose_place_task",
+  "target": {
+    "task_id": "task_flexible_01"
+  },
+  "context": {
+    "zone_id": "America/New_York",
+    "now": "2026-03-15T00:00:00Z",
+    "estimate_id": "estimate_synthetic_01",
+    "tasks": [
+      {
+        "task_id": "task_flexible_01",
+        "duration_minutes": 30,
+        "earliest_start_at": "2026-03-15T21:20:00Z",
+        "latest_finish_at": "2026-03-16T11:40:00Z",
+        "minimum_confidence": "low"
+      }
+    ],
+    "availability": [
+      {
+        "kind": "predicted_wake",
+        "start_at": "2026-03-15T20:50:00Z",
+        "end_at": "2026-03-16T12:40:00Z",
+        "zone_id": "America/New_York",
+        "confidence": "medium"
+      }
+    ],
+    "fixed_events": [
+      {
+        "event_id": "event_fixed_01",
+        "start_at": "2026-03-15T22:50:00Z",
+        "end_at": "2026-03-15T23:50:00Z",
+        "zone_id": "America/New_York"
+      }
+    ]
+  }
+}

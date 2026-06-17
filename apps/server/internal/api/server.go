@@ -61,6 +61,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /v1/status", s.requireDevice(http.HandlerFunc(s.handleStatus)))
 	mux.Handle("POST /v1/assistant/message", s.requireDevice(http.HandlerFunc(s.handleAssistantMessage)))
 	mux.Handle("GET /v1/proposals", s.requireDevice(http.HandlerFunc(s.handleListProposals)))
+	mux.Handle("POST /v1/proposals", s.requireDevice(http.HandlerFunc(s.handleCreateProposal)))
 	mux.Handle("POST /v1/proposals/{id}/decision", s.requireDevice(http.HandlerFunc(s.handleProposalDecision)))
 	mux.Handle("GET /v1/overview", s.requireDevice(http.HandlerFunc(s.handleOverview)))
 	mux.Handle("GET /v1/rhythm", s.requireDevice(http.HandlerFunc(s.handleRhythm)))
@@ -131,6 +132,21 @@ func (s *Server) handleListProposals(w http.ResponseWriter, r *http.Request) {
 		"schema_version": syncmodel.SchemaVersion,
 		"proposals":      records,
 	})
+}
+
+func (s *Server) handleCreateProposal(w http.ResponseWriter, r *http.Request) {
+	device := deviceFromContext(r.Context())
+	var req assistant.DirectProposalRequest
+	if err := decodeBody(w, r, syncmodel.MaxRequestBytes, &req); err != nil {
+		writeDecodeError(w, err)
+		return
+	}
+	resp, err := s.assistant.HandleDirectProposal(r.Context(), device, req)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid proposal request")
+		return
+	}
+	writeJSON(w, http.StatusCreated, resp)
 }
 
 type proposalDecisionRequest struct {

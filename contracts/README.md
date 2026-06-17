@@ -24,3 +24,8 @@ calendar text.
 authenticated server read projections. They are also projection contracts, not raw sync
 or domain-model serialization: refusals are typed, observation/source IDs are omitted,
 and the rhythm chart uses presentation row IDs plus civil-time labels.
+
+`direct-proposal-request.schema.json` and `proposal-response.schema.json` cover the M4
+agent/direct proposal path. The request reuses the assistant action target shape plus a
+request-scoped planning context; the response contains a pending proposal and one-use
+decision token, but no approval/apply operation.

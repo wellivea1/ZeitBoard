@@ -71,9 +71,11 @@ provider disclosure, strict JSON action validation, redacted context, pending pr
 one-use approval tokens, and encrypted proposal/audit storage. The **Milestone 3
 server-side read layer** is implemented with effective sleep-session replay from synced
 observations/corrections, core-engine overview/rhythm/accuracy projections, typed
-estimation refusals, and authenticated access. The **MCP/skill agent connector and live
+estimation refusals, and authenticated access. The **Milestone 4 local MCP connector** is
+implemented as a stateless adapter over the backend API with read tools, propose-only
+tools, call budgets, and no approval/apply tool. The **cloud skill wrapper and live
 trusted-view transport do not exist yet**; their rows remain design requirements for
-those future workstreams, not current guarantees.
+future workstreams, not current guarantees.
 
 ## Threats and mitigations
 
@@ -86,7 +88,7 @@ those future workstreams, not current guarantees.
 | Over-broad context to the LLM provider | Health data over-exposed to a third party | The assistant builds role-scoped context field-by-field, omitting medication names, diagnosis, raw behavioral timestamps, full calendar text, tokens, and secrets; provider status discloses the active provider/model |
 | Server read projection leak | Synced private records exposed through read APIs | Overview/rhythm/accuracy endpoints require device auth, replay only decrypted store records internally, return projection DTOs instead of sync envelopes, sanitize internal observation IDs, and test for forbidden fields |
 | Assistant or agent mutation | Schedule changed without consent | Model emits only allowlisted actions the server resolves into proposals; approval queue; one-use signed token; no direct mutation path (tested) |
-| Malicious external agent (MCP/skill) | Exfiltration or unauthorized change | Allowlisted read projections only (never the raw model); propose-only; call budget; fail-closed on unknown/oversized/invalid |
+| Malicious external agent (MCP/skill) | Exfiltration or unauthorized change | Local MCP exposes allowlisted read projections only (never the raw model), propose-only tools, call budgets, and no approval/apply tool; cloud skills remain future and require a separate privacy review |
 | Malicious import (Takeout / My Activity) | Resource exhaustion; misleading inference | Size limits, strict schemas, bounded strings/arrays, transactional validation; inferred sleep marked low-confidence (`inferred`), never overclaimed |
 | Source mutation | Audit history and estimator support become misleading | Append-only observations and corrections; effective read model; persistence tests |
 | Time-zone confusion | Incorrect drift or schedule proposals | UTC instants plus IANA zones; half-open intervals; DST-focused tests |
@@ -121,8 +123,8 @@ server host remain part of the trusted computing base.
 - Sync: assert authentication is required, transport is TLS, and replayed messages are
   rejected.
 - Agent/assistant: assert there is no path to mutate the schedule except by creating a
-  pending proposal (no direct-mutation API); read tools expose only allowlisted projection
-  fields.
+  pending proposal (no direct-mutation API); MCP exposes no approval/apply tool; read
+  tools expose only allowlisted projection fields.
 - Credentials: assert BYOK keys are never logged, projected, or placed in LLM context.
 - LLM context: assert outbound context is minimized and redacted (no forbidden fields).
 - Projection: test output against a forbidden-field list across all permission

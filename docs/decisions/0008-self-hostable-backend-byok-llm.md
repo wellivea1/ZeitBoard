@@ -58,4 +58,5 @@ but neither vendor-hosted nor vendor-keyed.
 ADR-0009 records the Milestone 1 sync backend design, and `apps/server` implements that
 authenticated encrypted sync path. ADR-0010 records the Milestone 2 assistant backend
 design, and `apps/server` implements BYOK provider transport plus propose-only assistant
-actions. The MCP connector/skill layer remains future work.
+actions. ADR-0011 records Milestone 3 server read projections, and ADR-0012 records the
+Milestone 4 local MCP connector. Cloud skill packaging remains future work.

@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Direct proposal request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "recommended_action", "target", "context"],
+  "properties": {
+    "schema_version": {"$ref": "common.schema.json#/$defs/schemaVersion"},
+    "recommended_action": {
+      "type": "string",
+      "enum": ["propose_move_task", "propose_place_task", "propose_reminder_shift"]
+    },
+    "target": {"$ref": "assistant-action.schema.json#/$defs/target"},
+    "answer": {"type": "string", "minLength": 1, "maxLength": 800},
+    "context": {"$ref": "#/$defs/planningContext"}
+  },
+  "$defs": {
+    "planningContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["zone_id", "now", "tasks", "availability"],
+      "properties": {
+        "zone_id": {"$ref": "common.schema.json#/$defs/zoneId"},
+        "now": {"$ref": "common.schema.json#/$defs/timestamp"},
+        "estimate_id": {"$ref": "common.schema.json#/$defs/identifier"},
+        "tasks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/task"}
+        },
+        "availability": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/availability"}
+        },
+        "fixed_events": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/fixedEvent"}
+        }
+      }
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_id", "duration_minutes"],
+      "properties": {
+        "task_id": {"$ref": "common.schema.json#/$defs/identifier"},
+        "duration_minutes": {"type": "integer", "minimum": 5, "maximum": 1440},
+        "earliest_start_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+        "latest_finish_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+        "preferred_after_wake_minutes": {"type": "integer", "minimum": 0, "maximum": 1440},
+        "minimum_confidence": {"type": "string", "enum": ["low", "medium", "high"]},
+        "business_hours": {"type": "boolean"},
+        "business_start_local": {"type": "string", "pattern": "^[0-2][0-9]:[0-5][0-9]$"},
+        "business_end_local": {"type": "string", "pattern": "^[0-2][0-9]:[0-5][0-9]$"}
+      }
+    },
+    "availability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "start_at", "end_at", "zone_id", "confidence"],
+      "properties": {
+        "kind": {"type": "string", "enum": ["predicted_wake", "predicted_sleep", "functional", "free"]},
+        "start_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+        "end_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+        "zone_id": {"$ref": "common.schema.json#/$defs/zoneId"},
+        "confidence": {"type": "string", "enum": ["low", "medium", "high"]}
+      }
+    },
+    "fixedEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_id", "start_at", "end_at", "zone_id"],
+      "properties": {
+        "event_id": {"$ref": "common.schema.json#/$defs/identifier"},
+        "start_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+        "end_at": {"$ref": "common.schema.json#/$defs/timestamp"},
+        "zone_id": {"$ref": "common.schema.json#/$defs/zoneId"}
+      }
+    }
+  }
+}

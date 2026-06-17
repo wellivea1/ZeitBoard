@@ -243,8 +243,11 @@ state + propose actions) through the allowlisted, redacted capability layer.**
   provider disclosure, device revocation, and encrypted proposal/audit storage. Backend
   Milestone 3 has landed: the server derives effective sleep sessions from synced
   observations/corrections, computes estimates with the core engine, and exposes
-  authenticated overview, rhythm, and accuracy projections with typed refusals. The MCP
-  connector/skill layer remains the next backend workstream.
+  authenticated overview, rhythm, and accuracy projections with typed refusals. Backend
+  Milestone 4 has landed: a local stdio MCP adapter exposes those read projections and
+  propose-only scheduling tools over the backend API with call budgets, while approval
+  remains the human one-use-token path. Cloud skill packaging and reviewer-gated
+  auto-apply remain future work.
 - **Contracts:** new surfaces extend the versioned schemas (and an ADR) rather
   than inventing UI-only data.
 

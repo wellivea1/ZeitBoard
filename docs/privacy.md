@@ -5,8 +5,9 @@
 > [ADR-0008](decisions/0008-self-hostable-backend-byok-llm.md)). The backend is **entirely
 > self-hostable** (the project operates no service and collects no telemetry); the user's
 > data syncs to *their own* instance, and the assistant LLM is **bring-your-own-key**. The
-> Milestone 1 sync path, Milestone 2 BYOK assistant backend, and Milestone 3 server-side
-> read projections are implemented; the MCP connector/skill layer remains future work.
+> Milestone 1 sync path, Milestone 2 BYOK assistant backend, Milestone 3 server-side
+> read projections, and the Milestone 4 local MCP connector are implemented; cloud skill
+> packaging remains future work.
 > Not legal advice.
 
 ## Commitments
@@ -67,6 +68,14 @@ trusted DTO field by field and never serializes the private model. Server-side o
 rhythm, and accuracy projections are authenticated read DTOs built from the decrypted
 sync store and omit raw sync payloads, source record IDs, notes, medication names, and
 tokens. The phase-one trusted website is static, synthetic, and makes no network request.
+
+## Agent connector
+
+The local MCP connector is a stateless adapter over the self-hosted backend API. It holds
+only the backend URL and a device token, exposes read projections and propose-only tools,
+and stores no health data. It has no approval/apply tool and cannot consume approval
+tokens; human approval remains in the backend's existing one-use decision endpoint. Missing
+or unreachable backend configuration exposes no tools.
 
 ## Development data
 

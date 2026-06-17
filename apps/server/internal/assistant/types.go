@@ -68,6 +68,14 @@ type ProposalSummary struct {
 	Payload       json.RawMessage      `json:"payload"`
 }
 
+type DirectProposalRequest struct {
+	SchemaVersion     string          `json:"schema_version"`
+	RecommendedAction string          `json:"recommended_action"`
+	Target            *ActionTarget   `json:"target,omitempty"`
+	Answer            string          `json:"answer,omitempty"`
+	Context           PlanningContext `json:"context"`
+}
+
 type modelAction struct {
 	SchemaVersion     string        `json:"schema_version"`
 	RecommendedAction string        `json:"recommended_action"`
@@ -83,6 +91,8 @@ type actionTarget struct {
 	PreferredAfterWakeMinutes *int       `json:"preferred_after_wake_minutes,omitempty"`
 	ReminderID                string     `json:"reminder_id,omitempty"`
 }
+
+type ActionTarget = actionTarget
 
 type storedProposalPayload struct {
 	ProposalID        string                   `json:"proposal_id"`
