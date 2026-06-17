@@ -544,14 +544,19 @@ This reuses the §3.2 actogram engine with a **clinical longitudinal mode**,
 
 ## 4. Feature C — Conversational assistant (chatbox)
 
-> **Backend default updated by [ADR-0007](decisions/0007-connected-cloud-architecture.md).**
-> The product is now connected/cloud, so the **cloud LLM is the standard backend** — the
-> "provider defaults to off/local" wording in §4.4 and §4.6 is superseded (a local/offline
-> mode may remain as a *fallback*, not the default). Everything else in §4.4/§4.6 still
-> holds and should be implemented as written: the model only emits allowlisted actions the
-> **server** resolves (it mutates nothing), every change goes through the approval queue,
-> context is redacted/role-scoped, and the active backend is always disclosed. Additionally,
-> the cloud provider must not train on or retain the context (DPA / zero-retention tier).
+> **Backend updated by [ADR-0007](decisions/0007-connected-cloud-architecture.md) +
+> [ADR-0008](decisions/0008-self-hostable-backend-byok-llm.md).**
+> The backend is **entirely self-hostable**, and the assistant LLM is
+> **bring-your-own-key, multi-provider** — modeled on OpenCode, with integrated support
+> for **OpenCode Zen, OpenRouter, OpenAI, and Anthropic** (OpenCode Go as the
+> implementation reference). The project ships **no keys**; the "provider defaults to
+> off/local" wording in §4.4/§4.6 is superseded — the user configures a provider and
+> supplies the key (a local/offline mode may remain as a fallback). Everything else in
+> §4.4/§4.6 still holds and must be implemented as written: the model only emits
+> allowlisted actions the **server** resolves (it mutates nothing), every change goes
+> through the approval queue, context is minimized/redacted, BYOK credentials are stored
+> in a secret store and never logged, and the active provider is always disclosed. The
+> provider's data terms are the user's relationship (their key, their choice).
 
 A local-first assistant that **manages the schedule by creating approval-queue
 proposals** (never applying changes) and **answers questions about local data**
@@ -692,11 +697,14 @@ local observations + corrections + current estimate
 
 **Hard rules (copy NoobBoard's, narrowed to scheduling):**
 
-- **Provider defaults to off/local.** With no cloud provider configured the
-  assistant answers only from local data and never fabricates; cloud providers
-  (OpenAI/Anthropic) are opt-in in Settings, called via plain HTTP (no SDK), and
-  surfaced by the header dot (§4.3). Deterministic dev uses fixtures, never a mock
-  answer generator.
+- **Bring-your-own provider (BYOK), multi-provider.** The user configures a provider
+  and supplies their own key — **OpenCode Zen, OpenRouter, OpenAI, or Anthropic**
+  (provider abstraction modeled on OpenCode; **OpenCode Go** as the Go reference); the
+  project ships no keys. Providers are called over plain HTTP (no SDK), credentials live
+  in a secret store and are never logged, and the active provider is surfaced by the
+  header dot (§4.3). With no provider configured the assistant answers only from local
+  data and never fabricates. Deterministic dev uses fixtures, never a mock answer
+  generator.
 - **The model mutates nothing.** It returns only a schema-allowlisted
   `recommended_action` ∈ `{propose_move_task, propose_place_task,
   propose_reminder_shift, answer_only}` plus a structured target (task id /

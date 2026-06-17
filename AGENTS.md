@@ -25,7 +25,7 @@
 
 ## Privacy
 
-- **Connected cloud app (ADR-0007):** the user's data syncs to their account over an authenticated, encrypted channel and a cloud LLM is a standard backend. No advertising, data brokerage, or third-party tracking SDKs. Health/circadian data is special-category — collect and process it only with explicit consent, and provide user export and deletion.
+- **Connected, self-hosted, BYOK (ADR-0007 + ADR-0008):** the backend is **entirely self-hostable** (the project runs no service and collects no telemetry); the user's data syncs to *their own* instance over TLS, encrypted at rest. The assistant LLM is **bring-your-own-key, multi-provider** (OpenCode Zen / OpenRouter / OpenAI / Anthropic, modeled on OpenCode) — ship **no keys**; send only minimized/redacted context to the user's chosen provider and disclose it. No advertising, data brokerage, or third-party tracking SDKs. Legal scope **US / North Carolina** (compliance elsewhere is the user's); make honest privacy representations; provide export + deletion.
 - Never collect keystrokes, typed content, screenshots, browser history, or active-window titles; collection is permission-gated and user-initiated.
 - Do not log health payloads, notes, medication names, calendar content, tokens, or exact behavioral timestamps.
 - Fixtures, screenshots, static web assets, and tests must contain synthetic data only.

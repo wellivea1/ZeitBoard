@@ -172,8 +172,9 @@ write-back is off by default and passes a security review before enablement.
 
 An assistant to manage the schedule and answer questions about one's own data —
 proposing, never applying, and never advising medically. Per
-[ADR-0007](decisions/0007-connected-cloud-architecture.md) the assistant is
-**cloud-backed by default** (a local/offline mode may remain as a fallback).
+[ADR-0008](decisions/0008-self-hostable-backend-byok-llm.md) the assistant uses a
+**bring-your-own-key, multi-provider LLM** (the user supplies their own key; a
+local/offline mode may remain as a fallback).
 
 - **Manage the calendar by conversation.** The assistant turns requests
   ("find me 90 min for taxes before Friday, not right after I wake") into
@@ -184,10 +185,12 @@ proposing, never applying, and never advising medically. Per
   drift, next predicted windows, what a proposal means, why a task moved — always
   with uncertainty and civil time, and a hard refusal boundary on diagnosis,
   prescribing, dosing, and treatment timing.
-- **Cloud LLM is the standard backend (ADR-0007).** Context sent to the provider is
-  minimized and redacted, the provider must not train on or retain it, and the active
-  backend is always disclosed in the UI. The model still only *proposes* (approval gate)
-  and never advises medically; an optional local/offline mode may remain as a fallback.
+- **Bring-your-own-key, multi-provider LLM (ADR-0008).** The user supplies their own
+  key; integrated providers are OpenCode Zen, OpenRouter, OpenAI, and Anthropic (modeled
+  on OpenCode, OpenCode Go reference). The project ships no keys; context sent to the
+  user's chosen provider is minimized and redacted, and the active provider is always
+  disclosed. The model still only *proposes* (approval gate) and never advises medically;
+  the provider's data terms are the user's relationship.
 - **The assistant's action registry doubles as an agent-accessible interface.** The
   same allowlisted, *propose-only*, redacted capability layer the in-app assistant
   uses is exposed to an external agent so the whole app can be driven non-visually by
@@ -226,13 +229,15 @@ state + propose actions) through the allowlisted, redacted capability layer.**
   (a local MCP connector or a Claude/ChatGPT skill), not a transcription of the charts;
   cloud agents are opt-in and gated like any connected backend. This is a standing
   design constraint, not a later pass. See ADR-0006 and Phase 4.
-- **Privacy & threat model:** the product is a **connected cloud app**
-  ([ADR-0007](decisions/0007-connected-cloud-architecture.md)) — the user's data syncs
-  to their account and a cloud LLM is a standard backend, with explicit consent for
-  special-category health data, encryption in transit + at rest, and export/deletion. A
-  **sync backend/server is a new workstream** and a prerequisite for companion↔server
-  sync (none exists yet). `privacy.md` and `threat-model.md` are under revision per
-  ADR-0007; each feature that adds a data source or external surface updates them.
+- **Privacy & threat model:** the product is **connected, self-hosted, and BYOK**
+  ([ADR-0007](decisions/0007-connected-cloud-architecture.md) +
+  [ADR-0008](decisions/0008-self-hostable-backend-byok-llm.md)) — an **entirely
+  self-hostable** Go backend syncs the user's data to *their own* instance (TLS,
+  encrypted at rest), and the assistant LLM is **bring-your-own-key, multi-provider**
+  (no shipped keys). The project runs no service and collects no telemetry; the operator
+  is the data controller. Legal scope **US / North Carolina**. The **self-hostable
+  backend + BYOK provider layer is the gating new workstream** (none exists yet);
+  `privacy.md`/`threat-model.md` are under revision per ADR-0007/0008.
 - **Contracts:** new surfaces extend the versioned schemas (and an ADR) rather
   than inventing UI-only data.
 

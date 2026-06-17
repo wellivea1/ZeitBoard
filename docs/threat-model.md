@@ -1,11 +1,14 @@
 # Threat model
 
-> **⚠ Under revision per [ADR-0007](decisions/0007-connected-cloud-architecture.md).**
+> **⚠ Under revision per [ADR-0007](decisions/0007-connected-cloud-architecture.md) +
+> [ADR-0008](decisions/0008-self-hostable-backend-byok-llm.md).**
 > This model assumes a local-first app where "no health payload leaves the device." That
-> invariant no longer holds: the product is a connected cloud app that syncs the private
-> model to the user's account and uses a cloud LLM. This document needs a rewrite to add
-> accounts/auth, server-side storage of identifiable health data, cloud-provider access,
-> transport, and the LLM provider's data handling as in-scope assets and surfaces.
+> invariant no longer holds: the product is connected, with an **entirely self-hostable**
+> backend syncing the private model to the user's own instance and a **bring-your-own-key**
+> LLM. Needs a rewrite around the self-hosted-instance trust boundary: the **operator** is
+> the primary defender; new assets are the self-hosted server, the sync transport (TLS),
+> data at rest on the instance, and BYOK provider credentials. LLM-provider data handling
+> is the user's relationship (their key, their chosen provider). Legal scope: US / NC.
 
 ## Scope and assets
 

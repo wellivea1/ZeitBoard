@@ -1,21 +1,32 @@
 # Privacy
 
-> **⚠ Under revision per [ADR-0007](decisions/0007-connected-cloud-architecture.md).**
-> The product is now a connected cloud app (the user's data syncs to their account; a
-> cloud LLM is a standard backend). The sections below describe the superseded
-> local-first/offline model and will be rewritten once the backend/identity model and
-> LLM provider are chosen. What carries over: explicit consent for special-category
-> health data, user export + deletion, encryption in transit and at rest, no
-> advertising or data brokerage, and default-deny *sharing to other people*.
+> **Architecture: connected, self-hosted, BYOK**
+> ([ADR-0007](decisions/0007-connected-cloud-architecture.md) +
+> [ADR-0008](decisions/0008-self-hostable-backend-byok-llm.md)). The backend is **entirely
+> self-hostable** (the project operates no service and collects no telemetry); the user's
+> data syncs to *their own* instance, and the assistant LLM is **bring-your-own-key**. Some
+> sections below still describe the original local-first scaffold and are being updated;
+> `threat-model.md` still needs a full rewrite around the self-hosted-instance boundary.
+> Not legal advice.
 
 ## Commitments
 
-- Connected cloud operation ([ADR-0007](decisions/0007-connected-cloud-architecture.md)):
-  the user's data syncs to their account and a cloud LLM is a standard backend. No
-  advertising, data brokerage, or third-party tracking SDKs.
+- **Self-hostable, user-controlled.** The backend is entirely self-hostable; the project
+  runs no service and collects no telemetry. The operator of an instance controls the
+  data and is its data controller.
+- **Bring-your-own LLM.** The assistant uses the user's own provider key (OpenCode Zen /
+  OpenRouter / OpenAI / Anthropic, modeled on OpenCode). The project ships no keys; only
+  minimized, redacted context is sent, to the provider the user chose and discloses —
+  that provider relationship and its terms are the user's.
+- No advertising, data brokerage, or third-party tracking SDKs.
 - User-controlled acquisition, correction, export, sharing, and deletion.
 - Data minimization at collection, storage, logging, projection, and testing.
-- Explicit consent and least privilege for every platform permission.
+- Encryption in transit (TLS) and at rest on the instance; BYOK credentials in a secret
+  store, never logged.
+- Explicit consent and least privilege for every platform permission and data source.
+- **Legal scope: US / North Carolina** — honest representations (NC UDAP) and
+  breach-notification awareness (NC Identity Theft Protection Act) for instance
+  operators. Compliance outside the US/NC is the user's responsibility.
 
 ## Collection defaults
 
@@ -30,10 +41,11 @@ by the product boundary. It must not retain application names or content.
 
 ## Local storage
 
-Private data stays in the configured local SQLite database. Database files,
-write-ahead logs, exports, and backups must be treated as sensitive. File
-permissions should be restricted to the current user. At-rest encryption is a
-future enhancement and is not assumed by phase one.
+Private data lives in the local SQLite database and syncs to the user's
+self-hosted instance. Database files, write-ahead logs, exports, and backups must
+be treated as sensitive and have file permissions restricted to the owner.
+**At-rest encryption (local and on the instance) and TLS in transit are required**,
+not optional — the operator holds the keys.
 
 Deletion removes local derived data and source records according to the user's
 explicit request, subject to a clear confirmation flow. Export must be an

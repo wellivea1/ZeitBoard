@@ -60,13 +60,16 @@ operation.
 - Fixtures and tests stay synthetic (good practice), but the "synthetic-only because
   nothing leaves the device" rationale no longer applies.
 
-## Open questions (block a full privacy + threat-model rewrite)
+## Open questions — resolved by [ADR-0008](0008-self-hostable-backend-byok-llm.md)
 
-- **Backend & identity:** a hosted service we run, or a user-self-hostable server? What
-  account/identity model?
-- **LLM provider & terms:** which provider, under what training/retention terms?
-- **Target markets:** EU/UK (GDPR) and/or US state laws set the consent and
-  data-handling baseline.
+- **Backend & identity:** **entirely self-hostable** Go server (no mandatory
+  project-run service); the operator is the data controller.
+- **LLM provider & terms:** **bring-your-own-key, multi-provider** (OpenCode Zen,
+  OpenRouter, OpenAI, Anthropic), modeled on OpenCode; the project ships no keys.
+- **Target markets:** **US / North Carolina**; compliance elsewhere is the user's.
+
+This refines the "convenience-first / managed cloud" framing above toward a
+**user-sovereign** model: connected, but self-hosted and self-keyed.
 
 ## Status / next steps
 
