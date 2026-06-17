@@ -189,12 +189,20 @@ TalkBack (Android), never seeing a chart. Blindness is a leading cause of Non-24
 an important, well-supported user — but the product is visual-first for sighted users like
 Maya, and the visuals are never sacrificed to serve this path; she is served wherever
 accessibility can be added without compromising aesthetics or functionality.
-- **JTBD:** "Read me, out loud and in order, whether I'm likely awake, how long until my next
-  predicted sleep window, and what's pending — without me ever needing to see a chart."
-- **Needs:** every chart as a navigable table; an accessible name on every control; spoken
-  state changes; complete keyboard operation; civil times announced explicitly.
-- **Fails if:** any actogram/drift/calendar is visual-only, a control is unlabeled, meaning is
-  carried by color or position, or a state change happens silently.
+- **JTBD:** "Let me *talk* to it — 'am I likely awake tomorrow? move my tax block to after I
+  wake' — and hear the answer, without ever needing to see a chart."
+- **Primary path:** a conversational agent with live voice driving ZeitBoard through its
+  agent-accessible capability layer ([ADR-0006](decisions/0006-agent-accessible-interface.md)) —
+  read state, propose changes, hear them back. The screen-reader tables under each chart are a
+  *secondary* fallback for SR users who prefer them; the visual UI is never compromised to
+  serve Noor.
+- **Needs:** every feature operable by an agent non-visually (perceive state + propose actions,
+  propose-only via the approval queue); concise, speakable, civil-time-primary,
+  uncertainty-visible results; an accessible name on every control and a chart text equivalent
+  for the SR fallback.
+- **Fails if:** a feature has no agent-operable path (an agent can't read its state or act on
+  it); the agent can mutate the schedule without the approval gate; or, in SR fallback, a
+  control is unlabeled or a chart has no text equivalent.
 
 ---
 

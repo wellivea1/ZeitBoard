@@ -744,6 +744,40 @@ local observations + corrections + current estimate
    Approvals screen.
 9. When no backend is usable, the assistant entry is absent (not a disabled box).
 
+### 4.7 Agent-accessible interface (MCP connector / skill) + live voice
+
+The §4.6 action registry is not assistant-only — it is the **agent-accessible capability
+layer** that makes the whole app drivable non-visually, the intended primary path for blind
+users ([ADR-0006](decisions/0006-agent-accessible-interface.md)). Same registry, same approval
+gate, same redaction; the agent is just a different client over it.
+
+- **Shape.** Expose two tool families over the existing registry: **read tools** returning the
+  speakable projection DTOs the UI already uses (overview, rhythm summary + the chart
+  `sr-table` data, pending proposals, conflicts, next windows — civil-time-primary,
+  uncertainty-visible), and **propose-only action tools** (`propose_move_task`,
+  `propose_place_task`, `propose_reminder_shift`, `log_sleep`, ...) the server resolves into
+  `change-proposal`s. No tool mutates state directly, touches credentials/files/network by
+  default, or returns the raw domain model — same fail-closed allowlist / call-budget /
+  redaction rules as §4.6.
+- **Delivery.** (a) a **local MCP server** *(leading option)* so an MCP client such as Claude
+  Desktop drives ZeitBoard; the connector is local, so with a local agent no health data
+  leaves the device. (b) a **Claude/ChatGPT skill** wrapping the same tools for a cloud
+  assistant — opt-in, off by default, gated like any connected backend.
+- **Voice.** Live voice is the *client's* (Claude/ChatGPT voice mode, or the OS); ZeitBoard
+  ships no TTS/STT and just returns concise, speakable results. Loop: voice-in → agent →
+  ZeitBoard tools → structured result → voice-out.
+- **Backend disclosure & consent** identical to §4.4: the active agent/backend is always
+  shown; a cloud agent triggers the one-time minimal-context consent note and needs its own
+  privacy review + threat-model update.
+
+**Acceptance additions:**
+10. Every UI-exposed capability has a corresponding agent read or propose-only tool; a test
+    asserts no action tool has a direct-mutation path (all route through the approval queue).
+11. Agent read tools return only allowlisted projection fields (no raw domain model, med
+    names, diagnosis, raw activity, or un-needed calendar text), asserted like the
+    trusted-view projection tests.
+12. With a local MCP client + local agent, zero network requests carry health data.
+
 ---
 
 ## 5. New components (inventory delta) + inputs

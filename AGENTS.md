@@ -21,6 +21,7 @@
 - The product is **visual-first** for its primary audience (people with *sighted* Non-24); visual feedback is never sacrificed for accessibility. But make every element accessible where it can reasonably be done **without compromising aesthetics or functionality**. See `docs/accessibility.md`.
 - Give every control an accessible name; never convey meaning by color alone; keep the UI keyboard-operable; target WCAG 2.2 AA on desktop and Android (TalkBack). Provide a text/table equivalent for charts where it doesn't degrade the visual design.
 - Don't gate shipping a visual feature on full non-visual parity; add the accessible equivalents that don't cost aesthetics or functionality.
+- The **primary non-visual path is an agent + live voice**, not a transcription of the visuals: every feature must expose an agent-operable, non-visual interface — structured readable state + allowlisted *propose-only* actions through the approval gate — so an MCP client or assistant can drive it. Cloud agents are opt-in, off by default, and gated like any connected backend. See `docs/decisions/0006-agent-accessible-interface.md`.
 
 ## Privacy
 

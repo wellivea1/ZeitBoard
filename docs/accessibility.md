@@ -36,6 +36,24 @@ repository rules are in [`../AGENTS.md`](../AGENTS.md).
   `apps/desktop/frontend/src/theme/contrast.test.ts`).
 - **Android** mirrors these with Compose semantics and content descriptions (TalkBack).
 
+## The primary non-visual path: an agent + live voice
+
+Screen-reader tables of a chart are a serviceable *fallback*, not the best non-visual
+experience. The intended primary path for blind users is a **conversational agent with
+live voice** — "when am I likely awake tomorrow? move my tax block to after I wake,"
+spoken back and queued — driving ZeitBoard through a structured, agent-operable
+capability layer rather than reading pixels.
+
+This is why it resolves the visual-first tension cleanly: the non-visual experience is a
+*separate modality*, so the visual UI never has to be compromised to serve it. The
+design constraint that follows is **every feature must be operable by an agent
+non-visually** (perceive its state, perform its actions), through the same allowlisted,
+*propose-only*, redacted interface the in-app assistant uses (mutations go through the
+approval queue; nothing auto-applies; medical-advice refusal holds). Delivery is a local
+MCP connector and/or a Claude/ChatGPT skill; a cloud agent is opt-in, off by default,
+and gated like any connected backend. ZeitBoard ships no speech stack — voice is the
+agent client's job. See [`decisions/0006-agent-accessible-interface.md`](decisions/0006-agent-accessible-interface.md).
+
 ## The trade-off rule
 
 When an accessibility affordance would force a worse-looking or worse-functioning

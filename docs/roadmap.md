@@ -187,13 +187,25 @@ own data — proposing, never applying, and never advising medically.
   default, scoped to the minimum non-identifying context, and requires its own
   privacy review and threat-model update (same bar as the relay). The UI always
   shows whether the assistant is running locally or via a connected service.
+- **The assistant's action registry doubles as an agent-accessible interface.** The
+  same allowlisted, *propose-only*, redacted capability layer the in-app assistant
+  uses is exposed to an external agent so the whole app can be driven non-visually by
+  conversation + live voice — the intended primary path for blind users (see the
+  Agent-accessible interface cross-cutting track and ADR-0006). Delivered as a **local
+  MCP connector** (leading option; works with a local agent so health data can stay on
+  device) and/or a **Claude/ChatGPT skill** (cloud, opt-in, gated). The agent only
+  proposes; the approval queue and medical refusal are unchanged; ZeitBoard ships no
+  speech stack (voice is the client's).
 
-Spec: [`ui-ux-feature-specs.md` §4](ui-ux-feature-specs.md).
+Spec: [`ui-ux-feature-specs.md` §4](ui-ux-feature-specs.md);
+agent interface = [ADR-0006](decisions/0006-agent-accessible-interface.md).
 
 Exit criteria: the assistant cannot mutate the schedule except by creating
 approval-queue proposals; it refuses medical questions with a consistent,
 non-alarming script; with the default backend, no health payload leaves the
-device; the active backend is always disclosed in the UI.
+device; the active backend is always disclosed in the UI; **every feature is
+operable non-visually by an agent (read state + propose actions) through the
+allowlisted, redacted capability layer**, with a local MCP path that needs no cloud.
 
 ---
 
@@ -207,6 +219,12 @@ device; the active backend is always disclosed in the UI.
   accessible names, non-color-only cues, keyboard operation, WCAG 2.2 AA,
   reduced-stimulation, 44px targets, and chart text equivalents where they don't
   compromise aesthetics or functionality. See `accessibility.md`.
+- **Agent-accessible interface:** every feature exposes a non-visual, agent-operable
+  surface — structured readable state + allowlisted *propose-only* actions through the
+  approval gate. The intended primary path for blind users is an **agent + live voice**
+  (a local MCP connector or a Claude/ChatGPT skill), not a transcription of the charts;
+  cloud agents are opt-in and gated like any connected backend. This is a standing
+  design constraint, not a later pass. See ADR-0006 and Phase 4.
 - **Privacy & threat model:** each feature that adds a data source, a network
   call, or an external surface updates `privacy.md` and `threat-model.md` before
   it ships.
