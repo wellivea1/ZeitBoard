@@ -11,14 +11,47 @@ import (
 
 var ErrNoReliableWindow = errors.New("no reliable scheduling window")
 
+// Explanation codes are the v1 schedule-proposals vocabulary. The scheduler
+// emits only codes it actually enforced, so a proposal never claims a guarantee
+// the engine did not apply.
+const (
+	CodeWithinPredictedWakingWindow = "within_predicted_waking_window"
+	CodeAvoidsFixedEvent            = "avoids_fixed_event"
+	CodeWithinTaskBounds            = "within_task_bounds"
+	CodeUncertaintyBufferApplied    = "uncertainty_buffer_applied"
+)
+
+// UnplacedReason is the v1 vocabulary for why a task produced no proposal.
+type UnplacedReason string
+
+const (
+	ReasonNoAvailableInterval    UnplacedReason = "no_available_interval"
+	ReasonOutsideForecastHorizon UnplacedReason = "outside_forecast_horizon"
+	ReasonEstimateUnavailable    UnplacedReason = "estimate_unavailable"
+	ReasonInvalidConstraints     UnplacedReason = "invalid_constraints"
+)
+
+// ClassifyUnplaced maps a Propose error to its contract reason code.
+func ClassifyUnplaced(err error) UnplacedReason {
+	switch {
+	case err == nil:
+		return ""
+	case errors.Is(err, ErrNoReliableWindow):
+		return ReasonNoAvailableInterval
+	default:
+		return ReasonInvalidConstraints
+	}
+}
+
 type Proposal struct {
-	TaskID        domain.FlexibleTaskID      `json:"taskId"`
-	Window        domain.TimeRange           `json:"window"`
-	EstimateID    domain.PhaseEstimateID     `json:"estimateId"`
-	Confidence    domain.InferenceConfidence `json:"confidence"`
-	Explanation   string                     `json:"explanation"`
-	NeedsApproval bool                       `json:"needsApproval"`
-	CreatedAt     time.Time                  `json:"createdAt"`
+	TaskID           domain.FlexibleTaskID      `json:"taskId"`
+	Window           domain.TimeRange           `json:"window"`
+	EstimateID       domain.PhaseEstimateID     `json:"estimateId"`
+	Confidence       domain.InferenceConfidence `json:"confidence"`
+	Explanation      string                     `json:"explanation"`
+	ExplanationCodes []string                   `json:"explanationCodes"`
+	NeedsApproval    bool                       `json:"needsApproval"`
+	CreatedAt        time.Time                  `json:"createdAt"`
 }
 
 type Request struct {
@@ -65,14 +98,53 @@ func (Scheduler) Propose(request Request) (Proposal, error) {
 	selected := candidates[0]
 	end, _ := domain.NewZonedInstant(selected.interval.Start.UTC.Add(request.Task.EstimatedDuration), selected.interval.Start.ZoneID)
 	return Proposal{
-		TaskID:        request.Task.ID,
-		Window:        domain.TimeRange{Start: selected.interval.Start, End: end},
-		EstimateID:    selected.availability.EstimateID,
-		Confidence:    selected.availability.Confidence,
-		Explanation:   fmt.Sprintf("Earliest deterministic fit in a %s window after applying fixed events and task constraints.", selected.availability.Kind),
-		NeedsApproval: constraint.RequiresApproval || !constraint.AllowAutomaticMovement,
-		CreatedAt:     time.Now().UTC(),
+		TaskID:           request.Task.ID,
+		Window:           domain.TimeRange{Start: selected.interval.Start, End: end},
+		EstimateID:       selected.availability.EstimateID,
+		Confidence:       selected.availability.Confidence,
+		Explanation:      fmt.Sprintf("Earliest deterministic fit in a %s window after applying fixed events and task constraints.", selected.availability.Kind),
+		ExplanationCodes: explanationCodes(selected, request),
+		NeedsApproval:    constraint.RequiresApproval || !constraint.AllowAutomaticMovement,
+		CreatedAt:        time.Now().UTC(),
 	}, nil
+}
+
+// explanationCodes reports only the guarantees the engine actually applied to
+// this placement. uncertainty_buffer_applied is intentionally never emitted
+// yet: the scheduler takes the earliest deterministic fit and does not pad the
+// window edges, so claiming a buffer would be false.
+func explanationCodes(selected candidate, request Request) []string {
+	var codes []string
+	if selected.availability.Kind == domain.AvailabilityPredictedWake {
+		codes = append(codes, CodeWithinPredictedWakingWindow)
+	}
+	if windowOverlapsEvent(selected.availability.Interval, request.Events) {
+		codes = append(codes, CodeAvoidsFixedEvent)
+	}
+	if hasExplicitBounds(request.Task.Constraint, request.WakeAnchor) {
+		codes = append(codes, CodeWithinTaskBounds)
+	}
+	if len(codes) == 0 {
+		// The placement always sits inside the engine's feasible region.
+		codes = append(codes, CodeWithinTaskBounds)
+	}
+	return codes
+}
+
+func windowOverlapsEvent(window domain.TimeRange, events []domain.CalendarEvent) bool {
+	for _, event := range events {
+		if window.Overlaps(event.Interval) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasExplicitBounds(constraint domain.TaskConstraint, wake *domain.WakeAnchor) bool {
+	if constraint.BusinessHours || constraint.Deadline != nil || constraint.EarliestStart != nil || constraint.LatestFinish != nil {
+		return true
+	}
+	return constraint.PreferredAfterWake != nil && wake != nil
 }
 
 type candidate struct {

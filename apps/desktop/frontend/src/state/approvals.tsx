@@ -1,5 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import { proposalFixtures, type ChangeProposalFixture } from "../data/phaseTwo";
+import type { ChangeProposalFixture } from "../data/phaseTwo";
+import {
+  loadProposals,
+  proposalsFixture,
+  type ProposalsSource,
+  type UnplacedProposal,
+} from "../data/proposals";
 
 export type ProposalDecision = "approved" | "rejected";
 export type ProposalStatus = "pending" | ProposalDecision;
@@ -18,6 +24,8 @@ interface ApprovalsContextValue {
   proposals: DecidedProposal[];
   pending: DecidedProposal[];
   pendingCount: number;
+  unplaced: UnplacedProposal[];
+  source: ProposalsSource;
   decide: (id: string, decision: ProposalDecision) => void;
   undoLast: () => void;
   lastDecision: LastDecision | null;
@@ -25,13 +33,35 @@ interface ApprovalsContextValue {
 
 const ApprovalsContext = createContext<ApprovalsContextValue | null>(null);
 
-// In-session approval state. Nothing is persisted or applied to a backend yet;
-// the shapes mirror the planned change-proposal contract so a later swap is clean.
+// Approval decisions stay in-session; nothing is written back to a calendar yet.
+// The pending proposals are seeded from the local scheduling engine (GetProposals)
+// and fall back to the shared fixture before the Wails service is ready.
 export function ApprovalsProvider({ children }: { children: ReactNode }) {
   const [proposals, setProposals] = useState<DecidedProposal[]>(() =>
-    proposalFixtures.map((proposal) => ({ ...proposal, status: "pending" })),
+    proposalsFixture.proposals.map((proposal) => ({ ...proposal, status: "pending" })),
   );
+  const [unplaced, setUnplaced] = useState<UnplacedProposal[]>(proposalsFixture.unplaced);
+  const [source, setSource] = useState<ProposalsSource>("fixture");
   const [lastDecision, setLastDecision] = useState<LastDecision | null>(null);
+
+  useEffect(() => {
+    let current = true;
+    void loadProposals().then((result) => {
+      if (!current) return;
+      setSource(result.source);
+      setUnplaced(result.data.unplaced);
+      // Only seed the queue while it is still untouched, so an in-flight load
+      // never clobbers a decision the user already made.
+      setProposals((existing) =>
+        existing.some((proposal) => proposal.status !== "pending")
+          ? existing
+          : result.data.proposals.map((proposal) => ({ ...proposal, status: "pending" })),
+      );
+    });
+    return () => {
+      current = false;
+    };
+  }, []);
 
   const decide = (id: string, decision: ProposalDecision) => {
     const target = proposals.find((proposal) => proposal.id === id);
@@ -62,6 +92,8 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
     proposals,
     pending,
     pendingCount: pending.length,
+    unplaced,
+    source,
     decide,
     undoLast,
     lastDecision,

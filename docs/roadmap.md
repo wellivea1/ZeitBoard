@@ -99,12 +99,20 @@ binding) over the same sessions the Overview uses, so the two screens never
 disagree; the screen falls back to the shared fixture when the service is
 unavailable and shows whether it is running on the local estimate or sample data.
 The engine still runs over synthetic sessions — wiring real imported observations
-is Phase 3. Desktop theming (Auto/Light/Dark) and an independent
-reduced-stimulation toggle are implemented with before-first-paint application,
-`localStorage` persistence, extended CSS custom properties, and tests; the WCAG
-2.2 AA contrast/target-size consolidation pass has landed with a regression test.
-Persistent proposal state, real import refresh, backend correction undo, and full
-onboarding remain phase-two work.
+is Phase 3. The **Approvals trust gate is now engine-backed** too: the
+`GetProposals` Wails binding runs the real `scheduling.Scheduler` over the current
+estimate's predicted waking windows (plus the current functional window and a
+fixed event), so every queued proposal is one the engine actually produced — with
+contract-aligned `explanation_codes` for the constraints it enforced, the fixed
+events it avoided, and an honest `unplaced` list (reason codes) when no safe
+window exists. The scheduler emits only guarantees it applied and never claims an
+`uncertainty_buffer_applied` it does not yet perform. Desktop theming
+(Auto/Light/Dark) and an independent reduced-stimulation toggle are implemented
+with before-first-paint application, `localStorage` persistence, extended CSS
+custom properties, and tests; the WCAG 2.2 AA contrast/target-size consolidation
+pass has landed with a regression test. Approval decisions are still in-session
+(no write-back); persisting decisions, real import refresh, backend correction
+undo, and full onboarding remain phase-two work.
 
 Exit criteria: a fatigued user can read current state, recent drift, and the
 next predicted windows in seconds; the app is fully operable with a screen reader

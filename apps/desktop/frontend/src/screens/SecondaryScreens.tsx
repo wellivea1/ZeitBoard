@@ -8,7 +8,6 @@ import {
   correctionPreviewFixture,
   refusalFixture,
   sourceConflictFixtures,
-  unplacedTaskFixture,
   type ChangeProposalFixture,
   type ProposalOrigin,
   type RhythmDriftPointFixture,
@@ -518,7 +517,8 @@ const taskRows = [
 ];
 
 export function TasksScreen() {
-  const { pending, pendingCount } = useApprovals();
+  const { pending, pendingCount, unplaced } = useApprovals();
+  const firstUnplaced = unplaced[0];
   return (
     <>
       <PageHeader
@@ -595,9 +595,18 @@ export function TasksScreen() {
 
         <aside className="panel unplaced-panel" aria-labelledby="unplaced-title">
           <p className="section-kicker">Not proposed</p>
-          <h2 id="unplaced-title">{unplacedTaskFixture.title}</h2>
-          <p>{unplacedTaskFixture.reason}</p>
-          <small>{unplacedTaskFixture.nextAction}</small>
+          {firstUnplaced ? (
+            <>
+              <h2 id="unplaced-title">{firstUnplaced.title}</h2>
+              <p>{firstUnplaced.reason}</p>
+              <small>{firstUnplaced.nextAction}</small>
+            </>
+          ) : (
+            <>
+              <h2 id="unplaced-title">All tasks have a proposal</h2>
+              <p>Every flexible task fits a safe window in the current estimate.</p>
+            </>
+          )}
         </aside>
       </section>
     </>
@@ -605,7 +614,7 @@ export function TasksScreen() {
 }
 
 export function ApprovalsScreen() {
-  const { pending, pendingCount } = useApprovals();
+  const { pending, pendingCount, unplaced, source } = useApprovals();
   const byOrigin = (origin: ProposalOrigin) =>
     pending.filter((proposal) => proposal.origin === origin).length;
   return (
@@ -616,6 +625,12 @@ export function ApprovalsScreen() {
           pendingCount > 0
             ? `${pendingCount} pending ${pendingCount === 1 ? "proposal" : "proposals"}. Approve or reject each change before anything moves.`
             : "Nothing is waiting for your approval right now."
+        }
+        actions={
+          <div className="status-cluster">
+            <span className="sync-dot" data-mode={source} aria-hidden="true" />
+            <span>{source === "backend" ? "Local plan" : "Sample data"}</span>
+          </div>
         }
       />
       <PlaceholderNotice>
@@ -644,6 +659,22 @@ export function ApprovalsScreen() {
               approve it.
             </p>
           </div>
+        )}
+
+        {unplaced.length > 0 && (
+          <section className="panel unplaced-panel" aria-labelledby="approvals-unplaced-title">
+            <p className="section-kicker">Not proposed</p>
+            <h2 id="approvals-unplaced-title">
+              {unplaced.length} task{unplaced.length === 1 ? "" : "s"} without a safe window
+            </h2>
+            <ul className="unplaced-list">
+              {unplaced.map((item) => (
+                <li key={item.title}>
+                  <strong>{item.title}</strong> — {item.reason}. <small>{item.nextAction}</small>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
       </section>
     </>
