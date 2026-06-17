@@ -104,11 +104,12 @@ Everything else in the brief is adopted.
 
 These are ranked. When two conflict, the lower number wins.
 
-> **Baseline assumed by every principle below — non-visual parity.** The product
-> must be fully operable and understandable with a screen reader and keyboard,
-> with no information carried by color or spatial position alone. Many people with
-> Non-24 are totally blind, so screen-reader use is a *primary* mode, not an
-> accommodation. See §18 and [`accessibility.md`](accessibility.md).
+> **Baseline assumed by every principle below — accessible where it doesn't cost the
+> visuals.** The product is **visual-first** for its primary audience (sighted Non-24),
+> and visual feedback is never sacrificed for accessibility. But every element that can
+> reasonably be made accessible should be: keyboard-operable, with no meaning carried by
+> color alone and a screen-reader text equivalent for charts — wherever that does not
+> compromise aesthetics or functionality. See §18 and [`accessibility.md`](accessibility.md).
 
 1. **One-glance truth.** The top of every primary screen answers that screen's main
    question in one sentence a tired person can parse. Everything else is secondary.
@@ -181,11 +182,13 @@ No wearable; only phone + occasional manual logs. Lots of gaps and false sleep d
   data"; clear sense of what each source adds.
 - **Fails if:** the app pretends to know, or correcting feels like data-entry punishment.
 
-### 3.6 Noor — totally blind Non-24 user (co-primary; screen-reader only)
+### 3.6 Noor — totally blind Non-24 user (secondary; screen-reader only)
 
 Blind since birth; uses the app entirely via a screen reader + keyboard (desktop) and
 TalkBack (Android), never seeing a chart. Blindness is a leading cause of Non-24, so Noor is
-as central as Maya — not an edge case.
+an important, well-supported user — but the product is visual-first for sighted users like
+Maya, and the visuals are never sacrificed to serve this path; she is served wherever
+accessibility can be added without compromising aesthetics or functionality.
 - **JTBD:** "Read me, out loud and in order, whether I'm likely awake, how long until my next
   predicted sleep window, and what's pending — without me ever needing to see a chart."
 - **Needs:** every chart as a navigable table; an accessible name on every control; spoken
@@ -1046,11 +1049,12 @@ Target **WCAG 2.2 AA**. This product's users are disproportionately likely to be
 photophobic, or cognitively impaired *at the moment of use*, so accessibility is core, not
 polish.
 
-**Non-visual use is a primary mode.** A large share of people with Non-24 are totally blind
-(the rhythm free-runs without light reaching the circadian clock), so screen-reader + keyboard
-operation is a core path, not an accommodation. Every screen here must be fully usable with no
-sighted vision — the commitment and non-negotiables live in [`accessibility.md`](accessibility.md),
-and the blind co-primary persona is §3.6.
+**Accessible wherever it doesn't cost the visuals.** The product is visual-first for its
+primary audience (sighted Non-24), and visual feedback is never sacrificed for accessibility.
+That said, blindness is a leading cause of Non-24, so screen-reader + keyboard operation and a
+text equivalent for each chart are supported wherever they can be added without compromising
+aesthetics or functionality — the principle and specifics live in
+[`accessibility.md`](accessibility.md), and the blind secondary persona is §3.6.
 
 - **Keyboard (desktop):** full operability; logical focus order top-to-bottom matching
   visual hierarchy; visible focus ring (`focus-ring` token, ≥ 3:1); `Esc` closes

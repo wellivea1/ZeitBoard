@@ -110,15 +110,25 @@ window exists. The scheduler emits only guarantees it applied and never claims a
 (Auto/Light/Dark) and an independent reduced-stimulation toggle are implemented
 with before-first-paint application, `localStorage` persistence, extended CSS
 custom properties, and tests; the WCAG 2.2 AA contrast/target-size consolidation
-pass has landed with a regression test. Approval decisions are still in-session
-(no write-back); persisting decisions, real import refresh, backend correction
-undo, and full onboarding remain phase-two work.
+pass has landed with a regression test. An **estimation accuracy harness**
+(`estimation.Backtest`) now answers "is the estimate any good?" by walk-forward
+validation — refit on each prefix, predict the next sleep onset, and score point
+error, forecast-window hit-rate, and per-confidence calibration. Early findings on
+synthetic data: a clean linear rhythm is recovered with ~0h error and a 1.0
+hit-rate; a 3h mid-series phase jump (relative coordination) drives median point
+error to ~3h while the engine correctly *drops* its confidence — and the
+forecast-window hit-rate stays 1.0, confirming the predicted windows are honestly
+wide (so point error, not hit-rate, is the sharper quality signal, and window width
+is a candidate for future tightening). Approval decisions are still in-session (no
+write-back); persisting decisions, real import refresh, backend correction undo,
+running the harness on real imported history, and full onboarding remain
+phase-two work.
 
 Exit criteria: a fatigued user can read current state, recent drift, and the
-next predicted windows in seconds; the app is fully operable with a screen reader
-and keyboard, with a non-visual equivalent for every chart;
-usability research (synthetic/participant-controlled data) shows no one reads an
-estimate as exact.
+next predicted windows in seconds; the app is keyboard-operable and meets WCAG 2.2
+AA, with screen-reader text equivalents for charts wherever they don't compromise
+the visuals; usability research (synthetic/participant-controlled data) shows no
+one reads an estimate as exact.
 
 ---
 
@@ -191,12 +201,12 @@ device; the active backend is always disclosed in the UI.
 
 - **Uncertainty system:** ranges not points; ordinal confidence; non-color-only
   encodings — applied to every new chart, proposal, and assistant answer.
-- **Accessibility — screen-reader + keyboard is a priority:** non-visual use is a
-  primary mode because many people with Non-24 are totally blind. A screen-reader
-  text/table equivalent for every chart, an accessible name on every control,
-  polite live-region announcements, non-color-only cues, keyboard-complete
-  operation, reduced-stimulation, and 44px targets are acceptance criteria for each
-  new surface, not a later pass. See `accessibility.md`.
+- **Accessibility — visual-first, accessible where reasonable:** the product is
+  visual-first for its primary audience (sighted Non-24) and never sacrifices visual
+  feedback, but every element that can reasonably be made accessible should be:
+  accessible names, non-color-only cues, keyboard operation, WCAG 2.2 AA,
+  reduced-stimulation, 44px targets, and chart text equivalents where they don't
+  compromise aesthetics or functionality. See `accessibility.md`.
 - **Privacy & threat model:** each feature that adds a data source, a network
   call, or an external surface updates `privacy.md` and `threat-model.md` before
   it ships.

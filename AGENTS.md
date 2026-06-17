@@ -18,9 +18,9 @@
 
 ## Accessibility
 
-- Screen-reader + keyboard operation is a **first-class mode**: many people with Non-24 are totally blind, so non-visual users are core, not edge. See `docs/accessibility.md`.
-- Ship a text/table equivalent for every chart or visual-only element; give every control an accessible name; announce meaningful state changes via polite live regions; never convey meaning by color or position alone.
-- New or changed UI must be keyboard- and screen-reader-operable before it ships, with its non-visual equivalent in the same change. Target WCAG 2.2 AA on desktop and Android (TalkBack).
+- The product is **visual-first** for its primary audience (people with *sighted* Non-24); visual feedback is never sacrificed for accessibility. But make every element accessible where it can reasonably be done **without compromising aesthetics or functionality**. See `docs/accessibility.md`.
+- Give every control an accessible name; never convey meaning by color alone; keep the UI keyboard-operable; target WCAG 2.2 AA on desktop and Android (TalkBack). Provide a text/table equivalent for charts where it doesn't degrade the visual design.
+- Don't gate shipping a visual feature on full non-visual parity; add the accessible equivalents that don't cost aesthetics or functionality.
 
 ## Privacy
 
