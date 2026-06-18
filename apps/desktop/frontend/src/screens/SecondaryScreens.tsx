@@ -32,6 +32,7 @@ import {
   type SleepEntry,
   type SleepEntryInput,
 } from "../data/sleepEntries";
+import { notifySleepDataChanged, sleepDataChangedEvent } from "../data/sleepDataEvents";
 import type { ConfidenceLevel, OverviewSource } from "../data/overview";
 
 const days = ["Mon 15", "Tue 16", "Wed 17", "Thu 18", "Fri 19"];
@@ -723,14 +724,18 @@ export function RhythmScreen() {
 
   useEffect(() => {
     let current = true;
-    void loadRhythm().then((result) => {
-      if (current) {
-        setRhythm(result.data);
-        setMode(result.source);
-      }
-    });
+    const refresh = () =>
+      void loadRhythm().then((result) => {
+        if (current) {
+          setRhythm(result.data);
+          setMode(result.source);
+        }
+      });
+    refresh();
+    window.addEventListener(sleepDataChangedEvent, refresh);
     return () => {
       current = false;
+      window.removeEventListener(sleepDataChangedEvent, refresh);
     };
   }, []);
 
@@ -1234,6 +1239,7 @@ export function DataSourcesScreen() {
     setBusy(true);
     try {
       await addSleepEntry(form);
+      notifySleepDataChanged();
       setStatusMessage("Sleep entry saved locally.");
       setForm(initialSleepForm());
       await refreshEntries();
@@ -1266,6 +1272,7 @@ export function DataSourcesScreen() {
     try {
       const correction: SleepCorrectionInput = { observationId: editingId, ...editForm };
       await correctSleepEntry(correction);
+      notifySleepDataChanged();
       setStatusMessage("Correction appended locally.");
       setEditingId(null);
       await refreshEntries();
@@ -1281,6 +1288,7 @@ export function DataSourcesScreen() {
     setFormError("");
     try {
       await suppressSleepEntry(entry.observationId);
+      notifySleepDataChanged();
       setStatusMessage("Sleep entry suppressed from estimates.");
       await refreshEntries();
     } catch (error) {

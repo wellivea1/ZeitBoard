@@ -3,6 +3,7 @@ import { Icon, type IconName } from "../components/Icon";
 import { PageHeader } from "../components/AppShell";
 import { loadOverview } from "../data/backend";
 import { overviewFixture } from "../data/fixture";
+import { sleepDataChangedEvent } from "../data/sleepDataEvents";
 import { useApprovals } from "../state/approvals";
 import type { ConfidenceLevel, OverviewSource } from "../data/overview";
 
@@ -69,14 +70,18 @@ export function OverviewScreen() {
 
   useEffect(() => {
     let current = true;
-    void loadOverview().then((result) => {
-      if (current) {
-        setOverview(result.data);
-        setMode(result.source);
-      }
-    });
+    const refresh = () =>
+      void loadOverview().then((result) => {
+        if (current) {
+          setOverview(result.data);
+          setMode(result.source);
+        }
+      });
+    refresh();
+    window.addEventListener(sleepDataChangedEvent, refresh);
     return () => {
       current = false;
+      window.removeEventListener(sleepDataChangedEvent, refresh);
     };
   }, []);
 

@@ -6,6 +6,7 @@ import {
   type ProposalsSource,
   type UnplacedProposal,
 } from "../data/proposals";
+import { sleepDataChangedEvent } from "../data/sleepDataEvents";
 
 export type ProposalDecision = "approved" | "rejected";
 export type ProposalStatus = "pending" | ProposalDecision;
@@ -46,20 +47,24 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let current = true;
-    void loadProposals().then((result) => {
-      if (!current) return;
-      setSource(result.source);
-      setUnplaced(result.data.unplaced);
-      // Only seed the queue while it is still untouched, so an in-flight load
-      // never clobbers a decision the user already made.
-      setProposals((existing) =>
-        existing.some((proposal) => proposal.status !== "pending")
-          ? existing
-          : result.data.proposals.map((proposal) => ({ ...proposal, status: "pending" })),
-      );
-    });
+    const refresh = () =>
+      void loadProposals().then((result) => {
+        if (!current) return;
+        setSource(result.source);
+        setUnplaced(result.data.unplaced);
+        // Only seed the queue while it is still untouched, so an in-flight load
+        // never clobbers a decision the user already made.
+        setProposals((existing) =>
+          existing.some((proposal) => proposal.status !== "pending")
+            ? existing
+            : result.data.proposals.map((proposal) => ({ ...proposal, status: "pending" })),
+        );
+      });
+    refresh();
+    window.addEventListener(sleepDataChangedEvent, refresh);
     return () => {
       current = false;
+      window.removeEventListener(sleepDataChangedEvent, refresh);
     };
   }, []);
 

@@ -198,6 +198,45 @@ describe("desktop navigation", () => {
                   entries: [],
                 },
           AddSleepEntry: addSleep,
+          GetProposals: async () =>
+            saved
+              ? {
+                  fixtureMode: false,
+                  status: "estimated",
+                  proposals: [
+                    {
+                      id: "proposal-local-entry",
+                      origin: "scheduler",
+                      kind: "Place",
+                      title: "Local sleep data follow-up",
+                      to: "Mon Mar 2, 10:00 AM to 10:30 AM",
+                      rhythmContext: "at the start of a predicted waking window",
+                      confidence: "High",
+                      explanationCodes: ["within_predicted_waking_window"],
+                      reasonLabels: ["In a predicted waking window"],
+                      createdLabel: "Proposed by Scheduler from local sleep entries",
+                      expiresLabel: "valid for the current estimate",
+                    },
+                  ],
+                  unplaced: [],
+                }
+              : {
+                  fixtureMode: false,
+                  status: "empty",
+                  refusal: {
+                    code: "estimate_unavailable",
+                    message: "Add sleep entries.",
+                  },
+                  proposals: [],
+                  unplaced: [
+                    {
+                      title: "Local sleep data follow-up",
+                      reason: "No current estimate to plan against",
+                      reasonCode: "estimate_unavailable",
+                      nextAction: "Add sleep entries.",
+                    },
+                  ],
+                },
         },
       },
     };
@@ -224,6 +263,9 @@ describe("desktop navigation", () => {
       classification: "principal",
     });
     expect(screen.getByText(/Sun Mar 1, 10:00 PM EST to Mon Mar 2, 6:00 AM EST/)).toBeVisible();
+
+    fireEvent.click(screen.getByRole("link", { name: /Approvals/ }));
+    expect(await screen.findByText("Local sleep data follow-up")).toBeVisible();
   });
 
   it("applies Settings appearance controls through the visible UI", () => {
