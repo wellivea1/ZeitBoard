@@ -1,0 +1,517 @@
+package sqlite
+
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"regexp"
+	"sort"
+	"time"
+
+	"non24.app/core/domain"
+	"non24.app/core/ingest"
+)
+
+const (
+	SleepKindEpisode = "sleep_episode"
+
+	SleepClassificationPrincipal = "principal"
+	SleepClassificationNap       = "nap"
+	SleepClassificationUnknown   = "unknown"
+
+	ProvenanceAcquisitionManual        = "manual"
+	ProvenanceAcquisitionHealthConnect = "health_connect"
+	ProvenanceAcquisitionOSActivity    = "os_activity"
+	ProvenanceAcquisitionFileImport    = "file_import"
+	ProvenanceAcquisitionSynthetic     = "synthetic"
+
+	ProvenanceEvidenceDirectlyObserved = "directly_observed"
+	ProvenanceEvidenceUserReported     = "user_reported"
+	ProvenanceEvidenceInferred         = "inferred"
+
+	CorrectionReasonUserEdit       = "user_edit"
+	CorrectionReasonDuplicate      = "duplicate"
+	CorrectionReasonInvalidRange   = "invalid_range"
+	CorrectionReasonSourceConflict = "source_conflict"
+)
+
+var contractIdentifier = regexp.MustCompile(`^[a-z][a-z0-9_-]{2,63}$`)
+
+// SleepObservationRecord is the local desktop record shape for
+// observation-set.schema.json#/$defs/observation when kind=sleep_episode.
+type SleepObservationRecord struct {
+	ObservationID string                     `json:"observation_id"`
+	Kind          string                     `json:"kind"`
+	StartAt       time.Time                  `json:"start_at"`
+	EndAt         time.Time                  `json:"end_at"`
+	ZoneID        string                     `json:"zone_id"`
+	Sleep         SleepObservationDetails    `json:"sleep"`
+	Provenance    SleepObservationProvenance `json:"provenance"`
+}
+
+type SleepObservationDetails struct {
+	Classification string `json:"classification"`
+}
+
+type SleepObservationProvenance struct {
+	AcquisitionMethod string    `json:"acquisition_method"`
+	EvidenceStatus    string    `json:"evidence_status"`
+	RecordedAt        time.Time `json:"recorded_at"`
+	SourceRecordID    string    `json:"source_record_id,omitempty"`
+}
+
+// SleepCorrectionRecord is the local desktop record shape for
+// correction-set.schema.json#/$defs/correction.
+type SleepCorrectionRecord struct {
+	CorrectionID           string                 `json:"correction_id"`
+	TargetObservationID    string                 `json:"target_observation_id"`
+	SupersedesCorrectionID string                 `json:"supersedes_correction_id,omitempty"`
+	CreatedAt              time.Time              `json:"created_at"`
+	Reason                 string                 `json:"reason"`
+	Changes                SleepCorrectionChanges `json:"changes"`
+}
+
+type SleepCorrectionChanges struct {
+	StartAt             *time.Time `json:"start_at,omitempty"`
+	EndAt               *time.Time `json:"end_at,omitempty"`
+	SleepClassification *string    `json:"sleep_classification,omitempty"`
+	Excluded            *bool      `json:"excluded,omitempty"`
+}
+
+func (s *Store) AppendSleepObservation(ctx context.Context, record SleepObservationRecord) error {
+	if err := validateSleepObservation(record); err != nil {
+		return err
+	}
+	record.StartAt = record.StartAt.UTC()
+	record.EndAt = record.EndAt.UTC()
+	record.Provenance.RecordedAt = record.Provenance.RecordedAt.UTC()
+	encoded, err := json.Marshal(record)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, `INSERT INTO local_sleep_observations(
+		observation_id, kind, start_at, end_at, zone_id, classification,
+		acquisition_method, evidence_status, recorded_at, source_record_id, payload_json
+	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		record.ObservationID, record.Kind, formatSQLiteTime(record.StartAt), formatSQLiteTime(record.EndAt),
+		record.ZoneID, record.Sleep.Classification, record.Provenance.AcquisitionMethod,
+		record.Provenance.EvidenceStatus, formatSQLiteTime(record.Provenance.RecordedAt),
+		record.Provenance.SourceRecordID, encoded,
+	)
+	return err
+}
+
+func (s *Store) ListSleepObservations(ctx context.Context) ([]SleepObservationRecord, error) {
+	var records []SleepObservationRecord
+	err := s.readJSONRows(ctx, `SELECT payload_json FROM local_sleep_observations ORDER BY start_at, observation_id`, func(value []byte) error {
+		var record SleepObservationRecord
+		if err := json.Unmarshal(value, &record); err != nil {
+			return err
+		}
+		records = append(records, record)
+		return nil
+	})
+	return records, err
+}
+
+func (s *Store) AppendSleepCorrection(ctx context.Context, record SleepCorrectionRecord) error {
+	if err := validateSleepCorrection(record); err != nil {
+		return err
+	}
+	if err := s.requireSleepObservation(ctx, record.TargetObservationID); err != nil {
+		return err
+	}
+	record.CreatedAt = record.CreatedAt.UTC()
+	if record.Changes.StartAt != nil {
+		start := record.Changes.StartAt.UTC()
+		record.Changes.StartAt = &start
+	}
+	if record.Changes.EndAt != nil {
+		end := record.Changes.EndAt.UTC()
+		record.Changes.EndAt = &end
+	}
+	changes, err := json.Marshal(record.Changes)
+	if err != nil {
+		return err
+	}
+	encoded, err := json.Marshal(record)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, `INSERT INTO local_sleep_corrections(
+		correction_id, target_observation_id, supersedes_correction_id, created_at, reason, changes_json, payload_json
+	) VALUES(?, ?, ?, ?, ?, ?, ?)`,
+		record.CorrectionID, record.TargetObservationID, record.SupersedesCorrectionID,
+		formatSQLiteTime(record.CreatedAt), record.Reason, changes, encoded,
+	)
+	return err
+}
+
+func (s *Store) ListSleepCorrections(ctx context.Context) ([]SleepCorrectionRecord, error) {
+	var records []SleepCorrectionRecord
+	err := s.readJSONRows(ctx, `SELECT payload_json FROM local_sleep_corrections ORDER BY created_at, correction_id`, func(value []byte) error {
+		var record SleepCorrectionRecord
+		if err := json.Unmarshal(value, &record); err != nil {
+			return err
+		}
+		records = append(records, record)
+		return nil
+	})
+	return records, err
+}
+
+func (s *Store) LatestSleepCorrectionID(ctx context.Context, targetObservationID string) (string, error) {
+	var id string
+	err := s.db.QueryRowContext(ctx, `SELECT correction_id
+		FROM local_sleep_corrections
+		WHERE target_observation_id = ?
+		ORDER BY created_at DESC, correction_id DESC
+		LIMIT 1`, targetObservationID).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return id, err
+}
+
+func (s *Store) RawSleepSessions(ctx context.Context) ([]domain.SleepSession, error) {
+	observations, err := s.ListSleepObservations(ctx)
+	if err != nil {
+		return nil, err
+	}
+	sessions := make([]domain.SleepSession, 0, len(observations))
+	for _, observation := range observations {
+		session, err := sleepSessionFromObservation(observation)
+		if err != nil {
+			return nil, fmt.Errorf("observation %s: %w", observation.ObservationID, err)
+		}
+		sessions = append(sessions, session)
+	}
+	return sessions, nil
+}
+
+// CorrectedSleepSessions applies active append-only corrections but does not
+// merge overlapping reports. It is useful for entry-list UI where every source
+// observation still needs a row.
+func (s *Store) CorrectedSleepSessions(ctx context.Context) ([]domain.SleepSession, error) {
+	raw, err := s.RawSleepSessions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	corrections, err := s.activeDomainSleepCorrections(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return domain.ApplySleepCorrections(raw, corrections)
+}
+
+func (s *Store) EffectiveSleepSessions(ctx context.Context) ([]domain.SleepSession, error) {
+	corrected, err := s.CorrectedSleepSessions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	resolved, err := ingest.ResolveOverlappingSleepReports(corrected)
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(resolved, func(i, j int) bool {
+		return resolved[i].Intervals[0].Interval.Start.UTC.Before(resolved[j].Intervals[0].Interval.Start.UTC)
+	})
+	return resolved, nil
+}
+
+func (s *Store) activeDomainSleepCorrections(ctx context.Context) ([]domain.ManualCorrection, error) {
+	observations, err := s.ListSleepObservations(ctx)
+	if err != nil {
+		return nil, err
+	}
+	zoneByObservation := make(map[string]string, len(observations))
+	for _, observation := range observations {
+		zoneByObservation[observation.ObservationID] = observation.ZoneID
+	}
+	records, err := s.ListSleepCorrections(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var corrections []domain.ManualCorrection
+	for _, record := range records {
+		items, err := domainCorrectionsFromSleepRecord(record, zoneByObservation[record.TargetObservationID])
+		if err != nil {
+			return nil, fmt.Errorf("correction %s: %w", record.CorrectionID, err)
+		}
+		corrections = append(corrections, items...)
+	}
+	return markActiveCorrections(corrections), nil
+}
+
+func validateSleepObservation(record SleepObservationRecord) error {
+	if !contractIdentifier.MatchString(record.ObservationID) {
+		return errors.New("observation_id must match the v1 identifier format")
+	}
+	if record.Kind != SleepKindEpisode {
+		return errors.New("sleep observation kind must be sleep_episode")
+	}
+	if !validSleepClassification(record.Sleep.Classification) {
+		return errors.New("sleep.classification must be principal, nap, or unknown")
+	}
+	if !validAcquisition(record.Provenance.AcquisitionMethod) {
+		return errors.New("provenance.acquisition_method is not supported")
+	}
+	if !validEvidenceStatus(record.Provenance.EvidenceStatus) {
+		return errors.New("provenance.evidence_status is not supported")
+	}
+	if record.Provenance.RecordedAt.IsZero() {
+		return errors.New("provenance.recorded_at is required")
+	}
+	start, err := domain.NewZonedInstant(record.StartAt, record.ZoneID)
+	if err != nil {
+		return err
+	}
+	end, err := domain.NewZonedInstant(record.EndAt, record.ZoneID)
+	if err != nil {
+		return err
+	}
+	return (domain.TimeRange{Start: start, End: end}).Validate()
+}
+
+func validateSleepCorrection(record SleepCorrectionRecord) error {
+	if !contractIdentifier.MatchString(record.CorrectionID) {
+		return errors.New("correction_id must match the v1 identifier format")
+	}
+	if !contractIdentifier.MatchString(record.TargetObservationID) {
+		return errors.New("target_observation_id must match the v1 identifier format")
+	}
+	if record.SupersedesCorrectionID != "" && !contractIdentifier.MatchString(record.SupersedesCorrectionID) {
+		return errors.New("supersedes_correction_id must match the v1 identifier format")
+	}
+	if record.CreatedAt.IsZero() {
+		return errors.New("created_at is required")
+	}
+	if !validCorrectionReason(record.Reason) {
+		return errors.New("correction reason is not supported")
+	}
+	changes := record.Changes
+	count := 0
+	if changes.StartAt != nil {
+		count++
+	}
+	if changes.EndAt != nil {
+		count++
+	}
+	if changes.SleepClassification != nil {
+		if !validSleepClassification(*changes.SleepClassification) {
+			return errors.New("changes.sleep_classification must be principal, nap, or unknown")
+		}
+		count++
+	}
+	if changes.Excluded != nil {
+		count++
+	}
+	if count == 0 {
+		return errors.New("correction changes must not be empty")
+	}
+	if changes.StartAt != nil && changes.EndAt != nil && !changes.EndAt.After(*changes.StartAt) {
+		return errors.New("changes.end_at must be after changes.start_at")
+	}
+	return nil
+}
+
+func (s *Store) requireSleepObservation(ctx context.Context, observationID string) error {
+	var exists int
+	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM local_sleep_observations WHERE observation_id = ?`, observationID).Scan(&exists)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("sleep observation %s does not exist", observationID)
+	}
+	return err
+}
+
+func sleepSessionFromObservation(obs SleepObservationRecord) (domain.SleepSession, error) {
+	start, err := domain.NewZonedInstant(obs.StartAt, obs.ZoneID)
+	if err != nil {
+		return domain.SleepSession{}, err
+	}
+	end, err := domain.NewZonedInstant(obs.EndAt, obs.ZoneID)
+	if err != nil {
+		return domain.SleepSession{}, err
+	}
+	interval := domain.TimeRange{Start: start, End: end}
+	if err := interval.Validate(); err != nil {
+		return domain.SleepSession{}, err
+	}
+	evidence := domain.Evidence{
+		Acquisition:    acquisitionKind(obs.Provenance.AcquisitionMethod),
+		Status:         evidenceStatus(obs.Provenance.EvidenceStatus),
+		ObservationIDs: []domain.ObservationID{domain.ObservationID(obs.ObservationID)},
+		RecordedAt:     obs.Provenance.RecordedAt.UTC(),
+	}
+	if obs.Provenance.SourceRecordID != "" {
+		evidence.SourceIDs = []domain.DataSourceID{domain.DataSourceID(obs.Provenance.SourceRecordID)}
+	}
+	return domain.SleepSession{
+		ID:          domain.SleepSessionID(obs.ObservationID),
+		IsNap:       obs.Sleep.Classification == SleepClassificationNap,
+		SourceLabel: sourceLabel(obs.Provenance.AcquisitionMethod),
+		CreatedAt:   obs.Provenance.RecordedAt.UTC(),
+		Intervals: []domain.SleepInterval{{
+			Interval:      interval,
+			StartEvidence: evidence,
+			EndEvidence:   evidence,
+		}},
+	}, nil
+}
+
+func domainCorrectionsFromSleepRecord(record SleepCorrectionRecord, zoneID string) ([]domain.ManualCorrection, error) {
+	if zoneID == "" {
+		return nil, fmt.Errorf("target observation %s has no zone", record.TargetObservationID)
+	}
+	base := domain.ManualCorrection{
+		ID:           domain.CorrectionID(record.CorrectionID),
+		TargetID:     domain.SleepSessionID(record.TargetObservationID),
+		CreatedAt:    record.CreatedAt.UTC(),
+		SupersedesID: correctionIDPtr(record.SupersedesCorrectionID),
+		Active:       true,
+	}
+	var result []domain.ManualCorrection
+	if record.Changes.StartAt != nil {
+		item := base
+		item.Kind = domain.CorrectionSetSleepStart
+		instant, err := domain.NewZonedInstant(*record.Changes.StartAt, zoneID)
+		if err != nil {
+			return nil, err
+		}
+		item.InstantValue = &instant
+		result = append(result, item)
+	}
+	if record.Changes.EndAt != nil {
+		item := base
+		item.ID = suffixedCorrectionID(base.ID, "end")
+		item.Kind = domain.CorrectionSetWakeTime
+		instant, err := domain.NewZonedInstant(*record.Changes.EndAt, zoneID)
+		if err != nil {
+			return nil, err
+		}
+		item.InstantValue = &instant
+		result = append(result, item)
+	}
+	if record.Changes.SleepClassification != nil {
+		item := base
+		item.ID = suffixedCorrectionID(base.ID, "class")
+		item.Kind = domain.CorrectionClassifyNap
+		value := *record.Changes.SleepClassification == SleepClassificationNap
+		item.BoolValue = &value
+		result = append(result, item)
+	}
+	if record.Changes.Excluded != nil {
+		item := base
+		item.ID = suffixedCorrectionID(base.ID, "excluded")
+		item.Kind = domain.CorrectionSuppress
+		value := *record.Changes.Excluded
+		item.BoolValue = &value
+		result = append(result, item)
+	}
+	return result, nil
+}
+
+func markActiveCorrections(corrections []domain.ManualCorrection) []domain.ManualCorrection {
+	superseded := map[domain.CorrectionID]struct{}{}
+	for _, correction := range corrections {
+		if correction.SupersedesID == nil {
+			continue
+		}
+		superseded[*correction.SupersedesID] = struct{}{}
+		superseded[suffixedCorrectionID(*correction.SupersedesID, "end")] = struct{}{}
+		superseded[suffixedCorrectionID(*correction.SupersedesID, "class")] = struct{}{}
+		superseded[suffixedCorrectionID(*correction.SupersedesID, "excluded")] = struct{}{}
+	}
+	result := append([]domain.ManualCorrection(nil), corrections...)
+	for i := range result {
+		_, inactive := superseded[result[i].ID]
+		result[i].Active = !inactive
+	}
+	return result
+}
+
+func correctionIDPtr(value string) *domain.CorrectionID {
+	if value == "" {
+		return nil
+	}
+	id := domain.CorrectionID(value)
+	return &id
+}
+
+func suffixedCorrectionID(id domain.CorrectionID, suffix string) domain.CorrectionID {
+	return domain.CorrectionID(string(id) + "_" + suffix)
+}
+
+func acquisitionKind(value string) domain.AcquisitionKind {
+	switch value {
+	case ProvenanceAcquisitionHealthConnect, ProvenanceAcquisitionFileImport:
+		return domain.AcquisitionImported
+	case ProvenanceAcquisitionOSActivity:
+		return domain.AcquisitionCollected
+	default:
+		return domain.AcquisitionManual
+	}
+}
+
+func evidenceStatus(value string) domain.EvidenceStatus {
+	switch value {
+	case ProvenanceEvidenceDirectlyObserved:
+		return domain.StatusObserved
+	case ProvenanceEvidenceInferred:
+		return domain.StatusInferred
+	default:
+		return domain.StatusUserConfirmed
+	}
+}
+
+func sourceLabel(value string) string {
+	switch value {
+	case ProvenanceAcquisitionHealthConnect:
+		return "Health Connect sleep"
+	case ProvenanceAcquisitionFileImport:
+		return "Imported sleep"
+	case ProvenanceAcquisitionOSActivity:
+		return "Device activity"
+	case ProvenanceAcquisitionSynthetic:
+		return "Synthetic sleep"
+	default:
+		return "Manual sleep log"
+	}
+}
+
+func validSleepClassification(value string) bool {
+	return value == SleepClassificationPrincipal || value == SleepClassificationNap || value == SleepClassificationUnknown
+}
+
+func validAcquisition(value string) bool {
+	switch value {
+	case ProvenanceAcquisitionManual, ProvenanceAcquisitionHealthConnect, ProvenanceAcquisitionOSActivity, ProvenanceAcquisitionFileImport, ProvenanceAcquisitionSynthetic:
+		return true
+	default:
+		return false
+	}
+}
+
+func validEvidenceStatus(value string) bool {
+	switch value {
+	case ProvenanceEvidenceDirectlyObserved, ProvenanceEvidenceUserReported, ProvenanceEvidenceInferred:
+		return true
+	default:
+		return false
+	}
+}
+
+func validCorrectionReason(value string) bool {
+	switch value {
+	case CorrectionReasonUserEdit, CorrectionReasonDuplicate, CorrectionReasonInvalidRange, CorrectionReasonSourceConflict:
+		return true
+	default:
+		return false
+	}
+}
+
+func formatSQLiteTime(value time.Time) string {
+	return value.UTC().Format(time.RFC3339Nano)
+}

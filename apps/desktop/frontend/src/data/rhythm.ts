@@ -27,6 +27,12 @@ export interface RhythmDrift {
 
 export interface RhythmData {
   fixtureMode: boolean;
+  status: "estimated" | "empty" | "refused" | "unavailable";
+  message?: string;
+  refusal?: {
+    code: string;
+    message: string;
+  };
   actogram: RhythmActogram;
   drift: RhythmDrift;
 }
@@ -40,6 +46,7 @@ export interface RhythmResult {
 // renders the same shape the backend supplies, and the two never diverge.
 export const rhythmFixture: RhythmData = {
   fixtureMode: true,
+  status: "estimated",
   actogram: {
     summary: rhythmActogramFixture.summary,
     observedRows: rhythmActogramFixture.observedRows,
@@ -102,6 +109,18 @@ function confidence(value: unknown): ConfidenceLevel | undefined {
   if (normalized === "medium" || normalized === "moderate") return "Medium";
   if (normalized === "high") return "High";
   return undefined;
+}
+
+function status(value: unknown): RhythmData["status"] {
+  if (value === "empty" || value === "refused" || value === "unavailable") return value;
+  return "estimated";
+}
+
+function refusal(value: unknown): RhythmData["refusal"] | undefined {
+  if (!isRecord(value)) return undefined;
+  const code = str(value.code);
+  const message = str(value.message);
+  return code && message ? { code, message } : undefined;
 }
 
 function band(value: unknown): RhythmSleepBandFixture | undefined {
@@ -194,6 +213,7 @@ function normalizeNow(value: unknown): RhythmActogram["now"] | undefined {
 export function normalizeRhythm(value: unknown): RhythmData | undefined {
   if (!isRecord(value)) return undefined;
 
+  const rhythmStatus = status(value.status);
   const observedRows = mapAll(value.observedRows, band);
   const forecastRows = mapAll(value.forecastRows, band);
   const points = mapAll(value.driftPoints, point);
@@ -208,10 +228,8 @@ export function normalizeRhythm(value: unknown): RhythmData | undefined {
 
   if (
     !observedRows ||
-    observedRows.length === 0 ||
     !forecastRows ||
     !points ||
-    points.length === 0 ||
     !now ||
     !actogramSummary ||
     !driftTitle ||
@@ -224,9 +242,15 @@ export function normalizeRhythm(value: unknown): RhythmData | undefined {
   ) {
     return undefined;
   }
+  if (rhythmStatus === "estimated" && (observedRows.length === 0 || points.length === 0)) {
+    return undefined;
+  }
 
   return {
     fixtureMode: value.fixtureMode === true,
+    status: rhythmStatus,
+    message: rhythmStatus === "estimated" ? undefined : driftSummary,
+    ...(refusal(value.refusal) ? { refusal: refusal(value.refusal) } : {}),
     actogram: { summary: actogramSummary, observedRows, forecastRows, now },
     drift: {
       title: driftTitle,

@@ -19,6 +19,8 @@ describe("loadOverview", () => {
         main: {
           App: {
             GetOverview: async () => ({
+              status: "estimated",
+              empty: false,
               currentEstimatedState: "Likely awake",
               timeSinceWake: "6 hours 20 minutes",
               predictedNextSleepWindow: "Mon Jun 15, 3:10 PM to Mon Jun 15, 5:40 PM",
@@ -41,6 +43,40 @@ describe("loadOverview", () => {
       reason: "Nine recent sleep episodes",
     });
     expect(result.data.fixtureMode).toBe(true);
+  });
+
+  it("normalizes an empty local overview without falling back to fixture data", async () => {
+    const result = await loadOverview({
+      go: {
+        main: {
+          App: {
+            GetOverview: async () => ({
+              status: "empty",
+              empty: true,
+              refusal: {
+                code: "estimate_unavailable",
+                message: "Add your first sleep entry.",
+              },
+              currentEstimatedState: "No sleep entries yet",
+              timeSinceWake: "Not available",
+              predictedNextSleepWindow: "Not enough local data",
+              driftEstimate: "Not enough local data",
+              confidence: "low",
+              confidenceReasons: ["Add your first sleep entry."],
+              nextUsefulTaskWindow: "No reliable proposal",
+              sharingStatus: "No active trusted view; local data only",
+              fixtureMode: false,
+              updatedLabel: "Waiting for local sleep entries",
+            }),
+          },
+        },
+      },
+    });
+
+    expect(result.source).toBe("backend");
+    expect(result.data.status).toBe("empty");
+    expect(result.data.empty).toBe(true);
+    expect(result.data.fixtureMode).toBe(false);
   });
 
   it("falls back when the Wails binding is unavailable", async () => {

@@ -18,8 +18,20 @@ import {
   loadRhythm,
   rhythmFixture,
   type RhythmActogram,
+  type RhythmData,
   type RhythmDrift,
 } from "../data/rhythm";
+import {
+  addSleepEntry,
+  correctSleepEntry,
+  loadSleepEntries,
+  suppressSleepEntry,
+  type SleepClassification,
+  type SleepCorrectionInput,
+  type SleepEntriesData,
+  type SleepEntry,
+  type SleepEntryInput,
+} from "../data/sleepEntries";
 import type { ConfidenceLevel, OverviewSource } from "../data/overview";
 
 const days = ["Mon 15", "Tue 16", "Wed 17", "Thu 18", "Fri 19"];
@@ -689,6 +701,21 @@ const rhythmTabs: { id: RhythmTab; label: string }[] = [
   { id: "sources", label: "Sources" },
 ];
 
+function RhythmUnavailablePanel({ rhythm }: { rhythm: RhythmData }) {
+  return (
+    <section className="panel empty-state rhythm-empty-state" aria-labelledby="rhythm-empty-title">
+      <p className="section-kicker">{rhythm.refusal?.code ?? rhythm.status}</p>
+      <h2 id="rhythm-empty-title">
+        {rhythm.status === "empty" ? "Add sleep entries to draw rhythm" : "Need more usable data"}
+      </h2>
+      <p>{rhythm.message ?? rhythm.refusal?.message ?? "The local estimator has no chart to show yet."}</p>
+      <a className="button primary" href="#/data-sources">
+        Add sleep entry
+      </a>
+    </section>
+  );
+}
+
 export function RhythmScreen() {
   const [tab, setTab] = useState<RhythmTab>("actogram");
   const [rhythm, setRhythm] = useState(rhythmFixture);
@@ -706,6 +733,8 @@ export function RhythmScreen() {
       current = false;
     };
   }, []);
+
+  const hasRhythm = rhythm.status === "estimated";
 
   const onTabKey = (event: KeyboardEvent<HTMLDivElement>) => {
     const index = rhythmTabs.findIndex((item) => item.id === tab);
@@ -729,14 +758,16 @@ export function RhythmScreen() {
         actions={
           <div className="status-cluster">
             <span className="sync-dot" data-mode={mode} aria-hidden="true" />
-            <span>{mode === "backend" ? "Local estimate" : "Sample data"}</span>
+            <span>{mode === "backend" ? (hasRhythm ? "Local estimate" : "Local data") : "Sample data"}</span>
           </div>
         }
       />
       <PlaceholderNotice>
-        {mode === "backend"
+        {mode === "backend" && hasRhythm
           ? "The actogram, drift fit, and forecast below are computed by the local estimation engine."
-          : "This read-only preview distinguishes imported, estimated, corrected, and incomplete observations."}
+          : mode === "backend"
+            ? "The local estimator is waiting for enough manually entered sleep data before drawing rhythm charts."
+            : "This read-only preview distinguishes imported, estimated, corrected, and incomplete observations."}
       </PlaceholderNotice>
       <section className="screen-grid rhythm-screen" aria-label="Rhythm review">
         <div
@@ -769,7 +800,11 @@ export function RhythmScreen() {
             id="rhythm-panel-actogram"
             aria-labelledby="rhythm-tab-actogram"
           >
-            <ActogramPanel actogram={rhythm.actogram} />
+            {hasRhythm ? (
+              <ActogramPanel actogram={rhythm.actogram} />
+            ) : (
+              <RhythmUnavailablePanel rhythm={rhythm} />
+            )}
           </div>
         )}
 
@@ -780,7 +815,7 @@ export function RhythmScreen() {
             id="rhythm-panel-drift"
             aria-labelledby="rhythm-tab-drift"
           >
-            <DriftPanel drift={rhythm.drift} />
+            {hasRhythm ? <DriftPanel drift={rhythm.drift} /> : <RhythmUnavailablePanel rhythm={rhythm} />}
           </div>
         )}
 
@@ -791,36 +826,56 @@ export function RhythmScreen() {
             id="rhythm-panel-sources"
             aria-labelledby="rhythm-tab-sources"
           >
-            <CorrectionInspector />
+            {mode === "fixture" ? (
+              <>
+                <CorrectionInspector />
 
-            <section className="panel refusal-panel" aria-labelledby="refusal-title">
-              <p className="section-kicker">{refusalFixture.code}</p>
-              <h2 id="refusal-title">{refusalFixture.title}</h2>
-              <p>{refusalFixture.message}</p>
-              <div className="proposal-reasons" aria-label="Refusal actions">
-                {refusalFixture.actions.map((action) => (
-                  <span className="task-chip" key={action}>
-                    {action}
-                  </span>
-                ))}
-              </div>
-            </section>
+                <section className="panel refusal-panel" aria-labelledby="refusal-title">
+                  <p className="section-kicker">{refusalFixture.code}</p>
+                  <h2 id="refusal-title">{refusalFixture.title}</h2>
+                  <p>{refusalFixture.message}</p>
+                  <div className="proposal-reasons" aria-label="Refusal actions">
+                    {refusalFixture.actions.map((action) => (
+                      <span className="task-chip" key={action}>
+                        {action}
+                      </span>
+                    ))}
+                  </div>
+                </section>
 
-            <section
-              className="panel source-conflicts-panel"
-              aria-labelledby="source-conflicts-title"
-            >
-              <div className="panel-heading">
-                <div>
-                  <p className="section-kicker">Sources</p>
-                  <h2 id="source-conflicts-title">Source conflicts and missingness</h2>
+                <section
+                  className="panel source-conflicts-panel"
+                  aria-labelledby="source-conflicts-title"
+                >
+                  <div className="panel-heading">
+                    <div>
+                      <p className="section-kicker">Sources</p>
+                      <h2 id="source-conflicts-title">Source conflicts and missingness</h2>
+                    </div>
+                  </div>
+                  <SourceConflictList
+                    conflicts={sourceConflictFixtures}
+                    labelledBy="source-conflicts-title"
+                  />
+                </section>
+              </>
+            ) : (
+              <section className="panel source-conflicts-panel" aria-labelledby="local-sources-title">
+                <div className="panel-heading">
+                  <div>
+                    <p className="section-kicker">Sources</p>
+                    <h2 id="local-sources-title">Manual sleep entries</h2>
+                  </div>
+                  <a href="#/data-sources">
+                    Open log <Icon name="chevron" />
+                  </a>
                 </div>
-              </div>
-              <SourceConflictList
-                conflicts={sourceConflictFixtures}
-                labelledBy="source-conflicts-title"
-              />
-            </section>
+                <p className="phase-two-copy">
+                  Observations are immutable and corrections are append-only. Edit and suppression
+                  history is visible in Data Sources.
+                </p>
+              </section>
+            )}
           </div>
         )}
       </section>
@@ -945,26 +1000,366 @@ export function SharingScreen() {
   );
 }
 
+const fallbackSleepZone = "America/New_York";
+
+function browserZone() {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || fallbackSleepZone;
+}
+
+function dateTimeInputValue(value: Date) {
+  const local = new Date(value.getTime() - value.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
+function initialSleepForm(): SleepEntryInput {
+  const end = new Date();
+  end.setSeconds(0, 0);
+  const start = new Date(end.getTime() - 8 * 60 * 60 * 1000);
+  return {
+    startLocal: dateTimeInputValue(start),
+    endLocal: dateTimeInputValue(end),
+    zoneId: browserZone(),
+    classification: "principal",
+  };
+}
+
+function endAfterStart(input: SleepEntryInput) {
+  return new Date(input.endLocal).getTime() > new Date(input.startLocal).getTime();
+}
+
+function SleepEntryForm({
+  form,
+  onChange,
+  submitLabel,
+  disabled,
+}: {
+  form: SleepEntryInput;
+  onChange: (form: SleepEntryInput) => void;
+  submitLabel: string;
+  disabled: boolean;
+}) {
+  return (
+    <div className="sleep-entry-fields">
+      <label>
+        Sleep start
+        <input
+          type="datetime-local"
+          value={form.startLocal}
+          onChange={(event) => onChange({ ...form, startLocal: event.target.value })}
+          required
+        />
+      </label>
+      <label>
+        Wake time
+        <input
+          type="datetime-local"
+          value={form.endLocal}
+          onChange={(event) => onChange({ ...form, endLocal: event.target.value })}
+          required
+        />
+      </label>
+      <label>
+        Time zone
+        <input
+          type="text"
+          value={form.zoneId}
+          onChange={(event) => onChange({ ...form, zoneId: event.target.value })}
+          required
+        />
+      </label>
+      <label>
+        Classification
+        <select
+          value={form.classification}
+          onChange={(event) =>
+            onChange({ ...form, classification: event.target.value as SleepClassification })
+          }
+        >
+          <option value="principal">Principal sleep</option>
+          <option value="nap">Nap</option>
+        </select>
+      </label>
+      <button className="button primary" type="submit" disabled={disabled}>
+        {submitLabel}
+      </button>
+    </div>
+  );
+}
+
+function SleepEntryCard({
+  entry,
+  editing,
+  editForm,
+  busy,
+  onBeginEdit,
+  onCancelEdit,
+  onEditChange,
+  onSaveEdit,
+  onSuppress,
+}: {
+  entry: SleepEntry;
+  editing: boolean;
+  editForm: SleepEntryInput;
+  busy: boolean;
+  onBeginEdit: () => void;
+  onCancelEdit: () => void;
+  onEditChange: (form: SleepEntryInput) => void;
+  onSaveEdit: () => void;
+  onSuppress: () => void;
+}) {
+  const corrected =
+    entry.startLocal !== entry.effectiveStartLocal ||
+    entry.endLocal !== entry.effectiveEndLocal ||
+    entry.classification !== entry.effectiveClassification;
+
+  return (
+    <article className="sleep-entry-card" data-suppressed={entry.suppressed || undefined}>
+      <div className="sleep-entry-main">
+        <div className="record-icon">
+          <Icon name="moon" />
+        </div>
+        <div>
+          <h2>
+            {entry.effectiveStartLabel} to {entry.effectiveEndLabel}
+          </h2>
+          <p>
+            {entry.durationLabel} - {entry.effectiveClassification} - {entry.provenanceLabel}
+          </p>
+          {corrected && (
+            <p className="sleep-entry-raw">
+              Raw entry: {entry.startLabel} to {entry.endLabel}
+            </p>
+          )}
+        </div>
+        <span className={`source-status ${entry.suppressed ? "" : "connected"}`}>
+          {entry.suppressed ? "Suppressed" : corrected ? "Corrected" : "Active"}
+        </span>
+      </div>
+
+      {editing ? (
+        <form
+          className="sleep-edit-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSaveEdit();
+          }}
+        >
+          <SleepEntryForm
+            form={editForm}
+            onChange={onEditChange}
+            submitLabel="Save correction"
+            disabled={busy}
+          />
+          <button className="button secondary" type="button" onClick={onCancelEdit}>
+            Cancel
+          </button>
+        </form>
+      ) : (
+        <div className="sleep-entry-actions">
+          <button className="button secondary" type="button" onClick={onBeginEdit}>
+            Edit by correction
+          </button>
+          <button
+            className="button secondary"
+            type="button"
+            onClick={onSuppress}
+            disabled={entry.suppressed || busy}
+          >
+            Suppress from estimates
+          </button>
+        </div>
+      )}
+
+      {entry.history.length > 0 && (
+        <details className="sleep-entry-history">
+          <summary>Correction history ({entry.history.length})</summary>
+          <ul>
+            {entry.history.map((item) => (
+              <li key={item.correctionId}>
+                <strong>{item.createdLabel}</strong> - {item.summary}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </article>
+  );
+}
+
 export function DataSourcesScreen() {
+  const [entriesData, setEntriesData] = useState<SleepEntriesData>({
+    status: "empty",
+    empty: true,
+    message: "Loading local sleep entries.",
+    entries: [],
+  });
+  const [form, setForm] = useState<SleepEntryInput>(initialSleepForm);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<SleepEntryInput>(initialSleepForm);
+  const [busy, setBusy] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
+
+  const refreshEntries = async () => {
+    const loaded = await loadSleepEntries();
+    setEntriesData(loaded);
+  };
+
+  useEffect(() => {
+    let current = true;
+    void loadSleepEntries()
+      .then((loaded) => {
+        if (current) setEntriesData(loaded);
+      })
+      .catch((error: unknown) => {
+        if (!current) return;
+        setEntriesData({
+          status: "unavailable",
+          empty: true,
+          message: error instanceof Error ? error.message : "Manual sleep log is unavailable.",
+          entries: [],
+        });
+      });
+    return () => {
+      current = false;
+    };
+  }, []);
+
+  const submitEntry = async () => {
+    setFormError("");
+    if (!endAfterStart(form)) {
+      setFormError("Wake time must be after sleep start.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await addSleepEntry(form);
+      setStatusMessage("Sleep entry saved locally.");
+      setForm(initialSleepForm());
+      await refreshEntries();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Could not save sleep entry.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const beginEdit = (entry: SleepEntry) => {
+    setEditingId(entry.observationId);
+    setEditForm({
+      startLocal: entry.effectiveStartLocal,
+      endLocal: entry.effectiveEndLocal,
+      zoneId: entry.zoneId,
+      classification: entry.effectiveClassification,
+    });
+    setFormError("");
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    setFormError("");
+    if (!endAfterStart(editForm)) {
+      setFormError("Wake time must be after sleep start.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const correction: SleepCorrectionInput = { observationId: editingId, ...editForm };
+      await correctSleepEntry(correction);
+      setStatusMessage("Correction appended locally.");
+      setEditingId(null);
+      await refreshEntries();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Could not append correction.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const suppressEntry = async (entry: SleepEntry) => {
+    setBusy(true);
+    setFormError("");
+    try {
+      await suppressSleepEntry(entry.observationId);
+      setStatusMessage("Sleep entry suppressed from estimates.");
+      await refreshEntries();
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Could not suppress entry.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <>
       <PageHeader
         title="Data Sources"
-        description="Review local inputs and the boundary around each permission."
+        description="Enter local sleep episodes and review immutable observations plus append-only corrections."
       />
       <section className="screen-grid data-source-screen" aria-label="Data source review">
-        <section className="panel source-conflicts-panel" aria-labelledby="data-conflicts-title">
+        <section className="panel sleep-entry-panel" aria-labelledby="sleep-entry-title">
           <div className="panel-heading">
             <div>
-              <p className="section-kicker">Estimate inputs</p>
-              <h2 id="data-conflicts-title">Source conflicts and missingness</h2>
+              <p className="section-kicker">Manual input</p>
+              <h2 id="sleep-entry-title">Add sleep entry</h2>
             </div>
           </div>
-          <SourceConflictList
-            conflicts={sourceConflictFixtures}
-            labelledBy="data-conflicts-title"
-          />
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              void submitEntry();
+            }}
+          >
+            <SleepEntryForm
+              form={form}
+              onChange={setForm}
+              submitLabel="Save sleep entry"
+              disabled={busy || entriesData.status === "unavailable"}
+            />
+          </form>
+          {formError && (
+            <p className="form-error" role="alert">
+              {formError}
+            </p>
+          )}
+          <p className="form-status" role="status" aria-live="polite">
+            {statusMessage || entriesData.message}
+          </p>
         </section>
+
+        <section className="panel sleep-entry-list-panel" aria-labelledby="sleep-log-title">
+          <div className="panel-heading">
+            <div>
+              <p className="section-kicker">Local observations</p>
+              <h2 id="sleep-log-title">Sleep log</h2>
+            </div>
+          </div>
+          {entriesData.entries.length === 0 ? (
+            <div className="empty-state sleep-log-empty">
+              <p className="section-kicker">{entriesData.status}</p>
+              <h2>No sleep entries yet</h2>
+              <p>Add your first principal sleep episode above. The estimator will stay refused until enough usable entries exist.</p>
+            </div>
+          ) : (
+            <div className="sleep-entry-list">
+              {entriesData.entries.map((entry) => (
+                <SleepEntryCard
+                  key={entry.observationId}
+                  entry={entry}
+                  editing={editingId === entry.observationId}
+                  editForm={editForm}
+                  busy={busy}
+                  onBeginEdit={() => beginEdit(entry)}
+                  onCancelEdit={() => setEditingId(null)}
+                  onEditChange={setEditForm}
+                  onSaveEdit={saveEdit}
+                  onSuppress={() => void suppressEntry(entry)}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+
         <section className="panel source-list source-status-panel" aria-label="Data source status">
           <article>
             <div className="source-mark">
@@ -972,25 +1367,25 @@ export function DataSourcesScreen() {
             </div>
             <div>
               <h2>Manual sleep log</h2>
-              <p>3 entries this week - last entry today</p>
+              <p>
+                {entriesData.entries.length} local{" "}
+                {entriesData.entries.length === 1 ? "entry" : "entries"} - observations immutable,
+                corrections append-only
+              </p>
             </div>
-            <span className="source-status connected">Available</span>
-            <button className="button secondary" type="button">
-              Manage
-            </button>
+            <span className={`source-status ${entriesData.status === "ready" ? "connected" : ""}`}>
+              {entriesData.status === "ready" ? "Available" : entriesData.status}
+            </span>
           </article>
           <article>
             <div className="source-mark">
               <Icon name="calendar" />
             </div>
             <div>
-              <h2>Local calendar</h2>
-              <p>Fixed event times only - private titles stay local</p>
+              <h2>Calendar import</h2>
+              <p>Out of scope for this local sleep-data slice</p>
             </div>
-            <span className="source-status connected">Connected</span>
-            <button className="button secondary" type="button">
-              Manage
-            </button>
+            <span className="source-status">Future</span>
           </article>
           <article>
             <div className="source-mark">
@@ -998,12 +1393,9 @@ export function DataSourcesScreen() {
             </div>
             <div>
               <h2>Device activity</h2>
-              <p>Not connected - optional supporting observation</p>
+              <p>Not connected - optional supporting observation later</p>
             </div>
             <span className="source-status">Off</span>
-            <button className="button secondary" type="button">
-              Set up
-            </button>
           </article>
         </section>
       </section>

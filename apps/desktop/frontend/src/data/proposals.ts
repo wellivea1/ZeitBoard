@@ -17,6 +17,11 @@ export type ProposalsSource = "backend" | "fixture";
 
 export interface ProposalsData {
   fixtureMode: boolean;
+  status: "estimated" | "empty" | "refused" | "unavailable";
+  refusal?: {
+    code: string;
+    message: string;
+  };
   proposals: ChangeProposalFixture[];
   unplaced: UnplacedProposal[];
 }
@@ -30,6 +35,7 @@ export interface ProposalsResult {
 // shape the scheduler supplies.
 export const proposalsFixture: ProposalsData = {
   fixtureMode: true,
+  status: "estimated",
   proposals: proposalFixtures,
   unplaced: [
     {
@@ -94,6 +100,18 @@ function confidence(value: unknown): ConfidenceLevel | undefined {
   if (normalized === "medium" || normalized === "moderate") return "Medium";
   if (normalized === "high") return "High";
   return undefined;
+}
+
+function status(value: unknown): ProposalsData["status"] {
+  if (value === "empty" || value === "refused" || value === "unavailable") return value;
+  return "estimated";
+}
+
+function refusal(value: unknown): ProposalsData["refusal"] | undefined {
+  if (!isRecord(value)) return undefined;
+  const code = str(value.code);
+  const message = str(value.message);
+  return code && message ? { code, message } : undefined;
 }
 
 function proposal(value: unknown): ChangeProposalFixture | undefined {
@@ -172,6 +190,8 @@ export function normalizeProposals(value: unknown): ProposalsData | undefined {
   if (!proposals || !unplacedList) return undefined;
   return {
     fixtureMode: value.fixtureMode === true,
+    status: status(value.status),
+    ...(refusal(value.refusal) ? { refusal: refusal(value.refusal) } : {}),
     proposals,
     unplaced: unplacedList,
   };

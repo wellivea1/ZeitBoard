@@ -5,6 +5,7 @@ import { loadRhythm, normalizeRhythm, rhythmFixture } from "./rhythm";
 // A backend-shaped projection (flat, as estimation.RhythmProjection serializes).
 const backendProjection = {
   fixtureMode: true,
+  status: "estimated",
   actogramSummary: "Double-plotted actogram derived from the local estimate.",
   observedRows: [
     {
@@ -84,6 +85,33 @@ describe("loadRhythm", () => {
       go: { service: { AppService: { GetRhythm: async () => Promise.reject(new Error("nope")) } } },
     });
     expect(result.source).toBe("fixture");
+  });
+
+  it("accepts an empty local projection without chart rows", () => {
+    expect(
+      normalizeRhythm({
+        fixtureMode: false,
+        status: "empty",
+        refusal: { code: "estimate_unavailable", message: "Add sleep entries." },
+        actogramSummary: "Add sleep entries.",
+        observedRows: [],
+        forecastRows: [],
+        now: { label: "now", day: "Jan 12", hour: 13.5 },
+        driftTitle: "Sleep-onset drift",
+        slopeLabel: "Not enough data",
+        driftConfidence: "Low",
+        driftSummary: "Add sleep entries.",
+        yMinHour: 0,
+        yMaxHour: 24,
+        driftPoints: [],
+      }),
+    ).toMatchObject({
+      fixtureMode: false,
+      status: "empty",
+      refusal: { code: "estimate_unavailable" },
+      actogram: { observedRows: [] },
+      drift: { points: [] },
+    });
   });
 
   it("rejects a malformed projection (missing drift points)", () => {

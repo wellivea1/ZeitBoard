@@ -3,7 +3,6 @@ import { Icon, type IconName } from "../components/Icon";
 import { PageHeader } from "../components/AppShell";
 import { loadOverview } from "../data/backend";
 import { overviewFixture } from "../data/fixture";
-import { refusalFixture, sourceConflictFixtures } from "../data/phaseTwo";
 import { useApprovals } from "../state/approvals";
 import type { ConfidenceLevel, OverviewSource } from "../data/overview";
 
@@ -51,7 +50,14 @@ type StateTone = "awake" | "asleep" | "uncertain";
 
 function stateTone(state: string): StateTone {
   const normalized = state.toLowerCase();
-  if (normalized.includes("uncertain") || normalized.includes("transition")) return "uncertain";
+  if (
+    normalized.includes("uncertain") ||
+    normalized.includes("transition") ||
+    normalized.includes("no sleep") ||
+    normalized.includes("need more") ||
+    normalized.includes("unavailable")
+  )
+    return "uncertain";
   if (normalized.includes("asleep") || normalized.includes("sleep")) return "asleep";
   return "awake";
 }
@@ -74,16 +80,29 @@ export function OverviewScreen() {
     };
   }, []);
 
+  const hasEstimate = overview.status === "estimated";
+  const todayLabel = new Date().toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+
   return (
     <>
       <PageHeader
-        eyebrow="Monday, June 15"
+        eyebrow={todayLabel}
         title="Overview"
         description="A practical view of your estimated sleep-wake phase and the time ahead."
         actions={
           <div className="status-cluster">
             <span className="sync-dot" data-mode={mode} aria-hidden="true" />
-            <span>{overview.fixtureMode ? "Sample data" : "Local service"}</span>
+            <span>
+              {overview.fixtureMode
+                ? "Sample data"
+                : hasEstimate
+                  ? "Local estimate"
+                  : "Local data"}
+            </span>
             <small>{overview.updatedLabel}</small>
           </div>
         }
@@ -100,10 +119,18 @@ export function OverviewScreen() {
             />
             {overview.state}
           </h2>
-          <p>
-            You have been awake for <strong>{overview.timeSinceWake}</strong>. This is an estimate
-            from recent sleep-wake observations, not an exact circadian phase measurement.
-          </p>
+          {hasEstimate ? (
+            <p>
+              You have been awake for <strong>{overview.timeSinceWake}</strong>. This is an
+              estimate from recent sleep-wake observations, not an exact circadian phase
+              measurement.
+            </p>
+          ) : (
+            <p>
+              {overview.refusal?.message ?? overview.confidence.reason} Sleep and wake times stay
+              local on this device.
+            </p>
+          )}
           <div className="phase-meta">
             <span>
               <Icon name="trend" />
@@ -141,19 +168,31 @@ export function OverviewScreen() {
       <section className="panel trust-strip" aria-labelledby="trust-strip-title">
         <div>
           <p className="section-kicker">Trust loop</p>
-          <h2 id="trust-strip-title">Review before anything changes</h2>
+          <h2 id="trust-strip-title">
+            {hasEstimate ? "Review before anything changes" : "Start with a manual sleep log"}
+          </h2>
           <p>
-            {pendingCount} pending {pendingCount === 1 ? "proposal" : "proposals"} and{" "}
-            {sourceConflictFixtures.length} source issues to review. {refusalFixture.message}
+            {hasEstimate
+              ? `${pendingCount} pending ${
+                  pendingCount === 1 ? "proposal" : "proposals"
+                } waiting for explicit approval. Estimates stay uncertain and proposal-only.`
+              : "Add principal sleep episodes in Data Sources. The app will refuse to estimate until there are enough usable entries."}
           </p>
         </div>
         <div className="trust-actions">
-          <a className="button secondary" href="#/approvals">
-            Review proposals
-          </a>
+          {hasEstimate && (
+            <a className="button secondary" href="#/approvals">
+              Review proposals
+            </a>
+          )}
           <a className="button secondary" href="#/rhythm">
             Review rhythm
           </a>
+          {!hasEstimate && (
+            <a className="button primary" href="#/data-sources">
+              Add sleep entry
+            </a>
+          )}
         </div>
       </section>
 
@@ -161,42 +200,18 @@ export function OverviewScreen() {
         <section className="panel schedule-panel" aria-labelledby="today-title">
           <div className="panel-heading">
             <div>
-              <p className="section-kicker">Flexible plan</p>
-              <h2 id="today-title">Today</h2>
+              <p className="section-kicker">{hasEstimate ? "Flexible plan" : "Local input"}</p>
+              <h2 id="today-title">{hasEstimate ? "Current planning window" : "Manual sleep log"}</h2>
             </div>
-            <a href="#/calendar">
-              Open calendar <Icon name="chevron" />
+            <a href={hasEstimate ? "#/approvals" : "#/data-sources"}>
+              {hasEstimate ? "Open approvals" : "Open data entry"} <Icon name="chevron" />
             </a>
           </div>
-          <div className="schedule-list">
-            <article className="schedule-item is-current">
-              <time>Now</time>
-              <span className="schedule-marker" />
-              <div>
-                <strong>Focused work</strong>
-                <p>Good fit for 60-90 minute tasks</p>
-              </div>
-              <span className="task-chip">Flexible</span>
-            </article>
-            <article className="schedule-item">
-              <time>6:30 PM</time>
-              <span className="schedule-marker" />
-              <div>
-                <strong>Project check-in</strong>
-                <p>Fixed calendar event</p>
-              </div>
-              <span className="task-chip fixed">Fixed</span>
-            </article>
-            <article className="schedule-item">
-              <time>8:30 PM</time>
-              <span className="schedule-marker" />
-              <div>
-                <strong>Lower-demand tasks</strong>
-                <p>Suggested transition in task intensity</p>
-              </div>
-              <span className="task-chip">Flexible</span>
-            </article>
-          </div>
+          <p className="phase-two-copy">
+            {hasEstimate
+              ? `${overview.usefulTaskWindow.label}. ${overview.usefulTaskWindow.detail}`
+              : "No rhythm estimate is shown until local entries meet the estimator minimum. Add civil sleep and wake times first."}
+          </p>
         </section>
 
         <aside className="panel confidence-panel" aria-labelledby="confidence-title">

@@ -922,7 +922,9 @@ button {
 .correction-inspector,
 .refusal-panel,
 .source-conflicts-panel,
-.source-status-panel {
+.source-status-panel,
+.sleep-entry-panel,
+.sleep-entry-list-panel {
   grid-column: span 12;
 }
 .rhythm-panel {
@@ -936,6 +938,8 @@ button {
 .correction-inspector,
 .refusal-panel,
 .source-conflicts-panel,
+.sleep-entry-panel,
+.sleep-entry-list-panel,
 .drift-panel,
 .actogram-panel {
   padding: 24px 26px;
@@ -1632,6 +1636,110 @@ button {
 .source-list {
   overflow: hidden;
 }
+.sleep-entry-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+.sleep-entry-fields label {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 750;
+}
+.sleep-entry-fields input,
+.sleep-entry-fields select {
+  min-height: 44px;
+  padding: 0 11px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.sleep-entry-fields .button {
+  align-self: end;
+}
+.form-error,
+.form-status {
+  margin: 14px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.form-error {
+  color: var(--confidence-low-text);
+}
+.form-status {
+  color: var(--muted);
+}
+.sleep-entry-list {
+  display: grid;
+  gap: 14px;
+}
+.sleep-entry-card {
+  padding: 17px 0 0;
+  border-top: 1px solid var(--divider);
+}
+.sleep-entry-card:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+.sleep-entry-card[data-suppressed="true"] {
+  opacity: 0.78;
+}
+.sleep-entry-main {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+}
+.sleep-entry-main h2 {
+  margin: 0 0 5px;
+  font-size: 13px;
+}
+.sleep-entry-main p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+.sleep-entry-raw {
+  margin-top: 5px !important;
+  color: var(--subtle) !important;
+}
+.sleep-entry-actions,
+.sleep-edit-form {
+  margin: 14px 0 16px 58px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.sleep-edit-form {
+  display: grid;
+}
+.sleep-entry-history {
+  margin: 0 0 16px 58px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.sleep-entry-history summary {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--sage-dark);
+  cursor: pointer;
+  font-weight: 800;
+}
+.sleep-entry-history ul {
+  margin: 0 0 0 18px;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  line-height: 1.5;
+}
+.sleep-log-empty {
+  padding-block: 28px;
+}
 .record-list article,
 .source-list article {
   min-height: 88px;
@@ -1990,6 +2098,15 @@ button {
   .record-list article,
   .source-list article {
     grid-template-columns: 42px minmax(0, 1fr) auto;
+  }
+  .sleep-entry-fields,
+  .sleep-entry-main {
+    grid-template-columns: 1fr;
+  }
+  .sleep-entry-actions,
+  .sleep-edit-form,
+  .sleep-entry-history {
+    margin-left: 0;
   }
   .record-time,
   .source-status {

@@ -76,13 +76,44 @@ func (s *Store) Migrate(ctx context.Context) error {
 			created_at TEXT NOT NULL,
 			profile_json BLOB NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS local_sleep_observations (
+			observation_id TEXT PRIMARY KEY,
+			kind TEXT NOT NULL,
+			start_at TEXT NOT NULL,
+			end_at TEXT NOT NULL,
+			zone_id TEXT NOT NULL,
+			classification TEXT NOT NULL,
+			acquisition_method TEXT NOT NULL,
+			evidence_status TEXT NOT NULL,
+			recorded_at TEXT NOT NULL,
+			source_record_id TEXT NOT NULL DEFAULT '',
+			payload_json BLOB NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_local_sleep_observations_start
+			ON local_sleep_observations(start_at)`,
+		`CREATE TABLE IF NOT EXISTS local_sleep_corrections (
+			correction_id TEXT PRIMARY KEY,
+			target_observation_id TEXT NOT NULL,
+			supersedes_correction_id TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			reason TEXT NOT NULL,
+			changes_json BLOB NOT NULL,
+			payload_json BLOB NOT NULL,
+			FOREIGN KEY(target_observation_id) REFERENCES local_sleep_observations(observation_id)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_local_sleep_corrections_target
+			ON local_sleep_corrections(target_observation_id, created_at)`,
 	}
 	for _, statement := range statements {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {
 			return fmt.Errorf("migrate sqlite: %w", err)
 		}
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(1, ?)`, time.Now().UTC().Format(time.RFC3339Nano))
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(1, ?)`, now); err != nil {
+		return err
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(2, ?)`, now)
 	return err
 }
 
@@ -245,7 +276,7 @@ func (s *Store) DeleteAll(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	for _, table := range []string{"source_observations", "manual_corrections", "phase_estimates", "medication_events", "share_profiles"} {
+	for _, table := range []string{"source_observations", "manual_corrections", "phase_estimates", "medication_events", "share_profiles", "local_sleep_corrections", "local_sleep_observations"} {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table); err != nil {
 			_ = tx.Rollback()
 			return err

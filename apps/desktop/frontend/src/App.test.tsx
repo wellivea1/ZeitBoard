@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { AppearanceProvider } from "./theme/AppearanceProvider";
 
@@ -8,6 +8,7 @@ beforeEach(() => {
   localStorage.clear();
   document.documentElement.removeAttribute("data-theme");
   document.documentElement.removeAttribute("data-reduced");
+  delete (globalThis as { go?: unknown }).go;
   const metaTheme =
     document.querySelector('meta[name="theme-color"]') ??
     document.head.appendChild(document.createElement("meta"));
@@ -126,12 +127,103 @@ describe("desktop navigation", () => {
     expect(screen.getByRole("heading", { name: "Rhythm" })).toBeVisible();
   });
 
-  it("shows source missingness on the data sources screen", () => {
+  it("validates manual sleep entry civil ranges", () => {
     window.location.hash = "#/data-sources";
+    (globalThis as { go?: unknown }).go = {
+      main: {
+        App: {
+          ListSleepEntries: async () => ({
+            status: "empty",
+            empty: true,
+            message: "No sleep entries yet.",
+            entries: [],
+          }),
+        },
+      },
+    };
     render(<App />);
 
-    expect(screen.getByText("Permission missing")).toBeVisible();
-    expect(screen.getByText("Last sync is stale")).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Sleep start"), {
+      target: { value: "2026-03-02T08:00" },
+    });
+    fireEvent.change(screen.getByLabelText("Wake time"), {
+      target: { value: "2026-03-02T07:00" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save sleep entry" }));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("Wake time must be after sleep start.");
+  });
+
+  it("submits a manual sleep entry through Wails and reloads the local log", async () => {
+    window.location.hash = "#/data-sources";
+    const entry = {
+      observationId: "obs_sleep_01",
+      startLocal: "2026-03-01T22:00",
+      endLocal: "2026-03-02T06:00",
+      startLabel: "Sun Mar 1, 10:00 PM EST",
+      endLabel: "Mon Mar 2, 6:00 AM EST",
+      zoneId: "America/New_York",
+      classification: "principal",
+      effectiveStartLocal: "2026-03-01T22:00",
+      effectiveEndLocal: "2026-03-02T06:00",
+      effectiveStartLabel: "Sun Mar 1, 10:00 PM EST",
+      effectiveEndLabel: "Mon Mar 2, 6:00 AM EST",
+      effectiveClassification: "principal",
+      durationLabel: "8 hours 0 minutes",
+      suppressed: false,
+      sourceLabel: "Manual sleep log",
+      provenanceLabel: "manual / user reported",
+      history: [],
+    };
+    let saved = false;
+    const addSleep = vi.fn(async () => {
+      saved = true;
+      return entry;
+    });
+    (globalThis as { go?: unknown }).go = {
+      main: {
+        App: {
+          ListSleepEntries: async () =>
+            saved
+              ? {
+                  status: "ready",
+                  empty: false,
+                  message: "1 local sleep entry stored on this device.",
+                  entries: [entry],
+                }
+              : {
+                  status: "empty",
+                  empty: true,
+                  message: "No sleep entries yet.",
+                  entries: [],
+                },
+          AddSleepEntry: addSleep,
+        },
+      },
+    };
+
+    render(<App />);
+
+    expect(await screen.findByRole("heading", { name: "No sleep entries yet" })).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Sleep start"), {
+      target: { value: "2026-03-01T22:00" },
+    });
+    fireEvent.change(screen.getByLabelText("Wake time"), {
+      target: { value: "2026-03-02T06:00" },
+    });
+    fireEvent.change(screen.getByLabelText("Time zone"), {
+      target: { value: "America/New_York" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save sleep entry" }));
+
+    expect(await screen.findByText("Sleep entry saved locally.")).toBeVisible();
+    expect(addSleep).toHaveBeenCalledWith({
+      startLocal: "2026-03-01T22:00",
+      endLocal: "2026-03-02T06:00",
+      zoneId: "America/New_York",
+      classification: "principal",
+    });
+    expect(screen.getByText(/Sun Mar 1, 10:00 PM EST to Mon Mar 2, 6:00 AM EST/)).toBeVisible();
   });
 
   it("applies Settings appearance controls through the visible UI", () => {

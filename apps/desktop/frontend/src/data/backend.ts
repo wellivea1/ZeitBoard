@@ -34,6 +34,8 @@ function isOverviewData(value: unknown): value is OverviewData {
 
   return (
     typeof candidate.fixtureMode === "boolean" &&
+    ["estimated", "empty", "refused", "unavailable"].includes(candidate.status ?? "") &&
+    typeof candidate.empty === "boolean" &&
     typeof candidate.state === "string" &&
     typeof candidate.stateDetail === "string" &&
     typeof candidate.timeSinceWake === "string" &&
@@ -68,6 +70,18 @@ function normalizeConfidence(value: unknown): OverviewData["confidence"]["level"
   return undefined;
 }
 
+function normalizeStatus(value: unknown): OverviewData["status"] {
+  if (value === "empty" || value === "refused" || value === "unavailable") return value;
+  return "estimated";
+}
+
+function normalizeRefusal(value: unknown): OverviewData["refusal"] | undefined {
+  if (!isRecord(value)) return undefined;
+  const code = asString(value.code);
+  const message = asString(value.message);
+  return code && message ? { code, message } : undefined;
+}
+
 function normalizeWailsOverview(value: unknown): OverviewData | undefined {
   if (isOverviewData(value)) return value;
   if (!isRecord(value)) return undefined;
@@ -79,6 +93,7 @@ function normalizeWailsOverview(value: unknown): OverviewData | undefined {
   const confidenceLevel = normalizeConfidence(value.confidence);
   const usefulTaskWindow = asString(value.nextUsefulTaskWindow);
   const sharingStatus = asString(value.sharingStatus);
+  const status = normalizeStatus(value.status);
 
   if (
     !state ||
@@ -98,8 +113,14 @@ function normalizeWailsOverview(value: unknown): OverviewData | undefined {
 
   return {
     fixtureMode: value.fixtureMode === true,
+    status,
+    empty: value.empty === true,
+    ...(normalizeRefusal(value.refusal) ? { refusal: normalizeRefusal(value.refusal) } : {}),
     state,
-    stateDetail: "Local estimate based on recent sleep-wake observations",
+    stateDetail:
+      status === "estimated"
+        ? "Local estimate based on recent sleep-wake observations"
+        : "Local estimate is waiting for enough manually entered sleep data",
     timeSinceWake,
     nextSleepWindow: {
       label: sleepWindow,
@@ -124,7 +145,7 @@ function normalizeWailsOverview(value: unknown): OverviewData | undefined {
       label: sharingStatus,
       detail: "Trusted views contain only explicitly allowlisted fields",
     },
-    updatedLabel: "Updated from the local service just now",
+    updatedLabel: asString(value.updatedLabel) ?? "Updated from the local service just now",
   };
 }
 

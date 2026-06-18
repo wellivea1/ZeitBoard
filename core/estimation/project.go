@@ -16,7 +16,9 @@ import (
 // real estimation engine instead of a hand-authored fixture that could drift
 // from the math.
 type RhythmProjection struct {
-	FixtureMode bool `json:"fixtureMode"`
+	FixtureMode bool               `json:"fixtureMode"`
+	Status      string             `json:"status,omitempty"`
+	Refusal     *EstimationRefusal `json:"refusal,omitempty"`
 
 	ActogramSummary string       `json:"actogramSummary"`
 	ObservedRows    []RhythmBand `json:"observedRows"`
@@ -179,7 +181,8 @@ func (e RobustEstimator) Project(ctx context.Context, sessions []domain.SleepSes
 	confLabel := confidenceLabel(estimate.Confidence.Level)
 
 	return RhythmProjection{
-		FixtureMode:     true,
+		FixtureMode:     false,
+		Status:          "estimated",
 		ActogramSummary: "Double-plotted actogram of observed sleep with widening predicted sleep windows, all derived from the local estimate.",
 		ObservedRows:    observed,
 		ForecastRows:    forecast,

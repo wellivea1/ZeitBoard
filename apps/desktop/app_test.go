@@ -1,37 +1,121 @@
 package main
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"non24.app/core/scheduling"
+	storage "non24.app/core/storage/sqlite"
 )
 
-func TestProposalsFlowFromTheRealScheduler(t *testing.T) {
-	result, err := NewApp().GetProposals()
+func TestEmptyLocalStoreReturnsHonestStates(t *testing.T) {
+	app := newTestApp(t)
+
+	overview, err := app.GetOverview()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.FixtureMode {
-		t.Fatal("fixture mode should be explicit")
+	if overview.Status != "empty" || !overview.Empty || overview.FixtureMode {
+		t.Fatalf("unexpected empty overview: %#v", overview)
 	}
-	if len(result.Proposals) == 0 {
-		t.Fatal("expected at least one engine proposal")
+	if !strings.Contains(overview.CurrentEstimatedState, "No sleep entries") {
+		t.Fatalf("empty overview should invite first entry: %#v", overview)
 	}
 
+	rhythm, err := app.GetRhythm()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rhythm.Status != "empty" || rhythm.FixtureMode || len(rhythm.ObservedRows) != 0 || len(rhythm.DriftPoints) != 0 {
+		t.Fatalf("unexpected empty rhythm projection: %#v", rhythm)
+	}
+
+	proposals, err := app.GetProposals()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if proposals.Status != "empty" || proposals.FixtureMode || len(proposals.Proposals) != 0 {
+		t.Fatalf("unexpected empty proposals: %#v", proposals)
+	}
+	if len(proposals.Unplaced) == 0 || proposals.Unplaced[0].ReasonCode != string(scheduling.ReasonEstimateUnavailable) {
+		t.Fatalf("empty proposals should be marked estimate unavailable: %#v", proposals.Unplaced)
+	}
+}
+
+func TestBelowMinimumLocalDataReturnsTypedRefusal(t *testing.T) {
+	app := newTestApp(t)
+	seedSleepEntries(t, app, 2)
+
+	overview, err := app.GetOverview()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overview.Status != "refused" || overview.Refusal == nil || overview.Refusal.Code != "insufficient_data" {
+		t.Fatalf("expected insufficient data refusal, got %#v", overview)
+	}
+	if overview.FixtureMode {
+		t.Fatal("refusal must not fall back to fixture mode")
+	}
+
+	proposals, err := app.GetProposals()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if proposals.Status != "refused" || len(proposals.Proposals) != 0 {
+		t.Fatalf("proposals should refuse without an estimate: %#v", proposals)
+	}
+}
+
+func TestStoredEntriesDriveOverviewRhythmAndProposals(t *testing.T) {
+	app := newTestApp(t)
+	seedSleepEntries(t, app, 12)
+
+	overview, err := app.GetOverview()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overview.Status != "estimated" || overview.FixtureMode {
+		t.Fatalf("expected local estimated overview: %#v", overview)
+	}
+	if overview.PredictedNextSleepWindow == "" || overview.PredictedNextSleepWindow == "Not enough local data" {
+		t.Fatalf("overview did not expose predicted window: %#v", overview)
+	}
+	if !strings.Contains(overview.DriftEstimate, "observed sleep cycle") {
+		t.Fatalf("unsafe drift wording: %q", overview.DriftEstimate)
+	}
+	if len(overview.MedicationEvents) != 0 {
+		t.Fatalf("desktop local slice should not fabricate medication records: %#v", overview.MedicationEvents)
+	}
+
+	rhythm, err := app.GetRhythm()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rhythm.Status != "estimated" || rhythm.FixtureMode || len(rhythm.ObservedRows) == 0 || len(rhythm.DriftPoints) == 0 {
+		t.Fatalf("expected local rhythm projection: %#v", rhythm)
+	}
+
+	proposals, err := app.GetProposals()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if proposals.Status != "estimated" || proposals.FixtureMode || len(proposals.Proposals) == 0 {
+		t.Fatalf("expected local scheduler proposals: %#v", proposals)
+	}
 	validCodes := map[string]bool{
 		scheduling.CodeWithinPredictedWakingWindow: true,
 		scheduling.CodeAvoidsFixedEvent:            true,
 		scheduling.CodeWithinTaskBounds:            true,
 		scheduling.CodeUncertaintyBufferApplied:    true,
 	}
-	sawWakingWindow, sawAvoidsEvent := false, false
-	for _, proposal := range result.Proposals {
+	for _, proposal := range proposals.Proposals {
+		if proposal.Origin != "scheduler" || proposal.To == "" || proposal.Confidence == "" {
+			t.Fatalf("incomplete proposal: %#v", proposal)
+		}
 		if len(proposal.ExplanationCodes) == 0 {
 			t.Fatalf("proposal %q has no explanation codes", proposal.ID)
-		}
-		if len(proposal.ReasonLabels) != len(proposal.ExplanationCodes) {
-			t.Fatalf("proposal %q reason labels do not match codes", proposal.ID)
 		}
 		for _, code := range proposal.ExplanationCodes {
 			if !validCodes[code] {
@@ -40,53 +124,89 @@ func TestProposalsFlowFromTheRealScheduler(t *testing.T) {
 			if code == scheduling.CodeUncertaintyBufferApplied {
 				t.Fatalf("proposal %q claims an uncertainty buffer the engine does not apply", proposal.ID)
 			}
-			if code == scheduling.CodeWithinPredictedWakingWindow {
-				sawWakingWindow = true
-			}
-			if code == scheduling.CodeAvoidsFixedEvent {
-				sawAvoidsEvent = true
-			}
-		}
-		if proposal.Origin != "scheduler" || proposal.To == "" || proposal.Confidence == "" {
-			t.Fatalf("incomplete proposal: %#v", proposal)
-		}
-	}
-	if !sawWakingWindow {
-		t.Fatal("expected a placement justified by a predicted waking window")
-	}
-	if !sawAvoidsEvent {
-		t.Fatal("expected a placement that avoids the fixed event")
-	}
-
-	// The deadline-too-soon task must surface as an honest unplaced entry.
-	if len(result.Unplaced) == 0 {
-		t.Fatal("expected the over-constrained task to be unplaced")
-	}
-	for _, unplaced := range result.Unplaced {
-		if unplaced.ReasonCode != string(scheduling.ReasonNoAvailableInterval) {
-			t.Fatalf("unexpected unplaced reason code %q", unplaced.ReasonCode)
-		}
-		if unplaced.Reason == "" || unplaced.NextAction == "" {
-			t.Fatalf("incomplete unplaced entry: %#v", unplaced)
 		}
 	}
 }
 
-func TestFixtureOverviewFlowsThroughApplicationService(t *testing.T) {
-	overview, err := NewApp().GetOverview()
+func TestSleepEntryEditAndSuppressAreAppendOnly(t *testing.T) {
+	app := newTestApp(t)
+	location, _ := time.LoadLocation(defaultZoneID)
+	start := time.Now().In(location).Add(-10 * time.Hour).Truncate(time.Minute)
+	added, err := app.AddSleepEntry(SleepEntryInput{
+		StartLocal:     start.Format("2006-01-02T15:04"),
+		EndLocal:       start.Add(8 * time.Hour).Format("2006-01-02T15:04"),
+		ZoneID:         defaultZoneID,
+		Classification: storage.SleepClassificationPrincipal,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !overview.FixtureMode {
-		t.Fatal("fixture mode should be explicit")
+
+	editedStart := start.Add(30 * time.Minute)
+	editedEnd := start.Add(8*time.Hour + 15*time.Minute)
+	edited, err := app.CorrectSleepEntry(SleepCorrectionInput{
+		ObservationID:  added.ObservationID,
+		StartLocal:     editedStart.Format("2006-01-02T15:04"),
+		EndLocal:       editedEnd.Format("2006-01-02T15:04"),
+		ZoneID:         defaultZoneID,
+		Classification: storage.SleepClassificationNap,
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
-	if overview.CurrentEstimatedState == "" || overview.PredictedNextSleepWindow == "" || overview.NextUsefulTaskWindow == "" {
-		t.Fatalf("incomplete overview: %#v", overview)
+	if edited.StartLocal == edited.EffectiveStartLocal {
+		t.Fatalf("raw start should remain immutable after correction: %#v", edited)
 	}
-	if !strings.Contains(overview.DriftEstimate, "observed sleep cycle") {
-		t.Fatalf("unsafe drift wording: %q", overview.DriftEstimate)
+	if edited.EffectiveClassification != storage.SleepClassificationNap || len(edited.History) != 1 {
+		t.Fatalf("edit was not reflected with history: %#v", edited)
 	}
-	if len(overview.MedicationEvents) != 1 || !strings.Contains(overview.MedicationEvents[0].RelativeToWake, "confirmed wake") {
-		t.Fatalf("medication timing missing: %#v", overview.MedicationEvents)
+
+	suppressed, err := app.SuppressSleepEntry(SleepSuppressInput{ObservationID: added.ObservationID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !suppressed.Suppressed || len(suppressed.History) != 2 {
+		t.Fatalf("suppression should append history and mark effective entry suppressed: %#v", suppressed)
+	}
+}
+
+func TestAddSleepEntryValidatesCivilRange(t *testing.T) {
+	app := newTestApp(t)
+	_, err := app.AddSleepEntry(SleepEntryInput{
+		StartLocal:     "2026-03-02T08:00",
+		EndLocal:       "2026-03-02T07:00",
+		ZoneID:         defaultZoneID,
+		Classification: storage.SleepClassificationPrincipal,
+	})
+	if err == nil || !strings.Contains(err.Error(), "after sleep start") {
+		t.Fatalf("expected end-after-start validation, got %v", err)
+	}
+}
+
+func newTestApp(t *testing.T) *App {
+	t.Helper()
+	store, err := storage.Open(filepath.Join(t.TempDir(), "desktop.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	return newAppWithStore(store, nil)
+}
+
+func seedSleepEntries(t *testing.T, app *App, count int) {
+	t.Helper()
+	location, _ := time.LoadLocation(defaultZoneID)
+	lastStart := time.Now().In(location).Add(-12 * time.Hour).Truncate(time.Minute)
+	firstStart := lastStart.Add(-time.Duration(count-1) * 25 * time.Hour)
+	for i := 0; i < count; i++ {
+		start := firstStart.Add(time.Duration(i) * 25 * time.Hour)
+		if _, err := app.AddSleepEntry(SleepEntryInput{
+			StartLocal:     start.Format("2006-01-02T15:04"),
+			EndLocal:       start.Add(8 * time.Hour).Format("2006-01-02T15:04"),
+			ZoneID:         defaultZoneID,
+			Classification: storage.SleepClassificationPrincipal,
+		}); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

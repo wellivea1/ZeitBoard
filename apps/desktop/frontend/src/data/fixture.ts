@@ -2,6 +2,8 @@ import type { OverviewData } from "./overview";
 
 export const overviewFixture: OverviewData = {
   fixtureMode: true,
+  status: "estimated",
+  empty: false,
   state: "Likely awake",
   stateDetail: "Inside the observed waking range",
   timeSinceWake: "6 hr 20 min",

@@ -2,6 +2,12 @@ export type ConfidenceLevel = "Low" | "Medium" | "High";
 
 export interface OverviewData {
   fixtureMode: boolean;
+  status: "estimated" | "empty" | "refused" | "unavailable";
+  empty: boolean;
+  refusal?: {
+    code: string;
+    message: string;
+  };
   state: string;
   stateDetail: string;
   timeSinceWake: string;

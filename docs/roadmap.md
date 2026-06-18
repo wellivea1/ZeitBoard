@@ -87,8 +87,11 @@ Make the local single-user experience trustworthy and legible.
   format = real clinical sleep logs + a SleepGraph-style actogram, kept out of the
   repo as private data. Spec: [`ui-ux-feature-specs.md` §3.6](ui-ux-feature-specs.md).
 
-Current implementation status: the first desktop trust-loop slice is in place
-with fixture-backed Approvals, Rhythm tabs, a double-plotted actogram with
+Current implementation status: the first desktop trust-loop slice is in place,
+and the first desktop-local sleep-data slice has landed with manual sleep entry,
+immutable local observations, append-only correction history, and real effective
+reads for Overview, Rhythm, and Proposals. The desktop trust-loop UI still includes
+Approvals, Rhythm tabs, a double-plotted actogram with
 widening forecast bands, a sleep-onset Drift chart, source conflict/missingness
 review, correction diff and undo affordance, refusal copy, and an Overview
 review strip. The Rhythm visualizer is now **engine-backed**: the actogram bands,
@@ -96,15 +99,17 @@ the Theil-Sen drift fit and its robust uncertainty band, the widening forecast,
 the slope/confidence labels, and the drift chart's y-range are all derived by the
 Go estimation engine (`estimation.Project`, exposed over the `GetRhythm` Wails
 binding) over the same sessions the Overview uses, so the two screens never
-disagree; the screen falls back to the shared fixture when the service is
-unavailable and shows whether it is running on the local estimate or sample data.
-The engine still runs over synthetic sessions — wiring real imported observations
-is Phase 3. The **Approvals trust gate is now engine-backed** too: the
+disagree; the screen falls back to the shared fixture only when the Wails service
+is unavailable in a browser preview and shows whether it is running on the local
+estimate, local data, or sample data.
+The desktop service no longer substitutes synthetic sleep sessions for a local
+store; manual desktop observations now drive the core estimator. The **Approvals
+trust gate is now engine-backed** too: the
 `GetProposals` Wails binding runs the real `scheduling.Scheduler` over the current
-estimate's predicted waking windows (plus the current functional window and a
-fixed event), so every queued proposal is one the engine actually produced — with
-contract-aligned `explanation_codes` for the constraints it enforced, the fixed
-events it avoided, and an honest `unplaced` list (reason codes) when no safe
+estimate's predicted waking windows plus the current functional window, so every
+queued proposal is one the engine actually produced, with
+contract-aligned `explanation_codes` for the constraints it enforced and an
+honest `unplaced` list (reason codes) when no safe
 window exists. The scheduler emits only guarantees it applied and never claims an
 `uncertainty_buffer_applied` it does not yet perform. Desktop theming
 (Auto/Light/Dark) and an independent reduced-stimulation toggle are implemented
@@ -120,9 +125,9 @@ error to ~3h while the engine correctly *drops* its confidence — and the
 forecast-window hit-rate stays 1.0, confirming the predicted windows are honestly
 wide (so point error, not hit-rate, is the sharper quality signal, and window width
 is a candidate for future tightening). Approval decisions are still in-session (no
-write-back); persisting decisions, real import refresh, backend correction undo,
-running the harness on real imported history, and full onboarding remain
-phase-two work.
+write-back); persisting decisions, import hardening, export/deletion UI, backend
+sync of the same contract-shaped local records, running the harness on
+participant-controlled real history, and full onboarding remain phase-two work.
 
 Exit criteria: a fatigued user can read current state, recent drift, and the
 next predicted windows in seconds; the app is keyboard-operable and meets WCAG 2.2

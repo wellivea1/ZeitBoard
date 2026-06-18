@@ -4,6 +4,7 @@ import { loadProposals, normalizeProposals, proposalsFixture } from "./proposals
 
 const backendProposals = {
   fixtureMode: true,
+  status: "estimated",
   proposals: [
     {
       id: "proposal-task-email",
@@ -74,10 +75,36 @@ describe("loadProposals", () => {
   });
 
   it("accepts a valid empty plan", () => {
-    expect(normalizeProposals({ fixtureMode: true, proposals: [], unplaced: [] })).toEqual({
+    expect(normalizeProposals({ fixtureMode: true, status: "estimated", proposals: [], unplaced: [] })).toEqual({
       fixtureMode: true,
+      status: "estimated",
       proposals: [],
       unplaced: [],
+    });
+  });
+
+  it("accepts estimate-unavailable unplaced tasks from the local app", () => {
+    expect(
+      normalizeProposals({
+        fixtureMode: false,
+        status: "empty",
+        refusal: { code: "estimate_unavailable", message: "Add sleep entries." },
+        proposals: [],
+        unplaced: [
+          {
+            title: "Email the clinic",
+            reason: "No current estimate to plan against",
+            reasonCode: "estimate_unavailable",
+            nextAction: "Add at least seven principal sleep entries before planning.",
+          },
+        ],
+      }),
+    ).toMatchObject({
+      fixtureMode: false,
+      status: "empty",
+      refusal: { code: "estimate_unavailable" },
+      proposals: [],
+      unplaced: [{ reasonCode: "estimate_unavailable" }],
     });
   });
 });
