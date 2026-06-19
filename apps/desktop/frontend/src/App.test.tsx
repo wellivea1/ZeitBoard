@@ -318,7 +318,9 @@ describe("desktop navigation", () => {
 
     render(<App />);
 
-    expect(await screen.findByText(/Sun Mar 1, 10:00 PM EST to Mon Mar 2, 6:00 AM EST/)).toBeVisible();
+    expect(
+      await screen.findByText(/Sun Mar 1, 10:00 PM EST to Mon Mar 2, 6:00 AM EST/),
+    ).toBeVisible();
     expect(screen.getByRole("button", { name: "Suppress from estimates" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Delete permanently" }));
     const eraseButton = screen.getByRole("button", { name: "Erase entry" });
@@ -370,6 +372,89 @@ describe("desktop navigation", () => {
       "content",
       "#f3f0e9",
     );
+  });
+
+  it("enables, syncs, and disables backend sync from Settings", async () => {
+    window.location.hash = "#/settings";
+    const offStatus = {
+      enabled: false,
+      status: "off",
+      backendUrl: "",
+      deviceId: "",
+      insecureSkipVerify: false,
+      lastSyncLabel: "Not synced yet",
+      lastError: "",
+      pendingPushCount: 0,
+      pushedCount: 0,
+      pulledCount: 0,
+      cursor: 0,
+    };
+    const connectedStatus = {
+      ...offStatus,
+      enabled: true,
+      status: "connected",
+      backendUrl: "https://localhost:8443",
+      deviceId: "device_desktop",
+      insecureSkipVerify: true,
+      lastSyncLabel: "Not synced yet",
+      pendingPushCount: 1,
+    };
+    const getStatus = vi.fn(async () => offStatus);
+    const configure = vi.fn(async () => connectedStatus);
+    const sync = vi.fn(async () => ({
+      ...connectedStatus,
+      pendingPushCount: 0,
+      pushedCount: 1,
+      pulledCount: 2,
+      lastSyncLabel: "Last synced Mar 2, 6:00 AM",
+    }));
+    const disable = vi.fn(async () => offStatus);
+    (globalThis as { go?: unknown }).go = {
+      main: {
+        App: {
+          GetBackendSyncStatus: getStatus,
+          ConfigureBackendSync: configure,
+          SyncNow: sync,
+          DisableBackendSync: disable,
+        },
+      },
+    };
+
+    render(
+      <AppearanceProvider>
+        <App />
+      </AppearanceProvider>,
+    );
+
+    expect(await screen.findByRole("heading", { name: "Self-hosted server" })).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Backend URL"), {
+      target: { value: "https://localhost:8443" },
+    });
+    fireEvent.change(screen.getByLabelText("Enrollment secret"), {
+      target: { value: "enroll-secret" },
+    });
+    fireEvent.change(screen.getByLabelText("Device label"), {
+      target: { value: "Desktop test" },
+    });
+    fireEvent.click(screen.getByLabelText(/Allow self-signed localhost TLS/));
+    fireEvent.click(screen.getByRole("button", { name: "Enable backend sync" }));
+
+    expect(await screen.findByText(/Backend sync enabled/)).toBeVisible();
+    expect(configure).toHaveBeenCalledWith({
+      enabled: true,
+      backendUrl: "https://localhost:8443",
+      enrollmentSecret: "enroll-secret",
+      deviceLabel: "Desktop test",
+      insecureSkipVerify: true,
+    });
+    expect(screen.getByText("Connected")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Sync now" }));
+    expect(await screen.findByText("Sync complete: 1 pushed, 2 pulled.")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Disable sync" }));
+    expect(await screen.findByText(/Backend sync disabled/)).toBeVisible();
+    expect(disable).toHaveBeenCalled();
   });
 
   it("exports and erases all local sleep data from Settings", async () => {

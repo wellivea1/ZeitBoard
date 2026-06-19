@@ -27,6 +27,7 @@ const (
 var fixturePairs = []struct{ schema, fixture string }{
 	{"observation-set.schema.json", "observations.json"},
 	{"correction-set.schema.json", "corrections.json"},
+	{"sleep-data-export.schema.json", "sleep-data-export.json"},
 	{"sync-batch.schema.json", "sync-batch.json"},
 	{"assistant-action.schema.json", "assistant-action.json"},
 	{"direct-proposal-request.schema.json", "direct-proposal-request.json"},

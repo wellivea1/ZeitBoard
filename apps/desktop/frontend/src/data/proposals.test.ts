@@ -75,7 +75,9 @@ describe("loadProposals", () => {
   });
 
   it("accepts a valid empty plan", () => {
-    expect(normalizeProposals({ fixtureMode: true, status: "estimated", proposals: [], unplaced: [] })).toEqual({
+    expect(
+      normalizeProposals({ fixtureMode: true, status: "estimated", proposals: [], unplaced: [] }),
+    ).toEqual({
       fixtureMode: true,
       status: "estimated",
       proposals: [],

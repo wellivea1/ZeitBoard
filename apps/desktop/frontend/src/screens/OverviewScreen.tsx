@@ -86,6 +86,14 @@ export function OverviewScreen() {
   }, []);
 
   const hasEstimate = overview.status === "estimated";
+  const sourceLabel =
+    mode === "synced"
+      ? "Synced - server estimate"
+      : overview.fixtureMode || mode === "fixture"
+        ? "Sample data"
+        : hasEstimate
+          ? "Local estimate"
+          : "Local data";
   const todayLabel = new Date().toLocaleDateString(undefined, {
     weekday: "long",
     month: "long",
@@ -101,13 +109,7 @@ export function OverviewScreen() {
         actions={
           <div className="status-cluster">
             <span className="sync-dot" data-mode={mode} aria-hidden="true" />
-            <span>
-              {overview.fixtureMode
-                ? "Sample data"
-                : hasEstimate
-                  ? "Local estimate"
-                  : "Local data"}
-            </span>
+            <span>{sourceLabel}</span>
             <small>{overview.updatedLabel}</small>
           </div>
         }
@@ -126,9 +128,8 @@ export function OverviewScreen() {
           </h2>
           {hasEstimate ? (
             <p>
-              You have been awake for <strong>{overview.timeSinceWake}</strong>. This is an
-              estimate from recent sleep-wake observations, not an exact circadian phase
-              measurement.
+              You have been awake for <strong>{overview.timeSinceWake}</strong>. This is an estimate
+              from recent sleep-wake observations, not an exact circadian phase measurement.
             </p>
           ) : (
             <p>
@@ -206,7 +207,9 @@ export function OverviewScreen() {
           <div className="panel-heading">
             <div>
               <p className="section-kicker">{hasEstimate ? "Flexible plan" : "Local input"}</p>
-              <h2 id="today-title">{hasEstimate ? "Current planning window" : "Manual sleep log"}</h2>
+              <h2 id="today-title">
+                {hasEstimate ? "Current planning window" : "Manual sleep log"}
+              </h2>
             </div>
             <a href={hasEstimate ? "#/approvals" : "#/data-sources"}>
               {hasEstimate ? "Open approvals" : "Open data entry"} <Icon name="chevron" />

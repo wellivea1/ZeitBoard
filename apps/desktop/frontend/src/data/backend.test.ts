@@ -10,7 +10,7 @@ describe("loadOverview", () => {
       go: { main: { App: { GetOverview: async () => backendOverview } } },
     });
 
-    expect(result).toEqual({ data: backendOverview, source: "backend" });
+    expect(result).toEqual({ data: backendOverview, source: "local" });
   });
 
   it("normalizes the desktop application's OverviewDTO", async () => {
@@ -36,13 +36,42 @@ describe("loadOverview", () => {
       },
     });
 
-    expect(result.source).toBe("backend");
+    expect(result.source).toBe("local");
     expect(result.data.state).toBe("Likely awake");
     expect(result.data.confidence).toEqual({
       level: "Medium",
       reason: "Nine recent sleep episodes",
     });
     expect(result.data.fixtureMode).toBe(true);
+  });
+
+  it("marks synced server estimates only when the desktop DTO says so", async () => {
+    const result = await loadOverview({
+      go: {
+        main: {
+          App: {
+            GetOverview: async () => ({
+              estimateSource: "synced",
+              status: "estimated",
+              empty: false,
+              currentEstimatedState: "Likely awake from server",
+              timeSinceWake: "5 hours",
+              predictedNextSleepWindow: "Tonight",
+              driftEstimate: "+45 minutes per observed sleep cycle",
+              confidence: "medium",
+              confidenceReasons: ["Server estimate"],
+              nextUsefulTaskWindow: "Later today",
+              sharingStatus: "Server projection only",
+              fixtureMode: false,
+              updatedLabel: "Synced - server estimate just now",
+            }),
+          },
+        },
+      },
+    });
+
+    expect(result.source).toBe("synced");
+    expect(result.data.stateDetail).toBe("Synced server estimate from the enrolled backend");
   });
 
   it("normalizes an empty local overview without falling back to fixture data", async () => {
@@ -73,7 +102,7 @@ describe("loadOverview", () => {
       },
     });
 
-    expect(result.source).toBe("backend");
+    expect(result.source).toBe("local");
     expect(result.data.status).toBe("empty");
     expect(result.data.empty).toBe(true);
     expect(result.data.fixtureMode).toBe(false);

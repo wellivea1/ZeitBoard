@@ -265,6 +265,141 @@ func TestDeleteAllSleepDataErasesLocalSleepTables(t *testing.T) {
 	}
 }
 
+func TestLocalSleepSyncTrackingCursorAndErasure(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "non24.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	start := time.Date(2026, 3, 5, 5, 0, 0, 0, time.UTC)
+	end := start.Add(8 * time.Hour)
+	obs := testSleepObservation("obs_sleep_05", start, end)
+	if err := store.AppendSleepObservation(ctx, obs); err != nil {
+		t.Fatal(err)
+	}
+	correctedStart := start.Add(15 * time.Minute)
+	correction := SleepCorrectionRecord{
+		CorrectionID:        "corr_sleep_06",
+		TargetObservationID: obs.ObservationID,
+		CreatedAt:           end.Add(time.Minute),
+		Reason:              CorrectionReasonUserEdit,
+		Changes:             SleepCorrectionChanges{StartAt: &correctedStart},
+	}
+	if err := store.AppendSleepCorrection(ctx, correction); err != nil {
+		t.Fatal(err)
+	}
+
+	records, err := store.LocalSleepSyncRecords(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 2 || records[0].RecordID != obs.ObservationID || records[0].Kind != SleepSyncKindObservation || records[1].RecordID != correction.CorrectionID || records[1].Kind != SleepSyncKindCorrection {
+		t.Fatalf("unexpected sync records: %#v", records)
+	}
+	unpushed, err := store.UnpushedSleepSyncRecords(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(unpushed) != 2 {
+		t.Fatalf("unpushed records = %d, want 2", len(unpushed))
+	}
+	if err := store.MarkSleepSyncRecordsPushed(ctx, records, end.Add(2*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	unpushed, err = store.UnpushedSleepSyncRecords(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(unpushed) != 0 {
+		t.Fatalf("pushed records still pending: %#v", unpushed)
+	}
+	if err := store.SaveSleepSyncCursor(ctx, 42); err != nil {
+		t.Fatal(err)
+	}
+	cursor, err := store.SleepSyncCursor(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cursor != 42 {
+		t.Fatalf("cursor = %d, want 42", cursor)
+	}
+
+	if err := store.DeleteSleepObservation(ctx, obs.ObservationID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AppendSleepObservation(ctx, obs); err != nil {
+		t.Fatal(err)
+	}
+	unpushed, err = store.UnpushedSleepSyncRecords(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(unpushed) != 1 || unpushed[0].RecordID != obs.ObservationID {
+		t.Fatalf("erasure should remove pushed tracking for sleep IDs, got %#v", unpushed)
+	}
+}
+
+func TestInsertSyncedSleepRecordsDedupesByContractID(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "non24.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	start := time.Date(2026, 3, 6, 5, 0, 0, 0, time.UTC)
+	end := start.Add(8 * time.Hour)
+	obs := testSleepObservation("obs_sleep_06", start, end)
+
+	inserted, err := store.InsertSyncedSleepObservation(ctx, obs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !inserted {
+		t.Fatal("first synced observation insert should report inserted")
+	}
+	inserted, err = store.InsertSyncedSleepObservation(ctx, obs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inserted {
+		t.Fatal("second synced observation insert should dedupe")
+	}
+	correctedEnd := end.Add(20 * time.Minute)
+	correction := SleepCorrectionRecord{
+		CorrectionID:        "corr_sleep_07",
+		TargetObservationID: obs.ObservationID,
+		CreatedAt:           end.Add(time.Minute),
+		Reason:              CorrectionReasonUserEdit,
+		Changes:             SleepCorrectionChanges{EndAt: &correctedEnd},
+	}
+	inserted, err = store.InsertSyncedSleepCorrection(ctx, correction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !inserted {
+		t.Fatal("first synced correction insert should report inserted")
+	}
+	inserted, err = store.InsertSyncedSleepCorrection(ctx, correction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if inserted {
+		t.Fatal("second synced correction insert should dedupe")
+	}
+	observations, err := store.ListSleepObservations(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	corrections, err := store.ListSleepCorrections(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(observations) != 1 || len(corrections) != 1 {
+		t.Fatalf("deduped records = %d observations, %d corrections", len(observations), len(corrections))
+	}
+}
+
 func testSleepObservation(id string, start, end time.Time) SleepObservationRecord {
 	return SleepObservationRecord{
 		ObservationID: id,

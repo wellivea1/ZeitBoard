@@ -104,6 +104,16 @@ func (s *Store) Migrate(ctx context.Context) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_local_sleep_corrections_target
 			ON local_sleep_corrections(target_observation_id, created_at)`,
+		`CREATE TABLE IF NOT EXISTS local_sync_state (
+			key TEXT PRIMARY KEY,
+			value TEXT NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS local_sleep_sync_records (
+			record_id TEXT PRIMARY KEY,
+			kind TEXT NOT NULL,
+			payload_hash TEXT NOT NULL,
+			pushed_at TEXT NOT NULL
+		)`,
 	}
 	for _, statement := range statements {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {

@@ -36,6 +36,7 @@ type App struct {
 	tray      tray.Controller
 	store     *storage.Store
 	storeErr  error
+	configDir string
 }
 
 type RefusalDTO struct {
@@ -44,6 +45,7 @@ type RefusalDTO struct {
 }
 
 type OverviewDTO struct {
+	EstimateSource           string               `json:"estimateSource"`
 	Status                   string               `json:"status"`
 	Empty                    bool                 `json:"empty"`
 	Refusal                  *RefusalDTO          `json:"refusal,omitempty"`
@@ -420,6 +422,9 @@ func (a *App) SuppressSleepEntry(input SleepSuppressInput) (SleepEntryDTO, error
 
 func (a *App) GetOverview() (OverviewDTO, error) {
 	now := time.Now().UTC().Truncate(time.Minute)
+	if overview, ok := a.serverOverview(context.Background(), now); ok {
+		return overview, nil
+	}
 	state, err := a.localEstimate(context.Background(), now)
 	if err != nil {
 		return OverviewDTO{}, err
@@ -477,6 +482,7 @@ func (a *App) GetOverview() (OverviewDTO, error) {
 		}
 	}
 	return OverviewDTO{
+		EstimateSource:           "local",
 		Status:                   "estimated",
 		CurrentEstimatedState:    currentState,
 		TimeSinceWake:            timeSinceWake,
@@ -495,6 +501,9 @@ func (a *App) GetOverview() (OverviewDTO, error) {
 
 func (a *App) GetRhythm() (estimation.RhythmProjection, error) {
 	now := time.Now().UTC().Truncate(time.Minute)
+	if rhythm, ok := a.serverRhythm(context.Background(), now); ok {
+		return rhythm, nil
+	}
 	state, err := a.localEstimate(context.Background(), now)
 	if err != nil {
 		return estimation.RhythmProjection{}, err
@@ -508,6 +517,7 @@ func (a *App) GetRhythm() (estimation.RhythmProjection, error) {
 	}
 	projection.FixtureMode = false
 	projection.Status = "estimated"
+	projection.EstimateSource = "local"
 	return projection, nil
 }
 
@@ -636,6 +646,7 @@ func overviewUnavailable(state localEstimateState, now time.Time) OverviewDTO {
 		title = "Local storage unavailable"
 	}
 	return OverviewDTO{
+		EstimateSource:           "local",
 		Status:                   state.Status,
 		Empty:                    state.Status == "empty",
 		Refusal:                  refusalDTO(state.Refusal, message),
@@ -661,6 +672,7 @@ func emptyRhythmProjection(state localEstimateState, now time.Time) estimation.R
 	}
 	return estimation.RhythmProjection{
 		FixtureMode:     false,
+		EstimateSource:  "local",
 		Status:          state.Status,
 		Refusal:         state.Refusal,
 		ActogramSummary: message,

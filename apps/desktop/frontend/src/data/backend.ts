@@ -75,6 +75,10 @@ function normalizeStatus(value: unknown): OverviewData["status"] {
   return "estimated";
 }
 
+function normalizeSource(value: unknown): OverviewResult["source"] {
+  return value === "synced" ? "synced" : "local";
+}
+
 function normalizeRefusal(value: unknown): OverviewData["refusal"] | undefined {
   if (!isRecord(value)) return undefined;
   const code = asString(value.code);
@@ -94,6 +98,7 @@ function normalizeWailsOverview(value: unknown): OverviewData | undefined {
   const usefulTaskWindow = asString(value.nextUsefulTaskWindow);
   const sharingStatus = asString(value.sharingStatus);
   const status = normalizeStatus(value.status);
+  const source = normalizeSource(value.estimateSource);
 
   if (
     !state ||
@@ -118,9 +123,11 @@ function normalizeWailsOverview(value: unknown): OverviewData | undefined {
     ...(normalizeRefusal(value.refusal) ? { refusal: normalizeRefusal(value.refusal) } : {}),
     state,
     stateDetail:
-      status === "estimated"
-        ? "Local estimate based on recent sleep-wake observations"
-        : "Local estimate is waiting for enough manually entered sleep data",
+      source === "synced"
+        ? "Synced server estimate from the enrolled backend"
+        : status === "estimated"
+          ? "Local estimate based on recent sleep-wake observations"
+          : "Local estimate is waiting for enough manually entered sleep data",
     timeSinceWake,
     nextSleepWindow: {
       label: sleepWindow,
@@ -158,7 +165,10 @@ export async function loadOverview(
   try {
     const result = await method();
     const overview = normalizeWailsOverview(result);
-    if (overview) return { data: overview, source: "backend" };
+    if (overview) {
+      const source = isRecord(result) ? normalizeSource(result.estimateSource) : "local";
+      return { data: overview, source };
+    }
   } catch {
     // Fixture mode keeps the desktop shell usable before the Wails service is ready.
   }

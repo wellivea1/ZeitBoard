@@ -6,7 +6,7 @@ import {
 } from "./phaseTwo";
 import type { ConfidenceLevel } from "./overview";
 
-export type RhythmSource = "backend" | "fixture";
+export type RhythmSource = "local" | "synced" | "fixture";
 
 export interface RhythmActogram {
   summary: string;
@@ -116,6 +116,10 @@ function status(value: unknown): RhythmData["status"] {
   return "estimated";
 }
 
+function source(value: unknown): RhythmSource {
+  return value === "synced" ? "synced" : "local";
+}
+
 function refusal(value: unknown): RhythmData["refusal"] | undefined {
   if (!isRecord(value)) return undefined;
   const code = str(value.code);
@@ -187,7 +191,17 @@ function point(value: unknown): RhythmDriftPointFixture | undefined {
   ) {
     return undefined;
   }
-  return { id, day, onsetHour, fitHour, bandLowHour, bandHighHour, onsetLabel, source, confidence: level };
+  return {
+    id,
+    day,
+    onsetHour,
+    fitHour,
+    bandLowHour,
+    bandHighHour,
+    onsetLabel,
+    source,
+    confidence: level,
+  };
 }
 
 function mapAll<T>(value: unknown, map: (item: unknown) => T | undefined): T[] | undefined {
@@ -273,7 +287,8 @@ export async function loadRhythm(
   try {
     const result = await method();
     const rhythm = normalizeRhythm(result);
-    if (rhythm) return { data: rhythm, source: "backend" };
+    if (rhythm)
+      return { data: rhythm, source: isRecord(result) ? source(result.estimateSource) : "local" };
   } catch {
     // Fixture mode keeps the Rhythm screen usable before the Wails service is ready.
   }

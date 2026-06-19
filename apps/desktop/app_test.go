@@ -237,7 +237,9 @@ func newTestApp(t *testing.T) *App {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	return newAppWithStore(store, nil)
+	app := newAppWithStore(store, nil)
+	app.configDir = filepath.Join(t.TempDir(), "config")
+	return app
 }
 
 func seedSleepEntries(t *testing.T, app *App, count int) {

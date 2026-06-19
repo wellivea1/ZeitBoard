@@ -16,9 +16,10 @@ import (
 // real estimation engine instead of a hand-authored fixture that could drift
 // from the math.
 type RhythmProjection struct {
-	FixtureMode bool               `json:"fixtureMode"`
-	Status      string             `json:"status,omitempty"`
-	Refusal     *EstimationRefusal `json:"refusal,omitempty"`
+	FixtureMode    bool               `json:"fixtureMode"`
+	EstimateSource string             `json:"estimateSource,omitempty"`
+	Status         string             `json:"status,omitempty"`
+	Refusal        *EstimationRefusal `json:"refusal,omitempty"`
 
 	ActogramSummary string       `json:"actogramSummary"`
 	ObservedRows    []RhythmBand `json:"observedRows"`

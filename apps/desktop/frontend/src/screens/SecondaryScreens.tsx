@@ -20,6 +20,7 @@ import {
   type RhythmActogram,
   type RhythmData,
   type RhythmDrift,
+  type RhythmSource,
 } from "../data/rhythm";
 import {
   addSleepEntry,
@@ -36,8 +37,16 @@ import {
   type SleepEntry,
   type SleepEntryInput,
 } from "../data/sleepEntries";
+import {
+  configureBackendSync,
+  disableBackendSync,
+  loadBackendSyncStatus,
+  syncNow,
+  type BackendSyncInput,
+  type BackendSyncStatus,
+} from "../data/backendSync";
 import { notifySleepDataChanged, sleepDataChangedEvent } from "../data/sleepDataEvents";
-import type { ConfidenceLevel, OverviewSource } from "../data/overview";
+import type { ConfidenceLevel } from "../data/overview";
 
 const days = ["Mon 15", "Tue 16", "Wed 17", "Thu 18", "Fri 19"];
 
@@ -365,7 +374,10 @@ function DriftPanel({ drift }: { drift: RhythmDrift }) {
     (_, i) => yMaxHour - (i / (DRIFT_TICKS - 1)) * (yMaxHour - yMinHour),
   );
   const fitPoints = points
-    .map((point, index) => `${scaleDriftX(index, points)},${scaleDriftY(point.fitHour, yMinHour, yMaxHour)}`)
+    .map(
+      (point, index) =>
+        `${scaleDriftX(index, points)},${scaleDriftY(point.fitHour, yMinHour, yMaxHour)}`,
+    )
     .join(" ");
   const bandPoints = [
     ...points.map(
@@ -713,7 +725,11 @@ function RhythmUnavailablePanel({ rhythm }: { rhythm: RhythmData }) {
       <h2 id="rhythm-empty-title">
         {rhythm.status === "empty" ? "Add sleep entries to draw rhythm" : "Need more usable data"}
       </h2>
-      <p>{rhythm.message ?? rhythm.refusal?.message ?? "The local estimator has no chart to show yet."}</p>
+      <p>
+        {rhythm.message ??
+          rhythm.refusal?.message ??
+          "The local estimator has no chart to show yet."}
+      </p>
       <a className="button primary" href="#/data-sources">
         Add sleep entry
       </a>
@@ -724,7 +740,7 @@ function RhythmUnavailablePanel({ rhythm }: { rhythm: RhythmData }) {
 export function RhythmScreen() {
   const [tab, setTab] = useState<RhythmTab>("actogram");
   const [rhythm, setRhythm] = useState(rhythmFixture);
-  const [mode, setMode] = useState<OverviewSource>("fixture");
+  const [mode, setMode] = useState<RhythmSource>("fixture");
 
   useEffect(() => {
     let current = true;
@@ -744,6 +760,14 @@ export function RhythmScreen() {
   }, []);
 
   const hasRhythm = rhythm.status === "estimated";
+  const sourceLabel =
+    mode === "synced"
+      ? "Synced - server estimate"
+      : mode === "local"
+        ? hasRhythm
+          ? "Local estimate"
+          : "Local data"
+        : "Sample data";
 
   const onTabKey = (event: KeyboardEvent<HTMLDivElement>) => {
     const index = rhythmTabs.findIndex((item) => item.id === tab);
@@ -767,16 +791,20 @@ export function RhythmScreen() {
         actions={
           <div className="status-cluster">
             <span className="sync-dot" data-mode={mode} aria-hidden="true" />
-            <span>{mode === "backend" ? (hasRhythm ? "Local estimate" : "Local data") : "Sample data"}</span>
+            <span>{sourceLabel}</span>
           </div>
         }
       />
       <PlaceholderNotice>
-        {mode === "backend" && hasRhythm
-          ? "The actogram, drift fit, and forecast below are computed by the local estimation engine."
-          : mode === "backend"
-            ? "The local estimator is waiting for enough manually entered sleep data before drawing rhythm charts."
-            : "This read-only preview distinguishes imported, estimated, corrected, and incomplete observations."}
+        {mode === "synced" && hasRhythm
+          ? "The actogram, drift fit, and forecast below are computed by the synced server estimate."
+          : mode === "synced"
+            ? "The synced server estimator is waiting for enough sleep data before drawing rhythm charts."
+            : mode === "local" && hasRhythm
+              ? "The actogram, drift fit, and forecast below are computed by the local estimation engine."
+              : mode === "local"
+                ? "The local estimator is waiting for enough manually entered sleep data before drawing rhythm charts."
+                : "This read-only preview distinguishes imported, estimated, corrected, and incomplete observations."}
       </PlaceholderNotice>
       <section className="screen-grid rhythm-screen" aria-label="Rhythm review">
         <div
@@ -824,7 +852,11 @@ export function RhythmScreen() {
             id="rhythm-panel-drift"
             aria-labelledby="rhythm-tab-drift"
           >
-            {hasRhythm ? <DriftPanel drift={rhythm.drift} /> : <RhythmUnavailablePanel rhythm={rhythm} />}
+            {hasRhythm ? (
+              <DriftPanel drift={rhythm.drift} />
+            ) : (
+              <RhythmUnavailablePanel rhythm={rhythm} />
+            )}
           </div>
         )}
 
@@ -869,7 +901,10 @@ export function RhythmScreen() {
                 </section>
               </>
             ) : (
-              <section className="panel source-conflicts-panel" aria-labelledby="local-sources-title">
+              <section
+                className="panel source-conflicts-panel"
+                aria-labelledby="local-sources-title"
+              >
                 <div className="panel-heading">
                   <div>
                     <p className="section-kicker">Sources</p>
@@ -1219,7 +1254,11 @@ function SleepEntryCard({
       )}
 
       {deleteConfirming && (
-        <div className="sleep-delete-confirmation" role="group" aria-labelledby={`${deleteInputID}-title`}>
+        <div
+          className="sleep-delete-confirmation"
+          role="group"
+          aria-labelledby={`${deleteInputID}-title`}
+        >
           <div>
             <strong id={`${deleteInputID}-title`}>Permanent erase</strong>
             <p>
@@ -1454,7 +1493,10 @@ export function DataSourcesScreen() {
             <div className="empty-state sleep-log-empty">
               <p className="section-kicker">{entriesData.status}</p>
               <h2>No sleep entries yet</h2>
-              <p>Add your first principal sleep episode above. The estimator will stay refused until enough usable entries exist.</p>
+              <p>
+                Add your first principal sleep episode above. The estimator will stay refused until
+                enough usable entries exist.
+              </p>
             </div>
           ) : (
             <div className="sleep-entry-list">
@@ -1528,6 +1570,36 @@ export function DataSourcesScreen() {
   );
 }
 
+const initialBackendSyncStatus: BackendSyncStatus = {
+  enabled: false,
+  status: "off",
+  backendUrl: "",
+  deviceId: "",
+  insecureSkipVerify: false,
+  lastSyncLabel: "Not synced yet",
+  lastError: "",
+  pendingPushCount: 0,
+  pushedCount: 0,
+  pulledCount: 0,
+  cursor: 0,
+};
+
+function initialBackendSyncForm(status = initialBackendSyncStatus): BackendSyncInput {
+  return {
+    enabled: true,
+    backendUrl: status.backendUrl,
+    enrollmentSecret: "",
+    deviceLabel: "ZeitBoard desktop",
+    insecureSkipVerify: status.insecureSkipVerify,
+  };
+}
+
+function backendSyncStatusLabel(status: BackendSyncStatus) {
+  if (!status.enabled) return "Off";
+  if (status.status === "error") return "Needs attention";
+  return "Connected";
+}
+
 export function SettingsScreen() {
   const { theme, reducedStimulation, setTheme, setReducedStimulation } = useAppearanceContext();
   const [exportedSleepData, setExportedSleepData] = useState<SleepDataExport | null>(null);
@@ -1535,6 +1607,37 @@ export function SettingsScreen() {
   const [dataControlError, setDataControlError] = useState("");
   const [deleteAllConfirmation, setDeleteAllConfirmation] = useState("");
   const [dataControlBusy, setDataControlBusy] = useState(false);
+  const [backendSyncStatus, setBackendSyncStatus] =
+    useState<BackendSyncStatus>(initialBackendSyncStatus);
+  const [backendSyncForm, setBackendSyncForm] = useState<BackendSyncInput>(() =>
+    initialBackendSyncForm(),
+  );
+  const [backendSyncMessage, setBackendSyncMessage] = useState("");
+  const [backendSyncError, setBackendSyncError] = useState("");
+  const [backendSyncBusy, setBackendSyncBusy] = useState(false);
+
+  useEffect(() => {
+    let current = true;
+    void loadBackendSyncStatus()
+      .then((status) => {
+        if (!current) return;
+        setBackendSyncStatus(status);
+        setBackendSyncForm((form) => ({
+          ...form,
+          backendUrl: status.backendUrl || form.backendUrl,
+          insecureSkipVerify: status.insecureSkipVerify,
+        }));
+      })
+      .catch((error: unknown) => {
+        if (!current) return;
+        setBackendSyncError(
+          error instanceof Error ? error.message : "Could not read backend sync status.",
+        );
+      });
+    return () => {
+      current = false;
+    };
+  }, []);
 
   const handleExportSleepData = async () => {
     setDataControlBusy(true);
@@ -1574,6 +1677,69 @@ export function SettingsScreen() {
       setDataControlError(error instanceof Error ? error.message : "Could not erase sleep data.");
     } finally {
       setDataControlBusy(false);
+    }
+  };
+
+  const handleConfigureBackendSync = async () => {
+    setBackendSyncBusy(true);
+    setBackendSyncError("");
+    setBackendSyncMessage("");
+    try {
+      const status = await configureBackendSync(backendSyncForm);
+      setBackendSyncStatus(status);
+      setBackendSyncForm((form) => ({ ...form, enrollmentSecret: "" }));
+      setBackendSyncMessage(
+        "Backend sync enabled. Synced server estimates are now available when the backend is reachable.",
+      );
+    } catch (error) {
+      setBackendSyncError(
+        error instanceof Error ? error.message : "Could not enable backend sync.",
+      );
+      setBackendSyncForm((form) => ({ ...form, enrollmentSecret: "" }));
+    } finally {
+      setBackendSyncBusy(false);
+    }
+  };
+
+  const handleDisableBackendSync = async () => {
+    setBackendSyncBusy(true);
+    setBackendSyncError("");
+    setBackendSyncMessage("");
+    try {
+      const status = await disableBackendSync();
+      setBackendSyncStatus(status);
+      setBackendSyncMessage(
+        "Backend sync disabled. Estimates remain local and no sync network calls will be made.",
+      );
+    } catch (error) {
+      setBackendSyncError(
+        error instanceof Error ? error.message : "Could not disable backend sync.",
+      );
+    } finally {
+      setBackendSyncBusy(false);
+    }
+  };
+
+  const handleSyncNow = async () => {
+    setBackendSyncBusy(true);
+    setBackendSyncError("");
+    setBackendSyncMessage("");
+    try {
+      const status = await syncNow();
+      setBackendSyncStatus(status);
+      if (status.status === "error") {
+        setBackendSyncError(status.lastError || "Backend sync failed.");
+      } else if (!status.enabled) {
+        setBackendSyncMessage("Backend sync is off.");
+      } else {
+        setBackendSyncMessage(
+          `Sync complete: ${status.pushedCount} pushed, ${status.pulledCount} pulled.`,
+        );
+      }
+    } catch (error) {
+      setBackendSyncError(error instanceof Error ? error.message : "Could not sync now.");
+    } finally {
+      setBackendSyncBusy(false);
     }
   };
 
@@ -1645,6 +1811,166 @@ export function SettingsScreen() {
             </span>
             <input type="checkbox" defaultChecked />
           </label>
+        </div>
+        <div className="panel settings-section backend-sync-panel">
+          <div className="data-control-intro">
+            <p className="section-kicker">Backend sync</p>
+            <h2>Self-hosted server</h2>
+            <p className="settings-copy">
+              Sync is off by default. When enabled, only v1 sleep observations and corrections are
+              sent to your enrolled self-hosted backend. Overview and Rhythm clearly label synced
+              server estimates.
+            </p>
+          </div>
+          <div className="data-control-grid">
+            <section
+              className="data-control-card backend-sync-card"
+              aria-labelledby="backend-sync-connect-title"
+            >
+              <div>
+                <h3 id="backend-sync-connect-title">Connect backend</h3>
+                <p>
+                  Use an HTTPS URL and enrollment secret from your own server. The device token is
+                  stored outside the editable config and is never shown here.
+                </p>
+              </div>
+              <form
+                className="backend-sync-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void handleConfigureBackendSync();
+                }}
+              >
+                <label htmlFor="backend-sync-url">
+                  Backend URL
+                  <input
+                    id="backend-sync-url"
+                    type="url"
+                    placeholder="https://zeitboard.example.com"
+                    value={backendSyncForm.backendUrl}
+                    onChange={(event) =>
+                      setBackendSyncForm((form) => ({ ...form, backendUrl: event.target.value }))
+                    }
+                  />
+                </label>
+                <label htmlFor="backend-sync-secret">
+                  Enrollment secret
+                  <input
+                    id="backend-sync-secret"
+                    type="password"
+                    value={backendSyncForm.enrollmentSecret}
+                    onChange={(event) =>
+                      setBackendSyncForm((form) => ({
+                        ...form,
+                        enrollmentSecret: event.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label htmlFor="backend-sync-label">
+                  Device label
+                  <input
+                    id="backend-sync-label"
+                    type="text"
+                    value={backendSyncForm.deviceLabel}
+                    onChange={(event) =>
+                      setBackendSyncForm((form) => ({ ...form, deviceLabel: event.target.value }))
+                    }
+                  />
+                </label>
+                <label
+                  className="toggle-row backend-sync-dev-toggle"
+                  htmlFor="backend-sync-insecure"
+                >
+                  <span>
+                    <strong>Allow self-signed localhost TLS</strong>
+                    <small>Development only. Production sync verifies HTTPS certificates.</small>
+                  </span>
+                  <input
+                    id="backend-sync-insecure"
+                    type="checkbox"
+                    checked={backendSyncForm.insecureSkipVerify}
+                    onChange={(event) =>
+                      setBackendSyncForm((form) => ({
+                        ...form,
+                        insecureSkipVerify: event.target.checked,
+                      }))
+                    }
+                  />
+                </label>
+                <div className="backend-sync-actions">
+                  <button
+                    className="button primary"
+                    type="submit"
+                    disabled={backendSyncBusy || !backendSyncForm.backendUrl}
+                  >
+                    Enable backend sync
+                  </button>
+                  <button
+                    className="button secondary"
+                    type="button"
+                    onClick={() => void handleDisableBackendSync()}
+                    disabled={backendSyncBusy || !backendSyncStatus.enabled}
+                  >
+                    Disable sync
+                  </button>
+                </div>
+              </form>
+            </section>
+            <section
+              className="data-control-card backend-sync-card"
+              aria-labelledby="backend-sync-status-title"
+            >
+              <div>
+                <h3 id="backend-sync-status-title">Sync status</h3>
+                <p>
+                  Backend unavailable falls back to local estimates. Conflicts are reported here and
+                  do not crash the app.
+                </p>
+              </div>
+              <dl className="sync-status-list">
+                <div>
+                  <dt>Status</dt>
+                  <dd>{backendSyncStatusLabel(backendSyncStatus)}</dd>
+                </div>
+                <div>
+                  <dt>Backend</dt>
+                  <dd>{backendSyncStatus.backendUrl || "Not configured"}</dd>
+                </div>
+                <div>
+                  <dt>Device</dt>
+                  <dd>{backendSyncStatus.deviceId || "Not enrolled"}</dd>
+                </div>
+                <div>
+                  <dt>Pending push</dt>
+                  <dd>{backendSyncStatus.pendingPushCount}</dd>
+                </div>
+                <div>
+                  <dt>Last sync</dt>
+                  <dd>{backendSyncStatus.lastSyncLabel}</dd>
+                </div>
+              </dl>
+              <button
+                className="button secondary"
+                type="button"
+                onClick={() => void handleSyncNow()}
+                disabled={backendSyncBusy || !backendSyncStatus.enabled}
+              >
+                Sync now
+              </button>
+              {backendSyncStatus.lastError && (
+                <p className="form-error">Last error: {backendSyncStatus.lastError}</p>
+              )}
+            </section>
+          </div>
+          {backendSyncError && (
+            <p className="form-error" role="alert">
+              {backendSyncError}
+            </p>
+          )}
+          <p className="form-status" role="status" aria-live="polite">
+            {backendSyncMessage}
+          </p>
         </div>
         <div className="panel settings-section data-controls-panel">
           <div className="data-control-intro">

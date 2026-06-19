@@ -2,7 +2,9 @@ package sqlite
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -35,6 +37,9 @@ const (
 	CorrectionReasonDuplicate      = "duplicate"
 	CorrectionReasonInvalidRange   = "invalid_range"
 	CorrectionReasonSourceConflict = "source_conflict"
+
+	SleepSyncKindObservation = "observation"
+	SleepSyncKindCorrection  = "correction"
 )
 
 var contractIdentifier = regexp.MustCompile(`^[a-z][a-z0-9_-]{2,63}$`)
@@ -97,6 +102,14 @@ type SleepDataExport struct {
 	GeneratedAt    time.Time           `json:"generated_at"`
 	ObservationSet SleepObservationSet `json:"observation_set"`
 	CorrectionSet  SleepCorrectionSet  `json:"correction_set"`
+}
+
+type SleepSyncRecord struct {
+	RecordID    string
+	Kind        string
+	CreatedAt   time.Time
+	Payload     json.RawMessage
+	PayloadHash string
 }
 
 func (s *Store) AppendSleepObservation(ctx context.Context, record SleepObservationRecord) error {
@@ -181,6 +194,187 @@ func (s *Store) ListSleepCorrections(ctx context.Context) ([]SleepCorrectionReco
 	return records, err
 }
 
+func (s *Store) LocalSleepSyncRecords(ctx context.Context) ([]SleepSyncRecord, error) {
+	observations, err := s.ListSleepObservations(ctx)
+	if err != nil {
+		return nil, err
+	}
+	corrections, err := s.ListSleepCorrections(ctx)
+	if err != nil {
+		return nil, err
+	}
+	records := make([]SleepSyncRecord, 0, len(observations)+len(corrections))
+	for _, observation := range observations {
+		payload, err := json.Marshal(observation)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, newSleepSyncRecord(observation.ObservationID, SleepSyncKindObservation, observation.Provenance.RecordedAt, payload))
+	}
+	for _, correction := range corrections {
+		payload, err := json.Marshal(correction)
+		if err != nil {
+			return nil, err
+		}
+		records = append(records, newSleepSyncRecord(correction.CorrectionID, SleepSyncKindCorrection, correction.CreatedAt, payload))
+	}
+	sort.Slice(records, func(i, j int) bool {
+		if records[i].CreatedAt.Equal(records[j].CreatedAt) {
+			return records[i].RecordID < records[j].RecordID
+		}
+		return records[i].CreatedAt.Before(records[j].CreatedAt)
+	})
+	return records, nil
+}
+
+func (s *Store) UnpushedSleepSyncRecords(ctx context.Context) ([]SleepSyncRecord, error) {
+	records, err := s.LocalSleepSyncRecords(ctx)
+	if err != nil {
+		return nil, err
+	}
+	pushed := map[string]string{}
+	rows, err := s.db.QueryContext(ctx, `SELECT record_id, payload_hash FROM local_sleep_sync_records`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id, hash string
+		if err := rows.Scan(&id, &hash); err != nil {
+			return nil, err
+		}
+		pushed[id] = hash
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	unpushed := make([]SleepSyncRecord, 0, len(records))
+	for _, record := range records {
+		if pushed[record.RecordID] == record.PayloadHash {
+			continue
+		}
+		unpushed = append(unpushed, record)
+	}
+	return unpushed, nil
+}
+
+func (s *Store) MarkSleepSyncRecordsPushed(ctx context.Context, records []SleepSyncRecord, pushedAt time.Time) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	for _, record := range records {
+		if _, err := tx.ExecContext(ctx, `INSERT OR REPLACE INTO local_sleep_sync_records(record_id, kind, payload_hash, pushed_at) VALUES(?, ?, ?, ?)`,
+			record.RecordID, record.Kind, record.PayloadHash, formatSQLiteTime(pushedAt)); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *Store) SleepSyncCursor(ctx context.Context) (int64, error) {
+	var raw string
+	err := s.db.QueryRowContext(ctx, `SELECT value FROM local_sync_state WHERE key = 'sleep_sync_cursor'`).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	var cursor int64
+	if _, err := fmt.Sscanf(raw, "%d", &cursor); err != nil {
+		return 0, err
+	}
+	return cursor, nil
+}
+
+func (s *Store) SaveSleepSyncCursor(ctx context.Context, cursor int64) error {
+	if cursor < 0 {
+		return errors.New("sleep sync cursor must not be negative")
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT OR REPLACE INTO local_sync_state(key, value) VALUES('sleep_sync_cursor', ?)`, fmt.Sprintf("%d", cursor))
+	return err
+}
+
+func (s *Store) InsertSyncedSleepObservation(ctx context.Context, record SleepObservationRecord) (bool, error) {
+	if err := validateSleepObservation(record); err != nil {
+		return false, err
+	}
+	record.StartAt = record.StartAt.UTC()
+	record.EndAt = record.EndAt.UTC()
+	record.Provenance.RecordedAt = record.Provenance.RecordedAt.UTC()
+	encoded, err := json.Marshal(record)
+	if err != nil {
+		return false, err
+	}
+	result, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO local_sleep_observations(
+		observation_id, kind, start_at, end_at, zone_id, classification,
+		acquisition_method, evidence_status, recorded_at, source_record_id, payload_json
+	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		record.ObservationID, record.Kind, formatSQLiteTime(record.StartAt), formatSQLiteTime(record.EndAt),
+		record.ZoneID, record.Sleep.Classification, record.Provenance.AcquisitionMethod,
+		record.Provenance.EvidenceStatus, formatSQLiteTime(record.Provenance.RecordedAt),
+		record.Provenance.SourceRecordID, encoded,
+	)
+	if err != nil {
+		return false, err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	synced := newSleepSyncRecord(record.ObservationID, SleepSyncKindObservation, record.Provenance.RecordedAt, encoded)
+	if err := s.MarkSleepSyncRecordsPushed(ctx, []SleepSyncRecord{synced}, time.Now().UTC()); err != nil {
+		return false, err
+	}
+	return rows > 0, nil
+}
+
+func (s *Store) InsertSyncedSleepCorrection(ctx context.Context, record SleepCorrectionRecord) (bool, error) {
+	if err := validateSleepCorrection(record); err != nil {
+		return false, err
+	}
+	if err := s.requireSleepObservation(ctx, record.TargetObservationID); err != nil {
+		return false, err
+	}
+	record.CreatedAt = record.CreatedAt.UTC()
+	if record.Changes.StartAt != nil {
+		start := record.Changes.StartAt.UTC()
+		record.Changes.StartAt = &start
+	}
+	if record.Changes.EndAt != nil {
+		end := record.Changes.EndAt.UTC()
+		record.Changes.EndAt = &end
+	}
+	changes, err := json.Marshal(record.Changes)
+	if err != nil {
+		return false, err
+	}
+	encoded, err := json.Marshal(record)
+	if err != nil {
+		return false, err
+	}
+	result, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO local_sleep_corrections(
+		correction_id, target_observation_id, supersedes_correction_id, created_at, reason, changes_json, payload_json
+	) VALUES(?, ?, ?, ?, ?, ?, ?)`,
+		record.CorrectionID, record.TargetObservationID, record.SupersedesCorrectionID,
+		formatSQLiteTime(record.CreatedAt), record.Reason, changes, encoded,
+	)
+	if err != nil {
+		return false, err
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	synced := newSleepSyncRecord(record.CorrectionID, SleepSyncKindCorrection, record.CreatedAt, encoded)
+	if err := s.MarkSleepSyncRecordsPushed(ctx, []SleepSyncRecord{synced}, time.Now().UTC()); err != nil {
+		return false, err
+	}
+	return rows > 0, nil
+}
+
 func (s *Store) ExportSleepData(ctx context.Context) (SleepDataExport, error) {
 	generatedAt := time.Now().UTC()
 	result := SleepDataExport{
@@ -224,6 +418,14 @@ func (s *Store) DeleteSleepObservation(ctx context.Context, observationID string
 	if err != nil {
 		return err
 	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM local_sleep_sync_records
+		WHERE record_id = ?
+			OR record_id IN (
+				SELECT correction_id FROM local_sleep_corrections WHERE target_observation_id = ?
+			)`, observationID, observationID); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM local_sleep_corrections WHERE target_observation_id = ?`, observationID); err != nil {
 		_ = tx.Rollback()
 		return err
@@ -253,7 +455,7 @@ func (s *Store) DeleteAllSleepData(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	for _, table := range []string{"local_sleep_corrections", "local_sleep_observations"} {
+	for _, table := range []string{"local_sleep_sync_records", "local_sleep_corrections", "local_sleep_observations"} {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table); err != nil {
 			_ = tx.Rollback()
 			return err
@@ -612,6 +814,17 @@ func validCorrectionReason(value string) bool {
 		return true
 	default:
 		return false
+	}
+}
+
+func newSleepSyncRecord(id, kind string, createdAt time.Time, payload []byte) SleepSyncRecord {
+	sum := sha256.Sum256(payload)
+	return SleepSyncRecord{
+		RecordID:    id,
+		Kind:        kind,
+		CreatedAt:   createdAt.UTC(),
+		Payload:     append(json.RawMessage(nil), payload...),
+		PayloadHash: hex.EncodeToString(sum[:]),
 	}
 }
 

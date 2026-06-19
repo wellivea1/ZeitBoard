@@ -63,7 +63,7 @@ describe("loadRhythm", () => {
       go: { main: { App: { GetRhythm: async () => backendProjection } } },
     });
 
-    expect(result.source).toBe("backend");
+    expect(result.source).toBe("local");
     expect(result.data.actogram.observedRows).toHaveLength(1);
     expect(result.data.actogram.observedRows[0]?.kind).toBe("observed");
     expect(result.data.actogram.forecastRows[0]?.kind).toBe("forecast");
@@ -71,6 +71,19 @@ describe("loadRhythm", () => {
     expect(result.data.drift.slopeLabel).toBe("+60 min per cycle");
     expect(result.data.drift.confidence).toBe("Medium");
     expect(result.data.drift.yMaxHour).toBeGreaterThan(result.data.drift.yMinHour);
+  });
+
+  it("marks synced server rhythm only when estimateSource is synced", async () => {
+    const result = await loadRhythm({
+      go: {
+        main: {
+          App: { GetRhythm: async () => ({ ...backendProjection, estimateSource: "synced" }) },
+        },
+      },
+    });
+
+    expect(result.source).toBe("synced");
+    expect(result.data.actogram.summary).toBe(backendProjection.actogramSummary);
   });
 
   it("falls back when the Wails binding is unavailable", async () => {

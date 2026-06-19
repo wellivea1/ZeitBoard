@@ -108,12 +108,15 @@ describe("sleep entry adapter", () => {
 
     await expect(loadSleepEntries(root)).resolves.toMatchObject({ entries: [entry] });
     await expect(
-      addSleepEntry({
-        startLocal: "2026-03-01T22:00",
-        endLocal: "2026-03-02T06:00",
-        zoneId: "America/New_York",
-        classification: "principal",
-      }, root),
+      addSleepEntry(
+        {
+          startLocal: "2026-03-01T22:00",
+          endLocal: "2026-03-02T06:00",
+          zoneId: "America/New_York",
+          classification: "principal",
+        },
+        root,
+      ),
     ).resolves.toMatchObject({ observationId: "obs_sleep_01" });
   });
 

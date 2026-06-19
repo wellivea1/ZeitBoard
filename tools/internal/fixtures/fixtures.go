@@ -83,6 +83,13 @@ type correctionSet struct {
 	Corrections   []correction `json:"corrections"`
 }
 
+type sleepDataExport struct {
+	SchemaVersion  string         `json:"schema_version"`
+	GeneratedAt    string         `json:"generated_at"`
+	ObservationSet observationSet `json:"observation_set"`
+	CorrectionSet  correctionSet  `json:"correction_set"`
+}
+
 type syncRecord struct {
 	Seq       int    `json:"seq"`
 	RecordID  string `json:"recordId"`
@@ -518,6 +525,13 @@ func Build() ([]File, error) {
 		},
 	}
 
+	sleepDataExportFixture := sleepDataExport{
+		SchemaVersion:  "v1",
+		GeneratedAt:    ts(generatedAt),
+		ObservationSet: observationsFixture,
+		CorrectionSet:  correctionsFixture,
+	}
+
 	syncBatchFixture := syncBatch{
 		SchemaVersion: "v1",
 		Cursor:        2,
@@ -904,6 +918,7 @@ func Build() ([]File, error) {
 	}{
 		{"observations.json", observationsFixture},
 		{"corrections.json", correctionsFixture},
+		{"sleep-data-export.json", sleepDataExportFixture},
 		{"sync-batch.json", syncBatchFixture},
 		{"assistant-action.json", assistantActionFixture},
 		{"direct-proposal-request.json", directProposalRequestFixture},

@@ -128,10 +128,15 @@ is a candidate for future tightening). Local sleep export and erasure controls
 have landed too: Settings exports v1 contract-shaped sleep JSON (`observation_set`
 and `correction_set`) and can hard-erase all local sleep observations/correction
 history after explicit confirmation, while Data Sources can hard-erase one entry
-separately from append-only suppress. Approval decisions are still in-session (no
-write-back); persisting decisions, import hardening, backend sync/tombstone
-semantics for the same contract-shaped local records, running the harness on
-participant-controlled real history, and full onboarding remain phase-two work.
+separately from append-only suppress. Desktop backend sync has landed as an
+explicit opt-in loop to the user's self-hosted backend: Settings handles device
+enrollment and status, local sleep observations/corrections push and pull through
+the v1 sync API, pulled records are deduped, conflicts surface as status, and
+Overview/Rhythm label synced server estimates distinctly from local estimates.
+Approval decisions are still in-session (no write-back); persisting decisions,
+import hardening, delete/tombstone propagation for already-synced records, running
+the harness on participant-controlled real history, and full onboarding remain
+phase-two work.
 
 Exit criteria: a fatigued user can read current state, recent drift, and the
 next predicted windows in seconds; the app is keyboard-operable and meets WCAG 2.2

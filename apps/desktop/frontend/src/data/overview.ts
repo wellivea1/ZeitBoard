@@ -35,7 +35,7 @@ export interface OverviewData {
   updatedLabel: string;
 }
 
-export type OverviewSource = "backend" | "fixture";
+export type OverviewSource = "local" | "synced" | "fixture";
 
 export interface OverviewResult {
   data: OverviewData;
