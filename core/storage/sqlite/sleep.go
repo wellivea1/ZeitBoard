@@ -80,6 +80,25 @@ type SleepCorrectionChanges struct {
 	Excluded            *bool      `json:"excluded,omitempty"`
 }
 
+type SleepObservationSet struct {
+	SchemaVersion string                   `json:"schema_version"`
+	GeneratedAt   time.Time                `json:"generated_at"`
+	Observations  []SleepObservationRecord `json:"observations"`
+}
+
+type SleepCorrectionSet struct {
+	SchemaVersion string                  `json:"schema_version"`
+	GeneratedAt   time.Time               `json:"generated_at"`
+	Corrections   []SleepCorrectionRecord `json:"corrections"`
+}
+
+type SleepDataExport struct {
+	SchemaVersion  string              `json:"schema_version"`
+	GeneratedAt    time.Time           `json:"generated_at"`
+	ObservationSet SleepObservationSet `json:"observation_set"`
+	CorrectionSet  SleepCorrectionSet  `json:"correction_set"`
+}
+
 func (s *Store) AppendSleepObservation(ctx context.Context, record SleepObservationRecord) error {
 	if err := validateSleepObservation(record); err != nil {
 		return err
@@ -160,6 +179,90 @@ func (s *Store) ListSleepCorrections(ctx context.Context) ([]SleepCorrectionReco
 		return nil
 	})
 	return records, err
+}
+
+func (s *Store) ExportSleepData(ctx context.Context) (SleepDataExport, error) {
+	generatedAt := time.Now().UTC()
+	result := SleepDataExport{
+		SchemaVersion: "v1",
+		GeneratedAt:   generatedAt,
+		ObservationSet: SleepObservationSet{
+			SchemaVersion: "v1",
+			GeneratedAt:   generatedAt,
+			Observations:  []SleepObservationRecord{},
+		},
+		CorrectionSet: SleepCorrectionSet{
+			SchemaVersion: "v1",
+			GeneratedAt:   generatedAt,
+			Corrections:   []SleepCorrectionRecord{},
+		},
+	}
+	observations, err := s.ListSleepObservations(ctx)
+	if err != nil {
+		return result, err
+	}
+	corrections, err := s.ListSleepCorrections(ctx)
+	if err != nil {
+		return result, err
+	}
+	if observations == nil {
+		observations = []SleepObservationRecord{}
+	}
+	if corrections == nil {
+		corrections = []SleepCorrectionRecord{}
+	}
+	result.ObservationSet.Observations = observations
+	result.CorrectionSet.Corrections = corrections
+	return result, nil
+}
+
+func (s *Store) DeleteSleepObservation(ctx context.Context, observationID string) error {
+	if !contractIdentifier.MatchString(observationID) {
+		return errors.New("observation_id must match the v1 identifier format")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM local_sleep_corrections WHERE target_observation_id = ?`, observationID); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	result, err := tx.ExecContext(ctx, `DELETE FROM local_sleep_observations WHERE observation_id = ?`, observationID)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	deleted, err := result.RowsAffected()
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if deleted == 0 {
+		_ = tx.Rollback()
+		return fmt.Errorf("sleep observation %s does not exist", observationID)
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return s.compactDeletedData(ctx)
+}
+
+func (s *Store) DeleteAllSleepData(ctx context.Context) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	for _, table := range []string{"local_sleep_corrections", "local_sleep_observations"} {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	return s.compactDeletedData(ctx)
 }
 
 func (s *Store) LatestSleepCorrectionID(ctx context.Context, targetObservationID string) (string, error) {

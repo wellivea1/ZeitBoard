@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Sleep data export v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "generated_at", "observation_set", "correction_set"],
+  "properties": {
+    "schema_version": {
+      "$ref": "common.schema.json#/$defs/schemaVersion"
+    },
+    "generated_at": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "observation_set": {
+      "$ref": "observation-set.schema.json"
+    },
+    "correction_set": {
+      "$ref": "correction-set.schema.json"
+    }
+  }
+}

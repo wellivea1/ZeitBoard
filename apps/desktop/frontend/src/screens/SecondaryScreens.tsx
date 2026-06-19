@@ -24,10 +24,14 @@ import {
 import {
   addSleepEntry,
   correctSleepEntry,
+  deleteAllSleepData,
+  deleteSleepObservation,
+  exportSleepData,
   loadSleepEntries,
   suppressSleepEntry,
   type SleepClassification,
   type SleepCorrectionInput,
+  type SleepDataExport,
   type SleepEntriesData,
   type SleepEntry,
   type SleepEntryInput,
@@ -1006,6 +1010,7 @@ export function SharingScreen() {
 }
 
 const fallbackSleepZone = "America/New_York";
+const deleteConfirmationToken = "DELETE";
 
 function browserZone() {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || fallbackSleepZone;
@@ -1030,6 +1035,28 @@ function initialSleepForm(): SleepEntryInput {
 
 function endAfterStart(input: SleepEntryInput) {
   return new Date(input.endLocal).getTime() > new Date(input.startLocal).getTime();
+}
+
+function downloadSleepDataExport(exported: SleepDataExport) {
+  if (
+    (typeof navigator !== "undefined" && navigator.userAgent.toLowerCase().includes("jsdom")) ||
+    typeof Blob === "undefined" ||
+    typeof URL === "undefined" ||
+    typeof URL.createObjectURL !== "function" ||
+    typeof document === "undefined"
+  ) {
+    return false;
+  }
+  const blob = new Blob([exported.json], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = exported.fileName;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+  return true;
 }
 
 function SleepEntryForm({
@@ -1096,26 +1123,39 @@ function SleepEntryCard({
   editing,
   editForm,
   busy,
+  deleteConfirming,
+  deleteConfirmation,
   onBeginEdit,
   onCancelEdit,
   onEditChange,
   onSaveEdit,
   onSuppress,
+  onBeginDelete,
+  onCancelDelete,
+  onDeleteConfirmationChange,
+  onDelete,
 }: {
   entry: SleepEntry;
   editing: boolean;
   editForm: SleepEntryInput;
   busy: boolean;
+  deleteConfirming: boolean;
+  deleteConfirmation: string;
   onBeginEdit: () => void;
   onCancelEdit: () => void;
   onEditChange: (form: SleepEntryInput) => void;
   onSaveEdit: () => void;
   onSuppress: () => void;
+  onBeginDelete: () => void;
+  onCancelDelete: () => void;
+  onDeleteConfirmationChange: (value: string) => void;
+  onDelete: () => void;
 }) {
   const corrected =
     entry.startLocal !== entry.effectiveStartLocal ||
     entry.endLocal !== entry.effectiveEndLocal ||
     entry.classification !== entry.effectiveClassification;
+  const deleteInputID = `delete-confirm-${entry.observationId}`;
 
   return (
     <article className="sleep-entry-card" data-suppressed={entry.suppressed || undefined}>
@@ -1172,6 +1212,41 @@ function SleepEntryCard({
           >
             Suppress from estimates
           </button>
+          <button className="button secondary danger-outline" type="button" onClick={onBeginDelete}>
+            Delete permanently
+          </button>
+        </div>
+      )}
+
+      {deleteConfirming && (
+        <div className="sleep-delete-confirmation" role="group" aria-labelledby={`${deleteInputID}-title`}>
+          <div>
+            <strong id={`${deleteInputID}-title`}>Permanent erase</strong>
+            <p>
+              Type DELETE to remove this observation and its correction history from local sleep
+              storage. Use suppress when you only want it excluded from estimates.
+            </p>
+          </div>
+          <label htmlFor={deleteInputID}>Deletion confirmation</label>
+          <input
+            id={deleteInputID}
+            type="text"
+            value={deleteConfirmation}
+            onChange={(event) => onDeleteConfirmationChange(event.target.value)}
+          />
+          <div className="sleep-delete-actions">
+            <button
+              className="button danger"
+              type="button"
+              onClick={onDelete}
+              disabled={busy || deleteConfirmation !== deleteConfirmationToken}
+            >
+              Erase entry
+            </button>
+            <button className="button secondary" type="button" onClick={onCancelDelete}>
+              Cancel erase
+            </button>
+          </div>
         </div>
       )}
 
@@ -1201,6 +1276,8 @@ export function DataSourcesScreen() {
   const [form, setForm] = useState<SleepEntryInput>(initialSleepForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<SleepEntryInput>(initialSleepForm);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
@@ -1252,6 +1329,8 @@ export function DataSourcesScreen() {
 
   const beginEdit = (entry: SleepEntry) => {
     setEditingId(entry.observationId);
+    setDeletingId(null);
+    setDeleteConfirmation("");
     setEditForm({
       startLocal: entry.effectiveStartLocal,
       endLocal: entry.effectiveEndLocal,
@@ -1286,6 +1365,7 @@ export function DataSourcesScreen() {
   const suppressEntry = async (entry: SleepEntry) => {
     setBusy(true);
     setFormError("");
+    setDeletingId(null);
     try {
       await suppressSleepEntry(entry.observationId);
       notifySleepDataChanged();
@@ -1293,6 +1373,34 @@ export function DataSourcesScreen() {
       await refreshEntries();
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Could not suppress entry.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const beginDelete = (entry: SleepEntry) => {
+    setDeletingId(entry.observationId);
+    setDeleteConfirmation("");
+    setEditingId(null);
+    setFormError("");
+  };
+
+  const deleteEntry = async (entry: SleepEntry) => {
+    if (deleteConfirmation !== deleteConfirmationToken) {
+      setFormError("Type DELETE to confirm permanent erasure.");
+      return;
+    }
+    setBusy(true);
+    setFormError("");
+    try {
+      const loaded = await deleteSleepObservation(entry.observationId, deleteConfirmation);
+      setEntriesData(loaded);
+      notifySleepDataChanged();
+      setStatusMessage("Sleep entry erased permanently.");
+      setDeletingId(null);
+      setDeleteConfirmation("");
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Could not erase sleep entry.");
     } finally {
       setBusy(false);
     }
@@ -1357,11 +1465,20 @@ export function DataSourcesScreen() {
                   editing={editingId === entry.observationId}
                   editForm={editForm}
                   busy={busy}
+                  deleteConfirming={deletingId === entry.observationId}
+                  deleteConfirmation={deletingId === entry.observationId ? deleteConfirmation : ""}
                   onBeginEdit={() => beginEdit(entry)}
                   onCancelEdit={() => setEditingId(null)}
                   onEditChange={setEditForm}
                   onSaveEdit={saveEdit}
                   onSuppress={() => void suppressEntry(entry)}
+                  onBeginDelete={() => beginDelete(entry)}
+                  onCancelDelete={() => {
+                    setDeletingId(null);
+                    setDeleteConfirmation("");
+                  }}
+                  onDeleteConfirmationChange={setDeleteConfirmation}
+                  onDelete={() => void deleteEntry(entry)}
                 />
               ))}
             </div>
@@ -1413,6 +1530,52 @@ export function DataSourcesScreen() {
 
 export function SettingsScreen() {
   const { theme, reducedStimulation, setTheme, setReducedStimulation } = useAppearanceContext();
+  const [exportedSleepData, setExportedSleepData] = useState<SleepDataExport | null>(null);
+  const [dataControlStatus, setDataControlStatus] = useState("");
+  const [dataControlError, setDataControlError] = useState("");
+  const [deleteAllConfirmation, setDeleteAllConfirmation] = useState("");
+  const [dataControlBusy, setDataControlBusy] = useState(false);
+
+  const handleExportSleepData = async () => {
+    setDataControlBusy(true);
+    setDataControlError("");
+    try {
+      const exported = await exportSleepData();
+      setExportedSleepData(exported);
+      const downloaded = downloadSleepDataExport(exported);
+      setDataControlStatus(
+        `${downloaded ? "Downloaded" : "Prepared"} ${exported.observationCount} ${
+          exported.observationCount === 1 ? "observation" : "observations"
+        } and ${exported.correctionCount} ${
+          exported.correctionCount === 1 ? "correction" : "corrections"
+        } from ${exported.generatedLabel}.`,
+      );
+    } catch (error) {
+      setDataControlError(error instanceof Error ? error.message : "Could not export sleep data.");
+    } finally {
+      setDataControlBusy(false);
+    }
+  };
+
+  const handleDeleteAllSleepData = async () => {
+    if (deleteAllConfirmation !== deleteConfirmationToken) {
+      setDataControlError("Type DELETE to confirm permanent erasure.");
+      return;
+    }
+    setDataControlBusy(true);
+    setDataControlError("");
+    try {
+      await deleteAllSleepData(deleteAllConfirmation);
+      notifySleepDataChanged();
+      setExportedSleepData(null);
+      setDeleteAllConfirmation("");
+      setDataControlStatus("All local sleep observations and correction history were erased.");
+    } catch (error) {
+      setDataControlError(error instanceof Error ? error.message : "Could not erase sleep data.");
+    } finally {
+      setDataControlBusy(false);
+    }
+  };
 
   return (
     <>
@@ -1483,18 +1646,77 @@ export function SettingsScreen() {
             <input type="checkbox" defaultChecked />
           </label>
         </div>
-        <div className="panel settings-section">
-          <div>
+        <div className="panel settings-section data-controls-panel">
+          <div className="data-control-intro">
             <p className="section-kicker">Local data</p>
             <h2>Storage</h2>
+            <p className="settings-copy">
+              Local sleep data stays on this device. Export produces v1 JSON with observation-set
+              and correction-set sections. Suppress appends a correction; erase permanently removes
+              local observations and their correction history.
+            </p>
           </div>
-          <p className="settings-copy">
-            All application data is stored on this device. Export and deletion controls will be
-            connected to the desktop service.
+          <div className="data-control-grid">
+            <section className="data-control-card" aria-labelledby="sleep-export-title">
+              <div>
+                <h3 id="sleep-export-title">Export sleep data</h3>
+                <p>
+                  Download a contract-shaped JSON file for backup, review, or later import tooling.
+                </p>
+              </div>
+              <button
+                className="button secondary"
+                type="button"
+                onClick={() => void handleExportSleepData()}
+                disabled={dataControlBusy}
+              >
+                Export sleep data
+              </button>
+              {exportedSleepData && (
+                <textarea
+                  className="export-preview"
+                  aria-label="Sleep data export JSON"
+                  readOnly
+                  rows={8}
+                  value={exportedSleepData.json}
+                />
+              )}
+            </section>
+            <section className="data-control-card danger-zone" aria-labelledby="sleep-delete-title">
+              <div>
+                <h3 id="sleep-delete-title">Erase local sleep data</h3>
+                <p>
+                  This hard-deletes local sleep observations and sleep correction history. It is not
+                  the append-only suppress action.
+                </p>
+              </div>
+              <label htmlFor="delete-all-sleep-data">
+                Type DELETE to erase all local sleep data
+                <input
+                  id="delete-all-sleep-data"
+                  type="text"
+                  value={deleteAllConfirmation}
+                  onChange={(event) => setDeleteAllConfirmation(event.target.value)}
+                />
+              </label>
+              <button
+                className="button danger"
+                type="button"
+                onClick={() => void handleDeleteAllSleepData()}
+                disabled={dataControlBusy || deleteAllConfirmation !== deleteConfirmationToken}
+              >
+                Erase all sleep data
+              </button>
+            </section>
+          </div>
+          {dataControlError && (
+            <p className="form-error" role="alert">
+              {dataControlError}
+            </p>
+          )}
+          <p className="form-status" role="status" aria-live="polite">
+            {dataControlStatus}
           </p>
-          <button className="button secondary" type="button">
-            Open data controls
-          </button>
         </div>
       </section>
     </>

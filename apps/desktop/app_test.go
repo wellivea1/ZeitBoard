@@ -170,6 +170,53 @@ func TestSleepEntryEditAndSuppressAreAppendOnly(t *testing.T) {
 	}
 }
 
+func TestSleepExportAndDeleteRequireExplicitErasure(t *testing.T) {
+	app := newTestApp(t)
+	location, _ := time.LoadLocation(defaultZoneID)
+	start := time.Now().In(location).Add(-10 * time.Hour).Truncate(time.Minute)
+	added, err := app.AddSleepEntry(SleepEntryInput{
+		StartLocal:     start.Format("2006-01-02T15:04"),
+		EndLocal:       start.Add(8 * time.Hour).Format("2006-01-02T15:04"),
+		ZoneID:         defaultZoneID,
+		Classification: storage.SleepClassificationPrincipal,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.SuppressSleepEntry(SleepSuppressInput{ObservationID: added.ObservationID}); err != nil {
+		t.Fatal(err)
+	}
+
+	exported, err := app.ExportSleepData()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exported.ObservationCount != 1 || exported.CorrectionCount != 1 {
+		t.Fatalf("suppressed entry should still export observation and correction: %#v", exported)
+	}
+	if !strings.Contains(exported.JSON, `"observation_set"`) || !strings.Contains(exported.JSON, added.ObservationID) {
+		t.Fatalf("export is not the contract-shaped sleep data: %s", exported.JSON)
+	}
+
+	if _, err := app.DeleteSleepObservation(SleepDeleteInput{ObservationID: added.ObservationID, Confirmation: "suppress"}); err == nil {
+		t.Fatal("delete should require the exact erasure confirmation")
+	}
+	entries, err := app.DeleteSleepObservation(SleepDeleteInput{ObservationID: added.ObservationID, Confirmation: deleteConfirm})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !entries.Empty || len(entries.Entries) != 0 {
+		t.Fatalf("delete should hard-erase the local sleep entry: %#v", entries)
+	}
+	exported, err = app.ExportSleepData()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exported.ObservationCount != 0 || exported.CorrectionCount != 0 || strings.Contains(exported.JSON, added.ObservationID) {
+		t.Fatalf("export still contains erased sleep data: %#v", exported)
+	}
+}
+
 func TestAddSleepEntryValidatesCivilRange(t *testing.T) {
 	app := newTestApp(t)
 	_, err := app.AddSleepEntry(SleepEntryInput{

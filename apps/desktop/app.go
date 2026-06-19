@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -25,6 +26,7 @@ import (
 const (
 	defaultZoneID = "America/New_York"
 	disclaimer    = "Estimates describe observed sleep-wake timing and uncertainty. This application does not provide medical advice."
+	deleteConfirm = "DELETE"
 )
 
 type App struct {
@@ -113,11 +115,28 @@ type SleepSuppressInput struct {
 	ObservationID string `json:"observationId"`
 }
 
+type SleepDeleteInput struct {
+	ObservationID string `json:"observationId"`
+	Confirmation  string `json:"confirmation"`
+}
+
+type SleepDeleteAllInput struct {
+	Confirmation string `json:"confirmation"`
+}
+
 type SleepEntriesDTO struct {
 	Status  string          `json:"status"`
 	Empty   bool            `json:"empty"`
 	Message string          `json:"message"`
 	Entries []SleepEntryDTO `json:"entries"`
+}
+
+type SleepDataExportDTO struct {
+	FileName         string `json:"fileName"`
+	JSON             string `json:"json"`
+	GeneratedLabel   string `json:"generatedLabel"`
+	ObservationCount int    `json:"observationCount"`
+	CorrectionCount  int    `json:"correctionCount"`
 }
 
 type SleepEntryDTO struct {
@@ -257,6 +276,56 @@ func (a *App) ListSleepEntries() (SleepEntriesDTO, error) {
 			Empty:   true,
 			Message: "Local storage is unavailable: " + err.Error(),
 		}, nil
+	}
+	return a.listSleepEntriesWithStore(context.Background(), store)
+}
+
+func (a *App) ExportSleepData() (SleepDataExportDTO, error) {
+	store, err := a.requireStore()
+	if err != nil {
+		return SleepDataExportDTO{}, err
+	}
+	exported, err := store.ExportSleepData(context.Background())
+	if err != nil {
+		return SleepDataExportDTO{}, err
+	}
+	encoded, err := json.MarshalIndent(exported, "", "  ")
+	if err != nil {
+		return SleepDataExportDTO{}, err
+	}
+	return SleepDataExportDTO{
+		FileName:         "zeitboard-sleep-export-" + exported.GeneratedAt.Format("20060102-150405") + ".json",
+		JSON:             string(encoded),
+		GeneratedLabel:   exported.GeneratedAt.Local().Format("Jan 2, 2006, 3:04 PM"),
+		ObservationCount: len(exported.ObservationSet.Observations),
+		CorrectionCount:  len(exported.CorrectionSet.Corrections),
+	}, nil
+}
+
+func (a *App) DeleteSleepObservation(input SleepDeleteInput) (SleepEntriesDTO, error) {
+	if err := requireDeleteConfirmation(input.Confirmation); err != nil {
+		return SleepEntriesDTO{}, err
+	}
+	store, err := a.requireStore()
+	if err != nil {
+		return SleepEntriesDTO{}, err
+	}
+	if err := store.DeleteSleepObservation(context.Background(), input.ObservationID); err != nil {
+		return SleepEntriesDTO{}, err
+	}
+	return a.listSleepEntriesWithStore(context.Background(), store)
+}
+
+func (a *App) DeleteAllSleepData(input SleepDeleteAllInput) (SleepEntriesDTO, error) {
+	if err := requireDeleteConfirmation(input.Confirmation); err != nil {
+		return SleepEntriesDTO{}, err
+	}
+	store, err := a.requireStore()
+	if err != nil {
+		return SleepEntriesDTO{}, err
+	}
+	if err := store.DeleteAllSleepData(context.Background()); err != nil {
+		return SleepEntriesDTO{}, err
 	}
 	return a.listSleepEntriesWithStore(context.Background(), store)
 }
@@ -801,6 +870,13 @@ func parseCivilTime(value string, location *time.Location) (time.Time, error) {
 
 func validInputClassification(value string) bool {
 	return value == storage.SleepClassificationPrincipal || value == storage.SleepClassificationNap
+}
+
+func requireDeleteConfirmation(value string) error {
+	if strings.TrimSpace(value) != deleteConfirm {
+		return errors.New("type DELETE to confirm permanent erasure")
+	}
+	return nil
 }
 
 func latestPrincipalSession(sessions []domain.SleepSession) (domain.SleepSession, bool) {

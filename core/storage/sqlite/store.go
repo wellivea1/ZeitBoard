@@ -36,6 +36,7 @@ func (s *Store) Close() error { return s.db.Close() }
 func (s *Store) Migrate(ctx context.Context) error {
 	statements := []string{
 		`PRAGMA foreign_keys = ON`,
+		`PRAGMA secure_delete = ON`,
 		`PRAGMA journal_mode = WAL`,
 		`PRAGMA busy_timeout = 5000`,
 		`CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -285,9 +286,13 @@ func (s *Store) DeleteAll(ctx context.Context) error {
 	if err := tx.Commit(); err != nil {
 		return err
 	}
+	return s.compactDeletedData(ctx)
+}
+
+func (s *Store) compactDeletedData(ctx context.Context) error {
 	if _, err := s.db.ExecContext(ctx, `PRAGMA wal_checkpoint(TRUNCATE)`); err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `VACUUM`)
+	_, err := s.db.ExecContext(ctx, `VACUUM`)
 	return err
 }

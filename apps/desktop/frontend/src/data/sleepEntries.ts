@@ -46,6 +46,14 @@ export interface SleepEntriesData {
   entries: SleepEntry[];
 }
 
+export interface SleepDataExport {
+  fileName: string;
+  json: string;
+  generatedLabel: string;
+  observationCount: number;
+  correctionCount: number;
+}
+
 type UnknownRecord = Record<string, unknown>;
 type WailsMethod = (input?: unknown) => Promise<unknown>;
 
@@ -88,6 +96,10 @@ function str(value: unknown): string | undefined {
 
 function classification(value: unknown): SleepClassification | undefined {
   return value === "principal" || value === "nap" ? value : undefined;
+}
+
+function nonNegativeInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 ? value : undefined;
 }
 
 function normalizeCorrection(value: unknown): SleepCorrection | undefined {
@@ -189,6 +201,25 @@ export function normalizeSleepEntries(value: unknown): SleepEntriesData | undefi
   return { status, empty: value.empty, message, entries };
 }
 
+export function normalizeSleepDataExport(value: unknown): SleepDataExport | undefined {
+  if (!isRecord(value)) return undefined;
+  const fileName = str(value.fileName);
+  const json = str(value.json);
+  const generatedLabel = str(value.generatedLabel);
+  const observationCount = nonNegativeInteger(value.observationCount);
+  const correctionCount = nonNegativeInteger(value.correctionCount);
+  if (
+    !fileName ||
+    !json ||
+    !generatedLabel ||
+    observationCount === undefined ||
+    correctionCount === undefined
+  ) {
+    return undefined;
+  }
+  return { fileName, json, generatedLabel, observationCount, correctionCount };
+}
+
 export async function loadSleepEntries(
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<SleepEntriesData> {
@@ -209,6 +240,42 @@ export async function addSleepEntry(
   const entry = normalizeEntry(result);
   if (!entry) throw new Error("Manual sleep entry service returned an invalid entry.");
   return entry;
+}
+
+export async function exportSleepData(
+  root: WailsRoot = globalThis as unknown as WailsRoot,
+): Promise<SleepDataExport> {
+  const method = findMethod(root, ["ExportSleepData"]);
+  if (!method) throw new Error("Sleep data export service is unavailable.");
+  const result = await method();
+  const exported = normalizeSleepDataExport(result);
+  if (!exported) throw new Error("Sleep data export service returned an invalid export.");
+  return exported;
+}
+
+export async function deleteSleepObservation(
+  observationId: string,
+  confirmation: string,
+  root: WailsRoot = globalThis as unknown as WailsRoot,
+): Promise<SleepEntriesData> {
+  const method = findMethod(root, ["DeleteSleepObservation"]);
+  if (!method) throw new Error("Sleep data deletion service is unavailable.");
+  const result = await method({ observationId, confirmation });
+  const entries = normalizeSleepEntries(result);
+  if (!entries) throw new Error("Sleep data deletion service returned an invalid entry list.");
+  return entries;
+}
+
+export async function deleteAllSleepData(
+  confirmation: string,
+  root: WailsRoot = globalThis as unknown as WailsRoot,
+): Promise<SleepEntriesData> {
+  const method = findMethod(root, ["DeleteAllSleepData"]);
+  if (!method) throw new Error("Sleep data deletion service is unavailable.");
+  const result = await method({ confirmation });
+  const entries = normalizeSleepEntries(result);
+  if (!entries) throw new Error("Sleep data deletion service returned an invalid entry list.");
+  return entries;
 }
 
 export async function correctSleepEntry(

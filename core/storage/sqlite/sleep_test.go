@@ -159,3 +159,125 @@ func TestLocalSleepCorrectionsAreAppendOnlyAndSuperseded(t *testing.T) {
 		t.Fatalf("superseding correction failed to retain full effective start: got %s want %s", got, firstStart)
 	}
 }
+
+func TestLocalSleepExportAndDeleteDistinguishSuppressFromErasure(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "non24.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	start := time.Date(2026, 3, 3, 5, 0, 0, 0, time.UTC)
+	end := start.Add(8 * time.Hour)
+	obs := testSleepObservation("obs_sleep_03", start, end)
+	if err := store.AppendSleepObservation(ctx, obs); err != nil {
+		t.Fatal(err)
+	}
+	excluded := true
+	suppression := SleepCorrectionRecord{
+		CorrectionID:        "corr_sleep_04",
+		TargetObservationID: obs.ObservationID,
+		CreatedAt:           end.Add(time.Minute),
+		Reason:              CorrectionReasonUserEdit,
+		Changes:             SleepCorrectionChanges{Excluded: &excluded},
+	}
+	if err := store.AppendSleepCorrection(ctx, suppression); err != nil {
+		t.Fatal(err)
+	}
+
+	exported, err := store.ExportSleepData(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exported.SchemaVersion != "v1" || exported.ObservationSet.SchemaVersion != "v1" || exported.CorrectionSet.SchemaVersion != "v1" {
+		t.Fatalf("export did not preserve v1 set shape: %#v", exported)
+	}
+	if len(exported.ObservationSet.Observations) != 1 || len(exported.CorrectionSet.Corrections) != 1 {
+		t.Fatalf("suppression should export raw observation and append-only correction: %#v", exported)
+	}
+	effective, err := store.CorrectedSleepSessions(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(effective) != 1 || !effective[0].Suppressed {
+		t.Fatalf("suppression should only affect effective reads: %#v", effective)
+	}
+
+	if err := store.DeleteSleepObservation(ctx, obs.ObservationID); err != nil {
+		t.Fatal(err)
+	}
+	exported, err = store.ExportSleepData(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(exported.ObservationSet.Observations) != 0 || len(exported.CorrectionSet.Corrections) != 0 {
+		t.Fatalf("delete should erase observation and correction history: %#v", exported)
+	}
+	if exported.ObservationSet.Observations == nil || exported.CorrectionSet.Corrections == nil {
+		t.Fatal("empty export should keep contract arrays, not null slices")
+	}
+	effective, err = store.CorrectedSleepSessions(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(effective) != 0 {
+		t.Fatalf("deleted sleep entry still appears in effective reads: %#v", effective)
+	}
+}
+
+func TestDeleteAllSleepDataErasesLocalSleepTables(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "non24.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	start := time.Date(2026, 3, 4, 5, 0, 0, 0, time.UTC)
+	end := start.Add(8 * time.Hour)
+	obs := testSleepObservation("obs_sleep_04", start, end)
+	if err := store.AppendSleepObservation(ctx, obs); err != nil {
+		t.Fatal(err)
+	}
+	correctedStart := start.Add(20 * time.Minute)
+	correction := SleepCorrectionRecord{
+		CorrectionID:        "corr_sleep_05",
+		TargetObservationID: obs.ObservationID,
+		CreatedAt:           end.Add(time.Minute),
+		Reason:              CorrectionReasonUserEdit,
+		Changes:             SleepCorrectionChanges{StartAt: &correctedStart},
+	}
+	if err := store.AppendSleepCorrection(ctx, correction); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := store.DeleteAllSleepData(ctx); err != nil {
+		t.Fatal(err)
+	}
+	exported, err := store.ExportSleepData(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(exported.ObservationSet.Observations)+len(exported.CorrectionSet.Corrections) != 0 {
+		t.Fatalf("local sleep data remains after delete all: %#v", exported)
+	}
+	if exported.ObservationSet.Observations == nil || exported.CorrectionSet.Corrections == nil {
+		t.Fatal("empty delete-all export should keep contract arrays, not null slices")
+	}
+}
+
+func testSleepObservation(id string, start, end time.Time) SleepObservationRecord {
+	return SleepObservationRecord{
+		ObservationID: id,
+		Kind:          SleepKindEpisode,
+		StartAt:       start,
+		EndAt:         end,
+		ZoneID:        "America/New_York",
+		Sleep:         SleepObservationDetails{Classification: SleepClassificationPrincipal},
+		Provenance: SleepObservationProvenance{
+			AcquisitionMethod: ProvenanceAcquisitionManual,
+			EvidenceStatus:    ProvenanceEvidenceUserReported,
+			RecordedAt:        end,
+			SourceRecordID:    "desktop-manual",
+		},
+	}
+}

@@ -124,9 +124,13 @@ hit-rate; a 3h mid-series phase jump (relative coordination) drives median point
 error to ~3h while the engine correctly *drops* its confidence — and the
 forecast-window hit-rate stays 1.0, confirming the predicted windows are honestly
 wide (so point error, not hit-rate, is the sharper quality signal, and window width
-is a candidate for future tightening). Approval decisions are still in-session (no
-write-back); persisting decisions, import hardening, export/deletion UI, backend
-sync of the same contract-shaped local records, running the harness on
+is a candidate for future tightening). Local sleep export and erasure controls
+have landed too: Settings exports v1 contract-shaped sleep JSON (`observation_set`
+and `correction_set`) and can hard-erase all local sleep observations/correction
+history after explicit confirmation, while Data Sources can hard-erase one entry
+separately from append-only suppress. Approval decisions are still in-session (no
+write-back); persisting decisions, import hardening, backend sync/tombstone
+semantics for the same contract-shaped local records, running the harness on
 participant-controlled real history, and full onboarding remain phase-two work.
 
 Exit criteria: a fatigued user can read current state, recent drift, and the

@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { addSleepEntry, loadSleepEntries, normalizeSleepEntries } from "./sleepEntries";
+import {
+  addSleepEntry,
+  deleteAllSleepData,
+  deleteSleepObservation,
+  exportSleepData,
+  loadSleepEntries,
+  normalizeSleepDataExport,
+  normalizeSleepEntries,
+} from "./sleepEntries";
 
 const entry = {
   observationId: "obs_sleep_01",
@@ -56,6 +64,31 @@ describe("sleep entry adapter", () => {
     ).toBeUndefined();
   });
 
+  it("normalizes contract-shaped sleep exports", () => {
+    expect(
+      normalizeSleepDataExport({
+        fileName: "zeitboard-sleep-export-20260302-060000.json",
+        json: '{"schema_version":"v1","observation_set":{"observations":[]}}',
+        generatedLabel: "Mar 2, 2026, 6:00 AM",
+        observationCount: 1,
+        correctionCount: 2,
+      }),
+    ).toMatchObject({
+      fileName: "zeitboard-sleep-export-20260302-060000.json",
+      observationCount: 1,
+      correctionCount: 2,
+    });
+    expect(
+      normalizeSleepDataExport({
+        fileName: "bad.json",
+        json: "{}",
+        generatedLabel: "now",
+        observationCount: -1,
+        correctionCount: 0,
+      }),
+    ).toBeUndefined();
+  });
+
   it("loads and adds through Wails methods", async () => {
     const root = {
       go: {
@@ -82,5 +115,54 @@ describe("sleep entry adapter", () => {
         classification: "principal",
       }, root),
     ).resolves.toMatchObject({ observationId: "obs_sleep_01" });
+  });
+
+  it("exports and deletes through Wails methods", async () => {
+    const deleted = {
+      status: "empty",
+      empty: true,
+      message: "No sleep entries yet.",
+      entries: [],
+    };
+    let singleDeleteInput: unknown;
+    let deleteAllInput: unknown;
+    const root = {
+      go: {
+        main: {
+          App: {
+            ExportSleepData: async () => ({
+              fileName: "zeitboard-sleep-export-20260302-060000.json",
+              json: '{"schema_version":"v1","observation_set":{"observations":[]}}',
+              generatedLabel: "Mar 2, 2026, 6:00 AM",
+              observationCount: 1,
+              correctionCount: 1,
+            }),
+            DeleteSleepObservation: async (input: unknown) => {
+              singleDeleteInput = input;
+              return deleted;
+            },
+            DeleteAllSleepData: async (input: unknown) => {
+              deleteAllInput = input;
+              return deleted;
+            },
+          },
+        },
+      },
+    };
+
+    await expect(exportSleepData(root)).resolves.toMatchObject({
+      observationCount: 1,
+      correctionCount: 1,
+    });
+    await expect(deleteSleepObservation("obs_sleep_01", "DELETE", root)).resolves.toMatchObject({
+      empty: true,
+      entries: [],
+    });
+    await expect(deleteAllSleepData("DELETE", root)).resolves.toMatchObject({
+      empty: true,
+      entries: [],
+    });
+    expect(singleDeleteInput).toEqual({ observationId: "obs_sleep_01", confirmation: "DELETE" });
+    expect(deleteAllInput).toEqual({ confirmation: "DELETE" });
   });
 });

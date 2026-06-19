@@ -268,6 +268,75 @@ describe("desktop navigation", () => {
     expect(await screen.findByText("Local sleep data follow-up")).toBeVisible();
   });
 
+  it("hard-deletes a sleep entry through the Data Sources confirmation flow", async () => {
+    window.location.hash = "#/data-sources";
+    const entry = {
+      observationId: "obs_sleep_01",
+      startLocal: "2026-03-01T22:00",
+      endLocal: "2026-03-02T06:00",
+      startLabel: "Sun Mar 1, 10:00 PM EST",
+      endLabel: "Mon Mar 2, 6:00 AM EST",
+      zoneId: "America/New_York",
+      classification: "principal",
+      effectiveStartLocal: "2026-03-01T22:00",
+      effectiveEndLocal: "2026-03-02T06:00",
+      effectiveStartLabel: "Sun Mar 1, 10:00 PM EST",
+      effectiveEndLabel: "Mon Mar 2, 6:00 AM EST",
+      effectiveClassification: "principal",
+      durationLabel: "8 hours 0 minutes",
+      suppressed: false,
+      sourceLabel: "Manual sleep log",
+      provenanceLabel: "manual / user reported",
+      history: [
+        {
+          correctionId: "corr_sleep_01",
+          createdLabel: "Mar 2, 6:15 AM",
+          reason: "user edit",
+          summary: "excluded from estimates",
+        },
+      ],
+    };
+    const deleteSleep = vi.fn(async () => ({
+      status: "empty",
+      empty: true,
+      message: "No sleep entries yet.",
+      entries: [],
+    }));
+    (globalThis as { go?: unknown }).go = {
+      main: {
+        App: {
+          ListSleepEntries: async () => ({
+            status: "ready",
+            empty: false,
+            message: "1 local sleep entry stored on this device.",
+            entries: [entry],
+          }),
+          DeleteSleepObservation: deleteSleep,
+        },
+      },
+    };
+
+    render(<App />);
+
+    expect(await screen.findByText(/Sun Mar 1, 10:00 PM EST to Mon Mar 2, 6:00 AM EST/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Suppress from estimates" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Delete permanently" }));
+    const eraseButton = screen.getByRole("button", { name: "Erase entry" });
+    expect(eraseButton).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Deletion confirmation"), {
+      target: { value: "DELETE" },
+    });
+    fireEvent.click(eraseButton);
+
+    expect(await screen.findByText("Sleep entry erased permanently.")).toBeVisible();
+    expect(deleteSleep).toHaveBeenCalledWith({
+      observationId: "obs_sleep_01",
+      confirmation: "DELETE",
+    });
+    expect(screen.getByRole("heading", { name: "No sleep entries yet" })).toBeVisible();
+  });
+
   it("applies Settings appearance controls through the visible UI", () => {
     window.location.hash = "#/settings";
     render(
@@ -301,5 +370,55 @@ describe("desktop navigation", () => {
       "content",
       "#f3f0e9",
     );
+  });
+
+  it("exports and erases all local sleep data from Settings", async () => {
+    window.location.hash = "#/settings";
+    const exportSleep = vi.fn(async () => ({
+      fileName: "zeitboard-sleep-export-20260302-060000.json",
+      json: '{"schema_version":"v1","observation_set":{"observations":[]},"correction_set":{"corrections":[]}}',
+      generatedLabel: "Mar 2, 2026, 6:00 AM",
+      observationCount: 1,
+      correctionCount: 1,
+    }));
+    const deleteAll = vi.fn(async () => ({
+      status: "empty",
+      empty: true,
+      message: "No sleep entries yet.",
+      entries: [],
+    }));
+    (globalThis as { go?: unknown }).go = {
+      main: {
+        App: {
+          ExportSleepData: exportSleep,
+          DeleteAllSleepData: deleteAll,
+        },
+      },
+    };
+
+    render(
+      <AppearanceProvider>
+        <App />
+      </AppearanceProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Export sleep data" }));
+
+    expect(await screen.findByText(/1 observation and 1 correction/)).toBeVisible();
+    expect(screen.getByLabelText("Sleep data export JSON")).toHaveValue(
+      '{"schema_version":"v1","observation_set":{"observations":[]},"correction_set":{"corrections":[]}}',
+    );
+    const eraseAll = screen.getByRole("button", { name: "Erase all sleep data" });
+    expect(eraseAll).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText(/Type DELETE to erase all local sleep data/), {
+      target: { value: "DELETE" },
+    });
+    fireEvent.click(eraseAll);
+
+    expect(
+      await screen.findByText("All local sleep observations and correction history were erased."),
+    ).toBeVisible();
+    expect(deleteAll).toHaveBeenCalledWith({ confirmation: "DELETE" });
   });
 });
