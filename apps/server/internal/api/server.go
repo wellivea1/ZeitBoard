@@ -128,6 +128,13 @@ func (s *Server) handleListProposals(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "proposal list failed")
 		return
 	}
+	// Any enrolled device may decide a pending proposal (ADR-0016), so the
+	// list carries the one-use decision token for pending, unexpired items.
+	records, err = s.store.AttachDecisionTokens(r.Context(), records, s.now())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "proposal list failed")
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"schema_version": syncmodel.SchemaVersion,
 		"proposals":      records,

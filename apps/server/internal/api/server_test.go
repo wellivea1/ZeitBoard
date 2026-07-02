@@ -345,6 +345,65 @@ func TestDirectProposalEndpointCreatesPendingProposalWithoutLLM(t *testing.T) {
 	}
 }
 
+func TestAnyEnrolledDeviceCanDecideViaListedToken(t *testing.T) {
+	h := newTestHarness(t)
+	agent := h.registerDevice(t, "mcp-agent")
+	desktop := h.registerDevice(t, "desktop")
+
+	// Device A (the agent) creates a pending proposal.
+	status, body := h.request(t, http.MethodPost, "/v1/proposals", agent, directProposalRequestBody("propose_place_task"))
+	if status != http.StatusCreated {
+		t.Fatalf("create status = %d body = %s", status, body)
+	}
+
+	// Device B (the desktop) lists proposals and receives a decision token for
+	// the pending item, without having created it.
+	status, body = h.request(t, http.MethodGet, "/v1/proposals", desktop, "")
+	if status != http.StatusOK {
+		t.Fatalf("list status = %d body = %s", status, body)
+	}
+	var list struct {
+		Proposals []struct {
+			ProposalID    string               `json:"proposalId"`
+			Status        store.ProposalStatus `json:"status"`
+			DecisionToken string               `json:"decisionToken"`
+		} `json:"proposals"`
+	}
+	if err := json.Unmarshal(body, &list); err != nil {
+		t.Fatal(err)
+	}
+	if len(list.Proposals) != 1 || list.Proposals[0].Status != store.ProposalPending {
+		t.Fatalf("list = %+v, want one pending proposal", list)
+	}
+	if list.Proposals[0].DecisionToken == "" {
+		t.Fatal("pending proposal must carry a decision token for enrolled devices")
+	}
+
+	// Device B decides it; the decision consumes the one-use nonce.
+	decision := fmt.Sprintf(`{"decision":"approved","token":%q}`, list.Proposals[0].DecisionToken)
+	status, body = h.request(t, http.MethodPost, "/v1/proposals/"+list.Proposals[0].ProposalID+"/decision", desktop, decision)
+	if status != http.StatusOK {
+		t.Fatalf("cross-device decision status = %d body = %s", status, body)
+	}
+	// Replay (by anyone, including the creator) is rejected.
+	status, _ = h.request(t, http.MethodPost, "/v1/proposals/"+list.Proposals[0].ProposalID+"/decision", agent, decision)
+	if status != http.StatusConflict {
+		t.Fatalf("replay status = %d, want %d", status, http.StatusConflict)
+	}
+	// After the decision, the list no longer carries a token for it.
+	status, body = h.request(t, http.MethodGet, "/v1/proposals", desktop, "")
+	if status != http.StatusOK {
+		t.Fatalf("relist status = %d", status)
+	}
+	list.Proposals = nil // reset: omitempty fields would otherwise survive re-unmarshal
+	if err := json.Unmarshal(body, &list); err != nil {
+		t.Fatal(err)
+	}
+	if len(list.Proposals) != 1 || list.Proposals[0].Status != store.ProposalApproved || list.Proposals[0].DecisionToken != "" {
+		t.Fatalf("decided proposal listing = %+v, want approved without token", list.Proposals[0])
+	}
+}
+
 func TestDirectProposalEndpointRequiresAuthAndRejectsRevokedToken(t *testing.T) {
 	h := newTestHarness(t)
 	first := h.registerDeviceFull(t, "desktop")

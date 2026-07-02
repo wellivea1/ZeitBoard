@@ -290,6 +290,192 @@ func TestSyncNowPullsRemoteRecordsAndDedupesOwnRecords(t *testing.T) {
 	}
 }
 
+func TestPullSkipsOrphanCorrectionWithoutWedgingCursor(t *testing.T) {
+	app := newTestApp(t)
+	start := time.Date(2026, 3, 12, 4, 0, 0, 0, time.UTC)
+	// A correction whose target observation is absent everywhere (e.g. the user
+	// hard-erased the observation locally): a permanent orphan for this device.
+	orphanCorrection := storage.SleepCorrectionRecord{
+		CorrectionID:        "corr_orphan_01",
+		TargetObservationID: "obs_erased_01",
+		CreatedAt:           start.Add(10 * time.Hour),
+		Reason:              storage.CorrectionReasonUserEdit,
+		Changes:             storage.SleepCorrectionChanges{EndAt: timePtr(start.Add(8 * time.Hour))},
+	}
+	liveObservation := testSyncObservation("obs_live_01", start)
+	pulls := 0
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/devices":
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(registerDeviceResponse{SchemaVersion: "v1", DeviceID: "device_desktop", Token: "orphan-token"})
+		case "/v1/sync/pull":
+			pulls++
+			if r.URL.Query().Get("since") != "0" && pulls > 1 {
+				_ = json.NewEncoder(w).Encode(syncPullResponse{SchemaVersion: "v1", Cursor: 7, Records: []syncEnvelope{}})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(syncPullResponse{
+				SchemaVersion: "v1",
+				Cursor:        7,
+				Records: []syncEnvelope{
+					{Seq: 6, RecordID: liveObservation.ObservationID, Kind: storage.SleepSyncKindObservation, DeviceID: "phone_device", CreatedAt: liveObservation.Provenance.RecordedAt, Payload: mustJSON(t, liveObservation)},
+					{Seq: 7, RecordID: orphanCorrection.CorrectionID, Kind: storage.SleepSyncKindCorrection, DeviceID: "phone_device", CreatedAt: orphanCorrection.CreatedAt, Payload: mustJSON(t, orphanCorrection)},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	configureBackendForTest(t, app, server.URL)
+	status, err := app.SyncNow()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Status != "connected" || status.LastError != "" {
+		t.Fatalf("orphan correction must not fail the sync: %#v", status)
+	}
+	if status.PulledCount != 1 || status.SkippedCount != 1 {
+		t.Fatalf("expected 1 pulled + 1 skipped, got %#v", status)
+	}
+	if status.Cursor != 7 {
+		t.Fatalf("cursor must advance past the orphan, got %d", status.Cursor)
+	}
+	// A second sync starts after the orphan and stays healthy (not wedged).
+	second, err := app.SyncNow()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.Status != "connected" || second.SkippedCount != 0 || second.Cursor != 7 {
+		t.Fatalf("second sync should be clean: %#v", second)
+	}
+}
+
+func TestBackendProposalsListAndCrossDeviceDecision(t *testing.T) {
+	app := newTestApp(t)
+	payload := mustJSON(t, map[string]any{
+		"proposal_id": "proposal_abc123def456",
+		"action_id":   "propose_place_task",
+		"schedule_proposals": map[string]any{
+			"schema_version":    "v1",
+			"request_id":        "proposal_abc123def456",
+			"generated_at":      "2026-03-12T10:00:00Z",
+			"algorithm_version": "assistant-scheduler-v1",
+			"proposals": []map[string]any{{
+				"proposal_id": "proposal_abc123def456",
+				"task_id":     "taxes",
+				"start_at":    "2026-03-12T15:00:00Z",
+				"end_at":      "2026-03-12T16:30:00Z",
+				"zone_id":     "America/New_York",
+				"confidence":  map[string]any{"level": "medium", "reasons": []string{"scheduler"}},
+				"explanation_codes": []string{
+					"within_predicted_waking_window",
+				},
+			}},
+			"unplaced": []any{},
+		},
+		"answer": "Queued for approval.",
+	})
+	var decisions []map[string]string
+	decided := false
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/v1/devices":
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(registerDeviceResponse{SchemaVersion: "v1", DeviceID: "device_desktop", Token: "proposal-token"})
+		case r.URL.Path == "/v1/proposals" && r.Method == http.MethodGet:
+			record := map[string]any{
+				"proposalId": "proposal_abc123def456",
+				"actionId":   "propose_place_task",
+				"deviceId":   "device_agent",
+				"status":     "pending",
+				"createdAt":  "2026-03-12T10:00:00Z",
+				"updatedAt":  "2026-03-12T10:00:00Z",
+				"expiresAt":  "2026-03-12T10:15:00Z",
+				"payload":    json.RawMessage(payload),
+			}
+			if decided {
+				record["status"] = "approved"
+			} else {
+				record["decisionToken"] = "one-use-token"
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"schema_version": "v1", "proposals": []any{record}})
+		case strings.HasSuffix(r.URL.Path, "/decision") && r.Method == http.MethodPost:
+			var body map[string]string
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			decisions = append(decisions, body)
+			decided = true
+			_ = json.NewEncoder(w).Encode(map[string]any{"schema_version": "v1"})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	configureBackendForTest(t, app, server.URL)
+	list, err := app.GetBackendProposals()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list.Status != "ok" || len(list.Proposals) != 1 {
+		t.Fatalf("unexpected proposal list: %#v", list)
+	}
+	proposal := list.Proposals[0]
+	if proposal.Status != "pending" || proposal.DecisionToken != "one-use-token" {
+		t.Fatalf("pending proposal should carry the decision token: %#v", proposal)
+	}
+	if !strings.Contains(proposal.Title, "taxes") || proposal.Confidence != "Medium" {
+		t.Fatalf("proposal should be humanized from the payload: %#v", proposal)
+	}
+	if len(proposal.ReasonLabels) == 0 {
+		t.Fatalf("proposal should carry reason labels: %#v", proposal)
+	}
+
+	refreshed, err := app.DecideBackendProposal(BackendProposalDecisionInput{
+		ProposalID: proposal.ProposalID,
+		Decision:   "approved",
+		Token:      proposal.DecisionToken,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(decisions) != 1 || decisions[0]["decision"] != "approved" || decisions[0]["token"] != "one-use-token" {
+		t.Fatalf("decision endpoint payload = %#v", decisions)
+	}
+	if refreshed.Status != "ok" || len(refreshed.Proposals) != 1 || refreshed.Proposals[0].Status != "approved" {
+		t.Fatalf("refreshed list should show the decision: %#v", refreshed)
+	}
+
+	if _, err := app.DecideBackendProposal(BackendProposalDecisionInput{ProposalID: "x", Decision: "applied", Token: "t"}); err == nil {
+		t.Fatal("invalid decision verbs must be rejected")
+	}
+}
+
+func TestBackendProposalsOffWhenSyncDisabled(t *testing.T) {
+	app := newTestApp(t)
+	calls := 0
+	previousClient := newBackendHTTPClient
+	newBackendHTTPClient = func(bool) *http.Client {
+		return &http.Client{
+			Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+				calls++
+				return nil, http.ErrServerClosed
+			}),
+		}
+	}
+	t.Cleanup(func() { newBackendHTTPClient = previousClient })
+
+	list, err := app.GetBackendProposals()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list.Status != "off" || len(list.Proposals) != 0 || calls != 0 {
+		t.Fatalf("sync-off proposals should be an offline no-op: %#v calls=%d", list, calls)
+	}
+}
+
 func TestSyncedOverviewAndRhythmUseServerEstimateAndFallbackLocal(t *testing.T) {
 	app := newTestApp(t)
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

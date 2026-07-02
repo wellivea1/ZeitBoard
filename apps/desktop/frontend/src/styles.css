@@ -1652,7 +1652,8 @@ button {
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-.sr-table {
+.sr-table,
+.sr-only {
   position: absolute;
   width: 1px;
   height: 1px;

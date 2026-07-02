@@ -52,6 +52,7 @@ type BackendSyncStatusDTO struct {
 	PendingPushCount   int    `json:"pendingPushCount"`
 	PushedCount        int    `json:"pushedCount"`
 	PulledCount        int    `json:"pulledCount"`
+	SkippedCount       int    `json:"skippedCount"`
 	Cursor             int64  `json:"cursor"`
 }
 
@@ -149,7 +150,7 @@ type desktopBackendClient struct {
 
 func (a *App) GetBackendSyncStatus() (BackendSyncStatusDTO, error) {
 	cfg, _ := a.loadBackendSyncConfig()
-	return a.backendSyncStatus(cfg, 0, 0), nil
+	return a.backendSyncStatus(cfg, 0, 0, 0), nil
 }
 
 func (a *App) ConfigureBackendSync(input BackendSyncInput) (BackendSyncStatusDTO, error) {
@@ -182,17 +183,17 @@ func (a *App) ConfigureBackendSync(input BackendSyncInput) (BackendSyncStatusDTO
 	if err != nil {
 		cfg.LastError = sanitizeBackendError(err)
 		_ = a.saveBackendSyncConfig(cfg)
-		return a.backendSyncStatus(cfg, 0, 0), errors.New(cfg.LastError)
+		return a.backendSyncStatus(cfg, 0, 0, 0), errors.New(cfg.LastError)
 	}
 	if response.DeviceID == "" || response.Token == "" {
 		cfg.LastError = "backend enrollment returned an invalid device credential"
 		_ = a.saveBackendSyncConfig(cfg)
-		return a.backendSyncStatus(cfg, 0, 0), errors.New(cfg.LastError)
+		return a.backendSyncStatus(cfg, 0, 0, 0), errors.New(cfg.LastError)
 	}
 	if err := a.saveBackendSyncToken(response.Token); err != nil {
 		cfg.LastError = "could not store backend device token"
 		_ = a.saveBackendSyncConfig(cfg)
-		return a.backendSyncStatus(cfg, 0, 0), errors.New(cfg.LastError)
+		return a.backendSyncStatus(cfg, 0, 0, 0), errors.New(cfg.LastError)
 	}
 	cfg.Enabled = true
 	cfg.DeviceID = response.DeviceID
@@ -200,7 +201,7 @@ func (a *App) ConfigureBackendSync(input BackendSyncInput) (BackendSyncStatusDTO
 	if err := a.saveBackendSyncConfig(cfg); err != nil {
 		return BackendSyncStatusDTO{}, err
 	}
-	return a.backendSyncStatus(cfg, 0, 0), nil
+	return a.backendSyncStatus(cfg, 0, 0, 0), nil
 }
 
 func (a *App) DisableBackendSync() (BackendSyncStatusDTO, error) {
@@ -213,7 +214,7 @@ func (a *App) DisableBackendSync() (BackendSyncStatusDTO, error) {
 	if err := a.deleteBackendSyncToken(); err != nil {
 		return BackendSyncStatusDTO{}, err
 	}
-	return a.backendSyncStatus(cfg, 0, 0), nil
+	return a.backendSyncStatus(cfg, 0, 0, 0), nil
 }
 
 func (a *App) SyncNow() (BackendSyncStatusDTO, error) {
@@ -223,34 +224,34 @@ func (a *App) SyncNow() (BackendSyncStatusDTO, error) {
 			cfg.LastError = sanitizeBackendError(err)
 			_ = a.saveBackendSyncConfig(cfg)
 		}
-		return a.backendSyncStatus(cfg, 0, 0), nil
+		return a.backendSyncStatus(cfg, 0, 0, 0), nil
 	}
-	pushed, pulled, syncErr := a.syncSleepRecords(context.Background(), cfg, token)
+	pushed, pulled, skipped, syncErr := a.syncSleepRecords(context.Background(), cfg, token)
 	if syncErr != nil {
 		cfg.LastError = sanitizeBackendError(syncErr)
 		_ = a.saveBackendSyncConfig(cfg)
-		return a.backendSyncStatus(cfg, pushed, pulled), nil
+		return a.backendSyncStatus(cfg, pushed, pulled, skipped), nil
 	}
 	cfg.LastSyncAt = time.Now().UTC()
 	cfg.LastError = ""
 	if err := a.saveBackendSyncConfig(cfg); err != nil {
 		return BackendSyncStatusDTO{}, err
 	}
-	return a.backendSyncStatus(cfg, pushed, pulled), nil
+	return a.backendSyncStatus(cfg, pushed, pulled, skipped), nil
 }
 
-func (a *App) syncSleepRecords(ctx context.Context, cfg backendSyncConfig, token string) (int, int, error) {
+func (a *App) syncSleepRecords(ctx context.Context, cfg backendSyncConfig, token string) (int, int, int, error) {
 	store, err := a.requireStore()
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 	client := newDesktopBackendClient(cfg, token)
 	pushed, err := a.pushSleepRecords(ctx, store, client)
 	if err != nil {
-		return pushed, 0, err
+		return pushed, 0, 0, err
 	}
-	pulled, err := a.pullSleepRecords(ctx, store, client, cfg.DeviceID)
-	return pushed, pulled, err
+	pulled, skipped, err := a.pullSleepRecords(ctx, store, client, cfg.DeviceID)
+	return pushed, pulled, skipped, err
 }
 
 func (a *App) pushSleepRecords(ctx context.Context, store *storage.Store, client desktopBackendClient) (int, error) {
@@ -280,16 +281,17 @@ func (a *App) pushSleepRecords(ctx context.Context, store *storage.Store, client
 	return len(records), nil
 }
 
-func (a *App) pullSleepRecords(ctx context.Context, store *storage.Store, client desktopBackendClient, deviceID string) (int, error) {
+func (a *App) pullSleepRecords(ctx context.Context, store *storage.Store, client desktopBackendClient, deviceID string) (int, int, error) {
 	cursor, err := store.SleepSyncCursor(ctx)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	var response syncPullResponse
 	if err := client.getJSON(ctx, fmt.Sprintf("/v1/sync/pull?since=%d", cursor), &response); err != nil {
-		return 0, err
+		return 0, 0, err
 	}
 	inserted := 0
+	skipped := 0
 	corrections := make([]storage.SleepCorrectionRecord, 0)
 	for _, record := range response.Records {
 		if record.DeviceID == deviceID {
@@ -299,11 +301,11 @@ func (a *App) pullSleepRecords(ctx context.Context, store *storage.Store, client
 		case storage.SleepSyncKindObservation:
 			var observation storage.SleepObservationRecord
 			if err := json.Unmarshal(record.Payload, &observation); err != nil {
-				return inserted, err
+				return inserted, skipped, err
 			}
 			ok, err := store.InsertSyncedSleepObservation(ctx, observation)
 			if err != nil {
-				return inserted, err
+				return inserted, skipped, err
 			}
 			if ok {
 				inserted++
@@ -311,26 +313,34 @@ func (a *App) pullSleepRecords(ctx context.Context, store *storage.Store, client
 		case storage.SleepSyncKindCorrection:
 			var correction storage.SleepCorrectionRecord
 			if err := json.Unmarshal(record.Payload, &correction); err != nil {
-				return inserted, err
+				return inserted, skipped, err
 			}
 			corrections = append(corrections, correction)
 		default:
-			return inserted, fmt.Errorf("unsupported synced record kind %q", record.Kind)
+			return inserted, skipped, fmt.Errorf("unsupported synced record kind %q", record.Kind)
 		}
 	}
 	for _, correction := range corrections {
 		ok, err := store.InsertSyncedSleepCorrection(ctx, correction)
+		if errors.Is(err, storage.ErrSleepObservationMissing) {
+			// The target observation is not in the local store — usually
+			// because the user hard-erased it (ADR-0014). The correction is a
+			// permanent orphan for this device: skip it so a single
+			// unresolvable record can never wedge the pull cursor.
+			skipped++
+			continue
+		}
 		if err != nil {
-			return inserted, err
+			return inserted, skipped, err
 		}
 		if ok {
 			inserted++
 		}
 	}
 	if err := store.SaveSleepSyncCursor(ctx, response.Cursor); err != nil {
-		return inserted, err
+		return inserted, skipped, err
 	}
-	return inserted, nil
+	return inserted, skipped, nil
 }
 
 func (a *App) serverOverview(ctx context.Context, now time.Time) (OverviewDTO, bool) {
@@ -429,6 +439,188 @@ func overviewDTOFromServer(response serverOverviewResponse, now time.Time) Overv
 	}
 }
 
+// --- Synced proposals (approvals unification, ADR-0016) ---
+
+type backendProposalRecord struct {
+	ProposalID    string          `json:"proposalId"`
+	ActionID      string          `json:"actionId"`
+	DeviceID      string          `json:"deviceId"`
+	Status        string          `json:"status"`
+	CreatedAt     time.Time       `json:"createdAt"`
+	UpdatedAt     time.Time       `json:"updatedAt"`
+	ExpiresAt     time.Time       `json:"expiresAt"`
+	Payload       json.RawMessage `json:"payload"`
+	DecisionToken string          `json:"decisionToken"`
+}
+
+type backendProposalListResponse struct {
+	SchemaVersion string                  `json:"schema_version"`
+	Proposals     []backendProposalRecord `json:"proposals"`
+}
+
+type backendProposalPayload struct {
+	ScheduleProposals struct {
+		Proposals []struct {
+			TaskID     string    `json:"task_id"`
+			StartAt    time.Time `json:"start_at"`
+			EndAt      time.Time `json:"end_at"`
+			ZoneID     string    `json:"zone_id"`
+			Confidence struct {
+				Level   string   `json:"level"`
+				Reasons []string `json:"reasons"`
+			} `json:"confidence"`
+			ExplanationCodes []string `json:"explanation_codes"`
+		} `json:"proposals"`
+	} `json:"schedule_proposals"`
+	Answer string `json:"answer"`
+}
+
+type BackendProposalDTO struct {
+	ProposalID    string   `json:"proposalId"`
+	Action        string   `json:"action"`
+	Status        string   `json:"status"`
+	Title         string   `json:"title"`
+	Window        string   `json:"window"`
+	Confidence    string   `json:"confidence"`
+	ReasonLabels  []string `json:"reasonLabels"`
+	Answer        string   `json:"answer,omitempty"`
+	CreatedLabel  string   `json:"createdLabel"`
+	ExpiresLabel  string   `json:"expiresLabel"`
+	DecisionToken string   `json:"decisionToken,omitempty"`
+}
+
+type BackendProposalsDTO struct {
+	Status    string               `json:"status"`
+	Message   string               `json:"message,omitempty"`
+	Proposals []BackendProposalDTO `json:"proposals"`
+}
+
+type BackendProposalDecisionInput struct {
+	ProposalID string `json:"proposalId"`
+	Decision   string `json:"decision"`
+	Token      string `json:"token"`
+}
+
+// GetBackendProposals lists the synced backend's proposals (assistant/agent
+// origins) with their one-use decision tokens so this device can decide them.
+// When sync is off it reports status "off" without touching the network.
+func (a *App) GetBackendProposals() (BackendProposalsDTO, error) {
+	cfg, token, err := a.requireBackendSync()
+	if err != nil {
+		if !cfg.Enabled {
+			return BackendProposalsDTO{Status: "off", Proposals: []BackendProposalDTO{}}, nil
+		}
+		return BackendProposalsDTO{Status: "error", Message: sanitizeBackendError(err), Proposals: []BackendProposalDTO{}}, nil
+	}
+	return a.fetchBackendProposals(context.Background(), cfg, token), nil
+}
+
+// DecideBackendProposal approves or rejects a pending synced proposal via the
+// backend decision endpoint, consuming the one-use token, then returns the
+// refreshed list. Nothing is applied locally; the backend records the decision.
+func (a *App) DecideBackendProposal(input BackendProposalDecisionInput) (BackendProposalsDTO, error) {
+	if input.Decision != "approved" && input.Decision != "rejected" {
+		return BackendProposalsDTO{}, errors.New("decision must be approved or rejected")
+	}
+	if input.ProposalID == "" || input.Token == "" {
+		return BackendProposalsDTO{}, errors.New("proposal id and decision token are required")
+	}
+	cfg, token, err := a.requireBackendSync()
+	if err != nil {
+		return BackendProposalsDTO{Status: "error", Message: sanitizeBackendError(err), Proposals: []BackendProposalDTO{}}, nil
+	}
+	client := newDesktopBackendClient(cfg, token)
+	payload := map[string]string{"decision": input.Decision, "token": input.Token}
+	var decided map[string]json.RawMessage
+	if err := client.postJSON(context.Background(), "/v1/proposals/"+url.PathEscape(input.ProposalID)+"/decision", payload, &decided); err != nil {
+		result := a.fetchBackendProposals(context.Background(), cfg, token)
+		result.Status = "error"
+		result.Message = sanitizeBackendError(err)
+		return result, nil
+	}
+	return a.fetchBackendProposals(context.Background(), cfg, token), nil
+}
+
+func (a *App) fetchBackendProposals(ctx context.Context, cfg backendSyncConfig, token string) BackendProposalsDTO {
+	client := newDesktopBackendClient(cfg, token)
+	var response backendProposalListResponse
+	if err := client.getJSON(ctx, "/v1/proposals", &response); err != nil {
+		a.recordBackendSyncError(cfg, err)
+		return BackendProposalsDTO{Status: "error", Message: sanitizeBackendError(err), Proposals: []BackendProposalDTO{}}
+	}
+	proposals := make([]BackendProposalDTO, 0, len(response.Proposals))
+	for _, record := range response.Proposals {
+		proposals = append(proposals, backendProposalDTO(record))
+	}
+	return BackendProposalsDTO{Status: "ok", Proposals: proposals}
+}
+
+func backendProposalDTO(record backendProposalRecord) BackendProposalDTO {
+	dto := BackendProposalDTO{
+		ProposalID:    record.ProposalID,
+		Action:        record.ActionID,
+		Status:        record.Status,
+		Title:         backendProposalTitle(record.ActionID, ""),
+		Window:        "Window unavailable",
+		Confidence:    "Low",
+		ReasonLabels:  []string{},
+		CreatedLabel:  "Proposed " + record.CreatedAt.Local().Format("Jan 2, 3:04 PM"),
+		ExpiresLabel:  "expires " + record.ExpiresAt.Local().Format("Jan 2, 3:04 PM"),
+		DecisionToken: record.DecisionToken,
+	}
+	var payload backendProposalPayload
+	if err := json.Unmarshal(record.Payload, &payload); err != nil {
+		return dto
+	}
+	dto.Answer = payload.Answer
+	if len(payload.ScheduleProposals.Proposals) == 0 {
+		return dto
+	}
+	item := payload.ScheduleProposals.Proposals[0]
+	dto.Title = backendProposalTitle(record.ActionID, item.TaskID)
+	dto.Window = civilWindow(item.StartAt, item.EndAt, item.ZoneID)
+	dto.Confidence = titleConfidence(item.Confidence.Level)
+	dto.ReasonLabels = reasonLabels(item.ExplanationCodes)
+	return dto
+}
+
+func backendProposalTitle(action, taskID string) string {
+	verb := "Schedule change"
+	switch action {
+	case "propose_move_task":
+		verb = "Move task"
+	case "propose_place_task":
+		verb = "Place task"
+	case "propose_reminder_shift":
+		verb = "Shift reminder"
+	}
+	if taskID == "" {
+		return verb
+	}
+	return verb + " “" + taskID + "”"
+}
+
+func civilWindow(start, end time.Time, zoneID string) string {
+	location := time.Local
+	if zoneID != "" {
+		if loaded, err := time.LoadLocation(zoneID); err == nil {
+			location = loaded
+		}
+	}
+	return start.In(location).Format("Mon Jan 2, 3:04 PM") + " to " + end.In(location).Format("3:04 PM MST")
+}
+
+func titleConfidence(level string) string {
+	switch strings.ToLower(level) {
+	case "high":
+		return "High"
+	case "medium", "moderate":
+		return "Medium"
+	default:
+		return "Low"
+	}
+}
+
 func (a *App) requireBackendSync() (backendSyncConfig, string, error) {
 	cfg, err := a.loadBackendSyncConfig()
 	if err != nil {
@@ -457,7 +649,7 @@ func (a *App) requireBackendSync() (backendSyncConfig, string, error) {
 	return cfg, token, nil
 }
 
-func (a *App) backendSyncStatus(cfg backendSyncConfig, pushed, pulled int) BackendSyncStatusDTO {
+func (a *App) backendSyncStatus(cfg backendSyncConfig, pushed, pulled, skipped int) BackendSyncStatusDTO {
 	status := "off"
 	if cfg.Enabled {
 		status = "connected"
@@ -486,6 +678,7 @@ func (a *App) backendSyncStatus(cfg backendSyncConfig, pushed, pulled int) Backe
 		PendingPushCount:   pending,
 		PushedCount:        pushed,
 		PulledCount:        pulled,
+		SkippedCount:       skipped,
 		Cursor:             cursor,
 	}
 }

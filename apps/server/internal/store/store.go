@@ -459,6 +459,44 @@ func (s *Store) ListProposals(ctx context.Context) ([]ProposalRecord, error) {
 	return records, rows.Err()
 }
 
+// AttachDecisionTokens re-mints the one-use decision token for each pending,
+// unexpired proposal so any of the user's enrolled devices can decide it (not
+// only the creating device). The token is deterministic over the stored claims
+// and the proposal's single unused nonce, so re-minting never widens the
+// one-use guarantee: the first decision consumes the nonce for every copy.
+func (s *Store) AttachDecisionTokens(ctx context.Context, records []ProposalRecord, now time.Time) ([]ProposalRecord, error) {
+	for i := range records {
+		record := &records[i]
+		if record.Status != ProposalPending || !record.ExpiresAt.After(now.UTC()) {
+			continue
+		}
+		var nonce string
+		err := s.db.QueryRowContext(ctx,
+			`SELECT nonce FROM approval_nonces WHERE proposal_id = ? AND used_at = ''`,
+			record.ID,
+		).Scan(&nonce)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		token, err := s.signApprovalClaims(approvalClaims{
+			ProposalID: record.ID,
+			ActionID:   record.ActionID,
+			DeviceID:   record.DeviceID,
+			TargetHash: payloadHash(record.Payload),
+			Nonce:      nonce,
+			ExpiresAt:  record.ExpiresAt.UTC().Unix(),
+		})
+		if err != nil {
+			return nil, err
+		}
+		record.DecisionToken = token
+	}
+	return records, nil
+}
+
 func (s *Store) DecideProposal(ctx context.Context, proposalID, deviceID string, decision ProposalStatus, token string, decidedAt time.Time, audit json.RawMessage) (ProposalRecord, error) {
 	if decision != ProposalApproved && decision != ProposalRejected {
 		return ProposalRecord{}, errors.New("unsupported proposal decision")
@@ -513,7 +551,11 @@ func (s *Store) DecideProposal(ctx context.Context, proposalID, deviceID string,
 	if record.Status != ProposalPending {
 		return ProposalRecord{}, ErrProposalNotPending
 	}
-	if record.ActionID != claims.ActionID || record.DeviceID != claims.DeviceID || record.DeviceID != deviceID {
+	// The claims must match the stored proposal (creator device included), but
+	// the DECIDING device may be any of the user's enrolled devices — approval
+	// is a single-user, cross-device action, authenticated and audited with the
+	// deciding device's identity (ADR-0016).
+	if record.ActionID != claims.ActionID || record.DeviceID != claims.DeviceID {
 		return ProposalRecord{}, ErrInvalidApprovalToken
 	}
 	if payloadHash(record.Payload) != claims.TargetHash {

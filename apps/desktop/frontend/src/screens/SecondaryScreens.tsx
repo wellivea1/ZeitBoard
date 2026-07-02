@@ -23,6 +23,12 @@ import {
   type RhythmSource,
 } from "../data/rhythm";
 import {
+  decideBackendProposal,
+  loadBackendProposals,
+  type BackendProposal,
+  type BackendProposalsData,
+} from "../data/backendProposals";
+import {
   addSleepEntry,
   correctSleepEntry,
   deleteAllSleepData,
@@ -642,6 +648,143 @@ export function TasksScreen() {
   );
 }
 
+function SyncedProposalCard({
+  proposal,
+  busy,
+  onDecide,
+}: {
+  proposal: BackendProposal;
+  busy: boolean;
+  onDecide: (proposal: BackendProposal, decision: "approved" | "rejected") => void;
+}) {
+  return (
+    <article className="panel proposal-card" data-origin="assistant">
+      <div className="proposal-header">
+        <span className="proposal-kind">Synced</span>
+        <div>
+          <p className="section-kicker">Backend proposal</p>
+          <h2>{proposal.title}</h2>
+        </div>
+        <ConfidenceDots value={proposal.confidence} />
+      </div>
+      <p className="proposal-change">
+        <strong>{proposal.window}</strong>
+        {proposal.answer && <small>{proposal.answer}</small>}
+      </p>
+      {proposal.reasonLabels.length > 0 && (
+        <div className="proposal-reasons" aria-label="Proposal reasons">
+          {proposal.reasonLabels.map((reason) => (
+            <span className="task-chip" key={reason}>
+              {reason}
+            </span>
+          ))}
+        </div>
+      )}
+      <p className="proposal-meta">
+        {proposal.createdLabel} - {proposal.expiresLabel}
+      </p>
+      <div className="approval-actions">
+        <button
+          className="button secondary"
+          type="button"
+          disabled={busy || !proposal.decisionToken}
+          onClick={() => onDecide(proposal, "rejected")}
+        >
+          Reject proposal
+        </button>
+        <button
+          className="button primary"
+          type="button"
+          disabled={busy || !proposal.decisionToken}
+          onClick={() => onDecide(proposal, "approved")}
+        >
+          Accept proposal
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function SyncedProposalsPanel() {
+  const [data, setData] = useState<BackendProposalsData>({ status: "off", proposals: [] });
+  const [busy, setBusy] = useState(false);
+  const [announcement, setAnnouncement] = useState("");
+
+  useEffect(() => {
+    let current = true;
+    void loadBackendProposals().then((result) => {
+      if (current) setData(result);
+    });
+    return () => {
+      current = false;
+    };
+  }, []);
+
+  // Omit, don't disable: with sync off this surface simply is not there.
+  if (data.status === "off") return null;
+
+  const pending = data.proposals.filter((proposal) => proposal.status === "pending");
+  const decided = data.proposals.length - pending.length;
+
+  const onDecide = (proposal: BackendProposal, decision: "approved" | "rejected") => {
+    if (!proposal.decisionToken) return;
+    setBusy(true);
+    void decideBackendProposal({
+      proposalId: proposal.proposalId,
+      decision,
+      token: proposal.decisionToken,
+    }).then((result) => {
+      setBusy(false);
+      setData(result);
+      setAnnouncement(
+        result.status === "ok"
+          ? `${decision === "approved" ? "Approved" : "Rejected"} ${proposal.title}.`
+          : (result.message ?? "The decision could not be recorded."),
+      );
+    });
+  };
+
+  return (
+    <section className="panel synced-proposals-panel" aria-labelledby="synced-proposals-title">
+      <div className="panel-heading">
+        <div>
+          <p className="section-kicker">Synced backend</p>
+          <h2 id="synced-proposals-title">Assistant and agent proposals</h2>
+        </div>
+        <div className="status-cluster">
+          <span className="sync-dot" data-mode="backend" aria-hidden="true" />
+          <span>{pending.length} pending</span>
+        </div>
+      </div>
+      {data.status === "error" && (
+        <p className="diff-note">{data.message ?? "Could not reach the synced backend."}</p>
+      )}
+      {pending.length > 0 ? (
+        <div className="proposal-stack">
+          {pending.map((proposal) => (
+            <SyncedProposalCard
+              proposal={proposal}
+              busy={busy}
+              onDecide={onDecide}
+              key={proposal.proposalId}
+            />
+          ))}
+        </div>
+      ) : (
+        data.status === "ok" && (
+          <p className="phase-two-copy">
+            No synced proposals are waiting.{" "}
+            {decided > 0 && `${decided} earlier ${decided === 1 ? "decision is" : "decisions are"} recorded on the backend.`}
+          </p>
+        )
+      )}
+      <p role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </p>
+    </section>
+  );
+}
+
 export function ApprovalsScreen() {
   const { pending, pendingCount, unplaced, source } = useApprovals();
   const byOrigin = (origin: ProposalOrigin) =>
@@ -689,6 +832,8 @@ export function ApprovalsScreen() {
             </p>
           </div>
         )}
+
+        <SyncedProposalsPanel />
 
         {unplaced.length > 0 && (
           <section className="panel unplaced-panel" aria-labelledby="approvals-unplaced-title">

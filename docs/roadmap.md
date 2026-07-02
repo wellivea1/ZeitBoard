@@ -30,6 +30,10 @@ there rather than being repeated here.
 - Opt-in, off-by-default backend sync: enrollment, push/pull with dedupe,
   TLS-verified, token stored outside config; Overview/Rhythm can render the
   server's estimate, labeled distinctly, with local fallback (ADR-0015).
+- Unified approvals: the desktop lists the backend's assistant/agent proposals
+  and decides them via the one-use token (any enrolled device may decide;
+  audited); orphan synced corrections are skipped so one bad record can never
+  wedge the pull cursor (ADR-0016).
 - Theming (Auto/Light/Dark), reduced stimulation, WCAG 2.2 AA contrast pass
   with a regression test (ADR-0005).
 
@@ -60,14 +64,11 @@ there rather than being repeated here.
 The actionable near-term plan. Each slice is self-contained and lands with an
 ADR when it changes architecture.
 
-1. **Close the control loop — approvals unification + sync robustness.**
-   The desktop's in-session approval queue and the backend's persisted
-   proposals are still two disconnected worlds. When sync is on, the desktop
-   lists backend proposals and approves/rejects them via the one-use-token
-   decision endpoint (audited); the in-session queue remains the offline path.
-   Include the known pull-robustness fix: one unresolvable synced correction
-   (missing target) must be skipped/quarantined, not allowed to wedge the pull
-   cursor forever.
+1. ~~**Close the control loop — approvals unification + sync robustness.**~~
+   ✅ Delivered (ADR-0016): cross-device decisions via listed one-use tokens, a
+   "Synced backend" approvals panel (absent when sync is off), and orphan
+   synced corrections skipped instead of wedging the pull cursor. Remaining
+   niceties (batch review, expiry surfacing) fold into later queue work.
 2. **Server-side erasure (tombstones).** Local hard-delete does not yet
    propagate; the sync log is append-only by design. Add an authenticated
    erasure endpoint + tombstone semantics so ADR-0014's erasure right extends

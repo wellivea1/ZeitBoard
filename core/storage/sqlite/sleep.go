@@ -622,11 +622,16 @@ func validateSleepCorrection(record SleepCorrectionRecord) error {
 	return nil
 }
 
+// ErrSleepObservationMissing marks operations whose target observation is not
+// in the local store — e.g. a synced correction whose observation was erased
+// locally. Callers may treat it as a permanent, skippable orphan.
+var ErrSleepObservationMissing = errors.New("sleep observation does not exist")
+
 func (s *Store) requireSleepObservation(ctx context.Context, observationID string) error {
 	var exists int
 	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM local_sleep_observations WHERE observation_id = ?`, observationID).Scan(&exists)
 	if errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("sleep observation %s does not exist", observationID)
+		return fmt.Errorf("%w: %s", ErrSleepObservationMissing, observationID)
 	}
 	return err
 }
