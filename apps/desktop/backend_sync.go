@@ -53,6 +53,8 @@ type BackendSyncStatusDTO struct {
 	PushedCount        int    `json:"pushedCount"`
 	PulledCount        int    `json:"pulledCount"`
 	SkippedCount       int    `json:"skippedCount"`
+	ErasuresPushed     int    `json:"erasuresPushed"`
+	TombstonesApplied  int    `json:"tombstonesApplied"`
 	Cursor             int64  `json:"cursor"`
 }
 
@@ -109,6 +111,22 @@ type syncPullResponse struct {
 	Records       []syncEnvelope `json:"records"`
 }
 
+type syncEraseRequest struct {
+	SchemaVersion string   `json:"schema_version"`
+	RecordIDs     []string `json:"record_ids"`
+}
+
+type syncEraseResponse struct {
+	SchemaVersion string `json:"schema_version"`
+	Erased        int    `json:"erased"`
+	Tombstones    int    `json:"tombstones"`
+	Cursor        int64  `json:"cursor"`
+}
+
+type syncTombstonePayload struct {
+	RecordID string `json:"record_id"`
+}
+
 type serverOverviewResponse struct {
 	SchemaVersion            string               `json:"schema_version"`
 	Status                   string               `json:"status"`
@@ -150,7 +168,7 @@ type desktopBackendClient struct {
 
 func (a *App) GetBackendSyncStatus() (BackendSyncStatusDTO, error) {
 	cfg, _ := a.loadBackendSyncConfig()
-	return a.backendSyncStatus(cfg, 0, 0, 0), nil
+	return a.backendSyncStatusCounts(cfg, syncCounts{}), nil
 }
 
 func (a *App) ConfigureBackendSync(input BackendSyncInput) (BackendSyncStatusDTO, error) {
@@ -183,17 +201,17 @@ func (a *App) ConfigureBackendSync(input BackendSyncInput) (BackendSyncStatusDTO
 	if err != nil {
 		cfg.LastError = sanitizeBackendError(err)
 		_ = a.saveBackendSyncConfig(cfg)
-		return a.backendSyncStatus(cfg, 0, 0, 0), errors.New(cfg.LastError)
+		return a.backendSyncStatusCounts(cfg, syncCounts{}), errors.New(cfg.LastError)
 	}
 	if response.DeviceID == "" || response.Token == "" {
 		cfg.LastError = "backend enrollment returned an invalid device credential"
 		_ = a.saveBackendSyncConfig(cfg)
-		return a.backendSyncStatus(cfg, 0, 0, 0), errors.New(cfg.LastError)
+		return a.backendSyncStatusCounts(cfg, syncCounts{}), errors.New(cfg.LastError)
 	}
 	if err := a.saveBackendSyncToken(response.Token); err != nil {
 		cfg.LastError = "could not store backend device token"
 		_ = a.saveBackendSyncConfig(cfg)
-		return a.backendSyncStatus(cfg, 0, 0, 0), errors.New(cfg.LastError)
+		return a.backendSyncStatusCounts(cfg, syncCounts{}), errors.New(cfg.LastError)
 	}
 	cfg.Enabled = true
 	cfg.DeviceID = response.DeviceID
@@ -201,7 +219,7 @@ func (a *App) ConfigureBackendSync(input BackendSyncInput) (BackendSyncStatusDTO
 	if err := a.saveBackendSyncConfig(cfg); err != nil {
 		return BackendSyncStatusDTO{}, err
 	}
-	return a.backendSyncStatus(cfg, 0, 0, 0), nil
+	return a.backendSyncStatusCounts(cfg, syncCounts{}), nil
 }
 
 func (a *App) DisableBackendSync() (BackendSyncStatusDTO, error) {
@@ -214,7 +232,7 @@ func (a *App) DisableBackendSync() (BackendSyncStatusDTO, error) {
 	if err := a.deleteBackendSyncToken(); err != nil {
 		return BackendSyncStatusDTO{}, err
 	}
-	return a.backendSyncStatus(cfg, 0, 0, 0), nil
+	return a.backendSyncStatusCounts(cfg, syncCounts{}), nil
 }
 
 func (a *App) SyncNow() (BackendSyncStatusDTO, error) {
@@ -224,34 +242,72 @@ func (a *App) SyncNow() (BackendSyncStatusDTO, error) {
 			cfg.LastError = sanitizeBackendError(err)
 			_ = a.saveBackendSyncConfig(cfg)
 		}
-		return a.backendSyncStatus(cfg, 0, 0, 0), nil
+		return a.backendSyncStatusCounts(cfg, syncCounts{}), nil
 	}
-	pushed, pulled, skipped, syncErr := a.syncSleepRecords(context.Background(), cfg, token)
+	counts, syncErr := a.syncSleepRecords(context.Background(), cfg, token)
 	if syncErr != nil {
 		cfg.LastError = sanitizeBackendError(syncErr)
 		_ = a.saveBackendSyncConfig(cfg)
-		return a.backendSyncStatus(cfg, pushed, pulled, skipped), nil
+		return a.backendSyncStatusCounts(cfg, counts), nil
 	}
 	cfg.LastSyncAt = time.Now().UTC()
 	cfg.LastError = ""
 	if err := a.saveBackendSyncConfig(cfg); err != nil {
 		return BackendSyncStatusDTO{}, err
 	}
-	return a.backendSyncStatus(cfg, pushed, pulled, skipped), nil
+	return a.backendSyncStatusCounts(cfg, counts), nil
 }
 
-func (a *App) syncSleepRecords(ctx context.Context, cfg backendSyncConfig, token string) (int, int, int, error) {
+type syncCounts struct {
+	pushed            int
+	pulled            int
+	skipped           int
+	erasuresPushed    int
+	tombstonesApplied int
+}
+
+func (a *App) syncSleepRecords(ctx context.Context, cfg backendSyncConfig, token string) (syncCounts, error) {
+	counts := syncCounts{}
 	store, err := a.requireStore()
 	if err != nil {
-		return 0, 0, 0, err
+		return counts, err
 	}
 	client := newDesktopBackendClient(cfg, token)
-	pushed, err := a.pushSleepRecords(ctx, store, client)
+	counts.pushed, err = a.pushSleepRecords(ctx, store, client)
 	if err != nil {
-		return pushed, 0, 0, err
+		return counts, err
 	}
-	pulled, skipped, err := a.pullSleepRecords(ctx, store, client, cfg.DeviceID)
-	return pushed, pulled, skipped, err
+	counts.erasuresPushed, err = a.pushSleepErasures(ctx, store, client)
+	if err != nil {
+		return counts, err
+	}
+	counts.pulled, counts.skipped, counts.tombstonesApplied, err = a.pullSleepRecords(ctx, store, client, cfg.DeviceID)
+	return counts, err
+}
+
+// pushSleepErasures propagates local hard-deletes of already-pushed records to
+// the backend, which hard-deletes the synced copies and mints tombstones so
+// every other device erases too (ADR-0017).
+func (a *App) pushSleepErasures(ctx context.Context, store *storage.Store, client desktopBackendClient) (int, error) {
+	ids, err := store.PendingSleepErasures(ctx)
+	if err != nil {
+		return 0, err
+	}
+	confirmed := 0
+	const batchSize = 100
+	for start := 0; start < len(ids); start += batchSize {
+		end := min(start+batchSize, len(ids))
+		batch := ids[start:end]
+		var response syncEraseResponse
+		if err := client.postJSON(ctx, "/v1/sync/erase", syncEraseRequest{SchemaVersion: "v1", RecordIDs: batch}, &response); err != nil {
+			return confirmed, err
+		}
+		if err := store.ClearSleepErasures(ctx, batch); err != nil {
+			return confirmed, err
+		}
+		confirmed += len(batch)
+	}
+	return confirmed, nil
 }
 
 func (a *App) pushSleepRecords(ctx context.Context, store *storage.Store, client desktopBackendClient) (int, error) {
@@ -281,18 +337,20 @@ func (a *App) pushSleepRecords(ctx context.Context, store *storage.Store, client
 	return len(records), nil
 }
 
-func (a *App) pullSleepRecords(ctx context.Context, store *storage.Store, client desktopBackendClient, deviceID string) (int, int, error) {
+func (a *App) pullSleepRecords(ctx context.Context, store *storage.Store, client desktopBackendClient, deviceID string) (int, int, int, error) {
 	cursor, err := store.SleepSyncCursor(ctx)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 	var response syncPullResponse
 	if err := client.getJSON(ctx, fmt.Sprintf("/v1/sync/pull?since=%d", cursor), &response); err != nil {
-		return 0, 0, err
+		return 0, 0, 0, err
 	}
 	inserted := 0
 	skipped := 0
+	tombstonesApplied := 0
 	corrections := make([]storage.SleepCorrectionRecord, 0)
+	tombstones := make([]string, 0)
 	for _, record := range response.Records {
 		if record.DeviceID == deviceID {
 			continue
@@ -301,11 +359,11 @@ func (a *App) pullSleepRecords(ctx context.Context, store *storage.Store, client
 		case storage.SleepSyncKindObservation:
 			var observation storage.SleepObservationRecord
 			if err := json.Unmarshal(record.Payload, &observation); err != nil {
-				return inserted, skipped, err
+				return inserted, skipped, tombstonesApplied, err
 			}
 			ok, err := store.InsertSyncedSleepObservation(ctx, observation)
 			if err != nil {
-				return inserted, skipped, err
+				return inserted, skipped, tombstonesApplied, err
 			}
 			if ok {
 				inserted++
@@ -313,11 +371,23 @@ func (a *App) pullSleepRecords(ctx context.Context, store *storage.Store, client
 		case storage.SleepSyncKindCorrection:
 			var correction storage.SleepCorrectionRecord
 			if err := json.Unmarshal(record.Payload, &correction); err != nil {
-				return inserted, skipped, err
+				return inserted, skipped, tombstonesApplied, err
 			}
 			corrections = append(corrections, correction)
+		case "tombstone":
+			var payload syncTombstonePayload
+			if err := json.Unmarshal(record.Payload, &payload); err != nil {
+				return inserted, skipped, tombstonesApplied, err
+			}
+			id := payload.RecordID
+			if id == "" {
+				id = record.RecordID
+			}
+			// Applied after observations/corrections so a tombstone in the
+			// same batch always wins over the record it erases.
+			tombstones = append(tombstones, id)
 		default:
-			return inserted, skipped, fmt.Errorf("unsupported synced record kind %q", record.Kind)
+			return inserted, skipped, tombstonesApplied, fmt.Errorf("unsupported synced record kind %q", record.Kind)
 		}
 	}
 	for _, correction := range corrections {
@@ -331,16 +401,25 @@ func (a *App) pullSleepRecords(ctx context.Context, store *storage.Store, client
 			continue
 		}
 		if err != nil {
-			return inserted, skipped, err
+			return inserted, skipped, tombstonesApplied, err
 		}
 		if ok {
 			inserted++
 		}
 	}
-	if err := store.SaveSleepSyncCursor(ctx, response.Cursor); err != nil {
-		return inserted, skipped, err
+	for _, id := range tombstones {
+		applied, err := store.EraseSyncedSleepRecord(ctx, id)
+		if err != nil {
+			return inserted, skipped, tombstonesApplied, err
+		}
+		if applied {
+			tombstonesApplied++
+		}
 	}
-	return inserted, skipped, nil
+	if err := store.SaveSleepSyncCursor(ctx, response.Cursor); err != nil {
+		return inserted, skipped, tombstonesApplied, err
+	}
+	return inserted, skipped, tombstonesApplied, nil
 }
 
 func (a *App) serverOverview(ctx context.Context, now time.Time) (OverviewDTO, bool) {
@@ -649,7 +728,7 @@ func (a *App) requireBackendSync() (backendSyncConfig, string, error) {
 	return cfg, token, nil
 }
 
-func (a *App) backendSyncStatus(cfg backendSyncConfig, pushed, pulled, skipped int) BackendSyncStatusDTO {
+func (a *App) backendSyncStatusCounts(cfg backendSyncConfig, counts syncCounts) BackendSyncStatusDTO {
 	status := "off"
 	if cfg.Enabled {
 		status = "connected"
@@ -676,9 +755,11 @@ func (a *App) backendSyncStatus(cfg backendSyncConfig, pushed, pulled, skipped i
 		LastSyncLabel:      lastSyncLabel(cfg.LastSyncAt),
 		LastError:          cfg.LastError,
 		PendingPushCount:   pending,
-		PushedCount:        pushed,
-		PulledCount:        pulled,
-		SkippedCount:       skipped,
+		PushedCount:        counts.pushed,
+		PulledCount:        counts.pulled,
+		SkippedCount:       counts.skipped,
+		ErasuresPushed:     counts.erasuresPushed,
+		TombstonesApplied:  counts.tombstonesApplied,
 		Cursor:             cursor,
 	}
 }

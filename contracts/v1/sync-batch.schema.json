@@ -88,7 +88,7 @@
         },
         "kind": {
           "type": "string",
-          "enum": ["observation", "correction"]
+          "enum": ["observation", "correction", "tombstone"]
         },
         "deviceId": {
           "$ref": "common.schema.json#/$defs/identifier"
@@ -113,8 +113,21 @@
         },
         {
           "$ref": "correction-set.schema.json#/$defs/correction"
+        },
+        {
+          "$ref": "#/$defs/tombstonePayload"
         }
       ]
+    },
+    "tombstonePayload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["record_id"],
+      "properties": {
+        "record_id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        }
+      }
     },
     "kindPayloadMatch": {
       "allOf": [
@@ -148,6 +161,23 @@
             "properties": {
               "payload": {
                 "$ref": "correction-set.schema.json#/$defs/correction"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "tombstone"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "$ref": "#/$defs/tombstonePayload"
               }
             }
           }

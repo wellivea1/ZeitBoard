@@ -2106,9 +2106,11 @@ export function SettingsScreen() {
             <p className="section-kicker">Local data</p>
             <h2>Storage</h2>
             <p className="settings-copy">
-              Local sleep data stays on this device. Export produces v1 JSON with observation-set
-              and correction-set sections. Suppress appends a correction; erase permanently removes
-              local observations and their correction history.
+              Export produces v1 JSON with observation-set and correction-set sections. Suppress
+              appends a correction; erase permanently removes local observations and their
+              correction history. If backend sync is on, erasure also propagates on the next sync:
+              the server hard-deletes its copy and a tombstone tells your other devices to erase
+              theirs — nothing can restore an erased record.
             </p>
           </div>
           <div className="data-control-grid">

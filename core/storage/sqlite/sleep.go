@@ -418,6 +418,21 @@ func (s *Store) DeleteSleepObservation(ctx context.Context, observationID string
 	if err != nil {
 		return err
 	}
+	// Records that already reached the synced backend need server-side erasure
+	// too (ADR-0017): enqueue them in the erasure outbox before their tracking
+	// rows disappear. Never-pushed records never left this device, so they
+	// need no tombstone.
+	erasedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO local_sleep_erasures(record_id, erased_at)
+		SELECT record_id, ? FROM local_sleep_sync_records
+		WHERE pushed_at != ''
+			AND (record_id = ?
+				OR record_id IN (
+					SELECT correction_id FROM local_sleep_corrections WHERE target_observation_id = ?
+				))`, erasedAt, observationID, observationID); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM local_sleep_sync_records
 		WHERE record_id = ?
 			OR record_id IN (
@@ -455,6 +470,12 @@ func (s *Store) DeleteAllSleepData(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	erasedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO local_sleep_erasures(record_id, erased_at)
+		SELECT record_id, ? FROM local_sleep_sync_records WHERE pushed_at != ''`, erasedAt); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
 	for _, table := range []string{"local_sleep_sync_records", "local_sleep_corrections", "local_sleep_observations"} {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table); err != nil {
 			_ = tx.Rollback()
@@ -465,6 +486,99 @@ func (s *Store) DeleteAllSleepData(ctx context.Context) error {
 		return err
 	}
 	return s.compactDeletedData(ctx)
+}
+
+// PendingSleepErasures lists record ids that were hard-deleted locally after
+// having been pushed, and still await server-side erasure (ADR-0017).
+func (s *Store) PendingSleepErasures(ctx context.Context) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT record_id FROM local_sleep_erasures ORDER BY record_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// ClearSleepErasures removes outbox entries once the backend confirmed their
+// tombstones.
+func (s *Store) ClearSleepErasures(ctx context.Context, recordIDs []string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	for _, id := range recordIDs {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM local_sleep_erasures WHERE record_id = ?`, id); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// EraseSyncedSleepRecord applies a pulled tombstone: it hard-deletes the local
+// observation (with its corrections) or correction matching the record id,
+// plus any tracking rows — without enqueueing a new erasure (the tombstone
+// came FROM the server). Idempotent: absent records return false, nil.
+func (s *Store) EraseSyncedSleepRecord(ctx context.Context, recordID string) (bool, error) {
+	if !contractIdentifier.MatchString(recordID) {
+		return false, errors.New("record_id must match the v1 identifier format")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM local_sleep_sync_records
+		WHERE record_id = ?
+			OR record_id IN (
+				SELECT correction_id FROM local_sleep_corrections WHERE target_observation_id = ?
+			)`, recordID, recordID); err != nil {
+		return false, err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM local_sleep_erasures WHERE record_id = ?`, recordID); err != nil {
+		return false, err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM local_sleep_corrections WHERE target_observation_id = ?`, recordID); err != nil {
+		return false, err
+	}
+	observations, err := tx.ExecContext(ctx, `DELETE FROM local_sleep_observations WHERE observation_id = ?`, recordID)
+	if err != nil {
+		return false, err
+	}
+	deletedObservations, err := observations.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	corrections, err := tx.ExecContext(ctx, `DELETE FROM local_sleep_corrections WHERE correction_id = ?`, recordID)
+	if err != nil {
+		return false, err
+	}
+	deletedCorrections, err := corrections.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	committed = true
+	if deletedObservations+deletedCorrections == 0 {
+		return false, nil
+	}
+	return true, s.compactDeletedData(ctx)
 }
 
 func (s *Store) LatestSleepCorrectionID(ctx context.Context, targetObservationID string) (string, error) {

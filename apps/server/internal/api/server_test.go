@@ -423,6 +423,117 @@ func TestDirectProposalEndpointRequiresAuthAndRejectsRevokedToken(t *testing.T) 
 	}
 }
 
+func TestEraseHardDeletesMintsTombstonesAndBlocksResurrection(t *testing.T) {
+	h := newTestHarness(t)
+	desktop := h.registerDevice(t, "desktop")
+	phone := h.registerDevice(t, "phone")
+	start := time.Date(2026, 4, 1, 2, 0, 0, 0, time.UTC)
+	records := driftingSleepRecords(3, start, 25*time.Hour, 8*time.Hour)
+	h.pushRecords(t, desktop, records...)
+	const erasedID = "obs_sleep_00" // first drifting record's id
+
+	// Erase the first record from a DIFFERENT device (single-user model).
+	eraseBody := fmt.Sprintf(`{"schema_version":"v1","record_ids":[%q]}`, erasedID)
+	status, body := h.request(t, http.MethodPost, "/v1/sync/erase", phone, eraseBody)
+	if status != http.StatusOK {
+		t.Fatalf("erase status = %d body = %s", status, body)
+	}
+	var eraseResp syncmodel.EraseResponse
+	if err := json.Unmarshal(body, &eraseResp); err != nil {
+		t.Fatal(err)
+	}
+	if eraseResp.Erased != 1 || eraseResp.Tombstones != 1 {
+		t.Fatalf("erase response = %+v, want 1 erased + 1 tombstone", eraseResp)
+	}
+
+	// The pull stream no longer contains the record's payload; it contains a
+	// tombstone whose payload carries only the record id.
+	status, body = h.request(t, http.MethodGet, "/v1/sync/pull?since=0", phone, "")
+	if status != http.StatusOK {
+		t.Fatalf("pull status = %d", status)
+	}
+	var pull syncmodel.PullResponse
+	if err := json.Unmarshal(body, &pull); err != nil {
+		t.Fatal(err)
+	}
+	sawTombstone := false
+	for _, envelope := range pull.Records {
+		if envelope.RecordID == erasedID {
+			if envelope.Kind != syncmodel.KindTombstone {
+				t.Fatalf("erased record still present with kind %q", envelope.Kind)
+			}
+			sawTombstone = true
+			var payload syncmodel.TombstonePayload
+			if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.RecordID != erasedID {
+				t.Fatalf("tombstone payload = %+v", payload)
+			}
+			if bytes.Contains(envelope.Payload, []byte("start_at")) {
+				t.Fatal("tombstone payload must not contain observation data")
+			}
+		}
+	}
+	if !sawTombstone {
+		t.Fatal("pull must deliver the tombstone to other devices")
+	}
+
+	// A stale device re-pushing the erased record is a silent no-op.
+	h.pushRecords(t, desktop, records[0])
+	status, body = h.request(t, http.MethodGet, "/v1/sync/pull?since=0", phone, "")
+	if status != http.StatusOK {
+		t.Fatalf("post-resurrection pull status = %d", status)
+	}
+	pull = syncmodel.PullResponse{}
+	if err := json.Unmarshal(body, &pull); err != nil {
+		t.Fatal(err)
+	}
+	for _, envelope := range pull.Records {
+		if envelope.RecordID == erasedID && envelope.Kind != syncmodel.KindTombstone {
+			t.Fatalf("erased record was resurrected: %+v", envelope)
+		}
+	}
+
+	// The server estimate no longer uses the erased episode: only 2 remain,
+	// which is below the estimator minimum, so overview honestly refuses.
+	status, body = h.request(t, http.MethodGet, "/v1/overview", phone, "")
+	if status != http.StatusOK {
+		t.Fatalf("overview status = %d", status)
+	}
+	var overview struct {
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(body, &overview); err != nil {
+		t.Fatal(err)
+	}
+	if overview.Status != "refused" {
+		t.Fatalf("overview after erasing to 2 episodes = %q, want refused", overview.Status)
+	}
+
+	// Erasure requires auth; malformed requests are rejected.
+	status, _ = h.request(t, http.MethodPost, "/v1/sync/erase", "", eraseBody)
+	if status != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated erase status = %d", status)
+	}
+	status, _ = h.request(t, http.MethodPost, "/v1/sync/erase", phone, `{"schema_version":"v1","record_ids":[]}`)
+	if status != http.StatusBadRequest {
+		t.Fatalf("empty erase status = %d", status)
+	}
+	// Erasing again is idempotent (no new tombstone).
+	status, body = h.request(t, http.MethodPost, "/v1/sync/erase", phone, eraseBody)
+	if status != http.StatusOK {
+		t.Fatalf("repeat erase status = %d", status)
+	}
+	eraseResp = syncmodel.EraseResponse{}
+	if err := json.Unmarshal(body, &eraseResp); err != nil {
+		t.Fatal(err)
+	}
+	if eraseResp.Tombstones != 0 {
+		t.Fatalf("repeat erase minted %d tombstones, want 0", eraseResp.Tombstones)
+	}
+}
+
 func TestProjectionEndpointsUseServerEstimateFromSyncedSleep(t *testing.T) {
 	h := newTestHarness(t)
 	token := h.registerDevice(t, "desktop")

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Sync erase v1",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/eraseRequest"
+    },
+    {
+      "$ref": "#/$defs/eraseResponse"
+    }
+  ],
+  "$defs": {
+    "eraseRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "record_ids"],
+      "properties": {
+        "schema_version": {
+          "$ref": "common.schema.json#/$defs/schemaVersion"
+        },
+        "record_ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 100,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/identifier"
+          }
+        }
+      }
+    },
+    "eraseResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema_version", "erased", "tombstones"],
+      "properties": {
+        "schema_version": {
+          "$ref": "common.schema.json#/$defs/schemaVersion"
+        },
+        "erased": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tombstones": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cursor": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

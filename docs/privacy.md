@@ -51,9 +51,13 @@ be treated as sensitive and have file permissions restricted to the owner.
 not optional — the operator holds the keys.
 
 Deletion removes local derived data and source records according to the user's
-explicit request, subject to a clear confirmation flow. Export must be an
-intentional action and should identify whether it contains private data or only
-a minimized projection.
+explicit request, subject to a clear confirmation flow. When backend sync is
+enabled, erasure propagates: the self-hosted instance hard-deletes its synced
+copy and mints a tombstone (record id only, no health data) so every other
+enrolled device erases its copy on the next pull, and an erased record can
+never be re-pushed (ADR-0017). A device that never syncs again retains its
+local copy until it does. Export must be an intentional action and should
+identify whether it contains private data or only a minimized projection.
 
 ## Logging
 

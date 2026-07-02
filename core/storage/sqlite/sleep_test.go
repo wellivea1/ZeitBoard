@@ -340,6 +340,147 @@ func TestLocalSleepSyncTrackingCursorAndErasure(t *testing.T) {
 	}
 }
 
+func TestDeleteEnqueuesErasuresOnlyForPushedRecords(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "non24.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	start := time.Date(2026, 4, 2, 3, 0, 0, 0, time.UTC)
+	tp := func(value time.Time) *time.Time { return &value }
+
+	pushed := testSleepObservation("obs_pushed_01", start, start.Add(8*time.Hour))
+	unpushed := testSleepObservation("obs_unpushed_01", start.Add(25*time.Hour), start.Add(33*time.Hour))
+	if err := store.AppendSleepObservation(ctx, pushed); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AppendSleepObservation(ctx, unpushed); err != nil {
+		t.Fatal(err)
+	}
+	correction := SleepCorrectionRecord{
+		CorrectionID:        "corr_pushed_01",
+		TargetObservationID: pushed.ObservationID,
+		CreatedAt:           start.Add(10 * time.Hour),
+		Reason:              CorrectionReasonUserEdit,
+		Changes:             SleepCorrectionChanges{EndAt: tp(start.Add(7 * time.Hour))},
+	}
+	if err := store.AppendSleepCorrection(ctx, correction); err != nil {
+		t.Fatal(err)
+	}
+	// Mark the observation + its correction pushed; leave the other unpushed.
+	records, err := store.LocalSleepSyncRecords(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	toMark := make([]SleepSyncRecord, 0, 2)
+	for _, record := range records {
+		if record.RecordID == pushed.ObservationID || record.RecordID == correction.CorrectionID {
+			toMark = append(toMark, record)
+		}
+	}
+	if err := store.MarkSleepSyncRecordsPushed(ctx, toMark, time.Now().UTC()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Deleting the pushed observation enqueues erasures for it AND its correction.
+	if err := store.DeleteSleepObservation(ctx, pushed.ObservationID); err != nil {
+		t.Fatal(err)
+	}
+	pending, err := store.PendingSleepErasures(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 2 {
+		t.Fatalf("pending erasures = %v, want observation + correction", pending)
+	}
+
+	// Deleting the never-pushed observation enqueues nothing new.
+	if err := store.DeleteSleepObservation(ctx, unpushed.ObservationID); err != nil {
+		t.Fatal(err)
+	}
+	pending, err = store.PendingSleepErasures(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 2 {
+		t.Fatalf("unpushed delete should not enqueue erasure: %v", pending)
+	}
+
+	// Clearing removes confirmed entries.
+	if err := store.ClearSleepErasures(ctx, pending); err != nil {
+		t.Fatal(err)
+	}
+	pending, err = store.PendingSleepErasures(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("cleared erasures should be empty, got %v", pending)
+	}
+}
+
+func TestEraseSyncedSleepRecordAppliesTombstoneIdempotently(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "non24.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	start := time.Date(2026, 4, 3, 2, 0, 0, 0, time.UTC)
+	tp := func(value time.Time) *time.Time { return &value }
+
+	obs := testSleepObservation("obs_tombstoned_01", start, start.Add(8*time.Hour))
+	if err := store.AppendSleepObservation(ctx, obs); err != nil {
+		t.Fatal(err)
+	}
+	correction := SleepCorrectionRecord{
+		CorrectionID:        "corr_tombstoned_01",
+		TargetObservationID: obs.ObservationID,
+		CreatedAt:           start.Add(10 * time.Hour),
+		Reason:              CorrectionReasonUserEdit,
+		Changes:             SleepCorrectionChanges{EndAt: tp(start.Add(7 * time.Hour))},
+	}
+	if err := store.AppendSleepCorrection(ctx, correction); err != nil {
+		t.Fatal(err)
+	}
+
+	applied, err := store.EraseSyncedSleepRecord(ctx, obs.ObservationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !applied {
+		t.Fatal("tombstone application should report applied")
+	}
+	observations, err := store.ListSleepObservations(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	corrections, err := store.ListSleepCorrections(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(observations) != 0 || len(corrections) != 0 {
+		t.Fatalf("tombstone must erase observation and corrections: obs=%d corr=%d", len(observations), len(corrections))
+	}
+	// Applying a tombstone must NOT re-enqueue an outbound erasure.
+	pending, err := store.PendingSleepErasures(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("tombstone application enqueued erasures: %v", pending)
+	}
+	// Idempotent on repeat.
+	applied, err = store.EraseSyncedSleepRecord(ctx, obs.ObservationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if applied {
+		t.Fatal("repeat tombstone application should be a no-op")
+	}
+}
+
 func TestInsertSyncedSleepRecordsDedupesByContractID(t *testing.T) {
 	store, err := Open(filepath.Join(t.TempDir(), "non24.db"))
 	if err != nil {

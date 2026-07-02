@@ -68,6 +68,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /v1/accuracy", s.requireDevice(http.HandlerFunc(s.handleAccuracy)))
 	mux.Handle("POST /v1/sync/push", s.requireDevice(http.HandlerFunc(s.handlePush)))
 	mux.Handle("GET /v1/sync/pull", s.requireDevice(http.HandlerFunc(s.handlePull)))
+	mux.Handle("POST /v1/sync/erase", s.requireDevice(http.HandlerFunc(s.handleErase)))
 	return mux
 }
 
@@ -335,6 +336,33 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 		SchemaVersion: syncmodel.SchemaVersion,
 		Cursor:        cursor,
 		Accepted:      accepted,
+	})
+}
+
+// handleErase extends the user's erasure right (ADR-0014) to the synced
+// instance: it hard-deletes the named records and mints tombstones so every
+// device erases its copy and no stale push can resurrect them (ADR-0017).
+func (s *Server) handleErase(w http.ResponseWriter, r *http.Request) {
+	device := deviceFromContext(r.Context())
+	var req syncmodel.EraseRequest
+	if err := decodeBody(w, r, maxDeviceBodyBytes, &req); err != nil {
+		writeDecodeError(w, err)
+		return
+	}
+	if err := syncmodel.ValidateEraseRequest(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid erase request")
+		return
+	}
+	erased, tombstones, cursor, err := s.store.EraseSyncRecords(r.Context(), device.ID, req.RecordIDs, s.now())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "sync erase failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, syncmodel.EraseResponse{
+		SchemaVersion: syncmodel.SchemaVersion,
+		Erased:        erased,
+		Tombstones:    tombstones,
+		Cursor:        cursor,
 	})
 }
 

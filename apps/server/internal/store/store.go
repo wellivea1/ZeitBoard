@@ -151,6 +151,11 @@ func (s *Store) Migrate(ctx context.Context) error {
 			ciphertext BLOB NOT NULL,
 			payload_hash BLOB NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS sync_tombstones (
+			record_id TEXT PRIMARY KEY,
+			device_id TEXT NOT NULL,
+			erased_at TEXT NOT NULL
+		)`,
 		`CREATE TABLE IF NOT EXISTS proposals (
 			id TEXT PRIMARY KEY,
 			action_id TEXT NOT NULL,
@@ -313,12 +318,25 @@ func (s *Store) Append(ctx context.Context, deviceID string, records []syncmodel
 
 	accepted := 0
 	for _, record := range records {
+		// A tombstoned record id can never be resurrected: a stale device
+		// re-pushing an erased record is a silent no-op, not a conflict.
+		var tombstoned int
+		err := tx.QueryRowContext(ctx,
+			`SELECT 1 FROM sync_tombstones WHERE record_id = ?`, record.RecordID,
+		).Scan(&tombstoned)
+		if err == nil {
+			continue
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return 0, 0, err
+		}
+
 		sum := sha256.Sum256(record.Payload)
 		payloadHash := sum[:]
 
 		var existingSeq int64
 		var existingHash []byte
-		err := tx.QueryRowContext(ctx,
+		err = tx.QueryRowContext(ctx,
 			`SELECT seq, payload_hash FROM sync_records WHERE record_id = ?`,
 			record.RecordID,
 		).Scan(&existingSeq, &existingHash)
@@ -358,6 +376,89 @@ func (s *Store) Append(ctx context.Context, deviceID string, records []syncmodel
 	}
 	committed = true
 	return cursor, accepted, nil
+}
+
+// EraseSyncRecords hard-deletes the named records' encrypted payloads and
+// mints one tombstone per id: a registry row (which blocks any future push of
+// that id) plus a tombstone envelope in the pull stream so every device learns
+// to erase its local copy. Tombstone payloads carry only the record id — no
+// health data. Erasing an id that was never synced still mints a tombstone;
+// erasing an already-tombstoned id is a no-op.
+func (s *Store) EraseSyncRecords(ctx context.Context, deviceID string, recordIDs []string, erasedAt time.Time) (int, int, int64, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+
+	erased := 0
+	tombstones := 0
+	erasedAtText := erasedAt.UTC().Format(time.RFC3339Nano)
+	for _, recordID := range recordIDs {
+		// Never delete a tombstone envelope: repeat erasures must leave the
+		// durable erase signal in the pull stream intact.
+		result, err := tx.ExecContext(ctx,
+			`DELETE FROM sync_records WHERE record_id = ? AND kind != ?`,
+			recordID, string(syncmodel.KindTombstone),
+		)
+		if err != nil {
+			return 0, 0, 0, err
+		}
+		deleted, err := result.RowsAffected()
+		if err != nil {
+			return 0, 0, 0, err
+		}
+		erased += int(deleted)
+
+		registry, err := tx.ExecContext(ctx,
+			`INSERT OR IGNORE INTO sync_tombstones(record_id, device_id, erased_at) VALUES(?, ?, ?)`,
+			recordID, deviceID, erasedAtText,
+		)
+		if err != nil {
+			return 0, 0, 0, err
+		}
+		inserted, err := registry.RowsAffected()
+		if err != nil {
+			return 0, 0, 0, err
+		}
+		if inserted == 0 {
+			continue // already tombstoned; envelope exists
+		}
+		tombstones++
+
+		payload, err := json.Marshal(syncmodel.TombstonePayload{RecordID: recordID})
+		if err != nil {
+			return 0, 0, 0, err
+		}
+		nonce := make([]byte, s.aead.NonceSize())
+		if _, err := rand.Read(nonce); err != nil {
+			return 0, 0, 0, err
+		}
+		sum := sha256.Sum256(payload)
+		ciphertext := s.encrypt(nonce, payload, recordAAD(recordID, syncmodel.KindTombstone, deviceID, erasedAtText))
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO sync_records(record_id, kind, device_id, created_at, nonce, ciphertext, payload_hash)
+			 VALUES(?, ?, ?, ?, ?, ?, ?)`,
+			recordID, string(syncmodel.KindTombstone), deviceID, erasedAtText, nonce, ciphertext, sum[:],
+		); err != nil {
+			return 0, 0, 0, err
+		}
+	}
+
+	cursor, err := maxCursor(ctx, tx)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, 0, 0, err
+	}
+	committed = true
+	return erased, tombstones, cursor, nil
 }
 
 func (s *Store) CreateProposal(ctx context.Context, input ProposalInput) (ProposalRecord, error) {

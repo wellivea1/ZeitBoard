@@ -105,6 +105,15 @@ type syncBatch struct {
 	Records       []syncRecord `json:"records"`
 }
 
+type syncTombstonePayload struct {
+	RecordID string `json:"record_id"`
+}
+
+type syncErase struct {
+	SchemaVersion string   `json:"schema_version"`
+	RecordIDs     []string `json:"record_ids"`
+}
+
 type assistantActionTarget struct {
 	TaskID                    string `json:"task_id"`
 	EarliestStartAt           string `json:"earliest_start_at,omitempty"`
@@ -534,7 +543,7 @@ func Build() ([]File, error) {
 
 	syncBatchFixture := syncBatch{
 		SchemaVersion: "v1",
-		Cursor:        2,
+		Cursor:        3,
 		Records: []syncRecord{
 			{
 				Seq:       1,
@@ -552,7 +561,20 @@ func Build() ([]File, error) {
 				CreatedAt: correctionsFixture.Corrections[0].CreatedAt,
 				Payload:   correctionsFixture.Corrections[0],
 			},
+			{
+				Seq:       3,
+				RecordID:  "obs_sleep_erased_01",
+				Kind:      "tombstone",
+				DeviceID:  "device_desktop_01",
+				CreatedAt: ts(generatedAt),
+				Payload:   syncTombstonePayload{RecordID: "obs_sleep_erased_01"},
+			},
 		},
+	}
+
+	syncEraseFixture := syncErase{
+		SchemaVersion: "v1",
+		RecordIDs:     []string{"obs_sleep_erased_01", "corr_sleep_erased_01"},
 	}
 
 	assistantActionFixture := assistantAction{
@@ -920,6 +942,7 @@ func Build() ([]File, error) {
 		{"corrections.json", correctionsFixture},
 		{"sleep-data-export.json", sleepDataExportFixture},
 		{"sync-batch.json", syncBatchFixture},
+		{"sync-erase.json", syncEraseFixture},
 		{"assistant-action.json", assistantActionFixture},
 		{"direct-proposal-request.json", directProposalRequestFixture},
 		{"phase-estimate.json", estimateFixture},

@@ -1,6 +1,6 @@
 {
   "schema_version": "v1",
-  "cursor": 2,
+  "cursor": 3,
   "records": [
     {
       "seq": 1,
@@ -39,6 +39,16 @@
         "changes": {
           "start_at": "2026-03-08T07:10:00Z"
         }
+      }
+    },
+    {
+      "seq": 3,
+      "recordId": "obs_sleep_erased_01",
+      "kind": "tombstone",
+      "deviceId": "device_desktop_01",
+      "createdAt": "2026-03-15T00:00:00Z",
+      "payload": {
+        "record_id": "obs_sleep_erased_01"
       }
     }
   ]

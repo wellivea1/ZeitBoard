@@ -114,6 +114,10 @@ func (s *Store) Migrate(ctx context.Context) error {
 			payload_hash TEXT NOT NULL,
 			pushed_at TEXT NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS local_sleep_erasures (
+			record_id TEXT PRIMARY KEY,
+			erased_at TEXT NOT NULL
+		)`,
 	}
 	for _, statement := range statements {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {

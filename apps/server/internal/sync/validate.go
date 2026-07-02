@@ -60,6 +60,32 @@ func ValidatePushRequest(req *PushRequest) error {
 	return nil
 }
 
+// ValidateEraseRequest bounds and validates an erase request. Erasure is
+// intentionally push-shaped only: clients name record ids; the server mints
+// the tombstones.
+func ValidateEraseRequest(req *EraseRequest) error {
+	if req.SchemaVersion != SchemaVersion {
+		return errors.New("unsupported schema version")
+	}
+	if len(req.RecordIDs) == 0 {
+		return errors.New("at least one record id is required")
+	}
+	if len(req.RecordIDs) > MaxRecordsPerPush {
+		return errors.New("too many record ids")
+	}
+	seen := map[string]struct{}{}
+	for _, id := range req.RecordIDs {
+		if err := validateIdentifier(id, "record_id"); err != nil {
+			return err
+		}
+		if _, ok := seen[id]; ok {
+			return fmt.Errorf("duplicate record_id %q", id)
+		}
+		seen[id] = struct{}{}
+	}
+	return nil
+}
+
 func validatePayload(kind Kind, recordID string, payload json.RawMessage) error {
 	switch kind {
 	case KindObservation:

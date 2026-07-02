@@ -29,6 +29,7 @@ var fixturePairs = []struct{ schema, fixture string }{
 	{"correction-set.schema.json", "corrections.json"},
 	{"sleep-data-export.schema.json", "sleep-data-export.json"},
 	{"sync-batch.schema.json", "sync-batch.json"},
+	{"sync-erase.schema.json", "sync-erase.json"},
 	{"assistant-action.schema.json", "assistant-action.json"},
 	{"direct-proposal-request.schema.json", "direct-proposal-request.json"},
 	{"phase-estimate.schema.json", "phase-estimate.json"},

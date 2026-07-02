@@ -34,6 +34,10 @@ there rather than being repeated here.
   and decides them via the one-use token (any enrolled device may decide;
   audited); orphan synced corrections are skipped so one bad record can never
   wedge the pull cursor (ADR-0016).
+- End-to-end erasure: local hard-deletes propagate to the self-hosted instance
+  (payloads hard-deleted server-side) and to every device via id-only
+  tombstones in the pull stream; erased records can never be re-pushed
+  (ADR-0017).
 - Theming (Auto/Light/Dark), reduced stimulation, WCAG 2.2 AA contrast pass
   with a regression test (ADR-0005).
 
@@ -69,10 +73,13 @@ ADR when it changes architecture.
    "Synced backend" approvals panel (absent when sync is off), and orphan
    synced corrections skipped instead of wedging the pull cursor. Remaining
    niceties (batch review, expiry surfacing) fold into later queue work.
-2. **Server-side erasure (tombstones).** Local hard-delete does not yet
-   propagate; the sync log is append-only by design. Add an authenticated
-   erasure endpoint + tombstone semantics so ADR-0014's erasure right extends
-   to the synced instance, with a threat-model update in the same change.
+2. ~~**Server-side erasure (tombstones).**~~ ✅ Delivered (ADR-0017): an
+   authenticated erase endpoint hard-deletes synced payloads; tombstones
+   (record-id only) flow through the pull stream so every device erases its
+   copy; a tombstone registry makes re-pushing an erased id a silent no-op;
+   the desktop enqueues erasures for pushed records at hard-delete time.
+   Threat model + privacy updated. Residual: never-syncing devices retain
+   their copy until they pull.
 3. **Validate the estimator on real history.** Transcribe the owner's real
    2021–2023 sleep charts into the v1 import format (manual/assisted — no
    handwriting-OCR promises), import locally, and run the backtest. The

@@ -18,6 +18,10 @@ type Kind string
 const (
 	KindObservation Kind = "observation"
 	KindCorrection  Kind = "correction"
+	// KindTombstone marks an erased record in the pull stream. Tombstones are
+	// minted only by the server's erase endpoint — clients cannot push them —
+	// and their payload carries nothing but the erased record id.
+	KindTombstone Kind = "tombstone"
 )
 
 type PushRequest struct {
@@ -51,4 +55,20 @@ type PullResponse struct {
 	SchemaVersion string     `json:"schema_version"`
 	Cursor        int64      `json:"cursor"`
 	Records       []Envelope `json:"records"`
+}
+
+type TombstonePayload struct {
+	RecordID string `json:"record_id"`
+}
+
+type EraseRequest struct {
+	SchemaVersion string   `json:"schema_version"`
+	RecordIDs     []string `json:"record_ids"`
+}
+
+type EraseResponse struct {
+	SchemaVersion string `json:"schema_version"`
+	Erased        int    `json:"erased"`
+	Tombstones    int    `json:"tombstones"`
+	Cursor        int64  `json:"cursor"`
 }

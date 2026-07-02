@@ -476,6 +476,148 @@ func TestBackendProposalsOffWhenSyncDisabled(t *testing.T) {
 	}
 }
 
+func TestLocalHardDeletePropagatesErasureToBackend(t *testing.T) {
+	app := newTestApp(t)
+	var eraseRequests []syncEraseRequest
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/devices":
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(registerDeviceResponse{SchemaVersion: "v1", DeviceID: "device_desktop", Token: "erase-token"})
+		case "/v1/sync/push":
+			var req syncPushRequest
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			_ = json.NewEncoder(w).Encode(syncPushResponse{SchemaVersion: "v1", Cursor: int64(len(req.Records)), Accepted: len(req.Records)})
+		case "/v1/sync/erase":
+			var req syncEraseRequest
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			eraseRequests = append(eraseRequests, req)
+			_ = json.NewEncoder(w).Encode(syncEraseResponse{SchemaVersion: "v1", Erased: len(req.RecordIDs), Tombstones: len(req.RecordIDs), Cursor: 5})
+		case "/v1/sync/pull":
+			_ = json.NewEncoder(w).Encode(syncPullResponse{SchemaVersion: "v1", Cursor: 5, Records: []syncEnvelope{}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	configureBackendForTest(t, app, server.URL)
+
+	// Enter a real sleep episode and push it.
+	added, err := app.AddSleepEntry(SleepEntryInput{
+		StartLocal:     "2026-04-02T02:00",
+		EndLocal:       "2026-04-02T10:00",
+		ZoneID:         "UTC",
+		Classification: "principal",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := app.SyncNow()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.PushedCount != 1 || first.ErasuresPushed != 0 {
+		t.Fatalf("first sync = %#v, want 1 pushed and no erasures", first)
+	}
+
+	// Hard-delete locally, then sync: the erasure must reach the backend.
+	if _, err := app.DeleteSleepObservation(SleepDeleteInput{ObservationID: added.ObservationID, Confirmation: "DELETE"}); err != nil {
+		t.Fatal(err)
+	}
+	second, err := app.SyncNow()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.ErasuresPushed != 1 || second.LastError != "" {
+		t.Fatalf("second sync = %#v, want 1 erasure pushed", second)
+	}
+	if len(eraseRequests) != 1 || len(eraseRequests[0].RecordIDs) != 1 || eraseRequests[0].RecordIDs[0] != added.ObservationID {
+		t.Fatalf("erase requests = %#v", eraseRequests)
+	}
+	// The outbox is cleared: a third sync sends nothing.
+	third, err := app.SyncNow()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if third.ErasuresPushed != 0 || len(eraseRequests) != 1 {
+		t.Fatalf("third sync should push no erasures: %#v (requests %d)", third, len(eraseRequests))
+	}
+}
+
+func TestPulledTombstoneErasesLocalCopy(t *testing.T) {
+	app := newTestApp(t)
+	start := time.Date(2026, 4, 5, 3, 0, 0, 0, time.UTC)
+	remoteObservation := testSyncObservation("obs_remote_01", start)
+	tombstonePayload := mustJSON(t, syncTombstonePayload{RecordID: remoteObservation.ObservationID})
+	phase := 0
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/devices":
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(registerDeviceResponse{SchemaVersion: "v1", DeviceID: "device_desktop", Token: "tombstone-token"})
+		case "/v1/sync/pull":
+			if phase == 0 {
+				_ = json.NewEncoder(w).Encode(syncPullResponse{SchemaVersion: "v1", Cursor: 1, Records: []syncEnvelope{
+					{Seq: 1, RecordID: remoteObservation.ObservationID, Kind: storage.SleepSyncKindObservation, DeviceID: "phone_device", CreatedAt: remoteObservation.Provenance.RecordedAt, Payload: mustJSON(t, remoteObservation)},
+				}})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(syncPullResponse{SchemaVersion: "v1", Cursor: 2, Records: []syncEnvelope{
+				{Seq: 2, RecordID: remoteObservation.ObservationID, Kind: "tombstone", DeviceID: "phone_device", CreatedAt: start.Add(20 * time.Hour), Payload: tombstonePayload},
+			}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	configureBackendForTest(t, app, server.URL)
+
+	// First sync inserts the remote record.
+	first, err := app.SyncNow()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.PulledCount != 1 {
+		t.Fatalf("first sync should insert the remote record: %#v", first)
+	}
+	store, err := app.requireStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	observations, err := store.ListSleepObservations(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(observations) != 1 {
+		t.Fatalf("expected the remote observation locally, got %d", len(observations))
+	}
+
+	// Second sync pulls the tombstone: the local copy is erased, and no
+	// outbound erasure is re-enqueued (no loop).
+	phase = 1
+	second, err := app.SyncNow()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.TombstonesApplied != 1 || second.LastError != "" {
+		t.Fatalf("second sync = %#v, want 1 tombstone applied", second)
+	}
+	observations, err = store.ListSleepObservations(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(observations) != 0 {
+		t.Fatalf("tombstone should erase the local copy, got %d observations", len(observations))
+	}
+	pending, err := store.PendingSleepErasures(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 0 {
+		t.Fatalf("tombstone application must not enqueue outbound erasures: %v", pending)
+	}
+}
+
 func TestSyncedOverviewAndRhythmUseServerEstimateAndFallbackLocal(t *testing.T) {
 	app := newTestApp(t)
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

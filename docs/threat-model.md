@@ -73,9 +73,11 @@ server-side read layer** is implemented with effective sleep-session replay from
 observations/corrections, core-engine overview/rhythm/accuracy projections, typed
 estimation refusals, and authenticated access. The **Milestone 4 local MCP connector** is
 implemented as a stateless adapter over the backend API with read tools, propose-only
-tools, call budgets, and no approval/apply tool. The **cloud skill wrapper and live
-trusted-view transport do not exist yet**; their rows remain design requirements for
-future workstreams, not current guarantees.
+tools, call budgets, and no approval/apply tool. **Server-side erasure (ADR-0017)** is
+implemented: an authenticated erase endpoint hard-deletes synced payloads, tombstones
+block resurrection, and devices apply pulled tombstones as local hard-deletes. The
+**cloud skill wrapper and live trusted-view transport do not exist yet**; their rows
+remain design requirements for future workstreams, not current guarantees.
 
 ## Threats and mitigations
 
@@ -89,6 +91,7 @@ future workstreams, not current guarantees.
 | Server read projection leak | Synced private records exposed through read APIs | Overview/rhythm/accuracy endpoints require device auth, replay only decrypted store records internally, return projection DTOs instead of sync envelopes, sanitize internal observation IDs, and test for forbidden fields |
 | Assistant or agent mutation | Schedule changed without consent | Model emits only allowlisted actions the server resolves into proposals; approval queue; one-use signed token; no direct mutation path (tested) |
 | Malicious external agent (MCP/skill) | Exfiltration or unauthorized change | Local MCP exposes allowlisted read projections only (never the raw model), propose-only tools, call budgets, and no approval/apply tool; cloud skills remain future and require a separate privacy review |
+| Erased data lingering on the instance or other devices | A hard-deleted record survives elsewhere, defeating the erasure right | Authenticated `/v1/sync/erase` hard-deletes the synced payload and mints tombstones (record-id only, no health data) that every device applies on pull; the tombstone registry makes re-pushing an erased id a silent no-op (no resurrection). Residual: a device that never syncs again keeps its copy until it does (ADR-0017) |
 | Malicious import (Takeout / My Activity) | Resource exhaustion; misleading inference | Size limits, strict schemas, bounded strings/arrays, transactional validation; inferred sleep marked low-confidence (`inferred`), never overclaimed |
 | Source mutation | Audit history and estimator support become misleading | Append-only observations and corrections; effective read model; persistence tests |
 | Time-zone confusion | Incorrect drift or schedule proposals | UTC instants plus IANA zones; half-open intervals; DST-focused tests |
