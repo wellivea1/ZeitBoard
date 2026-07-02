@@ -98,8 +98,8 @@ export function AppShell({ screen, children }: { screen: ScreenId; children: Rea
           <div className="privacy-note">
             <Icon name="shield" />
             <span>
-              <strong>Local-first</strong>
-              <small>Your data stays on this device.</small>
+              <strong>Private by design</strong>
+              <small>Data stays local; syncs only to your own server if you turn sync on.</small>
             </span>
           </div>
         </div>

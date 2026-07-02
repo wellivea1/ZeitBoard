@@ -64,7 +64,7 @@ interface WailsRoot {
 const emptySleepEntries: SleepEntriesData = {
   status: "unavailable",
   empty: true,
-  message: "Manual sleep entry is available in the desktop app service.",
+  message: "This browser preview is read-only. Open the ZeitBoard desktop app to add sleep entries.",
   entries: [],
 };
 

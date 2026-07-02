@@ -503,13 +503,15 @@ export function CalendarScreen() {
         title="Calendar"
         description="Compare fixed events with uncertain predicted sleep and waking windows."
         actions={
-          <button className="button primary" type="button">
-            Add fixed event
-          </button>
+          <div className="status-cluster">
+            <span className="sync-dot" data-mode="fixture" aria-hidden="true" />
+            <span>Sample preview</span>
+          </div>
         }
       />
       <PlaceholderNotice>
-        Placeholder schedule proposals use synthetic events. Fixed events remain unchanged.
+        This five-day board is a synthetic design preview. Calendar import arrives with the
+        interoperability phase; fixed events will remain immutable inputs.
       </PlaceholderNotice>
       <section className="panel calendar-board" aria-label="Five day planning preview">
         <div className="calendar-hours" aria-hidden="true">
@@ -560,14 +562,15 @@ export function TasksScreen() {
         title="Tasks"
         description="Describe flexibility and effort; the planner returns proposals, not calendar changes."
         actions={
-          <button className="button primary" type="button">
-            New task
-          </button>
+          <div className="status-cluster">
+            <span className="sync-dot" data-mode="fixture" aria-hidden="true" />
+            <span>Sample preview</span>
+          </div>
         }
       />
       <PlaceholderNotice>
-        Task suggestions are synthetic. They create proposals only; no calendar or task change is
-        applied automatically.
+        The task list below is a synthetic design preview — user-owned tasks are a planned
+        feature. The approval queue is real: proposals only, nothing is applied automatically.
       </PlaceholderNotice>
       <section className="screen-grid" aria-label="Task planning and approvals">
         <section
@@ -594,18 +597,13 @@ export function TasksScreen() {
         </section>
 
         <section className="panel table-panel task-list-panel">
-          <div className="filter-row" aria-label="Task filters">
-            <button className="filter active" type="button">
-              Open 4
-            </button>
-            <button className="filter" type="button">
-              Scheduled 2
-            </button>
-            <button className="filter" type="button">
-              Done
-            </button>
+          <div className="panel-heading">
+            <div>
+              <p className="section-kicker">Sample task list</p>
+              <h2 id="task-list-title">Four synthetic open tasks</h2>
+            </div>
           </div>
-          <div className="task-table" role="table" aria-label="Open tasks">
+          <div className="task-table" role="table" aria-labelledby="task-list-title">
             <div className="task-row task-head" role="row">
               <span role="columnheader">Task</span>
               <span role="columnheader">Demand</span>
@@ -1079,11 +1077,16 @@ export function MedicationsScreen() {
         title="Medications"
         description="Keep a private record tied to your own wake or sleep events."
         actions={
-          <button className="button primary" type="button">
-            Add record
-          </button>
+          <div className="status-cluster">
+            <span className="sync-dot" data-mode="fixture" aria-hidden="true" />
+            <span>Sample preview</span>
+          </div>
         }
       />
+      <PlaceholderNotice>
+        These records are a synthetic design preview — medication logging is a planned feature.
+        It will record clock-time doses you enter; it will never recommend one.
+      </PlaceholderNotice>
       <div className="safety-banner">
         <Icon name="shield" />
         <p>
@@ -1130,11 +1133,16 @@ export function SharingScreen() {
         title="Sharing"
         description="Choose a person, then allow only the minimum fields they need."
         actions={
-          <button className="button primary" type="button">
-            New profile
-          </button>
+          <div className="status-cluster">
+            <span className="sync-dot" data-mode="fixture" aria-hidden="true" />
+            <span>Sample preview</span>
+          </div>
         }
       />
+      <PlaceholderNotice>
+        These profiles are a synthetic design preview — no trusted view is being shared. Sharing
+        stays default-deny: every field must be explicitly allowlisted before anyone sees it.
+      </PlaceholderNotice>
       <div className="safety-banner">
         <Icon name="shield" />
         <p>
@@ -1901,20 +1909,6 @@ export function SettingsScreen() {
             <h2>Time and appearance</h2>
           </div>
           <label>
-            Time format
-            <select defaultValue="12-hour">
-              <option value="12-hour">12-hour</option>
-              <option value="24-hour">24-hour</option>
-            </select>
-          </label>
-          <label>
-            Week starts
-            <select defaultValue="monday">
-              <option value="monday">Monday</option>
-              <option value="sunday">Sunday</option>
-            </select>
-          </label>
-          <label>
             Appearance
             <select
               value={theme}
@@ -1942,20 +1936,10 @@ export function SettingsScreen() {
             <p className="section-kicker">Estimates</p>
             <h2>Uncertainty display</h2>
           </div>
-          <label className="toggle-row">
-            <span>
-              <strong>Show confidence reasons</strong>
-              <small>Explain why an estimate is high, moderate, or low.</small>
-            </span>
-            <input type="checkbox" defaultChecked />
-          </label>
-          <label className="toggle-row">
-            <span>
-              <strong>Show predicted ranges</strong>
-              <small>Use windows rather than single-point times.</small>
-            </span>
-            <input type="checkbox" defaultChecked />
-          </label>
+          <p className="settings-copy">
+            Uncertainty is never hidden: estimates always show predicted ranges rather than
+            single-point times, ordinal confidence, and the reasons behind it.
+          </p>
         </div>
         <div className="panel settings-section backend-sync-panel">
           <div className="data-control-intro">
