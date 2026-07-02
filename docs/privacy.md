@@ -31,9 +31,11 @@
 
 ## Collection defaults
 
-Fixture mode is enabled in the sample configuration. Windows activity and
-Health Connect collection are disabled until the user enables them through a
-visible permission flow. The application does not collect keystrokes, typed
+The desktop runs on the user's manually entered sleep data and shows an honest
+empty state until entries exist; synthetic data appears only in clearly labeled
+sample mode. Windows activity and Health Connect collection are disabled until
+the user enables them through a visible permission flow, and backend sync is
+opt-in and off by default. The application does not collect keystrokes, typed
 content, screenshots, browser history, active-window titles, clipboard data,
 precise location, or unrelated files.
 

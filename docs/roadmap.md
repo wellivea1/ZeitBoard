@@ -1,278 +1,238 @@
 # Roadmap
 
-ZeitBoard grows from a local-first estimation scaffold into a daily-use planner
-for free-running sleep-wake rhythms. Every phase keeps the same guarantees:
-civil time stays primary, uncertainty stays visible, automation never applies
-itself silently, and the app never gives medical advice or claims exact
-circadian phase/DLMO.
+ZeitBoard is a planner for free-running sleep-wake rhythms: a **connected,
+entirely self-hostable, bring-your-own-key** system (ADR-0007/0008) with a
+visual-first desktop app, a self-hosted Go backend, and an agent-accessible
+capability layer. Every phase keeps the same guarantees: civil time stays
+primary, uncertainty stays visible, automation never applies itself silently,
+and the app never gives medical advice or claims exact circadian phase/DLMO.
 
-Detailed, build-ready UI for the phase 2–4 features below lives in
+Build-ready UI for the feature phases lives in
 [`ui-ux-feature-specs.md`](ui-ux-feature-specs.md); the master product design is
-[`ui-ux-design.md`](ui-ux-design.md). The implementation/deferment map for
-analysis and UI specs is [`specification-alignment.md`](specification-alignment.md).
+[`ui-ux-design.md`](ui-ux-design.md); the spec/implementation map is
+[`specification-alignment.md`](specification-alignment.md). Architecture
+decisions are ADRs under [`decisions/`](decisions/); per-milestone detail lives
+there rather than being repeated here.
 
 ---
 
-## Phase 1 — Executable scaffold  ✅ (delivered)
+## Where things stand (delivered)
 
-- Strict v1 contracts and deterministic synthetic fixtures (Go `tools/` module).
-- Append-only observations/corrections and effective reads.
-- Robust drift estimation with typed refusal and uncertain forecasts.
-- Deterministic schedule proposals without mutating fixed events.
-- Desktop (Wails+React), trusted-web fixture prototype, Android fixture shell.
-- Default-deny projection, privacy checks, green cross-platform CI.
+**Desktop (data + estimate)**
+- Manual sleep entry with immutable observations, append-only corrections
+  (edit/suppress), provenance history, and honest empty/refusal states
+  (ADR-0013). Contract-shaped local records (sync-ready by construction).
+- Overview, Rhythm (double-plot actogram + Theil-Sen drift + widening
+  forecast), and the proposals queue are all computed by the core engine from
+  the user's real local data — no synthetic data outside labeled sample mode.
+- Export (v1 contract-shaped JSON) and hard erasure (single entry or all),
+  distinct from append-only suppress (ADR-0014).
+- Opt-in, off-by-default backend sync: enrollment, push/pull with dedupe,
+  TLS-verified, token stored outside config; Overview/Rhythm can render the
+  server's estimate, labeled distinctly, with local fallback (ADR-0015).
+- Theming (Auto/Light/Dark), reduced stimulation, WCAG 2.2 AA contrast pass
+  with a regression test (ADR-0005).
 
-Exit criteria: the acceptance checks in `implementation-plan.md`.
+**Backend (`apps/server`, self-hosted)**
+- M1 sync: TLS, per-device bearer tokens (hashes stored), strict v1
+  validation, idempotent append-only log, AES-256-GCM at rest (ADR-0009).
+- M2 assistant: BYOK multi-provider LLM (OpenCode Zen / OpenRouter / OpenAI /
+  Anthropic), redacted field-by-field context, strict-JSON allowlisted actions
+  resolved by the server into *pending* proposals, one-use signed approval
+  tokens, encrypted proposal/audit storage, device revocation (ADR-0010).
+- M3 server-side estimation: effective sessions replayed from synced records,
+  core-engine overview/rhythm/accuracy projections, typed refusals (ADR-0011).
+- M4 local MCP connector: stateless stdio adapter, allowlisted read +
+  propose-only tools, call budgets, **no approve/apply tool** (ADR-0012).
+
+**Measurement**
+- `estimation.Backtest` (walk-forward validation) scores point error,
+  forecast-window hit-rate, and per-confidence calibration. Synthetic findings:
+  clean linear rhythms recover at ~0h error; a 3h phase jump degrades point
+  error to ~3h while confidence correctly drops; hit-rate stays 1.0 because the
+  windows are honestly wide — so **point error is the sharper quality signal**
+  and window width is a tightening candidate. Not yet run on real history.
+
+---
+
+## Next slices (priority order)
+
+The actionable near-term plan. Each slice is self-contained and lands with an
+ADR when it changes architecture.
+
+1. **Close the control loop — approvals unification + sync robustness.**
+   The desktop's in-session approval queue and the backend's persisted
+   proposals are still two disconnected worlds. When sync is on, the desktop
+   lists backend proposals and approves/rejects them via the one-use-token
+   decision endpoint (audited); the in-session queue remains the offline path.
+   Include the known pull-robustness fix: one unresolvable synced correction
+   (missing target) must be skipped/quarantined, not allowed to wedge the pull
+   cursor forever.
+2. **Server-side erasure (tombstones).** Local hard-delete does not yet
+   propagate; the sync log is append-only by design. Add an authenticated
+   erasure endpoint + tombstone semantics so ADR-0014's erasure right extends
+   to the synced instance, with a threat-model update in the same change.
+3. **Validate the estimator on real history.** Transcribe the owner's real
+   2021–2023 sleep charts into the v1 import format (manual/assisted — no
+   handwriting-OCR promises), import locally, and run the backtest. The
+   results gate estimator work: window-width tightening, an explicit
+   linear-misfit signal, and phase-dependent sleep duration are pursued only
+   as the numbers justify, each justified by a backtest delta.
+4. **Make tasks real.** Flexible tasks are currently hardcoded planner
+   fixtures (desktop `taskRows`, `localPlannerTasks`) — yet the approval queue,
+   calendar phase, and assistant all assume user-owned tasks exist to move.
+   Task CRUD + local persistence + sync (contract + ADR), replacing the
+   hardcoded task list. This is a prerequisite for Phase 3/4 delivering real
+   value, and it lets assistant/agent proposals target real tasks.
+5. **Replace the remaining fixture UI.** The Rhythm "Sources" tab still renders
+   synthetic conflict/correction-preview/refusal fixtures next to real data;
+   Data Sources shows synthetic source states. Drive them from real local
+   state (correction history exists; source status exists for sync) or clearly
+   label and demote what has no real backing yet.
+6. **Calendar import (Phase 3a) — after an explicit placement ADR.** The
+   original scoping predates the backend; decide *where adapters live*
+   (device-side like Health Connect vs server-side on the instance), which
+   protocols first (ICS/CalDAV before Google OAuth verification burdens), and
+   how imported-event text is kept out of projections. Then implement
+   read-only import per the re-scoped ADR.
+7. **Takeout / "My Activity" import + activity→sleep inference.** File import
+   (no Google API exists for My Activity) feeding the deferred probabilistic
+   inference; emits low-confidence `inferred` episodes only, validated by the
+   backtest before it can influence the estimate.
+8. **Assistant desktop UI (Phase 4 front end).** The backend and safety
+   architecture are delivered (M2/M4); build the §4 chat surface over the same
+   propose-only endpoints, with provider disclosure. Voice remains the agent
+   client's job (ADR-0006); document the Claude-Desktop-over-MCP voice path in
+   the runbook. Cloud skill packaging and any reviewer-gated auto-apply stay
+   future and separately gated.
+9. **Android companion sync.** The Health Connect skeleton exists but the
+   companion has no sync client; bring it onto the same enrollment + push/pull
+   path (its ADR should reuse ADR-0015's model).
+
+**Small debts (fold into adjacent slices):** consolidate the correction-record
+→ domain decoder (now duplicated across desktop storage, server readmodel, and
+the sync validator); prefer a CA-cert path over localhost skip-verify for the
+MCP client; medication logging should support fixed-clock-time regimens (how
+tasimelteon/melatonin are actually prescribed) alongside wake-relative display;
+periodic real screen-reader/TalkBack walkthroughs.
 
 ---
 
 ## Phase 2 — Local usability + the rhythm visualizer
 
-Make the local single-user experience trustworthy and legible.
+Largely delivered (see "Where things stand"). Remaining in scope:
 
-**Core usability**
-- Harden import validation, conflict handling, retention, export, deletion.
-- Represent source-specific missingness and forced-schedule/travel disruptions.
-- User-visible provenance and correction history; correction diffs + undo.
-- Refusal states, proposal review, and onboarding.
-- Accessibility (WCAG 2.2 AA), localization readiness, time-zone test coverage.
-- Light/dark parity and independent reduced-stimulation controls.
-- Evaluate local DB encryption and OS credential storage.
-
-**Desktop theme, reduced-stimulation, and accessibility consolidation**
-- Add an Auto / Light / Dark appearance selector to desktop Settings, backed by a
-  small theme module that applies `data-theme="light|dark"` to `<html>`,
-  persists the choice, follows `prefers-color-scheme` in Auto, and applies before
-  first paint.
-- Add an independent reduced-stimulation toggle backed by `data-reduced="true"`;
-  it must work in both light and dark themes, never force dark mode, persist
-  locally, soften motion/saturation/contrast/density, and continue honoring
-  `prefers-reduced-motion`.
-- Extend the existing CSS custom property system rather than creating a parallel
-  palette. Audit theme-relevant hardcoded colors in the desktop stylesheet so
-  dark mode can override app chrome, panels, charts, status/confidence states,
-  actogram/drift visuals, and trust-loop UI without invisible text or broken
-  contrast.
-- Close the desktop WCAG 2.2 AA gaps across Overview, Calendar, Tasks,
-  Approvals, Rhythm, Medications, Sharing, Data Sources, and Settings: body text
-  contrast, visible focus rings, 44px interactive targets, logical keyboard
-  order, non-color-only status/confidence/conflict/origin cues, and polite live
-  status announcements where state changes are surfaced.
-- Validate with desktop tests for theme and reduced-stimulation persistence,
-  full frontend quality checks, `scripts/dev.ps1 -Action check -Component
-  desktop`, contrast spot-checks in both themes, and in-app browser smoke checks
-  for Overview, Approvals, and Rhythm in light, dark, and reduced-stimulation
-  combinations.
-- Out of scope for this pass: Android theming, trusted-web prototype theming,
-  backend/data changes, and new screens. Track those separately after the
-  desktop consolidation lands.
-
-**Sleep chart visualizer** (new — low risk; visualizes existing local data only)
-- A dedicated **Rhythm** area (absorbs the current Timeline) with three views:
-  **Actogram** (double-plotted sleep bands showing the free-running diagonal,
-  Zeitlog-style), **Phase/Drift trend** (sleep-onset vs date with the Theil-Sen
-  fit and ± band), and **Sources & corrections** (the existing provenance
-  timeline).
-- Forecast region rendered as widening uncertainty bands, never hard lines.
-- Full keyboard + screen-reader table alternative for every chart.
-- No new data sources, no network: this is a read-only projection of
-  observations, corrections, and the current estimate. Spec:
-  [`ui-ux-feature-specs.md` §3](ui-ux-feature-specs.md).
-- **Automatic clinical charting + clinician export:** auto-generate the
-  longitudinal clinical actogram (one row per calendar date, configurable day-start
-  anchor, single- or double-plot) with intervention/medication/disruption
-  annotations from logged data, and export a printable, redaction-controlled PDF
-  for a sleep clinician — replacing hand-kept sleep logs. Recording only; never a
-  light/melatonin recommendation. Leans on the import hardening above. Reference
-  format = real clinical sleep logs + a SleepGraph-style actogram, kept out of the
-  repo as private data. Spec: [`ui-ux-feature-specs.md` §3.6](ui-ux-feature-specs.md).
-
-Current implementation status: the first desktop trust-loop slice is in place,
-and the first desktop-local sleep-data slice has landed with manual sleep entry,
-immutable local observations, append-only correction history, and real effective
-reads for Overview, Rhythm, and Proposals. The desktop trust-loop UI still includes
-Approvals, Rhythm tabs, a double-plotted actogram with
-widening forecast bands, a sleep-onset Drift chart, source conflict/missingness
-review, correction diff and undo affordance, refusal copy, and an Overview
-review strip. The Rhythm visualizer is now **engine-backed**: the actogram bands,
-the Theil-Sen drift fit and its robust uncertainty band, the widening forecast,
-the slope/confidence labels, and the drift chart's y-range are all derived by the
-Go estimation engine (`estimation.Project`, exposed over the `GetRhythm` Wails
-binding) over the same sessions the Overview uses, so the two screens never
-disagree; the screen falls back to the shared fixture only when the Wails service
-is unavailable in a browser preview and shows whether it is running on the local
-estimate, local data, or sample data.
-The desktop service no longer substitutes synthetic sleep sessions for a local
-store; manual desktop observations now drive the core estimator. The **Approvals
-trust gate is now engine-backed** too: the
-`GetProposals` Wails binding runs the real `scheduling.Scheduler` over the current
-estimate's predicted waking windows plus the current functional window, so every
-queued proposal is one the engine actually produced, with
-contract-aligned `explanation_codes` for the constraints it enforced and an
-honest `unplaced` list (reason codes) when no safe
-window exists. The scheduler emits only guarantees it applied and never claims an
-`uncertainty_buffer_applied` it does not yet perform. Desktop theming
-(Auto/Light/Dark) and an independent reduced-stimulation toggle are implemented
-with before-first-paint application, `localStorage` persistence, extended CSS
-custom properties, and tests; the WCAG 2.2 AA contrast/target-size consolidation
-pass has landed with a regression test. An **estimation accuracy harness**
-(`estimation.Backtest`) now answers "is the estimate any good?" by walk-forward
-validation — refit on each prefix, predict the next sleep onset, and score point
-error, forecast-window hit-rate, and per-confidence calibration. Early findings on
-synthetic data: a clean linear rhythm is recovered with ~0h error and a 1.0
-hit-rate; a 3h mid-series phase jump (relative coordination) drives median point
-error to ~3h while the engine correctly *drops* its confidence — and the
-forecast-window hit-rate stays 1.0, confirming the predicted windows are honestly
-wide (so point error, not hit-rate, is the sharper quality signal, and window width
-is a candidate for future tightening). Local sleep export and erasure controls
-have landed too: Settings exports v1 contract-shaped sleep JSON (`observation_set`
-and `correction_set`) and can hard-erase all local sleep observations/correction
-history after explicit confirmation, while Data Sources can hard-erase one entry
-separately from append-only suppress. Desktop backend sync has landed as an
-explicit opt-in loop to the user's self-hosted backend: Settings handles device
-enrollment and status, local sleep observations/corrections push and pull through
-the v1 sync API, pulled records are deduped, conflicts surface as status, and
-Overview/Rhythm label synced server estimates distinctly from local estimates.
-Approval decisions are still in-session (no write-back); persisting decisions,
-import hardening, delete/tombstone propagation for already-synced records, running
-the harness on participant-controlled real history, and full onboarding remain
-phase-two work.
+- Import hardening for external files (size/shape limits exist on sync; the
+  local import path arrives with slices 3 and 7).
+- Source-specific missingness and forced-schedule/travel disruption markers.
+- Correction diff/undo backed by real history end-to-end (UI affordances
+  exist; the Sources tab still shows fixture previews — slice 5).
+- Onboarding beyond the empty state; localization readiness.
+- Local DB encryption at rest + OS credential storage for the desktop store
+  (the token file is 0600; the SQLite store itself is not yet encrypted —
+  privacy.md requires it).
+- **Automatic clinical charting + clinician export** (§3.6): the longitudinal
+  clinical actogram with annotations and a printable, redaction-controlled
+  PDF — replacing hand-kept sleep logs. Recording only; never a treatment
+  recommendation. Depends on slices 3 (real history) and import hardening.
 
 Exit criteria: a fatigued user can read current state, recent drift, and the
-next predicted windows in seconds; the app is keyboard-operable and meets WCAG 2.2
-AA, with screen-reader text equivalents for charts wherever they don't compromise
-the visuals; usability research (synthetic/participant-controlled data) shows no
-one reads an estimate as exact.
+next predicted windows in seconds; the app is keyboard-operable and meets WCAG
+2.2 AA with chart text equivalents wherever they don't compromise the visuals;
+usability research (synthetic/participant-controlled data) shows no one reads
+an estimate as exact.
 
 ---
 
-## Phase 3 — Interoperability: auto-syncing calendar + approval queue
+## Phase 3 — Interoperability: calendars, tasks, and the approval gate
 
-Bring external calendars in, and let the planner *propose* changes — but gate
-every outward or schedule-altering action behind explicit human approval.
+**Delivered:** the approval-gate *mechanics* — the desktop engine-backed
+proposal queue with explanation codes and honest unplaced reasons; the
+backend's persisted pending proposals, one-use signed approval tokens, and
+audit trail. **Not yet delivered:** unification (slice 1), real tasks
+(slice 4), calendar import (slice 6), and write-back.
 
-**3a. Read-only calendar import**
-- Least-privilege, read-only adapters (e.g. ICS/CalDAV/Google read scope) behind
-  an availability + permission boundary, mirroring the Health Connect pattern.
-- Imported events are immutable inputs (like fixed events); their text stays
-  local and is never projected to trusted views.
-- Per-source sync status, last-success time, and conflict/duplicate handling.
+**3a. Read-only calendar import** — re-scope via ADR first (adapter placement,
+protocol order, OAuth verification realities); imported events are immutable
+inputs whose text never reaches trusted views or LLM context.
 
-**3b. Approval queue (the safe-automation gate) — prerequisite for any change**
-- A first-class **Approvals** surface. Nothing the system or assistant decides is
-  applied automatically; every move/placement/reminder shift becomes a *pending
-  proposal* the user approves, edits, or rejects, with plain-language reasons
-  (explanation codes), civil + rhythm context, confidence, and one-tap undo.
-- Fixed/imported events are never moved; only flexible tasks and app-created
-  reminders are ever proposed for movement.
-- Batch review; expiry of stale proposals; full audit trail.
+**3b. Approval queue completion** — one queue: desktop approves backend
+proposals (assistant/agent/scheduler origins) through the decision endpoint;
+batch review, expiry of stale proposals, decision history surfaced.
 
-**3c. Two-way sync (write-back) — only through the queue**
-- Approved changes to *app-owned* flexible items may be written back to a
-  connected calendar via a least-privilege write scope.
-- Gated behind: the approval queue, the relay/security review already required
-  for any non-local transport, and explicit per-calendar write consent.
-- Remote revocation semantics and metadata-minimizing operations.
-
-Spec: [`ui-ux-feature-specs.md` §2](ui-ux-feature-specs.md).
+**3c. Two-way calendar write-back — last, and separately gated.** Approved
+changes to app-owned flexible items may be written back via a least-privilege
+write scope. Gated behind the unified queue, explicit per-calendar write
+consent, and a dedicated security review + threat-model update before
+enablement. (The former "relay" review reference is superseded; the relay
+design survives only as input to trusted-view sharing.)
 
 Exit criteria: no code path applies a calendar change without a recorded
-approval; read-only import works with revocable, least-privilege scopes;
-write-back is off by default and passes a security review before enablement.
+approval; import is revocable and least-privilege; write-back is off by
+default and passes its security review before enablement.
 
 ---
 
-## Phase 4 — Conversational assistant (chatbox)
+## Phase 4 — Conversational assistant
 
-An assistant to manage the schedule and answer questions about one's own data —
-proposing, never applying, and never advising medically. Per
-[ADR-0008](decisions/0008-self-hostable-backend-byok-llm.md) the assistant uses a
-**bring-your-own-key, multi-provider LLM** (the user supplies their own key; a
-local/offline mode may remain as a fallback).
+**Delivered (backend):** the BYOK multi-provider assistant service — redacted
+context, strict-JSON allowlisted actions, server-resolved *pending* proposals,
+medical refusal, provider disclosure (ADR-0010) — and the agent-accessible MCP
+interface with propose-only tools and no approve/apply path (ADR-0006/0012).
 
-- **Manage the calendar by conversation.** The assistant turns requests
-  ("find me 90 min for taxes before Friday, not right after I wake") into
-  **proposals in the approval queue** — it has no authority to apply changes
-  directly. Inspirations: an OpenCode-style transcript with inline tool/action
-  cards; a board-style queue for the resulting pending changes.
-- **Answer questions about local state** — current estimated phase, recent
-  drift, next predicted windows, what a proposal means, why a task moved — always
-  with uncertainty and civil time, and a hard refusal boundary on diagnosis,
-  prescribing, dosing, and treatment timing.
-- **Bring-your-own-key, multi-provider LLM (ADR-0008).** The user supplies their own
-  key; integrated providers are OpenCode Zen, OpenRouter, OpenAI, and Anthropic (modeled
-  on OpenCode, OpenCode Go reference). The project ships no keys; context sent to the
-  user's chosen provider is minimized and redacted, and the active provider is always
-  disclosed. The model still only *proposes* (approval gate) and never advises medically;
-  the provider's data terms are the user's relationship.
-- **The assistant's action registry doubles as an agent-accessible interface.** The
-  same allowlisted, *propose-only*, redacted capability layer the in-app assistant
-  uses is exposed to an external agent so the whole app can be driven non-visually by
-  conversation + live voice — the intended primary path for blind users (see the
-  Agent-accessible interface cross-cutting track and ADR-0006). Delivered as a **local
-  MCP connector** (leading option; works with a local agent so health data can stay on
-  device) and/or a **Claude/ChatGPT skill** (cloud, opt-in, gated). The agent only
-  proposes; the approval queue and medical refusal are unchanged; ZeitBoard ships no
-  speech stack (voice is the client's).
-
-Spec: [`ui-ux-feature-specs.md` §4](ui-ux-feature-specs.md);
-agent interface = [ADR-0006](decisions/0006-agent-accessible-interface.md).
+**Remaining (product):**
+- The desktop chat surface (§4 spec): transcript with inline action cards,
+  provider status dot, refusal states, "omit when unusable".
+- Wiring assistant proposals into the unified approval queue (slice 1) and
+  real tasks (slice 4) so conversation manages actual schedule items.
+- Voice: ZeitBoard ships no speech stack; the supported path is an MCP-capable
+  client with voice (documented in the self-hosting runbook).
+- Cloud skill packaging (Claude/ChatGPT) — additive, opt-in, needs its own
+  privacy/threat review. Reviewer-gated auto-apply remains future and is never
+  the default gate.
 
 Exit criteria: the assistant cannot mutate the schedule except by creating
 approval-queue proposals; it refuses medical questions with a consistent,
-non-alarming script; context sent to the cloud backend is minimized and redacted
-(and the provider does not train on or retain it); the active backend is always
-disclosed in the UI; **every feature is operable non-visually by an agent (read
-state + propose actions) through the allowlisted, redacted capability layer.**
+non-alarming script; context sent to the user's provider is minimized and
+redacted; the active provider is always disclosed; every feature is operable
+non-visually by an agent (read state + propose actions) through the
+allowlisted, redacted capability layer.
 
 ---
 
 ## Cross-cutting tracks (every phase)
 
-- **Uncertainty system:** ranges not points; ordinal confidence; non-color-only
-  encodings — applied to every new chart, proposal, and assistant answer.
-- **Accessibility — visual-first, accessible where reasonable:** the product is
-  visual-first for its primary audience (sighted Non-24) and never sacrifices visual
-  feedback, but every element that can reasonably be made accessible should be:
-  accessible names, non-color-only cues, keyboard operation, WCAG 2.2 AA,
-  reduced-stimulation, 44px targets, and chart text equivalents where they don't
-  compromise aesthetics or functionality. See `accessibility.md`.
-- **Agent-accessible interface:** every feature exposes a non-visual, agent-operable
-  surface — structured readable state + allowlisted *propose-only* actions through the
-  approval gate. The intended primary path for blind users is an **agent + live voice**
-  (a local MCP connector or a Claude/ChatGPT skill), not a transcription of the charts;
-  cloud agents are opt-in and gated like any connected backend. This is a standing
-  design constraint, not a later pass. See ADR-0006 and Phase 4.
-- **Privacy & threat model:** the product is **connected, self-hosted, and BYOK**
-  ([ADR-0007](decisions/0007-connected-cloud-architecture.md) +
-  [ADR-0008](decisions/0008-self-hostable-backend-byok-llm.md)) — an **entirely
-  self-hostable** Go backend syncs the user's data to *their own* instance (TLS,
-  encrypted at rest), and the assistant LLM is **bring-your-own-key, multi-provider**
-  (no shipped keys). The project runs no service and collects no telemetry; the operator
-  is the data controller. Legal scope **US / North Carolina**. Backend Milestone 1 has
-  landed: `apps/server` provides authenticated device enrollment, TLS sync endpoints,
-  strict v1 sync validation, idempotent append-only push/pull, and AES-256-GCM encrypted
-  payload storage. Backend Milestone 2 has landed too: BYOK providers, redacted assistant
-  context, strict JSON action validation, pending proposals, one-use approval tokens,
-  provider disclosure, device revocation, and encrypted proposal/audit storage. Backend
-  Milestone 3 has landed: the server derives effective sleep sessions from synced
-  observations/corrections, computes estimates with the core engine, and exposes
-  authenticated overview, rhythm, and accuracy projections with typed refusals. Backend
-  Milestone 4 has landed: a local stdio MCP adapter exposes those read projections and
-  propose-only scheduling tools over the backend API with call budgets, while approval
-  remains the human one-use-token path. Cloud skill packaging and reviewer-gated
-  auto-apply remain future work.
-- **Contracts:** new surfaces extend the versioned schemas (and an ADR) rather
-  than inventing UI-only data.
+- **Uncertainty system:** ranges not points; ordinal confidence;
+  non-color-only encodings — applied to every new chart, proposal, and
+  assistant answer. The backtest harness is the standing accuracy gate: model
+  changes are justified by measured deltas, and new inference sources (device
+  activity, Takeout) must pass it before influencing the estimate.
+- **Accessibility — visual-first, accessible where reasonable:** never
+  sacrifice the visuals; add accessible names, non-color-only cues, keyboard
+  operation, WCAG 2.2 AA, reduced stimulation, 44px targets, and chart text
+  equivalents wherever they don't compromise aesthetics or functionality. See
+  `accessibility.md`.
+- **Agent-accessible interface:** every feature exposes a non-visual,
+  agent-operable surface — structured readable state + allowlisted
+  *propose-only* actions through the approval gate. The primary non-visual
+  path is an agent + live voice (ADR-0006), not a transcription of the charts.
+  A standing design constraint on every new feature, not a later pass.
+- **Privacy & threat model:** connected, self-hosted, BYOK (ADR-0007/0008):
+  the user's data syncs to *their own* instance; the project runs no service,
+  ships no keys, and collects no telemetry; legal scope US/NC. Implementation
+  status per surface is tracked in `threat-model.md`; every new data source,
+  endpoint, or external surface updates `privacy.md`/`threat-model.md` in the
+  same change.
+- **Contracts:** new surfaces extend the versioned schemas with deterministic
+  fixtures (and an ADR) rather than inventing UI-only data — every schema in
+  `contracts/v1` must have a registered, validated fixture.
 
 ---
 
-## Deferred / non-goals
+## Non-goals
 
 No phase includes: exact circadian phase/DLMO claims; autonomous health
-recommendations; the assistant or scheduler applying changes without approval;
-hidden background collection; advertising; or data brokerage. Each would require a
-new product scope and user-consent design. (Cloud sync of the user's data to their
-account and a cloud LLM backend are now **in scope** per
-[ADR-0007](decisions/0007-connected-cloud-architecture.md) — gated by explicit
-consent, encryption, and export/deletion — and are no longer non-goals.)
+recommendations; the assistant, scheduler, or any agent applying changes
+without a recorded human approval; hidden background collection; advertising;
+data brokerage; or a project-operated hosted service holding user data. Any of
+these would require a new product scope and user-consent design.

@@ -2,13 +2,18 @@
 
 ## Scope
 
-Phase one is an executable, local-first scaffold. It demonstrates ingestion,
+ZeitBoard is a connected, entirely self-hostable system (ADR-0007/0008): a
+visual-first desktop app running on the user's real local sleep data, a
+self-hosted Go backend (`apps/server`) that syncs that data across the user's
+own devices and hosts the BYOK assistant, and a local MCP connector that makes
+the same capability layer agent-operable. It demonstrates ingestion,
 append-only correction, estimated sleep-wake phase, uncertain forecasts,
-deterministic schedule proposals, and minimized trusted-view projection. It is
-not a medical device and does not provide diagnosis or health recommendations.
+deterministic schedule proposals, propose-only assistant/agent actions behind
+a human approval gate, and minimized trusted-view projection. It is not a
+medical device and does not provide diagnosis or health recommendations.
 
 The detailed analysis, optional-agent, validation, and UI specifications in
-this directory are tracked against the scaffold in
+this directory are tracked against the implementation in
 [`specification-alignment.md`](specification-alignment.md). Versioned contracts
 take precedence when terminology or field shapes differ.
 
@@ -22,11 +27,17 @@ flowchart LR
   Core --> Projection["Allowlisted projection"]
   Desktop["Wails desktop service"] --> Core
   DesktopUI["React desktop UI"] --> Desktop
+  Desktop <-->|"opt-in TLS sync + server projections"| Server["Self-hosted Go backend (zeitboardd)"]
+  Server --> ServerStore["Encrypted append-only store"]
+  Server -->|"redacted context, user's key"| LLM["BYOK LLM provider"]
+  MCP["Local MCP connector (zeitboard-mcp)"] -->|"read + propose-only tools"| Server
+  Agent["MCP client / agent"] --> MCP
   Android["Android repositories"] --> Contracts["Versioned contracts"]
   Fixtures["Synthetic fixtures"] --> Android
   Projection --> TrustedFixture["Pre-projected synthetic fixture"]
   TrustedFixture --> TrustedWeb["Static trusted-view prototype"]
   Core --> Contracts
+  Server --> Contracts
 ```
 
 ### Go core
@@ -40,7 +51,18 @@ interfaces and OS build tags.
 
 The Wails service is an adapter over core use cases. It maps private domain
 objects into explicit UI DTOs and does not expose database handles. The React
-frontend communicates only through generated Wails bindings.
+frontend communicates only through generated Wails bindings. Backend sync is
+opt-in and off by default; with sync off the desktop is purely local.
+
+### Self-hosted backend and agent connector
+
+`apps/server` ships two binaries the operator runs: `zeitboardd` (device
+enrollment, TLS sync of contract-shaped records into an encrypted append-only
+store, server-side estimation projections, and the BYOK propose-only assistant
+with one-use approval tokens) and `zeitboard-mcp` (a stateless local adapter
+exposing allowlisted read and propose-only tools to an MCP client; no tool can
+approve or apply). The server may import `non24.app/core` but not Wails. See
+ADR-0009 through ADR-0012 and `self-hosting.md`.
 
 ### Android
 

@@ -1,5 +1,10 @@
 # Phase-one implementation plan
 
+> **Historical document.** This is the delivered phase-one plan, kept as the
+> record of the original scaffold's scope and acceptance checks. The living
+> plan is [`roadmap.md`](roadmap.md); build status is tracked there and in
+> [`specification-alignment.md`](specification-alignment.md).
+
 ## Scope
 
 Build an executable architecture scaffold, not a complete health or scheduling product. All runtime data is local or synthetic. No public sharing endpoint is created.

@@ -30,6 +30,7 @@ and component arguments.
 
 ```powershell
 .\scripts\dev.ps1 -Action check -Component all
+.\scripts\dev.ps1 -Action check -Component server
 .\scripts\dev.ps1 -Action dev -Component desktop
 .\scripts\dev.ps1 -Action build -Component android
 .\scripts\dev.ps1 -Action fixtures
@@ -37,14 +38,18 @@ and component arguments.
 
 ```sh
 bash scripts/dev.sh check all
+bash scripts/dev.sh check server
 bash scripts/dev.sh dev desktop
 bash scripts/dev.sh build android
 bash scripts/dev.sh fixtures
 ```
 
-Components are discovered conservatively. Missing application subtrees are
-reported and skipped so the phase-one scaffold can land incrementally; a
-present component that fails its command causes the script to fail.
+Components: `contracts`, `core`, `server` (the self-hosted backend module
+under `apps/server`, producing `zeitboardd` and `zeitboard-mcp` — operator
+docs in `self-hosting.md`), `desktop`, `trusted-web`, and `android`.
+Components are discovered conservatively: missing application subtrees are
+reported and skipped, and a present component that fails its command causes
+the script to fail.
 
 ## Fixture and contract checks
 
