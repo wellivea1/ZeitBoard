@@ -38,6 +38,9 @@ there rather than being repeated here.
   (payloads hard-deleted server-side) and to every device via id-only
   tombstones in the pull stream; erased records can never be re-pushed
   (ADR-0017).
+- User-owned tasks (per-device): contract-shaped task CRUD, a real Tasks
+  screen, and the scheduler planning only stored open tasks (ADR-0018); task
+  sync deferred.
 - Theming (Auto/Light/Dark), reduced stimulation, WCAG 2.2 AA contrast pass
   with a regression test (ADR-0005).
 
@@ -86,12 +89,14 @@ ADR when it changes architecture.
    results gate estimator work: window-width tightening, an explicit
    linear-misfit signal, and phase-dependent sleep duration are pursued only
    as the numbers justify, each justified by a backtest delta.
-4. **Make tasks real.** Flexible tasks are currently hardcoded planner
-   fixtures (desktop `taskRows`, `localPlannerTasks`) — yet the approval queue,
-   calendar phase, and assistant all assume user-owned tasks exist to move.
-   Task CRUD + local persistence + sync (contract + ADR), replacing the
-   hardcoded task list. This is a prerequisite for Phase 3/4 delivering real
-   value, and it lets assistant/agent proposals target real tasks.
+4. ~~**Make tasks real.**~~ ✅ Delivered (ADR-0018): user-owned tasks with a v1
+   contract (`task-set`), local CRUD persistence, a real Tasks screen (add /
+   done / delete, honest empty and read-only states), and the scheduler now
+   plans only stored open tasks — no fabricated proposals, honest
+   `estimate_unavailable` for real tasks without an estimate. Deferred to a
+   follow-up slice: **task sync** (new sync record kinds + tombstone
+   interplay, staged like sleep data was) and write-back of approved
+   placements (Phase 3c).
 5. **Replace the remaining fixture UI.** The Rhythm "Sources" tab still renders
    synthetic conflict/correction-preview/refusal fixtures next to real data;
    Data Sources shows synthetic source states. Drive them from real local

@@ -118,6 +118,12 @@ func (s *Store) Migrate(ctx context.Context) error {
 			record_id TEXT PRIMARY KEY,
 			erased_at TEXT NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS local_tasks (
+			task_id TEXT PRIMARY KEY,
+			status TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			payload_json BLOB NOT NULL
+		)`,
 	}
 	for _, statement := range statements {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {

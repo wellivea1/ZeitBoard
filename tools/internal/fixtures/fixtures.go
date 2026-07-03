@@ -114,6 +114,24 @@ type syncErase struct {
 	RecordIDs     []string `json:"record_ids"`
 }
 
+type taskSet struct {
+	SchemaVersion string     `json:"schema_version"`
+	GeneratedAt   string     `json:"generated_at"`
+	Tasks         []taskItem `json:"tasks"`
+}
+
+type taskItem struct {
+	TaskID                    string `json:"task_id"`
+	Title                     string `json:"title"`
+	DurationMinutes           int    `json:"duration_minutes"`
+	Status                    string `json:"status"`
+	CreatedAt                 string `json:"created_at"`
+	EarliestStartAt           string `json:"earliest_start_at,omitempty"`
+	LatestFinishAt            string `json:"latest_finish_at,omitempty"`
+	PreferredAfterWakeMinutes int    `json:"preferred_after_wake_minutes,omitempty"`
+	MinimumConfidence         string `json:"minimum_confidence,omitempty"`
+}
+
 type assistantActionTarget struct {
 	TaskID                    string `json:"task_id"`
 	EarliestStartAt           string `json:"earliest_start_at,omitempty"`
@@ -577,6 +595,30 @@ func Build() ([]File, error) {
 		RecordIDs:     []string{"obs_sleep_erased_01", "corr_sleep_erased_01"},
 	}
 
+	taskSetFixture := taskSet{
+		SchemaVersion: "v1",
+		GeneratedAt:   ts(generatedAt),
+		Tasks: []taskItem{
+			{
+				TaskID:            "task_flexible_01",
+				Title:             "Synthetic paperwork block",
+				DurationMinutes:   90,
+				Status:            "open",
+				CreatedAt:         ts(generatedAt),
+				LatestFinishAt:    ts(forecastSleep2),
+				MinimumConfidence: "low",
+			},
+			{
+				TaskID:                    "task_flexible_02",
+				Title:                     "Synthetic errand",
+				DurationMinutes:           30,
+				Status:                    "done",
+				CreatedAt:                 ts(generatedAt),
+				PreferredAfterWakeMinutes: 120,
+			},
+		},
+	}
+
 	assistantActionFixture := assistantAction{
 		SchemaVersion:     "v1",
 		RecommendedAction: "propose_place_task",
@@ -943,6 +985,7 @@ func Build() ([]File, error) {
 		{"sleep-data-export.json", sleepDataExportFixture},
 		{"sync-batch.json", syncBatchFixture},
 		{"sync-erase.json", syncEraseFixture},
+		{"task-set.json", taskSetFixture},
 		{"assistant-action.json", assistantActionFixture},
 		{"direct-proposal-request.json", directProposalRequestFixture},
 		{"phase-estimate.json", estimateFixture},

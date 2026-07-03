@@ -521,14 +521,215 @@ func (a *App) GetRhythm() (estimation.RhythmProjection, error) {
 	return projection, nil
 }
 
+type TaskInput struct {
+	TaskID                    string `json:"taskId,omitempty"`
+	Title                     string `json:"title"`
+	DurationMinutes           int    `json:"durationMinutes"`
+	EarliestStartLocal        string `json:"earliestStartLocal,omitempty"`
+	LatestFinishLocal         string `json:"latestFinishLocal,omitempty"`
+	ZoneID                    string `json:"zoneId,omitempty"`
+	PreferredAfterWakeMinutes int    `json:"preferredAfterWakeMinutes,omitempty"`
+	MinimumConfidence         string `json:"minimumConfidence,omitempty"`
+}
+
+type TaskDTO struct {
+	TaskID          string `json:"taskId"`
+	Title           string `json:"title"`
+	DurationMinutes int    `json:"durationMinutes"`
+	DurationLabel   string `json:"durationLabel"`
+	Status          string `json:"status"`
+	WindowLabel     string `json:"windowLabel,omitempty"`
+	AfterWakeLabel  string `json:"afterWakeLabel,omitempty"`
+	CreatedLabel    string `json:"createdLabel"`
+}
+
+type TasksDTO struct {
+	Status  string    `json:"status"`
+	Message string    `json:"message,omitempty"`
+	Tasks   []TaskDTO `json:"tasks"`
+}
+
+type TaskActionInput struct {
+	TaskID string `json:"taskId"`
+	Done   bool   `json:"done,omitempty"`
+}
+
+// AddTask stores a user-owned flexible task. Tasks are planning items the
+// scheduler may propose windows for; every placement still requires approval.
+func (a *App) AddTask(input TaskInput) (TasksDTO, error) {
+	store, err := a.requireStore()
+	if err != nil {
+		return TasksDTO{}, err
+	}
+	record, err := taskRecordFromInput(input, newLocalID("task"), time.Now().UTC(), storage.TaskStatusOpen)
+	if err != nil {
+		return TasksDTO{}, err
+	}
+	if err := store.AddTask(context.Background(), record); err != nil {
+		return TasksDTO{}, err
+	}
+	return a.ListTasks()
+}
+
+func (a *App) ListTasks() (TasksDTO, error) {
+	store, err := a.requireStore()
+	if err != nil {
+		return TasksDTO{Status: "unavailable", Message: "Task planning needs the desktop app service.", Tasks: []TaskDTO{}}, nil
+	}
+	records, err := store.ListTasks(context.Background())
+	if err != nil {
+		return TasksDTO{}, err
+	}
+	tasks := make([]TaskDTO, 0, len(records))
+	for _, record := range records {
+		tasks = append(tasks, taskDTO(record))
+	}
+	return TasksDTO{Status: "ok", Tasks: tasks}, nil
+}
+
+// UpdateTask replaces an existing task's fields (status is preserved).
+func (a *App) UpdateTask(input TaskInput) (TasksDTO, error) {
+	if input.TaskID == "" {
+		return TasksDTO{}, errors.New("taskId is required")
+	}
+	store, err := a.requireStore()
+	if err != nil {
+		return TasksDTO{}, err
+	}
+	existing, err := store.ListTasks(context.Background())
+	if err != nil {
+		return TasksDTO{}, err
+	}
+	status := storage.TaskStatusOpen
+	created := time.Now().UTC()
+	found := false
+	for _, record := range existing {
+		if record.TaskID == input.TaskID {
+			status = record.Status
+			created = record.CreatedAt
+			found = true
+			break
+		}
+	}
+	if !found {
+		return TasksDTO{}, storage.ErrTaskNotFound
+	}
+	record, err := taskRecordFromInput(input, input.TaskID, created, status)
+	if err != nil {
+		return TasksDTO{}, err
+	}
+	if err := store.UpdateTask(context.Background(), record); err != nil {
+		return TasksDTO{}, err
+	}
+	return a.ListTasks()
+}
+
+func (a *App) SetTaskDone(input TaskActionInput) (TasksDTO, error) {
+	store, err := a.requireStore()
+	if err != nil {
+		return TasksDTO{}, err
+	}
+	status := storage.TaskStatusOpen
+	if input.Done {
+		status = storage.TaskStatusDone
+	}
+	if err := store.SetTaskStatus(context.Background(), input.TaskID, status); err != nil {
+		return TasksDTO{}, err
+	}
+	return a.ListTasks()
+}
+
+func (a *App) DeleteTask(input TaskActionInput) (TasksDTO, error) {
+	store, err := a.requireStore()
+	if err != nil {
+		return TasksDTO{}, err
+	}
+	if err := store.DeleteTask(context.Background(), input.TaskID); err != nil {
+		return TasksDTO{}, err
+	}
+	return a.ListTasks()
+}
+
+func taskRecordFromInput(input TaskInput, taskID string, createdAt time.Time, status string) (storage.TaskRecord, error) {
+	zoneID := strings.TrimSpace(input.ZoneID)
+	if zoneID == "" {
+		zoneID = defaultZoneID
+	}
+	location, err := time.LoadLocation(zoneID)
+	if err != nil {
+		return storage.TaskRecord{}, fmt.Errorf("load time zone %q: %w", zoneID, err)
+	}
+	record := storage.TaskRecord{
+		TaskID:            taskID,
+		Title:             strings.TrimSpace(input.Title),
+		DurationMinutes:   input.DurationMinutes,
+		Status:            status,
+		CreatedAt:         createdAt,
+		MinimumConfidence: strings.TrimSpace(input.MinimumConfidence),
+	}
+	if input.EarliestStartLocal != "" {
+		parsed, err := parseCivilTime(input.EarliestStartLocal, location)
+		if err != nil {
+			return storage.TaskRecord{}, fmt.Errorf("earliest start: %w", err)
+		}
+		utc := parsed.UTC()
+		record.EarliestStartAt = &utc
+	}
+	if input.LatestFinishLocal != "" {
+		parsed, err := parseCivilTime(input.LatestFinishLocal, location)
+		if err != nil {
+			return storage.TaskRecord{}, fmt.Errorf("latest finish: %w", err)
+		}
+		utc := parsed.UTC()
+		record.LatestFinishAt = &utc
+	}
+	if input.PreferredAfterWakeMinutes > 0 {
+		value := input.PreferredAfterWakeMinutes
+		record.PreferredAfterWakeMinutes = &value
+	}
+	return record, nil
+}
+
+func taskDTO(record storage.TaskRecord) TaskDTO {
+	dto := TaskDTO{
+		TaskID:          record.TaskID,
+		Title:           record.Title,
+		DurationMinutes: record.DurationMinutes,
+		DurationLabel:   formatDuration(time.Duration(record.DurationMinutes) * time.Minute),
+		Status:          record.Status,
+		CreatedLabel:    "Added " + record.CreatedAt.Local().Format("Jan 2"),
+	}
+	switch {
+	case record.EarliestStartAt != nil && record.LatestFinishAt != nil:
+		dto.WindowLabel = "Between " + record.EarliestStartAt.Local().Format("Jan 2, 3:04 PM") +
+			" and " + record.LatestFinishAt.Local().Format("Jan 2, 3:04 PM")
+	case record.EarliestStartAt != nil:
+		dto.WindowLabel = "Not before " + record.EarliestStartAt.Local().Format("Jan 2, 3:04 PM")
+	case record.LatestFinishAt != nil:
+		dto.WindowLabel = "Finish by " + record.LatestFinishAt.Local().Format("Jan 2, 3:04 PM")
+	}
+	if record.PreferredAfterWakeMinutes != nil {
+		dto.AfterWakeLabel = fmt.Sprintf("At least %d min after waking", *record.PreferredAfterWakeMinutes)
+	}
+	return dto
+}
+
 func (a *App) GetProposals() (ProposalsDTO, error) {
 	now := time.Now().UTC().Truncate(time.Minute)
-	state, err := a.localEstimate(context.Background(), now)
+	ctx := context.Background()
+	state, err := a.localEstimate(ctx, now)
 	if err != nil {
 		return ProposalsDTO{}, err
 	}
-	tasks := localPlannerTasks(now, defaultZoneID)
+	store, err := a.requireStore()
+	if err != nil {
+		return ProposalsDTO{}, err
+	}
 	if state.Status != "estimated" {
+		tasks, _, terr := store.OpenDomainTasks(ctx, defaultZoneID)
+		if terr != nil {
+			return ProposalsDTO{}, terr
+		}
 		return ProposalsDTO{
 			Status:      state.Status,
 			Refusal:     refusalDTO(state.Refusal, state.Message),
@@ -538,7 +739,10 @@ func (a *App) GetProposals() (ProposalsDTO, error) {
 		}, nil
 	}
 	zoneID := state.Estimate.AsOf.ZoneID
-	tasks = localPlannerTasks(now, zoneID)
+	tasks, _, err := store.OpenDomainTasks(ctx, zoneID)
+	if err != nil {
+		return ProposalsDTO{}, err
+	}
 	availability := append([]domain.AvailabilityWindow{}, state.Estimate.PredictedWakingWindows...)
 	if len(state.Estimate.PredictedSleepWindows) > 0 {
 		nextSleep := state.Estimate.PredictedSleepWindows[0].Interval
@@ -899,23 +1103,6 @@ func latestPrincipalSession(sessions []domain.SleepSession) (domain.SleepSession
 		return sessions[i], true
 	}
 	return domain.SleepSession{}, false
-}
-
-func localPlannerTasks(now time.Time, zoneID string) []domain.FlexibleTask {
-	deadline := domain.MustZonedInstant(now.Add(5*24*time.Hour), zoneID)
-	deepWorkEarliest := domain.MustZonedInstant(now.Add(18*time.Hour), zoneID)
-	callEarliest := domain.MustZonedInstant(now, zoneID)
-	callLatest := domain.MustZonedInstant(now.Add(20*time.Minute), zoneID)
-	return []domain.FlexibleTask{
-		{ID: "task-email", Title: "Email the clinic", EstimatedDuration: 30 * time.Minute,
-			Constraint: domain.TaskConstraint{MinimumConfidence: domain.ConfidenceLow, RequiresApproval: true}},
-		{ID: "task-taxes", Title: "Tax paperwork focus block", EstimatedDuration: 90 * time.Minute,
-			Constraint: domain.TaskConstraint{MinimumConfidence: domain.ConfidenceLow, RequiresApproval: true, Deadline: &deadline}},
-		{ID: "task-deepwork", Title: "Deep work session", EstimatedDuration: 90 * time.Minute,
-			Constraint: domain.TaskConstraint{MinimumConfidence: domain.ConfidenceLow, RequiresApproval: true, EarliestStart: &deepWorkEarliest}},
-		{ID: "task-call", Title: "Call accountant before noon", EstimatedDuration: 60 * time.Minute,
-			Constraint: domain.TaskConstraint{MinimumConfidence: domain.ConfidenceLow, RequiresApproval: true, EarliestStart: &callEarliest, LatestFinish: &callLatest}},
-	}
 }
 
 func unplacedForUnavailableEstimate(tasks []domain.FlexibleTask) []UnplacedDTO {

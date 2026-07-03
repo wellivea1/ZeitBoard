@@ -39,8 +39,21 @@ func TestEmptyLocalStoreReturnsHonestStates(t *testing.T) {
 	if proposals.Status != "empty" || proposals.FixtureMode || len(proposals.Proposals) != 0 {
 		t.Fatalf("unexpected empty proposals: %#v", proposals)
 	}
-	if len(proposals.Unplaced) == 0 || proposals.Unplaced[0].ReasonCode != string(scheduling.ReasonEstimateUnavailable) {
-		t.Fatalf("empty proposals should be marked estimate unavailable: %#v", proposals.Unplaced)
+	// With no user tasks there is nothing to mark unplaced — no fabricated rows.
+	if len(proposals.Unplaced) != 0 {
+		t.Fatalf("no tasks should mean no unplaced rows: %#v", proposals.Unplaced)
+	}
+
+	// A real task without an estimate is honestly marked estimate-unavailable.
+	if _, err := app.AddTask(TaskInput{Title: "File paperwork", DurationMinutes: 45}); err != nil {
+		t.Fatal(err)
+	}
+	proposals, err = app.GetProposals()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(proposals.Unplaced) != 1 || proposals.Unplaced[0].ReasonCode != string(scheduling.ReasonEstimateUnavailable) {
+		t.Fatalf("task without estimate should be estimate-unavailable: %#v", proposals.Unplaced)
 	}
 }
 
@@ -71,6 +84,12 @@ func TestBelowMinimumLocalDataReturnsTypedRefusal(t *testing.T) {
 func TestStoredEntriesDriveOverviewRhythmAndProposals(t *testing.T) {
 	app := newTestApp(t)
 	seedSleepEntries(t, app, 12)
+	if _, err := app.AddTask(TaskInput{Title: "Prepare appointment notes", DurationMinutes: 45}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.AddTask(TaskInput{Title: "Tax paperwork block", DurationMinutes: 90}); err != nil {
+		t.Fatal(err)
+	}
 
 	overview, err := app.GetOverview()
 	if err != nil {
@@ -125,6 +144,81 @@ func TestStoredEntriesDriveOverviewRhythmAndProposals(t *testing.T) {
 				t.Fatalf("proposal %q claims an uncertainty buffer the engine does not apply", proposal.ID)
 			}
 		}
+	}
+}
+
+func TestTaskBindingsCRUDAndPlannerIntegration(t *testing.T) {
+	app := newTestApp(t)
+
+	// Add with a constraint; list reflects it.
+	list, err := app.AddTask(TaskInput{
+		Title:                     "Call before noon",
+		DurationMinutes:           30,
+		PreferredAfterWakeMinutes: 60,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list.Status != "ok" || len(list.Tasks) != 1 || list.Tasks[0].Status != "open" {
+		t.Fatalf("add result = %#v", list)
+	}
+	id := list.Tasks[0].TaskID
+	if list.Tasks[0].AfterWakeLabel == "" {
+		t.Fatalf("after-wake constraint not surfaced: %#v", list.Tasks[0])
+	}
+
+	// Update title + duration.
+	list, err = app.UpdateTask(TaskInput{TaskID: id, Title: "Call before noon (rescoped)", DurationMinutes: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list.Tasks[0].Title != "Call before noon (rescoped)" || list.Tasks[0].DurationMinutes != 20 {
+		t.Fatalf("update not applied: %#v", list.Tasks[0])
+	}
+
+	// Done tasks are not planned.
+	if _, err := app.SetTaskDone(TaskActionInput{TaskID: id, Done: true}); err != nil {
+		t.Fatal(err)
+	}
+	seedSleepEntries(t, app, 12)
+	proposals, err := app.GetProposals()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(proposals.Proposals) != 0 || len(proposals.Unplaced) != 0 {
+		t.Fatalf("done task must not be planned: %#v", proposals)
+	}
+
+	// Reopen: the real scheduler now plans it.
+	if _, err := app.SetTaskDone(TaskActionInput{TaskID: id, Done: false}); err != nil {
+		t.Fatal(err)
+	}
+	proposals, err = app.GetProposals()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(proposals.Proposals)+len(proposals.Unplaced) != 1 {
+		t.Fatalf("open task should be planned or honestly unplaced: %#v", proposals)
+	}
+	if len(proposals.Proposals) == 1 && proposals.Proposals[0].Title != "Call before noon (rescoped)" {
+		t.Fatalf("proposal should target the real task: %#v", proposals.Proposals[0])
+	}
+
+	// Delete removes it from planning entirely.
+	list, err = app.DeleteTask(TaskActionInput{TaskID: id})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list.Tasks) != 0 {
+		t.Fatalf("delete failed: %#v", list)
+	}
+
+	// Validation errors surface.
+	if _, err := app.AddTask(TaskInput{Title: "", DurationMinutes: 30}); err == nil {
+		t.Fatal("empty title must be rejected")
+	}
+	if _, err := app.AddTask(TaskInput{Title: "too short", DurationMinutes: 1}); err == nil {
+		t.Fatal("1-minute duration must be rejected")
 	}
 }
 

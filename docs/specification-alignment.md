@@ -40,8 +40,10 @@ and UI specifications* to what implements them.
 - **Rhythm "Sources" tab and Data Sources:** still render synthetic
   conflict/correction-preview/refusal fixtures beside real data (roadmap
   slice 5).
-- **Tasks:** the task list and planner tasks are hardcoded; no user-owned task
-  entity exists yet (roadmap slice 4).
+- **Tasks:** user-owned tasks are real (contract, local CRUD, real Tasks
+  screen; the scheduler plans only stored open tasks — ADR-0018), but they are
+  per-device: task sync and write-back of approved placements remain future
+  work.
 
 ## Deferred analysis work
 
