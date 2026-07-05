@@ -42,7 +42,9 @@ import {
   deleteAllSleepData,
   deleteSleepObservation,
   exportSleepData,
+  latestCorrectedEntry,
   loadSleepEntries,
+  summarizeSleepSources,
   suppressSleepEntry,
   type SleepClassification,
   type SleepCorrectionInput,
@@ -1029,6 +1031,144 @@ const rhythmTabs: { id: RhythmTab; label: string }[] = [
   { id: "sources", label: "Sources" },
 ];
 
+// Real evidence review for the Rhythm Sources tab (roadmap slice 5): the
+// estimator's actual refusal, the actual correction history, and the actual
+// per-source composition of the local log — no synthetic conflicts.
+function LocalSourcesPanel({ rhythm }: { rhythm: RhythmData }) {
+  const [entriesData, setEntriesData] = useState<SleepEntriesData>({
+    status: "empty",
+    empty: true,
+    message: "Loading local sleep entries.",
+    entries: [],
+  });
+
+  useEffect(() => {
+    let current = true;
+    const refresh = () =>
+      void loadSleepEntries().then((loaded) => {
+        if (current) setEntriesData(loaded);
+      });
+    refresh();
+    window.addEventListener(sleepDataChangedEvent, refresh);
+    return () => {
+      current = false;
+      window.removeEventListener(sleepDataChangedEvent, refresh);
+    };
+  }, []);
+
+  const entries = entriesData.entries;
+  const sources = summarizeSleepSources(entries);
+  const corrected = latestCorrectedEntry(entries);
+  const correctedCount = entries.filter((entry) => entry.history.length > 0).length;
+  const suppressedCount = entries.filter((entry) => entry.suppressed).length;
+  const latestChange = corrected?.history[corrected.history.length - 1];
+
+  return (
+    <>
+      {rhythm.status !== "estimated" && rhythm.refusal && (
+        <section className="panel refusal-panel" aria-labelledby="refusal-title">
+          <p className="section-kicker">{rhythm.refusal.code}</p>
+          <h2 id="refusal-title">The estimator is refusing, not guessing</h2>
+          <p>{rhythm.refusal.message}</p>
+          <div className="proposal-reasons" aria-label="Refusal actions">
+            <a className="task-chip" href="#/data-sources">
+              Add sleep entries
+            </a>
+          </div>
+        </section>
+      )}
+
+      <aside className="panel correction-inspector" aria-labelledby="correction-title">
+        <div className="panel-heading">
+          <div>
+            <p className="section-kicker">Corrections</p>
+            <h2 id="correction-title">
+              {correctedCount > 0
+                ? `${correctedCount} corrected ${correctedCount === 1 ? "entry" : "entries"}`
+                : "No corrections yet"}
+            </h2>
+          </div>
+          <a href="#/data-sources">
+            Edit in Data Sources <Icon name="chevron" />
+          </a>
+        </div>
+        {corrected && latestChange ? (
+          <>
+            <dl className="correction-diff">
+              <div>
+                <dt>Source interval</dt>
+                <dd>
+                  {corrected.startLabel} to {corrected.endLabel}
+                </dd>
+              </div>
+              <div>
+                <dt>Effective interval</dt>
+                <dd>
+                  {corrected.effectiveStartLabel} to {corrected.effectiveEndLabel}
+                </dd>
+              </div>
+            </dl>
+            <p className="diff-note">{latestChange.summary}</p>
+            <small>
+              {latestChange.createdLabel} - {latestChange.reason}. The original observation is
+              preserved; corrections are append-only and reversible with another correction.
+            </small>
+          </>
+        ) : (
+          <p className="phase-two-copy">
+            Observations are immutable. Editing an entry appends a correction here instead of
+            overwriting it, so the evidence trail stays reviewable.
+          </p>
+        )}
+      </aside>
+
+      <section className="panel source-conflicts-panel" aria-labelledby="local-sources-title">
+        <div className="panel-heading">
+          <div>
+            <p className="section-kicker">Sources</p>
+            <h2 id="local-sources-title">What the estimator sees</h2>
+          </div>
+        </div>
+        {sources.length > 0 ? (
+          <div className="conflict-list" aria-labelledby="local-sources-title">
+            {sources.map((source) => (
+              <article className="conflict-row" data-state="resolved" key={source.source}>
+                <div>
+                  <span className="state-pill">{source.provenance}</span>
+                  <h3>{source.source}</h3>
+                  <p>
+                    {source.total} {source.total === 1 ? "entry" : "entries"}
+                    {source.corrected > 0 && `, ${source.corrected} corrected`}
+                    {source.suppressed > 0 && `, ${source.suppressed} suppressed from estimates`}
+                  </p>
+                </div>
+                <small>
+                  {source.suppressed > 0
+                    ? "Suppressed entries stay stored but are excluded from the estimate"
+                    : "All entries feed the estimate"}
+                </small>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <p className="phase-two-copy">
+            No local sleep data yet. Overlaps between future sources are resolved inside the
+            estimation engine, never silently in the chart.
+          </p>
+        )}
+        {suppressedCount + correctedCount > 0 && (
+          <p className="diff-note">
+            Every change is auditable: {correctedCount} correction{correctedCount === 1 ? "" : "s"}
+            {suppressedCount > 0 &&
+              `, ${suppressedCount} suppression${suppressedCount === 1 ? "" : "s"}`}{" "}
+            recorded without altering original observations.
+          </p>
+        )}
+      </section>
+    </>
+  );
+}
+
 function RhythmUnavailablePanel({ rhythm }: { rhythm: RhythmData }) {
   return (
     <section className="panel empty-state rhythm-empty-state" aria-labelledby="rhythm-empty-title">
@@ -1212,24 +1352,7 @@ export function RhythmScreen() {
                 </section>
               </>
             ) : (
-              <section
-                className="panel source-conflicts-panel"
-                aria-labelledby="local-sources-title"
-              >
-                <div className="panel-heading">
-                  <div>
-                    <p className="section-kicker">Sources</p>
-                    <h2 id="local-sources-title">Manual sleep entries</h2>
-                  </div>
-                  <a href="#/data-sources">
-                    Open log <Icon name="chevron" />
-                  </a>
-                </div>
-                <p className="phase-two-copy">
-                  Observations are immutable and corrections are append-only. Edit and suppression
-                  history is visible in Data Sources.
-                </p>
-              </section>
+              <LocalSourcesPanel rhythm={rhythm} />
             )}
           </div>
         )}
@@ -1641,6 +1764,7 @@ export function DataSourcesScreen() {
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
+  const [syncStatus, setSyncStatus] = useState<BackendSyncStatus | undefined>(undefined);
 
   const refreshEntries = async () => {
     const loaded = await loadSleepEntries();
@@ -1661,6 +1785,13 @@ export function DataSourcesScreen() {
           message: error instanceof Error ? error.message : "Manual sleep log is unavailable.",
           entries: [],
         });
+      });
+    void loadBackendSyncStatus()
+      .then((loaded) => {
+        if (current) setSyncStatus(loaded);
+      })
+      .catch(() => {
+        // The sync row simply stays hidden when status is unavailable.
       });
     return () => {
       current = false;
@@ -1865,6 +1996,32 @@ export function DataSourcesScreen() {
               {entriesData.status === "ready" ? "Available" : entriesData.status}
             </span>
           </article>
+          {syncStatus && (
+            <article>
+              <div className="source-mark">
+                <Icon name="sources" />
+              </div>
+              <div>
+                <h2>Server sync</h2>
+                <p>
+                  {syncStatus.enabled
+                    ? `Your own instance - ${syncStatus.pushedCount} pushed, ${syncStatus.pulledCount} pulled${
+                        syncStatus.lastSyncLabel ? `, last sync ${syncStatus.lastSyncLabel}` : ""
+                      }`
+                    : "Off - data stays on this device unless you enroll in Settings"}
+                </p>
+              </div>
+              <span
+                className={`source-status ${syncStatus.status === "connected" ? "connected" : ""}`}
+              >
+                {syncStatus.status === "connected"
+                  ? "Connected"
+                  : syncStatus.status === "error"
+                    ? "Error"
+                    : "Off"}
+              </span>
+            </article>
+          )}
           <article>
             <div className="source-mark">
               <Icon name="calendar" />

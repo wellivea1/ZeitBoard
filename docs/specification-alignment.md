@@ -37,9 +37,11 @@ and UI specifications* to what implements them.
 - **Approvals:** the desktop queue is engine-backed but in-session; the
   backend persists proposals with one-use approval tokens. The two are not yet
   unified (roadmap slice 1).
-- **Rhythm "Sources" tab and Data Sources:** still render synthetic
-  conflict/correction-preview/refusal fixtures beside real data (roadmap
-  slice 5).
+- **Rhythm "Sources" tab and Data Sources:** driven by real local data in the
+  desktop app (real refusal, real correction history, real per-source
+  composition, real sync status); synthetic previews remain only in the
+  labeled browser-preview fixture mode. A real cross-source conflict list
+  awaits an engine-surfaced overlap DTO once multiple sources exist.
 - **Tasks:** user-owned tasks are real (contract, local CRUD, real Tasks
   screen; the scheduler plans only stored open tasks — ADR-0018), but they are
   per-device: task sync and write-back of approved placements remain future

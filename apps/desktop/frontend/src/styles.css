@@ -1266,8 +1266,14 @@ button {
   font-size: 9px;
 }
 .actogram-visual-axis span {
+  /* All hour labels share one grid cell and spread horizontally; without the
+     explicit row, grid auto-placement stacks each label into its own row,
+     leaving a tall empty block above the day rows. */
+  grid-row: 1;
   grid-column: 2;
+  justify-self: start;
   margin-left: var(--axis-position);
+  white-space: nowrap;
 }
 .actogram-visual-axis span:nth-child(1) {
   --axis-position: 0%;

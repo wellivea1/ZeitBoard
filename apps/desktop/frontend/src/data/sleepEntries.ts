@@ -54,6 +54,44 @@ export interface SleepDataExport {
   correctionCount: number;
 }
 
+export interface SleepSourceSummary {
+  source: string;
+  provenance: string;
+  total: number;
+  corrected: number;
+  suppressed: number;
+}
+
+// Real evidence composition for the Rhythm Sources tab: counts per source of
+// what the estimator actually sees. No synthetic conflicts — overlap
+// resolution happens inside the estimation engine.
+export function summarizeSleepSources(entries: SleepEntry[]): SleepSourceSummary[] {
+  const bySource = new Map<string, SleepSourceSummary>();
+  for (const entry of entries) {
+    const summary = bySource.get(entry.sourceLabel) ?? {
+      source: entry.sourceLabel,
+      provenance: entry.provenanceLabel,
+      total: 0,
+      corrected: 0,
+      suppressed: 0,
+    };
+    summary.total += 1;
+    if (entry.history.length > 0) summary.corrected += 1;
+    if (entry.suppressed) summary.suppressed += 1;
+    bySource.set(entry.sourceLabel, summary);
+  }
+  return [...bySource.values()].sort(
+    (a, b) => b.total - a.total || a.source.localeCompare(b.source),
+  );
+}
+
+// The most recently corrected entry drives the real correction inspector;
+// the desktop log is ordered newest episode first. Undefined when no
+// corrections exist yet.
+export function latestCorrectedEntry(entries: SleepEntry[]): SleepEntry | undefined {
+  return entries.find((entry) => entry.history.length > 0);
+}
+
 type UnknownRecord = Record<string, unknown>;
 type WailsMethod = (input?: unknown) => Promise<unknown>;
 

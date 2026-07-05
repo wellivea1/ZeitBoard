@@ -101,6 +101,97 @@ describe("desktop navigation", () => {
     expect(screen.getByText("Wearable sleep overlaps desktop activity")).toBeVisible();
   });
 
+  it("drives the Sources tab from real local data instead of fixtures", async () => {
+    window.location.hash = "#/rhythm";
+    const correctedEntry = {
+      observationId: "obs_sleep_01",
+      startLocal: "2026-03-01T22:00",
+      endLocal: "2026-03-02T06:00",
+      startLabel: "Sun Mar 1, 10:00 PM EST",
+      endLabel: "Mon Mar 2, 6:00 AM EST",
+      zoneId: "America/New_York",
+      classification: "principal",
+      effectiveStartLocal: "2026-03-01T22:30",
+      effectiveEndLocal: "2026-03-02T06:00",
+      effectiveStartLabel: "Sun Mar 1, 10:30 PM EST",
+      effectiveEndLabel: "Mon Mar 2, 6:00 AM EST",
+      effectiveClassification: "principal",
+      durationLabel: "7 hours 30 minutes",
+      suppressed: false,
+      sourceLabel: "Manual sleep log",
+      provenanceLabel: "manual / user reported",
+      history: [
+        {
+          correctionId: "corr_sleep_01",
+          createdLabel: "Mar 2, 6:15 AM",
+          reason: "user edit",
+          summary: "start moved to Mar 1, 10:30 PM",
+        },
+      ],
+    };
+    const suppressedEntry = {
+      ...correctedEntry,
+      observationId: "obs_sleep_02",
+      suppressed: true,
+      history: [],
+    };
+    (globalThis as { go?: unknown }).go = {
+      main: {
+        App: {
+          GetRhythm: async () => ({
+            estimateSource: "local",
+            fixtureMode: false,
+            status: "refused",
+            refusal: {
+              code: "insufficient_data",
+              message: "Add at least seven principal sleep episodes.",
+            },
+            observedRows: [],
+            forecastRows: [],
+            driftPoints: [],
+            now: { day: "Jul 4", hour: 12, label: "Now" },
+            actogramSummary: "No chart yet",
+            driftTitle: "Sleep-onset drift",
+            slopeLabel: "n/a",
+            driftConfidence: "Low",
+            driftSummary: "Not enough usable sleep data.",
+            yMinHour: 0,
+            yMaxHour: 24,
+          }),
+          ListSleepEntries: async () => ({
+            status: "ready",
+            empty: false,
+            message: "2 local sleep entries stored on this device.",
+            entries: [correctedEntry, suppressedEntry],
+          }),
+        },
+      },
+    };
+    render(<App />);
+
+    await screen.findByText("Local data");
+    fireEvent.click(screen.getByRole("tab", { name: "Sources" }));
+
+    // Real refusal, not the refusal fixture.
+    expect(
+      await screen.findByRole("heading", { name: "The estimator is refusing, not guessing" }),
+    ).toBeVisible();
+    expect(screen.getByText("insufficient_data")).toBeVisible();
+
+    // Real correction history drives the inspector; the fixture undo button is gone.
+    expect(await screen.findByRole("heading", { name: "1 corrected entry" })).toBeVisible();
+    expect(screen.getByText("start moved to Mar 1, 10:30 PM")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Undo correction" })).toBeNull();
+    expect(screen.queryByText("Wearable sleep overlaps desktop activity")).toBeNull();
+
+    // Real per-source composition with suppression counts.
+    expect(screen.getByRole("heading", { name: "What the estimator sees" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Manual sleep log" })).toBeVisible();
+    expect(
+      screen.getByText(/2 entries, 1 corrected, 1 suppressed from estimates/, { selector: "p" }),
+    ).toBeVisible();
+  });
+
   it("renders the rhythm drift visualizer instead of a placeholder", () => {
     window.location.hash = "#/rhythm";
     render(<App />);

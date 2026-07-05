@@ -41,6 +41,9 @@ there rather than being repeated here.
 - User-owned tasks (per-device): contract-shaped task CRUD, a real Tasks
   screen, and the scheduler planning only stored open tasks (ADR-0018); task
   sync deferred.
+- The Rhythm Sources tab and Data Sources run on real local state (refusals,
+  correction history, per-source composition, sync status); synthetic previews
+  are confined to the labeled browser fixture mode.
 - Theming (Auto/Light/Dark), reduced stimulation, WCAG 2.2 AA contrast pass
   with a regression test (ADR-0005).
 
@@ -97,11 +100,15 @@ ADR when it changes architecture.
    follow-up slice: **task sync** (new sync record kinds + tombstone
    interplay, staged like sleep data was) and write-back of approved
    placements (Phase 3c).
-5. **Replace the remaining fixture UI.** The Rhythm "Sources" tab still renders
-   synthetic conflict/correction-preview/refusal fixtures next to real data;
-   Data Sources shows synthetic source states. Drive them from real local
-   state (correction history exists; source status exists for sync) or clearly
-   label and demote what has no real backing yet.
+5. ~~**Replace the remaining fixture UI.**~~ ✅ Delivered: in local/synced mode
+   the Rhythm "Sources" tab now shows the estimator's real refusal, the real
+   correction history (append-only inspector; the dead fixture undo button is
+   gone), and the real per-source composition with corrected/suppressed
+   counts; Data Sources gained a real server-sync source row. The synthetic
+   conflict/correction/refusal previews survive only in the browser-preview
+   fixture mode, which is labeled "Sample data". A real *conflict* list still
+   needs an engine-surfaced overlap DTO — deferred until multiple sources
+   exist (slice 7), rather than faking overlap logic in the chart layer.
 6. **Calendar import (Phase 3a) — after an explicit placement ADR.** The
    original scoping predates the backend; decide *where adapters live*
    (device-side like Health Connect vs server-side on the instance), which
@@ -138,8 +145,9 @@ Largely delivered (see "Where things stand"). Remaining in scope:
 - Import hardening for external files (size/shape limits exist on sync; the
   local import path arrives with slices 3 and 7).
 - Source-specific missingness and forced-schedule/travel disruption markers.
-- Correction diff/undo backed by real history end-to-end (UI affordances
-  exist; the Sources tab still shows fixture previews — slice 5).
+- Correction *undo* as a one-click affordance (the Sources tab now shows the
+  real correction history and diff; reversal today means appending another
+  correction in Data Sources).
 - Onboarding beyond the empty state; localization readiness.
 - Local DB encryption at rest + OS credential storage for the desktop store
   (the token file is 0600; the SQLite store itself is not yet encrypted —

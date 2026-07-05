@@ -5,9 +5,12 @@ import {
   deleteAllSleepData,
   deleteSleepObservation,
   exportSleepData,
+  latestCorrectedEntry,
   loadSleepEntries,
   normalizeSleepDataExport,
   normalizeSleepEntries,
+  summarizeSleepSources,
+  type SleepEntry,
 } from "./sleepEntries";
 
 const entry = {
@@ -167,5 +170,48 @@ describe("sleep entry adapter", () => {
     });
     expect(singleDeleteInput).toEqual({ observationId: "obs_sleep_01", confirmation: "DELETE" });
     expect(deleteAllInput).toEqual({ confirmation: "DELETE" });
+  });
+});
+
+describe("source summaries", () => {
+  const typed = entry as SleepEntry;
+  const uncorrected: SleepEntry = {
+    ...typed,
+    observationId: "obs_sleep_02",
+    sourceLabel: "Manual sleep log",
+    history: [],
+  };
+  const suppressedWearable: SleepEntry = {
+    ...typed,
+    observationId: "obs_sleep_03",
+    sourceLabel: "Wearable import",
+    suppressed: true,
+    history: [],
+  };
+
+  it("summarizes real per-source composition with corrected and suppressed counts", () => {
+    const summary = summarizeSleepSources([typed, uncorrected, suppressedWearable]);
+    expect(summary).toEqual([
+      {
+        source: "Manual sleep log",
+        provenance: "manual / user reported",
+        total: 2,
+        corrected: 1,
+        suppressed: 0,
+      },
+      {
+        source: "Wearable import",
+        provenance: "manual / user reported",
+        total: 1,
+        corrected: 0,
+        suppressed: 1,
+      },
+    ]);
+    expect(summarizeSleepSources([])).toEqual([]);
+  });
+
+  it("finds the newest corrected entry (log is newest-first)", () => {
+    expect(latestCorrectedEntry([uncorrected, typed])?.observationId).toBe("obs_sleep_01");
+    expect(latestCorrectedEntry([uncorrected, suppressedWearable])).toBeUndefined();
   });
 });
