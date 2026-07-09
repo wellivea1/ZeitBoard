@@ -3,8 +3,9 @@
 // a seeded generator that produces the sleep sessions the app would see while
 // retaining the true latent state, so estimator output is scored against truth
 // rather than against noisy observations. The generative-loop style follows the
-// sleepdiary/Zeitdex docs simulator (add a diary entry per cycle with normal
-// jitter); the scenario shapes and expected behaviors come from the plan.
+// sleepdiary docs simulator (add a diary entry per cycle with normal jitter;
+// full attribution in ADR-0019); scenario shapes and expected behaviors come
+// from the plan.
 //
 // Only sleep-timing structure is generated here. Wearable/phone/desktop/light
 // streams (plan scenarios 11-15, 18-19) wait until multi-source inference
