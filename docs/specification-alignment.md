@@ -17,7 +17,10 @@ and UI specifications* to what implements them.
 - The estimator uses a documented Theil-Sen sleep-start trajectory, reports
   drift per observed sleep cycle, widens forecast ranges with horizon, and
   uses the v1 contract refusal codes. `estimation.Backtest` provides
-  walk-forward point-error / hit-rate / calibration measurement.
+  walk-forward point-error / hit-rate / calibration measurement, and
+  `core/simulate` implements the validation plan's seeded synthetic generator
+  (latent truth retained) with a 12-scenario estimator validation suite and
+  benchmark table (ADR-0019).
 - Observations are immutable and corrections are append-only and reversible
   through superseding records — locally (desktop SQLite, ADR-0013), on the
   self-hosted backend (sync log, ADR-0009), and in every read path
@@ -71,8 +74,11 @@ and UI specifications* to what implements them.
 - A real trusted-view sharing transport (passcodes, access logs, remote
   revocation); the former relay design survives only as input to that path.
 - Local desktop DB encryption at rest and OS credential storage.
-- Emulator/device validation, real-world pilot validation, calibration plots,
-  benchmark reporting, and the complete 20-scenario synthetic generator.
+- Emulator/device validation, real-world pilot validation, and calibration
+  plots. Of the plan's 20 synthetic scenarios, the 12 sleep-timing scenarios
+  plus boundary-level corruption checks are implemented with benchmark
+  reporting (ADR-0019); scenarios 11–15 and 18–19 await the multi-source
+  streams of roadmap slice 7.
 
 The specifications' central safety rule is preserved everywhere: the software
 declines to guess when evidence is inadequate, and every automation path ends

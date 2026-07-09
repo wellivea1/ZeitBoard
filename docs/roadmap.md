@@ -92,6 +92,14 @@ ADR when it changes architecture.
    results gate estimator work: window-width tightening, an explicit
    linear-misfit signal, and phase-dependent sleep duration are pursued only
    as the numbers justify, each justified by a backtest delta.
+   *Interim delivered (ADR-0019):* `core/simulate` — the validation plan's
+   seeded synthetic generator (latent truth retained) plus a 12-scenario
+   suite running the real estimator: drift recovered within ~1 min/cycle on
+   every linearly-describable pattern (incl. naps, fragmentation,
+   deprivation, forced wake, travel, DST); the change-point scenario (S6)
+   degrades honestly with self-reported low confidence, now locked by tests.
+   Real-history validation stays open — synthetic data cannot prove real
+   logging behavior.
 4. ~~**Make tasks real.**~~ ✅ Delivered (ADR-0018): user-owned tasks with a v1
    contract (`task-set`), local CRUD persistence, a real Tasks screen (add /
    done / delete, honest empty and read-only states), and the scheduler now
