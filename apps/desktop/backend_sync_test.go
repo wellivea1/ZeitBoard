@@ -609,7 +609,7 @@ func TestPulledTombstoneErasesLocalCopy(t *testing.T) {
 	if len(observations) != 0 {
 		t.Fatalf("tombstone should erase the local copy, got %d observations", len(observations))
 	}
-	pending, err := store.PendingSleepErasures(context.Background())
+	pending, err := store.PendingSyncErasures(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -758,4 +758,165 @@ func mustJSON(t *testing.T, value any) json.RawMessage {
 
 func timePtr(value time.Time) *time.Time {
 	return &value
+}
+
+func TestTaskEditsPushRevisionsAndDeletePropagatesErasure(t *testing.T) {
+	app := newTestApp(t)
+	var pushedTaskIDs []string
+	var eraseRequests []syncEraseRequest
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/devices":
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(registerDeviceResponse{SchemaVersion: "v1", DeviceID: "device_desktop", Token: "task-token"})
+		case "/v1/sync/push":
+			var req syncPushRequest
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			for _, record := range req.Records {
+				if record.Kind == "task" {
+					pushedTaskIDs = append(pushedTaskIDs, record.RecordID)
+				}
+			}
+			_ = json.NewEncoder(w).Encode(syncPushResponse{SchemaVersion: "v1", Cursor: 1, Accepted: len(req.Records)})
+		case "/v1/sync/erase":
+			var req syncEraseRequest
+			_ = json.NewDecoder(r.Body).Decode(&req)
+			eraseRequests = append(eraseRequests, req)
+			_ = json.NewEncoder(w).Encode(syncEraseResponse{SchemaVersion: "v1", Erased: len(req.RecordIDs), Tombstones: len(req.RecordIDs), Cursor: 2})
+		case "/v1/sync/pull":
+			_ = json.NewEncoder(w).Encode(syncPullResponse{SchemaVersion: "v1", Cursor: 2, Records: []syncEnvelope{}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	configureBackendForTest(t, app, server.URL)
+
+	// Add + sync: revision 1 is pushed once.
+	list, err := app.AddTask(TaskInput{Title: "File paperwork", DurationMinutes: 45})
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskID := list.Tasks[0].TaskID
+	if _, err := app.SyncNow(); err != nil {
+		t.Fatal(err)
+	}
+	if len(pushedTaskIDs) != 1 || pushedTaskIDs[0] != taskID+"_r1" {
+		t.Fatalf("pushed task records = %v", pushedTaskIDs)
+	}
+	// Idempotent: a second sync pushes nothing new.
+	if _, err := app.SyncNow(); err != nil {
+		t.Fatal(err)
+	}
+	if len(pushedTaskIDs) != 1 {
+		t.Fatalf("unchanged task re-pushed: %v", pushedTaskIDs)
+	}
+
+	// Edit + sync: exactly the new revision goes out.
+	if _, err := app.UpdateTask(TaskInput{TaskID: taskID, Title: "File paperwork (rescoped)", DurationMinutes: 30}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.SyncNow(); err != nil {
+		t.Fatal(err)
+	}
+	if len(pushedTaskIDs) != 2 || pushedTaskIDs[1] != taskID+"_r2" {
+		t.Fatalf("pushed task records after edit = %v", pushedTaskIDs)
+	}
+
+	// Delete + sync: both pushed revisions are erased server-side.
+	if _, err := app.DeleteTask(TaskActionInput{TaskID: taskID}); err != nil {
+		t.Fatal(err)
+	}
+	status, err := app.SyncNow()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.ErasuresPushed != 2 || status.LastError != "" {
+		t.Fatalf("delete sync = %#v, want 2 erasures", status)
+	}
+	if len(eraseRequests) != 1 || len(eraseRequests[0].RecordIDs) != 2 {
+		t.Fatalf("erase requests = %#v", eraseRequests)
+	}
+}
+
+func TestPulledTaskRevisionsApplyLWWAndTombstoneDeletes(t *testing.T) {
+	app := newTestApp(t)
+	created := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
+	remote := storage.TaskRecord{
+		TaskID: "task_from_phone", Title: "Call clinic", DurationMinutes: 20,
+		Status: storage.TaskStatusOpen, CreatedAt: created, Revision: 2, UpdatedAt: created.Add(time.Hour),
+	}
+	stale := remote
+	stale.Revision = 1
+	stale.Title = "Old title"
+	tombstonePayload := mustJSON(t, syncTombstonePayload{RecordID: "task_from_phone_r2"})
+	phase := 0
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/devices":
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(registerDeviceResponse{SchemaVersion: "v1", DeviceID: "device_desktop", Token: "task-pull-token"})
+		case "/v1/sync/pull":
+			if phase == 0 {
+				_ = json.NewEncoder(w).Encode(syncPullResponse{SchemaVersion: "v1", Cursor: 2, Records: []syncEnvelope{
+					{Seq: 1, RecordID: "task_from_phone_r2", Kind: "task", DeviceID: "phone_device", CreatedAt: remote.UpdatedAt, Payload: mustJSON(t, remote)},
+					{Seq: 2, RecordID: "task_from_phone_r1", Kind: "task", DeviceID: "phone_device", CreatedAt: created, Payload: mustJSON(t, stale)},
+				}})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(syncPullResponse{SchemaVersion: "v1", Cursor: 3, Records: []syncEnvelope{
+				{Seq: 3, RecordID: "task_from_phone_r2", Kind: "tombstone", DeviceID: "phone_device", CreatedAt: created.Add(2 * time.Hour), Payload: tombstonePayload},
+			}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	configureBackendForTest(t, app, server.URL)
+
+	// Pull both revisions: LWW keeps revision 2; the stale one is skipped.
+	first, err := app.SyncNow()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.PulledCount != 1 || first.SkippedCount != 1 {
+		t.Fatalf("first sync = %#v, want 1 applied + 1 stale skipped", first)
+	}
+	list, err := app.ListTasks()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list.Tasks) != 1 || list.Tasks[0].Title != "Call clinic" {
+		t.Fatalf("tasks after pull = %#v", list.Tasks)
+	}
+	// The pulled task is not pushed back.
+	store, err := app.requireStore()
+	if err != nil {
+		t.Fatal(err)
+	}
+	unpushed, err := store.UnpushedTaskSyncRecords(context.Background())
+	if err != nil || len(unpushed) != 0 {
+		t.Fatalf("pulled task queued for re-push: %+v %v", unpushed, err)
+	}
+
+	// Pull the tombstone: the task disappears, nothing is re-enqueued.
+	phase = 1
+	second, err := app.SyncNow()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.TombstonesApplied != 1 || second.LastError != "" {
+		t.Fatalf("second sync = %#v, want 1 tombstone applied", second)
+	}
+	list, err = app.ListTasks()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list.Tasks) != 0 {
+		t.Fatalf("tombstoned task still present: %#v", list.Tasks)
+	}
+	pending, err := store.PendingSyncErasures(context.Background())
+	if err != nil || len(pending) != 0 {
+		t.Fatalf("tombstone application must not enqueue erasures: %v %v", pending, err)
+	}
 }

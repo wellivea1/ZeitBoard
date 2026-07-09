@@ -130,6 +130,8 @@ type taskItem struct {
 	LatestFinishAt            string `json:"latest_finish_at,omitempty"`
 	PreferredAfterWakeMinutes int    `json:"preferred_after_wake_minutes,omitempty"`
 	MinimumConfidence         string `json:"minimum_confidence,omitempty"`
+	Revision                  int    `json:"revision,omitempty"`
+	UpdatedAt                 string `json:"updated_at,omitempty"`
 }
 
 type assistantActionTarget struct {
@@ -561,7 +563,7 @@ func Build() ([]File, error) {
 
 	syncBatchFixture := syncBatch{
 		SchemaVersion: "v1",
-		Cursor:        3,
+		Cursor:        4,
 		Records: []syncRecord{
 			{
 				Seq:       1,
@@ -586,6 +588,23 @@ func Build() ([]File, error) {
 				DeviceID:  "device_desktop_01",
 				CreatedAt: ts(generatedAt),
 				Payload:   syncTombstonePayload{RecordID: "obs_sleep_erased_01"},
+			},
+			{
+				Seq:       4,
+				RecordID:  "task_flexible_01_r2",
+				Kind:      "task",
+				DeviceID:  "device_desktop_01",
+				CreatedAt: ts(generatedAt),
+				Payload: taskItem{
+					TaskID:            "task_flexible_01",
+					Title:             "Synthetic paperwork block (rescoped)",
+					DurationMinutes:   60,
+					Status:            "open",
+					CreatedAt:         ts(generatedAt),
+					MinimumConfidence: "low",
+					Revision:          2,
+					UpdatedAt:         ts(generatedAt),
+				},
 			},
 		},
 	}

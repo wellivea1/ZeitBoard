@@ -31,11 +31,20 @@ type TaskRecord struct {
 	LatestFinishAt            *time.Time `json:"latest_finish_at,omitempty"`
 	PreferredAfterWakeMinutes *int       `json:"preferred_after_wake_minutes,omitempty"`
 	MinimumConfidence         string     `json:"minimum_confidence,omitempty"`
+	// Revision makes mutable tasks syncable over the append-only log: each
+	// edit bumps it, and the revision syncs as an immutable record with id
+	// "<task_id>_r<revision>"; consumers keep the highest revision (ADR-0020).
+	Revision  int       `json:"revision,omitempty"`
+	UpdatedAt time.Time `json:"updated_at,omitempty"`
 }
 
 var ErrTaskNotFound = errors.New("task does not exist")
 
 func (s *Store) AddTask(ctx context.Context, record TaskRecord) error {
+	record.Revision = 1
+	if record.UpdatedAt.IsZero() {
+		record.UpdatedAt = record.CreatedAt
+	}
 	if err := validateTask(record); err != nil {
 		return err
 	}
@@ -66,8 +75,17 @@ func (s *Store) ListTasks(ctx context.Context) ([]TaskRecord, error) {
 	return records, err
 }
 
-// UpdateTask replaces the stored task (same id) with the given record.
+// UpdateTask replaces the stored task (same id) with the given record and
+// bumps its sync revision.
 func (s *Store) UpdateTask(ctx context.Context, record TaskRecord) error {
+	existing, err := s.taskByID(ctx, record.TaskID)
+	if err != nil {
+		return err
+	}
+	record.Revision = effectiveRevision(existing) + 1
+	if record.UpdatedAt.IsZero() {
+		record.UpdatedAt = time.Now().UTC()
+	}
 	if err := validateTask(record); err != nil {
 		return err
 	}
@@ -101,11 +119,33 @@ func (s *Store) DeleteTask(ctx context.Context, taskID string) error {
 	if !contractIdentifier.MatchString(taskID) {
 		return errors.New("task_id must match the v1 identifier format")
 	}
-	result, err := s.db.ExecContext(ctx, `DELETE FROM local_tasks WHERE task_id = ?`, taskID)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	return requireTaskAffected(result)
+	// Revisions that already reached the synced backend need server-side
+	// erasure too (ADR-0017): enqueue every pushed revision before its
+	// bookkeeping disappears. Never-pushed tasks never left this device.
+	erasedAt := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO local_sleep_erasures(record_id, erased_at)
+		SELECT record_id, ? FROM local_task_sync_records WHERE task_id = ?`, erasedAt, taskID); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM local_task_sync_records WHERE task_id = ?`, taskID); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	result, err := tx.ExecContext(ctx, `DELETE FROM local_tasks WHERE task_id = ?`, taskID)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if err := requireTaskAffected(result); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) taskByID(ctx context.Context, taskID string) (TaskRecord, error) {
@@ -205,6 +245,12 @@ func validateTask(record TaskRecord) error {
 	if record.CreatedAt.IsZero() {
 		return errors.New("created_at is required")
 	}
+	if record.Revision < 1 {
+		return errors.New("revision must be at least 1")
+	}
+	if record.UpdatedAt.IsZero() {
+		return errors.New("updated_at is required")
+	}
 	if record.PreferredAfterWakeMinutes != nil &&
 		(*record.PreferredAfterWakeMinutes < 0 || *record.PreferredAfterWakeMinutes > 1440) {
 		return errors.New("preferred_after_wake_minutes must be between 0 and 1440")
@@ -220,8 +266,18 @@ func validateTask(record TaskRecord) error {
 	return nil
 }
 
+func effectiveRevision(record TaskRecord) int {
+	if record.Revision < 1 {
+		return 1 // rows written before revisions existed count as revision 1
+	}
+	return record.Revision
+}
+
 func normalizeTaskTimes(record TaskRecord) TaskRecord {
 	record.CreatedAt = record.CreatedAt.UTC()
+	if !record.UpdatedAt.IsZero() {
+		record.UpdatedAt = record.UpdatedAt.UTC()
+	}
 	if record.EarliestStartAt != nil {
 		value := record.EarliestStartAt.UTC()
 		record.EarliestStartAt = &value

@@ -863,3 +863,98 @@ func assistantRequestBody() string {
   }
 }`
 }
+
+func taskRevisionRecord(taskID string, revision int, title, status string) string {
+	id := fmt.Sprintf("%s_r%d", taskID, revision)
+	payload := fmt.Sprintf(
+		`{"task_id":%q,"title":%q,"duration_minutes":45,"status":%q,"created_at":"2026-03-05T12:00:00Z","revision":%d,"updated_at":"2026-03-05T12:%02d:00Z"}`,
+		taskID, title, status, revision, revision)
+	return syncRecord(id, "task", payload)
+}
+
+func TestTaskRevisionSyncLifecycle(t *testing.T) {
+	h := newTestHarness(t)
+	desktop := h.registerDevice(t, "desktop")
+	laptop := h.registerDevice(t, "laptop")
+
+	// Two revisions of one task flow through the log; the server stores both
+	// (LWW is the consumer's job) and any device can pull them.
+	h.pushRecords(t, desktop, taskRevisionRecord("task_paperwork_01", 1, "File paperwork", "open"))
+	h.pushRecords(t, desktop, taskRevisionRecord("task_paperwork_01", 2, "File paperwork (rescoped)", "done"))
+
+	status, body := h.request(t, http.MethodGet, "/v1/sync/pull?since=0", laptop, "")
+	if status != http.StatusOK {
+		t.Fatalf("pull status = %d", status)
+	}
+	var pull syncmodel.PullResponse
+	if err := json.Unmarshal(body, &pull); err != nil {
+		t.Fatal(err)
+	}
+	taskRevisions := []string{}
+	for _, envelope := range pull.Records {
+		if envelope.Kind == syncmodel.KindTask {
+			taskRevisions = append(taskRevisions, envelope.RecordID)
+		}
+	}
+	if len(taskRevisions) != 2 || taskRevisions[0] != "task_paperwork_01_r1" || taskRevisions[1] != "task_paperwork_01_r2" {
+		t.Fatalf("task revisions in pull = %v", taskRevisions)
+	}
+
+	// Validation is strict: mismatched revision-record id, bad revision, and
+	// out-of-bounds fields are rejected.
+	badID := syncRecord("task_paperwork_01_r9", "task",
+		`{"task_id":"task_paperwork_01","title":"x","duration_minutes":45,"status":"open","created_at":"2026-03-05T12:00:00Z","revision":3,"updated_at":"2026-03-05T12:03:00Z"}`)
+	if status, _ := h.request(t, http.MethodPost, "/v1/sync/push", desktop, syncBatch(badID)); status != http.StatusBadRequest {
+		t.Fatalf("mismatched revision id accepted: %d", status)
+	}
+	badRevision := syncRecord("task_paperwork_01_r0", "task",
+		`{"task_id":"task_paperwork_01","title":"x","duration_minutes":45,"status":"open","created_at":"2026-03-05T12:00:00Z","revision":0,"updated_at":"2026-03-05T12:03:00Z"}`)
+	if status, _ := h.request(t, http.MethodPost, "/v1/sync/push", desktop, syncBatch(badRevision)); status != http.StatusBadRequest {
+		t.Fatalf("revision 0 accepted: %d", status)
+	}
+	badStatus := taskRevisionRecord("task_paperwork_02", 1, "ok", "archived")
+	if status, _ := h.request(t, http.MethodPost, "/v1/sync/push", desktop, syncBatch(badStatus)); status != http.StatusBadRequest {
+		t.Fatalf("off-enum status accepted: %d", status)
+	}
+
+	// Deleting the task erases every pushed revision: payloads hard-deleted,
+	// tombstones minted, resurrection blocked (ADR-0017 machinery, unchanged).
+	eraseBody := `{"schema_version":"v1","record_ids":["task_paperwork_01_r1","task_paperwork_01_r2"]}`
+	status, body = h.request(t, http.MethodPost, "/v1/sync/erase", laptop, eraseBody)
+	if status != http.StatusOK {
+		t.Fatalf("erase status = %d body = %s", status, body)
+	}
+	var erase syncmodel.EraseResponse
+	if err := json.Unmarshal(body, &erase); err != nil {
+		t.Fatal(err)
+	}
+	if erase.Erased != 2 || erase.Tombstones != 2 {
+		t.Fatalf("erase = %+v, want 2 erased + 2 tombstones", erase)
+	}
+	h.pushRecords(t, desktop, taskRevisionRecord("task_paperwork_01", 1, "File paperwork", "open")) // silent no-op
+	status, body = h.request(t, http.MethodGet, "/v1/sync/pull?since=0", desktop, "")
+	if status != http.StatusOK {
+		t.Fatalf("pull status = %d", status)
+	}
+	pull = syncmodel.PullResponse{}
+	if err := json.Unmarshal(body, &pull); err != nil {
+		t.Fatal(err)
+	}
+	for _, envelope := range pull.Records {
+		if envelope.Kind == syncmodel.KindTask {
+			t.Fatalf("erased task revision resurfaced: %s", envelope.RecordID)
+		}
+	}
+
+	// Task records must not disturb server-side sleep estimation.
+	start := time.Date(2026, 4, 1, 2, 0, 0, 0, time.UTC)
+	h.pushRecords(t, desktop, driftingSleepRecords(10, start, 24*time.Hour+50*time.Minute, 8*time.Hour)...)
+	h.pushRecords(t, desktop, taskRevisionRecord("task_paperwork_03", 1, "Unrelated task", "open"))
+	status, body = h.request(t, http.MethodGet, "/v1/overview", desktop, "")
+	if status != http.StatusOK {
+		t.Fatalf("overview status = %d body = %s", status, body)
+	}
+	if !strings.Contains(string(body), "estimated") {
+		t.Fatalf("estimation should proceed alongside task records: %s", body)
+	}
+}

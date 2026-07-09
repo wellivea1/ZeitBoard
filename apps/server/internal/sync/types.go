@@ -18,6 +18,11 @@ type Kind string
 const (
 	KindObservation Kind = "observation"
 	KindCorrection  Kind = "correction"
+	// KindTask carries one immutable revision of a user-owned task. Tasks are
+	// mutable planning items, so each edit appends a new record whose id is
+	// "<task_id>_r<revision>"; consumers keep the highest revision per task
+	// (ADR-0020). Deleting a task erases all its pushed revisions (ADR-0017).
+	KindTask Kind = "task"
 	// KindTombstone marks an erased record in the pull stream. Tombstones are
 	// minted only by the server's erase endpoint — clients cannot push them —
 	// and their payload carries nothing but the erased record id.

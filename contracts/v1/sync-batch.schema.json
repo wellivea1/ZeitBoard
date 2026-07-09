@@ -59,7 +59,7 @@
         },
         "kind": {
           "type": "string",
-          "enum": ["observation", "correction"]
+          "enum": ["observation", "correction", "task"]
         },
         "createdAt": {
           "$ref": "common.schema.json#/$defs/timestamp"
@@ -88,7 +88,7 @@
         },
         "kind": {
           "type": "string",
-          "enum": ["observation", "correction", "tombstone"]
+          "enum": ["observation", "correction", "task", "tombstone"]
         },
         "deviceId": {
           "$ref": "common.schema.json#/$defs/identifier"
@@ -115,7 +115,20 @@
           "$ref": "correction-set.schema.json#/$defs/correction"
         },
         {
+          "$ref": "#/$defs/taskPayload"
+        },
+        {
           "$ref": "#/$defs/tombstonePayload"
+        }
+      ]
+    },
+    "taskPayload": {
+      "allOf": [
+        {
+          "$ref": "task-set.schema.json#/$defs/task"
+        },
+        {
+          "required": ["revision", "updated_at"]
         }
       ]
     },
@@ -161,6 +174,23 @@
             "properties": {
               "payload": {
                 "$ref": "correction-set.schema.json#/$defs/correction"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "task"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "$ref": "#/$defs/taskPayload"
               }
             }
           }

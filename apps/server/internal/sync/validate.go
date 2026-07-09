@@ -35,7 +35,7 @@ func ValidatePushRequest(req *PushRequest) error {
 			return fmt.Errorf("duplicate recordId %q", record.RecordID)
 		}
 		seen[record.RecordID] = struct{}{}
-		if record.Kind != KindObservation && record.Kind != KindCorrection {
+		if record.Kind != KindObservation && record.Kind != KindCorrection && record.Kind != KindTask {
 			return errors.New("unsupported record kind")
 		}
 		if record.CreatedAt.IsZero() {
@@ -92,9 +92,66 @@ func validatePayload(kind Kind, recordID string, payload json.RawMessage) error 
 		return validateObservation(recordID, payload)
 	case KindCorrection:
 		return validateCorrection(recordID, payload)
+	case KindTask:
+		return validateTask(recordID, payload)
 	default:
 		return errors.New("unsupported record kind")
 	}
+}
+
+type taskPayload struct {
+	TaskID                    string    `json:"task_id"`
+	Title                     string    `json:"title"`
+	DurationMinutes           int       `json:"duration_minutes"`
+	Status                    string    `json:"status"`
+	CreatedAt                 time.Time `json:"created_at"`
+	EarliestStartAt           time.Time `json:"earliest_start_at,omitempty"`
+	LatestFinishAt            time.Time `json:"latest_finish_at,omitempty"`
+	PreferredAfterWakeMinutes int       `json:"preferred_after_wake_minutes,omitempty"`
+	MinimumConfidence         string    `json:"minimum_confidence,omitempty"`
+	Revision                  int       `json:"revision"`
+	UpdatedAt                 time.Time `json:"updated_at"`
+}
+
+// validateTask mirrors task-set.schema.json#/$defs/task plus the sync-only
+// requirements (revision, updated_at) and the revision-record id convention.
+func validateTask(recordID string, payload json.RawMessage) error {
+	var task taskPayload
+	if err := decodeStrict(payload, &task); err != nil {
+		return errors.New("invalid task payload")
+	}
+	if err := validateIdentifier(task.TaskID, "task_id"); err != nil {
+		return err
+	}
+	if task.Revision < 1 {
+		return errors.New("task revision must be at least 1")
+	}
+	if recordID != fmt.Sprintf("%s_r%d", task.TaskID, task.Revision) {
+		return errors.New("recordId must be task_id plus _r<revision>")
+	}
+	if task.Title == "" || len(task.Title) > 120 {
+		return errors.New("task title must be 1-120 characters")
+	}
+	if task.DurationMinutes < 5 || task.DurationMinutes > 720 {
+		return errors.New("task duration_minutes must be between 5 and 720")
+	}
+	if !oneOf(task.Status, "open", "done") {
+		return errors.New("task status must be open or done")
+	}
+	if task.CreatedAt.IsZero() || task.UpdatedAt.IsZero() {
+		return errors.New("task created_at and updated_at are required")
+	}
+	if task.PreferredAfterWakeMinutes < 0 || task.PreferredAfterWakeMinutes > 1440 {
+		return errors.New("task preferred_after_wake_minutes must be between 0 and 1440")
+	}
+	if task.MinimumConfidence != "" && !oneOf(task.MinimumConfidence, "low", "medium", "high") {
+		return errors.New("task minimum_confidence must be low, medium, or high")
+	}
+	if !task.EarliestStartAt.IsZero() && !task.LatestFinishAt.IsZero() &&
+		!task.LatestFinishAt.After(task.EarliestStartAt) {
+		return errors.New("task latest_finish_at must be after earliest_start_at")
+	}
+	return nil
 }
 
 func compactJSON(data []byte) (json.RawMessage, error) {

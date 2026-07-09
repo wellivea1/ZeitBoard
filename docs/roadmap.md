@@ -38,9 +38,9 @@ there rather than being repeated here.
   (payloads hard-deleted server-side) and to every device via id-only
   tombstones in the pull stream; erased records can never be re-pushed
   (ADR-0017).
-- User-owned tasks (per-device): contract-shaped task CRUD, a real Tasks
-  screen, and the scheduler planning only stored open tasks (ADR-0018); task
-  sync deferred.
+- User-owned tasks: contract-shaped task CRUD, a real Tasks screen, the
+  scheduler planning only stored open tasks (ADR-0018), and cross-device task
+  sync as immutable revision records with erasure-grade deletion (ADR-0020).
 - The Rhythm Sources tab and Data Sources run on real local state (refusals,
   correction history, per-source composition, sync status); synthetic previews
   are confined to the labeled browser fixture mode.
@@ -104,10 +104,11 @@ ADR when it changes architecture.
    contract (`task-set`), local CRUD persistence, a real Tasks screen (add /
    done / delete, honest empty and read-only states), and the scheduler now
    plans only stored open tasks — no fabricated proposals, honest
-   `estimate_unavailable` for real tasks without an estimate. Deferred to a
-   follow-up slice: **task sync** (new sync record kinds + tombstone
-   interplay, staged like sleep data was) and write-back of approved
-   placements (Phase 3c).
+   `estimate_unavailable` for real tasks without an estimate. *Task sync
+   delivered* (ADR-0020): edits travel as immutable revision records over the
+   append-only log with last-writer-wins application, and task deletion
+   erases all pushed revisions via ADR-0017 tombstones. Still deferred:
+   write-back of approved placements (Phase 3c).
 5. ~~**Replace the remaining fixture UI.**~~ ✅ Delivered: in local/synced mode
    the Rhythm "Sources" tab now shows the estimator's real refusal, the real
    correction history (append-only inspector; the dead fixture undo button is

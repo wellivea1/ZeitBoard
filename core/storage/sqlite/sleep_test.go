@@ -387,7 +387,7 @@ func TestDeleteEnqueuesErasuresOnlyForPushedRecords(t *testing.T) {
 	if err := store.DeleteSleepObservation(ctx, pushed.ObservationID); err != nil {
 		t.Fatal(err)
 	}
-	pending, err := store.PendingSleepErasures(ctx)
+	pending, err := store.PendingSyncErasures(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -399,7 +399,7 @@ func TestDeleteEnqueuesErasuresOnlyForPushedRecords(t *testing.T) {
 	if err := store.DeleteSleepObservation(ctx, unpushed.ObservationID); err != nil {
 		t.Fatal(err)
 	}
-	pending, err = store.PendingSleepErasures(ctx)
+	pending, err = store.PendingSyncErasures(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -408,10 +408,10 @@ func TestDeleteEnqueuesErasuresOnlyForPushedRecords(t *testing.T) {
 	}
 
 	// Clearing removes confirmed entries.
-	if err := store.ClearSleepErasures(ctx, pending); err != nil {
+	if err := store.ClearSyncErasures(ctx, pending); err != nil {
 		t.Fatal(err)
 	}
-	pending, err = store.PendingSleepErasures(ctx)
+	pending, err = store.PendingSyncErasures(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -464,7 +464,7 @@ func TestEraseSyncedSleepRecordAppliesTombstoneIdempotently(t *testing.T) {
 		t.Fatalf("tombstone must erase observation and corrections: obs=%d corr=%d", len(observations), len(corrections))
 	}
 	// Applying a tombstone must NOT re-enqueue an outbound erasure.
-	pending, err := store.PendingSleepErasures(ctx)
+	pending, err := store.PendingSyncErasures(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}

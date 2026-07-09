@@ -32,6 +32,16 @@ func TestPushValidatorAndSchemaDriftGuard(t *testing.T) {
 			body:  `{"schema_version":"v1","records":[{"recordId":"obs_sleep_01","kind":"observation","createdAt":"2026-03-05T12:40:00Z","payload":` + string(bytes.ReplaceAll([]byte(driftObservationPayload("obs_sleep_01")), []byte(`"provenance":`), []byte(`"unexpected":"nope","provenance":`))) + `}]}`,
 			valid: false,
 		},
+		{
+			name:  "valid task revision push",
+			body:  `{"schema_version":"v1","records":[{"recordId":"task_paperwork_01_r2","kind":"task","createdAt":"2026-03-05T12:40:00Z","payload":{"task_id":"task_paperwork_01","title":"File paperwork","duration_minutes":45,"status":"open","created_at":"2026-03-05T12:00:00Z","revision":2,"updated_at":"2026-03-05T12:02:00Z"}}]}`,
+			valid: true,
+		},
+		{
+			name:  "task without revision",
+			body:  `{"schema_version":"v1","records":[{"recordId":"task_paperwork_01_r1","kind":"task","createdAt":"2026-03-05T12:40:00Z","payload":{"task_id":"task_paperwork_01","title":"File paperwork","duration_minutes":45,"status":"open","created_at":"2026-03-05T12:00:00Z","updated_at":"2026-03-05T12:02:00Z"}}]}`,
+			valid: false,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -59,6 +69,7 @@ func loadSyncBatchSchema(t *testing.T) *jsonschema.Schema {
 		"common.schema.json",
 		"observation-set.schema.json",
 		"correction-set.schema.json",
+		"task-set.schema.json",
 		"sync-batch.schema.json",
 	} {
 		data, err := os.ReadFile(filepath.Join(root, "contracts", "v1", name))

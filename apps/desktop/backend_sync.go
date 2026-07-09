@@ -277,6 +277,11 @@ func (a *App) syncSleepRecords(ctx context.Context, cfg backendSyncConfig, token
 	if err != nil {
 		return counts, err
 	}
+	tasksPushed, err := a.pushTaskRecords(ctx, store, client)
+	if err != nil {
+		return counts, err
+	}
+	counts.pushed += tasksPushed
 	counts.erasuresPushed, err = a.pushSleepErasures(ctx, store, client)
 	if err != nil {
 		return counts, err
@@ -285,11 +290,40 @@ func (a *App) syncSleepRecords(ctx context.Context, cfg backendSyncConfig, token
 	return counts, err
 }
 
+// pushTaskRecords pushes the current revision of every locally-edited task as
+// an immutable revision record (ADR-0020).
+func (a *App) pushTaskRecords(ctx context.Context, store *storage.Store, client desktopBackendClient) (int, error) {
+	records, err := store.UnpushedTaskSyncRecords(ctx)
+	if err != nil {
+		return 0, err
+	}
+	if len(records) == 0 {
+		return 0, nil
+	}
+	pushRecords := make([]syncPushRecord, 0, len(records))
+	for _, record := range records {
+		pushRecords = append(pushRecords, syncPushRecord{
+			RecordID:  record.RecordID,
+			Kind:      "task",
+			CreatedAt: record.CreatedAt.UTC(),
+			Payload:   record.Payload,
+		})
+	}
+	var response syncPushResponse
+	if err := client.postJSON(ctx, "/v1/sync/push", syncPushRequest{SchemaVersion: "v1", Records: pushRecords}, &response); err != nil {
+		return 0, err
+	}
+	if err := store.MarkTaskSyncRecordsPushed(ctx, records, time.Now().UTC()); err != nil {
+		return 0, err
+	}
+	return len(records), nil
+}
+
 // pushSleepErasures propagates local hard-deletes of already-pushed records to
 // the backend, which hard-deletes the synced copies and mints tombstones so
 // every other device erases too (ADR-0017).
 func (a *App) pushSleepErasures(ctx context.Context, store *storage.Store, client desktopBackendClient) (int, error) {
-	ids, err := store.PendingSleepErasures(ctx)
+	ids, err := store.PendingSyncErasures(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -302,7 +336,7 @@ func (a *App) pushSleepErasures(ctx context.Context, store *storage.Store, clien
 		if err := client.postJSON(ctx, "/v1/sync/erase", syncEraseRequest{SchemaVersion: "v1", RecordIDs: batch}, &response); err != nil {
 			return confirmed, err
 		}
-		if err := store.ClearSleepErasures(ctx, batch); err != nil {
+		if err := store.ClearSyncErasures(ctx, batch); err != nil {
 			return confirmed, err
 		}
 		confirmed += len(batch)
@@ -374,6 +408,20 @@ func (a *App) pullSleepRecords(ctx context.Context, store *storage.Store, client
 				return inserted, skipped, tombstonesApplied, err
 			}
 			corrections = append(corrections, correction)
+		case "task":
+			var task storage.TaskRecord
+			if err := json.Unmarshal(record.Payload, &task); err != nil {
+				return inserted, skipped, tombstonesApplied, err
+			}
+			applied, err := store.ApplySyncedTask(ctx, task)
+			if err != nil {
+				return inserted, skipped, tombstonesApplied, err
+			}
+			if applied {
+				inserted++
+			} else {
+				skipped++ // stale revision: local state is newer (LWW)
+			}
 		case "tombstone":
 			var payload syncTombstonePayload
 			if err := json.Unmarshal(record.Payload, &payload); err != nil {
@@ -408,7 +456,14 @@ func (a *App) pullSleepRecords(ctx context.Context, store *storage.Store, client
 		}
 	}
 	for _, id := range tombstones {
-		applied, err := store.EraseSyncedSleepRecord(ctx, id)
+		var applied bool
+		var err error
+		if storage.IsTaskRevisionID(id) {
+			// Any tombstoned revision means the task was deleted somewhere.
+			applied, err = store.EraseSyncedTaskRecord(ctx, id)
+		} else {
+			applied, err = store.EraseSyncedSleepRecord(ctx, id)
+		}
 		if err != nil {
 			return inserted, skipped, tombstonesApplied, err
 		}

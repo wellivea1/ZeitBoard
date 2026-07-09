@@ -45,10 +45,10 @@ and UI specifications* to what implements them.
   composition, real sync status); synthetic previews remain only in the
   labeled browser-preview fixture mode. A real cross-source conflict list
   awaits an engine-surfaced overlap DTO once multiple sources exist.
-- **Tasks:** user-owned tasks are real (contract, local CRUD, real Tasks
-  screen; the scheduler plans only stored open tasks — ADR-0018), but they are
-  per-device: task sync and write-back of approved placements remain future
-  work.
+- **Tasks:** user-owned tasks are real and synced (contract, local CRUD, real
+  Tasks screen, scheduler plans only stored open tasks — ADR-0018; cross-device
+  revision sync with erasure-grade deletion — ADR-0020). Write-back of
+  approved placements remains future work (Phase 3c).
 
 ## Deferred analysis work
 

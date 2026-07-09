@@ -58,6 +58,13 @@
         "minimum_confidence": {
           "type": "string",
           "enum": ["low", "medium", "high"]
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "updated_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
         }
       }
     }

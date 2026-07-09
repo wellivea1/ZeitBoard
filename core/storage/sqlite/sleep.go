@@ -488,9 +488,11 @@ func (s *Store) DeleteAllSleepData(ctx context.Context) error {
 	return s.compactDeletedData(ctx)
 }
 
-// PendingSleepErasures lists record ids that were hard-deleted locally after
-// having been pushed, and still await server-side erasure (ADR-0017).
-func (s *Store) PendingSleepErasures(ctx context.Context) ([]string, error) {
+// PendingSyncErasures lists record ids (any kind: sleep records or task
+// revisions) that were hard-deleted locally after having been pushed, and
+// still await server-side erasure (ADR-0017). The backing table keeps its
+// historical name local_sleep_erasures; its rows are opaque record ids.
+func (s *Store) PendingSyncErasures(ctx context.Context) ([]string, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT record_id FROM local_sleep_erasures ORDER BY record_id`)
 	if err != nil {
 		return nil, err
@@ -507,9 +509,9 @@ func (s *Store) PendingSleepErasures(ctx context.Context) ([]string, error) {
 	return ids, rows.Err()
 }
 
-// ClearSleepErasures removes outbox entries once the backend confirmed their
+// ClearSyncErasures removes outbox entries once the backend confirmed their
 // tombstones.
-func (s *Store) ClearSleepErasures(ctx context.Context, recordIDs []string) error {
+func (s *Store) ClearSyncErasures(ctx context.Context, recordIDs []string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err

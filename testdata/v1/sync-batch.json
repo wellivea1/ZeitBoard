@@ -1,6 +1,6 @@
 {
   "schema_version": "v1",
-  "cursor": 3,
+  "cursor": 4,
   "records": [
     {
       "seq": 1,
@@ -49,6 +49,23 @@
       "createdAt": "2026-03-15T00:00:00Z",
       "payload": {
         "record_id": "obs_sleep_erased_01"
+      }
+    },
+    {
+      "seq": 4,
+      "recordId": "task_flexible_01_r2",
+      "kind": "task",
+      "deviceId": "device_desktop_01",
+      "createdAt": "2026-03-15T00:00:00Z",
+      "payload": {
+        "task_id": "task_flexible_01",
+        "title": "Synthetic paperwork block (rescoped)",
+        "duration_minutes": 60,
+        "status": "open",
+        "created_at": "2026-03-15T00:00:00Z",
+        "minimum_confidence": "low",
+        "revision": 2,
+        "updated_at": "2026-03-15T00:00:00Z"
       }
     }
   ]
