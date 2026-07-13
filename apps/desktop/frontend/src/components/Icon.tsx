@@ -15,7 +15,9 @@ export type IconName =
   | "trend"
   | "focus"
   | "shield"
-  | "chevron";
+  | "chevron"
+  | "close"
+  | "sparkle";
 
 const paths: Record<IconName, ReactNode> = {
   overview: (
@@ -99,6 +101,18 @@ const paths: Record<IconName, ReactNode> = {
   ),
   shield: <path d="M12 3 20 6v5c0 5.2-3.4 8.6-8 10-4.6-1.4-8-4.8-8-10V6l8-3Z" />,
   chevron: <path d="m9 18 6-6-6-6" />,
+  close: (
+    <>
+      <path d="m6 6 12 12" />
+      <path d="m18 6-12 12" />
+    </>
+  ),
+  sparkle: (
+    <>
+      <path d="M12 4v4M12 16v4M4 12h4M16 12h4" />
+      <path d="m8.5 8.5 2 2M13.5 13.5l2 2M15.5 8.5l-2 2M10.5 13.5l-2 2" />
+    </>
+  ),
 };
 
 export function Icon({ name, ...props }: SVGProps<SVGSVGElement> & { name: IconName }) {

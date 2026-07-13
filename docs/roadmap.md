@@ -128,12 +128,17 @@ ADR when it changes architecture.
    (no Google API exists for My Activity) feeding the deferred probabilistic
    inference; emits low-confidence `inferred` episodes only, validated by the
    backtest before it can influence the estimate.
-8. **Assistant desktop UI (Phase 4 front end).** The backend and safety
-   architecture are delivered (M2/M4); build the §4 chat surface over the same
-   propose-only endpoints, with provider disclosure. Voice remains the agent
-   client's job (ADR-0006); document the Claude-Desktop-over-MCP voice path in
-   the runbook. Cloud skill packaging and any reviewer-gated auto-apply stay
-   future and separately gated.
+8. ~~**Assistant desktop UI (Phase 4 front end).**~~ ✅ Delivered: the §4
+   assistant rail (status-strip toggle, Chat/Queue tabs, action cards wired to
+   the same one-use-token queue decisions, Enter/Shift+Enter composer, typing
+   indicator, disclaimer) over the M2 propose-only endpoint. The desktop sends
+   a redacted context — task ids and bounds, never titles; titles are
+   re-attached locally for display — and tests assert the redaction, the
+   medical-refusal passthrough, and that the flow touches no endpoint that
+   could apply a change. Provider disclosure comes from the backend
+   (`Connected: <provider>` / `Offline`). The Claude-Desktop-over-MCP voice
+   path is documented in the self-hosting runbook. Cloud skill packaging and
+   any reviewer-gated auto-apply stay future and separately gated.
 9. **Android companion sync.** The Health Connect skeleton exists but the
    companion has no sync client; bring it onto the same enrollment + push/pull
    path (its ADR should reuse ADR-0015's model).

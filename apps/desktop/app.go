@@ -743,20 +743,7 @@ func (a *App) GetProposals() (ProposalsDTO, error) {
 	if err != nil {
 		return ProposalsDTO{}, err
 	}
-	availability := append([]domain.AvailabilityWindow{}, state.Estimate.PredictedWakingWindows...)
-	if len(state.Estimate.PredictedSleepWindows) > 0 {
-		nextSleep := state.Estimate.PredictedSleepWindows[0].Interval
-		current := domain.AvailabilityWindow{
-			ID:         "current-functional-window",
-			Kind:       domain.AvailabilityFunctional,
-			Interval:   domain.TimeRange{Start: domain.MustZonedInstant(now, zoneID), End: nextSleep.Start},
-			Confidence: state.Estimate.Confidence,
-			EstimateID: state.Estimate.ID,
-		}
-		if current.Interval.End.UTC.After(current.Interval.Start.UTC) {
-			availability = append([]domain.AvailabilityWindow{current}, availability...)
-		}
-	}
+	availability := localPlanningAvailability(state, now)
 	latest, _ := latestPrincipalSession(state.Sessions)
 	wakeAnchor := domain.WakeAnchor{
 		ID:         "latest-wake",
@@ -1093,6 +1080,28 @@ func requireDeleteConfirmation(value string) error {
 		return errors.New("type DELETE to confirm permanent erasure")
 	}
 	return nil
+}
+
+// localPlanningAvailability builds the availability windows the scheduler and
+// the assistant context share: the current functional window (now until the
+// next predicted sleep) followed by the predicted waking windows.
+func localPlanningAvailability(state localEstimateState, now time.Time) []domain.AvailabilityWindow {
+	zoneID := state.Estimate.AsOf.ZoneID
+	availability := append([]domain.AvailabilityWindow{}, state.Estimate.PredictedWakingWindows...)
+	if len(state.Estimate.PredictedSleepWindows) > 0 {
+		nextSleep := state.Estimate.PredictedSleepWindows[0].Interval
+		current := domain.AvailabilityWindow{
+			ID:         "current-functional-window",
+			Kind:       domain.AvailabilityFunctional,
+			Interval:   domain.TimeRange{Start: domain.MustZonedInstant(now, zoneID), End: nextSleep.Start},
+			Confidence: state.Estimate.Confidence,
+			EstimateID: state.Estimate.ID,
+		}
+		if current.Interval.End.UTC.After(current.Interval.Start.UTC) {
+			availability = append([]domain.AvailabilityWindow{current}, availability...)
+		}
+	}
+	return availability
 }
 
 func latestPrincipalSession(sessions []domain.SleepSession) (domain.SleepSession, bool) {

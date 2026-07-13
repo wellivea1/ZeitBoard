@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Icon, type IconName } from "./Icon";
+import { AssistantRail } from "./AssistantRail";
 import { useApprovals } from "../state/approvals";
 import type { ScreenId } from "../types";
 
@@ -63,8 +64,9 @@ function NavigationLink({ item, active }: { item: NavItem; active: boolean }) {
 
 export function AppShell({ screen, children }: { screen: ScreenId; children: ReactNode }) {
   const { pendingCount } = useApprovals();
+  const [assistantOpen, setAssistantOpen] = useState(false);
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-assistant-open={assistantOpen || undefined}>
       <aside className="sidebar">
         <a className="brand" href="#/overview" aria-label="ZeitBoard overview">
           <span className="brand-mark" aria-hidden="true">
@@ -106,8 +108,20 @@ export function AppShell({ screen, children }: { screen: ScreenId; children: Rea
       </aside>
 
       <main className="main-content" id="main-content">
+        <button
+          className="assistant-toggle"
+          type="button"
+          data-active={assistantOpen || undefined}
+          aria-pressed={assistantOpen}
+          onClick={() => setAssistantOpen((open) => !open)}
+        >
+          <Icon name="sparkle" />
+          <span>Assistant</span>
+        </button>
         {children}
       </main>
+
+      <AssistantRail open={assistantOpen} onClose={() => setAssistantOpen(false)} />
     </div>
   );
 }

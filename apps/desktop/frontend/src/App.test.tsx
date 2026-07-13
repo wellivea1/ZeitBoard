@@ -598,3 +598,82 @@ describe("desktop navigation", () => {
     expect(deleteAll).toHaveBeenCalledWith({ confirmation: "DELETE" });
   });
 });
+
+describe("assistant rail", () => {
+  it("opens propose-only chat with honest offline state and disclaimer", async () => {
+    render(<App />);
+
+    const toggle = screen.getByRole("button", { name: "Assistant", pressed: false });
+    fireEvent.click(toggle);
+
+    expect(await screen.findByRole("complementary", { name: "Assistant" })).toBeVisible();
+    expect(screen.getByText("Manages your schedule via approvals. Not medical advice.")).toBeVisible();
+    // Browser preview has no desktop bridge: the rail says so and disables input.
+    expect(await screen.findByText(/desktop app/)).toBeVisible();
+    expect(screen.getByLabelText("Message the assistant")).toBeDisabled();
+    expect(screen.getByText("Offline")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Close assistant" }));
+    expect(screen.queryByRole("complementary", { name: "Assistant" })).toBeNull();
+  });
+
+  it("sends a message and renders the propose-only action card with decisions", async () => {
+    const decide = vi.fn(async () => ({ status: "ok", proposals: [] }));
+    (globalThis as { go?: unknown }).go = {
+      main: {
+        App: {
+          GetAssistantStatus: async () => ({
+            enabled: true,
+            configured: true,
+            provider: "anthropic",
+            model: "claude-sonnet-5",
+          }),
+          GetBackendProposals: async () => ({ status: "ok", proposals: [] }),
+          SendAssistantMessage: async () => ({
+            available: true,
+            result: "proposal_pending",
+            answer: "I found a window inside your predicted waking time.",
+            configured: true,
+            provider: "anthropic",
+            proposals: [
+              {
+                proposalId: "proposal_srv_01",
+                action: "propose_place_task",
+                status: "pending",
+                title: "Place task “Call clinic”",
+                window: "Thu Jul 10, 11:00 AM to 11:45 AM EDT",
+                confidence: "Medium",
+                reasonLabels: ["Fits the predicted waking window"],
+                createdLabel: "Proposed Jul 10, 8:00 AM",
+                expiresLabel: "expires Jul 10, 8:15 AM",
+                decisionToken: "one-use-token",
+              },
+            ],
+          }),
+          DecideBackendProposal: decide,
+        },
+      },
+    };
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Assistant", pressed: false }));
+    expect(await screen.findByText("Connected: anthropic")).toBeVisible();
+
+    // Example chips appear on the empty state; clicking one sends it.
+    fireEvent.click(await screen.findByRole("button", { name: "What's my next good window?" }));
+
+    expect(await screen.findByText("I found a window inside your predicted waking time.")).toBeVisible();
+    expect(screen.getByText("Place task “Call clinic”")).toBeVisible();
+    expect(screen.getByText("Thu Jul 10, 11:00 AM to 11:45 AM EDT")).toBeVisible();
+    expect(screen.getByRole("link", { name: "View in Approvals" })).toBeVisible();
+
+    // Approve goes through the same one-use-token queue decision.
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    await screen.findByText("approved");
+    expect(decide).toHaveBeenCalledWith({
+      proposalId: "proposal_srv_01",
+      decision: "approved",
+      token: "one-use-token",
+    });
+  });
+});

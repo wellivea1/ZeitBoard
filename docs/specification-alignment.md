@@ -63,8 +63,10 @@ and UI specifications* to what implements them.
 - State-space, particle-filter, Bayesian, physiological-signal, or
   biomarker-calibrated estimation.
 - Optional language-model summaries, task parsing, voice extraction, and
-  clinician-report drafting beyond the implemented propose-only assistant;
-  these require the safety evaluation suite before they can be enabled.
+  clinician-report drafting beyond the implemented propose-only assistant
+  (whose desktop chat surface now ships — §4 rail with redacted context and
+  provider disclosure); these require the safety evaluation suite before they
+  can be enabled.
 
 ## Deferred product and validation work
 

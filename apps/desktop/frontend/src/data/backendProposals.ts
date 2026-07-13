@@ -67,7 +67,7 @@ function proposalStatus(value: unknown): BackendProposalStatus | undefined {
   return undefined;
 }
 
-function normalizeProposal(value: unknown): BackendProposal | undefined {
+export function normalizeProposal(value: unknown): BackendProposal | undefined {
   if (!isRecord(value)) return undefined;
   const proposalId = str(value.proposalId);
   const action = str(value.action);

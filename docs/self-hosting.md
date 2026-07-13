@@ -139,3 +139,22 @@ placed in model context, and are not written to fixtures.
 The project has no telemetry path. The daemon listens on the TLS address configured by
 the operator. Outbound network calls occur only when the operator enables a BYOK
 assistant provider; arbitrary web access is not exposed to the assistant path.
+
+## Voice Via An MCP Client (Claude Desktop)
+
+ZeitBoard ships no speech stack (ADR-0006): live voice comes from an MCP-capable
+client driving the local connector. With Claude Desktop:
+
+1. Build the connector: `go build ./cmd/zeitboard-mcp` (in `apps/server`).
+2. Register it in Claude Desktop's MCP configuration as a stdio server, pointing it
+   at your instance URL and a device token you enrolled for it (same enrollment flow
+   as any device; revoke it like any device).
+3. Use Claude Desktop's voice mode. The connector exposes only allowlisted read
+   projections and propose-only actions with call budgets — there is no approve or
+   apply tool (ADR-0012), so spoken requests end as pending proposals you approve in
+   the app.
+
+What the agent can see is the same redacted, speakable projection surface the UI
+uses. Which *model* hears it is the client's configuration and the user's provider
+relationship — the same BYOK posture as the in-app assistant. Cloud skill packaging
+remains future work behind its own privacy review.
