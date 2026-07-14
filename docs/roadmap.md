@@ -146,8 +146,12 @@ ADR when it changes architecture.
 **Small debts (fold into adjacent slices):** consolidate the correction-record
 → domain decoder (now duplicated across desktop storage, server readmodel, and
 the sync validator); prefer a CA-cert path over localhost skip-verify for the
-MCP client; medication logging should support fixed-clock-time regimens (how
-tasimelteon/melatonin are actually prescribed) alongside wake-relative display;
+MCP client; medication tracking now has a full feature plan
+([`medication-feature-plan.md`](medication-feature-plan.md), slices M-A..M-F:
+benchmarked against Medisafe; fixed-clock regimens + wake-relative display,
+reminder collision forecasts, adherence-in-rhythm-context, association-not-
+causality markers, revision-synced definitions + append-only dose events,
+redacted agent surface; interaction checking explicitly rejected);
 periodic real screen-reader/TalkBack walkthroughs.
 
 ---
