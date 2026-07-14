@@ -142,6 +142,14 @@ ADR when it changes architecture.
 9. **Android companion sync.** The Health Connect skeleton exists but the
    companion has no sync client; bring it onto the same enrollment + push/pull
    path (its ADR should reuse ADR-0015's model).
+10. **UI refactor + theme manager** (planned in
+    [`ui-refactor-plan.md`](ui-refactor-plan.md), slices U-A..U-D): de-card
+    the layout (density pass, actogram as hero), retract sage to semantic
+    roles, token consolidation, and a five-preset theme manager — Paper,
+    Dark, Pitch black, **Amber glasses mode** (all-foreground ≥570nm with a
+    testable through-lens contrast formula), High contrast — plus opt-in
+    rhythm-linked switching (Amber engages N hours before *predicted* sleep
+    onset, the one theme feature only a circadian planner can offer).
 
 **Small debts (fold into adjacent slices):** consolidate the correction-record
 → domain decoder (now duplicated across desktop storage, server readmodel, and
