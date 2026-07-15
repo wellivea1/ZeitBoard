@@ -143,13 +143,16 @@ ADR when it changes architecture.
    companion has no sync client; bring it onto the same enrollment + push/pull
    path (its ADR should reuse ADR-0015's model).
 10. **UI refactor + theme manager** (planned in
-    [`ui-refactor-plan.md`](ui-refactor-plan.md), slices U-A..U-D): de-card
-    the layout (density pass, actogram as hero), retract sage to semantic
-    roles, token consolidation, and a five-preset theme manager — Paper,
-    Dark, Pitch black, **Amber glasses mode** (all-foreground ≥570nm with a
-    testable through-lens contrast formula), High contrast — plus opt-in
+    [`ui-refactor-plan.md`](ui-refactor-plan.md)). *U-A..U-C delivered:*
+    density pass (shadowless bordered surfaces, compact headers/metric rows
+    with 19px tabular values, actogram row/track enlarged), sage retracted
+    to action+awake while sleep visuals moved to the asleep blue family and
+    chips/meters went neutral, and the five-preset theme manager — Paper,
+    Dark, Pitch black, **Amber glasses mode**, High contrast — with the
+    contrast regression extended to all presets plus the through-lens
+    (≥7:1) and no-blue-channel assertions for Amber. *U-D remains:* opt-in
     rhythm-linked switching (Amber engages N hours before *predicted* sleep
-    onset, the one theme feature only a circadian planner can offer).
+    onset) + the agent-readable appearance surface, behind a small ADR.
 
 **Small debts (fold into adjacent slices):** consolidate the correction-record
 → domain decoder (now duplicated across desktop storage, server readmodel, and

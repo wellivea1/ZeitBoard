@@ -66,23 +66,24 @@
   --button-secondary-border: #cfd5d0;
 
   /* Charts */
-  --actogram-observed: #5a786d;
+  --actogram-observed: #4a5e7a;
   --actogram-observed-text: #fff;
-  --actogram-inferred-text: #475c55;
-  --actogram-inferred: repeating-linear-gradient(90deg, #cbd8d2 0 5px, #edf1ee 5px 8px);
-  --actogram-forecast-text: #4e615a;
-  --actogram-forecast: repeating-linear-gradient(90deg, #d8e5de 0 7px, #edf3ef 7px 12px);
-  --actogram-forecast-border: #bdd1c6;
+  --actogram-inferred-text: #46536b;
+  --actogram-inferred: repeating-linear-gradient(90deg, #c6d0dd 0 5px, #eef1f5 5px 8px);
+  --actogram-forecast-text: #4d5a72;
+  --actogram-forecast: repeating-linear-gradient(90deg, #d5deeb 0 7px, #eef1f6 7px 12px);
+  --actogram-forecast-border: #b9c6da;
   --actogram-original: #9ca9a4;
   --actogram-grid: #cdd3cf;
   --actogram-track-bg: #ecece7;
-  --drift-fit: var(--sage);
-  --drift-band: rgba(85, 118, 107, 0.15);
-  --drift-point: var(--sage-dark);
+  --drift-fit: var(--state-asleep);
+  --drift-band: rgba(74, 94, 122, 0.15);
+  --drift-point: #3a4c66;
   --drift-grid: #ecece7;
   --drift-axis: #cfd5d0;
   --drift-svg-bg: linear-gradient(to right, #f0f0eb 1px, transparent 1px);
   --meter-muted: #e4e4de;
+  --meter-fill: #6b7672;
 
   /* Elevation */
   --shadow: 0 12px 30px rgba(39, 52, 48, 0.06);
@@ -91,7 +92,7 @@
   /* Layout */
   --rail-right: 360px;
   --rail-left: 232px;
-  --row-pitch: 28px;
+  --row-pitch: 34px;
   --z-strip: 10;
   --z-rail: 20;
   --z-scrim: 90;
@@ -154,26 +155,231 @@
   --button-secondary-bg: var(--paper);
   --button-secondary-border: #4a5651;
 
-  --actogram-observed: #6f8c82;
-  --actogram-observed-text: #0f1412;
-  --actogram-inferred-text: #d0dbd4;
-  --actogram-inferred: repeating-linear-gradient(90deg, #4a5f57 0 5px, #2a3834 5px 8px);
-  --actogram-forecast-text: #b8c9c1;
-  --actogram-forecast: repeating-linear-gradient(90deg, #3f544d 0 7px, #25332e 7px 12px);
-  --actogram-forecast-border: #4f6960;
+  --actogram-observed: #7a9abf;
+  --actogram-observed-text: #0d1117;
+  --actogram-inferred-text: #cdd7e4;
+  --actogram-inferred: repeating-linear-gradient(90deg, #47586e 0 5px, #232b36 5px 8px);
+  --actogram-forecast-text: #b6c4d8;
+  --actogram-forecast: repeating-linear-gradient(90deg, #3c4c62 0 7px, #242c39 7px 12px);
+  --actogram-forecast-border: #556a89;
   --actogram-original: #5e6a65;
   --actogram-grid: #3b4541;
   --actogram-track-bg: #252d2a;
-  --drift-fit: var(--sage);
-  --drift-band: rgba(107, 144, 132, 0.22);
-  --drift-point: var(--sage-dark);
+  --drift-fit: var(--state-asleep);
+  --drift-band: rgba(122, 154, 191, 0.22);
+  --drift-point: #8fb0d4;
   --drift-grid: #2b3430;
   --drift-axis: #3b4541;
   --drift-svg-bg: linear-gradient(to right, #252d2a 1px, transparent 1px);
   --meter-muted: #2b3430;
+  --meter-fill: #a5ada7;
 
   --shadow: 0 12px 30px rgba(0, 0, 0, 0.28);
   --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
+/* Pitch black: OLED true-black, minimal photon flux. Dark hues on #000. */
+[data-theme="black"] {
+  color-scheme: dark;
+  --ink: #d6d9d5;
+  --muted: #a2a8a2;
+  --subtle: #8f958f;
+  --line: #1f1f1f;
+  --paper: #0a0a0a;
+  --canvas: #000000;
+  --panel-alt: #0f0f0f;
+  --divider: #161616;
+  --chrome: #050505;
+  --chrome-border: #1a1a1a;
+  --chrome-hover: rgba(255, 255, 255, 0.06);
+  --sage: #6b9084;
+  --sage-dark: #8ab4a6;
+  --sage-soft: #101a16;
+  --blue-soft: #0f171d;
+  --amber-soft: #1c1710;
+  --assistant: #a894c9;
+  --assistant-soft: #171221;
+  --state-awake: #6b9084;
+  --state-asleep: #7a9abf;
+  --state-uncertain: #c99a3e;
+  --state-awake-glow: rgba(107, 144, 132, 0.2);
+  --state-asleep-glow: rgba(122, 154, 191, 0.2);
+  --state-uncertain-glow: rgba(201, 154, 62, 0.2);
+  --confidence-high-text: #8fcfb5;
+  --confidence-high-bg: #101a15;
+  --confidence-medium-text: #e6c87c;
+  --confidence-medium-bg: #1b1610;
+  --confidence-low-text: #e2a9a3;
+  --confidence-low-bg: #1c1211;
+  --danger-text: #e2a9a3;
+  --danger-bg: #1c1211;
+  --danger-border: #57332e;
+  --danger-action-text: #000000;
+  --danger-action-bg: #e2a9a3;
+  --danger-action-hover: #f0b8b1;
+  --button-primary-text: #000000;
+  --button-primary-bg: #6b9084;
+  --button-primary-hover: #7fa395;
+  --button-secondary-text: #8ab4a6;
+  --button-secondary-bg: #0a0a0a;
+  --button-secondary-border: #2c332f;
+  --actogram-observed: #7a9abf;
+  --actogram-observed-text: #05070a;
+  --actogram-inferred-text: #cdd7e4;
+  --actogram-inferred: repeating-linear-gradient(90deg, #35435a 0 5px, #10151c 5px 8px);
+  --actogram-forecast-text: #b6c4d8;
+  --actogram-forecast: repeating-linear-gradient(90deg, #2b3a50 0 7px, #10151c 7px 12px);
+  --actogram-forecast-border: #47597a;
+  --actogram-original: #4a524e;
+  --actogram-grid: #222222;
+  --actogram-track-bg: #0f0f0f;
+  --drift-fit: var(--state-asleep);
+  --drift-band: rgba(122, 154, 191, 0.2);
+  --drift-point: #8fb0d4;
+  --drift-grid: #161616;
+  --drift-axis: #262626;
+  --drift-svg-bg: linear-gradient(to right, #121212 1px, transparent 1px);
+  --meter-muted: #1c1c1c;
+  --meter-fill: #a2a8a2;
+  --shadow: none;
+  --shadow-card: none;
+}
+
+/* Amber glasses mode: every foreground >=570nm-dominant so the UI keeps its
+   contrast through dark amber blue-blockers (blue reads black, green loses
+   most luminance through the lens). Blue channels held to <=10%; state is
+   carried by luminance and band patterns, never by hue families. */
+[data-theme="amber"] {
+  color-scheme: dark;
+  --ink: #ffc61a;
+  --muted: #d19200;
+  --subtle: #a87400;
+  --line: #2b1f04;
+  --paper: #0a0700;
+  --canvas: #000000;
+  --panel-alt: #120c02;
+  --divider: #1c1503;
+  --chrome: #0a0700;
+  --chrome-border: #241a04;
+  --chrome-hover: rgba(255, 176, 0, 0.08);
+  --sage: #f08c00;
+  --sage-dark: #ffa41a;
+  --sage-soft: #241703;
+  --blue-soft: #1c1503;
+  --amber-soft: #241a04;
+  --assistant: #ff8c1a;
+  --assistant-soft: #241703;
+  --state-awake: #ffbf1a;
+  --state-asleep: #b36b00;
+  --state-uncertain: #ff6a00;
+  --state-awake-glow: rgba(255, 191, 26, 0.16);
+  --state-asleep-glow: rgba(179, 107, 0, 0.2);
+  --state-uncertain-glow: rgba(255, 106, 0, 0.18);
+  --confidence-high-text: #ffbf1a;
+  --confidence-high-bg: #241a00;
+  --confidence-medium-text: #ffd11a;
+  --confidence-medium-bg: #2a2000;
+  --confidence-low-text: #ff7a1a;
+  --confidence-low-bg: #260f00;
+  --danger-text: #ff4d00;
+  --danger-bg: #260c00;
+  --danger-border: #7a2f00;
+  --danger-action-text: #000000;
+  --danger-action-bg: #ff4d00;
+  --danger-action-hover: #ff6a1a;
+  --button-primary-text: #000000;
+  --button-primary-bg: #f08c00;
+  --button-primary-hover: #ffa41a;
+  --button-secondary-text: #ffbf1a;
+  --button-secondary-bg: #0a0700;
+  --button-secondary-border: #3d2c05;
+  --actogram-observed: #e08a00;
+  --actogram-observed-text: #000000;
+  --actogram-inferred-text: #ffc21a;
+  --actogram-inferred: repeating-linear-gradient(90deg, #7a5500 0 5px, #241a00 5px 8px);
+  --actogram-forecast-text: #ffc21a;
+  --actogram-forecast: repeating-linear-gradient(90deg, #4d3800 0 7px, #1c1503 7px 12px);
+  --actogram-forecast-border: #8a6300;
+  --actogram-original: #8a6300;
+  --actogram-grid: #33260a;
+  --actogram-track-bg: #120c02;
+  --drift-fit: #ffbf1a;
+  --drift-band: rgba(255, 176, 0, 0.16);
+  --drift-point: #ffc21a;
+  --drift-grid: #1c1503;
+  --drift-axis: #3d2c05;
+  --drift-svg-bg: linear-gradient(to right, #1c1503 1px, transparent 1px);
+  --meter-muted: #241a04;
+  --meter-fill: #d19200;
+  --shadow: none;
+  --shadow-card: none;
+}
+
+/* High contrast: >=7:1 everywhere, structure by strong borders. */
+[data-theme="contrast"] {
+  color-scheme: dark;
+  --ink: #ffffff;
+  --muted: #f2f2f2;
+  --subtle: #e0e0e0;
+  --line: #6f6f6f;
+  --paper: #000000;
+  --canvas: #000000;
+  --panel-alt: #0a0a0a;
+  --divider: #4a4a4a;
+  --chrome: #000000;
+  --chrome-border: #6f6f6f;
+  --chrome-hover: rgba(255, 255, 255, 0.14);
+  --sage: #ffffff;
+  --sage-dark: #ffffff;
+  --sage-soft: #262626;
+  --blue-soft: #1a1a1a;
+  --amber-soft: #1a1a1a;
+  --assistant: #d9b8ff;
+  --assistant-soft: #1a1a1a;
+  --state-awake: #66ffcc;
+  --state-asleep: #99ccff;
+  --state-uncertain: #ffd633;
+  --state-awake-glow: rgba(102, 255, 204, 0.25);
+  --state-asleep-glow: rgba(153, 204, 255, 0.25);
+  --state-uncertain-glow: rgba(255, 214, 51, 0.25);
+  --confidence-high-text: #ffffff;
+  --confidence-high-bg: #1a1a1a;
+  --confidence-medium-text: #ffffff;
+  --confidence-medium-bg: #1a1a1a;
+  --confidence-low-text: #ffffff;
+  --confidence-low-bg: #1a1a1a;
+  --danger-text: #ff9999;
+  --danger-bg: #1a0000;
+  --danger-border: #ff9999;
+  --danger-action-text: #000000;
+  --danger-action-bg: #ff9999;
+  --danger-action-hover: #ffb3b3;
+  --button-primary-text: #000000;
+  --button-primary-bg: #ffffff;
+  --button-primary-hover: #e0e0e0;
+  --button-secondary-text: #ffffff;
+  --button-secondary-bg: #000000;
+  --button-secondary-border: #9a9a9a;
+  --actogram-observed: #d0d0d0;
+  --actogram-observed-text: #000000;
+  --actogram-inferred-text: #ffffff;
+  --actogram-inferred: repeating-linear-gradient(90deg, #7a7a7a 0 5px, #262626 5px 8px);
+  --actogram-forecast-text: #ffffff;
+  --actogram-forecast: repeating-linear-gradient(90deg, #4d4d4d 0 7px, #1a1a1a 7px 12px);
+  --actogram-forecast-border: #9a9a9a;
+  --actogram-original: #9a9a9a;
+  --actogram-grid: #4a4a4a;
+  --actogram-track-bg: #0a0a0a;
+  --drift-fit: #ffffff;
+  --drift-band: rgba(255, 255, 255, 0.2);
+  --drift-point: #ffffff;
+  --drift-grid: #333333;
+  --drift-axis: #6f6f6f;
+  --drift-svg-bg: linear-gradient(to right, #1a1a1a 1px, transparent 1px);
+  --meter-muted: #333333;
+  --meter-fill: #ffffff;
+  --shadow: none;
+  --shadow-card: none;
 }
 
 [data-reduced="true"] {
@@ -446,8 +652,8 @@ button {
   padding: 38px clamp(28px, 4vw, 64px) 60px;
 }
 .page-header {
-  min-height: 80px;
-  margin-bottom: 30px;
+  min-height: 0;
+  margin-bottom: 18px;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -456,8 +662,8 @@ button {
 .page-header h1 {
   margin-bottom: 7px;
   color: var(--ink);
-  font-size: clamp(29px, 3vw, 38px);
-  line-height: 1.05;
+  font-size: clamp(23px, 2.2vw, 28px);
+  line-height: 1.1;
   letter-spacing: -0.035em;
 }
 .page-header > div > p:last-child {
@@ -507,12 +713,11 @@ button {
 }
 
 .phase-panel {
-  margin-bottom: 20px;
-  padding: 30px clamp(26px, 4vw, 44px);
+  margin-bottom: 14px;
+  padding: 18px clamp(20px, 3vw, 28px);
   background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: 14px;
-  box-shadow: var(--shadow);
+  border-radius: 8px;
 }
 .phase-copy {
   max-width: 760px;
@@ -520,10 +725,10 @@ button {
 .phase-copy h2 {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 12px;
+  gap: 12px;
+  margin-bottom: 8px;
   color: var(--ink);
-  font-size: clamp(30px, 3.4vw, 42px);
+  font-size: clamp(24px, 2.6vw, 30px);
   line-height: 1.04;
   letter-spacing: -0.035em;
 }
@@ -549,10 +754,10 @@ button {
 }
 .phase-copy > p:not(.section-kicker) {
   max-width: 640px;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
   color: var(--muted);
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: 13px;
+  line-height: 1.55;
 }
 .phase-meta {
   display: flex;
@@ -598,33 +803,32 @@ button {
 }
 
 .metric-grid {
-  margin: 20px 0;
+  margin: 14px 0;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 14px;
+  gap: 10px;
 }
 .metric-card {
-  min-height: 112px;
-  padding: 21px 22px;
+  min-height: 0;
+  padding: 12px 16px;
   display: flex;
-  align-items: flex-start;
-  gap: 15px;
+  align-items: center;
+  gap: 12px;
   background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: 11px;
-  box-shadow: var(--shadow-card);
+  border-radius: 8px;
 }
 .metric-card[data-accent="true"] {
   background: var(--panel-alt);
   border-color: var(--line);
 }
 .metric-icon {
-  width: 38px;
-  height: 38px;
+  width: 34px;
+  height: 34px;
   display: grid;
   place-items: center;
-  color: var(--sage);
-  background: var(--sage-soft);
+  color: var(--muted);
+  background: var(--panel-alt);
   border-radius: 9px;
 }
 .metric-icon svg {
@@ -642,15 +846,16 @@ button {
 .metric-card strong {
   display: block;
   color: var(--ink);
-  font-size: clamp(15px, 1.5vw, 18px);
-  line-height: 1.25;
+  font-size: 19px;
+  line-height: 1.2;
   letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
 }
 .metric-card small {
   display: block;
-  margin-top: 5px;
+  margin-top: 3px;
   color: var(--subtle);
-  font-size: 10px;
+  font-size: 11px;
 }
 
 .overview-columns {
@@ -661,8 +866,7 @@ button {
 .panel {
   background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: 11px;
-  box-shadow: var(--shadow);
+  border-radius: 8px;
 }
 .screen-grid {
   display: grid;
@@ -740,13 +944,14 @@ button {
 }
 .task-chip {
   display: inline-flex;
-  padding: 4px 8px;
-  color: var(--sage-dark);
-  background: var(--sage-soft);
+  padding: 3px 8px;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid var(--line);
   border-radius: 4px;
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
 }
 .task-chip.fixed {
   color: var(--muted);
@@ -796,7 +1001,7 @@ button {
 }
 .confidence-meter span {
   height: 5px;
-  background: var(--sage);
+  background: var(--meter-fill);
   border-radius: 4px;
 }
 .confidence-meter span[data-muted="true"] {
@@ -1263,7 +1468,7 @@ button {
 .actogram-visual-axis {
   padding-bottom: 9px;
   color: var(--subtle);
-  font-size: 9px;
+  font-size: 10px;
 }
 .actogram-visual-axis span {
   /* All hour labels share one grid cell and spread horizontally; without the
@@ -1312,7 +1517,7 @@ button {
 }
 .actogram-visual-row time {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 750;
   text-align: right;
 }
@@ -1322,7 +1527,7 @@ button {
 }
 .actogram-visual-track {
   position: relative;
-  height: 22px;
+  height: 30px;
   overflow: hidden;
   background-image:
     linear-gradient(

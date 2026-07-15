@@ -23,8 +23,11 @@ function blockVars(selector: string): Record<string, string> {
 }
 
 const light = blockVars(":root");
-// Dark theme cascades over the light root.
+// Every preset cascades over the light root.
 const dark = { ...light, ...blockVars('[data-theme="dark"]') };
+const black = { ...light, ...blockVars('[data-theme="black"]') };
+const amber = { ...light, ...blockVars('[data-theme="amber"]') };
+const contrast = { ...light, ...blockVars('[data-theme="contrast"]') };
 
 function resolve(map: Record<string, string>, token: string): string {
   let value: string | undefined = map[token];
@@ -92,6 +95,9 @@ const pairs: { fg: string; bg: string; min: number; label: string }[] = [
 describe.each([
   ["light", light],
   ["dark", dark],
+  ["black", black],
+  ["amber", amber],
+  ["contrast", contrast],
 ])("WCAG 2.2 AA contrast (%s theme)", (_theme, map) => {
   it.each(pairs)("$label meets $min:1", ({ fg, bg, min }) => {
     const foreground = resolve(map, fg);
@@ -99,5 +105,61 @@ describe.each([
     expect(foreground, `--${fg}`).toMatch(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
     expect(background, `--${bg}`).toMatch(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
     expect(ratio(foreground, background)).toBeGreaterThanOrEqual(min);
+  });
+});
+
+// --- Amber glasses mode (ui-refactor-plan.md §3) ---
+// Through-lens luminance for dark amber blue-blockers: blue is removed and
+// green heavily attenuated before it reaches the eye.
+const LENS_G = 0.25;
+const LENS_B = 0.02;
+
+function throughLensLuminance(hex: string): number {
+  const raw = hex.replace("#", "");
+  const h = raw.length === 3 ? raw.replace(/(.)/g, "$1$1") : raw;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return 0.2126 * channel(r) + 0.7152 * LENS_G * channel(g) + 0.0722 * LENS_B * channel(b);
+}
+
+function throughLensRatio(fg: string, bg: string): number {
+  const a = throughLensLuminance(fg);
+  const b = throughLensLuminance(bg);
+  return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+}
+
+describe("amber glasses mode", () => {
+  it("body text keeps >=7:1 through dark amber lenses", () => {
+    expect(throughLensRatio(resolve(amber, "ink"), resolve(amber, "canvas"))).toBeGreaterThanOrEqual(7);
+    expect(throughLensRatio(resolve(amber, "ink"), resolve(amber, "paper"))).toBeGreaterThanOrEqual(7);
+  });
+
+  it("secondary text keeps >=3:1 through dark amber lenses", () => {
+    expect(throughLensRatio(resolve(amber, "muted"), resolve(amber, "canvas"))).toBeGreaterThanOrEqual(3);
+    expect(throughLensRatio(resolve(amber, "subtle"), resolve(amber, "paper"))).toBeGreaterThanOrEqual(3);
+  });
+
+  it("emits no blue: every color in the amber block holds B <= 10%", () => {
+    const block = blockVars('[data-theme="amber"]');
+    for (const [name, value] of Object.entries(block)) {
+      for (const match of value.matchAll(/#([0-9a-fA-F]{6})(?![0-9a-fA-F])/g)) {
+        const hex = match[1] ?? "";
+        const blue = parseInt(hex.slice(4, 6), 16);
+        expect(blue, `--${name}: #${hex}`).toBeLessThanOrEqual(26);
+      }
+      const rgba = value.match(/rgba\(\s*\d+\s*,\s*\d+\s*,\s*(\d+)/);
+      if (rgba) {
+        expect(Number(rgba[1]), `--${name}: ${value}`).toBeLessThanOrEqual(26);
+      }
+    }
+  });
+});
+
+// High contrast preset promises AAA for its core text.
+describe("high contrast preset", () => {
+  it("ink on canvas reaches 7:1", () => {
+    expect(ratio(resolve(contrast, "ink"), resolve(contrast, "canvas"))).toBeGreaterThanOrEqual(7);
+    expect(ratio(resolve(contrast, "muted"), resolve(contrast, "paper"))).toBeGreaterThanOrEqual(7);
   });
 });

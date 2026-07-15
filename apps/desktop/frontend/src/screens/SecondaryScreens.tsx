@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Icon } from "../components/Icon";
 import { PageHeader, PlaceholderNotice } from "../components/AppShell";
 import { useAppearanceContext } from "../theme/AppearanceProvider";
-import type { ThemePreference } from "../theme/theme";
+import { themePresets, type ThemePreference } from "../theme/theme";
 import { useApprovals } from "../state/approvals";
 import {
   correctionPreviewFixture,
@@ -2239,11 +2239,16 @@ export function SettingsScreen() {
               value={theme}
               onChange={(event) => setTheme(event.target.value as ThemePreference)}
             >
-              <option value="auto">Auto</option>
-              <option value="light">Light</option>
-              <option value="dark">Dark</option>
+              {themePresets.map((preset) => (
+                <option value={preset.id} key={preset.id}>
+                  {preset.label}
+                </option>
+              ))}
             </select>
           </label>
+          <p className="settings-copy">
+            {themePresets.find((preset) => preset.id === theme)?.hint}
+          </p>
           <label className="toggle-row settings-row">
             <span>
               <strong>Reduced stimulation</strong>

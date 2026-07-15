@@ -4,6 +4,7 @@ import {
   getStoredTheme,
   listenForSystemThemeChanges,
   storeTheme,
+  type EffectiveTheme,
   type ThemePreference,
 } from "./theme";
 import {
@@ -14,7 +15,7 @@ import {
 
 export interface AppearanceState {
   theme: ThemePreference;
-  effectiveTheme: "light" | "dark";
+  effectiveTheme: EffectiveTheme;
   reducedStimulation: boolean;
   setTheme: (preference: ThemePreference) => void;
   setReducedStimulation: (enabled: boolean) => void;
@@ -22,7 +23,7 @@ export interface AppearanceState {
 
 export function useAppearance(): AppearanceState {
   const [theme, setThemeState] = useState<ThemePreference>(getStoredTheme);
-  const [effectiveTheme, setEffectiveTheme] = useState<"light" | "dark">(() => {
+  const [effectiveTheme, setEffectiveTheme] = useState<EffectiveTheme>(() => {
     if (theme !== "auto") return theme;
     if (typeof window === "undefined" || !window.matchMedia) return "light";
     return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
