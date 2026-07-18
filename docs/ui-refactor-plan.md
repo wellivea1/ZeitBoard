@@ -185,3 +185,53 @@ container and no nested `.panel` or `.metric-card`. The Rhythm actogram measured
 approximately 568px high at the same viewport with no generic panel above the
 fold. Final verification commands and environment results are recorded in
 `verification.md`.
+
+## 7. Slice U-E (planned): chronological hover time probe
+
+Every chronological surface answers "what exact time is under my cursor."
+Hovering the actogram, the drift chart, the Overview cycle strip, or a
+calendar timeline shows a **time probe**: a theme-token hairline at the
+cursor's time position plus a small chip with the exact civil time in
+tabular numerals (minute precision — the charts' native resolution).
+
+### Interaction
+
+- **Actogram (double plot):** cursor x maps through the row's 48 h scale;
+  the chip reads `Sat Jul 18 · 03:24` — the *second* plot resolves to the
+  next civil day, exactly as the double plot implies. Hovering a forecast
+  row appends the qualifier `predicted`; the probe never turns a range into
+  a point claim beyond the cursor position itself.
+- **Drift chart:** a vertical hairline snaps to the nearest cycle; the chip
+  reads the cycle's date + observed onset (and fitted onset when they
+  differ), e.g. `Jul 12 · onset 02:47 (fit 02:52)`.
+- **Cycle strip / calendar:** same mapping at their own scales; the strip
+  adds `~` before times inside predicted spans.
+- The probe follows `pointermove`, disappears on leave, and renders on an
+  overlay layer (no band re-render; CSS transform positioning only).
+  Reduced stimulation keeps the hairline and chip but drops any transition.
+- Touch (Android later): press-and-hold summons the probe; release hides.
+- Keyboard/non-visual: the probe is a pointer affordance; exact values
+  remain available in the existing sr-tables (per the visual-first stance,
+  the probe adds precision for sighted users without becoming the only
+  path). Focused-chart arrow-key stepping is a possible follow-up, not in
+  scope.
+
+### Data honesty requirement
+
+The chip's time must come from **structured row data, never parsed labels**:
+actogram/strip rows gain an ISO civil date (+ zone) in the DTO so
+`timeAtCursor(x, row)` is arithmetic on real instants. Formatted prose is
+not reverse-engineered (the §2.3 rule Codex's audit codified). Forecast
+rows keep their `predicted` qualifier; zone is the row's own display zone.
+
+### Acceptance
+
+1. On each surface, a probe chip appears within one frame of hover and
+   tracks the cursor at minute precision; values match the sr-table row for
+   the same position.
+2. Second-plot hours (24–48) resolve to the following civil day.
+3. Forecast/predicted positions are qualified in the chip text.
+4. Works in all five presets (chip uses paper/ink tokens; hairline uses the
+   chart grid token) and under reduced stimulation (no motion).
+5. No layout shift, no band re-render on pointermove (verified via React
+   profiler or render counters in tests).

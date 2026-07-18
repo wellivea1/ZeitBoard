@@ -161,7 +161,11 @@ ADR when it changes architecture.
     releases at predicted wake, honest civil-time fallback when the
     estimator refuses; display actions are direct local actions, never
     queue-gated. Agent-driven switching deferred until a desktop-local
-    agent endpoint exists (recorded in the ADR).
+    agent endpoint exists (recorded in the ADR). *U-E planned*
+    (ui-refactor-plan §7): a hover time probe on every chronological
+    surface — hairline + tabular-numeral chip showing the exact civil time
+    under the cursor (double-plot day resolution, `predicted` qualifiers,
+    structured row dates in the DTO rather than parsed labels).
 
 **Small debts (fold into adjacent slices):** consolidate the correction-record
 → domain decoder (now duplicated across desktop storage, server readmodel, and
