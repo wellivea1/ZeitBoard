@@ -56,6 +56,7 @@ function Invoke-Contracts {
     }
     finally { $env:GOWORK = $prevGoWork }
     & (Join-Path $Root "scripts\validate-contracts.ps1")
+    if ($LASTEXITCODE -ne 0) { throw "Contract validation failed." }
 }
 
 function Invoke-Core {
@@ -84,7 +85,11 @@ function Invoke-Core {
                 Push-Location $module.DirectoryName
                 try {
                     go test ./...
-                    if ($Action -eq "check") { go vet ./... }
+                    if ($LASTEXITCODE -ne 0) { throw "Go tests failed in $($module.DirectoryName)." }
+                    if ($Action -eq "check") {
+                        go vet ./...
+                        if ($LASTEXITCODE -ne 0) { throw "Go vet failed in $($module.DirectoryName)." }
+                    }
                 }
                 finally { Pop-Location }
             }
@@ -92,13 +97,19 @@ function Invoke-Core {
         elseif ($Action -eq "build") {
             foreach ($module in $moduleFiles) {
                 Push-Location $module.DirectoryName
-                try { go build ./... }
+                try {
+                    go build ./...
+                    if ($LASTEXITCODE -ne 0) { throw "Go build failed in $($module.DirectoryName)." }
+                }
                 finally { Pop-Location }
             }
         }
         elseif ($Action -eq "dev") {
             Push-Location (Join-Path $Root "core")
-            try { go test ./... }
+            try {
+                go test ./...
+                if ($LASTEXITCODE -ne 0) { throw "Core Go tests failed." }
+            }
             finally { Pop-Location }
         }
     }
@@ -158,6 +169,7 @@ function Invoke-Web {
         throw "$Label does not define an npm '$script' script."
     }
     npm --prefix $Path run $script
+    if ($LASTEXITCODE -ne 0) { throw "$Label npm '$script' failed." }
 }
 
 function Invoke-Desktop {
@@ -166,14 +178,20 @@ function Invoke-Desktop {
     $wails = if (Test-Path $LocalWails) { $LocalWails } elseif ($globalWails) { $globalWails.Source } else { $null }
     if ($Action -eq "dev" -and (Test-Path (Join-Path $desktopRoot "wails.json")) -and $wails) {
         Push-Location $desktopRoot
-        try { & $wails dev }
+        try {
+            & $wails dev
+            if ($LASTEXITCODE -ne 0) { throw "Wails dev failed." }
+        }
         finally { Pop-Location }
         return
     }
     if ($Action -eq "build" -and (Test-Path (Join-Path $desktopRoot "wails.json"))) {
         if (-not $wails) { throw "Wails CLI not found. Run scripts\setup.ps1 first." }
         Push-Location $desktopRoot
-        try { & $wails build -nosyncgomod }
+        try {
+            & $wails build -nosyncgomod
+            if ($LASTEXITCODE -ne 0) { throw "Wails build failed." }
+        }
         finally { Pop-Location }
         return
     }
@@ -195,7 +213,10 @@ function Invoke-Android {
         default { return }
     }
     Push-Location $androidRoot
-    try { & $wrapper --no-daemon $task }
+    try {
+        & $wrapper --no-daemon $task
+        if ($LASTEXITCODE -ne 0) { throw "Android Gradle '$task' failed." }
+    }
     finally { Pop-Location }
 }
 

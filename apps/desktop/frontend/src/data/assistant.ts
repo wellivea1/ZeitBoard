@@ -1,4 +1,5 @@
 import { normalizeProposal, type BackendProposal } from "./backendProposals";
+import { findWailsMethod, type WailsRoot } from "./wailsBridge";
 
 // Assistant chat surface (spec §4, ADR-0010): every reply is propose-only —
 // proposals land in the same approval queue, and the desktop sends only a
@@ -30,12 +31,7 @@ export interface AssistantReply {
   proposals: BackendProposal[];
 }
 
-type WailsMethod = (payload?: unknown) => Promise<unknown>;
 type UnknownRecord = Record<string, unknown>;
-
-interface WailsRoot {
-  go?: Record<string, Record<string, Record<string, unknown>>>;
-}
 
 export const assistantUnavailableMessage =
   "The assistant needs the ZeitBoard desktop app with your self-hosted backend connected.";
@@ -45,22 +41,6 @@ const browserStatus: AssistantStatus = {
   configured: false,
   message: assistantUnavailableMessage,
 };
-
-function findMethod(root: WailsRoot, names: readonly string[]): WailsMethod | undefined {
-  const packages = root.go;
-  if (!packages) return undefined;
-  for (const packageValue of Object.values(packages)) {
-    for (const serviceValue of Object.values(packageValue)) {
-      for (const name of names) {
-        const candidate = serviceValue[name];
-        if (typeof candidate === "function") {
-          return (candidate as WailsMethod).bind(serviceValue);
-        }
-      }
-    }
-  }
-  return undefined;
-}
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null;
@@ -123,7 +103,7 @@ export function normalizeAssistantReply(value: unknown): AssistantReply | undefi
 export async function loadAssistantStatus(
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<AssistantStatus> {
-  const method = findMethod(root, ["GetAssistantStatus"]);
+  const method = findWailsMethod(root, ["GetAssistantStatus"]);
   if (!method) return browserStatus;
   try {
     const normalized = normalizeAssistantStatus(await method());
@@ -138,7 +118,7 @@ export async function sendAssistantMessage(
   message: string,
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<AssistantReply> {
-  const method = findMethod(root, ["SendAssistantMessage"]);
+  const method = findWailsMethod(root, ["SendAssistantMessage"]);
   if (!method) {
     return {
       available: false,

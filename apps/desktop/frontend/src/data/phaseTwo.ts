@@ -328,7 +328,6 @@ export const correctionPreviewFixture = {
   effectiveInterval: "Corrected sleep: Jun 13, 3:05 AM to 9:35 AM",
   diffLabel: "Forecast moves 28 min later and confidence stays Medium.",
   historyLabel: "Edited 16 min ago from synthetic fixture data",
-  undoLabel: "Undo correction",
 };
 
 export const refusalFixture = {

@@ -11,9 +11,10 @@
     "build": "npm run build --workspaces --if-present",
     "dev:desktop": "npm run dev --workspace @zeitboard/desktop-frontend",
     "dev:trusted": "npm run dev --workspace @zeitboard/trusted-web-prototype",
-    "format": "prettier --write package.json tsconfig.base.json eslint.config.js .prettierrc.json apps/desktop/frontend apps/trusted-web-prototype",
-    "format:check": "prettier --check package.json tsconfig.base.json eslint.config.js .prettierrc.json apps/desktop/frontend apps/trusted-web-prototype",
-    "lint": "eslint apps/desktop/frontend apps/trusted-web-prototype",
+    "format": "prettier --write package.json tsconfig.base.json eslint.config.js .prettierrc.json scripts/lint-ui-standards.mjs apps/desktop/frontend apps/trusted-web-prototype",
+    "format:check": "prettier --check package.json tsconfig.base.json eslint.config.js .prettierrc.json scripts/lint-ui-standards.mjs apps/desktop/frontend apps/trusted-web-prototype",
+    "lint": "eslint eslint.config.js scripts/lint-ui-standards.mjs apps/desktop/frontend apps/trusted-web-prototype && npm run lint:ui",
+    "lint:ui": "node scripts/lint-ui-standards.mjs",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },

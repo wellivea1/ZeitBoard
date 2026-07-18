@@ -1,8 +1,8 @@
 # ZeitBoard
 
-ZeitBoard is an early local-first scheduling prototype for people whose sleep-wake timing is free-running or highly irregular. It estimates an **observed sleep-wake rhythm** from user-controlled data, forecasts uncertain sleep and waking windows, and uses those forecasts to propose useful times for flexible tasks.
+ZeitBoard is a local-first planner for people whose sleep-wake timing is free-running or highly irregular. It estimates an **observed sleep-wake rhythm** from user-controlled data, forecasts uncertain sleep and waking windows, and uses those forecasts to propose useful times for flexible tasks.
 
-This repository is a phase-one scaffold. It is not a medical device, does not estimate DLMO or exact circadian phase, and does not recommend medication, light, melatonin, stimulant, hypnotic, meal, or exercise timing.
+It is not a medical device, does not estimate DLMO or exact circadian phase, and does not recommend medication, light, melatonin, stimulant, hypnotic, meal, or exercise timing.
 
 ZeitBoard is a separate project from the neighboring Zeitlog and Zeitdex workspaces. The shared `zeit` prefix is intentional branding, not shared code, history, or product scope.
 
@@ -20,14 +20,13 @@ testdata                    Synthetic observations and projected sharing fixture
 ```
 
 
-## Phase-one status
+## Current status
 
-The phase-one scaffold is implemented with synthetic fixture flows:
-
-- Go core with provenance-preserving corrections, robust sleep-start drift estimation, uncertainty forecasts, scheduling proposals, medication-relative timing, SQLite storage, and default-deny sharing.
-- Wails v2 Windows application with eight accessible React screens, an in-process collector boundary, and a Windows tray reopen/quit adapter.
-- Native Android Compose application with visible fixture mode and Health Connect `READ_SLEEP` availability/permission flow.
-- Static trusted-view prototype containing only pre-projected synthetic fields and no network requests.
+- The Wails desktop runs on persisted manual sleep observations, immutable raw records, and append-only corrections. Overview, Rhythm, and proposals use the real Go estimator and refuse honestly when evidence is insufficient.
+- Contract-shaped JSON export, permanent local erasure, opt-in self-hosted sync, cross-device tombstones, user-owned tasks, unified approvals, and the propose-only assistant surface are implemented.
+- The self-hosted backend provides encrypted sync, server-side projections, BYOK assistant providers, and a local MCP connector with read and propose-only tools.
+- The Android companion remains a build-ready Health Connect skeleton and does not yet sync. The trusted-view prototype remains static and synthetic.
+- Browser-only desktop preview data is synthetic and visibly labeled `Sample data`; it is not used by the running Wails desktop service.
 
 ## Build and test
 
@@ -51,7 +50,8 @@ The setup and development scripts prefer the pinned local Node.js runtime under
 `.tools\node-v24.16.0-win-x64` on `PATH`, or use the scripts above.
 
 See [docs/development.md](docs/development.md) for Linux commands,
-[docs/verification.md](docs/verification.md) for the verified environment, and
-[docs/roadmap.md](docs/roadmap.md) for real-source integration work. Android
+[docs/verification.md](docs/verification.md) for the verified environment,
+[docs/frontend-architecture.md](docs/frontend-architecture.md) for desktop UI
+boundaries, and [docs/roadmap.md](docs/roadmap.md) for remaining work. Android
 emulator launch requires an installed AVD; the debug APK can be built without
 one.

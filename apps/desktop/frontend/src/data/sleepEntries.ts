@@ -1,3 +1,5 @@
+import { findWailsMethod, type WailsRoot } from "./wailsBridge";
+
 export type SleepClassification = "principal" | "nap";
 
 export interface SleepEntryInput {
@@ -93,36 +95,14 @@ export function latestCorrectedEntry(entries: SleepEntry[]): SleepEntry | undefi
 }
 
 type UnknownRecord = Record<string, unknown>;
-type WailsMethod = (input?: unknown) => Promise<unknown>;
-
-interface WailsRoot {
-  go?: Record<string, Record<string, Record<string, unknown>>>;
-}
 
 const emptySleepEntries: SleepEntriesData = {
   status: "unavailable",
   empty: true,
-  message: "This browser preview is read-only. Open the ZeitBoard desktop app to add sleep entries.",
+  message:
+    "This browser preview is read-only. Open the ZeitBoard desktop app to add sleep entries.",
   entries: [],
 };
-
-function findMethod(root: WailsRoot, names: readonly string[]): WailsMethod | undefined {
-  const packages = root.go;
-  if (!packages) return undefined;
-
-  for (const packageValue of Object.values(packages)) {
-    for (const serviceValue of Object.values(packageValue)) {
-      for (const methodName of names) {
-        const candidate = serviceValue[methodName];
-        if (typeof candidate === "function") {
-          return (candidate as WailsMethod).bind(serviceValue);
-        }
-      }
-    }
-  }
-
-  return undefined;
-}
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null;
@@ -261,7 +241,7 @@ export function normalizeSleepDataExport(value: unknown): SleepDataExport | unde
 export async function loadSleepEntries(
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<SleepEntriesData> {
-  const method = findMethod(root, ["ListSleepEntries"]);
+  const method = findWailsMethod(root, ["ListSleepEntries"]);
   if (!method) return emptySleepEntries;
 
   const result = await method();
@@ -272,7 +252,7 @@ export async function addSleepEntry(
   input: SleepEntryInput,
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<SleepEntry> {
-  const method = findMethod(root, ["AddSleepEntry"]);
+  const method = findWailsMethod(root, ["AddSleepEntry"]);
   if (!method) throw new Error("Manual sleep entry service is unavailable.");
   const result = await method(input);
   const entry = normalizeEntry(result);
@@ -283,7 +263,7 @@ export async function addSleepEntry(
 export async function exportSleepData(
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<SleepDataExport> {
-  const method = findMethod(root, ["ExportSleepData"]);
+  const method = findWailsMethod(root, ["ExportSleepData"]);
   if (!method) throw new Error("Sleep data export service is unavailable.");
   const result = await method();
   const exported = normalizeSleepDataExport(result);
@@ -296,7 +276,7 @@ export async function deleteSleepObservation(
   confirmation: string,
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<SleepEntriesData> {
-  const method = findMethod(root, ["DeleteSleepObservation"]);
+  const method = findWailsMethod(root, ["DeleteSleepObservation"]);
   if (!method) throw new Error("Sleep data deletion service is unavailable.");
   const result = await method({ observationId, confirmation });
   const entries = normalizeSleepEntries(result);
@@ -308,7 +288,7 @@ export async function deleteAllSleepData(
   confirmation: string,
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<SleepEntriesData> {
-  const method = findMethod(root, ["DeleteAllSleepData"]);
+  const method = findWailsMethod(root, ["DeleteAllSleepData"]);
   if (!method) throw new Error("Sleep data deletion service is unavailable.");
   const result = await method({ confirmation });
   const entries = normalizeSleepEntries(result);
@@ -320,7 +300,7 @@ export async function correctSleepEntry(
   input: SleepCorrectionInput,
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<SleepEntry> {
-  const method = findMethod(root, ["CorrectSleepEntry"]);
+  const method = findWailsMethod(root, ["CorrectSleepEntry"]);
   if (!method) throw new Error("Manual sleep correction service is unavailable.");
   const result = await method(input);
   const entry = normalizeEntry(result);
@@ -332,7 +312,7 @@ export async function suppressSleepEntry(
   observationId: string,
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<SleepEntry> {
-  const method = findMethod(root, ["SuppressSleepEntry"]);
+  const method = findWailsMethod(root, ["SuppressSleepEntry"]);
   if (!method) throw new Error("Manual sleep suppression service is unavailable.");
   const result = await method({ observationId });
   const entry = normalizeEntry(result);

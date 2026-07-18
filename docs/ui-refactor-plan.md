@@ -1,6 +1,6 @@
 # UI refactor plan: density, identity, and the theme manager
 
-> Planning document. Complements `ui-ux-design.md` (which remains the master
+> Planning and implementation record. Complements `ui-ux-design.md` (which remains the master
 > interaction spec); this plan revises the *visual system* and adds a theme
 > architecture. Visual-first remains the constitution: accessibility features
 > are added where they cost nothing visually (ADR-0005 stance).
@@ -9,7 +9,8 @@
 
 Screenshots reviewed: Overview, Tasks, Rhythm (light + dark), 1440×900.
 Stylesheet audited quantitatively. The critique "generic flat card dashboard"
-is confirmed by numbers, not taste:
+was confirmed by numbers, not taste. These are baseline findings from before
+the structural follow-up described in section 5:
 
 1. **Card soup.** `.panel` (paper bg + 1px border + 11px radius + shadow) is
    used **48×** across screens — every kind of content, from a one-line
@@ -51,6 +52,10 @@ is confirmed by numbers, not taste:
    taller day rows, the current cycle visually emphasized, and a compact
    "cycle strip" variant reused on Overview. Charts get vertical priority
    over chrome on every screen.
+
+   The compact cycle strip shows the estimated waking span and predicted sleep.
+   The exact useful-task window stays textual until the DTO exposes structured
+   bounds; formatted prose is not parsed into a more precise chart claim.
 4. **Semantic color, not brand color.** Sage retracts to two jobs: primary
    action and "awake" state. Sleep bands/forecasts move to the asleep blue
    family; uncertainty and caution live in amber; agent origin stays purple;
@@ -135,7 +140,29 @@ interleave, U-D last. Each slice keeps the WCAG regression test green and
 extends it (U-C adds the through-lens assertions; U-B adds a "no container
 over 40% padding" review checklist item rather than an automated rule).
 
-## 5. Acceptance
+## 5. Implementation audit (2026-07-18)
+
+- **U-A delivered.** Shared spacing, radius, and type tokens now drive the
+  reworked route styles; status colors have semantic jobs; obsolete Overview
+  card rules were removed.
+- **U-B delivered after structural remediation.** The initial pass changed
+  CSS density but left the old metric-card composition in place. The follow-up
+  rebuilt Overview as one surface with a dominant state band, source-matched
+  cycle strip, three fact rows, confidence, conditional attention, and trust.
+  Rhythm's actogram is a full-width visual rather than another generic panel.
+- **U-C delivered.** Settings exposes Auto plus visual Paper, Dark, Pitch
+  black, Amber, and High contrast choices with live swatches and an independent
+  reduced-stimulation control. Token-level normal, through-lens, and zero-blue
+  checks cover the presets.
+- **Architecture remediation delivered.** The former 2,512-line multi-screen
+  module was split by route, reusable proposal/rhythm components were
+  extracted, Wails lookup was centralized in the data layer, and repository
+  lint now enforces those boundaries. See `frontend-architecture.md`.
+- **U-D remains open.** Rhythm-linked switching and agent-readable display
+  actions require the planned direct-display-action ADR and are not implied by
+  U-A..U-C completion.
+
+## 6. Acceptance
 
 1. Overview at 1440×900 shows rhythm data above the fold occupying ≥70% of
    the content column; no tile is emptier than it is full.
@@ -151,3 +178,10 @@ over 40% padding" review checklist item rather than an automated rule).
 5. Reduced stimulation composes with every preset; charts stay readable in
    all ten combinations (5 presets × reduced on/off) — screenshot matrix
    reviewed manually, patterns carry state everywhere hue cannot.
+
+The structural acceptance check measured the 1440×900 Overview surface at
+approximately 693px high (about 77% of the viewport) with one visible primary
+container and no nested `.panel` or `.metric-card`. The Rhythm actogram measured
+approximately 568px high at the same viewport with no generic panel above the
+fold. Final verification commands and environment results are recorded in
+`verification.md`.

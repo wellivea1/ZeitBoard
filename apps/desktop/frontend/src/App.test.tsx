@@ -37,6 +37,18 @@ describe("desktop navigation", () => {
     expect(screen.getByText("Sample data")).toBeVisible();
   });
 
+  it("renders Overview as one rhythm-first surface instead of metric cards", () => {
+    const { container } = render(<App />);
+
+    expect(screen.getByRole("heading", { name: "Likely awake" })).toBeVisible();
+    expect(screen.getByText("Today in your cycle")).toBeVisible();
+    expect(screen.getByText("Today, 10:15 PM to 1:27 AM")).toBeVisible();
+    expect(screen.getByText("+48 min per cycle")).toBeVisible();
+    expect(container.querySelectorAll(".overview-surface")).toHaveLength(1);
+    expect(container.querySelector(".overview-surface .panel")).toBeNull();
+    expect(container.querySelector(".metric-card")).toBeNull();
+  });
+
   it("renders approval proposals with explicit actions", () => {
     window.location.hash = "#/approvals";
     render(<App />);
@@ -96,7 +108,7 @@ describe("desktop navigation", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Sources" }));
 
     expect(screen.getByRole("heading", { name: "Correction inspector" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Undo correction" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Undo correction" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Source conflicts and missingness" })).toBeVisible();
     expect(screen.getByText("Wearable sleep overlaps desktop activity")).toBeVisible();
   });
@@ -430,6 +442,33 @@ describe("desktop navigation", () => {
     expect(screen.getByRole("heading", { name: "No sleep entries yet" })).toBeVisible();
   });
 
+  it("preserves task form input when saving fails", async () => {
+    window.location.hash = "#/tasks";
+    const addTask = vi.fn(async () => {
+      throw new Error("Task storage is unavailable.");
+    });
+    (globalThis as { go?: unknown }).go = {
+      main: {
+        App: {
+          ListTasks: async () => ({ status: "ok", tasks: [] }),
+          AddTask: addTask,
+        },
+      },
+    };
+
+    render(<App />);
+
+    const taskInput = await screen.findByLabelText("Task");
+    fireEvent.change(taskInput, { target: { value: "Call clinic" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save task" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Task storage is unavailable.");
+    expect(taskInput).toHaveValue("Call clinic");
+    expect(addTask).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Call clinic", durationMinutes: 45 }),
+    );
+  });
+
   it("applies Settings appearance controls through the visible UI", () => {
     window.location.hash = "#/settings";
     render(
@@ -438,13 +477,15 @@ describe("desktop navigation", () => {
       </AppearanceProvider>,
     );
 
-    const appearance = screen.getByRole("combobox", { name: "Appearance" });
+    const auto = screen.getByRole("radio", { name: /Auto/ });
+    const dark = screen.getByRole("radio", { name: /Dark/ });
+    const paper = screen.getByRole("radio", { name: /Paper/ });
     const reduced = screen.getByRole("checkbox", { name: /Reduced stimulation/ });
 
-    expect(appearance).toHaveValue("auto");
+    expect(auto).toBeChecked();
     expect(reduced).not.toBeChecked();
 
-    fireEvent.change(appearance, { target: { value: "dark" } });
+    fireEvent.click(dark);
     fireEvent.click(reduced);
 
     expect(document.documentElement).toHaveAttribute("data-theme", "dark");
@@ -456,7 +497,7 @@ describe("desktop navigation", () => {
     expect(localStorage.getItem("zeitboard-theme")).toBe("dark");
     expect(localStorage.getItem("zeitboard-reduced")).toBe("true");
 
-    fireEvent.change(appearance, { target: { value: "light" } });
+    fireEvent.click(paper);
 
     expect(document.documentElement).toHaveAttribute("data-theme", "light");
     expect(document.querySelector('meta[name="theme-color"]')).toHaveAttribute(
@@ -607,7 +648,9 @@ describe("assistant rail", () => {
     fireEvent.click(toggle);
 
     expect(await screen.findByRole("complementary", { name: "Assistant" })).toBeVisible();
-    expect(screen.getByText("Manages your schedule via approvals. Not medical advice.")).toBeVisible();
+    expect(
+      screen.getByText("Manages your schedule via approvals. Not medical advice."),
+    ).toBeVisible();
     // Browser preview has no desktop bridge: the rail says so and disables input.
     expect(await screen.findByText(/desktop app/)).toBeVisible();
     expect(screen.getByLabelText("Message the assistant")).toBeDisabled();
@@ -662,7 +705,9 @@ describe("assistant rail", () => {
     // Example chips appear on the empty state; clicking one sends it.
     fireEvent.click(await screen.findByRole("button", { name: "What's my next good window?" }));
 
-    expect(await screen.findByText("I found a window inside your predicted waking time.")).toBeVisible();
+    expect(
+      await screen.findByText("I found a window inside your predicted waking time."),
+    ).toBeVisible();
     expect(screen.getByText("Place task “Call clinic”")).toBeVisible();
     expect(screen.getByText("Thu Jul 10, 11:00 AM to 11:45 AM EDT")).toBeVisible();
     expect(screen.getByRole("link", { name: "View in Approvals" })).toBeVisible();

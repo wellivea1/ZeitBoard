@@ -2,6 +2,8 @@
 // lists the self-hosted backend's assistant/agent proposals and decides them
 // with the one-use token. With sync off this whole surface is absent.
 
+import { findWailsMethod, type WailsRoot } from "./wailsBridge";
+
 export type BackendProposalStatus = "pending" | "approved" | "rejected";
 
 export interface BackendProposal {
@@ -24,28 +26,7 @@ export interface BackendProposalsData {
   proposals: BackendProposal[];
 }
 
-type BackendMethod = (payload?: unknown) => Promise<unknown>;
 type UnknownRecord = Record<string, unknown>;
-
-interface WailsRoot {
-  go?: Record<string, Record<string, Record<string, unknown>>>;
-}
-
-function findMethod(root: WailsRoot, names: readonly string[]): BackendMethod | undefined {
-  const packages = root.go;
-  if (!packages) return undefined;
-  for (const packageValue of Object.values(packages)) {
-    for (const serviceValue of Object.values(packageValue)) {
-      for (const name of names) {
-        const candidate = serviceValue[name];
-        if (typeof candidate === "function") {
-          return (candidate as BackendMethod).bind(serviceValue);
-        }
-      }
-    }
-  }
-  return undefined;
-}
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null;
@@ -120,7 +101,7 @@ const offline: BackendProposalsData = { status: "off", proposals: [] };
 export async function loadBackendProposals(
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<BackendProposalsData> {
-  const method = findMethod(root, ["GetBackendProposals"]);
+  const method = findWailsMethod(root, ["GetBackendProposals"]);
   if (!method) return offline;
   try {
     const normalized = normalizeBackendProposals(await method());
@@ -135,7 +116,7 @@ export async function decideBackendProposal(
   input: { proposalId: string; decision: "approved" | "rejected"; token: string },
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<BackendProposalsData> {
-  const method = findMethod(root, ["DecideBackendProposal"]);
+  const method = findWailsMethod(root, ["DecideBackendProposal"]);
   if (!method) return offline;
   try {
     const normalized = normalizeBackendProposals(await method(input));

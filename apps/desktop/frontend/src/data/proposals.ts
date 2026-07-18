@@ -5,6 +5,7 @@ import {
   type ProposalOrigin,
 } from "./phaseTwo";
 import type { ConfidenceLevel } from "./overview";
+import { findWailsMethod, type WailsRoot } from "./wailsBridge";
 
 export interface UnplacedProposal {
   title: string;
@@ -46,32 +47,9 @@ export const proposalsFixture: ProposalsData = {
   ],
 };
 
-type ProposalsMethod = () => Promise<unknown>;
 type UnknownRecord = Record<string, unknown>;
 
-interface WailsRoot {
-  go?: Record<string, Record<string, Record<string, unknown>>>;
-}
-
 const methodNames = ["GetProposals", "Proposals"] as const;
-
-function findProposalsMethod(root: WailsRoot): ProposalsMethod | undefined {
-  const packages = root.go;
-  if (!packages) return undefined;
-
-  for (const packageValue of Object.values(packages)) {
-    for (const serviceValue of Object.values(packageValue)) {
-      for (const methodName of methodNames) {
-        const candidate = serviceValue[methodName];
-        if (typeof candidate === "function") {
-          return (candidate as ProposalsMethod).bind(serviceValue);
-        }
-      }
-    }
-  }
-
-  return undefined;
-}
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null;
@@ -200,13 +178,15 @@ export function normalizeProposals(value: unknown): ProposalsData | undefined {
 export async function loadProposals(
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<ProposalsResult> {
-  const method = findProposalsMethod(root);
+  const method = findWailsMethod(root, methodNames);
   if (!method) return { data: proposalsFixture, source: "fixture" };
 
   try {
     const result = await method();
     const proposals = normalizeProposals(result);
-    if (proposals) return { data: proposals, source: "backend" };
+    if (proposals) {
+      return { data: proposals, source: proposals.fixtureMode ? "fixture" : "backend" };
+    }
   } catch {
     // Fixture mode keeps the Approvals gate usable before the Wails service is ready.
   }

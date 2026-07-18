@@ -1,32 +1,10 @@
 import { overviewFixture } from "./fixture";
 import type { OverviewData, OverviewResult } from "./overview";
+import { findWailsMethod, type WailsRoot } from "./wailsBridge";
 
-type OverviewMethod = () => Promise<unknown>;
 type UnknownRecord = Record<string, unknown>;
 
-interface WailsRoot {
-  go?: Record<string, Record<string, Record<string, unknown>>>;
-}
-
 const methodNames = ["GetOverview", "Overview"] as const;
-
-function findOverviewMethod(root: WailsRoot): OverviewMethod | undefined {
-  const packages = root.go;
-  if (!packages) return undefined;
-
-  for (const packageValue of Object.values(packages)) {
-    for (const serviceValue of Object.values(packageValue)) {
-      for (const methodName of methodNames) {
-        const candidate = serviceValue[methodName];
-        if (typeof candidate === "function") {
-          return (candidate as OverviewMethod).bind(serviceValue);
-        }
-      }
-    }
-  }
-
-  return undefined;
-}
 
 function isOverviewData(value: unknown): value is OverviewData {
   if (!value || typeof value !== "object") return false;
@@ -75,7 +53,8 @@ function normalizeStatus(value: unknown): OverviewData["status"] {
   return "estimated";
 }
 
-function normalizeSource(value: unknown): OverviewResult["source"] {
+function normalizeSource(value: unknown, fixtureMode = false): OverviewResult["source"] {
+  if (fixtureMode) return "fixture";
   return value === "synced" ? "synced" : "local";
 }
 
@@ -98,7 +77,8 @@ function normalizeWailsOverview(value: unknown): OverviewData | undefined {
   const usefulTaskWindow = asString(value.nextUsefulTaskWindow);
   const sharingStatus = asString(value.sharingStatus);
   const status = normalizeStatus(value.status);
-  const source = normalizeSource(value.estimateSource);
+  const fixtureMode = value.fixtureMode === true;
+  const source = normalizeSource(value.estimateSource, fixtureMode);
 
   if (
     !state ||
@@ -117,17 +97,19 @@ function normalizeWailsOverview(value: unknown): OverviewData | undefined {
     : [];
 
   return {
-    fixtureMode: value.fixtureMode === true,
+    fixtureMode,
     status,
     empty: value.empty === true,
     ...(normalizeRefusal(value.refusal) ? { refusal: normalizeRefusal(value.refusal) } : {}),
     state,
     stateDetail:
-      source === "synced"
-        ? "Synced server estimate from the enrolled backend"
-        : status === "estimated"
-          ? "Local estimate based on recent sleep-wake observations"
-          : "Local estimate is waiting for enough manually entered sleep data",
+      source === "fixture"
+        ? "Sample projection for interface review"
+        : source === "synced"
+          ? "Synced server estimate from the enrolled backend"
+          : status === "estimated"
+            ? "Local estimate based on recent sleep-wake observations"
+            : "Local estimate is waiting for enough manually entered sleep data",
     timeSinceWake,
     nextSleepWindow: {
       label: sleepWindow,
@@ -159,14 +141,16 @@ function normalizeWailsOverview(value: unknown): OverviewData | undefined {
 export async function loadOverview(
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<OverviewResult> {
-  const method = findOverviewMethod(root);
+  const method = findWailsMethod(root, methodNames);
   if (!method) return { data: overviewFixture, source: "fixture" };
 
   try {
     const result = await method();
     const overview = normalizeWailsOverview(result);
     if (overview) {
-      const source = isRecord(result) ? normalizeSource(result.estimateSource) : "local";
+      const source = isRecord(result)
+        ? normalizeSource(result.estimateSource, overview.fixtureMode)
+        : normalizeSource(undefined, overview.fixtureMode);
       return { data: overview, source };
     }
   } catch {

@@ -5,7 +5,7 @@ import { overviewFixture } from "./fixture";
 
 describe("loadOverview", () => {
   it("uses a valid Wails overview when available", async () => {
-    const backendOverview = { ...overviewFixture, state: "Resting" };
+    const backendOverview = { ...overviewFixture, fixtureMode: false, state: "Resting" };
     const result = await loadOverview({
       go: { main: { App: { GetOverview: async () => backendOverview } } },
     });
@@ -36,13 +36,14 @@ describe("loadOverview", () => {
       },
     });
 
-    expect(result.source).toBe("local");
+    expect(result.source).toBe("fixture");
     expect(result.data.state).toBe("Likely awake");
     expect(result.data.confidence).toEqual({
       level: "Medium",
       reason: "Nine recent sleep episodes",
     });
     expect(result.data.fixtureMode).toBe(true);
+    expect(result.data.stateDetail).toBe("Sample projection for interface review");
   });
 
   it("marks synced server estimates only when the desktop DTO says so", async () => {

@@ -6,6 +6,9 @@ import { AppearanceProvider } from "./theme/AppearanceProvider";
 import { loadAndApplyReducedStimulation } from "./theme/reducedStimulation";
 import { loadAndApplyTheme } from "./theme/theme";
 import "./styles.css";
+import "./styles/overview.css";
+import "./styles/rhythm.css";
+import "./styles/settings.css";
 
 loadAndApplyTheme();
 loadAndApplyReducedStimulation();

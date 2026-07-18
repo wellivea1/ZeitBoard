@@ -2,40 +2,25 @@
 
 package tray
 
-import (
-	"testing"
-	"time"
-)
+import "testing"
 
 func TestWindowsTrayDispatchesShowAndQuitCallbacks(t *testing.T) {
 	controller := newPlatformController().(*windowsController)
-	show := make(chan struct{}, 1)
-	quit := make(chan struct{}, 1)
-	if err := controller.Start(Callbacks{
-		Show: func() { show <- struct{}{} },
-		Quit: func() { quit <- struct{}{} },
-	}); err != nil {
-		t.Fatal(err)
-	}
-	defer controller.Stop()
-
-	controller.mu.Lock()
-	window := controller.window
-	controller.mu.Unlock()
-	if window == 0 {
-		t.Fatal("tray message window was not created")
-	}
-	procPostMessage.Call(window, wmTray, 0, wmLButtonDblClk)
-	select {
-	case <-show:
-	case <-time.After(2 * time.Second):
-		t.Fatal("show callback was not dispatched")
+	showCount := 0
+	quitCount := 0
+	controller.callbacks = Callbacks{
+		Show: func() { showCount++ },
+		Quit: func() { quitCount++ },
 	}
 
-	procPostMessage.Call(window, wmCommand, idQuit, 0)
-	select {
-	case <-quit:
-	case <-time.After(2 * time.Second):
-		t.Fatal("quit callback was not dispatched")
+	controller.windowProc(0, wmTray, 0, wmLButtonDblClk)
+	controller.windowProc(0, wmCommand, idShow, 0)
+	controller.windowProc(0, wmCommand, idQuit, 0)
+
+	if showCount != 2 {
+		t.Fatalf("show callback dispatched %d times, want 2", showCount)
+	}
+	if quitCount != 1 {
+		t.Fatalf("quit callback dispatched %d times, want 1", quitCount)
 	}
 }

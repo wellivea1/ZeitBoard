@@ -9,6 +9,7 @@
 *.db-wal
 coverage/
 dist/
+.cache/
 node_modules/
 
 # Go/Wails

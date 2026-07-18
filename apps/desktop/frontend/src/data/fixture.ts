@@ -6,13 +6,13 @@ export const overviewFixture: OverviewData = {
   empty: false,
   state: "Likely awake",
   stateDetail: "Inside the observed waking range",
-  timeSinceWake: "6 hr 20 min",
+  timeSinceWake: "8 hr 24 min",
   nextSleepWindow: {
-    label: "Today, 3:10 PM to 5:40 PM",
-    uncertainty: "Expected range spans 2 hr 30 min",
+    label: "Today, 10:15 PM to 1:27 AM",
+    uncertainty: "Expected range spans 3 hr 12 min",
   },
   drift: {
-    label: "+42 min per cycle",
+    label: "+48 min per cycle",
     direction: "Later than the previous cycle",
   },
   confidence: {
@@ -20,8 +20,8 @@ export const overviewFixture: OverviewData = {
     reason: "Based on 9 recent principal sleep episodes with variable timing",
   },
   usefulTaskWindow: {
-    label: "Now to 1:45 PM",
-    detail: "Two flexible tasks fit before the predicted sleep window",
+    label: "Now to 9:40 PM",
+    detail: "Two flexible tasks fit before the earliest predicted sleep time",
   },
   sharingStatus: {
     active: true,

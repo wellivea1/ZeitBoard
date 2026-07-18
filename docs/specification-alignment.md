@@ -27,7 +27,13 @@ and UI specifications* to what implements them.
   (`ApplySleepCorrections` + overlap resolution).
 - The desktop runs on the user's real entered sleep data with honest
   empty/refusal states; export and hard erasure are implemented (ADR-0014);
-  opt-in backend sync round-trips contract-shaped records (ADR-0015).
+  opt-in backend sync round-trips contract-shaped records (ADR-0015), and
+  erasure propagates through server tombstones (ADR-0017).
+- The desktop UI implements the visual refactor's U-A..U-C boundary: one-surface
+  Overview with a source-matched cycle strip, a full-width Rhythm visual,
+  semantic theme tokens, and an appearance manager with Auto plus five presets.
+  Screen/data/style boundaries are enforced as described in
+  [`frontend-architecture.md`](frontend-architecture.md).
 - Fixed events are immutable scheduler inputs; proposals carry contract
   explanation codes and honest unplaced reasons.
 - Trusted views are static synthetic projections, render only allowlisted
@@ -37,9 +43,10 @@ and UI specifications* to what implements them.
 
 ## Partially implemented (UI ahead of or behind data)
 
-- **Approvals:** the desktop queue is engine-backed but in-session; the
-  backend persists proposals with one-use approval tokens. The two are not yet
-  unified (roadmap slice 1).
+- **Approvals:** local scheduler proposals and backend assistant/agent
+  proposals are both real, and the desktop decides backend proposals with
+  one-use tokens. They still appear as distinct queue sections; batch review,
+  surfaced expiry/history, and approved-placement write-back remain open.
 - **Rhythm "Sources" tab and Data Sources:** driven by real local data in the
   desktop app (real refusal, real correction history, real per-source
   composition, real sync status); synthetic previews remain only in the
@@ -49,6 +56,9 @@ and UI specifications* to what implements them.
   Tasks screen, scheduler plans only stored open tasks — ADR-0018; cross-device
   revision sync with erasure-grade deletion — ADR-0020). Write-back of
   approved placements remains future work (Phase 3c).
+- **Appearance:** U-A through U-C are implemented. U-D rhythm-linked preset
+  switching and the agent-readable direct display action remain deferred until
+  their explicit ADR defines that reversible-action boundary.
 
 ## Deferred analysis work
 

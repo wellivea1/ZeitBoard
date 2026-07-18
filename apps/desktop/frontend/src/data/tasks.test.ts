@@ -37,9 +37,7 @@ describe("tasks", () => {
     const result = await loadTasks({});
     expect(result.status).toBe("unavailable");
     expect(result.tasks).toEqual([]);
-    await expect(addTask({ title: "x", durationMinutes: 30 }, {})).rejects.toThrow(
-      "desktop app",
-    );
+    await expect(addTask({ title: "x", durationMinutes: 30 }, {})).rejects.toThrow("desktop app");
   });
 
   it("runs CRUD through the Wails methods and returns the refreshed list", async () => {

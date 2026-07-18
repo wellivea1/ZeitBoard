@@ -1,7 +1,10 @@
 package sqlite
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -161,7 +164,8 @@ func TestLocalSleepCorrectionsAreAppendOnlyAndSuperseded(t *testing.T) {
 }
 
 func TestLocalSleepExportAndDeleteDistinguishSuppressFromErasure(t *testing.T) {
-	store, err := Open(filepath.Join(t.TempDir(), "non24.db"))
+	path := filepath.Join(t.TempDir(), "non24.db")
+	store, err := Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,6 +174,8 @@ func TestLocalSleepExportAndDeleteDistinguishSuppressFromErasure(t *testing.T) {
 	start := time.Date(2026, 3, 3, 5, 0, 0, 0, time.UTC)
 	end := start.Add(8 * time.Hour)
 	obs := testSleepObservation("obs_sleep_03", start, end)
+	const payloadMarker = "sleep-payload-that-must-not-survive-erasure-98431"
+	obs.Provenance.SourceRecordID = payloadMarker
 	if err := store.AppendSleepObservation(ctx, obs); err != nil {
 		t.Fatal(err)
 	}
@@ -222,6 +228,20 @@ func TestLocalSleepExportAndDeleteDistinguishSuppressFromErasure(t *testing.T) {
 	}
 	if len(effective) != 0 {
 		t.Fatalf("deleted sleep entry still appears in effective reads: %#v", effective)
+	}
+	databaseBytes, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(databaseBytes, []byte(payloadMarker)) {
+		t.Fatal("deleted sleep payload remains in the compacted SQLite database")
+	}
+	walBytes, err := os.ReadFile(path + "-wal")
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatal(err)
+	}
+	if bytes.Contains(walBytes, []byte(payloadMarker)) {
+		t.Fatal("deleted sleep payload remains in the SQLite WAL")
 	}
 }
 

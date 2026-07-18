@@ -162,7 +162,8 @@ export function AssistantRail({ open, onClose }: { open: boolean; onClose: () =>
       .catch((error: unknown) => {
         appendMessage({
           role: "assistant",
-          text: error instanceof Error ? error.message : "Something went wrong. Nothing was changed.",
+          text:
+            error instanceof Error ? error.message : "Something went wrong. Nothing was changed.",
         });
       })
       .finally(() => setBusy(false));
@@ -283,7 +284,10 @@ export function AssistantRail({ open, onClose }: { open: boolean; onClose: () =>
             ))}
             {busy && (
               <div className="assistant-message is-assistant">
-                <div className="assistant-bubble assistant-typing" aria-label="Assistant is responding">
+                <div
+                  className="assistant-bubble assistant-typing"
+                  aria-label="Assistant is responding"
+                >
                   <i />
                   <i />
                   <i />
@@ -327,7 +331,12 @@ export function AssistantRail({ open, onClose }: { open: boolean; onClose: () =>
             <p className="assistant-empty">Nothing waiting for approval.</p>
           )}
           {pendingQueue.map((proposal) => (
-            <ActionCard proposal={proposal} busy={busy} onDecide={onDecide} key={proposal.proposalId} />
+            <ActionCard
+              proposal={proposal}
+              busy={busy}
+              onDecide={onDecide}
+              key={proposal.proposalId}
+            />
           ))}
         </div>
       )}

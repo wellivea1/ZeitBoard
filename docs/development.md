@@ -59,3 +59,27 @@ regenerate), and `go test ./...` validates every schema against the draft
 2020-12 metaschema and every fixture against its v1 JSON Schema (including
 negative cases). `go run ./cmd/validatecontracts` runs the validation alone.
 CI runs the same checks. Test and demo data must remain synthetic.
+
+## Frontend quality checks
+
+Run the repository-level commands so both web workspaces and the desktop UI
+architecture guard are covered:
+
+```powershell
+$env:PATH = "$PWD\.tools\node-v24.16.0-win-x64;$env:PATH"
+npm.cmd run format:check
+npm.cmd run lint
+npm.cmd run typecheck
+npm.cmd test
+npm.cmd run build
+```
+
+`npm run lint` includes ESLint and `npm run lint:ui`. The latter enforces the
+screen/data/style boundaries in
+[`frontend-architecture.md`](frontend-architecture.md), including module-size
+limits, one screen per module, no direct Wails access from UI modules, and the
+structural Overview contract.
+
+`scripts/dev.ps1` treats every native tool exit code as authoritative. A failed
+Go test, vet, build, npm script, Wails command, contract validator, or Gradle
+task fails the wrapper instead of allowing a false-green check.

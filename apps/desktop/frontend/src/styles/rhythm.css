@@ -1,0 +1,107 @@
+.screen-context {
+  margin: 0 0 var(--space-5);
+  padding: var(--space-2) 0 var(--space-2) var(--space-4);
+  color: var(--muted);
+  border-left: 2px solid var(--state-asleep);
+  font-size: var(--type-body);
+  line-height: 1.5;
+}
+
+.rhythm-screen {
+  min-width: 0;
+}
+
+.rhythm-tabs {
+  min-height: 52px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+}
+
+.rhythm-tabs .filter {
+  min-height: 44px;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+}
+
+.rhythm-tabs .filter.active {
+  color: var(--ink);
+  background: transparent;
+  border-bottom-color: var(--state-asleep);
+}
+
+.rhythm-panel {
+  margin-top: var(--space-2);
+}
+
+.rhythm-visual-surface {
+  min-width: 0;
+  padding: var(--space-6) 0 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+.rhythm-visual-surface .panel-heading {
+  margin-bottom: var(--space-5);
+}
+
+.actogram-panel {
+  min-height: 540px;
+  overflow-x: hidden;
+}
+
+.actogram-chart {
+  padding-bottom: var(--space-2);
+  scrollbar-color: var(--line) transparent;
+}
+
+.actogram-visual-axis span {
+  transform: translateX(-50%);
+}
+
+.actogram-visual-axis span:first-child {
+  transform: none;
+}
+
+.actogram-visual-axis span:last-child {
+  transform: translateX(-100%);
+}
+
+.actogram-visual-track,
+.actogram-band,
+.actogram-footer i {
+  border-radius: var(--radius-control);
+}
+
+.actogram-footer {
+  padding-top: var(--space-1);
+  border-top: 1px solid var(--divider);
+}
+
+.drift-panel {
+  padding-inline: 0;
+}
+
+.drift-chart {
+  min-height: 430px;
+}
+
+@media (max-width: 700px) {
+  .rhythm-tabs {
+    overflow-x: auto;
+  }
+
+  .rhythm-visual-surface .panel-heading {
+    align-items: flex-start;
+  }
+
+  .actogram-heading {
+    gap: var(--space-3);
+  }
+}

@@ -131,13 +131,21 @@ function throughLensRatio(fg: string, bg: string): number {
 
 describe("amber glasses mode", () => {
   it("body text keeps >=7:1 through dark amber lenses", () => {
-    expect(throughLensRatio(resolve(amber, "ink"), resolve(amber, "canvas"))).toBeGreaterThanOrEqual(7);
-    expect(throughLensRatio(resolve(amber, "ink"), resolve(amber, "paper"))).toBeGreaterThanOrEqual(7);
+    expect(
+      throughLensRatio(resolve(amber, "ink"), resolve(amber, "canvas")),
+    ).toBeGreaterThanOrEqual(7);
+    expect(throughLensRatio(resolve(amber, "ink"), resolve(amber, "paper"))).toBeGreaterThanOrEqual(
+      7,
+    );
   });
 
   it("secondary text keeps >=3:1 through dark amber lenses", () => {
-    expect(throughLensRatio(resolve(amber, "muted"), resolve(amber, "canvas"))).toBeGreaterThanOrEqual(3);
-    expect(throughLensRatio(resolve(amber, "subtle"), resolve(amber, "paper"))).toBeGreaterThanOrEqual(3);
+    expect(
+      throughLensRatio(resolve(amber, "muted"), resolve(amber, "canvas")),
+    ).toBeGreaterThanOrEqual(3);
+    expect(
+      throughLensRatio(resolve(amber, "subtle"), resolve(amber, "paper")),
+    ).toBeGreaterThanOrEqual(3);
   });
 
   it("emits no blue: every color in the amber block holds B <= 10%", () => {

@@ -10,9 +10,10 @@ and the app never gives medical advice or claims exact circadian phase/DLMO.
 Build-ready UI for the feature phases lives in
 [`ui-ux-feature-specs.md`](ui-ux-feature-specs.md); the master product design is
 [`ui-ux-design.md`](ui-ux-design.md); the spec/implementation map is
-[`specification-alignment.md`](specification-alignment.md). Architecture
-decisions are ADRs under [`decisions/`](decisions/); per-milestone detail lives
-there rather than being repeated here.
+[`specification-alignment.md`](specification-alignment.md); enforced desktop UI
+boundaries are in [`frontend-architecture.md`](frontend-architecture.md).
+Architecture decisions are ADRs under [`decisions/`](decisions/); per-milestone
+detail lives there rather than being repeated here.
 
 ---
 
@@ -44,8 +45,10 @@ there rather than being repeated here.
 - The Rhythm Sources tab and Data Sources run on real local state (refusals,
   correction history, per-source composition, sync status); synthetic previews
   are confined to the labeled browser fixture mode.
-- Theming (Auto/Light/Dark), reduced stimulation, WCAG 2.2 AA contrast pass
-  with a regression test (ADR-0005).
+- Appearance manager with Auto plus Paper, Dark, Pitch black, Amber, and High
+  contrast presets; reduced stimulation composes with each preset. Contrast,
+  Amber through-lens, and zero-blue token assertions are automated (ADR-0005,
+  UI slices U-A..U-C).
 
 **Backend (`apps/server`, self-hosted)**
 - M1 sync: TLS, per-device bearer tokens (hashes stored), strict v1
@@ -144,15 +147,18 @@ ADR when it changes architecture.
    path (its ADR should reuse ADR-0015's model).
 10. **UI refactor + theme manager** (planned in
     [`ui-refactor-plan.md`](ui-refactor-plan.md)). *U-A..U-C delivered:*
-    density pass (shadowless bordered surfaces, compact headers/metric rows
-    with 19px tabular values, actogram row/track enlarged), sage retracted
-    to action+awake while sleep visuals moved to the asleep blue family and
-    chips/meters went neutral, and the five-preset theme manager — Paper,
-    Dark, Pitch black, **Amber glasses mode**, High contrast — with the
-    contrast regression extended to all presets plus the through-lens
-    (≥7:1) and no-blue-channel assertions for Amber. *U-D remains:* opt-in
-    rhythm-linked switching (Amber engages N hours before *predicted* sleep
-    onset) + the agent-readable appearance surface, behind a small ADR.
+    the structural follow-up replaced Overview's metric-card grid with one
+    status surface, a source-matched cycle strip, compact fact/confidence rows,
+    conditional attention, and the trust boundary; Rhythm gives the actogram
+    full-width visual priority. Sage is limited to action/awake semantics,
+    sleep visuals use the asleep blue family, and the appearance manager ships
+    Paper, Dark, Pitch black, **Amber glasses mode**, and High contrast plus
+    Auto. Contrast regression covers every preset, including Amber's
+    through-lens (≥7:1) and no-blue-channel assertions. Route modules, shared
+    visuals, data adapters, and UI lint boundaries are documented and enforced.
+    *U-D remains:* opt-in rhythm-linked switching (Amber engages N hours before
+    *predicted* sleep onset) and the agent-readable appearance surface, behind
+    a small ADR.
 
 **Small debts (fold into adjacent slices):** consolidate the correction-record
 → domain decoder (now duplicated across desktop storage, server readmodel, and
@@ -196,19 +202,21 @@ an estimate as exact.
 
 ## Phase 3 — Interoperability: calendars, tasks, and the approval gate
 
-**Delivered:** the approval-gate *mechanics* — the desktop engine-backed
-proposal queue with explanation codes and honest unplaced reasons; the
-backend's persisted pending proposals, one-use signed approval tokens, and
-audit trail. **Not yet delivered:** unification (slice 1), real tasks
-(slice 4), calendar import (slice 6), and write-back.
+**Delivered:** the desktop engine-backed proposal queue with explanation codes
+and honest unplaced reasons; backend-persisted assistant/agent proposals,
+one-use signed approval tokens, cross-device decisions, audit trail, real local
+tasks, and immutable task revision sync with erasure-grade deletion.
+**Not yet delivered:** calendar import, approved-placement write-back, batch
+review, surfaced decision history, and richer proposal expiry handling.
 
 **3a. Read-only calendar import** — re-scope via ADR first (adapter placement,
 protocol order, OAuth verification realities); imported events are immutable
 inputs whose text never reaches trusted views or LLM context.
 
-**3b. Approval queue completion** — one queue: desktop approves backend
-proposals (assistant/agent/scheduler origins) through the decision endpoint;
-batch review, expiry of stale proposals, decision history surfaced.
+**3b. Approval queue completion** — the desktop already approves backend
+assistant/agent proposals through the decision endpoint. Remaining work is one
+combined presentation across local scheduler and backend origins, batch review,
+surfaced expiry, and decision history.
 
 **3c. Two-way calendar write-back — last, and separately gated.** Approved
 changes to app-owned flexible items may be written back via a least-privilege
@@ -230,11 +238,13 @@ context, strict-JSON allowlisted actions, server-resolved *pending* proposals,
 medical refusal, provider disclosure (ADR-0010) — and the agent-accessible MCP
 interface with propose-only tools and no approve/apply path (ADR-0006/0012).
 
+**Delivered (desktop):** the assistant rail, provider/offline disclosure,
+transcript, refusal handling, redacted task context, and inline action cards
+wired to the same one-use-token backend decisions.
+
 **Remaining (product):**
-- The desktop chat surface (§4 spec): transcript with inline action cards,
-  provider status dot, refusal states, "omit when unusable".
-- Wiring assistant proposals into the unified approval queue (slice 1) and
-  real tasks (slice 4) so conversation manages actual schedule items.
+- Broader usability validation of the assistant and queue under fatigue;
+  batch review and surfaced proposal history remain Phase 3 queue work.
 - Voice: ZeitBoard ships no speech stack; the supported path is an MCP-capable
   client with voice (documented in the self-hosting runbook).
 - Cloud skill packaging (Claude/ChatGPT) — additive, opt-in, needs its own

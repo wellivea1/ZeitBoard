@@ -1,4 +1,5 @@
 import { notifySleepDataChanged } from "./sleepDataEvents";
+import { findWailsMethod, type WailsRoot } from "./wailsBridge";
 
 // User-owned flexible tasks (ADR-0018): real planning items the scheduler
 // proposes windows for. Titles are private user text and stay local.
@@ -31,34 +32,13 @@ export interface TaskInput {
   minimumConfidence?: string;
 }
 
-type WailsMethod = (input?: unknown) => Promise<unknown>;
 type UnknownRecord = Record<string, unknown>;
-
-interface WailsRoot {
-  go?: Record<string, Record<string, Record<string, unknown>>>;
-}
 
 const unavailable: TasksData = {
   status: "unavailable",
   message: "This browser preview is read-only. Open the ZeitBoard desktop app to manage tasks.",
   tasks: [],
 };
-
-function findMethod(root: WailsRoot, names: readonly string[]): WailsMethod | undefined {
-  const packages = root.go;
-  if (!packages) return undefined;
-  for (const packageValue of Object.values(packages)) {
-    for (const serviceValue of Object.values(packageValue)) {
-      for (const name of names) {
-        const candidate = serviceValue[name];
-        if (typeof candidate === "function") {
-          return (candidate as WailsMethod).bind(serviceValue);
-        }
-      }
-    }
-  }
-  return undefined;
-}
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null;
@@ -79,7 +59,14 @@ function normalizeTask(value: unknown): Task | undefined {
     typeof value.durationMinutes === "number" && Number.isInteger(value.durationMinutes)
       ? value.durationMinutes
       : undefined;
-  if (!taskId || !title || !durationLabel || !createdLabel || !status || durationMinutes === undefined) {
+  if (
+    !taskId ||
+    !title ||
+    !durationLabel ||
+    !createdLabel ||
+    !status ||
+    durationMinutes === undefined
+  ) {
     return undefined;
   }
   const windowLabel = str(value.windowLabel);
@@ -113,7 +100,7 @@ export function normalizeTasks(value: unknown): TasksData | undefined {
 export async function loadTasks(
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<TasksData> {
-  const method = findMethod(root, ["ListTasks"]);
+  const method = findWailsMethod(root, ["ListTasks"]);
   if (!method) return unavailable;
   try {
     const normalized = normalizeTasks(await method());
@@ -130,7 +117,7 @@ async function mutateTasks(
   input: unknown,
   failure: string,
 ): Promise<TasksData> {
-  const method = findMethod(root, names);
+  const method = findWailsMethod(root, names);
   if (!method) throw new Error("Task planning needs the ZeitBoard desktop app.");
   const result = await method(input);
   const normalized = normalizeTasks(result);

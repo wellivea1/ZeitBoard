@@ -4,7 +4,7 @@ import { loadRhythm, normalizeRhythm, rhythmFixture } from "./rhythm";
 
 // A backend-shaped projection (flat, as estimation.RhythmProjection serializes).
 const backendProjection = {
-  fixtureMode: true,
+  fixtureMode: false,
   status: "estimated",
   actogramSummary: "Double-plotted actogram derived from the local estimate.",
   observedRows: [
@@ -84,6 +84,18 @@ describe("loadRhythm", () => {
 
     expect(result.source).toBe("synced");
     expect(result.data.actogram.summary).toBe(backendProjection.actogramSummary);
+  });
+
+  it("keeps a fixture projection labeled as sample data", async () => {
+    const result = await loadRhythm({
+      go: {
+        main: {
+          App: { GetRhythm: async () => ({ ...backendProjection, fixtureMode: true }) },
+        },
+      },
+    });
+
+    expect(result.source).toBe("fixture");
   });
 
   it("falls back when the Wails binding is unavailable", async () => {

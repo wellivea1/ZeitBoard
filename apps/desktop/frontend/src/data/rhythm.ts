@@ -5,6 +5,7 @@ import {
   type RhythmSleepBandFixture,
 } from "./phaseTwo";
 import type { ConfidenceLevel } from "./overview";
+import { findWailsMethod, type WailsRoot } from "./wailsBridge";
 
 export type RhythmSource = "local" | "synced" | "fixture";
 
@@ -64,32 +65,9 @@ export const rhythmFixture: RhythmData = {
   },
 };
 
-type RhythmMethod = () => Promise<unknown>;
 type UnknownRecord = Record<string, unknown>;
 
-interface WailsRoot {
-  go?: Record<string, Record<string, Record<string, unknown>>>;
-}
-
 const methodNames = ["GetRhythm", "Rhythm"] as const;
-
-function findRhythmMethod(root: WailsRoot): RhythmMethod | undefined {
-  const packages = root.go;
-  if (!packages) return undefined;
-
-  for (const packageValue of Object.values(packages)) {
-    for (const serviceValue of Object.values(packageValue)) {
-      for (const methodName of methodNames) {
-        const candidate = serviceValue[methodName];
-        if (typeof candidate === "function") {
-          return (candidate as RhythmMethod).bind(serviceValue);
-        }
-      }
-    }
-  }
-
-  return undefined;
-}
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null;
@@ -116,7 +94,8 @@ function status(value: unknown): RhythmData["status"] {
   return "estimated";
 }
 
-function source(value: unknown): RhythmSource {
+function source(value: unknown, fixtureMode = false): RhythmSource {
+  if (fixtureMode) return "fixture";
   return value === "synced" ? "synced" : "local";
 }
 
@@ -281,14 +260,19 @@ export function normalizeRhythm(value: unknown): RhythmData | undefined {
 export async function loadRhythm(
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<RhythmResult> {
-  const method = findRhythmMethod(root);
+  const method = findWailsMethod(root, methodNames);
   if (!method) return { data: rhythmFixture, source: "fixture" };
 
   try {
     const result = await method();
     const rhythm = normalizeRhythm(result);
     if (rhythm)
-      return { data: rhythm, source: isRecord(result) ? source(result.estimateSource) : "local" };
+      return {
+        data: rhythm,
+        source: isRecord(result)
+          ? source(result.estimateSource, rhythm.fixtureMode)
+          : source(undefined, rhythm.fixtureMode),
+      };
   } catch {
     // Fixture mode keeps the Rhythm screen usable before the Wails service is ready.
   }

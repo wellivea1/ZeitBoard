@@ -93,6 +93,23 @@
   --rail-right: 360px;
   --rail-left: 232px;
   --row-pitch: 34px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --radius-control: 4px;
+  --radius-card: 8px;
+  --radius-overlay: 12px;
+  --type-label: 11px;
+  --type-body: 13px;
+  --type-body-strong: 15px;
+  --type-data: 18px;
+  --type-data-large: 22px;
   --z-strip: 10;
   --z-rail: 20;
   --z-scrim: 90;
@@ -103,6 +120,33 @@
   /* Motion */
   --transition-fast: 120ms ease-out;
   --transition-base: 180ms ease-out;
+
+  /* Theme-picker previews remain stable while the live theme changes. */
+  --preview-paper-bg: #f5f3ee;
+  --preview-paper-rail: #ebeae4;
+  --preview-paper-ink: #24302d;
+  --preview-paper-action: #55766b;
+  --preview-paper-sleep: #4a5e7a;
+  --preview-dark-bg: #161b19;
+  --preview-dark-rail: #1f2623;
+  --preview-dark-ink: #e8eae5;
+  --preview-dark-action: #6b9084;
+  --preview-dark-sleep: #7a9abf;
+  --preview-black-bg: #000000;
+  --preview-black-rail: #050505;
+  --preview-black-ink: #d6d9d5;
+  --preview-black-action: #6b9084;
+  --preview-black-sleep: #7a9abf;
+  --preview-amber-bg: #000000;
+  --preview-amber-rail: #080500;
+  --preview-amber-ink: #ffc61a;
+  --preview-amber-action: #f08c00;
+  --preview-amber-sleep: #a65d00;
+  --preview-contrast-bg: #000000;
+  --preview-contrast-rail: #000000;
+  --preview-contrast-ink: #ffffff;
+  --preview-contrast-action: #9fffd0;
+  --preview-contrast-sleep: #b8d8ff;
 }
 
 [data-theme="dark"] {
@@ -398,11 +442,9 @@
 [data-reduced="true"] .phase-state-dot,
 [data-reduced="true"] .confidence-badge,
 [data-reduced="true"] .state-pill,
-[data-reduced="true"] .metric-icon,
 [data-reduced="true"] .proposal-kind,
 [data-reduced="true"] .actogram-band,
-[data-reduced="true"] .drift-point,
-[data-reduced="true"] .schedule-marker {
+[data-reduced="true"] .drift-point {
   filter: saturate(0.65);
 }
 
@@ -412,11 +454,6 @@
   gap: 24px;
 }
 
-[data-reduced="true"] .metric-grid {
-  gap: 18px;
-}
-
-[data-reduced="true"] .schedule-item,
 [data-reduced="true"] .task-row,
 [data-reduced="true"] .record-list article,
 [data-reduced="true"] .source-list article {
@@ -712,26 +749,6 @@ button {
   box-shadow: 0 0 0 3px var(--state-awake-glow);
 }
 
-.phase-panel {
-  margin-bottom: 14px;
-  padding: 18px clamp(20px, 3vw, 28px);
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-}
-.phase-copy {
-  max-width: 760px;
-}
-.phase-copy h2 {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 8px;
-  color: var(--ink);
-  font-size: clamp(24px, 2.6vw, 30px);
-  line-height: 1.04;
-  letter-spacing: -0.035em;
-}
 .phase-state-dot {
   width: 15px;
   height: 15px;
@@ -751,32 +768,6 @@ button {
 .phase-state-dot[data-state="uncertain"] {
   background: var(--state-uncertain);
   box-shadow: 0 0 0 4px var(--state-uncertain-glow);
-}
-.phase-copy > p:not(.section-kicker) {
-  max-width: 640px;
-  margin-bottom: 12px;
-  color: var(--muted);
-  font-size: 13px;
-  line-height: 1.55;
-}
-.phase-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px 26px;
-  color: var(--muted);
-  font-size: 12px;
-}
-.phase-meta > span {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-.phase-meta svg {
-  width: 15px;
-  height: 15px;
-}
-.phase-meta strong {
-  color: var(--ink);
 }
 .confidence-badge {
   display: inline-flex;
@@ -802,67 +793,6 @@ button {
   background: var(--confidence-low-bg);
 }
 
-.metric-grid {
-  margin: 14px 0;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-.metric-card {
-  min-height: 0;
-  padding: 12px 16px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-}
-.metric-card[data-accent="true"] {
-  background: var(--panel-alt);
-  border-color: var(--line);
-}
-.metric-icon {
-  width: 34px;
-  height: 34px;
-  display: grid;
-  place-items: center;
-  color: var(--muted);
-  background: var(--panel-alt);
-  border-radius: 9px;
-}
-.metric-icon svg {
-  width: 18px;
-  height: 18px;
-}
-.metric-card p {
-  margin-bottom: 6px;
-  color: var(--muted);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-.metric-card strong {
-  display: block;
-  color: var(--ink);
-  font-size: 19px;
-  line-height: 1.2;
-  letter-spacing: -0.01em;
-  font-variant-numeric: tabular-nums;
-}
-.metric-card small {
-  display: block;
-  margin-top: 3px;
-  color: var(--subtle);
-  font-size: 11px;
-}
-
-.overview-columns {
-  display: grid;
-  grid-template-columns: minmax(0, 1.65fr) minmax(270px, 0.75fr);
-  gap: 20px;
-}
 .panel {
   background: var(--paper);
   border: 1px solid var(--line);
@@ -874,8 +804,6 @@ button {
   gap: 20px;
   align-items: start;
 }
-.schedule-panel,
-.confidence-panel,
 .timeline-panel {
   padding: 25px 27px;
 }
@@ -891,8 +819,7 @@ button {
   font-size: 19px;
   letter-spacing: -0.02em;
 }
-.panel-heading a,
-.confidence-panel > a {
+.panel-heading a {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -901,46 +828,9 @@ button {
   font-weight: 700;
   text-decoration: none;
 }
-.panel-heading a svg,
-.confidence-panel > a svg {
+.panel-heading a svg {
   width: 13px;
   height: 13px;
-}
-.schedule-list {
-  display: grid;
-}
-.schedule-item {
-  min-height: 66px;
-  display: grid;
-  grid-template-columns: 66px 13px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-  border-top: 1px solid var(--divider);
-}
-.schedule-item time {
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 700;
-}
-.schedule-marker {
-  width: 9px;
-  height: 9px;
-  background: var(--subtle);
-  border: 2px solid var(--paper);
-  border-radius: 50%;
-  box-shadow: 0 0 0 1px var(--line);
-}
-.schedule-item.is-current .schedule-marker {
-  background: var(--state-awake);
-  box-shadow: 0 0 0 3px var(--state-awake-glow);
-}
-.schedule-item strong {
-  font-size: 13px;
-}
-.schedule-item p {
-  margin: 4px 0 0;
-  color: var(--muted);
-  font-size: 10px;
 }
 .task-chip {
   display: inline-flex;
@@ -956,42 +846,6 @@ button {
 .task-chip.fixed {
   color: var(--muted);
   background: var(--blue-soft);
-}
-.trust-strip {
-  margin: 0 0 20px;
-  padding: 20px 22px;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 18px;
-}
-.trust-strip h2 {
-  margin: 0 0 8px;
-  font-size: 17px;
-}
-.trust-strip p {
-  max-width: 790px;
-  margin: 0;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.55;
-}
-.trust-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 9px;
-}
-.trust-actions .button {
-  display: inline-flex;
-  align-items: center;
-  text-decoration: none;
-}
-.confidence-panel > p {
-  min-height: 52px;
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.55;
 }
 .confidence-meter {
   margin: 4px 0 19px;
@@ -1508,6 +1362,7 @@ button {
   --axis-position: 98%;
 }
 .actogram-visual-grid {
+  min-width: 760px;
   display: grid;
   gap: 6px;
 }
@@ -1811,10 +1666,6 @@ button {
   font-size: 12px;
   line-height: 1.5;
 }
-.undo-button {
-  width: 100%;
-  margin-top: 16px;
-}
 .conflict-list {
   display: grid;
   gap: 10px;
@@ -2036,7 +1887,7 @@ button {
   border-bottom: 1px solid var(--divider);
 }
 .record-list article {
-  grid-template-columns: 42px minmax(0, 1fr) auto 44px;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
 }
 .source-list article {
   grid-template-columns: 42px minmax(0, 1fr) auto 82px;
@@ -2104,7 +1955,7 @@ button {
   min-height: 132px;
   padding: 22px;
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) 44px;
+  grid-template-columns: 48px minmax(0, 1fr);
   align-items: center;
   gap: 15px;
 }
@@ -2391,15 +2242,6 @@ button {
     justify-content: center;
     margin-inline: 0;
   }
-  .overview-columns {
-    grid-template-columns: 1fr;
-  }
-  .trust-strip {
-    grid-template-columns: 1fr;
-  }
-  .trust-actions {
-    justify-content: flex-start;
-  }
   .settings-section {
     grid-template-columns: 1fr 1fr;
   }
@@ -2446,10 +2288,6 @@ button {
   .page-actions {
     margin-top: 16px;
   }
-  .phase-panel {
-    padding: 26px 22px;
-  }
-  .metric-grid,
   .profile-grid {
     grid-template-columns: 1fr;
   }

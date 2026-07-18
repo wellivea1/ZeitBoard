@@ -55,6 +55,10 @@ and can permanently erase local sleep records without pretending that erasure is
 correction. Append-only correction history remains intact until the user invokes
 an explicit erase control.
 
+This is application-level erasure from ZeitBoard's active SQLite store and WAL.
+It does not claim to remove copies in external backups, filesystem snapshots, or
+storage-device wear leveling.
+
 Backend sync of these contract-shaped records must not silently reinterpret local
 hard delete as an append-only correction. A future sync slice must define explicit
 delete/tombstone behavior before syncing erasure across devices.

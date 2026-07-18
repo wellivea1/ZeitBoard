@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { loadProposals, normalizeProposals, proposalsFixture } from "./proposals";
 
 const backendProposals = {
-  fixtureMode: true,
+  fixtureMode: false,
   status: "estimated",
   proposals: [
     {
@@ -49,6 +49,18 @@ describe("loadProposals", () => {
       data: proposalsFixture,
       source: "fixture",
     });
+  });
+
+  it("keeps fixture proposals labeled as sample data", async () => {
+    const result = await loadProposals({
+      go: {
+        main: {
+          App: { GetProposals: async () => ({ ...backendProposals, fixtureMode: true }) },
+        },
+      },
+    });
+
+    expect(result.source).toBe("fixture");
   });
 
   it("falls back when the backend rejects", async () => {

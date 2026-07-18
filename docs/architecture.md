@@ -51,8 +51,11 @@ interfaces and OS build tags.
 
 The Wails service is an adapter over core use cases. It maps private domain
 objects into explicit UI DTOs and does not expose database handles. The React
-frontend communicates only through generated Wails bindings. Backend sync is
-opt-in and off by default; with sync off the desktop is purely local.
+frontend communicates through typed adapters under `frontend/src/data`; those
+adapters alone locate Wails bindings and validate unknown DTOs before screens
+can use them. Backend sync is opt-in and off by default; with sync off the
+desktop is purely local. Screen, component, styling, and lint boundaries are
+defined in [`frontend-architecture.md`](frontend-architecture.md).
 
 ### Self-hosted backend and agent connector
 

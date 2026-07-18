@@ -1,3 +1,5 @@
+import { findWailsMethod, type WailsRoot } from "./wailsBridge";
+
 export interface BackendSyncInput {
   enabled: boolean;
   backendUrl: string;
@@ -21,12 +23,6 @@ export interface BackendSyncStatus {
 }
 
 type UnknownRecord = Record<string, unknown>;
-type WailsMethod = (input?: unknown) => Promise<unknown>;
-
-interface WailsRoot {
-  go?: Record<string, Record<string, Record<string, unknown>>>;
-}
-
 const unavailableStatus: BackendSyncStatus = {
   enabled: false,
   status: "off",
@@ -40,24 +36,6 @@ const unavailableStatus: BackendSyncStatus = {
   pulledCount: 0,
   cursor: 0,
 };
-
-function findMethod(root: WailsRoot, names: readonly string[]): WailsMethod | undefined {
-  const packages = root.go;
-  if (!packages) return undefined;
-
-  for (const packageValue of Object.values(packages)) {
-    for (const serviceValue of Object.values(packageValue)) {
-      for (const methodName of names) {
-        const candidate = serviceValue[methodName];
-        if (typeof candidate === "function") {
-          return (candidate as WailsMethod).bind(serviceValue);
-        }
-      }
-    }
-  }
-
-  return undefined;
-}
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null;
@@ -98,7 +76,7 @@ export function normalizeBackendSyncStatus(value: unknown): BackendSyncStatus | 
 export async function loadBackendSyncStatus(
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<BackendSyncStatus> {
-  const method = findMethod(root, ["GetBackendSyncStatus"]);
+  const method = findWailsMethod(root, ["GetBackendSyncStatus"]);
   if (!method) return unavailableStatus;
   const result = await method();
   return normalizeBackendSyncStatus(result) ?? unavailableStatus;
@@ -108,7 +86,7 @@ export async function configureBackendSync(
   input: BackendSyncInput,
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<BackendSyncStatus> {
-  const method = findMethod(root, ["ConfigureBackendSync"]);
+  const method = findWailsMethod(root, ["ConfigureBackendSync"]);
   if (!method) throw new Error("Backend sync service is unavailable.");
   const result = await method(input);
   const status = normalizeBackendSyncStatus(result);
@@ -119,7 +97,7 @@ export async function configureBackendSync(
 export async function disableBackendSync(
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<BackendSyncStatus> {
-  const method = findMethod(root, ["DisableBackendSync"]);
+  const method = findWailsMethod(root, ["DisableBackendSync"]);
   if (!method) throw new Error("Backend sync service is unavailable.");
   const result = await method();
   const status = normalizeBackendSyncStatus(result);
@@ -130,7 +108,7 @@ export async function disableBackendSync(
 export async function syncNow(
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<BackendSyncStatus> {
-  const method = findMethod(root, ["SyncNow"]);
+  const method = findWailsMethod(root, ["SyncNow"]);
   if (!method) throw new Error("Backend sync service is unavailable.");
   const result = await method();
   const status = normalizeBackendSyncStatus(result);
