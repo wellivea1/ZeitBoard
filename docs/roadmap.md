@@ -156,9 +156,12 @@ ADR when it changes architecture.
     Auto. Contrast regression covers every preset, including Amber's
     through-lens (≥7:1) and no-blue-channel assertions. Route modules, shared
     visuals, data adapters, and UI lint boundaries are documented and enforced.
-    *U-D remains:* opt-in rhythm-linked switching (Amber engages N hours before
-    *predicted* sleep onset) and the agent-readable appearance surface, behind
-    a small ADR.
+    *U-D delivered (ADR-0021):* opt-in rhythm-linked night mode — a chosen
+    night preset engages N hours before the *predicted* sleep onset and
+    releases at predicted wake, honest civil-time fallback when the
+    estimator refuses; display actions are direct local actions, never
+    queue-gated. Agent-driven switching deferred until a desktop-local
+    agent endpoint exists (recorded in the ADR).
 
 **Small debts (fold into adjacent slices):** consolidate the correction-record
 → domain decoder (now duplicated across desktop storage, server readmodel, and
