@@ -12,6 +12,15 @@ import {
   getStoredReducedStimulation,
   storeReducedStimulation,
 } from "./reducedStimulation";
+import {
+  evaluateNightWindow,
+  getStoredNightRule,
+  loadAppearanceClock,
+  storeNightRule,
+  type AppearanceClock,
+  type NightRule,
+} from "./nightMode";
+import { sleepDataChangedEvent } from "../data/sleepDataEvents";
 
 export interface AppearanceState {
   theme: ThemePreference;
@@ -19,6 +28,11 @@ export interface AppearanceState {
   reducedStimulation: boolean;
   setTheme: (preference: ThemePreference) => void;
   setReducedStimulation: (enabled: boolean) => void;
+  nightRule: NightRule;
+  setNightRule: (rule: NightRule) => void;
+  nightActive: boolean;
+  nightSource: "forecast" | "civil" | null;
+  clockStatus: string;
 }
 
 export function useAppearance(): AppearanceState {
@@ -31,6 +45,9 @@ export function useAppearance(): AppearanceState {
   const [reducedStimulation, setReducedStimulationState] = useState<boolean>(
     getStoredReducedStimulation,
   );
+  const [nightRule, setNightRuleState] = useState<NightRule>(getStoredNightRule);
+  const [clock, setClock] = useState<AppearanceClock>({ status: "unavailable" });
+  const [now, setNow] = useState<Date>(() => new Date());
 
   const updateEffectiveTheme = useCallback((preference: ThemePreference) => {
     applyThemeAttribute(preference);
@@ -77,11 +94,55 @@ export function useAppearance(): AppearanceState {
     });
   }, [theme, updateEffectiveTheme]);
 
+  const night = evaluateNightWindow(nightRule, clock, now);
+
+  const setNightRule = useCallback((rule: NightRule) => {
+    storeNightRule(rule);
+    setNightRuleState(rule);
+  }, []);
+
+  // The night window overrides what the DOM shows without touching the
+  // stored preference (ADR-0021: local, reversible display action).
+  useEffect(() => {
+    if (night.active) {
+      applyThemeAttribute(nightRule.preset);
+      return;
+    }
+    applyThemeAttribute(theme);
+  }, [night.active, nightRule.preset, theme]);
+
+  // Forecast times move with the user's data: refresh on data changes and a
+  // slow tick so engagement happens without a reload.
+  useEffect(() => {
+    if (!nightRule.enabled) return;
+    let current = true;
+    const refresh = () =>
+      void loadAppearanceClock().then((loaded) => {
+        if (current) setClock(loaded);
+      });
+    refresh();
+    window.addEventListener(sleepDataChangedEvent, refresh);
+    const tick = window.setInterval(() => {
+      setNow(new Date());
+      refresh();
+    }, 60_000);
+    return () => {
+      current = false;
+      window.removeEventListener(sleepDataChangedEvent, refresh);
+      window.clearInterval(tick);
+    };
+  }, [nightRule.enabled]);
+
   return {
     theme,
-    effectiveTheme,
+    effectiveTheme: night.active ? nightRule.preset : effectiveTheme,
     reducedStimulation,
     setTheme,
     setReducedStimulation,
+    nightRule,
+    setNightRule,
+    nightActive: night.active,
+    nightSource: night.source,
+    clockStatus: clock.status,
   };
 }

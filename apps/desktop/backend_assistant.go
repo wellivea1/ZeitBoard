@@ -265,3 +265,30 @@ func assistantProposalDTO(summary assistantProposalSummary, titles map[string]st
 	}
 	return dto
 }
+
+// AppearanceClockDTO gives the appearance scheduler structured forecast
+// times (ADR-0021): when predicted sleep begins and when the sleeper is
+// predicted to wake. Display automation is a local, reversible action — it
+// never goes through the approval queue.
+type AppearanceClockDTO struct {
+	Status       string `json:"status"`
+	SleepStartAt string `json:"sleepStartAt,omitempty"`
+	WakeAt       string `json:"wakeAt,omitempty"`
+}
+
+func (a *App) GetAppearanceClock() (AppearanceClockDTO, error) {
+	now := time.Now().UTC()
+	state, err := a.localEstimate(context.Background(), now)
+	if err != nil {
+		return AppearanceClockDTO{}, err
+	}
+	if state.Status != "estimated" || len(state.Estimate.PredictedSleepWindows) == 0 {
+		return AppearanceClockDTO{Status: state.Status}, nil
+	}
+	window := state.Estimate.PredictedSleepWindows[0].Interval
+	return AppearanceClockDTO{
+		Status:       "estimated",
+		SleepStartAt: window.Start.UTC.Format(time.RFC3339),
+		WakeAt:       window.End.UTC.Format(time.RFC3339),
+	}, nil
+}

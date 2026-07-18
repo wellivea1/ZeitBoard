@@ -125,3 +125,22 @@ func TestAssistantMedicalRefusalPassesThroughWithoutProposal(t *testing.T) {
 		t.Fatalf("medical refusal must create no proposal: %#v", reply)
 	}
 }
+
+func TestAppearanceClockIsHonest(t *testing.T) {
+	app := newTestApp(t)
+	clock, err := app.GetAppearanceClock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if clock.Status == "estimated" || clock.SleepStartAt != "" {
+		t.Fatalf("empty store must not fabricate a clock: %#v", clock)
+	}
+	seedSleepEntries(t, app, 12)
+	clock, err = app.GetAppearanceClock()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if clock.Status != "estimated" || clock.SleepStartAt == "" || clock.WakeAt == "" {
+		t.Fatalf("expected structured forecast times: %#v", clock)
+	}
+}
