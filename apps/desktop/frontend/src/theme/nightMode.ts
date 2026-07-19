@@ -53,7 +53,8 @@ export function getStoredNightRule(): NightRule {
         typeof parsed.leadHours === "number" && parsed.leadHours >= 0 && parsed.leadHours <= 12
           ? parsed.leadHours
           : 2,
-      fallbackStartLocal: typeof parsed.fallbackStartLocal === "string" ? parsed.fallbackStartLocal : "",
+      fallbackStartLocal:
+        typeof parsed.fallbackStartLocal === "string" ? parsed.fallbackStartLocal : "",
       fallbackEndLocal: typeof parsed.fallbackEndLocal === "string" ? parsed.fallbackEndLocal : "",
     };
   } catch {
@@ -80,7 +81,11 @@ function minutesOfDay(value: string): number | undefined {
 
 // evaluateNightWindow is pure so the rule is testable: forecast first,
 // honest civil fallback second, inactive otherwise.
-export function evaluateNightWindow(rule: NightRule, clock: AppearanceClock, now: Date): NightWindow {
+export function evaluateNightWindow(
+  rule: NightRule,
+  clock: AppearanceClock,
+  now: Date,
+): NightWindow {
   if (!rule.enabled) return { active: false, source: null };
 
   if (clock.status === "estimated" && clock.sleepStartAt && clock.wakeAt) {

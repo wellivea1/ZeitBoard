@@ -19,8 +19,10 @@ device activity. Provenance separates `acquisition_method` from
 `evidence_status`; an imported measurement can therefore be directly observed,
 while a manually entered value can be user reported.
 
-Source observations are never updated after insertion. De-duplication marks an
-observation through correction/effective-read state rather than deleting it.
+Source observations are never updated after insertion. Import idempotency
+reports an unchanged `source_record_id` before insertion and rejects a changed
+payload using that ID. Semantic duplicates already stored are handled through
+correction/effective-read state rather than destructive mutation.
 
 ### Correction
 

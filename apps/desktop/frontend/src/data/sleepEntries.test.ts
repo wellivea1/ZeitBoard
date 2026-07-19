@@ -210,6 +210,37 @@ describe("source summaries", () => {
     expect(summarizeSleepSources([])).toEqual([]);
   });
 
+  it("keeps distinct imported evidence provenance in separate summaries", () => {
+    const observed: SleepEntry = {
+      ...uncorrected,
+      observationId: "obs_sleep_import_observed",
+      sourceLabel: "Imported sleep",
+      provenanceLabel: "file import / directly observed",
+    };
+    const reported: SleepEntry = {
+      ...observed,
+      observationId: "obs_sleep_import_reported",
+      provenanceLabel: "file import / user reported",
+    };
+
+    expect(summarizeSleepSources([observed, reported])).toEqual([
+      {
+        source: "Imported sleep",
+        provenance: "file import / directly observed",
+        total: 1,
+        corrected: 0,
+        suppressed: 0,
+      },
+      {
+        source: "Imported sleep",
+        provenance: "file import / user reported",
+        total: 1,
+        corrected: 0,
+        suppressed: 0,
+      },
+    ]);
+  });
+
   it("finds the newest corrected entry (log is newest-first)", () => {
     expect(latestCorrectedEntry([uncorrected, typed])?.observationId).toBe("obs_sleep_01");
     expect(latestCorrectedEntry([uncorrected, suppressedWearable])).toBeUndefined();

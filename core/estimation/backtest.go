@@ -2,6 +2,7 @@ package estimation
 
 import (
 	"context"
+	"errors"
 	"math"
 	"sort"
 	"time"
@@ -11,7 +12,7 @@ import (
 
 // BacktestReport answers the question the rest of the app cannot: is the estimate
 // any good? It walks the observation history forward, refits at each step, predicts
-// the next sleep onset, and scores the prediction against what actually happened —
+// the next sleep onset, and scores the prediction against what actually happened,
 // reporting error, forecast-window hit-rate, and whether the confidence levels are
 // calibrated. It is a measurement of the core engine, not a new estimate.
 type BacktestReport struct {
@@ -23,6 +24,7 @@ type BacktestReport struct {
 	HitRate             float64             `json:"hitRate"`
 	Calibration         []CalibrationBucket `json:"calibration"`
 	Points              []BacktestPoint     `json:"-"`
+	RefusalPoints       []BacktestRefusal   `json:"-"`
 }
 
 // CalibrationBucket groups evaluations by the confidence the estimator reported, so
@@ -36,13 +38,23 @@ type CalibrationBucket struct {
 
 // BacktestPoint is one walk-forward evaluation (detail; not serialized to the UI).
 type BacktestPoint struct {
-	EpisodesUsed   int
-	HorizonCycles  int
-	PredictedOnset time.Time
-	ActualOnset    time.Time
-	AbsErrorHours  float64
-	WithinWindow   bool
-	Confidence     domain.ConfidenceLevel
+	EpisodesUsed     int
+	HorizonCycles    int
+	PredictedOnset   time.Time
+	ActualOnset      time.Time
+	AbsErrorHours    float64
+	WithinWindow     bool
+	WindowStart      time.Time
+	WindowEnd        time.Time
+	WindowWidthHours float64
+	Confidence       domain.ConfidenceLevel
+}
+
+type BacktestRefusal struct {
+	EpisodesAvailable int
+	ActualOnset       time.Time
+	Code              RefusalCode
+	Message           string
 }
 
 // Backtest evaluates the estimator against its own observation history by
@@ -64,11 +76,6 @@ func (e RobustEstimator) Backtest(ctx context.Context, sessions []domain.SleepSe
 			Message: "not enough principal sleep episodes to hold any out for validation",
 		}
 	}
-	fullIndices, err := cycleIndices(full)
-	if err != nil {
-		return BacktestReport{}, err
-	}
-
 	report := BacktestReport{}
 	var errors []float64
 	hits := 0
@@ -84,33 +91,60 @@ func (e RobustEstimator) Backtest(ctx context.Context, sessions []domain.SleepSe
 		asOf := full[k-1].Intervals[0].Interval.End.UTC
 		estimate, perr := e.Estimate(ctx, sub, asOf)
 		if perr != nil {
-			report.Refusals++
-			continue
+			if appendBacktestRefusal(&report, k, full[k].Intervals[0].Interval.Start.UTC, perr) {
+				continue
+			}
+			return BacktestReport{}, perr
 		}
-		fit, ferr := fitOnsetTrend(sub)
+		modelEpisodes, serr := selectEpisodes(sub, config.MaximumEpisodes)
+		if serr != nil {
+			if appendBacktestRefusal(&report, k, full[k].Intervals[0].Interval.Start.UTC, serr) {
+				continue
+			}
+			return BacktestReport{}, serr
+		}
+		fit, ferr := fitOnsetTrend(modelEpisodes)
 		if ferr != nil {
-			report.Refusals++
-			continue
+			if appendBacktestRefusal(&report, k, full[k].Intervals[0].Interval.Start.UTC, ferr) {
+				continue
+			}
+			return BacktestReport{}, ferr
 		}
 
-		predicted := fit.onsetAt(fullIndices[k])
 		actual := full[k].Intervals[0].Interval.Start.UTC
+		lastModelOnset := modelEpisodes[len(modelEpisodes)-1].Intervals[0].Interval.Start.UTC
+		horizon, herr := cycleStep(actual.Sub(lastModelOnset))
+		if herr != nil {
+			if appendBacktestRefusal(&report, k, actual, herr) {
+				continue
+			}
+			return BacktestReport{}, herr
+		}
+		predicted := fit.onsetAt(fit.lastIndex + horizon)
 		absError := math.Abs(predicted.Sub(actual).Hours())
-		horizon := fullIndices[k] - fullIndices[k-1]
 		within := false
+		var windowStart, windowEnd time.Time
+		var windowWidth float64
 		if horizon >= 1 && horizon <= len(estimate.PredictedSleepWindows) {
-			within = estimate.PredictedSleepWindows[horizon-1].Interval.Contains(actual)
+			window := estimate.PredictedSleepWindows[horizon-1].Interval
+			within = window.Contains(actual)
+			windowStart = window.Start.UTC
+			windowEnd = window.End.UTC
+			windowWidth = window.Duration().Hours()
 		}
 		level := estimate.Confidence.Level
 
 		report.Points = append(report.Points, BacktestPoint{
-			EpisodesUsed:   k,
-			HorizonCycles:  horizon,
-			PredictedOnset: predicted,
-			ActualOnset:    actual,
-			AbsErrorHours:  round2(absError),
-			WithinWindow:   within,
-			Confidence:     level,
+			EpisodesUsed:     k,
+			HorizonCycles:    horizon,
+			PredictedOnset:   predicted,
+			ActualOnset:      actual,
+			AbsErrorHours:    round2(absError),
+			WithinWindow:     within,
+			WindowStart:      windowStart,
+			WindowEnd:        windowEnd,
+			WindowWidthHours: round2(windowWidth),
+			Confidence:       level,
 		})
 		errors = append(errors, absError)
 		if within {
@@ -167,6 +201,7 @@ type onsetFit struct {
 	base      time.Time
 	slope     float64
 	intercept float64
+	lastIndex int
 }
 
 func fitOnsetTrend(episodes []domain.SleepSession) (onsetFit, error) {
@@ -186,11 +221,26 @@ func fitOnsetTrend(episodes []domain.SleepSession) (onsetFit, error) {
 	for i := range x {
 		intercepts[i] = y[i] - slope*x[i]
 	}
-	return onsetFit{base: base, slope: slope, intercept: median(intercepts)}, nil
+	return onsetFit{base: base, slope: slope, intercept: median(intercepts), lastIndex: indices[len(indices)-1]}, nil
 }
 
 func (f onsetFit) onsetAt(index int) time.Time {
 	return f.base.Add(hoursDuration(f.intercept + f.slope*float64(index)))
+}
+
+func appendBacktestRefusal(report *BacktestReport, episodes int, actual time.Time, err error) bool {
+	var refusal *EstimationRefusal
+	if !errors.As(err, &refusal) {
+		return false
+	}
+	report.Refusals++
+	report.RefusalPoints = append(report.RefusalPoints, BacktestRefusal{
+		EpisodesAvailable: episodes,
+		ActualOnset:       actual,
+		Code:              refusal.Code,
+		Message:           refusal.Message,
+	})
+	return true
 }
 
 func mean(values []float64) float64 {

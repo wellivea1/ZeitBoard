@@ -67,9 +67,11 @@ and UI specifications* to what implements them.
   roadmap slice 7 — gated by the backtest).
 - Explicit missingness records, source reliability learning, conflict scoring,
   forced-schedule qualification, and travel/illness/intervention markers.
-- Multi-window change-point classification and operating-state history; an
-  explicit linear-misfit signal and phase-dependent sleep duration (pursued as
-  real-history backtest results justify, roadmap slice 3).
+- Multi-window change-point classification and operating-state history. The
+  ADR-0022 real-history baseline justifies evaluating an explicit
+  calibration/misfit candidate (the high-confidence bucket was poorly
+  calibrated), but no candidate ships without a positive backtest delta.
+  Phase-dependent sleep duration remains deferred until duration is scored.
 - State-space, particle-filter, Bayesian, physiological-signal, or
   biomarker-calibrated estimation.
 - Optional language-model summaries, task parsing, voice extraction, and

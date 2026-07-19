@@ -25,11 +25,12 @@ mode, rhythm-linked night switching). This foundation is exactly what the
 portal needs, because **a visitor's time request is just one more proposal
 origin** — the queue, tokens, and audit already exist.
 
-**Gap 1 — the estimate is unproven on real life** (roadmap slice 3). Every
-promise the portal makes ("likely awake ~15:00–23:00") rests on estimator
-accuracy on *real* logging behavior. Synthetic validation (ADR-0019) is
-strong but cannot prove this. Real-history import + backtest is the
-epistemic gate for everything public-facing and stays **Phase 1**.
+**Gap 1 — real-life validation is partial** (roadmap slice 3). ADR-0022 now
+delivers strict local import and a real digital-history backtest. It rejects
+blanket window tightening by measured delta and exposes a confidence-calibration
+follow-up. Earlier handwritten-only 2021 charts still need owner-reviewed
+transcription, so Phase 1 has a real baseline but cannot claim complete chart
+coverage yet.
 
 **Gap 2 — "calendar app" is still a fixture.** The Calendar screen is a
 synthetic five-day board; fixed events exist only as scheduler test inputs.

@@ -40,7 +40,8 @@ availability.
 7. Wails service ↔ desktop frontend.
 8. Android permission APIs ↔ Android repositories.
 9. Private state → **trusted-view projection** → trusted recipient (default-deny).
-10. External import (e.g. Google "My Activity" Takeout) → core. *New.*
+10. Owner-selected v1 sleep file → local importer; future external adapters
+    (e.g. Google "My Activity" Takeout) → core.
 11. Development tools / CI → synthetic fixtures only.
 
 ## Adversaries
@@ -76,6 +77,9 @@ implemented as a stateless adapter over the backend API with read tools, propose
 tools, call budgets, and no approval/apply tool. **Server-side erasure (ADR-0017)** is
 implemented: an authenticated erase endpoint hard-deletes synced payloads, tombstones
 block resurrection, and devices apply pulled tombstones as local hard-deletes. The
+**local v1 sleep import boundary (ADR-0022)** is implemented with an 8 MiB / 20,000-row
+cap, strict JSON/CSV shape, per-row errors, source-id conflict detection, and atomic
+all-or-nothing commit. The
 **cloud skill wrapper and live trusted-view transport do not exist yet**; their rows
 remain design requirements for future workstreams, not current guarantees.
 
@@ -92,7 +96,8 @@ remain design requirements for future workstreams, not current guarantees.
 | Assistant or agent mutation | Schedule changed without consent | Model emits only allowlisted actions the server resolves into proposals; approval queue; one-use signed token; no direct mutation path (tested) |
 | Malicious external agent (MCP/skill) | Exfiltration or unauthorized change | Local MCP exposes allowlisted read projections only (never the raw model), propose-only tools, call budgets, and no approval/apply tool; cloud skills remain future and require a separate privacy review |
 | Erased data lingering on the instance or other devices | A hard-deleted record survives elsewhere, defeating the erasure right | Authenticated `/v1/sync/erase` hard-deletes the synced payload and mints tombstones (record-id only, no health data) that every device applies on pull; the tombstone registry makes re-pushing an erased id a silent no-op (no resurrection). Residual: a device that never syncs again keeps its copy until it does (ADR-0017) |
-| Malicious import (Takeout / My Activity) | Resource exhaustion; misleading inference | Size limits, strict schemas, bounded strings/arrays, transactional validation; inferred sleep marked low-confidence (`inferred`), never overclaimed |
+| Malicious or malformed local sleep import | Resource exhaustion; hidden row loss; misleading estimator input | 8 MiB and 20,000-row caps; strict v1 JSON/canonical CSV; only principal/nap `file_import` sleep rows; per-row errors; invalid/conflicting rows block the whole transaction; duplicate source IDs are explicitly reported; no payload logging |
+| Future Takeout / My Activity import | Resource exhaustion; misleading inference | Not implemented; must add bounded parsing and mark inferred sleep low-confidence (`inferred`) before it may affect estimation |
 | Source mutation | Audit history and estimator support become misleading | Append-only observations and corrections; effective read model; persistence tests |
 | Time-zone confusion | Incorrect drift or schedule proposals | UTC instants plus IANA zones; half-open intervals; DST-focused tests |
 | Estimator overclaim | Uncertain data appears authoritative | Typed refusal, ordinal confidence, widening windows, constrained product language; backtest harness measures calibration |
@@ -132,7 +137,9 @@ server host remain part of the trusted computing base.
 - LLM context: assert outbound context is minimized and redacted (no forbidden fields).
 - Projection: test output against a forbidden-field list across all permission
   combinations; revoked and expired profiles return no view.
-- Import: fuzz or property-test Takeout/import and correction-chain parsing.
+- Import: unit-test size/shape limits, row accounting, duplicate/conflict
+  handling, transaction atomicity, DST ambiguity, and erasure; fuzz/property
+  tests remain required for future Takeout parsing.
 - Logs: scan integration-test logs for representative sensitive values.
 - Process: revisit this model when adding a data source, an LLM provider, a sync change,
   or any new external surface; review platform permissions and network calls each release.

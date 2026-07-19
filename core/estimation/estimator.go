@@ -37,16 +37,20 @@ type Config struct {
 	MinimumPeriod   time.Duration
 	MaximumPeriod   time.Duration
 	BaseUncertainty time.Duration
+	// UncertaintyScale changes forecast bounds without changing the fitted
+	// rhythm. Production uses 1; other values exist for measured candidates.
+	UncertaintyScale float64
 }
 
 func DefaultConfig() Config {
 	return Config{
-		MinimumEpisodes: 7,
-		MaximumEpisodes: 21,
-		ForecastCycles:  7,
-		MinimumPeriod:   20 * time.Hour,
-		MaximumPeriod:   30 * time.Hour,
-		BaseUncertainty: 30 * time.Minute,
+		MinimumEpisodes:  7,
+		MaximumEpisodes:  21,
+		ForecastCycles:   7,
+		MinimumPeriod:    20 * time.Hour,
+		MaximumPeriod:    30 * time.Hour,
+		BaseUncertainty:  30 * time.Minute,
+		UncertaintyScale: 1,
 	}
 }
 
@@ -67,6 +71,12 @@ func (e RobustEstimator) Estimate(ctx context.Context, sessions []domain.SleepSe
 	config := e.Config
 	if config.MinimumEpisodes == 0 {
 		config = DefaultConfig()
+	}
+	if config.UncertaintyScale == 0 {
+		config.UncertaintyScale = 1
+	}
+	if config.UncertaintyScale <= 0 {
+		return domain.PhaseEstimate{}, &EstimationRefusal{Code: RefusalUnsupportedInput, Message: "uncertainty scale must be positive"}
 	}
 	episodes, err := selectEpisodes(sessions, config.MaximumEpisodes)
 	if err != nil {
@@ -143,11 +153,11 @@ func (e RobustEstimator) Estimate(ctx context.Context, sessions []domain.SleepSe
 	for _, episode := range episodes {
 		estimate.InputSessionIDs = append(estimate.InputSessionIDs, episode.ID)
 	}
-	baseUncertaintyHours := math.Max(config.BaseUncertainty.Hours(), 1.4826*residualMAD)
+	baseUncertaintyHours := config.UncertaintyScale * math.Max(config.BaseUncertainty.Hours(), 1.4826*residualMAD)
 	for horizon := 1; horizon <= config.ForecastCycles; horizon++ {
 		center := base.Add(hoursDuration(intercept + slope*float64(lastIndex+horizon)))
-		uncertainty := hoursDuration(baseUncertaintyHours + float64(horizon)*math.Max(0.25, residualMAD*0.35))
-		durationUncertainty := hoursDuration(math.Max(0.25, 1.4826*durationMAD))
+		uncertainty := hoursDuration(baseUncertaintyHours + config.UncertaintyScale*float64(horizon)*math.Max(0.25, residualMAD*0.35))
+		durationUncertainty := hoursDuration(config.UncertaintyScale * math.Max(0.25, 1.4826*durationMAD))
 		sleepStart, _ := domain.NewZonedInstant(center.Add(-uncertainty), zoneID)
 		sleepEnd, _ := domain.NewZonedInstant(center.Add(hoursDuration(durationMedian)).Add(uncertainty+durationUncertainty), zoneID)
 		wakeStart, _ := domain.NewZonedInstant(center.Add(hoursDuration(durationMedian)).Add(-uncertainty-durationUncertainty), zoneID)
@@ -202,23 +212,31 @@ func cycleIndices(episodes []domain.SleepSession) ([]int, error) {
 	indices := make([]int, len(episodes))
 	for i := 1; i < len(episodes); i++ {
 		delta := episodes[i].Intervals[0].Interval.Start.UTC.Sub(episodes[i-1].Intervals[0].Interval.Start.UTC)
-		if delta <= 0 {
-			return nil, &EstimationRefusal{Code: RefusalUnsupportedInput, Message: "sleep starts must increase in absolute time"}
-		}
-		ratio := delta.Hours() / 24
-		cycles := int(math.Round(ratio))
-		if cycles < 1 {
-			cycles = 1
-		}
-		if cycles > 7 || math.Abs(ratio-float64(cycles)) > 0.35 {
-			return nil, &EstimationRefusal{
-				Code:    RefusalAmbiguousCycleIndex,
-				Message: fmt.Sprintf("cannot identify missing sleep cycles across a %.1f-hour gap", delta.Hours()),
-			}
+		cycles, err := cycleStep(delta)
+		if err != nil {
+			return nil, err
 		}
 		indices[i] = indices[i-1] + cycles
 	}
 	return indices, nil
+}
+
+func cycleStep(delta time.Duration) (int, error) {
+	if delta <= 0 {
+		return 0, &EstimationRefusal{Code: RefusalUnsupportedInput, Message: "sleep starts must increase in absolute time"}
+	}
+	ratio := delta.Hours() / 24
+	cycles := int(math.Round(ratio))
+	if cycles < 1 {
+		cycles = 1
+	}
+	if cycles > 7 || math.Abs(ratio-float64(cycles)) > 0.35 {
+		return 0, &EstimationRefusal{
+			Code:    RefusalAmbiguousCycleIndex,
+			Message: fmt.Sprintf("cannot identify missing sleep cycles across a %.1f-hour gap", delta.Hours()),
+		}
+	}
+	return cycles, nil
 }
 
 func theilSenSlope(x, y []float64) float64 {
