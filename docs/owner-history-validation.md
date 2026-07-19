@@ -103,8 +103,38 @@ go run ./cmd/zeitboard-history transcription `
   --format json
 ```
 
-The owner must review handwritten values and every dated row status. Do not use
-an OCR result as an observed timestamp without that review.
+Every status must correspond to a source review. Do not use an OCR result as an
+observed timestamp. If the owner authorizes an assisted source-derived pass,
+record that fact and its measured uncertainty instead of describing the values
+as owner-keyed timestamps.
+
+### Source-derived Sleep Diary charts
+
+Sleep Diary's official
+[SpreadsheetGraph documentation](https://sleepdiary.github.io/core/src/SpreadsheetGraph/)
+and [report renderer source](https://github.com/sleepdiary/report/blob/6366ad62e3d2c9204084230a2a56609697eecff4/src/sleepdiary-report.js)
+define the long-term chart as labeled day rows with a 24-hour 18:00-to-18:00
+axis. For a raster export, an assisted transcription may measure that known
+grid and the filled sleep bars, but it remains a chart estimate rather than
+handwriting recognition or a directly observed measurement.
+
+The owner-history validation used the original 5100x6600 page images, sampled
+the hourly grid at five-minute increments, removed isolated marks, joined only
+short scan gaps, and visually reviewed full-page boundary overlays. Every
+labeled chart row was then represented in the review ledger. Two rows contained
+two episodes, so the complete 241-row source produced 243 review statuses: 223
+confirmed sleep entries and 20 explicit no-new-episode entries.
+
+Eight episodes overlap finalized Fitbit records. Their 16 boundaries measured
+23.2 minutes mean, 10.0 minutes median, 55.5 minutes P90, and 127 minutes
+maximum absolute error. Those overlap episodes are calibration evidence only.
+The primary benchmark imports the 215 chart episodes that end before Fitbit
+begins, so the lower-precision chart cannot alter directly observed Fitbit
+boundaries through overlap resolution.
+
+Keep the source pages, extracted images, overlays, ledgers, converted files,
+and boundary-level comparisons private. Commit only the aggregate method and
+results.
 
 ## CLI preview and backtest
 

@@ -47,41 +47,64 @@ The finalized digital source conversion accounted for every source row:
 
 Against a fresh ignored database, preview reported 738 ready, 0 duplicate,
 and 0 invalid rows. Commit imported all 738 atomically. A second preview
-reported 0 ready, 738 exact duplicates, and 0 invalid rows. The available
-digital history covers late October 2021 through December 2023. Earlier
-handwritten-only charts were not machine-read. A five-page source review
-confirmed the non-overlapping chart span as March 11 through October 27, 2021.
-The ignored owner ledger contains 231 dated rows, 231 unique source IDs, and 231
-`needs_review` statuses. The converter reported 0 confirmed sleep rows, 0
-confirmed no-observation rows, and 231 pending rows; it refused conversion and
-wrote no partial output. Owner confirmation remains the stated coverage gap.
-The measured conversion used one owner-selected zone; no travel-zone inference
-was applied.
+reported 0 ready, 738 exact duplicates, and 0 invalid rows. The digital
+history covers late October 2021 through December 2023.
 
-The backtest used 737 principal episodes. With the seven-episode minimum, all
-730 eligible holdouts were accounted for as 636 evaluations plus 94 typed
-refusals (coverage 0.871). Every refusal was `ambiguous_cycle_index`.
+The five original handwritten-chart pages were source-reviewed without OCR.
+Their 241 labeled day rows use the Sleep Diary report's 18:00-to-18:00 layout.
+Grid-aligned five-minute boundary estimates were visually checked on full-page
+overlays. The date-complete review ledger contains 243 explicit statuses: 223
+`confirmed_sleep` entries and 20 `confirmed_no_observation` entries. There are
+two more statuses than chart rows because two rows contain two sleep episodes;
+`confirmed_no_observation` means that a row was checked and contains no new
+episode start, not that the owner did not sleep.
 
-| Candidate | Scale | Evaluations | Refusals | Median error | Mean error | P90 error | Hit rate | Mean window |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Baseline | 1.00 | 636 | 94 | 1.77 h | 2.50 h | 5.65 h | 0.78 | 14.48 h |
-| Tighten-75 | 0.75 | 636 | 94 | 1.77 h | 2.50 h | 5.65 h | 0.72 | 13.06 h |
-| Tighten-50 | 0.50 | 636 | 94 | 1.77 h | 2.50 h | 5.65 h | 0.66 | 11.64 h |
+Eight chart episodes overlap finalized Fitbit records and were reserved for a
+source-accuracy check. Across their 16 start/end boundaries, absolute chart
+error versus Fitbit was 23.2 minutes mean, 10.0 minutes median, 55.5 minutes
+P90, and 127 minutes maximum. The primary benchmark therefore uses 215 chart
+episodes from before Fitbit begins and retains the eight overlap episodes only
+for calibration. Its 232 chart rows produce a 234-status ledger: 215 confirmed
+sleep entries and 19 explicitly checked rows without a new episode. Conversion
+reported all 234 rows, wrote 215 observations, and silently skipped none.
+
+The combined import used 738 Fitbit observations plus those 215 non-overlapping
+chart observations. On a fresh ignored database, the source previews reported
+738 and 215 ready with zero invalid rows. Their commits appended all 953
+observations atomically; repeat previews reported 738 and 215 exact duplicates
+with zero ready or invalid rows. The measured conversion used one owner-selected
+zone; no travel-zone inference was applied.
+
+The combined backtest used 952 principal episodes; the remaining observation
+was the reported Fitbit nap. With the seven-episode minimum, all 945 eligible
+holdouts were accounted for as 809 evaluations plus 136 typed refusals
+(coverage 0.856). Every refusal was `ambiguous_cycle_index`.
+
+| Candidate | Scale | Evaluations | Refusals | Coverage | Median error | Mean error | P90 error | Hit rate | Mean window |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Baseline | 1.00 | 809 | 136 | 0.856 | 1.71 h | 2.40 h | 5.41 h | 0.78 | 14.71 h |
+| Tighten-75 | 0.75 | 809 | 136 | 0.856 | 1.71 h | 2.40 h | 5.41 h | 0.72 | 13.31 h |
+| Tighten-50 | 0.50 | 809 | 136 | 0.856 | 1.71 h | 2.40 h | 5.41 h | 0.66 | 11.91 h |
 
 Baseline confidence calibration:
 
 | Confidence | Evaluations | Hit rate | Median error |
 |---|---:|---:|---:|
-| High | 16 | 0.44 | 1.64 h |
-| Medium | 302 | 0.82 | 1.37 h |
-| Low | 318 | 0.76 | 2.31 h |
+| High | 28 | 0.61 | 1.23 h |
+| Medium | 386 | 0.81 | 1.42 h |
+| Low | 395 | 0.77 | 2.19 h |
 
 Measured decision: keep the production uncertainty scale at 1.00. Tighten-75
-reduced mean width by 1.42h but lost 6 percentage points of hit rate;
-Tighten-50 reduced width by 2.84h but lost 12 points. Point error did not
-improve. The low-versus-medium error delta and the small, poorly calibrated
-high bucket justify testing an explicit calibration/misfit candidate next, but
-no such signal ships without a positive delta against this baseline.
+reduced mean width by 1.40h but lost 6 percentage points of hit rate;
+Tighten-50 reduced width by 2.80h but lost 12 points. Point error did not
+improve. The chart-inclusive baseline also improves on the digital-only run's
+1.77h median, 2.50h mean, and 5.65h P90 errors while preserving its 0.78 hit
+rate. A sensitivity run that allowed the eight lower-precision chart overlaps
+to merge into Fitbit changed only median error, from 1.71h to 1.70h at displayed
+precision; the decision is unchanged. The low-versus-medium error delta and
+the high bucket's lower hit rate justify testing an explicit confidence-window
+calibration or misfit candidate next, but no such signal ships without a
+positive delta against this combined baseline.
 
 ## Visual verification
 

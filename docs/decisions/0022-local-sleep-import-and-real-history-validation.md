@@ -16,10 +16,10 @@ strict local import path and a real-history backtest before estimator changes
 can ship.
 
 The source material includes overlapping Fitbit exports and handwritten charts.
-The digital files can be converted deterministically. Handwritten times cannot
-be treated as machine-readable facts without owner review. Raw history and
-converted observation files are private and must not enter source control, test
-fixtures, CI, or logs.
+The digital files can be converted deterministically. Handwritten chart bars
+cannot be treated as machine-readable facts without source review and measured
+uncertainty. Raw history and converted observation files are private and must
+not enter source control, test fixtures, CI, or logs.
 
 ## Decision
 
@@ -76,6 +76,18 @@ or silent time inference is claimed. Every chart row must transition from
 invalid rows block the whole conversion, and confirmed no-observation rows are
 counted without becoming sleep observations.
 
+For the owner-history run, the owner authorized a source-derived assisted pass
+over the original high-resolution Sleep Diary charts. The official report
+renderer's 18:00-to-18:00 grid was measured at five-minute increments, and
+full-page overlays were visually reviewed. This is a chart transcription, not
+OCR and not directly observed evidence. Every one of 241 chart rows is
+represented: the complete ledger has 243 statuses because two rows contain two
+episodes, with 223 confirmed sleep entries and 20 explicit no-new-episode
+entries. Eight episodes overlapping finalized Fitbit records were retained as
+calibration evidence rather than imported into the primary benchmark. Their 16
+boundaries had 10.0 minutes median and 55.5 minutes P90 absolute error versus
+Fitbit; mean error was 23.2 minutes and the maximum was 127 minutes.
+
 Private outputs request mode `0600` and refuse overwrite unless `--force` is
 explicit. On Windows, where Go file modes do not replace ACLs, the output must
 also live in an owner-controlled directory. The documented workflow keeps files
@@ -89,40 +101,43 @@ aborting the whole history. Each holdout uses the same maximum-21 recent-episode
 fit as the production estimator.
 
 The baseline and two validation-only uncertainty-scale candidates were measured
-on 737 principal episodes from the imported digital history (738 observations,
-one classified nap):
+on 952 principal episodes from the combined history. The import contains 738
+Fitbit observations (one classified nap) plus 215 non-overlapping chart
+observations:
 
 | Candidate | Evaluations | Refusals | Median error | P90 error | Hit rate | Mean window |
 |---|---:|---:|---:|---:|---:|---:|
-| Baseline (1.00) | 636 | 94 | 1.77 h | 5.65 h | 0.78 | 14.48 h |
-| Tighten to 0.75 | 636 | 94 | 1.77 h | 5.65 h | 0.72 | 13.06 h |
-| Tighten to 0.50 | 636 | 94 | 1.77 h | 5.65 h | 0.66 | 11.64 h |
+| Baseline (1.00) | 809 | 136 | 1.71 h | 5.41 h | 0.78 | 14.71 h |
+| Tighten to 0.75 | 809 | 136 | 1.71 h | 5.41 h | 0.72 | 13.31 h |
+| Tighten to 0.50 | 809 | 136 | 1.71 h | 5.41 h | 0.66 | 11.91 h |
 
-All 94 refusals were `ambiguous_cycle_index`; every eligible holdout was either
+All 136 refusals were `ambiguous_cycle_index`; every eligible holdout was either
 evaluated or refused.
 
 **Estimator decision:** reject blanket forecast-window tightening. A 0.75 scale
-saved 1.42 hours of mean width but lost 6 percentage points of hit rate; a 0.50
-scale saved 2.84 hours but lost 12 points. Neither candidate changed point error.
+saved 1.40 hours of mean width but lost 6 percentage points of hit rate; a 0.50
+scale saved 2.80 hours but lost 12 points. Neither candidate changed point error.
 The production default remains 1.00.
 
 The baseline confidence buckets also justify a measured follow-up, not an
-immediate model change: low-confidence median error was 2.31 hours versus 1.37
-hours at medium confidence, while the small high-confidence bucket had only a
-0.44 hit rate (16 evaluations). An explicit calibration/misfit candidate may be
-developed next, but it must beat this committed baseline before shipping.
+immediate model change: low-confidence median error was 2.19 hours versus 1.42
+hours at medium confidence, while high confidence had a 0.61 hit rate across 28
+evaluations versus 0.81 across 386 medium-confidence evaluations. An explicit
+confidence-window calibration or misfit candidate may be developed next, but it
+must beat this committed combined baseline before shipping.
 Phase-dependent duration remains deferred until the harness scores duration.
 
 ## Consequences
 
 - Local imports are append-only and idempotent without weakening hard erasure.
-- The real digital history imports cleanly and produces a reproducible aggregate
-  benchmark without committing private observations.
-- The available digital history begins in late October 2021. Earlier
-  handwritten-only charts remain owner-reviewed transcription work. An ignored
-  231-row ledger accounts for every March 11-October 27 chart date and blocks
-  conversion while all rows are pending; this ADR does not claim complete
-  coverage of those charts.
+- The combined real history imports cleanly and produces a reproducible
+  aggregate benchmark without committing private observations. Fresh previews
+  and commits accepted all 953 observations with zero invalid rows; repeat
+  previews classified all 953 as exact duplicates.
+- The handwritten-chart coverage gap is closed with an explicit, source-checked
+  ledger and measured boundary uncertainty. Direct Fitbit boundaries remain
+  authoritative in the benchmark because overlapping chart estimates are used
+  only for calibration.
 - The measured run used one owner-selected zone. Any unrecorded travel-zone
   changes remain a source-data limitation, not something the converter guesses.
 - Broad window tightening is closed as a candidate for now. Calibration/misfit

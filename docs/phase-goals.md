@@ -25,13 +25,12 @@ mode, rhythm-linked night switching). This foundation is exactly what the
 portal needs, because **a visitor's time request is just one more proposal
 origin** — the queue, tokens, and audit already exist.
 
-**Gap 1 — real-life validation is partial** (roadmap slice 3). ADR-0022 now
-delivers strict local import and a real digital-history backtest. It rejects
-blanket window tightening by measured delta and exposes a confidence-calibration
-follow-up. Earlier handwritten-only 2021 charts still need owner-reviewed
-transcription; a date-complete ledger now prevents any chart day from being
-silently skipped. Phase 1 has a real baseline but cannot claim complete chart
-coverage until that review is finished.
+**Closed gate 1 — real-life validation** (roadmap slice 3). ADR-0022 delivers
+strict local import, explicit source-reviewed coverage of the handwritten 2021
+charts, measured chart-boundary uncertainty, and a combined 2021–2023
+walk-forward backtest. It rejects blanket window tightening by measured delta
+and exposes a confidence-window calibration/misfit follow-up. Phase 1's stated
+acceptance criteria are met; broader pilot validation remains separate work.
 
 **Gap 2 — "calendar app" is still a fixture.** The Calendar screen is a
 synthetic five-day board; fixed events exist only as scheduler test inputs.
@@ -68,17 +67,19 @@ style alerts need a push path that works self-hosted (web push with
 operator VAPID keys; the Android companion as a second receiver). The
 companion still has no sync client (slice 9).
 
-**Sequencing logic.** Trust before reach: prove the estimate (P1), make the
-calendar real so requests have something to land in (P2), build the health
-substance (P3), mature the assistant over it (P4), then open the portal
-(P5) and fan out notifications (P6). P3 and P4 can interleave; P5 hard-
-depends on P1 (honest availability) and P2 (requests need real placement).
+**Sequencing logic.** Trust before reach: P1's estimator gate is now closed, so
+the next dependency is making the calendar real (P2) before requests have a
+place to land. Then build the health substance (P3), mature the assistant over
+it (P4), open the portal (P5), and fan out notifications (P6). P3 and P4 can
+interleave; P5 still depends on P2's real placement path.
 
 ---
 
 ## Phase goals (`/goal` prompts)
 
 ### `/goal phase-1-ground-truth`
+
+Status: achieved on 2026-07-19 via ADR-0022 and `verification.md`.
 
 > **Goal: validate the estimator on the owner's real 2021–2023 sleep
 > history and gate estimator changes on measured deltas.**
