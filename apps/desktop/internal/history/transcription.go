@@ -20,11 +20,20 @@ var transcriptionColumns = []string{
 	"end_local",
 	"zone_id",
 	"classification",
+	"review_status",
 }
 
+const (
+	TranscriptionReviewNeedsReview            = "needs_review"
+	TranscriptionReviewConfirmedSleep         = "confirmed_sleep"
+	TranscriptionReviewConfirmedNoObservation = "confirmed_no_observation"
+)
+
 type TranscriptionReport struct {
-	Rows         int
-	Observations int
+	Rows              int
+	Observations      int
+	NoObservationRows int
+	PendingRows       int
 }
 
 func ConvertTranscriptionFile(path string) ([]storage.SleepObservationRecord, TranscriptionReport, error) {
@@ -66,26 +75,70 @@ func ConvertTranscriptionFile(path string) ([]storage.SleepObservationRecord, Tr
 			problems = append(problems, fmt.Sprintf("row %d: expected %d columns; found %d", rowNumber, len(header), len(record)))
 			continue
 		}
-		observation, rowProblems := transcriptionObservation(record, columns)
+		value := func(name string) string { return strings.TrimSpace(record[columns[name]]) }
+		sourceID := value("source_record_id")
+		var rowProblems []string
+		if sourceID == "" {
+			rowProblems = append(rowProblems, "source_record_id is required")
+		} else if len([]byte(sourceID)) > 128 {
+			rowProblems = append(rowProblems, "source_record_id exceeds 128 bytes")
+		} else if prior, exists := seenSources[sourceID]; exists {
+			rowProblems = append(rowProblems, fmt.Sprintf("source_record_id repeats row %d", prior))
+		} else {
+			seenSources[sourceID] = rowNumber
+		}
+
+		var observation storage.SleepObservationRecord
+		reviewStatus := value("review_status")
+		switch reviewStatus {
+		case TranscriptionReviewConfirmedSleep:
+			var observationProblems []string
+			observation, observationProblems = transcriptionObservation(record, columns)
+			rowProblems = append(rowProblems, observationProblems...)
+		case TranscriptionReviewConfirmedNoObservation:
+			rowProblems = append(rowProblems, validateNoObservationRow(record, columns)...)
+		case TranscriptionReviewNeedsReview:
+			report.PendingRows++
+			rowProblems = append(rowProblems, validateReviewZone(value("zone_id"))...)
+			rowProblems = append(rowProblems, "review_status needs owner confirmation")
+		default:
+			rowProblems = append(rowProblems, "review_status must be needs_review, confirmed_sleep, or confirmed_no_observation")
+		}
 		for _, problem := range rowProblems {
 			problems = append(problems, fmt.Sprintf("row %d: %s", rowNumber, problem))
 		}
 		if len(rowProblems) > 0 {
 			continue
 		}
-		sourceID := observation.Provenance.SourceRecordID
-		if prior, exists := seenSources[sourceID]; exists {
-			problems = append(problems, fmt.Sprintf("row %d: source_record_id repeats row %d", rowNumber, prior))
-			continue
+		if reviewStatus == TranscriptionReviewConfirmedSleep {
+			observations = append(observations, observation)
+		} else if reviewStatus == TranscriptionReviewConfirmedNoObservation {
+			report.NoObservationRows++
 		}
-		seenSources[sourceID] = rowNumber
-		observations = append(observations, observation)
 	}
+	report.Observations = len(observations)
 	if len(problems) > 0 {
 		return nil, report, errors.New(strings.Join(problems, "\n"))
 	}
-	report.Observations = len(observations)
 	return observations, report, nil
+}
+
+func validateNoObservationRow(record []string, columns map[string]int) []string {
+	value := func(name string) string { return strings.TrimSpace(record[columns[name]]) }
+	problems := validateReviewZone(value("zone_id"))
+	for _, name := range []string{"start_local", "end_local", "classification"} {
+		if value(name) != "" {
+			problems = append(problems, name+" must be empty when review_status is confirmed_no_observation")
+		}
+	}
+	return problems
+}
+
+func validateReviewZone(zoneID string) []string {
+	if _, err := time.LoadLocation(zoneID); err != nil {
+		return []string{fmt.Sprintf("invalid IANA zone_id %q", zoneID)}
+	}
+	return nil
 }
 
 func transcriptionObservation(record []string, columns map[string]int) (storage.SleepObservationRecord, []string) {

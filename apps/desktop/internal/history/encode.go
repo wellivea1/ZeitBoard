@@ -13,7 +13,14 @@ import (
 	storage "non24.app/core/storage/sqlite"
 )
 
-const TranscriptionTemplate = "source_record_id,start_local,end_local,zone_id,classification\r\n"
+const TranscriptionTemplate = "source_record_id,start_local,end_local,zone_id,classification,review_status\r\n"
+
+type TranscriptionTemplateOptions struct {
+	FromDate     string
+	ThroughDate  string
+	ZoneID       string
+	SourcePrefix string
+}
 
 var canonicalCSVColumns = []string{
 	"observation_id",
@@ -26,6 +33,79 @@ var canonicalCSVColumns = []string{
 	"evidence_status",
 	"recorded_at",
 	"source_record_id",
+}
+
+func EncodeTranscriptionTemplate(options TranscriptionTemplateOptions) ([]byte, int, error) {
+	fromText := strings.TrimSpace(options.FromDate)
+	throughText := strings.TrimSpace(options.ThroughDate)
+	if fromText == "" && throughText == "" {
+		return []byte(TranscriptionTemplate), 0, nil
+	}
+	if fromText == "" || throughText == "" {
+		return nil, 0, errors.New("template date coverage requires both from and through dates")
+	}
+	from, err := time.Parse(time.DateOnly, fromText)
+	if err != nil {
+		return nil, 0, errors.New("template from date must use YYYY-MM-DD")
+	}
+	through, err := time.Parse(time.DateOnly, throughText)
+	if err != nil {
+		return nil, 0, errors.New("template through date must use YYYY-MM-DD")
+	}
+	if through.Before(from) {
+		return nil, 0, errors.New("template through date must not be before from date")
+	}
+	zoneID := strings.TrimSpace(options.ZoneID)
+	if _, err := time.LoadLocation(zoneID); err != nil {
+		return nil, 0, fmt.Errorf("load template time zone %q: %w", zoneID, err)
+	}
+	prefix := strings.TrimSpace(options.SourcePrefix)
+	if prefix == "" {
+		prefix = "chart"
+	}
+	if prefix != options.SourcePrefix && options.SourcePrefix != "" {
+		return nil, 0, errors.New("template source prefix must not have surrounding whitespace")
+	}
+	for _, character := range prefix {
+		if (character < 'a' || character > 'z') &&
+			(character < 'A' || character > 'Z') &&
+			(character < '0' || character > '9') &&
+			character != '_' && character != '-' {
+			return nil, 0, errors.New("template source prefix may contain only ASCII letters, digits, underscores, and hyphens")
+		}
+	}
+
+	rowCount := int(through.Sub(from).Hours()/24) + 1
+	if rowCount > storage.MaxSleepImportRows {
+		return nil, 0, fmt.Errorf("template exceeds the %d-row import limit", storage.MaxSleepImportRows)
+	}
+	var output bytes.Buffer
+	writer := csv.NewWriter(&output)
+	writer.UseCRLF = true
+	if err := writer.Write(transcriptionColumns); err != nil {
+		return nil, 0, err
+	}
+	for date := from; !date.After(through); date = date.AddDate(0, 0, 1) {
+		sourceID := prefix + "-" + date.Format(time.DateOnly)
+		if len([]byte(sourceID)) > 128 {
+			return nil, 0, errors.New("generated source_record_id exceeds 128 bytes; shorten the source prefix")
+		}
+		if err := writer.Write([]string{
+			sourceID,
+			"",
+			"",
+			zoneID,
+			"",
+			TranscriptionReviewNeedsReview,
+		}); err != nil {
+			return nil, 0, err
+		}
+	}
+	writer.Flush()
+	if err := writer.Error(); err != nil {
+		return nil, 0, err
+	}
+	return output.Bytes(), rowCount, nil
 }
 
 func EncodeObservationSet(format string, generatedAt time.Time, observations []storage.SleepObservationRecord) ([]byte, error) {

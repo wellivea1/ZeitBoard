@@ -116,7 +116,9 @@ public availability portal) with a pasteable `/goal` prompt per phase is
    rejected by measured delta. The confidence result justifies a separately
    measured calibration/misfit candidate, not a speculative model change.
    Earlier handwritten-only 2021 charts still require owner-reviewed
-   transcription before this slice can claim complete chart coverage.
+   transcription before this slice can claim complete chart coverage. The
+   ignored 231-row date-complete ledger is generated; the converter refuses
+   output until every row is explicitly confirmed as sleep or no observation.
 4. ~~**Make tasks real.**~~ ✅ Delivered (ADR-0018): user-owned tasks with a v1
    contract (`task-set`), local CRUD persistence, a real Tasks screen (add /
    done / delete, honest empty and read-only states), and the scheduler now

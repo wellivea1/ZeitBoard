@@ -49,8 +49,12 @@ Against a fresh ignored database, preview reported 738 ready, 0 duplicate,
 and 0 invalid rows. Commit imported all 738 atomically. A second preview
 reported 0 ready, 738 exact duplicates, and 0 invalid rows. The available
 digital history covers late October 2021 through December 2023. Earlier
-handwritten-only charts were not machine-read; the owner-review template and
-strict converter are implemented, but those rows remain a stated coverage gap.
+handwritten-only charts were not machine-read. A five-page source review
+confirmed the non-overlapping chart span as March 11 through October 27, 2021.
+The ignored owner ledger contains 231 dated rows, 231 unique source IDs, and 231
+`needs_review` statuses. The converter reported 0 confirmed sleep rows, 0
+confirmed no-observation rows, and 231 pending rows; it refused conversion and
+wrote no partial output. Owner confirmation remains the stated coverage gap.
 The measured conversion used one owner-selected zone; no travel-zone inference
 was applied.
 

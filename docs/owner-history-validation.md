@@ -57,23 +57,44 @@ the resulting files separately. The converter never infers travel zones.
 
 ## Handwritten chart transcription
 
-Generate a header-only owner-review template:
+Generate a header-only owner-review template, or prepopulate one pending row per
+chart date. This example covers the handwritten-only span before Fitbit begins:
 
 ```powershell
-go run ./cmd/zeitboard-history template --out <private-transcription.csv>
+go run ./cmd/zeitboard-history template `
+  --out <private-transcription.csv> `
+  --from 2021-03-11 `
+  --through 2021-10-27 `
+  --zone America/New_York `
+  --source-prefix chart `
+  --force
 ```
 
-Fill every row with:
+The exact review header is:
 
 ```text
-source_record_id,start_local,end_local,zone_id,classification
+source_record_id,start_local,end_local,zone_id,classification,review_status
 ```
 
-Use one stable source ID per chart entry, an IANA zone, and `principal` or
-`nap`. Local civil times may use `YYYY-MM-DD HH:MM`. At a DST ambiguity use RFC
-3339 with the correct explicit offset, such as `2021-11-07T01:30:00-04:00`.
-The converter rejects repeated IDs, impossible ranges, invalid zones, and
-offsets that disagree with the named zone. It never skips a bad row.
+Every generated row starts as `needs_review`, which blocks conversion. After
+checking the source chart, change it to exactly one of:
+
+- `confirmed_sleep`: fill `start_local`, `end_local`, and `classification`
+  (`principal` or `nap`);
+- `confirmed_no_observation`: leave both times and classification empty. This
+  records that the chart row was checked without claiming the owner did not
+  sleep.
+
+Use one stable source ID per chart entry and an IANA zone. If one chart date has
+multiple sleep episodes, add rows with unique suffixes rather than overwriting
+one interval. Local civil times may use `YYYY-MM-DD HH:MM`. At a DST ambiguity
+use RFC 3339 with the correct explicit offset, such as
+`2021-11-07T01:30:00-04:00`.
+
+The converter rejects pending rows, repeated IDs, impossible ranges, invalid
+zones, inconsistent no-observation rows, and offsets that disagree with the
+named zone. It emits no partial file and reports all pending rows; nothing is
+silently skipped.
 
 ```powershell
 go run ./cmd/zeitboard-history transcription `
@@ -82,8 +103,8 @@ go run ./cmd/zeitboard-history transcription `
   --format json
 ```
 
-The owner must review handwritten values. Do not use an OCR result as an
-observed timestamp without that review.
+The owner must review handwritten values and every dated row status. Do not use
+an OCR result as an observed timestamp without that review.
 
 ## CLI preview and backtest
 

@@ -186,7 +186,7 @@ export async function importSleepData(
 }
 
 export const transcriptionTemplateCSV =
-  "source_record_id,start_local,end_local,zone_id,classification\r\n";
+  "source_record_id,start_local,end_local,zone_id,classification,review_status\r\n";
 
 export function downloadTranscriptionTemplate(): boolean {
   if (

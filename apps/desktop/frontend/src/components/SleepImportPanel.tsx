@@ -237,7 +237,8 @@ export function SleepImportPanel({ onImported }: { onImported: () => Promise<voi
         </button>
       </div>
       <p className="sleep-import-note">
-        Handwritten charts require owner-reviewed CSV transcription and the local converter.
+        Handwritten charts require owner-reviewed CSV transcription and the local converter. Each
+        dated row stays needs_review until marked confirmed_sleep or confirmed_no_observation.
         ZeitBoard does not claim to recognize handwriting or silently infer missing times.
       </p>
       {error && (

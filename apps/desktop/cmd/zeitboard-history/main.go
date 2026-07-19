@@ -49,6 +49,10 @@ func main() {
 func runTemplate(args []string) error {
 	flags := flag.NewFlagSet("template", flag.ContinueOnError)
 	output := flags.String("out", "", "output CSV path")
+	from := flags.String("from", "", "optional first chart date, YYYY-MM-DD")
+	through := flags.String("through", "", "optional last chart date, YYYY-MM-DD")
+	zoneID := flags.String("zone", "America/New_York", "IANA time zone for generated review rows")
+	sourcePrefix := flags.String("source-prefix", "chart", "stable source_record_id prefix for generated review rows")
 	force := flags.Bool("force", false, "replace an existing output file")
 	if err := flags.Parse(args); err != nil {
 		return err
@@ -56,10 +60,23 @@ func runTemplate(args []string) error {
 	if strings.TrimSpace(*output) == "" {
 		return errors.New("template requires --out")
 	}
-	if err := writePrivateFile(*output, []byte(history.TranscriptionTemplate), *force); err != nil {
+	encoded, rows, err := history.EncodeTranscriptionTemplate(history.TranscriptionTemplateOptions{
+		FromDate:     *from,
+		ThroughDate:  *through,
+		ZoneID:       *zoneID,
+		SourcePrefix: *sourcePrefix,
+	})
+	if err != nil {
 		return err
 	}
-	fmt.Printf("Wrote owner transcription template to %s\n", *output)
+	if err := writePrivateFile(*output, encoded, *force); err != nil {
+		return err
+	}
+	if rows == 0 {
+		fmt.Printf("Wrote header-only owner transcription template to %s\n", *output)
+	} else {
+		fmt.Printf("Wrote %d needs_review chart rows to %s\n", rows, *output)
+	}
 	return nil
 }
 
@@ -126,6 +143,8 @@ func runTranscription(args []string) error {
 	}
 	observations, report, err := history.ConvertTranscriptionFile(*input)
 	if err != nil {
+		fmt.Printf("Review rows: total=%d confirmed_sleep=%d confirmed_no_observation=%d pending=%d\n",
+			report.Rows, report.Observations, report.NoObservationRows, report.PendingRows)
 		return err
 	}
 	encoded, err := history.EncodeObservationSet(*format, time.Now().UTC(), observations)
@@ -135,7 +154,8 @@ func runTranscription(args []string) error {
 	if err := writePrivateFile(*output, encoded, *force); err != nil {
 		return err
 	}
-	fmt.Printf("Converted %d owner-reviewed rows into %d observations.\n", report.Rows, report.Observations)
+	fmt.Printf("Converted %d owner-reviewed rows into %d observations; %d rows explicitly confirmed no observation.\n",
+		report.Rows, report.Observations, report.NoObservationRows)
 	fmt.Printf("Wrote private v1 import file to %s\n", *output)
 	return nil
 }

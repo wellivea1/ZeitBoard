@@ -69,8 +69,8 @@ func TestFitbitConverterRejectsAmbiguousCivilTimes(t *testing.T) {
 func TestTranscriptionConverterRejectsAmbiguousTimesAndRepeatedSourceIDs(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "transcription.csv")
 	writeHistoryTestFile(t, path, TranscriptionTemplate+
-		"chart-2021-11-07,2021-11-07 01:30,2021-11-07 09:30,America/New_York,principal\n"+
-		"chart-2021-11-07,2021-11-08 01:30,2021-11-08 09:30,America/New_York,principal\n")
+		"chart-2021-11-07,2021-11-07 01:30,2021-11-07 09:30,America/New_York,principal,confirmed_sleep\n"+
+		"chart-2021-11-07,2021-11-08 01:30,2021-11-08 09:30,America/New_York,principal,confirmed_sleep\n")
 	_, report, err := ConvertTranscriptionFile(path)
 	if err == nil {
 		t.Fatal("ambiguous and repeated transcription rows should fail")
@@ -83,7 +83,7 @@ func TestTranscriptionConverterRejectsAmbiguousTimesAndRepeatedSourceIDs(t *test
 func TestTranscriptionConverterRejectsAnExplicitOffsetOutsideTheNamedZone(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "transcription.csv")
 	writeHistoryTestFile(t, path, TranscriptionTemplate+
-		"chart-2021-offset,2021-03-11T21:00:00+03:00,2021-03-12T07:00:00+03:00,America/New_York,principal\n")
+		"chart-2021-offset,2021-03-11T21:00:00+03:00,2021-03-12T07:00:00+03:00,America/New_York,principal,confirmed_sleep\n")
 	_, _, err := ConvertTranscriptionFile(path)
 	if err == nil || !strings.Contains(err.Error(), "does not match zone_id") {
 		t.Fatalf("mismatched explicit offset was not rejected: %v", err)
@@ -93,12 +93,13 @@ func TestTranscriptionConverterRejectsAnExplicitOffsetOutsideTheNamedZone(t *tes
 func TestTranscriptionConverterProducesCanonicalCSV(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "transcription.csv")
 	writeHistoryTestFile(t, path, TranscriptionTemplate+
-		"chart-2021-03-11,2021-03-11 21:00,2021-03-12 07:00,America/New_York,principal\n")
+		"chart-2021-03-11,2021-03-11 21:00,2021-03-12 07:00,America/New_York,principal,confirmed_sleep\n"+
+		"chart-2021-03-12,,,America/New_York,,confirmed_no_observation\n")
 	observations, report, err := ConvertTranscriptionFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if report.Rows != 1 || report.Observations != 1 || observations[0].Provenance.EvidenceStatus != storage.ProvenanceEvidenceUserReported {
+	if report.Rows != 2 || report.Observations != 1 || report.NoObservationRows != 1 || observations[0].Provenance.EvidenceStatus != storage.ProvenanceEvidenceUserReported {
 		t.Fatalf("unexpected transcription conversion: report=%#v observations=%#v", report, observations)
 	}
 	encoded, err := EncodeObservationSet("csv", time.Time{}, observations)
@@ -116,6 +117,59 @@ func TestTranscriptionConverterProducesCanonicalCSV(t *testing.T) {
 	}
 	if !preview.CanImport || preview.ReadyRows != 1 {
 		t.Fatalf("canonical transcription CSV is not importable: %#v", preview)
+	}
+}
+
+func TestDatedTranscriptionTemplateBlocksOutputUntilEveryRowIsReviewed(t *testing.T) {
+	encoded, rows, err := EncodeTranscriptionTemplate(TranscriptionTemplateOptions{
+		FromDate: "2021-03-11", ThroughDate: "2021-03-13", ZoneID: "America/New_York", SourcePrefix: "chart",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rows != 3 || strings.Count(string(encoded), "needs_review") != 3 {
+		t.Fatalf("dated template did not account for every chart date: rows=%d template=%s", rows, encoded)
+	}
+	path := filepath.Join(t.TempDir(), "pending-transcription.csv")
+	writeHistoryTestFile(t, path, string(encoded))
+	observations, report, err := ConvertTranscriptionFile(path)
+	if err == nil || !strings.Contains(err.Error(), "needs owner confirmation") {
+		t.Fatalf("pending review rows should block conversion: observations=%#v report=%#v err=%v", observations, report, err)
+	}
+	if report.Rows != 3 || report.PendingRows != 3 || report.Observations != 0 || report.NoObservationRows != 0 {
+		t.Fatalf("pending review accounting is incomplete: %#v", report)
+	}
+}
+
+func TestTranscriptionConverterRejectsInconsistentNoObservationWithoutPartialOutput(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "inconsistent-no-observation.csv")
+	writeHistoryTestFile(t, path, TranscriptionTemplate+
+		"chart-2021-03-11,2021-03-11 21:00,2021-03-12 07:00,America/New_York,principal,confirmed_sleep\n"+
+		"chart-2021-03-12,2021-03-12 21:00,,America/New_York,,confirmed_no_observation\n")
+	observations, report, err := ConvertTranscriptionFile(path)
+	if err == nil || !strings.Contains(err.Error(), "start_local must be empty") {
+		t.Fatalf("inconsistent no-observation row should fail: report=%#v err=%v", report, err)
+	}
+	if observations != nil {
+		t.Fatalf("failed conversion returned partial observations: %#v", observations)
+	}
+	if report.Rows != 2 || report.Observations != 1 || report.NoObservationRows != 0 || report.PendingRows != 0 {
+		t.Fatalf("failed conversion accounting is incorrect: %#v", report)
+	}
+}
+
+func TestDatedTranscriptionTemplateRejectsIncompleteOrUnsafeOptions(t *testing.T) {
+	_, _, err := EncodeTranscriptionTemplate(TranscriptionTemplateOptions{
+		FromDate: "2021-03-11", ZoneID: "America/New_York", SourcePrefix: "chart",
+	})
+	if err == nil || !strings.Contains(err.Error(), "requires both from and through") {
+		t.Fatalf("incomplete date coverage should fail: %v", err)
+	}
+	_, _, err = EncodeTranscriptionTemplate(TranscriptionTemplateOptions{
+		FromDate: "2021-03-11", ThroughDate: "2021-03-12", ZoneID: "America/New_York", SourcePrefix: "chart rows",
+	})
+	if err == nil || !strings.Contains(err.Error(), "ASCII letters") {
+		t.Fatalf("unsafe source prefix should fail: %v", err)
 	}
 }
 

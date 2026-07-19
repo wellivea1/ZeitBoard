@@ -96,7 +96,7 @@ describe("sleep import adapter", () => {
 
   it("ships a header-only owner transcription template", () => {
     expect(transcriptionTemplateCSV).toBe(
-      "source_record_id,start_local,end_local,zone_id,classification\r\n",
+      "source_record_id,start_local,end_local,zone_id,classification,review_status\r\n",
     );
   });
 });

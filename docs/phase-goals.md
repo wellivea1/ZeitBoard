@@ -29,8 +29,9 @@ origin** — the queue, tokens, and audit already exist.
 delivers strict local import and a real digital-history backtest. It rejects
 blanket window tightening by measured delta and exposes a confidence-calibration
 follow-up. Earlier handwritten-only 2021 charts still need owner-reviewed
-transcription, so Phase 1 has a real baseline but cannot claim complete chart
-coverage yet.
+transcription; a date-complete ledger now prevents any chart day from being
+silently skipped. Phase 1 has a real baseline but cannot claim complete chart
+coverage until that review is finished.
 
 **Gap 2 — "calendar app" is still a fixture.** The Calendar screen is a
 synthetic five-day board; fixed events exist only as scheduler test inputs.

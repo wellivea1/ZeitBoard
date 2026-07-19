@@ -58,8 +58,8 @@ manual and imported provenance in source summaries.
 
 - converting finalized `Fitbit Sleep Data*.csv` files while explicitly counting
   excluded superseded directories, out-of-range rows, and exact overlaps;
-- generating a header-only transcription template and converting only
-  owner-reviewed rows;
+- generating either a header-only template or a date-populated review ledger,
+  then converting only owner-confirmed rows;
 - previewing or committing an import to a selected SQLite database; and
 - running the baseline/candidate backtest matrix.
 
@@ -71,7 +71,10 @@ owner-confirmed date/zone splits rather than inferred zone changes.
 Transcribed records are `file_import` / `user_reported`; digital Fitbit records
 are `file_import` / `directly_observed`. Ambiguous transcription times require
 an RFC 3339 offset that agrees with the named zone. No handwriting recognition
-or silent time inference is claimed.
+or silent time inference is claimed. Every chart row must transition from
+`needs_review` to `confirmed_sleep` or `confirmed_no_observation`; pending or
+invalid rows block the whole conversion, and confirmed no-observation rows are
+counted without becoming sleep observations.
 
 Private outputs request mode `0600` and refuse overwrite unless `--force` is
 explicit. On Windows, where Go file modes do not replace ACLs, the output must
@@ -116,8 +119,10 @@ Phase-dependent duration remains deferred until the harness scores duration.
 - The real digital history imports cleanly and produces a reproducible aggregate
   benchmark without committing private observations.
 - The available digital history begins in late October 2021. Earlier
-  handwritten-only charts remain owner-reviewed transcription work; this ADR
-  does not claim complete coverage of those charts.
+  handwritten-only charts remain owner-reviewed transcription work. An ignored
+  231-row ledger accounts for every March 11-October 27 chart date and blocks
+  conversion while all rows are pending; this ADR does not claim complete
+  coverage of those charts.
 - The measured run used one owner-selected zone. Any unrecorded travel-zone
   changes remain a source-data limitation, not something the converter guesses.
 - Broad window tightening is closed as a candidate for now. Calibration/misfit
