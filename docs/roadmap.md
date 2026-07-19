@@ -75,7 +75,9 @@ detail lives there rather than being repeated here.
 ## Next slices (priority order)
 
 The actionable near-term plan. Each slice is self-contained and lands with an
-ADR when it changes architecture.
+ADR when it changes architecture. The phase-level direction (through the
+public availability portal) with a pasteable `/goal` prompt per phase is
+[`phase-goals.md`](phase-goals.md); slices below map onto its phases 1-2.
 
 1. ~~**Close the control loop — approvals unification + sync robustness.**~~
    ✅ Delivered (ADR-0016): cross-device decisions via listed one-use tokens, a
