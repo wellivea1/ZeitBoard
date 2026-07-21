@@ -1,35 +1,48 @@
 package org.non24.planner.ui
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -38,9 +51,25 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
@@ -62,36 +91,19 @@ import org.non24.planner.domain.TimeWindow
 private enum class Destination(
     val route: String,
     val label: String,
-    val shortLabel: String,
+    val icon: DestinationIcon,
 ) {
-    STATUS("status", "Status", "S"),
-    CORRECT("correct", "Correct", "C"),
-    MEDICATION("medication", "Medication", "M"),
-    SETTINGS("settings", "Settings", "G"),
+    STATUS("status", "Status", DestinationIcon.STATUS),
+    CORRECT("correct", "Correct", DestinationIcon.CORRECT),
+    MEDICATION("medication", "Medication", DestinationIcon.MEDICATION),
+    SETTINGS("settings", "Settings", DestinationIcon.SETTINGS),
 }
 
-private val lightColors = lightColorScheme(
-    primary = Color(0xFF3559A8),
-    onPrimary = Color.White,
-    secondary = Color(0xFF57617A),
-    surface = Color(0xFFF7F8FC),
-    surfaceVariant = Color(0xFFE1E5F0),
-)
-
-private val darkColors = darkColorScheme(
-    primary = Color(0xFFAEC6FF),
-    secondary = Color(0xFFC0C6DC),
-)
-
-@Composable
-fun Non24Theme(
-    darkTheme: Boolean = false,
-    content: @Composable () -> Unit,
-) {
-    MaterialTheme(
-        colorScheme = if (darkTheme) darkColors else lightColors,
-        content = content,
-    )
+private enum class DestinationIcon {
+    STATUS,
+    CORRECT,
+    MEDICATION,
+    SETTINGS,
 }
 
 @Composable
@@ -117,41 +129,38 @@ fun Non24App(
 
     Non24Theme {
         Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
             topBar = {
                 Column {
-                    Surface(shadowElevation = 2.dp) {
-                        Text(
-                            text = "ZeitBoard",
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                    }
+                    BrandBar()
                     if (uiState.settings.dataMode == DataMode.FIXTURE) {
                         FixtureBanner()
                     }
                 }
             },
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-            bottomBar = {
-                NavigationBar {
-                    Destination.entries.forEach { destination ->
-                        NavigationBarItem(
-                            selected = currentRoute == destination.route,
-                            onClick = {
-                                navController.navigate(destination.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) {
-                                        saveState = true
-                                    }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            icon = { Text(destination.shortLabel, fontWeight = FontWeight.Bold) },
-                            label = { Text(destination.label) },
-                        )
-                    }
+            snackbarHost = {
+                SnackbarHost(snackbarHostState) { data ->
+                    Snackbar(
+                        snackbarData = data,
+                        containerColor = Ink,
+                        contentColor = Paper,
+                        shape = MaterialTheme.shapes.medium,
+                    )
                 }
+            },
+            bottomBar = {
+                DestinationBar(
+                    currentRoute = currentRoute,
+                    onDestinationSelected = { destination ->
+                        navController.navigate(destination.route) {
+                            popUpTo(navController.graph.findStartDestination().id) {
+                                saveState = true
+                            }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                )
             },
         ) { padding ->
             NavHost(
@@ -201,31 +210,25 @@ private fun StatusScreen(
     onOpenHealthConnectListing: () -> Unit,
 ) {
     ScreenColumn {
-        SectionTitle("Current status")
+        ScreenHeader(
+            kicker = "Today",
+            title = "Status",
+            description = "Estimated sleep timing and the latest observation on this device.",
+        )
+
         if (state.estimate != null) {
-            StatusEstimateCard(state)
+            StatusEstimatePanel(state)
         } else {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text("No Android estimate", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "Health Connect mode imports sleep sessions only. Estimated sleep-wake " +
-                            "phase and predicted windows must come from the shared core through a repository contract.",
-                    )
-                }
-            }
+            EmptyEstimatePanel()
         }
 
-        LatestSleepCard(
+        LatestSleepPanel(
             episode = state.latestSleepEpisode,
             use24HourTime = state.settings.use24HourTime,
         )
 
-        SectionTitle("Health Connect")
-        HealthConnectCard(
+        SectionHeading("Health Connect")
+        HealthConnectPanel(
             state = state,
             onUseHealthConnect = onUseHealthConnect,
             onRequestPermission = onRequestPermission,
@@ -234,7 +237,7 @@ private fun StatusScreen(
         )
 
         Text(
-            "This scaffold is not a medical device and does not identify exact circadian phase or DLMO.",
+            "Not a medical device. Activity does not identify exact circadian phase or DLMO.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -242,87 +245,215 @@ private fun StatusScreen(
 }
 
 @Composable
-private fun StatusEstimateCard(state: AppUiState) {
+private fun StatusEstimatePanel(state: AppUiState) {
     val estimate = requireNotNull(state.estimate)
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+    val shape = MaterialTheme.shapes.large
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .background(
+                Brush.linearGradient(
+                    colors = listOf(Color(0xFF31564F), Color(0xFF5A776E)),
+                ),
+            )
+            .padding(horizontal = 18.dp, vertical = 17.dp),
+        verticalArrangement = Arrangement.spacedBy(13.dp),
+    ) {
+        Text(
+            estimate.label.uppercase(Locale.ROOT),
+            style = MaterialTheme.typography.labelSmall,
+            color = Color(0xFFDDE9E4),
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(estimate.label, style = MaterialTheme.typography.titleMedium)
-            ConfidenceLabel(estimate.confidence)
-            WindowRow(
-                label = "Predicted sleep window",
-                window = estimate.predictedSleepWindow,
-                use24HourTime = state.settings.use24HourTime,
-            )
-            WindowRow(
-                label = "Predicted waking window",
-                window = estimate.predictedWakingWindow,
-                use24HourTime = state.settings.use24HourTime,
-            )
-            HorizontalDivider()
-            estimate.confidenceReasons.forEach { reason ->
-                Text("- $reason", style = MaterialTheme.typography.bodySmall)
-            }
             Text(
-                "Imported snapshot: ${estimate.algorithmVersion}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                "Forecast available",
+                style = MaterialTheme.typography.headlineMedium,
+                color = Color.White,
             )
+            ConfidenceBadge(estimate.confidence)
         }
+
+        HorizontalDivider(color = Color.White.copy(alpha = 0.22f))
+        ForecastRow(
+            label = "Predicted sleep window",
+            window = estimate.predictedSleepWindow,
+            use24HourTime = state.settings.use24HourTime,
+        )
+        ForecastRow(
+            label = "Predicted waking window",
+            window = estimate.predictedWakingWindow,
+            use24HourTime = state.settings.use24HourTime,
+        )
+        HorizontalDivider(color = Color.White.copy(alpha = 0.22f))
+
+        estimate.confidenceReasons.forEach { reason ->
+            Row(
+                verticalAlignment = Alignment.Top,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .padding(top = 5.dp)
+                        .size(4.dp)
+                        .background(Color(0xFFDDE9E4), CircleShape),
+                )
+                Text(
+                    reason,
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.White.copy(alpha = 0.9f),
+                )
+            }
+        }
+        Text(
+            "Snapshot / ${estimate.algorithmVersion}",
+            style = MaterialTheme.typography.labelSmall,
+            color = Color.White.copy(alpha = 0.62f),
+        )
     }
 }
 
 @Composable
-private fun HealthConnectCard(
+private fun EmptyEstimatePanel() {
+    Panel {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(9.dp),
+        ) {
+            StatusDot(color = Amber)
+            Text("Estimate unavailable", style = MaterialTheme.typography.titleMedium)
+        }
+        Text(
+            "Health Connect imports sleep sessions only. Predicted windows require an " +
+                "estimate supplied through the shared repository contract.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun ForecastRow(
+    label: String,
+    window: TimeWindow,
+    use24HourTime: Boolean,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(
+            label.uppercase(Locale.ROOT),
+            style = MaterialTheme.typography.labelSmall,
+            color = Color(0xFFDDE9E4),
+        )
+        Text(
+            formatWindow(window, use24HourTime),
+            style = MaterialTheme.typography.titleMedium,
+            color = Color.White,
+        )
+    }
+}
+
+@Composable
+private fun HealthConnectPanel(
     state: AppUiState,
     onUseHealthConnect: () -> Unit,
     onRequestPermission: () -> Unit,
     onRefreshHealth: () -> Unit,
     onOpenHealthConnectListing: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+    Panel {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(9.dp),
+            ) {
+                StatusDot(
+                    color = if (state.healthAvailability == HealthConnectAvailability.AVAILABLE) {
+                        Sage
+                    } else {
+                        Amber
+                    },
+                )
+                Text(
+                    when (state.healthAvailability) {
+                        HealthConnectAvailability.AVAILABLE -> "Available on this device"
+                        HealthConnectAvailability.UPDATE_REQUIRED -> "Provider update required"
+                        HealthConnectAvailability.UNAVAILABLE -> "Unavailable on this device"
+                    },
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            }
             Text(
-                when (state.healthAvailability) {
-                    HealthConnectAvailability.AVAILABLE -> "Available on this device"
-                    HealthConnectAvailability.UPDATE_REQUIRED -> "Provider update required"
-                    HealthConnectAvailability.UNAVAILABLE -> "Unavailable on this device"
-                },
-                style = MaterialTheme.typography.titleMedium,
+                "READ SLEEP",
+                style = MaterialTheme.typography.labelSmall,
+                color = SageDark,
             )
-            Text("Requested access: read sleep sessions only.")
-            when (state.healthAvailability) {
-                HealthConnectAvailability.AVAILABLE -> {
-                    Text(
-                        when (state.healthPermissionState) {
-                            HealthPermissionState.GRANTED -> "Sleep permission granted"
-                            HealthPermissionState.REQUIRED -> "Sleep permission required"
-                            HealthPermissionState.UNKNOWN -> "Checking sleep permission"
-                            HealthPermissionState.UNAVAILABLE -> "Sleep permission unavailable"
-                        },
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        if (state.settings.dataMode != DataMode.HEALTH_CONNECT) {
-                            OutlinedButton(onClick = onUseHealthConnect) { Text("Use Health Connect") }
-                        }
-                        if (state.healthPermissionState != HealthPermissionState.GRANTED) {
-                            Button(onClick = onRequestPermission) { Text("Grant read access") }
-                        } else {
-                            Button(onClick = onRefreshHealth) { Text("Refresh sleep") }
-                        }
+        }
+
+        Text(
+            "Requested access is limited to sleep sessions.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        when (state.healthAvailability) {
+            HealthConnectAvailability.AVAILABLE -> {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                DataRow(
+                    label = "Permission",
+                    value = when (state.healthPermissionState) {
+                        HealthPermissionState.GRANTED -> "Granted"
+                        HealthPermissionState.REQUIRED -> "Required"
+                        HealthPermissionState.UNKNOWN -> "Checking"
+                        HealthPermissionState.UNAVAILABLE -> "Unavailable"
+                    },
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (state.settings.dataMode != DataMode.HEALTH_CONNECT) {
+                        SecondaryButton(
+                            text = "Use Health Connect",
+                            onClick = onUseHealthConnect,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    if (state.healthPermissionState != HealthPermissionState.GRANTED) {
+                        PrimaryButton(
+                            text = "Grant read access",
+                            onClick = onRequestPermission,
+                            modifier = Modifier.weight(1f),
+                        )
+                    } else {
+                        PrimaryButton(
+                            text = "Refresh sleep",
+                            onClick = onRefreshHealth,
+                            modifier = Modifier.weight(1f),
+                        )
                     }
                 }
-                HealthConnectAvailability.UPDATE_REQUIRED -> {
-                    Button(onClick = onOpenHealthConnectListing) { Text("Update Health Connect") }
-                }
-                HealthConnectAvailability.UNAVAILABLE -> {
-                    Text("Fixture mode remains available on Android 8 and devices without Health Connect.")
-                }
+            }
+            HealthConnectAvailability.UPDATE_REQUIRED -> {
+                PrimaryButton(
+                    text = "Update Health Connect",
+                    onClick = onOpenHealthConnectListing,
+                    modifier = Modifier.widthIn(min = 176.dp),
+                )
+            }
+            HealthConnectAvailability.UNAVAILABLE -> {
+                Text(
+                    "Synthetic fixture mode remains available on devices without Health Connect.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
             }
         }
     }
@@ -343,51 +474,58 @@ private fun CorrectionScreen(
     }
 
     ScreenColumn {
-        SectionTitle("Manual sleep/wake correction")
-        Text(
-            "Corrections are appended separately. Imported source observations are not rewritten.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        ScreenHeader(
+            kicker = "Observations",
+            title = "Correct sleep",
+            description = "Append a correction without changing the source observation.",
         )
+        InfoStrip("Imported observations stay unchanged. Corrections remain a separate history.")
+
         if (latest == null) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Text("No sleep episode is available.", modifier = Modifier.padding(18.dp))
+            Panel {
+                Text("No sleep episode is available.", style = MaterialTheme.typography.bodyMedium)
             }
         } else {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(
-                    modifier = Modifier.padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+            Panel {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text("Latest principal sleep", style = MaterialTheme.typography.titleMedium)
-                    Text("Time zone: ${zone.id}")
-                    OutlinedTextField(
-                        value = startText,
-                        onValueChange = { startText = it },
-                        label = { Text("Sleep time") },
-                        supportingText = { Text("yyyy-MM-dd HH:mm") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
+                    Text(
+                        zone.id,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    OutlinedTextField(
-                        value = endText,
-                        onValueChange = { endText = it },
-                        label = { Text("Wake time") },
-                        supportingText = { Text("yyyy-MM-dd HH:mm") },
-                        modifier = Modifier.fillMaxWidth(),
-                        singleLine = true,
-                    )
-                    Button(
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                DenseTextField(
+                    value = startText,
+                    onValueChange = { startText = it },
+                    label = "Sleep time",
+                    helper = "yyyy-MM-dd HH:mm",
+                    imeAction = ImeAction.Next,
+                )
+                DenseTextField(
+                    value = endText,
+                    onValueChange = { endText = it },
+                    label = "Wake time",
+                    helper = "yyyy-MM-dd HH:mm",
+                    imeAction = ImeAction.Done,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    PrimaryButton(
+                        text = "Save correction",
                         onClick = { onSave(startText, endText) },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Save correction")
-                    }
-                    latest.appliedCorrection?.let {
-                        Text(
-                            "A manual correction is active for this source episode.",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
+                        modifier = Modifier.widthIn(min = 150.dp),
+                    )
+                }
+                latest.appliedCorrection?.let {
+                    InlineStatus("A manual correction is active for this source episode.")
                 }
             }
         }
@@ -401,52 +539,56 @@ private fun MedicationScreen(
 ) {
     val zone = ZoneId.systemDefault()
     var name by remember { mutableStateOf("") }
-    var occurredAt by remember {
-        mutableStateOf(formatForInput(Instant.now(), zone))
-    }
+    var occurredAt by remember { mutableStateOf(formatForInput(Instant.now(), zone)) }
 
     ScreenColumn {
-        SectionTitle("Quick medication event")
-        Text(
-            "Record what happened. This screen does not recommend medication or timing.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        ScreenHeader(
+            kicker = "Local record",
+            title = "Medication event",
+            description = "Record what happened without medication or timing advice.",
         )
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+        Panel {
+            DenseTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = "Medication label",
+                placeholder = "Medication",
+                imeAction = ImeAction.Next,
+            )
+            DenseTextField(
+                value = occurredAt,
+                onValueChange = { occurredAt = it },
+                label = "Occurred at",
+                helper = "yyyy-MM-dd HH:mm / ${zone.id}",
+                imeAction = ImeAction.Done,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
             ) {
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Medication label") },
-                    placeholder = { Text("Medication") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
-                OutlinedTextField(
-                    value = occurredAt,
-                    onValueChange = { occurredAt = it },
-                    label = { Text("Occurred at") },
-                    supportingText = { Text("yyyy-MM-dd HH:mm (${zone.id})") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
-                Button(
+                PrimaryButton(
+                    text = "Save event",
                     onClick = {
                         onSave(name, occurredAt)
                         name = ""
                     },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("Save event")
-                }
+                    modifier = Modifier.widthIn(min = 132.dp),
+                )
             }
         }
+
         if (state.medicationEvents.isNotEmpty()) {
-            SectionTitle("Recent local events")
-            state.medicationEvents.take(5).forEach { event ->
-                MedicationEventCard(event, state.settings.use24HourTime)
+            SectionHeading("Recent local events")
+            Panel(contentPadding = 0.dp, spacing = 0.dp) {
+                state.medicationEvents.take(5).forEachIndexed { index, event ->
+                    MedicationEventRow(event, state.settings.use24HourTime)
+                    if (index < minOf(4, state.medicationEvents.lastIndex)) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 14.dp),
+                            color = MaterialTheme.colorScheme.outlineVariant,
+                        )
+                    }
+                }
             }
         }
     }
@@ -459,162 +601,660 @@ private fun SettingsScreen(
     onUse24HourChanged: (Boolean) -> Unit,
 ) {
     ScreenColumn {
-        SectionTitle("Data source")
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Text("Fixture mode is intentionally visible and contains synthetic data only.")
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    FilterChip(
-                        selected = state.settings.dataMode == DataMode.FIXTURE,
-                        onClick = { onDataModeChanged(DataMode.FIXTURE) },
-                        label = { Text("Fixture") },
-                    )
-                    FilterChip(
-                        selected = state.settings.dataMode == DataMode.HEALTH_CONNECT,
-                        onClick = { onDataModeChanged(DataMode.HEALTH_CONNECT) },
-                        enabled = state.healthAvailability == HealthConnectAvailability.AVAILABLE,
-                        label = { Text("Health Connect") },
-                    )
-                }
-            }
+        ScreenHeader(
+            kicker = "Device",
+            title = "Settings",
+            description = "Local data source, display, and privacy controls.",
+        )
+
+        SectionHeading("Data source")
+        Panel {
+            Text(
+                "Fixture mode is always labeled and contains synthetic data only.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            SegmentedDataMode(
+                selected = state.settings.dataMode,
+                healthConnectEnabled = state.healthAvailability == HealthConnectAvailability.AVAILABLE,
+                onSelected = onDataModeChanged,
+            )
         }
 
-        SectionTitle("Display")
-        Card(modifier = Modifier.fillMaxWidth()) {
+        SectionHeading("Display")
+        Panel {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(18.dp),
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(3.dp),
+                ) {
                     Text("24-hour time", style = MaterialTheme.typography.titleMedium)
-                    Text("Use 24-hour labels for displayed times.")
+                    Text(
+                        "Use 24-hour labels for displayed times.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
-                Switch(
+                CompactSwitch(
                     checked = state.settings.use24HourTime,
                     onCheckedChange = onUse24HourChanged,
                 )
             }
         }
 
-        SectionTitle("Privacy")
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier.padding(18.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text("Local-first phase-one scaffold", style = MaterialTheme.typography.titleMedium)
-                Text("No analytics, telemetry, tracking SDKs, or health-data upload.")
-                Text("Medication labels and exact behavioral timestamps are never written to logs.")
-            }
+        SectionHeading("Privacy")
+        Panel {
+            Text("Local-first companion", style = MaterialTheme.typography.titleMedium)
+            PrivacyLine("No analytics, telemetry, tracking SDKs, or health-data upload.")
+            PrivacyLine("Medication labels and exact behavioral timestamps are never logged.")
         }
     }
 }
 
 @Composable
-private fun LatestSleepCard(
+private fun LatestSleepPanel(
     episode: EffectiveSleepEpisode?,
     use24HourTime: Boolean,
 ) {
-    Card(modifier = Modifier.fillMaxWidth()) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text("Latest sleep observation", style = MaterialTheme.typography.titleMedium)
-            if (episode == null) {
-                Text("No sleep session is available from the selected source.")
-            } else {
-                Text("Sleep: ${formatDisplay(episode.start, episode.timeZoneId, use24HourTime)}")
-                Text("Wake: ${formatDisplay(episode.end, episode.timeZoneId, use24HourTime)}")
-                Text(
-                    if (episode.appliedCorrection == null) "Source observation" else "Manual correction applied",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
+    Panel {
+        Text("Latest sleep observation", style = MaterialTheme.typography.titleMedium)
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        if (episode == null) {
+            Text(
+                "No sleep session is available from the selected source.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            DataRow(
+                label = "Sleep",
+                value = formatDisplay(episode.start, episode.timeZoneId, use24HourTime),
+            )
+            DataRow(
+                label = "Wake",
+                value = formatDisplay(episode.end, episode.timeZoneId, use24HourTime),
+            )
+            InlineStatus(
+                if (episode.appliedCorrection == null) {
+                    "Source observation"
+                } else {
+                    "Manual correction applied"
+                },
+            )
         }
     }
 }
 
 @Composable
-private fun WindowRow(
-    label: String,
-    window: TimeWindow,
-    use24HourTime: Boolean,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(label, style = MaterialTheme.typography.labelLarge)
+private fun DataRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
         Text(
-            "${formatDisplay(window.start, ZoneId.systemDefault().id, use24HourTime)} to " +
-                formatDisplay(window.end, ZoneId.systemDefault().id, use24HourTime),
+            label.uppercase(Locale.ROOT),
+            modifier = Modifier.width(68.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            value,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
         )
     }
 }
 
 @Composable
-private fun ConfidenceLabel(confidence: Confidence) {
-    val text = when (confidence) {
-        Confidence.LOW -> "Low confidence"
-        Confidence.MODERATE -> "Moderate confidence"
-        Confidence.HIGH -> "High confidence"
+private fun ConfidenceBadge(confidence: Confidence) {
+    val (text, background, foreground) = when (confidence) {
+        Confidence.LOW -> Triple("LOW", Color(0xFFF1E1DF), Color(0xFF714D4A))
+        Confidence.MODERATE -> Triple("MODERATE", AmberSoft, Color(0xFF695528))
+        Confidence.HIGH -> Triple("HIGH", SageSoft, Color(0xFF315C49))
     }
     Text(
         text = text,
         modifier = Modifier
-            .background(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.shapes.small)
-            .padding(horizontal = 10.dp, vertical = 6.dp),
-        style = MaterialTheme.typography.labelLarge,
+            .clip(MaterialTheme.shapes.small)
+            .background(background)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        style = MaterialTheme.typography.labelSmall,
+        color = foreground,
     )
 }
 
 @Composable
-private fun MedicationEventCard(event: MedicationEvent, use24HourTime: Boolean) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+private fun MedicationEventRow(event: MedicationEvent, use24HourTime: Boolean) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
     ) {
-        Column(modifier = Modifier.padding(14.dp)) {
-            Text(event.displayName, fontWeight = FontWeight.SemiBold)
-            Text(formatDisplay(event.occurredAt, event.timeZoneId, use24HourTime))
+        Text(
+            event.displayName,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        Text(
+            formatDisplay(event.occurredAt, event.timeZoneId, use24HourTime),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun SegmentedDataMode(
+    selected: DataMode,
+    healthConnectEnabled: Boolean,
+    onSelected: (DataMode) -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.small,
+        color = Paper,
+        border = BorderStroke(1.dp, Line),
+    ) {
+        Row(modifier = Modifier.fillMaxWidth().height(44.dp).selectableGroup()) {
+            DataModeOption(
+                text = "Fixture",
+                selected = selected == DataMode.FIXTURE,
+                onClick = { onSelected(DataMode.FIXTURE) },
+                modifier = Modifier.weight(1f),
+            )
+            Box(modifier = Modifier.fillMaxHeight().width(1.dp).background(Line))
+            DataModeOption(
+                text = "Health Connect",
+                selected = selected == DataMode.HEALTH_CONNECT,
+                enabled = healthConnectEnabled,
+                onClick = { onSelected(DataMode.HEALTH_CONNECT) },
+                modifier = Modifier.weight(1f),
+            )
         }
+    }
+}
+
+@Composable
+private fun DataModeOption(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+) {
+    Box(
+        modifier = modifier
+            .fillMaxHeight()
+            .alpha(if (enabled) 1f else 0.45f)
+            .background(if (selected) SageSoft else Color.Transparent)
+            .selectable(
+                selected = selected,
+                enabled = enabled,
+                role = Role.RadioButton,
+                onClick = onClick,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (selected) SageDark else Muted,
+        )
+    }
+}
+
+@Composable
+private fun DenseTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    helper: String? = null,
+    placeholder: String = "",
+    imeAction: ImeAction,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val focused by interactionSource.collectIsFocusedAsState()
+    val shape = MaterialTheme.shapes.small
+
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Text(
+            label.uppercase(Locale.ROOT),
+            style = MaterialTheme.typography.labelSmall,
+            color = if (focused) SageDark else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier
+                .fillMaxWidth()
+                .semantics { contentDescription = label },
+            textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
+            singleLine = true,
+            interactionSource = interactionSource,
+            keyboardOptions = KeyboardOptions(imeAction = imeAction),
+            cursorBrush = SolidColor(SageDark),
+            decorationBox = { innerTextField ->
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 44.dp)
+                        .clip(shape)
+                        .background(Paper)
+                        .border(1.dp, if (focused) Sage else Line, shape)
+                        .padding(horizontal = 11.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        if (value.isEmpty() && placeholder.isNotEmpty()) {
+                            Text(
+                                placeholder,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Subtle,
+                            )
+                        }
+                        innerTextField()
+                    }
+                }
+            },
+        )
+        helper?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PrimaryButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier.heightIn(min = 44.dp),
+        shape = MaterialTheme.shapes.medium,
+        colors = ButtonDefaults.buttonColors(
+            containerColor = SageDark,
+            contentColor = Color.White,
+        ),
+        contentPadding = PaddingValues(horizontal = 13.dp, vertical = 0.dp),
+    ) {
+        Text(text, style = MaterialTheme.typography.labelLarge)
+    }
+}
+
+@Composable
+private fun SecondaryButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier.heightIn(min = 44.dp),
+        shape = MaterialTheme.shapes.medium,
+        border = BorderStroke(1.dp, Color(0xFFCFD5D0)),
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = SageDark),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
+    ) {
+        Text(text, style = MaterialTheme.typography.labelLarge)
+    }
+}
+
+@Composable
+private fun CompactSwitch(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .toggleable(
+                value = checked,
+                role = Role.Switch,
+                onValueChange = onCheckedChange,
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            modifier = Modifier
+                .width(36.dp)
+                .height(20.dp)
+                .clip(CircleShape)
+                .background(if (checked) SageDark else Chrome)
+                .border(1.dp, if (checked) SageDark else Line, CircleShape),
+        )
+        Box(
+            modifier = Modifier
+                .align(if (checked) Alignment.CenterEnd else Alignment.CenterStart)
+                .padding(horizontal = 8.dp)
+                .size(16.dp)
+                .background(if (checked) Color.White else Subtle, CircleShape),
+        )
+    }
+}
+
+@Composable
+private fun Panel(
+    modifier: Modifier = Modifier,
+    contentPadding: Dp = 15.dp,
+    spacing: Dp = 11.dp,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Surface(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+        shadowElevation = 0.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(contentPadding),
+            verticalArrangement = Arrangement.spacedBy(spacing),
+            content = content,
+        )
+    }
+}
+
+@Composable
+private fun ScreenHeader(kicker: String, title: String, description: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            kicker.uppercase(Locale.ROOT),
+            style = MaterialTheme.typography.labelSmall,
+            color = Sage,
+        )
+        Text(title, style = MaterialTheme.typography.headlineLarge)
+        Text(
+            description,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun SectionHeading(text: String) {
+    Text(text, style = MaterialTheme.typography.titleLarge)
+}
+
+@Composable
+private fun InfoStrip(text: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().background(SageSoft),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(modifier = Modifier.width(3.dp).heightIn(min = 42.dp).background(Sage))
+        Text(
+            text,
+            modifier = Modifier.padding(horizontal = 11.dp, vertical = 9.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = SageDark,
+        )
+    }
+}
+
+@Composable
+private fun InlineStatus(text: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        StatusDot(color = Sage, size = 6.dp)
+        Text(
+            text,
+            style = MaterialTheme.typography.labelMedium,
+            color = SageDark,
+        )
+    }
+}
+
+@Composable
+private fun PrivacyLine(text: String) {
+    Row(
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        StatusDot(color = Sage, size = 5.dp, modifier = Modifier.padding(top = 5.dp))
+        Text(
+            text,
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun StatusDot(
+    color: Color,
+    modifier: Modifier = Modifier,
+    size: Dp = 7.dp,
+) {
+    Box(modifier = modifier.size(size).background(color, CircleShape))
+}
+
+@Composable
+private fun BrandBar() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Chrome)
+            .statusBarsPadding(),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            OrbitMark()
+            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                Text(
+                    "ZeitBoard",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    "COMPANION",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        HorizontalDivider(color = Line)
+    }
+}
+
+@Composable
+private fun OrbitMark() {
+    Canvas(
+        modifier = Modifier
+            .size(28.dp)
+            .semantics { contentDescription = "ZeitBoard" },
+    ) {
+        val center = Offset(size.width / 2f, size.height / 2f)
+        drawCircle(color = Sage, radius = size.minDimension * 0.47f, style = Stroke(width = 1.4.dp.toPx()))
+        drawArc(
+            color = Sage,
+            startAngle = -70f,
+            sweepAngle = 285f,
+            useCenter = false,
+            topLeft = Offset(size.width * 0.19f, size.height * 0.19f),
+            size = Size(size.width * 0.62f, size.height * 0.62f),
+            style = Stroke(width = 1.2.dp.toPx(), cap = StrokeCap.Round),
+        )
+        drawCircle(color = Sage, radius = size.minDimension * 0.13f, center = center)
+        drawCircle(
+            color = Chrome,
+            radius = size.minDimension * 0.065f,
+            center = Offset(size.width * 0.55f, size.height * 0.03f),
+        )
     }
 }
 
 @Composable
 private fun FixtureBanner() {
-    Box(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(Color(0xFFFFE3A3), MaterialTheme.shapes.medium)
-            .padding(14.dp),
+            .background(AmberSoft)
+            .padding(horizontal = 16.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
+        StatusDot(color = Amber, size = 6.dp)
         Text(
-            "FIXTURE MODE - SYNTHETIC DATA",
-            color = Color(0xFF5F4500),
-            fontWeight = FontWeight.Bold,
+            "FIXTURE MODE / SYNTHETIC DATA",
+            style = MaterialTheme.typography.labelSmall,
+            color = Color(0xFF695528),
         )
     }
 }
 
 @Composable
-private fun SectionTitle(text: String) {
-    Text(text, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+private fun DestinationBar(
+    currentRoute: String,
+    onDestinationSelected: (Destination) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth().background(Chrome).navigationBarsPadding()) {
+        HorizontalDivider(color = Line)
+        Row(
+            modifier = Modifier.fillMaxWidth().height(58.dp).selectableGroup(),
+        ) {
+            Destination.entries.forEach { destination ->
+                val selected = currentRoute == destination.route
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .background(if (selected) Paper else Chrome)
+                        .selectable(
+                            selected = selected,
+                            role = Role.Tab,
+                            onClick = { onDestinationSelected(destination) },
+                        ),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(2.dp)
+                            .background(if (selected) Sage else Color.Transparent),
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    DestinationGlyph(
+                        destination.icon,
+                        color = if (selected) SageDark else Muted,
+                    )
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        destination.label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (selected) SageDark else Muted,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DestinationGlyph(icon: DestinationIcon, color: Color) {
+    Canvas(modifier = Modifier.size(17.dp)) {
+        val stroke = 1.5.dp.toPx()
+        when (icon) {
+            DestinationIcon.STATUS -> {
+                val square = size.width * 0.31f
+                val gap = size.width * 0.18f
+                listOf(
+                    Offset(0f, 0f),
+                    Offset(square + gap, 0f),
+                    Offset(0f, square + gap),
+                    Offset(square + gap, square + gap),
+                ).forEach { topLeft ->
+                    drawRoundRect(
+                        color = color,
+                        topLeft = topLeft,
+                        size = Size(square, square),
+                        cornerRadius = CornerRadius(1.5.dp.toPx()),
+                        style = Stroke(width = stroke),
+                    )
+                }
+            }
+            DestinationIcon.CORRECT -> {
+                drawLine(color, Offset(size.width * 0.12f, size.height * 0.28f), Offset(size.width * 0.88f, size.height * 0.28f), stroke, StrokeCap.Round)
+                drawLine(color, Offset(size.width * 0.12f, size.height * 0.72f), Offset(size.width * 0.88f, size.height * 0.72f), stroke, StrokeCap.Round)
+                drawCircle(color, size.width * 0.10f, Offset(size.width * 0.35f, size.height * 0.28f))
+                drawCircle(color, size.width * 0.10f, Offset(size.width * 0.66f, size.height * 0.72f))
+            }
+            DestinationIcon.MEDICATION -> {
+                rotate(-38f) {
+                    drawRoundRect(
+                        color = color,
+                        topLeft = Offset(size.width * 0.23f, size.height * 0.08f),
+                        size = Size(size.width * 0.54f, size.height * 0.84f),
+                        cornerRadius = CornerRadius(size.width * 0.27f),
+                        style = Stroke(width = stroke),
+                    )
+                    drawLine(
+                        color,
+                        Offset(size.width * 0.23f, size.height * 0.50f),
+                        Offset(size.width * 0.77f, size.height * 0.50f),
+                        stroke,
+                    )
+                }
+            }
+            DestinationIcon.SETTINGS -> {
+                val center = Offset(size.width / 2f, size.height / 2f)
+                drawCircle(color, size.width * 0.31f, center, style = Stroke(width = stroke))
+                drawCircle(color, size.width * 0.09f, center)
+                repeat(4) { index ->
+                    rotate(index * 90f, center) {
+                        drawLine(
+                            color,
+                            Offset(center.x, size.height * 0.02f),
+                            Offset(center.x, size.height * 0.18f),
+                            stroke,
+                            StrokeCap.Round,
+                        )
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
 private fun ScreenColumn(content: @Composable ColumnScope.() -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(PaddingValues(horizontal = 18.dp, vertical = 20.dp)),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-        content = content,
-    )
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.TopCenter,
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .widthIn(max = 680.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 17.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            content = content,
+        )
+    }
 }
 
 private fun zoneFor(zoneId: String?): ZoneId =
@@ -628,4 +1268,23 @@ private fun formatDisplay(instant: Instant, zoneId: String, use24HourTime: Boole
     val zone = zoneFor(zoneId)
     val pattern = if (use24HourTime) "EEE, MMM d HH:mm z" else "EEE, MMM d h:mm a z"
     return DateTimeFormatter.ofPattern(pattern, Locale.getDefault()).format(instant.atZone(zone))
+}
+
+private fun formatWindow(window: TimeWindow, use24HourTime: Boolean): String {
+    val zone = ZoneId.systemDefault()
+    val start = window.start.atZone(zone)
+    val end = window.end.atZone(zone)
+    val dateFormatter = DateTimeFormatter.ofPattern("EEE, MMM d", Locale.getDefault())
+    val timeFormatter = DateTimeFormatter.ofPattern(
+        if (use24HourTime) "HH:mm" else "h:mm a",
+        Locale.getDefault(),
+    )
+    val zoneFormatter = DateTimeFormatter.ofPattern("z", Locale.getDefault())
+    return if (start.toLocalDate() == end.toLocalDate()) {
+        "${dateFormatter.format(start)} / ${timeFormatter.format(start)} - " +
+            "${timeFormatter.format(end)} ${zoneFormatter.format(end)}"
+    } else {
+        "${dateFormatter.format(start)} ${timeFormatter.format(start)} - " +
+            "${dateFormatter.format(end)} ${timeFormatter.format(end)} ${zoneFormatter.format(end)}"
+    }
 }

@@ -20,7 +20,9 @@ and UI specifications* to what implements them.
   walk-forward point-error / hit-rate / calibration measurement, and
   `core/simulate` implements the validation plan's seeded synthetic generator
   (latent truth retained) with a 12-scenario estimator validation suite and
-  benchmark table (ADR-0019).
+  benchmark table (ADR-0019). ADR-0022 adds strict local JSON/CSV import and a
+  combined 2021–2023 owner-history benchmark with source-calibrated chart
+  uncertainty; estimator candidates are now gated on that measured baseline.
 - Observations are immutable and corrections are append-only and reversible
   through superseding records — locally (desktop SQLite, ADR-0013), on the
   self-hosted backend (sync log, ADR-0009), and in every read path
@@ -51,7 +53,7 @@ and UI specifications* to what implements them.
   desktop app (real refusal, real correction history, real per-source
   composition, real sync status); synthetic previews remain only in the
   labeled browser-preview fixture mode. A real cross-source conflict list
-  awaits an engine-surfaced overlap DTO once multiple sources exist.
+  still awaits an engine-surfaced overlap DTO.
 - **Tasks:** user-owned tasks are real and synced (contract, local CRUD, real
   Tasks screen, scheduler plans only stored open tasks — ADR-0018; cross-device
   revision sync with erasure-grade deletion — ADR-0020). Write-back of
@@ -67,9 +69,11 @@ and UI specifications* to what implements them.
   roadmap slice 7 — gated by the backtest).
 - Explicit missingness records, source reliability learning, conflict scoring,
   forced-schedule qualification, and travel/illness/intervention markers.
-- Multi-window change-point classification and operating-state history; an
-  explicit linear-misfit signal and phase-dependent sleep duration (pursued as
-  real-history backtest results justify, roadmap slice 3).
+- Multi-window change-point classification and operating-state history. The
+  ADR-0022 real-history baseline justifies evaluating an explicit
+  calibration/misfit candidate (the high-confidence bucket was poorly
+  calibrated), but no candidate ships without a positive backtest delta.
+  Phase-dependent sleep duration remains deferred until duration is scored.
 - State-space, particle-filter, Bayesian, physiological-signal, or
   biomarker-calibrated estimation.
 - Optional language-model summaries, task parsing, voice extraction, and

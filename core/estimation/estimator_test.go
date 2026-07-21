@@ -149,6 +149,29 @@ func TestTemporaryEntrainmentThenRenewedDriftLowersConfidence(t *testing.T) {
 	}
 }
 
+func TestUncertaintyScaleTightensForecastWithoutChangingTheFit(t *testing.T) {
+	sessions := syntheticSessions(16, time.Date(2026, 1, 1, 2, 0, 0, 0, time.UTC), 25*time.Hour, 8*time.Hour, "UTC")
+	asOf := sessions[len(sessions)-1].Intervals[0].Interval.End.UTC
+	baseline, err := (RobustEstimator{}).Estimate(context.Background(), sessions, asOf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := DefaultConfig()
+	config.UncertaintyScale = 0.5
+	tightened, err := (RobustEstimator{Config: config}).Estimate(context.Background(), sessions, asOf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	baselineWindow := baseline.PredictedSleepWindows[0].Interval
+	tightenedWindow := tightened.PredictedSleepWindows[0].Interval
+	if tightenedWindow.Duration() >= baselineWindow.Duration() {
+		t.Fatalf("tightened window duration = %s, baseline = %s", tightenedWindow.Duration(), baselineWindow.Duration())
+	}
+	if !tightened.CharacteristicSleepStart.UTC.Equal(baseline.CharacteristicSleepStart.UTC) || tightened.ObservedCycleLength != baseline.ObservedCycleLength {
+		t.Fatalf("uncertainty scale changed the fitted rhythm: baseline=%#v tightened=%#v", baseline, tightened)
+	}
+}
+
 func syntheticSessions(count int, first time.Time, period, duration time.Duration, zone string) []domain.SleepSession {
 	sessions := make([]domain.SleepSession, 0, count)
 	for i := 0; i < count; i++ {

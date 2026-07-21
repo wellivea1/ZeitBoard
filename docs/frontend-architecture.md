@@ -1,6 +1,6 @@
 # Desktop frontend architecture
 
-Status: implemented and enforced as of 2026-07-18.
+Status: implemented and enforced as of 2026-07-19.
 
 This document defines the maintainability boundary for the Wails React
 frontend. The product and interaction rules remain in `ui-ux-design.md`; the
@@ -17,7 +17,9 @@ visual refactor decisions remain in `ui-refactor-plan.md`.
   rhythm visuals are shared instead of copied between screens.
 - `src/data/` is the only UI layer that knows how to locate Wails methods. Each
   adapter validates and normalizes an unknown DTO before returning typed UI
-  data. `wailsBridge.ts` owns method discovery and binding.
+  data. `wailsBridge.ts` owns method discovery and binding. The sleep-import
+  adapter also rejects reports whose row statuses do not reconcile with the
+  aggregate counts.
 - `src/state/` owns state that genuinely spans routes. Small invalidation
   signals, such as sleep-data changes, remain explicit events rather than a
   second application store.
@@ -65,6 +67,10 @@ tokens rather than raw colors or ad-hoc radii.
   estimated and come from the same source.
 - Suppressing a sleep entry appends an `excluded` correction. The immutable
   observation and correction history remain in export and sync history.
+- Import preview and import commit are separate Wails calls. Commit reruns
+  strict validation in one transaction; the UI never treats a preview as write
+  authorization. Any invalid row disables commit, while exact source-record
+  duplicates remain visible and are not reinserted.
 - Permanent deletion is a different binding and requires the exact `DELETE`
   token. It removes the observation, correction history, and local sync payload
   rows, then checkpoints the WAL and vacuums SQLite. IDs already sent to the
@@ -101,6 +107,7 @@ architecture guards, not substitutes for tests or visual review.
 | Synthetic previews exposed enabled controls with no action | Removed the dead affordances; preview surfaces now remain visibly read-only |
 | Repository checks could hide native Go failures | Hardened `scripts/dev.ps1` to propagate Go, npm, Wails, contract, and Gradle exit codes |
 
-Rhythm-linked appearance switching and the agent-readable appearance action are
-not part of this refactor. They remain U-D and require the direct-display-action
-ADR described in `ui-refactor-plan.md`.
+Rhythm-linked appearance switching is implemented under ADR-0021. The
+agent-readable appearance action remains deferred until a desktop-local agent
+surface exists; the U-E chronological hover probe remains planned in
+`ui-refactor-plan.md`.

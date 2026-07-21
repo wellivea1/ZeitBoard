@@ -21,7 +21,11 @@ describe("rhythm-linked night window", () => {
   });
 
   it("tracks drift because the trigger is the forecast, not the clock", () => {
-    const drifted = { ...clock, sleepStartAt: "2026-07-19T05:00:00Z", wakeAt: "2026-07-19T13:30:00Z" };
+    const drifted = {
+      ...clock,
+      sleepStartAt: "2026-07-19T05:00:00Z",
+      wakeAt: "2026-07-19T13:30:00Z",
+    };
     expect(evaluateNightWindow(rule, drifted, new Date("2026-07-19T02:30:00Z")).active).toBe(false);
     expect(evaluateNightWindow(rule, drifted, new Date("2026-07-19T03:30:00Z")).active).toBe(true);
   });

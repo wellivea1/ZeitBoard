@@ -74,6 +74,46 @@ func TestBacktestRefusesWithoutEnoughHistory(t *testing.T) {
 	}
 }
 
+func TestBacktestCountsAmbiguousGapsAndContinuesOnLaterCleanHistory(t *testing.T) {
+	zone := "America/New_York"
+	first := syntheticSessions(30, time.Date(2023, 1, 1, 5, 0, 0, 0, time.UTC), 25*time.Hour, 8*time.Hour, zone)
+	secondStart := first[len(first)-1].Intervals[0].Interval.Start.UTC.Add(36 * time.Hour)
+	second := syntheticSessions(30, secondStart, 25*time.Hour, 8*time.Hour, zone)
+	sessions := append(first, second...)
+
+	report, err := (RobustEstimator{}).Backtest(context.Background(), sessions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.Evaluations == 0 || report.Refusals == 0 {
+		t.Fatalf("expected both evaluations and honest refusals: %#v", report)
+	}
+	if report.Evaluations+report.Refusals != len(sessions)-DefaultConfig().MinimumEpisodes {
+		t.Fatalf("backtest did not account for every holdout: evaluations=%d refusals=%d", report.Evaluations, report.Refusals)
+	}
+	if len(report.RefusalPoints) != report.Refusals || report.RefusalPoints[0].Code != RefusalAmbiguousCycleIndex {
+		t.Fatalf("refusal details were not retained: %#v", report.RefusalPoints)
+	}
+}
+
+func TestBacktestPredictionUsesTheSameRecentFitAsEstimate(t *testing.T) {
+	zone := "UTC"
+	start := time.Date(2023, 1, 1, 5, 0, 0, 0, time.UTC)
+	first := syntheticSessions(25, start, 24*time.Hour, 8*time.Hour, zone)
+	secondStart := first[len(first)-1].Intervals[0].Interval.Start.UTC.Add(25 * time.Hour)
+	second := syntheticSessions(25, secondStart, 25*time.Hour, 8*time.Hour, zone)
+	sessions := append(first, second...)
+
+	report, err := (RobustEstimator{}).Backtest(context.Background(), sessions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	last := report.Points[len(report.Points)-1]
+	if last.AbsErrorHours > 0.25 {
+		t.Fatalf("last prediction did not use the estimator's recent fit: %#v", last)
+	}
+}
+
 func shiftSession(session domain.SleepSession, by time.Duration, zone string) domain.SleepSession {
 	interval := session.Intervals[0].Interval
 	start := interval.Start.UTC.Add(by)

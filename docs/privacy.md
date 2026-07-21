@@ -33,7 +33,9 @@
 
 The desktop runs on the user's manually entered sleep data and shows an honest
 empty state until entries exist; synthetic data appears only in clearly labeled
-sample mode. Windows activity and Health Connect collection are disabled until
+sample mode. Local sleep-file import reads only the JSON or CSV the user
+explicitly selects; it does not scan arbitrary folders or upload the file.
+Windows activity and Health Connect collection are disabled until
 the user enables them through a visible permission flow, and backend sync is
 opt-in and off by default. The application does not collect keystrokes, typed
 content, screenshots, browser history, active-window titles, clipboard data,
@@ -58,6 +60,13 @@ enrolled device erases its copy on the next pull, and an erased record can
 never be re-pushed (ADR-0017). A device that never syncs again retains its
 local copy until it does. Export must be an intentional action and should
 identify whether it contains private data or only a minimized projection.
+
+Imported sleep observations use the same local table, export path, correction
+layer, sync path, and erasure controls as manual observations. Conversion tools
+request mode `0600`, require explicit overwrite, and still rely on an
+owner-controlled directory ACL on Windows. Preview reports may show row
+timestamps in the local UI; logs and committed verification retain counts and
+aggregate metrics only.
 
 ## Logging
 
@@ -87,8 +96,11 @@ or unreachable backend configuration exposes no tools.
 
 Fixtures, tests, screenshots, demos, and static assets contain synthetic data
 only. The `tools/` fixture generator is deterministic and checks trusted-view
-fixtures for forbidden private keys. Real exports must never be committed,
-attached to issues, or used in CI.
+fixtures for forbidden private keys. Real exports, converted import files,
+transcription sheets, validation databases, detailed backtest points, and chart
+renders must never be committed, attached to issues, or used in CI. Aggregate
+backtest metrics may be committed when they contain no raw timestamps or
+identifiers.
 
 ## Product claims
 

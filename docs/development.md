@@ -83,3 +83,19 @@ structural Overview contract.
 `scripts/dev.ps1` treats every native tool exit code as authoritative. A failed
 Go test, vet, build, npm script, Wails command, contract validator, or Gradle
 task fails the wrapper instead of allowing a false-green check.
+
+## Private owner-history tooling
+
+The local `zeitboard-history` command converts owner-controlled Fitbit exports
+or owner-reviewed chart transcriptions, previews/commits v1 sleep imports, and
+runs the aggregate backtest matrix. From `apps/desktop`:
+
+```powershell
+go run ./cmd/zeitboard-history help
+```
+
+See [`owner-history-validation.md`](owner-history-validation.md) for the strict
+formats and command sequence. Raw inputs, converted observation sets, detailed
+refusal points, and SQLite validation databases are private. Keep them under
+the ignored `.cache/` directory or outside the repository; they never belong in
+fixtures or CI.

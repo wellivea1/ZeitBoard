@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
-import { Icon } from "../components/Icon";
 import { PageHeader } from "../components/AppShell";
+import { DataSourceStatusPanel } from "../components/DataSourceStatusPanel";
+import { Icon } from "../components/Icon";
+import { SleepImportPanel } from "../components/SleepImportPanel";
 import { loadBackendSyncStatus, type BackendSyncStatus } from "../data/backendSync";
 import { deleteConfirmationToken } from "../data/sleepDataControl";
 import { notifySleepDataChanged } from "../data/sleepDataEvents";
@@ -421,7 +423,7 @@ export function DataSourcesScreen() {
     <>
       <PageHeader
         title="Data Sources"
-        description="Enter local sleep episodes and review immutable observations plus append-only corrections."
+        description="Enter or import sleep episodes, then review immutable observations and append-only corrections."
       />
       <section className="screen-grid data-source-screen" aria-label="Data source review">
         <section className="panel sleep-entry-panel" aria-labelledby="sleep-entry-title">
@@ -453,6 +455,8 @@ export function DataSourcesScreen() {
             {statusMessage || entriesData.message}
           </p>
         </section>
+
+        <SleepImportPanel onImported={refreshEntries} />
 
         <section className="panel sleep-entry-list-panel" aria-labelledby="sleep-log-title">
           <div className="panel-heading">
@@ -499,70 +503,7 @@ export function DataSourcesScreen() {
           )}
         </section>
 
-        <section className="panel source-list source-status-panel" aria-label="Data source status">
-          <article>
-            <div className="source-mark">
-              <Icon name="clock" />
-            </div>
-            <div>
-              <h2>Manual sleep log</h2>
-              <p>
-                {entriesData.entries.length} local{" "}
-                {entriesData.entries.length === 1 ? "entry" : "entries"} - observations immutable,
-                corrections append-only
-              </p>
-            </div>
-            <span className={`source-status ${entriesData.status === "ready" ? "connected" : ""}`}>
-              {entriesData.status === "ready" ? "Available" : entriesData.status}
-            </span>
-          </article>
-          {syncStatus && (
-            <article>
-              <div className="source-mark">
-                <Icon name="sources" />
-              </div>
-              <div>
-                <h2>Server sync</h2>
-                <p>
-                  {syncStatus.enabled
-                    ? `Your own instance - ${syncStatus.pushedCount} pushed, ${syncStatus.pulledCount} pulled${
-                        syncStatus.lastSyncLabel ? `, last sync ${syncStatus.lastSyncLabel}` : ""
-                      }`
-                    : "Off - data stays on this device unless you enroll in Settings"}
-                </p>
-              </div>
-              <span
-                className={`source-status ${syncStatus.status === "connected" ? "connected" : ""}`}
-              >
-                {syncStatus.status === "connected"
-                  ? "Connected"
-                  : syncStatus.status === "error"
-                    ? "Error"
-                    : "Off"}
-              </span>
-            </article>
-          )}
-          <article>
-            <div className="source-mark">
-              <Icon name="calendar" />
-            </div>
-            <div>
-              <h2>Calendar import</h2>
-              <p>Out of scope for this local sleep-data slice</p>
-            </div>
-            <span className="source-status">Future</span>
-          </article>
-          <article>
-            <div className="source-mark">
-              <Icon name="sources" />
-            </div>
-            <div>
-              <h2>Device activity</h2>
-              <p>Not connected - optional supporting observation later</p>
-            </div>
-            <span className="source-status">Off</span>
-          </article>
-        </section>
+        <DataSourceStatusPanel entriesData={entriesData} syncStatus={syncStatus} />
       </section>
     </>
   );

@@ -70,7 +70,8 @@ export interface SleepSourceSummary {
 export function summarizeSleepSources(entries: SleepEntry[]): SleepSourceSummary[] {
   const bySource = new Map<string, SleepSourceSummary>();
   for (const entry of entries) {
-    const summary = bySource.get(entry.sourceLabel) ?? {
+    const key = `${entry.sourceLabel}\u0000${entry.provenanceLabel}`;
+    const summary = bySource.get(key) ?? {
       source: entry.sourceLabel,
       provenance: entry.provenanceLabel,
       total: 0,
@@ -80,10 +81,13 @@ export function summarizeSleepSources(entries: SleepEntry[]): SleepSourceSummary
     summary.total += 1;
     if (entry.history.length > 0) summary.corrected += 1;
     if (entry.suppressed) summary.suppressed += 1;
-    bySource.set(entry.sourceLabel, summary);
+    bySource.set(key, summary);
   }
   return [...bySource.values()].sort(
-    (a, b) => b.total - a.total || a.source.localeCompare(b.source),
+    (a, b) =>
+      b.total - a.total ||
+      a.source.localeCompare(b.source) ||
+      a.provenance.localeCompare(b.provenance),
   );
 }
 

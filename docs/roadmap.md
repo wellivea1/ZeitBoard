@@ -68,7 +68,13 @@ detail lives there rather than being repeated here.
   clean linear rhythms recover at ~0h error; a 3h phase jump degrades point
   error to ~3h while confidence correctly drops; hit-rate stays 1.0 because the
   windows are honestly wide — so **point error is the sharper quality signal**
-  and window width is a tightening candidate. Not yet run on real history.
+  and window width was a tightening candidate.
+- Combined real-history validation is recorded in ADR-0022 and
+  `verification.md`: 952 principal episodes produce 809 evaluations and 136
+  typed refusals, with baseline median error 1.71h, P90 error 5.41h, 0.78
+  window hit-rate, and 0.856 evaluable coverage. Blanket tightening was
+  rejected: a 25% uncertainty reduction saved 1.40h of mean window width but
+  lost 6 percentage points of hit-rate, with no point-error benefit.
 
 ---
 
@@ -91,20 +97,26 @@ public availability portal) with a pasteable `/goal` prompt per phase is
    the desktop enqueues erasures for pushed records at hard-delete time.
    Threat model + privacy updated. Residual: never-syncing devices retain
    their copy until they pull.
-3. **Validate the estimator on real history.** Transcribe the owner's real
-   2021–2023 sleep charts into the v1 import format (manual/assisted — no
-   handwriting-OCR promises), import locally, and run the backtest. The
-   results gate estimator work: window-width tightening, an explicit
-   linear-misfit signal, and phase-dependent sleep duration are pursued only
-   as the numbers justify, each justified by a backtest delta.
+3. ~~**Validate the estimator on real history.**~~ ✅ Delivered. The owner's
+   2021–2023 sleep history is represented in the v1 import format and measured
+   with the walk-forward backtest. The result remains the standing gate:
+   window-width, misfit-signal, and phase-dependent-duration changes require a
+   positive measured delta before shipping.
    *Interim delivered (ADR-0019):* `core/simulate` — the validation plan's
    seeded synthetic generator (latent truth retained) plus a 12-scenario
    suite running the real estimator: drift recovered within ~1 min/cycle on
    every linearly-describable pattern (incl. naps, fragmentation,
    deprivation, forced wake, travel, DST); the change-point scenario (S6)
    degrades honestly with self-reported low confidence, now locked by tests.
-   Real-history validation stays open — synthetic data cannot prove real
-   logging behavior.
+   *Real-history path delivered (ADR-0022):* strict v1 JSON/CSV import,
+   Data Sources preview/commit UI, owner-assisted Fitbit/transcription tools,
+   a source-checked and date-complete chart ledger, overlap-calibrated chart
+   uncertainty, an ignored validation database proving 953 benchmark
+   observations import cleanly with chart/Fitbit overlaps held out, and a
+   committed baseline/candidate backtest.
+   Blanket window tightening is rejected by measured delta. The confidence
+   result justifies a separately measured confidence-window calibration or
+   misfit candidate, not a speculative model change.
 4. ~~**Make tasks real.**~~ ✅ Delivered (ADR-0018): user-owned tasks with a v1
    contract (`task-set`), local CRUD persistence, a real Tasks screen (add /
    done / delete, honest empty and read-only states), and the scheduler now
@@ -186,8 +198,8 @@ periodic real screen-reader/TalkBack walkthroughs.
 
 Largely delivered (see "Where things stand"). Remaining in scope:
 
-- Import hardening for external files (size/shape limits exist on sync; the
-  local import path arrives with slices 3 and 7).
+- Import adapters beyond sleep observation-set JSON/CSV (the local sleep path
+  is hardened by ADR-0022; Takeout/activity import remains slice 7).
 - Source-specific missingness and forced-schedule/travel disruption markers.
 - Correction *undo* as a one-click affordance (the Sources tab now shows the
   real correction history and diff; reversal today means appending another

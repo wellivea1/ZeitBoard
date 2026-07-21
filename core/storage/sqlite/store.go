@@ -92,6 +92,19 @@ func (s *Store) Migrate(ctx context.Context) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_local_sleep_observations_start
 			ON local_sleep_observations(start_at)`,
+		`DROP INDEX IF EXISTS idx_local_sleep_import_source_record`,
+		`CREATE TRIGGER IF NOT EXISTS trg_local_sleep_import_source_record
+			BEFORE INSERT ON local_sleep_observations
+			WHEN NEW.acquisition_method = 'file_import'
+				AND NEW.source_record_id <> ''
+				AND EXISTS (
+					SELECT 1 FROM local_sleep_observations
+					WHERE acquisition_method = 'file_import'
+						AND source_record_id = NEW.source_record_id
+				)
+			BEGIN
+				SELECT RAISE(ABORT, 'duplicate imported source_record_id');
+			END`,
 		`CREATE TABLE IF NOT EXISTS local_sleep_corrections (
 			correction_id TEXT PRIMARY KEY,
 			target_observation_id TEXT NOT NULL,
@@ -136,11 +149,12 @@ func (s *Store) Migrate(ctx context.Context) error {
 		}
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	if _, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(1, ?)`, now); err != nil {
-		return err
+	for _, version := range []int{1, 2, 3} {
+		if _, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(?, ?)`, version, now); err != nil {
+			return err
+		}
 	}
-	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(2, ?)`, now)
-	return err
+	return nil
 }
 
 func (s *Store) AppendObservation(ctx context.Context, observation domain.SourceObservation) error {
