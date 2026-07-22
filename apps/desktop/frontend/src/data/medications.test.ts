@@ -149,6 +149,28 @@ describe("medication data adapter", () => {
     expect(normalizeMedications(excluded)).toBeDefined();
   });
 
+  it("accepts only complete, valid medication start markers", () => {
+    const started = structuredClone(medicationResponse);
+    Object.assign(started.medications[0]!, {
+      startedAt: "2026-06-20T05:12:00Z",
+      startedLocal: "2026-06-20T01:12",
+      startedZoneId: "America/New_York",
+      startedLabel: "Started Jun 20, 2026, 1:12 AM EDT",
+    });
+    expect(normalizeMedications(started)?.medications[0]).toMatchObject({
+      startedLocal: "2026-06-20T01:12",
+      startedZoneId: "America/New_York",
+    });
+
+    const partial = structuredClone(started);
+    delete (partial.medications[0] as Record<string, unknown>).startedZoneId;
+    expect(normalizeMedications(partial)).toBeUndefined();
+
+    const malformed = structuredClone(started);
+    Object.assign(malformed.medications[0]!, { startedAt: "not-a-timestamp" });
+    expect(normalizeMedications(malformed)).toBeUndefined();
+  });
+
   it("rejects contradictory ownership, counts, identifiers, and civil times", () => {
     const unknownMedication = structuredClone(medicationResponse);
     unknownMedication.events[0]!.medicationId = "med_missing_01";

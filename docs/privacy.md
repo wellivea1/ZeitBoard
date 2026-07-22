@@ -40,9 +40,10 @@ entered CalDAV collection. CalDAV is read-only, bounded, and device-side. The
 password is used for one request and cleared; it is never persisted. Stored
 collection endpoints are sanitized to exclude credentials and query secrets.
 Medication data is created only from labels, optional form/strength and
-clinician-rule text, schedules, and taken/skipped events the owner explicitly
-enters. The app does not query a drug database, infer a schedule from a name or
-history, move a scheduled time, or upload medication text. Desktop medication
+clinician-rule text, optional owner-recorded start markers, schedules, and
+taken/skipped events the owner explicitly enters. The app does not query a drug
+database, infer a schedule from a name or history, move a scheduled time, or
+upload medication text. Desktop medication
 notifications are off by default. Enabling them for an explicit clock schedule
 allows the local operating-system notification surface to display the
 owner-entered label at those times, including forecasted sleep overlaps.
@@ -95,9 +96,10 @@ separately owned ZeitBoard block; rejection creates no event; undo removes only
 that app-owned block. Calendar export contains app-owned placements only and
 never copies imported text.
 
-Medication definitions, schedules, raw events, corrections, and reminder
-claims remain in local SQLite. Derived wake/sleep relationships are recomputed
-and are not included in the medication export. Reminder claims contain only an
+Medication definitions, optional start markers, schedules, raw events,
+corrections, and reminder claims remain in local SQLite. Derived wake/sleep
+relationships are recomputed and are not included in the medication export.
+Reminder claims contain only an
 opaque occurrence ID, medication ID, and scheduled/claimed UTC instants; they
 are inserted before delivery to prevent duplicate prompts and are excluded
 from export and sync. Exclusion appends a correction and retains the raw
@@ -105,11 +107,21 @@ evidence; typed `DELETE` erasure removes an event and its corrections, or a
 definition and all dependent events, corrections, schedules, and reminder
 claims, then checkpoints and vacuums SQLite. Medication labels, clinician
 rules, and notes are excluded from backend sync, trusted views, MCP/assistant
-context, telemetry, and logs in M-A/M-B. Future sync requires a new reviewed
+context, telemetry, and logs in M-A/M-B/M-C. Future sync requires a new reviewed
 redaction and tombstone path before those records may leave the device.
 Erasing the SQLite record cannot retract a reminder label already delivered to
 Windows notification history; the opt-in disclosure treats that OS-managed
 copy as outside ZeitBoard's erasure boundary.
+
+The M-C clinician report is generated entirely in the desktop process. Go
+applies redaction before returning either preview data or standalone HTML:
+diagnosis, calendar/location information, and clinician-entered medication
+guidance are always omitted; medication labels/forms/strengths are aliases by
+default; medication notes and marker notes require separate opt-ins. Export
+requires typed `EXPORT`, has an offline content-security policy and no scripts
+or external assets, and makes no network request. Once the owner saves or shares
+an explicitly generated file, that copy is outside ZeitBoard's storage,
+revocation, and erasure boundary.
 
 Rhythm context markers and their notes remain in local SQLite. They are
 excluded from estimation, scheduling, reminders, backend sync, trusted views,

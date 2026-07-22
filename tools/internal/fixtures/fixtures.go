@@ -259,6 +259,28 @@ type rhythmMarkerSet struct {
 	Markers       []rhythmMarkerItem `json:"markers"`
 }
 
+type clinicalChartRange struct {
+	Mode string `json:"mode"`
+	From string `json:"from,omitempty"`
+	To   string `json:"to,omitempty"`
+}
+
+type clinicalChartInclude struct {
+	Forecast      bool `json:"forecast"`
+	Medication    bool `json:"medication"`
+	RhythmContext bool `json:"rhythm_context"`
+}
+
+type clinicalChartRequest struct {
+	SchemaVersion string               `json:"schema_version"`
+	Range         clinicalChartRange   `json:"range"`
+	Orientation   string               `json:"orientation"`
+	DayStartHour  int                  `json:"day_start_hour"`
+	ZoneID        string               `json:"zone_id"`
+	Include       clinicalChartInclude `json:"include"`
+	Redactions    []string             `json:"redactions"`
+}
+
 type assistantActionTarget struct {
 	TaskID                    string `json:"task_id"`
 	EarliestStartAt           string `json:"earliest_start_at,omitempty"`
@@ -871,6 +893,15 @@ func Build() ([]File, error) {
 			},
 		},
 	}
+	clinicalChartRequestFixture := clinicalChartRequest{
+		SchemaVersion: "v1",
+		Range:         clinicalChartRange{Mode: "custom", From: "2026-03-01", To: "2026-03-31"},
+		Orientation:   "24h",
+		DayStartHour:  18,
+		ZoneID:        zoneID,
+		Include:       clinicalChartInclude{Forecast: false, Medication: true, RhythmContext: true},
+		Redactions:    []string{"diagnosis", "location", "clinician_rule", "medication_labels", "medication_notes", "rhythm_context_notes"},
+	}
 	medicationSetFixtureV2 := medicationSet{
 		SchemaVersion: "v2",
 		GeneratedAt:   ts(generatedAt),
@@ -1334,6 +1365,7 @@ func Build() ([]File, error) {
 		{"medication-event-set.json", medicationEventSetFixture},
 		{"medication-data-export.json", medicationDataExportFixture},
 		{"rhythm-marker-set.json", rhythmMarkerSetFixture},
+		{"clinical-chart-request.json", clinicalChartRequestFixture},
 		{"assistant-action.json", assistantActionFixture},
 		{"direct-proposal-request.json", directProposalRequestFixture},
 		{"phase-estimate.json", estimateFixture},

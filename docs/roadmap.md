@@ -154,14 +154,17 @@ public availability portal) with a pasteable `/goal` prompt per phase is
    and remote write-back remain future, separately permissioned work.
 
 **Disease-management track.** ~~M-A local medication logging~~, ~~M-B
-user-authored schedules + feasibility~~, and ~~local rhythm context markers~~
-are delivered (ADR-0024/0025/0026),
+user-authored schedules + feasibility~~, ~~local rhythm context markers~~, and
+~~M-C adherence + clinician context export~~ are delivered
+(ADR-0024/0025/0026/0027),
 including byte-verified erasure distinct from append-only exclusion, explicit
 civil/DST semantics, neutral sleep-collision forecasts, and opt-in at-most-once
 desktop reminders. Context markers for illness, travel, disruption, and forced
-schedules are immutable, erasable, local-only actogram annotations and the
-future association view's confounder prerequisite. **Next:** M-C
-adherence-in-rhythm context, medication dose markers, and clinician export.
+schedules are immutable, erasable, local-only chart annotations and explicit
+possible confounders beside M-C's descriptive association. M-C adds a 6 PM/noon
+clinical-day chart, selected-range drift, dose/start markers, explicit-record
+adherence, and confirmed redaction-first printable HTML. **Next:** M-D sync and
+M-E's separately reviewed local agent projection.
 
 7. **Takeout / "My Activity" import + activity→sleep inference.** File import
    (no Google API exists for My Activity) feeding the deferred probabilistic
@@ -214,7 +217,7 @@ adherence-in-rhythm context, medication dose markers, and clinician export.
 **Small debts (fold into adjacent slices):** consolidate the correction-record
 → domain decoder (now duplicated across desktop storage, server readmodel, and
 the sync validator); prefer a CA-cert path over localhost skip-verify for the
-MCP client; medication tracking M-A/M-B is delivered and M-C..M-F remain specified
+MCP client; medication tracking M-A..M-C is delivered and M-D..M-F remain specified
 ([`medication-feature-plan.md`](medication-feature-plan.md), slices M-A..M-F:
 benchmarked against Medisafe; fixed-clock regimens + wake-relative display,
 reminder collision forecasts, adherence-in-rhythm-context, association-not-
@@ -239,10 +242,10 @@ Largely delivered (see "Where things stand"). Remaining in scope:
 - Local DB encryption at rest + OS credential storage for the desktop store
   (the token file is 0600; the SQLite store itself is not yet encrypted —
   privacy.md requires it).
-- **Automatic clinical charting + clinician export** (§3.6 / medication M-C): the longitudinal
-  clinical actogram with annotations and a printable, redaction-controlled
-  PDF — replacing hand-kept sleep logs. Recording only; never a treatment
-  recommendation. Depends on slices 3 (real history) and import hardening.
+- Clinical-chart refinements beyond delivered M-C: reserved 48-hour clinical
+  orientation, direct PNG/PDF generation, and a blank clinical sleep-log
+  template. The shipped 24-hour report already prints to PDF from standalone
+  local HTML; refinements must preserve the same redaction and no-advice gate.
 
 Exit criteria: a fatigued user can read current state, recent drift, and the
 next predicted windows in seconds; the app is keyboard-operable and meets WCAG

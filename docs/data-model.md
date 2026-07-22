@@ -64,8 +64,10 @@ suppression.
 A medication definition is mutable private local intent with a monotonically
 increasing revision. It stores a user-entered label, optional form/strength
 text, optional verbatim clinician rule, active state, and an optional
-user-authored schedule. Absence of a schedule is represented as absence, not
-inferred as `as_needed`. An explicit schedule is `as_needed`,
+user-authored schedule. It may also store one optional owner-recorded start
+instant with its explicit IANA zone; this is a descriptive chart marker, not a
+dose, schedule, or treatment-effect field. Absence of a schedule is represented
+as absence, not inferred as `as_needed`. An explicit schedule is `as_needed`,
 `fixed_clock`, or `cycling`. Clock schedules own an IANA zone, one to
 eight unique civil times, and an opt-in reminder flag; cycling schedules also
 own a civil start date and on/off day counts. No field is inferred from a
@@ -86,6 +88,15 @@ medication ID, and scheduled/claimed UTC instants. Its uniqueness and
 immutability provide at-most-once desktop delivery across polling and restarts.
 Claims are written before notification delivery, cascade on medication
 erasure, and are excluded from contract export and sync.
+
+The clinician context report is a projection, not a stored entity. It joins a
+selected civil-date range of effective sleep, effective medication events,
+optional medication starts, and optional rhythm markers. Scheduled adherence
+counts use only events explicitly recorded as scheduled; as-needed records are
+separate and unlogged doses do not exist in the model. Drift is recomputed from
+principal episodes whose onsets fall in the selected range. The optional
+before/after view carries descriptive segment slopes and possible confounders,
+not an effect estimate.
 
 ### Rhythm context marker
 
@@ -160,4 +171,8 @@ because strict v1 consumers would reject them. A contract version change is
 required whenever an existing strict consumer would no longer accept or
 correctly interpret a payload. Rhythm context markers use the independent
 strict `contracts/v1/rhythm-marker-set.schema.json`; they do not extend the
-strict rhythm-estimate or trusted-view contracts.
+strict rhythm-estimate or trusted-view contracts. The independent strict
+`clinical-chart-request` v1 contract names projection range, orientation,
+civil-day anchor, zone, optional layers, and mandatory
+diagnosis/location/clinician-guidance redactions. The generated HTML is an
+owner-created local artifact rather than a persisted or synced contract record.

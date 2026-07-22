@@ -1,7 +1,7 @@
 # Medication tracking: comprehensive feature plan
 
-> Implementation plan. M-A and M-B are delivered under ADR-0024 and ADR-0025;
-> the marker prerequisite is delivered under ADR-0026; M-C..M-F remain gated.
+> Implementation plan. M-A through M-C are delivered under ADR-0024 through
+> ADR-0027; M-D..M-F remain gated.
 > Extends `ui-ux-design.md` §9.6 and the
 > roadmap's medication debt line into a full feature plan. Engineering notes
 > only; not medical advice. The app records and displays — it never recommends
@@ -9,7 +9,8 @@
 
 ## Delivery status (2026-07-22)
 
-**M-A local logging and M-B schedules + feasibility are delivered.** The
+**M-A local logging, M-B schedules + feasibility, and M-C clinician context are
+delivered.** The
 desktop preserves the strict v1 logging contract and adds strict v2
 schedule-capable medication, event, and export contracts;
 revision-checked local definitions; immutable raw taken/skipped events with
@@ -22,9 +23,10 @@ SQLite/WAL tests. The sample preview is removed.
 Adding a medication still creates no schedule. A clock schedule requires the
 owner to enter its IANA zone and civil times, and ZeitBoard never infers or
 moves them. ADR-0026 now supplies local illness/travel/disruption/forced-
-schedule confounder records and actogram annotations. M-C remains responsible
-for adherence summaries, medication dose markers, the observational
-association view, and clinician export.
+schedule confounder records and actogram annotations. ADR-0027 now delivers
+explicit-record adherence summaries, medication dose/start markers, a
+non-causal before/after view with named confounders, and the redaction-first
+local clinician report as printable HTML.
 
 Medical boundary evidence is intentionally conservative. The
 [AASM intrinsic circadian-rhythm guideline](https://pmc.ncbi.nlm.nih.gov/articles/PMC4582061/)
@@ -120,9 +122,9 @@ confidence, no fabrication):
    a medication becomes an actogram/drift **marker**; the drift chart can show
    before/after slope segments *labeled as association*, with simultaneous
    confounders listed (schedule changes, travel, light exposure if logged).
-   The copy never says "the medication changed your drift." M-C is the first
-   consumer of the delivered local rhythm-context records from ADR-0026; dose
-   markers remain separate M-C work.
+   The copy never says "the medication changed your drift." M-C consumes the
+   delivered local rhythm-context records from ADR-0026 and renders dose/start
+   markers separately from those possible confounders.
 5. **Timezone-aware reminders** (Medisafe #3) use an explicit schedule-owned
    IANA zone. Civil occurrences resolve to UTC instants with tested DST-gap and
    repeated-time behavior; the app does not silently follow device-zone travel
@@ -161,8 +163,9 @@ are append-only evidence.**
   `schedule` (`kind: fixed_clock|as_needed|cycling`, civil times, cycle
   days-on/off, explicit IANA zone, reminder opt-in), optional
   `clinician_rule` (verbatim user-entered text, always attributed to the
-  clinician in UI), `active` flag, and optional `started_at` (drives the
-  future association marker). Refill state remains future work.
+  clinician in UI), `active` flag, and optional `started_at` plus explicit zone
+  (drives the delivered descriptive association marker). Refill state remains
+  future work.
 - `medication_event` (append-only, correction-chained like sleep records,
   ADR-0013): `event_id`, `medication_id`, `dose_at` (ZonedInstant), `status`
   (`taken|skipped`), `scheduled` flag, optional private note; wake-relative
@@ -173,7 +176,8 @@ are append-only evidence.**
   from export and sync.
 - Contracts: M-A's strict v1 medication/event/export schemas remain unchanged.
   M-B adds schedule-capable v2 versions of `medication-set.schema.json`,
-  `medication-event-set.schema.json`, and the local export envelope. M-D
+  `medication-event-set.schema.json`, and the local export envelope. M-C adds
+  the strict v1 `clinical-chart-request` projection contract. M-D
   must add explicit sync-batch kinds and remote erasure tombstones before any
   medication payload leaves the device.
 - Erasure/export: M-A delivers `ExportSleepData`-style contract export and the
@@ -185,15 +189,15 @@ are append-only evidence.**
 |---|---|---|
 | **M-A Local logging — delivered (ADR-0024)** | contract + storage + real Medications screen (quick log / backdate / skipped / notes), wake-relative + before-sleep display via `core/medication`, honest no-estimate states; sample preview retired | nothing (core exists) |
 | **M-B Schedules + feasibility — delivered (ADR-0025)** | `fixed_clock`/`as_needed`/`cycling` schedules, explicit-zone civil expansion, opt-in at-most-once desktop reminders, neutral collision forecast surface, clinician-rule attribution | M-A |
-| **M-C Adherence + clinician export** | taken/skipped history, adherence-vs-rhythm table, actogram dose markers, observational association view with the ADR-0026 confounder list; feeds the §3.6 clinician PDF | M-A; marker records (delivered) |
+| **M-C Adherence + clinician export - delivered (ADR-0027)** | explicit-record adherence-vs-rhythm table, dose/start markers, robust observational association with the ADR-0026 confounder list, redacted preview, and standalone printable HTML/PDF path | M-A; marker records (delivered) |
 | **M-D Sync** | definitions as revision records, events as append-only records, tombstone deletion | M-A (mirrors ADR-0020) |
 | **M-E Agent surface** | redacted assistant/MCP context + `propose_log_dose`; refusal-boundary tests | M-A, slice-8 rail |
 | **M-F Missed-dose sharing** | Medfriend-equivalent as an off-by-default sharing permission | sharing transport (deferred) |
 
 Ordering rationale: M-A retired the last full "Sample preview" screen; M-B
-completed the explicit schedule/collision part of §9.6. M-C is where circadian
-value peaks (and what the
-clinician actually wants); M-D/M-E reuse proven machinery nearly verbatim.
+completed the explicit schedule/collision part of §9.6; M-C adds the local
+clinician-facing context. M-D/M-E remain separately gated because they create
+new sync and agent projection boundaries.
 
 ## 7. Standing safety acceptance (every slice)
 

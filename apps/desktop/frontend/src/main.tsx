@@ -14,6 +14,7 @@ import "./styles/data-sources.css";
 import "./styles/sharing.css";
 import "./styles/calendar.css";
 import "./styles/medications.css";
+import "./styles/medication-report.css";
 import "./styles/medication-schedules.css";
 
 loadAndApplyTheme();

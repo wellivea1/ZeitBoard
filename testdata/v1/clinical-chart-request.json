@@ -1,0 +1,24 @@
+{
+  "schema_version": "v1",
+  "range": {
+    "mode": "custom",
+    "from": "2026-03-01",
+    "to": "2026-03-31"
+  },
+  "orientation": "24h",
+  "day_start_hour": 18,
+  "zone_id": "America/New_York",
+  "include": {
+    "forecast": false,
+    "medication": true,
+    "rhythm_context": true
+  },
+  "redactions": [
+    "diagnosis",
+    "location",
+    "clinician_rule",
+    "medication_labels",
+    "medication_notes",
+    "rhythm_context_notes"
+  ]
+}

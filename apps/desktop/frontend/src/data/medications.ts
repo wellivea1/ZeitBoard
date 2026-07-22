@@ -75,6 +75,10 @@ export interface MedicationDefinition {
   schedule?: MedicationSchedule;
   createdLabel: string;
   eventCount: number;
+  startedAt?: string;
+  startedLocal?: string;
+  startedZoneId?: string;
+  startedLabel?: string;
 }
 
 export interface MedicationLog {
@@ -116,6 +120,8 @@ export interface MedicationInput {
   label: string;
   form: string;
   strengthLabel: string;
+  startedLocal?: string;
+  startedZoneId?: string;
 }
 
 export interface MedicationUpdateInput extends MedicationInput {
@@ -481,6 +487,17 @@ function normalizeMedication(value: unknown): MedicationDefinition | undefined {
   const schedule = value.schedule === undefined ? undefined : normalizeSchedule(value.schedule);
   const createdLabel = text(value.createdLabel);
   const eventCount = nonNegativeInteger(value.eventCount);
+  const startedAt = value.startedAt === undefined ? undefined : timestamp(value.startedAt);
+  const startedLocal =
+    value.startedLocal === undefined ? undefined : localDateTime(value.startedLocal);
+  const startedZoneId = value.startedZoneId === undefined ? undefined : zoneId(value.startedZoneId);
+  const startedLabel = value.startedLabel === undefined ? undefined : text(value.startedLabel);
+  const hasStartFields = [
+    value.startedAt,
+    value.startedLocal,
+    value.startedZoneId,
+    value.startedLabel,
+  ].some((item) => item !== undefined);
   if (
     !medicationId ||
     !label ||
@@ -494,7 +511,8 @@ function normalizeMedication(value: unknown): MedicationDefinition | undefined {
     Boolean(clinicianRule) !== Boolean(clinicianRuleAttribution) ||
     (clinicianRule?.length ?? 0) > 500 ||
     !createdLabel ||
-    eventCount === undefined
+    eventCount === undefined ||
+    (hasStartFields && !(startedAt && startedLocal && startedZoneId && startedLabel))
   ) {
     return undefined;
   }
@@ -513,6 +531,9 @@ function normalizeMedication(value: unknown): MedicationDefinition | undefined {
     ...(schedule ? { schedule } : {}),
     createdLabel,
     eventCount,
+    ...(startedAt && startedLocal && startedZoneId && startedLabel
+      ? { startedAt, startedLocal, startedZoneId, startedLabel }
+      : {}),
   };
 }
 

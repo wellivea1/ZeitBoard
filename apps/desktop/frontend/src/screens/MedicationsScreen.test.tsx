@@ -243,4 +243,61 @@ describe("MedicationsScreen", () => {
     expect(screen.queryByText(/good time|bad time|safe time/i)).not.toBeInTheDocument();
     expect(screen.getByRole("table")).toBeInTheDocument();
   });
+
+  it("records an optional civil medication start for descriptive comparison", async () => {
+    const current = structuredClone(response);
+    Object.assign(current.medications[0]!, {
+      startedAt: "2026-06-20T05:12:00Z",
+      startedLocal: "2026-06-20T01:12",
+      startedZoneId: "America/New_York",
+      startedLabel: "Jun 20, 2026, 1:12 AM EDT",
+    });
+    const getMedications = vi.fn(async () => structuredClone(current));
+    const updateMedication = vi.fn(async (input: unknown) => {
+      const revision = input as { startedLocal: string; startedZoneId: string };
+      Object.assign(current.medications[0]!, {
+        revision: 2,
+        startedAt: "2026-06-21T06:30:00Z",
+        startedLocal: revision.startedLocal,
+        startedZoneId: revision.startedZoneId,
+        startedLabel: "Jun 21, 2026, 2:30 AM EDT",
+      });
+      return structuredClone(current);
+    });
+    (globalThis as GlobalWithGo).go = {
+      main: {
+        App: {
+          GetMedications: getMedications,
+          UpdateMedication: updateMedication,
+        },
+      },
+    };
+
+    render(<MedicationsScreen />);
+
+    expect(await screen.findByText(/Start marker: Jun 20/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    const editor = screen.getByRole("region", { name: "Edit medication" });
+    expect(within(editor).getByText(/does not establish a medication effect/)).toBeInTheDocument();
+    fireEvent.change(within(editor).getByLabelText("Local date and time"), {
+      target: { value: "2026-06-21T02:30" },
+    });
+    fireEvent.change(within(editor).getByLabelText("IANA time zone"), {
+      target: { value: "America/New_York" },
+    });
+    fireEvent.click(within(editor).getByRole("button", { name: "Save revision" }));
+
+    await waitFor(() => expect(updateMedication).toHaveBeenCalledTimes(1));
+    expect(updateMedication).toHaveBeenCalledWith({
+      medicationId: "med_local_01",
+      revision: 1,
+      label: "Evening record",
+      form: "tablet",
+      strengthLabel: "",
+      active: true,
+      startedLocal: "2026-06-21T02:30",
+      startedZoneId: "America/New_York",
+    });
+    expect(await screen.findByText(/Start marker: Jun 21/)).toBeInTheDocument();
+  });
 });
