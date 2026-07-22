@@ -134,6 +134,42 @@ type taskItem struct {
 	UpdatedAt                 string `json:"updated_at,omitempty"`
 }
 
+type calendarEventSet struct {
+	SchemaVersion string           `json:"schema_version"`
+	GeneratedAt   string           `json:"generated_at"`
+	Sources       []calendarSource `json:"sources"`
+	Events        []calendarEvent  `json:"events"`
+}
+
+type calendarSource struct {
+	SourceID        string `json:"source_id"`
+	Label           string `json:"label"`
+	Kind            string `json:"kind"`
+	ReadOnly        bool   `json:"read_only"`
+	CoverageStartAt string `json:"coverage_start_at"`
+	CoverageEndAt   string `json:"coverage_end_at"`
+	LastImportedAt  string `json:"last_imported_at"`
+}
+
+type calendarEvent struct {
+	EventID        string `json:"event_id"`
+	SourceID       string `json:"source_id"`
+	SourceRecordID string `json:"source_record_id"`
+	Title          string `json:"title"`
+	StartAt        string `json:"start_at"`
+	EndAt          string `json:"end_at"`
+	ZoneID         string `json:"zone_id"`
+	AllDay         bool   `json:"all_day"`
+	Busy           bool   `json:"busy"`
+	Ownership      string `json:"ownership"`
+	CreatedAt      string `json:"created_at"`
+	Location       string `json:"location,omitempty"`
+	Notes          string `json:"notes,omitempty"`
+	TaskID         string `json:"task_id,omitempty"`
+	TaskRevision   int    `json:"task_revision,omitempty"`
+	ProposalID     string `json:"proposal_id,omitempty"`
+}
+
 type assistantActionTarget struct {
 	TaskID                    string `json:"task_id"`
 	EarliestStartAt           string `json:"earliest_start_at,omitempty"`
@@ -795,6 +831,65 @@ func Build() ([]File, error) {
 		},
 	}
 
+	coverageStart := generatedAt.Add(-366 * 24 * time.Hour)
+	coverageEnd := generatedAt.Add(732 * 24 * time.Hour)
+	calendarEventSetFixture := calendarEventSet{
+		SchemaVersion: "v1",
+		GeneratedAt:   ts(generatedAt),
+		Sources: []calendarSource{
+			{
+				SourceID:        "calendar_source_ics_01",
+				Label:           "Synthetic commitments",
+				Kind:            "ics",
+				ReadOnly:        true,
+				CoverageStartAt: ts(coverageStart),
+				CoverageEndAt:   ts(coverageEnd),
+				LastImportedAt:  ts(generatedAt),
+			},
+			{
+				SourceID:        "calendar_source_zeitboard",
+				Label:           "ZeitBoard placements",
+				Kind:            "zeitboard",
+				ReadOnly:        false,
+				CoverageStartAt: ts(coverageStart),
+				CoverageEndAt:   ts(coverageEnd),
+				LastImportedAt:  ts(generatedAt),
+			},
+		},
+		Events: []calendarEvent{
+			{
+				EventID:        "calendar_event_imported_01",
+				SourceID:       "calendar_source_ics_01",
+				SourceRecordID: "fixture-event-01@zeitboard.local/20260315T190000Z",
+				Title:          "Synthetic fixed commitment",
+				StartAt:        ts(forecastWake1.Add(2 * time.Hour)),
+				EndAt:          ts(forecastWake1.Add(3 * time.Hour)),
+				ZoneID:         zoneID,
+				AllDay:         false,
+				Busy:           true,
+				Ownership:      "imported",
+				CreatedAt:      ts(generatedAt),
+				Location:       "Synthetic location",
+			},
+			{
+				EventID:        "calendar_event_owned_01",
+				SourceID:       "calendar_source_zeitboard",
+				SourceRecordID: "proposal_task_01",
+				Title:          "Synthetic paperwork block",
+				StartAt:        ts(proposalStart),
+				EndAt:          ts(proposalStart.Add(minutes(30))),
+				ZoneID:         zoneID,
+				AllDay:         false,
+				Busy:           true,
+				Ownership:      "app_owned",
+				CreatedAt:      ts(generatedAt),
+				TaskID:         "task_flexible_01",
+				TaskRevision:   1,
+				ProposalID:     "proposal_task_01",
+			},
+		},
+	}
+
 	directProposalResponseFixture := directProposalResponse{
 		SchemaVersion: "v1",
 		Backend:       providerStatus{Configured: false, Provider: "disabled"},
@@ -1005,6 +1100,7 @@ func Build() ([]File, error) {
 		{"sync-batch.json", syncBatchFixture},
 		{"sync-erase.json", syncEraseFixture},
 		{"task-set.json", taskSetFixture},
+		{"calendar-event-set.json", calendarEventSetFixture},
 		{"assistant-action.json", assistantActionFixture},
 		{"direct-proposal-request.json", directProposalRequestFixture},
 		{"phase-estimate.json", estimateFixture},

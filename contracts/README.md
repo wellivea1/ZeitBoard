@@ -29,3 +29,9 @@ and the rhythm chart uses presentation row IDs plus civil-time labels.
 agent/direct proposal path. The request reuses the assistant action target shape plus a
 request-scoped planning context; the response contains a pending proposal and one-use
 decision token, but no approval/apply operation.
+
+`calendar-event-set.schema.json` is a private, device-local contract. Imported
+event text may be displayed locally but must never be copied into schedule requests,
+trusted views, MCP payloads, telemetry, or server projections. Scheduling receives
+only event identifiers and half-open UTC intervals. Imported events are read-only;
+only explicitly approved `app_owned` blocks may carry task and proposal links.
