@@ -48,6 +48,19 @@ func loadLocation(rawID string) (*time.Location, string, error) {
 	if loc, err := time.LoadLocation(id); err == nil {
 		return loc, id, nil
 	}
+	for slash := strings.IndexByte(id, '/'); slash >= 0; {
+		candidate := strings.TrimPrefix(id[slash:], "/")
+		if strings.Contains(candidate, "/") {
+			if loc, err := time.LoadLocation(candidate); err == nil {
+				return loc, candidate, nil
+			}
+		}
+		next := strings.IndexByte(id[slash+1:], '/')
+		if next < 0 {
+			break
+		}
+		slash += next + 1
+	}
 
 	lowerID := strings.ToLower(id)
 	for windowsID, ianaID := range windowsZones {

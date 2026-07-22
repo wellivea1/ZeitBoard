@@ -1,8 +1,10 @@
 package sqlite
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -121,6 +123,60 @@ func TestReplaceImportedCalendarIsAtomicReadOnlyAndRevocable(t *testing.T) {
 	}
 }
 
+func TestRemoveImportedCalendarErasesPrivateBytes(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "calendar-erasure.db")
+	store, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	ctx := context.Background()
+	marker := "calendar-erasure-marker-7f31c8b2"
+	source := testCalendarSource(calendarcore.SourceCalDAV)
+	source.Label = marker
+	event := testImportedEvent(
+		"calendar_event_erasure_01",
+		"uid-erasure/20260105T140000Z",
+		marker,
+		time.Date(2026, 1, 5, 14, 0, 0, 0, time.UTC),
+		true,
+	)
+	event.Location = "room-" + marker
+	event.Notes = "notes-" + marker
+	endpoint := "https://calendar.example.test/private/" + marker + "/"
+	if err := store.ReplaceImportedCalendar(ctx, source, []calendarcore.Event{event}, endpoint); err != nil {
+		t.Fatal(err)
+	}
+
+	readFiles := func() ([]byte, []byte) {
+		t.Helper()
+		databaseBytes, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		walBytes, err := os.ReadFile(path + "-wal")
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			t.Fatal(err)
+		}
+		return databaseBytes, walBytes
+	}
+	databaseBytes, walBytes := readFiles()
+	if !bytes.Contains(databaseBytes, []byte(marker)) && !bytes.Contains(walBytes, []byte(marker)) {
+		t.Fatal("calendar marker was not persisted before the erasure check")
+	}
+
+	if err := store.RemoveImportedCalendar(ctx, source.SourceID); err != nil {
+		t.Fatal(err)
+	}
+	databaseBytes, walBytes = readFiles()
+	if bytes.Contains(databaseBytes, []byte(marker)) {
+		t.Fatal("deleted calendar source remains in the compacted SQLite database")
+	}
+	if bytes.Contains(walBytes, []byte(marker)) {
+		t.Fatal("deleted calendar source remains in the SQLite WAL")
+	}
+}
+
 func TestReplaceCalDAVCalendarStoresOnlySanitizedEndpoint(t *testing.T) {
 	store, ctx := openCalendarTestStore(t)
 	source := testCalendarSource(calendarcore.SourceCalDAV)
@@ -174,6 +230,10 @@ func TestProposalApprovalMaterializesOwnedBlockAndUndoRemovesOnlyIt(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
+	sleepFingerprint, err := store.SleepPlanningFingerprint(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
 	decidedAt := time.Date(2026, 1, 3, 12, 0, 0, 0, time.UTC)
 	input := ProposalDecisionInput{
 		DecisionID:        "decision_calendar_01",
@@ -192,6 +252,7 @@ func TestProposalApprovalMaterializesOwnedBlockAndUndoRemovesOnlyIt(t *testing.T
 		SnapshotStartAt:   snapshotStart,
 		SnapshotEndAt:     snapshotEnd,
 		EventSnapshotHash: fingerprint,
+		SleepSnapshotHash: sleepFingerprint,
 	}
 	owned := calendarcore.Event{
 		EventID:        "calendar_event_owned_01",
@@ -259,7 +320,7 @@ func TestProposalApprovalMaterializesOwnedBlockAndUndoRemovesOnlyIt(t *testing.T
 	}
 }
 
-func TestProposalDecisionRejectsTaskAndCalendarRaces(t *testing.T) {
+func TestProposalDecisionRejectsTaskCalendarAndSleepRaces(t *testing.T) {
 	store, ctx := openCalendarTestStore(t)
 	created := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
 	task := TaskRecord{
@@ -275,6 +336,10 @@ func TestProposalDecisionRejectsTaskAndCalendarRaces(t *testing.T) {
 	start := time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC)
 	end := start.Add(48 * time.Hour)
 	_, emptyFingerprint, err := store.BusyDomainEvents(ctx, start, end, "UTC")
+	if err != nil {
+		t.Fatal(err)
+	}
+	emptySleepFingerprint, err := store.SleepPlanningFingerprint(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,6 +360,7 @@ func TestProposalDecisionRejectsTaskAndCalendarRaces(t *testing.T) {
 		SnapshotStartAt:   start,
 		SnapshotEndAt:     end,
 		EventSnapshotHash: emptyFingerprint,
+		SleepSnapshotHash: emptySleepFingerprint,
 	}
 	blocking := testImportedEvent("calendar_event_import_01", "uid-1/20260105T140000Z", "Private", start.Add(14*time.Hour), true)
 	if err := store.ReplaceImportedCalendar(ctx, testCalendarSource(calendarcore.SourceICS), []calendarcore.Event{blocking}, ""); err != nil {
@@ -310,6 +376,34 @@ func TestProposalDecisionRejectsTaskAndCalendarRaces(t *testing.T) {
 	}
 	input.EventSnapshotHash = currentFingerprint
 	input.DecisionID = "decision_calendar_stale_02"
+	observation := SleepObservationRecord{
+		ObservationID: "sleep_observation_stale_01",
+		Kind:          SleepKindEpisode,
+		StartAt:       start.Add(-10 * time.Hour),
+		EndAt:         start.Add(-2 * time.Hour),
+		ZoneID:        "UTC",
+		Sleep: SleepObservationDetails{
+			Classification: SleepClassificationPrincipal,
+		},
+		Provenance: SleepObservationProvenance{
+			AcquisitionMethod: ProvenanceAcquisitionManual,
+			EvidenceStatus:    ProvenanceEvidenceUserReported,
+			RecordedAt:        created.Add(90 * time.Minute),
+		},
+	}
+	if err := store.AppendSleepObservation(ctx, observation); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.DecideProposal(ctx, input, nil); !errors.Is(err, ErrStaleProposal) {
+		t.Fatalf("sleep race error = %v", err)
+	}
+
+	currentSleepFingerprint, err := store.SleepPlanningFingerprint(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input.SleepSnapshotHash = currentSleepFingerprint
+	input.DecisionID = "decision_calendar_stale_03"
 	task.Revision = 1
 	task.UpdatedAt = created.Add(2 * time.Hour)
 	task.Title = "Changed planning review"

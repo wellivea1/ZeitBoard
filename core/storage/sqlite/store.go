@@ -211,6 +211,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 			snapshot_start_at TEXT NOT NULL,
 			snapshot_end_at TEXT NOT NULL,
 			event_snapshot_hash TEXT NOT NULL,
+			sleep_snapshot_hash TEXT NOT NULL DEFAULT '',
 			CHECK(snapshot_end_at > snapshot_start_at),
 			CHECK(proposal_end_at > proposal_start_at),
 			CHECK(
@@ -227,13 +228,41 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("migrate sqlite: %w", err)
 		}
 	}
+	hasSleepSnapshotHash, err := sqliteTableHasColumn(ctx, s.db, "local_proposal_decisions", "sleep_snapshot_hash")
+	if err != nil {
+		return fmt.Errorf("inspect proposal decision migration: %w", err)
+	}
+	if !hasSleepSnapshotHash {
+		if _, err := s.db.ExecContext(ctx, `ALTER TABLE local_proposal_decisions
+			ADD COLUMN sleep_snapshot_hash TEXT NOT NULL DEFAULT ''`); err != nil {
+			return fmt.Errorf("add proposal sleep snapshot hash: %w", err)
+		}
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	for _, version := range []int{1, 2, 3, 4} {
+	for _, version := range []int{1, 2, 3, 4, 5} {
 		if _, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(?, ?)`, version, now); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func sqliteTableHasColumn(ctx context.Context, db *sql.DB, table, column string) (bool, error) {
+	rows, err := db.QueryContext(ctx, `SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return false, err
+		}
+		if name == column {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
 }
 
 func (s *Store) AppendObservation(ctx context.Context, observation domain.SourceObservation) error {

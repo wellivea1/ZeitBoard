@@ -39,6 +39,7 @@ type localProposalCandidate struct {
 	snapshotStartAt   time.Time
 	snapshotEndAt     time.Time
 	eventSnapshotHash string
+	sleepSnapshotHash string
 }
 
 type localProposalBuild struct {
@@ -84,6 +85,7 @@ func (a *App) DecideLocalProposal(input LocalProposalDecisionInput) (LocalPropos
 		SnapshotStartAt:   candidate.snapshotStartAt,
 		SnapshotEndAt:     candidate.snapshotEndAt,
 		EventSnapshotHash: candidate.eventSnapshotHash,
+		SleepSnapshotHash: candidate.sleepSnapshotHash,
 	}
 	var owned *calendarcore.Event
 	if input.Decision == storage.ProposalApproved {
@@ -150,7 +152,7 @@ func (a *App) buildLocalProposals(now time.Time) (localProposalBuild, error) {
 		return localProposalBuild{}, err
 	}
 	planningNow := now.UTC().Truncate(localProposalTTL)
-	state, err := a.localEstimate(ctx, planningNow)
+	state, sleepFingerprint, err := a.localEstimateForPlanningSnapshot(ctx, planningNow)
 	if err != nil {
 		return localProposalBuild{}, err
 	}
@@ -245,7 +247,7 @@ func (a *App) buildLocalProposals(now time.Time) (localProposalBuild, error) {
 			})
 			continue
 		}
-		proposalID := deterministicProposalID(record, state.Estimate.ID, proposal.Window, fingerprint)
+		proposalID := deterministicProposalID(record, state.Estimate.ID, proposal.Window, fingerprint, sleepFingerprint)
 		if _, alreadyDecided := activeByID[proposalID]; alreadyDecided {
 			continue
 		}
@@ -271,9 +273,35 @@ func (a *App) buildLocalProposals(now time.Time) (localProposalBuild, error) {
 			snapshotStartAt:   snapshotStart,
 			snapshotEndAt:     snapshotEnd,
 			eventSnapshotHash: fingerprint,
+			sleepSnapshotHash: sleepFingerprint,
 		}
 	}
 	return result, nil
+}
+
+func (a *App) localEstimateForPlanningSnapshot(ctx context.Context, now time.Time) (localEstimateState, string, error) {
+	store, err := a.requireStore()
+	if err != nil {
+		return localEstimateState{}, "", err
+	}
+	for attempt := 0; attempt < 2; attempt++ {
+		before, err := store.SleepPlanningFingerprint(ctx)
+		if err != nil {
+			return localEstimateState{}, "", err
+		}
+		state, err := a.localEstimate(ctx, now)
+		if err != nil {
+			return localEstimateState{}, "", err
+		}
+		after, err := store.SleepPlanningFingerprint(ctx)
+		if err != nil {
+			return localEstimateState{}, "", err
+		}
+		if before == after {
+			return state, before, nil
+		}
+	}
+	return localEstimateState{}, "", storage.ErrStaleProposal
 }
 
 func decidedProposalDTO(record storage.ProposalDecisionRecord) (ProposalDTO, error) {
@@ -322,11 +350,11 @@ func planningSnapshotRange(availability []domain.AvailabilityWindow) (time.Time,
 	return start.UTC(), end.UTC(), !start.IsZero() && start.Before(end)
 }
 
-func deterministicProposalID(task storage.TaskRecord, estimateID domain.PhaseEstimateID, window domain.TimeRange, eventSnapshotHash string) string {
+func deterministicProposalID(task storage.TaskRecord, estimateID domain.PhaseEstimateID, window domain.TimeRange, eventSnapshotHash, sleepSnapshotHash string) string {
 	digest := sha256.Sum256([]byte(fmt.Sprintf(
-		"%s\x00%d\x00%s\x00%s\x00%s\x00%s",
+		"%s\x00%d\x00%s\x00%s\x00%s\x00%s\x00%s",
 		task.TaskID, effectiveTaskRevision(task), estimateID,
-		window.Start.UTC.Format(time.RFC3339Nano), window.End.UTC.Format(time.RFC3339Nano), eventSnapshotHash,
+		window.Start.UTC.Format(time.RFC3339Nano), window.End.UTC.Format(time.RFC3339Nano), eventSnapshotHash, sleepSnapshotHash,
 	)))
 	return "proposal_" + hex.EncodeToString(digest[:16])
 }

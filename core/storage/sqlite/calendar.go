@@ -56,6 +56,7 @@ type ProposalDecisionInput struct {
 	SnapshotStartAt   time.Time
 	SnapshotEndAt     time.Time
 	EventSnapshotHash string
+	SleepSnapshotHash string
 }
 
 type ProposalDecisionRecord struct {
@@ -77,6 +78,7 @@ type ProposalDecisionRecord struct {
 	SnapshotStartAt   time.Time `json:"snapshot_start_at"`
 	SnapshotEndAt     time.Time `json:"snapshot_end_at"`
 	EventSnapshotHash string    `json:"event_snapshot_hash"`
+	SleepSnapshotHash string    `json:"sleep_snapshot_hash"`
 }
 
 func (s *Store) ReplaceImportedCalendar(ctx context.Context, source calendarcore.Source, events []calendarcore.Event, endpoint string) error {
@@ -244,9 +246,9 @@ func (s *Store) BusyDomainEvents(ctx context.Context, start, end time.Time, zone
 	return busyDomainEvents(ctx, s.db, start, end, zoneID)
 }
 
-// DecideProposal verifies the exact task revision and text-free busy-event
-// fingerprint in the same transaction that records the decision. Approval also
-// inserts the supplied app-owned block; rejection never writes an event.
+// DecideProposal verifies the exact task revision plus text-free calendar and
+// sleep fingerprints in the same transaction that records the decision.
+// Approval also inserts the supplied app-owned block; rejection writes no event.
 func (s *Store) DecideProposal(ctx context.Context, input ProposalDecisionInput, ownedEvent *calendarcore.Event) (ProposalDecisionRecord, error) {
 	if err := validateProposalDecisionInput(input); err != nil {
 		return ProposalDecisionRecord{}, err
@@ -285,6 +287,13 @@ func (s *Store) DecideProposal(ctx context.Context, input ProposalDecisionInput,
 	if fingerprint != input.EventSnapshotHash {
 		return ProposalDecisionRecord{}, ErrStaleProposal
 	}
+	sleepFingerprint, err := sleepPlanningFingerprint(ctx, tx)
+	if err != nil {
+		return ProposalDecisionRecord{}, err
+	}
+	if sleepFingerprint != input.SleepSnapshotHash {
+		return ProposalDecisionRecord{}, ErrStaleProposal
+	}
 
 	record := ProposalDecisionRecord{
 		DecisionID:        input.DecisionID,
@@ -303,6 +312,7 @@ func (s *Store) DecideProposal(ctx context.Context, input ProposalDecisionInput,
 		SnapshotStartAt:   input.SnapshotStartAt.UTC(),
 		SnapshotEndAt:     input.SnapshotEndAt.UTC(),
 		EventSnapshotHash: input.EventSnapshotHash,
+		SleepSnapshotHash: input.SleepSnapshotHash,
 	}
 	if input.Decision == ProposalApproved {
 		if ownedEvent == nil {
@@ -420,7 +430,7 @@ const proposalDecisionSelect = `SELECT
 	decision_id, proposal_id, task_id, task_revision, estimate_id,
 	proposal_title, proposal_start_at, proposal_end_at, zone_id, confidence, explanation_codes_json,
 	decision, decided_at,
-	supersedes_decision_id, event_id, snapshot_start_at, snapshot_end_at, event_snapshot_hash
+	supersedes_decision_id, event_id, snapshot_start_at, snapshot_end_at, event_snapshot_hash, sleep_snapshot_hash
 	FROM local_proposal_decisions`
 
 type queryContext interface {
@@ -636,6 +646,10 @@ func validateProposalDecisionInput(input ProposalDecisionInput) error {
 	if err != nil || len(decoded) != sha256.Size || input.EventSnapshotHash != strings.ToLower(input.EventSnapshotHash) {
 		return errors.New("event snapshot hash must be a lowercase SHA-256 digest")
 	}
+	decoded, err = hex.DecodeString(input.SleepSnapshotHash)
+	if err != nil || len(decoded) != sha256.Size || input.SleepSnapshotHash != strings.ToLower(input.SleepSnapshotHash) {
+		return errors.New("sleep snapshot hash must be a lowercase SHA-256 digest")
+	}
 	return nil
 }
 
@@ -680,14 +694,14 @@ func insertProposalDecision(ctx context.Context, tx *sql.Tx, record ProposalDeci
 		decision_id, proposal_id, task_id, task_revision, estimate_id,
 		proposal_title, proposal_start_at, proposal_end_at, zone_id, confidence, explanation_codes_json,
 		decision, decided_at,
-		supersedes_decision_id, event_id, snapshot_start_at, snapshot_end_at, event_snapshot_hash
-	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		supersedes_decision_id, event_id, snapshot_start_at, snapshot_end_at, event_snapshot_hash, sleep_snapshot_hash
+	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		record.DecisionID, record.ProposalID, record.TaskID, record.TaskRevision,
 		record.EstimateID, record.ProposalTitle, formatSQLiteTime(record.ProposalStartAt),
 		formatSQLiteTime(record.ProposalEndAt), record.ZoneID, record.Confidence, explanationCodes,
 		record.Decision, formatSQLiteTime(record.DecidedAt),
 		record.SupersedesID, record.EventID, formatSQLiteTime(record.SnapshotStartAt),
-		formatSQLiteTime(record.SnapshotEndAt), record.EventSnapshotHash,
+		formatSQLiteTime(record.SnapshotEndAt), record.EventSnapshotHash, record.SleepSnapshotHash,
 	)
 	return err
 }
@@ -710,7 +724,7 @@ func scanProposalDecision(scanner rowScanner) (ProposalDecisionRecord, error) {
 		&record.EstimateID, &record.ProposalTitle, &proposalStart, &proposalEnd,
 		&record.ZoneID, &record.Confidence, &explanationCodes,
 		&record.Decision, &decidedAt, &record.SupersedesID,
-		&record.EventID, &snapshotStart, &snapshotEnd, &record.EventSnapshotHash,
+		&record.EventID, &snapshotStart, &snapshotEnd, &record.EventSnapshotHash, &record.SleepSnapshotHash,
 	); err != nil {
 		return ProposalDecisionRecord{}, err
 	}

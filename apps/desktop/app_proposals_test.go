@@ -202,6 +202,39 @@ func TestLocalProposalDecisionRejectsChangedCalendarSnapshot(t *testing.T) {
 	}
 }
 
+func TestLocalProposalDecisionRejectsChangedSleepSnapshot(t *testing.T) {
+	app := newTestApp(t)
+	fixedNow := time.Now().UTC().Truncate(localProposalTTL).Add(5 * time.Minute)
+	app.nowFn = func() time.Time { return fixedNow }
+	seedSleepEntries(t, app, 12)
+	if _, err := app.AddTask(TaskInput{Title: "Review forms", DurationMinutes: 45}); err != nil {
+		t.Fatal(err)
+	}
+	built, err := app.buildLocalProposals(fixedNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proposalID, _ := onlyPendingCandidate(t, built)
+	location := locationOrUTC(defaultZoneID)
+	addedStart := fixedNow.In(location).Add(-20 * 24 * time.Hour).Truncate(time.Minute)
+	if _, err := app.AddSleepEntry(SleepEntryInput{
+		StartLocal:     addedStart.Format("2006-01-02T15:04"),
+		EndLocal:       addedStart.Add(8 * time.Hour).Format("2006-01-02T15:04"),
+		ZoneID:         defaultZoneID,
+		Classification: storage.SleepClassificationPrincipal,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = app.DecideLocalProposal(LocalProposalDecisionInput{
+		ProposalID: proposalID,
+		Decision:   storage.ProposalApproved,
+	})
+	if !errors.Is(err, storage.ErrStaleProposal) {
+		t.Fatalf("stale sleep decision error = %v", err)
+	}
+}
+
 func onlyPendingCandidate(t *testing.T, built localProposalBuild) (string, localProposalCandidate) {
 	t.Helper()
 	if len(built.pending) != 1 {
