@@ -1,0 +1,144 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Medication set v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "generated_at", "medications"],
+  "properties": {
+    "schema_version": {
+      "$ref": "common.schema.json#/$defs/schemaVersion"
+    },
+    "generated_at": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "medications": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/medication"
+      }
+    }
+  },
+  "$defs": {
+    "medication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "medication_id",
+        "label",
+        "active",
+        "created_at",
+        "revision",
+        "updated_at"
+      ],
+      "properties": {
+        "medication_id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "form": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "strength_label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "started_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "started_zone_id": {
+          "$ref": "common.schema.json#/$defs/zoneId"
+        },
+        "schedule": {
+          "$ref": "#/$defs/schedule"
+        },
+        "created_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "updated_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        }
+      },
+      "dependentRequired": {
+        "started_at": ["started_zone_id"],
+        "started_zone_id": ["started_at"]
+      }
+    },
+    "schedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["as_needed", "fixed_clock", "cycling"]
+        },
+        "civil_times": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"
+          }
+        },
+        "days_on": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 365
+        },
+        "days_off": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 365
+        },
+        "cycle_started_on": {
+          "type": "string",
+          "format": "date"
+        }
+      },
+      "oneOf": [
+        {
+          "properties": {"kind": {"const": "as_needed"}},
+          "not": {
+            "anyOf": [
+              {"required": ["civil_times"]},
+              {"required": ["days_on"]},
+              {"required": ["days_off"]},
+              {"required": ["cycle_started_on"]}
+            ]
+          }
+        },
+        {
+          "properties": {"kind": {"const": "fixed_clock"}},
+          "required": ["civil_times"],
+          "not": {
+            "anyOf": [
+              {"required": ["days_on"]},
+              {"required": ["days_off"]},
+              {"required": ["cycle_started_on"]}
+            ]
+          }
+        },
+        {
+          "properties": {"kind": {"const": "cycling"}},
+          "required": ["civil_times", "days_on", "days_off", "cycle_started_on"]
+        }
+      ]
+    }
+  }
+}

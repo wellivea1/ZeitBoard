@@ -1,14 +1,14 @@
 # Verification record
 
-Most recent local verification: Windows 11 on 2026-07-19.
+Most recent local verification: Windows 11 on 2026-07-22.
 
 ## Passing checks
 
 - Frontend formatting, ESLint, and repository UI standards. The UI guard passed
-  with 12 screen modules and 4 component stylesheets.
+  with 14 screen modules and 7 component stylesheets.
 - Frontend TypeScript and production builds for the desktop and trusted-view
   workspaces.
-- Frontend tests: 16 desktop test files with 161 tests, plus 2 trusted-view test
+- Frontend tests: 24 desktop test files with 189 tests, plus 2 trusted-view test
   files with 6 tests.
 - `scripts/dev.ps1 -Action check -Component desktop`: desktop production build.
 - `scripts/dev.ps1 -Action check -Component core`: Go formatting, tests, and vet
@@ -16,13 +16,34 @@ Most recent local verification: Windows 11 on 2026-07-19.
 - `scripts/dev.ps1 -Action build -Component core`: Go builds for `core` and
   `apps/desktop`.
 - `scripts/dev.ps1 -Action check -Component server`: server formatting, tests,
-  and vet.
+  and vet, including the server/MCP projection privacy allowlist.
 - `scripts/dev.ps1 -Action check -Component contracts`: deterministic drift
-  check for 20 v1 fixture files, tools tests/vet, and schema validation.
-- `scripts/dev.ps1 -Action check -Component android`: Gradle `check`.
+  check for 24 unchanged v1 fixtures plus 3 medication v2 fixtures, tools
+  tests/vet, and schema validation.
+- Native Wails production build at `apps/desktop/build/bin/ZeitBoard.exe`.
+- Android `testDebugUnitTest`, `lintDebug`, and `assembleDebug`; this medication
+  slice changes no Android source.
 - Sleep erasure regression: suppression remains exportable and excluded from
   effective reads; hard deletion removes observation/correction rows and the
   unique payload marker from the compacted SQLite database and WAL.
+- Medication evidence regression: exclusion remains an append-only correction
+  and stored evidence remains countable/exportable; event erasure removes the
+  selected event and correction chain without deleting its definition, while
+  medication erasure removes the definition and all dependent evidence. Both
+  paths remove unique payload markers from the compacted SQLite database and
+  WAL.
+- Medication schedule regression: strict as-needed/fixed/cycling validation,
+  explicit IANA zones, civil cycle boundaries, DST gaps, first repeated-time
+  occurrence, and real estimator-horizon collision counts pass. Reminder tests
+  verify explicit opt-in, claim-before-notify, durable at-most-once behavior,
+  no retry after notification failure, inactive-definition pause, private-label
+  control-character normalization, immutable claims, and erasure cascade.
+- Calendar ownership regression: bounded ICS/CalDAV preview and import,
+  recurrence/DST parsing, immutable imported rows, and source erasure all pass.
+  Erasure removes private labels, titles, locations, notes, and saved endpoints
+  from both the compacted SQLite database and WAL. Text-free scheduler
+  projection, task/sleep/event stale-decision refusal, app-owned approval
+  materialization, rejection, undo, and import-free ICS export also pass.
 
 The check wrapper itself was also corrected: native Go, npm, Wails, contract,
 and Gradle failures now propagate as a non-zero script result.
@@ -108,9 +129,40 @@ positive delta against this combined baseline.
 
 ## Visual verification
 
+- Reviewed the real Medications workspace with unavailable-service and populated
+  bridge states at 1440x900 and 390x844. Definition setup, compact quick log,
+  observed/predicted/unavailable timing context, correction, exclusion, typed
+  hard-erasure controls, the user-authored schedule editor, reminder disclosure,
+  neutral feasibility counts, and DST gap copy remained legible and contained.
+  At 1440x900 the 1425px document had no off-viewport elements; at 390x844 the
+  document remained within its 375px layout viewport while the 720px occurrence
+  table scrolled only inside its named 315px region. Runtime console review
+  reported no warnings or errors, and the viewport override was reset.
+- Reviewed the real-calendar replacement at 1440x900 in the browser fixture:
+  source administration remains a compact rail, forecast ranges remain
+  background bands, fixed events use rectangular overlap lanes, exact event
+  details open in the inspector, and the document has no horizontal overflow.
+- Repeated Calendar at 390x844. The primary board precedes source
+  administration, date controls collapse to two compact rows, the 620px civil
+  board scrolls inside its column, and the document remains within the 375px
+  layout viewport. Runtime console review reported no warnings or errors.
+
 - Manually reviewed Overview and Rhythm at 1440x900 in Paper, Dark, Pitch black,
   Amber, and High contrast, with reduced stimulation both off and on. Appearance
   was restored to Auto with reduced stimulation off after the matrix.
+- Reviewed the U-E time probes on Overview, actogram, drift, and Calendar at
+  1440x900. The actogram second plot resolved to the following civil day,
+  forecast positions stayed explicitly predicted, drift reported observed and
+  fitted onsets, and edge chips remained inside their tracks.
+- Repeated probe and containment checks with a 390x844 viewport override in
+  High contrast + reduced stimulation. Overview and Calendar did not widen the
+  page; the actogram retained internal horizontal scrolling while the document
+  stayed at viewport width; the drift screen-reader table remained semantic
+  without contributing its intrinsic column width to page overflow.
+- Pointer movement, chart scrolling, and route changes left at most one probe
+  visible. Runtime console review reported no warnings or errors. Paper, Amber,
+  and High contrast probe chips were visually reviewed; theme contrast tests
+  cover all five presets. Appearance and viewport overrides were reset.
 - Overview measured approximately 693px high (77% of the viewport) with one
   primary surface and no nested generic panels or metric cards.
 - Rhythm's actogram measured approximately 568px high and stayed within the
@@ -118,9 +170,10 @@ positive delta against this combined baseline.
 - Overview had no page-level horizontal overflow at 900x900 or 390x844. The
   navigation rail scrolls internally at narrow widths as designed.
 - The 390x844 Rhythm pass exposed chart overflow propagating to the page. The
-  final CSS contains that overflow at `.actogram-panel` while preserving
-  horizontal scrolling in `.actogram-chart`; the UI standards check now guards
-  both rules and the readable 760px double-plot width.
+  final CSS paint-contains that overflow at `.actogram-panel` while preserving
+  horizontal scrolling in `.actogram-chart`; hidden screen-reader tables use
+  fixed layout so added columns cannot widen the page. The UI standards check
+  guards these rules and the readable 760px double-plot width.
 
 ## Previously verified artifacts
 
@@ -136,9 +189,7 @@ Verified on Windows 11 on 2026-06-15 and 2026-06-16:
 
 ## Environment limitations
 
-- The in-app browser refused the final localhost reload after the temporary
-  Vite server stopped, so the post-fix 390x844 Rhythm containment was verified
-  by source guard, lint, and production build rather than a second screenshot.
-- No Android device or emulator was available for an Android UI launch. The APK,
-  unit tests, lint, and Gradle checks pass.
+- Android UI was previously reviewed on the Pixel 10 Pro XL API 36 emulator;
+  this desktop-only slice changed no Android source. Gradle verification was
+  rerun, but the emulator visual matrix was not repeated.
 - The installed Go toolchain has CGO disabled, so `go test -race` is unavailable.

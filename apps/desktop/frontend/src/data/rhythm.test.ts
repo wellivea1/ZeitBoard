@@ -11,6 +11,8 @@ const backendProjection = {
     {
       id: "sleep-1",
       day: "Jan 12",
+      civilDate: "2026-01-12",
+      zoneId: "America/New_York",
       startHour: 21.5,
       durationHours: 8,
       kind: "observed",
@@ -25,6 +27,8 @@ const backendProjection = {
     {
       id: "forecast-1",
       day: "Jan 13",
+      civilDate: "2026-01-13",
+      zoneId: "America/New_York",
       startHour: 22.5,
       durationHours: 3.2,
       kind: "forecast",
@@ -35,7 +39,13 @@ const backendProjection = {
       confidence: "Medium",
     },
   ],
-  now: { label: "now", day: "Jan 12", hour: 13.5 },
+  now: {
+    label: "now",
+    day: "Jan 12",
+    civilDate: "2026-01-12",
+    zoneId: "America/New_York",
+    hour: 13.5,
+  },
   driftTitle: "Sleep-onset drift",
   slopeLabel: "+60 min per cycle",
   driftConfidence: "Medium",
@@ -46,6 +56,8 @@ const backendProjection = {
     {
       id: "drift-1",
       day: "Jan 12",
+      civilDate: "2026-01-12",
+      zoneId: "America/New_York",
       onsetHour: 21.5,
       fitHour: 21.4,
       bandLowHour: 20.9,
@@ -66,6 +78,8 @@ describe("loadRhythm", () => {
     expect(result.source).toBe("local");
     expect(result.data.actogram.observedRows).toHaveLength(1);
     expect(result.data.actogram.observedRows[0]?.kind).toBe("observed");
+    expect(result.data.actogram.observedRows[0]?.civilDate).toBe("2026-01-12");
+    expect(result.data.actogram.observedRows[0]?.zoneId).toBe("America/New_York");
     expect(result.data.actogram.forecastRows[0]?.kind).toBe("forecast");
     expect(result.data.actogram.now.hour).toBe(13.5);
     expect(result.data.drift.slopeLabel).toBe("+60 min per cycle");
@@ -121,7 +135,13 @@ describe("loadRhythm", () => {
         actogramSummary: "Add sleep entries.",
         observedRows: [],
         forecastRows: [],
-        now: { label: "now", day: "Jan 12", hour: 13.5 },
+        now: {
+          label: "now",
+          day: "Jan 12",
+          civilDate: "2026-01-12",
+          zoneId: "America/New_York",
+          hour: 13.5,
+        },
         driftTitle: "Sleep-onset drift",
         slopeLabel: "Not enough data",
         driftConfidence: "Low",
@@ -142,6 +162,37 @@ describe("loadRhythm", () => {
   it("rejects a malformed projection (missing drift points)", () => {
     const broken = { ...backendProjection, driftPoints: [] };
     expect(normalizeRhythm(broken)).toBeUndefined();
+  });
+
+  it("requires structured civil date and zone data for local estimates", () => {
+    const rowsWithoutDate = backendProjection.observedRows.map((row) =>
+      Object.fromEntries(Object.entries(row).filter(([key]) => key !== "civilDate")),
+    );
+    const rowsWithoutZone = backendProjection.observedRows.map((row) =>
+      Object.fromEntries(Object.entries(row).filter(([key]) => key !== "zoneId")),
+    );
+    expect(
+      normalizeRhythm({ ...backendProjection, observedRows: rowsWithoutDate }),
+    ).toBeUndefined();
+    expect(
+      normalizeRhythm({ ...backendProjection, observedRows: rowsWithoutZone }),
+    ).toBeUndefined();
+  });
+
+  it("accepts civil dates while preserving zone redaction for synced estimates", () => {
+    const withoutZone = (row: Record<string, unknown>) =>
+      Object.fromEntries(Object.entries(row).filter(([key]) => key !== "zoneId"));
+    const synced = {
+      ...backendProjection,
+      estimateSource: "synced",
+      observedRows: backendProjection.observedRows.map(withoutZone),
+      forecastRows: backendProjection.forecastRows.map(withoutZone),
+      driftPoints: backendProjection.driftPoints.map(withoutZone),
+      now: withoutZone(backendProjection.now),
+    };
+    const normalized = normalizeRhythm(synced);
+    expect(normalized?.actogram.observedRows[0]?.civilDate).toBe("2026-01-12");
+    expect(normalized?.actogram.observedRows[0]?.zoneId).toBeUndefined();
   });
 
   it("rejects a collapsed y-range", () => {

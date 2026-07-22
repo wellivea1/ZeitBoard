@@ -1,5 +1,5 @@
 // Command genfixtures deterministically writes (or, with -check, verifies) the
-// synthetic contract fixtures under testdata/v1. It replaces the former
+// synthetic contract fixtures under testdata. It replaces the former
 // scripts/generate-testdata.py.
 package main
 
@@ -27,14 +27,14 @@ func main() {
 		fail(err)
 	}
 
-	outDir := filepath.Join(root, "testdata", "v1")
 	var mismatches []string
 	for _, f := range files {
+		outDir := filepath.Join(root, "testdata", f.Version)
 		path := filepath.Join(outDir, f.Name)
 		if *check {
 			existing, err := os.ReadFile(path)
 			if err != nil || !bytes.Equal(existing, f.Data) {
-				mismatches = append(mismatches, f.Name)
+				mismatches = append(mismatches, filepath.ToSlash(filepath.Join(f.Version, f.Name)))
 			}
 			continue
 		}
@@ -59,7 +59,7 @@ func main() {
 	if *check {
 		action = "verified"
 	}
-	fmt.Printf("%s %d synthetic fixture files in %s\n", action, len(files), outDir)
+	fmt.Printf("%s %d synthetic fixture files under %s\n", action, len(files), filepath.Join(root, "testdata"))
 }
 
 func fail(err error) {

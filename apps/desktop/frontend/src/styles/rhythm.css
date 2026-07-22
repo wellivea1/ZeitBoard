@@ -9,6 +9,7 @@
 
 .rhythm-screen {
   min-width: 0;
+  overflow-x: clip;
 }
 
 .rhythm-tabs {
@@ -53,6 +54,7 @@
 
 .actogram-panel {
   min-height: 540px;
+  contain: paint;
   overflow-x: hidden;
 }
 

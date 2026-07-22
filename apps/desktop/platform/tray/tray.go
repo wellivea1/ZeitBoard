@@ -1,5 +1,9 @@
 package tray
 
+import "errors"
+
+var ErrNotificationsUnavailable = errors.New("desktop notifications are unavailable")
+
 type Callbacks struct {
 	Show func()
 	Quit func()
@@ -7,6 +11,7 @@ type Callbacks struct {
 
 type Controller interface {
 	Start(Callbacks) error
+	Notify(title, message string) error
 	Stop() error
 }
 

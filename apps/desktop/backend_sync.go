@@ -510,6 +510,7 @@ func (a *App) serverRhythm(ctx context.Context, now time.Time) (estimation.Rhyth
 	if response.Refusal != nil {
 		message = response.Refusal.Message
 	}
+	localNow := now.In(locationOrUTC(defaultZoneID))
 	return estimation.RhythmProjection{
 		FixtureMode:     false,
 		EstimateSource:  "synced",
@@ -518,7 +519,13 @@ func (a *App) serverRhythm(ctx context.Context, now time.Time) (estimation.Rhyth
 		ActogramSummary: message,
 		ObservedRows:    []estimation.RhythmBand{},
 		ForecastRows:    []estimation.RhythmBand{},
-		Now:             estimation.RhythmNow{Label: "now", Day: now.Local().Format("Jan 2"), Hour: localClockHour(now.Local())},
+		Now: estimation.RhythmNow{
+			Label:     "now",
+			Day:       localNow.Format("Jan 2"),
+			CivilDate: localNow.Format("2006-01-02"),
+			ZoneID:    defaultZoneID,
+			Hour:      localClockHour(localNow),
+		},
 		DriftTitle:      "Sleep-onset drift",
 		SlopeLabel:      "Not enough data",
 		DriftConfidence: "Low",

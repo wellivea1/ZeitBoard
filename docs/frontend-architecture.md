@@ -19,10 +19,17 @@ visual refactor decisions remain in `ui-refactor-plan.md`.
   adapter validates and normalizes an unknown DTO before returning typed UI
   data. `wailsBridge.ts` owns method discovery and binding. The sleep-import
   adapter also rejects reports whose row statuses do not reconcile with the
-  aggregate counts.
+  aggregate counts. The calendar adapter additionally reconciles source
+  ownership, source metadata, interval semantics, unique segment identifiers,
+  and consecutive civil dates before any local response renders. The
+  medication adapter similarly reconciles unique definition/event IDs,
+  references, private display labels, stored-event counts, civil timestamps,
+  strict schedule shape, unique clock times, reminder-service state, occurrence
+  status/count totals, estimator-horizon coverage, neutral context labels,
+  export counts, and the no-fixture invariant.
 - `src/state/` owns state that genuinely spans routes. Small invalidation
-  signals, such as sleep-data changes, remain explicit events rather than a
-  second application store.
+  signals, such as sleep-data and calendar changes, remain explicit events
+  rather than a second application store.
 - `src/theme/` owns preset definitions, persistence, and root data attributes.
   Theme presets change semantic tokens; components do not branch on preset
   names.
@@ -53,6 +60,24 @@ exact useful-task window remains text because the current Overview DTO exposes
 it as a formatted label, not structured numeric bounds. The UI must not parse
 that prose to manufacture chart precision.
 
+Calendar has a route-specific ownership contract: source administration stays
+in a compact rail at desktop widths while the civil-time board remains the
+primary surface; below the tablet breakpoint the board precedes source
+administration. Forecast windows are background bands, fixed events are
+rectangular foreground blocks with overlap lanes, and exact event details are
+available through an inspector and semantic table. The board owns its internal
+horizontal scroll at narrow widths and may not widen the document.
+
+Medications uses one ruled workspace rather than nested cards: quick logging
+and the civil-time evidence ledger remain primary, while definition management
+stays in a compact rail. Observed, predicted, and unavailable rhythm context
+are text-qualified. Correction and permanent erasure are separate editors;
+the latter cannot submit until the exact `DELETE` token is entered. Schedule
+editing is a compact field grid in that rail. The feasibility surface uses a
+ruled occurrence table with contained horizontal scrolling, neutral
+inside/outside/out-of-horizon language, explicit DST-gap rows, and attributed
+clinician text; it never turns forecast context into a warning bubble.
+
 `styles.css` contains global tokens, resets, shell primitives, and established
 shared components. Reworked route-specific composition lives in
 `src/styles/*.css`. New component CSS uses spacing, radius, type, and color
@@ -71,13 +96,24 @@ tokens rather than raw colors or ad-hoc radii.
   strict validation in one transaction; the UI never treats a preview as write
   authorization. Any invalid row disables commit, while exact source-record
   duplicates remain visible and are not reinserted.
+- ICS and CalDAV preview/commit are likewise separate. CalDAV passwords are
+  cleared after every request. Imported sources require typed `REMOVE`
+  confirmation; the UI never presents imported events as editable or includes
+  them in the app-owned export.
 - Permanent deletion is a different binding and requires the exact `DELETE`
   token. It removes the observation, correction history, and local sync payload
   rows, then checkpoints the WAL and vacuums SQLite. IDs already sent to the
   backend remain only in the erasure outbox until tombstones propagate; no
   sleep payload remains there.
+- Medication edits and exclusion append corrections to immutable raw events.
+  Medication event/definition deletion uses separate `DELETE`-confirmed
+  bindings and compacts the same local SQLite/WAL boundary. M-B schedule input
+  is explicit, revision-checked intent; reminders require a separate opt-in and
+  forecast labels never move a time. M-A/M-B have no browser fixture fallback,
+  sync projection, assistant context, or interaction check.
 - Database erasure does not claim to remove copies held by external backups,
-  filesystem snapshots, or storage-device wear leveling.
+  filesystem snapshots, storage-device wear leveling, or a medication label
+  already delivered to OS-managed notification history.
 
 ## Enforced standards
 
@@ -105,9 +141,12 @@ architecture guards, not substitutes for tests or visual review.
 | UI architecture was convention only | Added ESLint limits and the repository-specific UI standards check |
 | Theme selection was a text control | Replaced with a visual preset manager with previews and explicit selected state |
 | Synthetic previews exposed enabled controls with no action | Removed the dead affordances; preview surfaces now remain visibly read-only |
+| Calendar was a synthetic board with oversized card-like composition | Replaced it with validated real-source adapters, dense rules, background forecast bands, overlap lanes, explicit ownership controls, and contained narrow-width scrolling |
 | Repository checks could hide native Go failures | Hardened `scripts/dev.ps1` to propagate Go, npm, Wails, contract, and Gradle exit codes |
 
 Rhythm-linked appearance switching is implemented under ADR-0021. The
 agent-readable appearance action remains deferred until a desktop-local agent
-surface exists; the U-E chronological hover probe remains planned in
-`ui-refactor-plan.md`.
+surface exists. The U-E chronological hover probe is implemented with strict
+local civil-date/zone normalization and an imperative, no-rerender overlay;
+the network-facing server/MCP projection retains civil dates but deliberately
+omits raw local zone identifiers.

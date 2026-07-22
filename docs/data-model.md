@@ -49,12 +49,54 @@ A refusal stores a typed reason such as insufficient data, ambiguous cycle
 indexing, or conflicting observations. Refusal and successful estimate are
 mutually exclusive result variants.
 
-### Fixed event, task, and proposal
+### Calendar source and event
 
-Fixed events are immutable schedule constraints. Tasks contain duration and
-allowed bounds. The scheduler returns proposal records with explanations and
-never edits fixed events. User-entered timing constraints remain user-authored
-inputs; the system does not turn them into medical recommendations.
+A calendar source has one of three ownership-bearing kinds: `ics` and `caldav`
+are read-only imported snapshots; `zeitboard` contains only app-owned placement
+blocks. An imported event retains local title, location, and notes for display,
+but its scheduler projection contains only an opaque identifier and half-open
+UTC interval. Snapshot replacement is atomic and imported rows cannot be
+updated in place. Removing a source is explicit erasure, not an append-only
+suppression.
+
+### Medication definition, schedule, event, correction, and reminder claim
+
+A medication definition is mutable private local intent with a monotonically
+increasing revision. It stores a user-entered label, optional form/strength
+text, optional verbatim clinician rule, active state, and an optional
+user-authored schedule. Absence of a schedule is represented as absence, not
+inferred as `as_needed`. An explicit schedule is `as_needed`,
+`fixed_clock`, or `cycling`. Clock schedules own an IANA zone, one to
+eight unique civil times, and an opt-in reminder flag; cycling schedules also
+own a civil start date and on/off day counts. No field is inferred from a
+medication label, event history, or sleep estimate.
+
+A medication event is immutable evidence that the owner recorded `taken` or
+`skipped` at a UTC instant with an IANA zone. An edit appends a correction that
+may change effective time, zone, status, scheduled-elsewhere fact, note, or
+exclusion. The chain has one root and cannot fork. Wake-relative and
+before-sleep values are computed from current sleep evidence and are neither
+stored in raw records nor exported. Exclusion retains evidence; hard deletion
+is a separate typed operation that physically removes an event/corrections or
+the definition and all dependent history.
+
+A medication reminder claim is local delivery state, not health evidence. It
+contains an opaque digest for one medication/scheduled-UTC occurrence, the
+medication ID, and scheduled/claimed UTC instants. Its uniqueness and
+immutability provide at-most-once desktop delivery across polling and restarts.
+Claims are written before notification delivery, cascade on medication
+erasure, and are excluded from contract export and sync.
+
+### Task, proposal, and decision
+
+Tasks contain duration and allowed bounds. The scheduler returns proposal
+records with explanations and never edits fixed events. A local decision binds
+the exact task revision, estimate, proposed interval, sleep-data fingerprint,
+and text-free busy-event fingerprint. Approval appends a decision and creates a
+separately owned ZeitBoard block in one transaction; rejection creates no
+event. Undo appends an audit decision and removes only the linked app-owned
+block. User-entered constraints remain user-authored inputs; the system does
+not turn them into medical recommendations.
 
 ### Share profile and trusted view
 
@@ -71,9 +113,15 @@ erDiagram
   OBSERVATION }o--o{ ESTIMATE : supports
   ESTIMATE ||--|{ FORECAST_WINDOW : produces
   ESTIMATE ||--o{ SCHEDULE_REQUEST : informs
-  SCHEDULE_REQUEST ||--o{ FIXED_EVENT : constrains
+  CALENDAR_SOURCE ||--o{ CALENDAR_EVENT : contains
+  MEDICATION ||--o{ MEDICATION_EVENT : records
+  MEDICATION ||--o{ MEDICATION_REMINDER_CLAIM : claims
+  MEDICATION_EVENT ||--o{ MEDICATION_CORRECTION : corrected_by
+  SCHEDULE_REQUEST ||--o{ CALENDAR_EVENT : constrained_by
   SCHEDULE_REQUEST ||--o{ TASK : contains
   TASK ||--o| PROPOSAL : may_receive
+  PROPOSAL ||--o{ PROPOSAL_DECISION : audited_by
+  PROPOSAL_DECISION ||--o| CALENDAR_EVENT : may_materialize
   SHARE_PROFILE ||--o{ TRUSTED_VIEW : projects
 ```
 
@@ -82,7 +130,9 @@ reason lists, but ownership and immutability rules must remain unchanged.
 
 ## Contract mapping
 
-Schemas under `contracts/v1/` describe interchange DTOs, not database rows.
-Strict consumers reject unknown fields. A contract version change is required
-when a strict v1 consumer would no longer accept or correctly interpret a
-payload.
+Schemas under `contracts/v1/` and `contracts/v2/` describe interchange
+DTOs, not database rows. Strict consumers reject unknown fields. M-A medication
+logging remains valid v1; M-B schedule fields use the medication v2 contracts
+because strict v1 consumers would reject them. A contract version change is
+required whenever an existing strict consumer would no longer accept or
+correctly interpret a payload.

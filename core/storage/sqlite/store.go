@@ -142,19 +142,191 @@ func (s *Store) Migrate(ctx context.Context) error {
 			task_id TEXT NOT NULL,
 			pushed_at TEXT NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS local_medications (
+			medication_id TEXT PRIMARY KEY,
+			active INTEGER NOT NULL CHECK(active IN (0, 1)),
+			revision INTEGER NOT NULL CHECK(revision >= 1),
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			payload_json BLOB NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_local_medications_active
+			ON local_medications(active, updated_at)`,
+		`CREATE TABLE IF NOT EXISTS local_medication_events (
+			event_id TEXT PRIMARY KEY,
+			medication_id TEXT NOT NULL,
+			dose_at TEXT NOT NULL,
+			status TEXT NOT NULL CHECK(status IN ('taken', 'skipped')),
+			scheduled INTEGER NOT NULL CHECK(scheduled IN (0, 1)),
+			recorded_at TEXT NOT NULL,
+			payload_json BLOB NOT NULL,
+			FOREIGN KEY(medication_id) REFERENCES local_medications(medication_id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_local_medication_events_dose
+			ON local_medication_events(dose_at, event_id)`,
+		`CREATE TRIGGER IF NOT EXISTS trg_local_medication_events_immutable
+			BEFORE UPDATE ON local_medication_events
+			BEGIN
+				SELECT RAISE(ABORT, 'medication events are immutable');
+			END`,
+		`CREATE TABLE IF NOT EXISTS local_medication_event_corrections (
+			correction_id TEXT PRIMARY KEY,
+			target_event_id TEXT NOT NULL,
+			supersedes_correction_id TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			reason TEXT NOT NULL CHECK(reason IN ('user_edit', 'duplicate', 'invalid_time')),
+			changes_json BLOB NOT NULL,
+			payload_json BLOB NOT NULL,
+			FOREIGN KEY(target_event_id) REFERENCES local_medication_events(event_id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_local_medication_corrections_target
+			ON local_medication_event_corrections(target_event_id, created_at, correction_id)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_local_medication_corrections_supersedes
+			ON local_medication_event_corrections(supersedes_correction_id)
+			WHERE supersedes_correction_id <> ''`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_local_medication_corrections_root
+			ON local_medication_event_corrections(target_event_id)
+			WHERE supersedes_correction_id = ''`,
+		`CREATE TRIGGER IF NOT EXISTS trg_local_medication_corrections_immutable
+			BEFORE UPDATE ON local_medication_event_corrections
+			BEGIN
+				SELECT RAISE(ABORT, 'medication event corrections are immutable');
+			END`,
+		`CREATE TABLE IF NOT EXISTS local_medication_reminder_claims (
+			occurrence_id TEXT PRIMARY KEY,
+			medication_id TEXT NOT NULL,
+			scheduled_at TEXT NOT NULL,
+			claimed_at TEXT NOT NULL,
+			FOREIGN KEY(medication_id) REFERENCES local_medications(medication_id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_local_medication_reminder_claims_medication
+			ON local_medication_reminder_claims(medication_id, scheduled_at)`,
+		`CREATE TRIGGER IF NOT EXISTS trg_local_medication_reminder_claims_immutable
+			BEFORE UPDATE ON local_medication_reminder_claims
+			BEGIN
+				SELECT RAISE(ABORT, 'medication reminder claims are immutable');
+			END`,
+		`CREATE TABLE IF NOT EXISTS local_calendar_sources (
+			source_id TEXT PRIMARY KEY,
+			label TEXT NOT NULL,
+			kind TEXT NOT NULL CHECK(kind IN ('ics', 'caldav', 'zeitboard')),
+			read_only INTEGER NOT NULL CHECK(read_only IN (0, 1)),
+			coverage_start_at TEXT NOT NULL,
+			coverage_end_at TEXT NOT NULL,
+			last_imported_at TEXT NOT NULL,
+			endpoint TEXT NOT NULL DEFAULT '',
+			CHECK(
+				(kind IN ('ics', 'caldav') AND read_only = 1) OR
+				(kind = 'zeitboard' AND read_only = 0)
+			)
+		)`,
+		`CREATE TABLE IF NOT EXISTS local_calendar_events (
+			event_id TEXT PRIMARY KEY,
+			source_id TEXT NOT NULL,
+			source_record_id TEXT NOT NULL,
+			title TEXT NOT NULL,
+			start_at TEXT NOT NULL,
+			end_at TEXT NOT NULL,
+			zone_id TEXT NOT NULL,
+			all_day INTEGER NOT NULL CHECK(all_day IN (0, 1)),
+			busy INTEGER NOT NULL CHECK(busy IN (0, 1)),
+			ownership TEXT NOT NULL CHECK(ownership IN ('imported', 'app_owned')),
+			created_at TEXT NOT NULL,
+			location TEXT NOT NULL DEFAULT '',
+			notes TEXT NOT NULL DEFAULT '',
+			task_id TEXT NOT NULL DEFAULT '',
+			task_revision INTEGER NOT NULL DEFAULT 0,
+			proposal_id TEXT NOT NULL DEFAULT '',
+			FOREIGN KEY(source_id) REFERENCES local_calendar_sources(source_id) ON DELETE CASCADE,
+			UNIQUE(source_id, source_record_id),
+			CHECK(end_at >= start_at),
+			CHECK(busy = 0 OR end_at > start_at),
+			CHECK(
+				(ownership = 'imported' AND task_id = '' AND task_revision = 0 AND proposal_id = '') OR
+				(ownership = 'app_owned' AND task_id <> '' AND task_revision >= 1 AND proposal_id <> '')
+			)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_local_calendar_events_interval
+			ON local_calendar_events(start_at, end_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_local_calendar_events_busy
+			ON local_calendar_events(busy, start_at, end_at)`,
+		`CREATE TRIGGER IF NOT EXISTS trg_local_calendar_imported_immutable
+			BEFORE UPDATE ON local_calendar_events
+			WHEN OLD.ownership = 'imported'
+			BEGIN
+				SELECT RAISE(ABORT, 'imported calendar events are immutable');
+			END`,
+		`CREATE TABLE IF NOT EXISTS local_proposal_decisions (
+			decision_id TEXT PRIMARY KEY,
+			proposal_id TEXT NOT NULL,
+			task_id TEXT NOT NULL,
+			task_revision INTEGER NOT NULL,
+			estimate_id TEXT NOT NULL,
+			proposal_title TEXT NOT NULL,
+			proposal_start_at TEXT NOT NULL,
+			proposal_end_at TEXT NOT NULL,
+			zone_id TEXT NOT NULL,
+			confidence TEXT NOT NULL CHECK(confidence IN ('low', 'medium', 'high')),
+			explanation_codes_json BLOB NOT NULL,
+			decision TEXT NOT NULL CHECK(decision IN ('approved', 'rejected', 'undone')),
+			decided_at TEXT NOT NULL,
+			supersedes_decision_id TEXT NOT NULL DEFAULT '',
+			event_id TEXT NOT NULL DEFAULT '',
+			snapshot_start_at TEXT NOT NULL,
+			snapshot_end_at TEXT NOT NULL,
+			event_snapshot_hash TEXT NOT NULL,
+			sleep_snapshot_hash TEXT NOT NULL DEFAULT '',
+			CHECK(snapshot_end_at > snapshot_start_at),
+			CHECK(proposal_end_at > proposal_start_at),
+			CHECK(
+				(decision = 'approved' AND event_id <> '' AND supersedes_decision_id = '') OR
+				(decision = 'rejected' AND event_id = '' AND supersedes_decision_id = '') OR
+				(decision = 'undone' AND supersedes_decision_id <> '')
+			)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_local_proposal_decisions_proposal
+			ON local_proposal_decisions(proposal_id, decided_at, decision_id)`,
 	}
 	for _, statement := range statements {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {
 			return fmt.Errorf("migrate sqlite: %w", err)
 		}
 	}
+	hasSleepSnapshotHash, err := sqliteTableHasColumn(ctx, s.db, "local_proposal_decisions", "sleep_snapshot_hash")
+	if err != nil {
+		return fmt.Errorf("inspect proposal decision migration: %w", err)
+	}
+	if !hasSleepSnapshotHash {
+		if _, err := s.db.ExecContext(ctx, `ALTER TABLE local_proposal_decisions
+			ADD COLUMN sleep_snapshot_hash TEXT NOT NULL DEFAULT ''`); err != nil {
+			return fmt.Errorf("add proposal sleep snapshot hash: %w", err)
+		}
+	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	for _, version := range []int{1, 2, 3} {
+	for _, version := range []int{1, 2, 3, 4, 5, 6, 7} {
 		if _, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(?, ?)`, version, now); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func sqliteTableHasColumn(ctx context.Context, db *sql.DB, table, column string) (bool, error) {
+	rows, err := db.QueryContext(ctx, `SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return false, err
+		}
+		if name == column {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
 }
 
 func (s *Store) AppendObservation(ctx context.Context, observation domain.SourceObservation) error {
@@ -316,7 +488,7 @@ func (s *Store) DeleteAll(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	for _, table := range []string{"source_observations", "manual_corrections", "phase_estimates", "medication_events", "share_profiles", "local_sleep_corrections", "local_sleep_observations"} {
+	for _, table := range []string{"source_observations", "manual_corrections", "phase_estimates", "medication_events", "share_profiles", "local_sleep_corrections", "local_sleep_observations", "local_medication_reminder_claims", "local_medication_event_corrections", "local_medication_events", "local_medications", "local_proposal_decisions", "local_calendar_events", "local_calendar_sources"} {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table); err != nil {
 			_ = tx.Rollback()
 			return err

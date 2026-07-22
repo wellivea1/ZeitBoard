@@ -109,8 +109,8 @@ describe.each([
 });
 
 // --- Amber glasses mode (ui-refactor-plan.md §3) ---
-// Through-lens luminance for dark amber blue-blockers: blue is removed and
-// green heavily attenuated before it reaches the eye.
+// Conservative display-compatibility simulation for a dark-amber filter.
+// This is a UI regression heuristic, not lens spectroscopy or clinical proof.
 const LENS_G = 0.25;
 const LENS_B = 0.02;
 
@@ -130,7 +130,7 @@ function throughLensRatio(fg: string, bg: string): number {
 }
 
 describe("amber glasses mode", () => {
-  it("body text keeps >=7:1 through dark amber lenses", () => {
+  it("body text keeps >=7:1 in the simulated dark-amber filter", () => {
     expect(
       throughLensRatio(resolve(amber, "ink"), resolve(amber, "canvas")),
     ).toBeGreaterThanOrEqual(7);
@@ -139,7 +139,7 @@ describe("amber glasses mode", () => {
     );
   });
 
-  it("secondary text keeps >=3:1 through dark amber lenses", () => {
+  it("secondary text keeps >=3:1 in the simulated dark-amber filter", () => {
     expect(
       throughLensRatio(resolve(amber, "muted"), resolve(amber, "canvas")),
     ).toBeGreaterThanOrEqual(3);
@@ -148,7 +148,7 @@ describe("amber glasses mode", () => {
     ).toBeGreaterThanOrEqual(3);
   });
 
-  it("emits no blue: every color in the amber block holds B <= 10%", () => {
+  it("minimizes the commanded blue channel to <=10%", () => {
     const block = blockVars('[data-theme="amber"]');
     for (const [name, value] of Object.entries(block)) {
       for (const match of value.matchAll(/#([0-9a-fA-F]{6})(?![0-9a-fA-F])/g)) {

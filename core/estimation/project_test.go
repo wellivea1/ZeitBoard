@@ -31,6 +31,15 @@ func TestProjectDerivesDriftFromTheEngine(t *testing.T) {
 	if projection.ObservedRows[0].Day != "Jan 12" {
 		t.Fatalf("newest observed row day = %q", projection.ObservedRows[0].Day)
 	}
+	if projection.ObservedRows[0].CivilDate != "2026-01-12" || projection.ObservedRows[0].ZoneID != "UTC" {
+		t.Fatalf("newest observed row civil anchor = %q %q", projection.ObservedRows[0].CivilDate, projection.ObservedRows[0].ZoneID)
+	}
+	if projection.DriftPoints[0].CivilDate != "2026-01-01" || projection.DriftPoints[0].ZoneID != "UTC" {
+		t.Fatalf("first drift point civil anchor = %q %q", projection.DriftPoints[0].CivilDate, projection.DriftPoints[0].ZoneID)
+	}
+	if projection.Now.CivilDate != "2026-01-13" || projection.Now.ZoneID != "UTC" {
+		t.Fatalf("now civil anchor = %q %q", projection.Now.CivilDate, projection.Now.ZoneID)
+	}
 
 	// Unwrapped fit must be monotone with a positive slope and stay continuous
 	// across midnight (no 24h jumps), and the band must be non-degenerate.

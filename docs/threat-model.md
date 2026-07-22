@@ -79,7 +79,12 @@ implemented: an authenticated erase endpoint hard-deletes synced payloads, tombs
 block resurrection, and devices apply pulled tombstones as local hard-deletes. The
 **local v1 sleep import boundary (ADR-0022)** is implemented with an 8 MiB / 20,000-row
 cap, strict JSON/CSV shape, per-row errors, source-id conflict detection, and atomic
-all-or-nothing commit. The
+all-or-nothing commit. **Local medication evidence and user-authored schedules
+(ADR-0024/0025)** are implemented with private device-only definitions,
+immutable events, correction chains, strict civil-time expansion, neutral
+sleep-collision forecasts, opt-in claim-first desktop reminders, contract
+export, and byte-checked hard erasure; no medication payload sync or agent
+projection exists in M-A/M-B. The
 **cloud skill wrapper and live trusted-view transport do not exist yet**; their rows
 remain design requirements for future workstreams, not current guarantees.
 
@@ -97,11 +102,19 @@ remain design requirements for future workstreams, not current guarantees.
 | Malicious external agent (MCP/skill) | Exfiltration or unauthorized change | Local MCP exposes allowlisted read projections only (never the raw model), propose-only tools, call budgets, and no approval/apply tool; cloud skills remain future and require a separate privacy review |
 | Erased data lingering on the instance or other devices | A hard-deleted record survives elsewhere, defeating the erasure right | Authenticated `/v1/sync/erase` hard-deletes the synced payload and mints tombstones (record-id only, no health data) that every device applies on pull; the tombstone registry makes re-pushing an erased id a silent no-op (no resurrection). Residual: a device that never syncs again keeps its copy until it does (ADR-0017) |
 | Malicious or malformed local sleep import | Resource exhaustion; hidden row loss; misleading estimator input | 8 MiB and 20,000-row caps; strict v1 JSON/canonical CSV; only principal/nap `file_import` sleep rows; per-row errors; invalid/conflicting rows block the whole transaction; duplicate source IDs are explicitly reported; no payload logging |
+| Malicious or oversized ICS/CalDAV source | Resource exhaustion, recurrence explosion, parser ambiguity, or network pivot | Input/response/component/occurrence/work caps; strict content-line parsing; bounded recurrence horizon; HTTPS except loopback; cross-origin redirects refused; sanitized endpoint persistence; atomic preview/commit |
+| CalDAV credential disclosure | Password or secret-bearing URL survives locally or leaks in logs | Credentials are one-shot request fields and cleared by the UI; passwords are never persisted; userinfo/query secrets and non-loopback HTTP endpoints are rejected; calendar payloads and endpoints are excluded from logs |
 | Future Takeout / My Activity import | Resource exhaustion; misleading inference | Not implemented; must add bounded parsing and mark inferred sleep low-confidence (`inferred`) before it may affect estimation |
 | Source mutation | Audit history and estimator support become misleading | Append-only observations and corrections; effective read model; persistence tests |
 | Time-zone confusion | Incorrect drift or schedule proposals | UTC instants plus IANA zones; half-open intervals; DST-focused tests |
+| Medication correction mistaken for erasure | Sensitive raw evidence remains when the owner expected deletion | Ordinary edits and exclusion append immutable corrections and say that evidence remains; separate event/definition erasure requires exact `DELETE`, cascades corrections, checkpoints the WAL, vacuums SQLite, and is byte-tested |
+| Duplicate or misleading medication reminder | Repeated prompts could be mistaken for a second dose instruction | Reminders require an explicit owner-authored clock schedule and separate opt-in; an immutable unique occurrence claim is committed before notification delivery, delivery failures are not retried, and copy says "Reminder you set" rather than directing a dose |
+| Civil-time or forecast ambiguity | A DST transition, device-zone change, or forecast limit misstates schedule feasibility | Schedules own an explicit IANA zone; DST gaps are skipped and reported, repeated times use the first occurrence, cycles advance by civil date, and every occurrence outside the actual estimator horizon is labeled unavailable |
+| Medication notification disclosure | A private label appears on a shared or observed desktop | Medication notifications are off by default; the schedule editor discloses that opt-in allows the local OS notification surface to display the label, and control characters are stripped before delivery |
+| Medication text crosses a projection boundary | Names, clinician rules, or private notes reach a server, agent, trusted view, or log | M-A/M-B have no sync or agent projection; local DTOs are explicit, reminder claims contain no text, exports are owner-initiated, and privacy tests/architecture require opaque IDs before any later projection is enabled |
 | Estimator overclaim | Uncertain data appears authoritative | Typed refusal, ordinal confidence, widening windows, constrained product language; backtest harness measures calibration |
-| Fixed-event mutation | User calendar intent is changed | Immutable input DTOs; proposals are separate outputs |
+| Fixed-event mutation | User calendar intent is changed | Imported rows are database-guarded immutable; source removal is a separate confirmed erasure; approval writes only a separately owned ZeitBoard block; export filters to app-owned events |
+| Stale local proposal approval | A task is placed against changed sleep or calendar evidence | Proposal IDs bind task revision, estimate, interval, sleep snapshot, and text-free event snapshot; the decision transaction recomputes task, sleep, and event state and fails closed before writing |
 | Projection regression | Private fields enter a trusted view | Closed allowlisted DTO, explicit permissions, forbidden-key fixture checks, projection tests |
 | Stale or revoked share | Recipient retains unintended access | Expiry and revocation checked before projection; no view on inactive profile |
 | Sensitive logging | Payloads leak into support bundles or CI | Structured redaction; log categories/counts, never values, tokens, or exact timestamps |
@@ -138,8 +151,9 @@ server host remain part of the trusted computing base.
 - Projection: test output against a forbidden-field list across all permission
   combinations; revoked and expired profiles return no view.
 - Import: unit-test size/shape limits, row accounting, duplicate/conflict
-  handling, transaction atomicity, DST ambiguity, and erasure; fuzz/property
-  tests remain required for future Takeout parsing.
+  handling, transaction atomicity, DST ambiguity, recurrence work caps,
+  CalDAV redirect/credential boundaries, ownership-preserving calendar export,
+  and erasure; fuzz/property tests remain required for future Takeout parsing.
 - Logs: scan integration-test logs for representative sensitive values.
 - Process: revisit this model when adding a data source, an LLM provider, a sync change,
   or any new external surface; review platform permissions and network calls each release.

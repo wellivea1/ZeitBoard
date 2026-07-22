@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import type { RhythmDriftPointFixture, RhythmSleepBandFixture } from "../data/phaseTwo";
 import type { RhythmActogram, RhythmDrift } from "../data/rhythm";
+import { TimeProbe } from "./TimeProbe";
+import { civilProbeLabel, formatCivilDate, formatClock24, useTimeProbe } from "./timeProbeLogic";
 
 const DOUBLE_PLOT_HOURS = 48;
 const DAY_HOURS = 24;
@@ -35,6 +37,13 @@ function circularSegments(startHour: number, durationHours: number) {
   return segments;
 }
 
+function withinCircularSpan(hour: number, startHour: number, durationHours: number) {
+  const start = ((startHour % DAY_HOURS) + DAY_HOURS) % DAY_HOURS;
+  const point = ((hour % DAY_HOURS) + DAY_HOURS) % DAY_HOURS;
+  const duration = Math.min(Math.max(durationHours, 0), DAY_HOURS);
+  return (point - start + DAY_HOURS) % DAY_HOURS <= duration;
+}
+
 interface CycleStripProps {
   actogram: RhythmActogram;
   usefulWindowLabel: string;
@@ -43,11 +52,28 @@ interface CycleStripProps {
 
 export function CycleStrip({ actogram, usefulWindowLabel, sleepWindowLabel }: CycleStripProps) {
   const forecast = actogram.forecastRows[0];
-  if (!forecast) return null;
-
   const nowHour = ((actogram.now.hour % DAY_HOURS) + DAY_HOURS) % DAY_HOURS;
-  const forecastStart = ((forecast.startHour % DAY_HOURS) + DAY_HOURS) % DAY_HOURS;
+  const forecastStart = forecast ? ((forecast.startHour % DAY_HOURS) + DAY_HOURS) % DAY_HOURS : 0;
   const awakeDuration = (forecastStart - nowHour + DAY_HOURS) % DAY_HOURS;
+  const resolveProbe = useCallback(
+    (fraction: number) => {
+      if (!forecast) return undefined;
+      const hour = fraction * DAY_HOURS;
+      const predicted = withinCircularSpan(hour, forecastStart, forecast.durationHours);
+      return {
+        position: fraction,
+        label: civilProbeLabel(actogram.now.civilDate, fraction * DAY_HOURS * 60, {
+          predicted,
+          approximate: predicted,
+        }),
+        zoneId: actogram.now.zoneId,
+      };
+    },
+    [actogram.now.civilDate, actogram.now.zoneId, forecast, forecastStart],
+  );
+  const probe = useTimeProbe(resolveProbe);
+
+  if (!forecast) return null;
 
   return (
     <figure
@@ -68,7 +94,12 @@ export function CycleStrip({ actogram, usefulWindowLabel, sleepWindowLabel }: Cy
         <span>6 PM</span>
         <span>12 AM</span>
       </div>
-      <div className="cycle-strip-track" aria-hidden="true">
+      <div
+        className="cycle-strip-track has-time-probe"
+        aria-hidden="true"
+        onPointerMove={probe.onPointerMove}
+        onPointerLeave={probe.onPointerLeave}
+      >
         {circularSegments(nowHour, awakeDuration).map((segment) => (
           <span
             className="cycle-strip-segment is-awake"
@@ -86,6 +117,7 @@ export function CycleStrip({ actogram, usefulWindowLabel, sleepWindowLabel }: Cy
         <span className="cycle-strip-now" style={{ left: dayPercent(nowHour) }}>
           now
         </span>
+        <TimeProbe probeRef={probe.probeRef} labelRef={probe.labelRef} />
       </div>
       <div className="cycle-strip-legend">
         <span>
@@ -126,12 +158,29 @@ function ActogramBand({
 
 function ActogramRow({ band, now }: { band: RhythmSleepBandFixture; now: RhythmActogram["now"] }) {
   const duplicateFits = band.startHour + 24 < DOUBLE_PLOT_HOURS;
-  const showNowTick = band.day === now.day;
+  const showNowTick = Boolean(
+    band.zoneId && now.zoneId && band.civilDate === now.civilDate && band.zoneId === now.zoneId,
+  );
+  const resolveProbe = useCallback(
+    (fraction: number) => ({
+      position: fraction,
+      label: civilProbeLabel(band.civilDate, fraction * DOUBLE_PLOT_HOURS * 60, {
+        predicted: band.kind === "forecast",
+      }),
+      zoneId: band.zoneId,
+    }),
+    [band.civilDate, band.kind, band.zoneId],
+  );
+  const probe = useTimeProbe(resolveProbe);
 
   return (
     <div className="actogram-visual-row">
       <time>{band.day}</time>
-      <div className="actogram-visual-track">
+      <div
+        className="actogram-visual-track has-time-probe"
+        onPointerMove={probe.onPointerMove}
+        onPointerLeave={probe.onPointerLeave}
+      >
         {band.originalStartHour !== undefined && band.originalDurationHours !== undefined && (
           <span
             className="actogram-band is-original"
@@ -149,6 +198,7 @@ function ActogramRow({ band, now }: { band: RhythmSleepBandFixture; now: RhythmA
             aria-hidden="true"
           />
         )}
+        <TimeProbe probeRef={probe.probeRef} labelRef={probe.labelRef} />
       </div>
       <small>{band.confidence}</small>
     </div>
@@ -281,6 +331,33 @@ const DRIFT_TICKS = 4;
 export function DriftPanel({ drift }: { drift: RhythmDrift }) {
   const points = drift.points;
   const { yMinHour, yMaxHour } = drift;
+  const resolveProbe = useCallback(
+    (fraction: number) => {
+      if (points.length === 0) return undefined;
+      const cursorX = fraction * 100;
+      let nearestIndex = 0;
+      let nearestDistance = Number.POSITIVE_INFINITY;
+      points.forEach((_, index) => {
+        const distance = Math.abs(scaleDriftX(index, points) - cursorX);
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+          nearestIndex = index;
+        }
+      });
+      const point = points[nearestIndex];
+      if (!point) return undefined;
+      const onset = formatClock24(point.onsetHour);
+      const fit = formatClock24(point.fitHour);
+      const fitLabel = fit === onset ? "" : ` (fit ${fit})`;
+      return {
+        position: scaleDriftX(nearestIndex, points) / 100,
+        label: `${formatCivilDate(point.civilDate, 0, false)} · onset ${onset}${fitLabel}`,
+        zoneId: point.zoneId,
+      };
+    },
+    [points],
+  );
+  const probe = useTimeProbe(resolveProbe);
   // Ticks run top (latest onset) to bottom (earliest), derived from the data
   // range so genuinely free-running onsets are never clipped.
   const ticks = Array.from(
@@ -326,36 +403,47 @@ export function DriftPanel({ drift }: { drift: RhythmDrift }) {
           ))}
         </div>
         <div className="drift-chart" role="img" aria-label={drift.summary}>
-          <svg
-            className="drift-svg"
-            viewBox="0 0 100 100"
-            preserveAspectRatio="none"
-            aria-hidden="true"
+          <div
+            className="drift-plot has-time-probe"
+            onPointerMove={probe.onPointerMove}
+            onPointerLeave={probe.onPointerLeave}
           >
-            {ticks.map((hour) => (
-              <line
-                className="drift-gridline"
-                x1="0"
-                x2="100"
-                y1={scaleDriftY(hour, yMinHour, yMaxHour)}
-                y2={scaleDriftY(hour, yMinHour, yMaxHour)}
+            <svg
+              className="drift-svg"
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+            >
+              {ticks.map((hour) => (
+                <line
+                  className="drift-gridline"
+                  x1="0"
+                  x2="100"
+                  y1={scaleDriftY(hour, yMinHour, yMaxHour)}
+                  y2={scaleDriftY(hour, yMinHour, yMaxHour)}
+                  vectorEffect="non-scaling-stroke"
+                  key={hour}
+                />
+              ))}
+              <polygon className="drift-band" points={bandPoints} />
+              <polyline
+                className="drift-fit"
+                points={fitPoints}
                 vectorEffect="non-scaling-stroke"
-                key={hour}
               />
-            ))}
-            <polygon className="drift-band" points={bandPoints} />
-            <polyline className="drift-fit" points={fitPoints} vectorEffect="non-scaling-stroke" />
-            {points.map((point, index) => (
-              <circle
-                className="drift-point"
-                cx={scaleDriftX(index, points)}
-                cy={scaleDriftY(point.onsetHour, yMinHour, yMaxHour)}
-                r="1.7"
-                vectorEffect="non-scaling-stroke"
-                key={point.id}
-              />
-            ))}
-          </svg>
+              {points.map((point, index) => (
+                <circle
+                  className="drift-point"
+                  cx={scaleDriftX(index, points)}
+                  cy={scaleDriftY(point.onsetHour, yMinHour, yMaxHour)}
+                  r="1.7"
+                  vectorEffect="non-scaling-stroke"
+                  key={point.id}
+                />
+              ))}
+            </svg>
+            <TimeProbe probeRef={probe.probeRef} labelRef={probe.labelRef} />
+          </div>
           <div className="drift-x-axis" aria-hidden="true">
             {points.map((point) => (
               <span key={point.id}>{point.day}</span>
@@ -385,7 +473,7 @@ export function DriftPanel({ drift }: { drift: RhythmDrift }) {
             <th>Sleep onset</th>
             <th>Source</th>
             <th>Confidence</th>
-            <th>Fit</th>
+            <th>Fitted onset</th>
           </tr>
         </thead>
         <tbody>
@@ -395,7 +483,7 @@ export function DriftPanel({ drift }: { drift: RhythmDrift }) {
               <td>{point.onsetLabel}</td>
               <td>{point.source}</td>
               <td>{point.confidence}</td>
-              <td>{drift.slopeLabel}</td>
+              <td>{formatClock24(point.fitHour)}</td>
             </tr>
           ))}
         </tbody>

@@ -10,7 +10,7 @@ import (
 )
 
 // TestFixturesMatchCheckedIn is the drift guard: the Go generator must
-// reproduce the committed testdata/v1 files byte-for-byte. This is the
+// reproduce the committed versioned testdata files byte-for-byte. This is the
 // equivalent of the former `generate-testdata.py --check`.
 func TestFixturesMatchCheckedIn(t *testing.T) {
 	root, err := repo.Root()
@@ -25,7 +25,7 @@ func TestFixturesMatchCheckedIn(t *testing.T) {
 		t.Fatal("no fixtures were generated")
 	}
 	for _, f := range files {
-		path := filepath.Join(root, "testdata", "v1", f.Name)
+		path := filepath.Join(root, "testdata", f.Version, f.Name)
 		want, err := os.ReadFile(path)
 		if err != nil {
 			t.Errorf("read %s: %v", f.Name, err)

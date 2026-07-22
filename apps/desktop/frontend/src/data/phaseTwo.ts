@@ -31,6 +31,8 @@ export type RhythmBandKind = "observed" | "corrected" | "inferred" | "nap" | "fo
 export interface RhythmSleepBandFixture {
   id: string;
   day: string;
+  civilDate: string;
+  zoneId?: string;
   startHour: number;
   durationHours: number;
   kind: RhythmBandKind;
@@ -47,6 +49,8 @@ export interface RhythmSleepBandFixture {
 export interface RhythmDriftPointFixture {
   id: string;
   day: string;
+  civilDate: string;
+  zoneId?: string;
   onsetHour: number;
   fitHour: number;
   bandLowHour: number;
@@ -126,6 +130,8 @@ export const rhythmActogramFixture = {
     {
       id: "sleep-jun-15",
       day: "Jun 15",
+      civilDate: "2026-06-15",
+      zoneId: "America/New_York",
       startHour: 21.7,
       durationHours: 7.4,
       kind: "observed",
@@ -138,6 +144,8 @@ export const rhythmActogramFixture = {
     {
       id: "sleep-jun-14",
       day: "Jun 14",
+      civilDate: "2026-06-14",
+      zoneId: "America/New_York",
       startHour: 20.9,
       durationHours: 7.5,
       kind: "observed",
@@ -150,6 +158,8 @@ export const rhythmActogramFixture = {
     {
       id: "sleep-jun-13",
       day: "Jun 13",
+      civilDate: "2026-06-13",
+      zoneId: "America/New_York",
       startHour: 20.1,
       durationHours: 6.5,
       kind: "corrected",
@@ -165,6 +175,8 @@ export const rhythmActogramFixture = {
     {
       id: "sleep-jun-12",
       day: "Jun 12",
+      civilDate: "2026-06-12",
+      zoneId: "America/New_York",
       startHour: 19.35,
       durationHours: 7.2,
       kind: "observed",
@@ -177,6 +189,8 @@ export const rhythmActogramFixture = {
     {
       id: "sleep-jun-11",
       day: "Jun 11",
+      civilDate: "2026-06-11",
+      zoneId: "America/New_York",
       startHour: 18.6,
       durationHours: 6.9,
       kind: "inferred",
@@ -189,6 +203,8 @@ export const rhythmActogramFixture = {
     {
       id: "sleep-jun-10",
       day: "Jun 10",
+      civilDate: "2026-06-10",
+      zoneId: "America/New_York",
       startHour: 17.8,
       durationHours: 7.1,
       kind: "observed",
@@ -203,6 +219,8 @@ export const rhythmActogramFixture = {
     {
       id: "forecast-jun-16",
       day: "Jun 16",
+      civilDate: "2026-06-16",
+      zoneId: "America/New_York",
       startHour: 22.25,
       durationHours: 3.2,
       kind: "forecast",
@@ -215,6 +233,8 @@ export const rhythmActogramFixture = {
     {
       id: "forecast-jun-17",
       day: "Jun 17",
+      civilDate: "2026-06-17",
+      zoneId: "America/New_York",
       startHour: 22.85,
       durationHours: 4.5,
       kind: "forecast",
@@ -227,6 +247,8 @@ export const rhythmActogramFixture = {
     {
       id: "forecast-jun-18",
       day: "Jun 18",
+      civilDate: "2026-06-18",
+      zoneId: "America/New_York",
       startHour: 23.35,
       durationHours: 6.1,
       kind: "forecast",
@@ -239,7 +261,9 @@ export const rhythmActogramFixture = {
   ] satisfies RhythmSleepBandFixture[],
   now: {
     label: "now",
-    day: "Jun 15",
+    day: "Jun 16",
+    civilDate: "2026-06-16",
+    zoneId: "America/New_York",
     hour: 13.5,
   },
 };
@@ -256,6 +280,8 @@ export const rhythmDriftFixture = {
     {
       id: "drift-jun-10",
       day: "Jun 10",
+      civilDate: "2026-06-10",
+      zoneId: "America/New_York",
       onsetHour: 17.8,
       fitHour: 17.75,
       bandLowHour: 17.25,
@@ -267,6 +293,8 @@ export const rhythmDriftFixture = {
     {
       id: "drift-jun-11",
       day: "Jun 11",
+      civilDate: "2026-06-11",
+      zoneId: "America/New_York",
       onsetHour: 18.6,
       fitHour: 18.55,
       bandLowHour: 17.95,
@@ -278,6 +306,8 @@ export const rhythmDriftFixture = {
     {
       id: "drift-jun-12",
       day: "Jun 12",
+      civilDate: "2026-06-12",
+      zoneId: "America/New_York",
       onsetHour: 19.35,
       fitHour: 19.35,
       bandLowHour: 18.75,
@@ -289,6 +319,8 @@ export const rhythmDriftFixture = {
     {
       id: "drift-jun-13",
       day: "Jun 13",
+      civilDate: "2026-06-13",
+      zoneId: "America/New_York",
       onsetHour: 20.1,
       fitHour: 20.15,
       bandLowHour: 19.45,
@@ -300,6 +332,8 @@ export const rhythmDriftFixture = {
     {
       id: "drift-jun-14",
       day: "Jun 14",
+      civilDate: "2026-06-14",
+      zoneId: "America/New_York",
       onsetHour: 20.9,
       fitHour: 20.95,
       bandLowHour: 20.2,
@@ -311,6 +345,8 @@ export const rhythmDriftFixture = {
     {
       id: "drift-jun-15",
       day: "Jun 15",
+      civilDate: "2026-06-15",
+      zoneId: "America/New_York",
       onsetHour: 21.7,
       fitHour: 21.75,
       bandLowHour: 20.9,

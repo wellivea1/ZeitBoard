@@ -29,3 +29,17 @@ and the rhythm chart uses presentation row IDs plus civil-time labels.
 agent/direct proposal path. The request reuses the assistant action target shape plus a
 request-scoped planning context; the response contains a pending proposal and one-use
 decision token, but no approval/apply operation.
+
+`calendar-event-set.schema.json` is a private, device-local contract. Imported
+event text may be displayed locally but must never be copied into schedule requests,
+trusted views, MCP payloads, telemetry, or server projections. Scheduling receives
+only event identifiers and half-open UTC intervals. Imported events are read-only;
+only explicitly approved `app_owned` blocks may carry task and proposal links.
+
+The `v1` medication schemas preserve the M-A logging contract. The `v2`
+medication schemas add explicit schedule zones, reminder opt-in, and private
+clinician-rule text without redefining strict v1 payloads. Both are private,
+device-local contracts. Medication labels, strength/form or clinician-rule
+text, and event notes must not enter trusted views, LLM context, MCP output,
+telemetry, or logs. Wake-relative and predicted-sleep timing are read-time
+projections and are never stored as medication evidence.

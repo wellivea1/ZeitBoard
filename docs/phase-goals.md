@@ -32,18 +32,21 @@ walk-forward backtest. It rejects blanket window tightening by measured delta
 and exposes a confidence-window calibration/misfit follow-up. Phase 1's stated
 acceptance criteria are met; broader pilot validation remains separate work.
 
-**Gap 2 — "calendar app" is still a fixture.** The Calendar screen is a
-synthetic five-day board; fixed events exist only as scheduler test inputs.
-Real ICS/CalDAV import (read-only first), real fixed events in planning,
-and write-back of approved placements (Phase 3c) are the distance between
-"planner with proposals" and "calendar app."
+**Closed gate 2 - real local calendar.** ADR-0023 delivers bounded read-only
+ICS and CalDAV snapshots, real fixed events in planning, a local civil-time
+board, persistent approved ZeitBoard placements, undo, source erasure, and an
+app-owned ICS export. Imported event text remains local. Remote write-back to
+an external calendar is still separately gated; the delivered path never
+mutates an imported event.
 
-**Gap 3 — "disease management" is planned, not built.** The
-Medisafe-benchmarked medication plan (M-A..M-F) is unimplemented; the
-Medications screen is the last full sample-preview surface. Disruption /
-travel / illness / forced-schedule markers and the §3.6 clinician report
-are deferred. These three together are what "disease management" means
-here — rhythm + meds + markers + a report a clinician will actually read.
+**Active gate 3 — disease management.** Medication slices M-A and M-B are
+delivered under ADR-0024/0025: local definitions, append-only taken/skipped
+evidence, corrections, explicit user-authored schedules, neutral collision
+forecasts, opt-in claim-first desktop reminders, contract export, real erasure,
+and the real Medications workspace. M-C adherence and clinician export plus
+disruption/travel/illness/forced-schedule markers remain open. Together those
+remaining pieces complete the intended disease-management surface: rhythm +
+meds + markers + a report a clinician can inspect.
 
 **Gap 4 — the assistant is desktop-chat only.** Voice rides the MCP client
 (documented), but agent access to local device state (appearance, quick
@@ -67,11 +70,12 @@ style alerts need a push path that works self-hosted (web push with
 operator VAPID keys; the Android companion as a second receiver). The
 companion still has no sync client (slice 9).
 
-**Sequencing logic.** Trust before reach: P1's estimator gate is now closed, so
-the next dependency is making the calendar real (P2) before requests have a
-place to land. Then build the health substance (P3), mature the assistant over
-it (P4), open the portal (P5), and fan out notifications (P6). P3 and P4 can
-interleave; P5 still depends on P2's real placement path.
+**Sequencing logic.** Trust before reach: P1's estimator gate and P2's local
+calendar gate are closed and P3 has started with M-A/M-B. The next primary
+dependency is completing the health substance (M-C plus markers), followed
+by maturing the assistant over it (P4), opening the portal
+(P5), and fanning out notifications (P6). P3 and P4 can interleave; P5 can now
+build on P2's approved local placement path.
 
 ---
 
@@ -100,6 +104,9 @@ Status: achieved on 2026-07-19 via ADR-0022 and `verification.md`.
 
 ### `/goal phase-2-real-calendar`
 
+Status: achieved on 2026-07-22 via ADR-0023 and the calendar verification
+record in `verification.md`. External-provider write-back remains out of scope.
+
 > **Goal: make ZeitBoard a real calendar: imported events, real fixed
 > events in planning, and write-back of approved placements.**
 > Context: roadmap slice 6 + Phase 3c, `docs/data-model.md` fixed events,
@@ -118,6 +125,10 @@ Status: achieved on 2026-07-19 via ADR-0022 and `verification.md`.
 > materializes a block visible on Calendar and in export.
 
 ### `/goal phase-3-disease-management`
+
+Status: in progress as of 2026-07-22. M-A local logging and M-B schedules +
+feasibility are delivered via ADR-0024/0025; M-C, rhythm markers, and the
+clinician report remain open.
 
 > **Goal: implement medication tracking M-A..M-C and rhythm markers so the
 > app manages the disease, not just the schedule.**

@@ -736,7 +736,12 @@ func serverRhythmProjection(summary string) *estimation.RhythmProjection {
 		ActogramSummary: summary,
 		ObservedRows:    []estimation.RhythmBand{},
 		ForecastRows:    []estimation.RhythmBand{},
-		Now:             estimation.RhythmNow{Label: "now", Day: "Mar 7", Hour: 12},
+		Now: estimation.RhythmNow{
+			Label:     "now",
+			Day:       "Mar 7",
+			CivilDate: "2026-03-07",
+			Hour:      12,
+		},
 		DriftTitle:      "Sleep-onset drift",
 		SlopeLabel:      "+45 min per cycle",
 		DriftConfidence: "Low",

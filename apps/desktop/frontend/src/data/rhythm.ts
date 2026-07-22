@@ -13,7 +13,7 @@ export interface RhythmActogram {
   summary: string;
   observedRows: RhythmSleepBandFixture[];
   forecastRows: RhythmSleepBandFixture[];
-  now: { label: string; day: string; hour: number };
+  now: { label: string; day: string; civilDate: string; zoneId?: string; hour: number };
 }
 
 export interface RhythmDrift {
@@ -81,6 +81,14 @@ function num(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? value : undefined;
 }
 
+function civilDate(value: unknown): string | undefined {
+  const text = str(value);
+  const match = text ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(text) : null;
+  if (!text || !match) return undefined;
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  return date.toISOString().startsWith(text) ? text : undefined;
+}
+
 function confidence(value: unknown): ConfidenceLevel | undefined {
   const normalized = str(value)?.toLowerCase();
   if (normalized === "low") return "Low";
@@ -106,10 +114,12 @@ function refusal(value: unknown): RhythmData["refusal"] | undefined {
   return code && message ? { code, message } : undefined;
 }
 
-function band(value: unknown): RhythmSleepBandFixture | undefined {
+function band(value: unknown, requireZone: boolean): RhythmSleepBandFixture | undefined {
   if (!isRecord(value)) return undefined;
   const id = str(value.id);
   const day = str(value.day);
+  const rowDate = civilDate(value.civilDate);
+  const zoneId = str(value.zoneId);
   const startHour = num(value.startHour);
   const durationHours = num(value.durationHours);
   const kind = str(value.kind);
@@ -121,6 +131,8 @@ function band(value: unknown): RhythmSleepBandFixture | undefined {
   if (
     !id ||
     !day ||
+    !rowDate ||
+    (requireZone && !zoneId) ||
     startHour === undefined ||
     durationHours === undefined ||
     !kind ||
@@ -135,6 +147,8 @@ function band(value: unknown): RhythmSleepBandFixture | undefined {
   return {
     id,
     day,
+    civilDate: rowDate,
+    zoneId,
     startHour,
     durationHours,
     kind: kind as RhythmSleepBandFixture["kind"],
@@ -146,10 +160,12 @@ function band(value: unknown): RhythmSleepBandFixture | undefined {
   };
 }
 
-function point(value: unknown): RhythmDriftPointFixture | undefined {
+function point(value: unknown, requireZone: boolean): RhythmDriftPointFixture | undefined {
   if (!isRecord(value)) return undefined;
   const id = str(value.id);
   const day = str(value.day);
+  const rowDate = civilDate(value.civilDate);
+  const zoneId = str(value.zoneId);
   const onsetHour = num(value.onsetHour);
   const fitHour = num(value.fitHour);
   const bandLowHour = num(value.bandLowHour);
@@ -160,6 +176,8 @@ function point(value: unknown): RhythmDriftPointFixture | undefined {
   if (
     !id ||
     !day ||
+    !rowDate ||
+    (requireZone && !zoneId) ||
     onsetHour === undefined ||
     fitHour === undefined ||
     bandLowHour === undefined ||
@@ -173,6 +191,8 @@ function point(value: unknown): RhythmDriftPointFixture | undefined {
   return {
     id,
     day,
+    civilDate: rowDate,
+    zoneId,
     onsetHour,
     fitHour,
     bandLowHour,
@@ -194,23 +214,28 @@ function mapAll<T>(value: unknown, map: (item: unknown) => T | undefined): T[] |
   return mapped;
 }
 
-function normalizeNow(value: unknown): RhythmActogram["now"] | undefined {
+function normalizeNow(value: unknown, requireZone: boolean): RhythmActogram["now"] | undefined {
   if (!isRecord(value)) return undefined;
   const label = str(value.label);
   const day = str(value.day);
+  const nowDate = civilDate(value.civilDate);
+  const zoneId = str(value.zoneId);
   const hour = num(value.hour);
-  if (!label || !day || hour === undefined) return undefined;
-  return { label, day, hour };
+  if (!label || !day || !nowDate || (requireZone && !zoneId) || hour === undefined)
+    return undefined;
+  return { label, day, civilDate: nowDate, zoneId, hour };
 }
 
 export function normalizeRhythm(value: unknown): RhythmData | undefined {
   if (!isRecord(value)) return undefined;
 
   const rhythmStatus = status(value.status);
-  const observedRows = mapAll(value.observedRows, band);
-  const forecastRows = mapAll(value.forecastRows, band);
-  const points = mapAll(value.driftPoints, point);
-  const now = normalizeNow(value.now);
+  const rhythmSource = source(value.estimateSource, value.fixtureMode === true);
+  const requireZone = rhythmSource !== "synced";
+  const observedRows = mapAll(value.observedRows, (item) => band(item, requireZone));
+  const forecastRows = mapAll(value.forecastRows, (item) => band(item, requireZone));
+  const points = mapAll(value.driftPoints, (item) => point(item, requireZone));
+  const now = normalizeNow(value.now, requireZone);
   const actogramSummary = str(value.actogramSummary);
   const driftTitle = str(value.driftTitle);
   const slopeLabel = str(value.slopeLabel);

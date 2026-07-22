@@ -289,10 +289,10 @@
   --shadow-card: none;
 }
 
-/* Amber glasses mode: every foreground >=570nm-dominant so the UI keeps its
-   contrast through dark amber blue-blockers (blue reads black, green loses
-   most luminance through the lens). Blue channels held to <=10%; state is
-   carried by luminance and band patterns, never by hue families. */
+/* Amber compatibility mode: a blue-minimized RGB palette designed to remain
+   legible through many dark-amber lenses. CSS controls subpixels, not emitted
+   spectra, so this makes no wavelength or treatment claim. Blue channels are
+   held to <=10%; state also uses luminance and band patterns. */
 [data-theme="amber"] {
   color-scheme: dark;
   --ink: #ffc61a;
@@ -934,70 +934,50 @@ button {
   color: var(--sage-dark);
 }
 
-.calendar-board {
-  overflow: hidden;
+.has-time-probe {
+  cursor: crosshair;
 }
-.calendar-hours {
-  padding: 14px 22px 10px 104px;
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  color: var(--subtle);
-  border-bottom: 1px solid var(--line);
-  font-size: 9px;
-}
-.calendar-hours span:last-child {
-  text-align: right;
-}
-.calendar-days article {
-  min-height: 85px;
-  display: grid;
-  grid-template-columns: 82px minmax(0, 1fr);
-  align-items: center;
-  padding: 0 22px;
-  border-bottom: 1px solid var(--divider);
-}
-.calendar-days article:last-child {
-  border-bottom: 0;
-}
-.calendar-days h2 {
-  margin: 0;
-  font-size: 12px;
-}
-.day-track {
-  position: relative;
-  height: 36px;
-  overflow: hidden;
-  background-image: linear-gradient(to right, var(--divider) 1px, transparent 1px);
-  background-size: 25% 100%;
-  border-radius: 4px;
-}
-.sleep-band,
-.wake-band,
-.fixed-event {
+
+.time-probe {
   position: absolute;
-  top: 7px;
-  height: 22px;
-  padding: 0 7px;
-  display: flex;
-  align-items: center;
-  overflow: hidden;
-  border-radius: 4px;
-  white-space: nowrap;
-  font-size: 8px;
-  font-weight: 750;
+  z-index: var(--z-strip);
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  pointer-events: none;
+  background: var(--probe-line, var(--line));
+  transform: translateX(0);
+  will-change: transform;
 }
-.sleep-band {
+
+.time-probe[hidden] {
+  display: none;
+}
+
+.time-probe-label {
+  position: absolute;
+  top: var(--probe-label-top, 50%);
+  left: 0;
+  padding: var(--space-1) var(--space-2);
   color: var(--ink);
-  background: var(--blue-soft);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  font-size: var(--type-label);
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  line-height: 1;
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
 }
-.wake-band {
-  color: var(--confidence-high-text);
-  background: var(--confidence-high-bg);
+
+.time-probe[data-edge="start"] .time-probe-label {
+  transform: translate(0, -50%);
 }
-.fixed-event {
-  color: var(--confidence-medium-text);
-  background: var(--confidence-medium-bg);
-  border-left: 3px solid var(--state-uncertain);
+
+.time-probe[data-edge="end"] .time-probe-label {
+  transform: translate(-100%, -50%);
 }
 
 .table-panel {
@@ -1016,6 +996,62 @@ button {
 .sleep-entry-panel,
 .sleep-entry-list-panel {
   grid-column: span 12;
+}
+.approval-history-panel {
+  grid-column: span 12;
+  overflow: hidden;
+}
+.approval-error {
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--danger-text);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  font-size: 12px;
+}
+.approval-decision-list {
+  display: grid;
+}
+.approval-decision-list > div {
+  min-height: 62px;
+  padding: 10px 16px;
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  border-top: 1px solid var(--divider);
+}
+.approval-decision-list > div > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.approval-decision-list strong,
+.approval-decision-list span,
+.approval-decision-list small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.approval-decision-list span,
+.approval-decision-list small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.decision-state {
+  padding-left: 8px;
+  color: var(--confidence-high-text) !important;
+  border-left: 3px solid var(--sage);
+  font-weight: 800;
+  text-transform: capitalize;
+}
+.decision-state[data-decision="rejected"] {
+  color: var(--danger-text) !important;
+  border-left-color: var(--danger-border);
 }
 .rhythm-panel {
   grid-column: span 12;
@@ -1381,6 +1417,7 @@ button {
   font-size: 10px;
 }
 .actogram-visual-track {
+  --probe-line: var(--actogram-grid);
   position: relative;
   height: 30px;
   overflow: hidden;
@@ -1545,9 +1582,15 @@ button {
   display: grid;
   grid-template-rows: 300px 30px;
 }
+.drift-plot {
+  --probe-label-top: var(--space-4);
+  --probe-line: var(--drift-grid);
+  position: relative;
+  height: 300px;
+}
 .drift-svg {
   width: 100%;
-  height: 300px;
+  height: 100%;
   overflow: visible;
   background-image: var(--drift-svg-bg);
   background-size: 20% 100%;
@@ -1724,6 +1767,10 @@ button {
   border: 0;
   clip: rect(0 0 0 0);
   white-space: nowrap;
+}
+
+.sr-table {
+  table-layout: fixed;
 }
 
 .record-list,
@@ -2312,14 +2359,6 @@ button {
   .task-row > span:nth-child(3),
   .task-row > span:nth-child(4) {
     display: none;
-  }
-  .calendar-hours {
-    padding-left: 20px;
-  }
-  .calendar-days article {
-    grid-template-columns: 1fr;
-    gap: 9px;
-    padding-block: 12px;
   }
   .timeline-axis {
     margin-left: 0;

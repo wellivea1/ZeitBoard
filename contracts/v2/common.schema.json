@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ZeitBoard common v2 definitions",
+  "$defs": {
+    "schemaVersion": {
+      "const": "v2"
+    },
+    "identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{2,63}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "zoneId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^(UTC|[A-Za-z0-9._+-]+(?:/[A-Za-z0-9._+-]+)+)$"
+    },
+    "provenance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["acquisition_method", "evidence_status", "recorded_at"],
+      "properties": {
+        "acquisition_method": {
+          "type": "string",
+          "enum": ["manual", "health_connect", "os_activity", "file_import", "synthetic"]
+        },
+        "evidence_status": {
+          "type": "string",
+          "enum": ["directly_observed", "user_reported", "inferred"]
+        },
+        "recorded_at": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "source_record_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    }
+  }
+}
