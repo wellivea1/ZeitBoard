@@ -1,55 +1,127 @@
 import { Icon } from "../components/Icon";
-import { PageHeader, PlaceholderNotice } from "../components/AppShell";
+import { PageHeader } from "../components/AppShell";
+
+const relationshipTemplates = [
+  {
+    relationship: "Family",
+    fields: "Availability and best-contact window",
+    expiry: "Required",
+  },
+  {
+    relationship: "Friend",
+    fields: "Availability only",
+    expiry: "Required",
+  },
+  {
+    relationship: "Clinician",
+    fields: "Predicted sleep and waking windows, plus confidence",
+    expiry: "Required",
+  },
+  {
+    relationship: "Collaborator",
+    fields: "Availability only",
+    expiry: "Short default",
+  },
+] as const;
 
 export function SharingScreen() {
   return (
     <>
       <PageHeader
         title="Sharing"
-        description="Choose a person, then allow only the minimum fields they need."
+        description="Choose the minimum fields, require an expiry, and preview the exact recipient view before creating a link."
         actions={
           <div className="status-cluster">
             <span className="sync-dot" data-mode="fixture" aria-hidden="true" />
-            <span>Sample preview</span>
+            <span>Design preview</span>
           </div>
         }
       />
-      <PlaceholderNotice>
-        These profiles are a synthetic design preview — no trusted view is being shared. Sharing
-        stays default-deny: every field must be explicitly allowlisted before anyone sees it.
-      </PlaceholderNotice>
-      <div className="safety-banner">
-        <Icon name="shield" />
-        <p>
-          <strong>Default deny</strong>Medication, diagnosis, raw activity, location, and private
-          calendar text are never part of a trusted view.
-        </p>
-      </div>
-      <section className="profile-grid" aria-label="Sharing profiles">
-        <article className="panel share-profile">
-          <div className="avatar">HH</div>
-          <div className="profile-copy">
-            <span className="active-pill">Active</span>
-            <h2>Household</h2>
-            <p>Predicted sleep window, predicted waking window, confidence</p>
+
+      <section className="sharing-workspace" aria-label="Sharing capability preview">
+        <header className="sharing-state">
+          <div className="sharing-state-copy">
+            <Icon name="shield" />
+            <div>
+              <p className="section-kicker">Current state</p>
+              <h2>No trusted view is being shared</h2>
+              <p>
+                Link creation and recipient access are not connected in this build. The examples
+                below document minimum-access defaults; they are not people, profiles, or active
+                links.
+              </p>
+            </div>
           </div>
-        </article>
-        <article className="panel share-profile">
-          <div className="avatar soft">WC</div>
-          <div className="profile-copy">
-            <span className="active-pill">Active</span>
-            <h2>Work coordinator</h2>
-            <p>Availability windows only</p>
+          <dl className="sharing-state-facts">
+            <div>
+              <dt>Policy</dt>
+              <dd>Default deny</dd>
+            </div>
+            <div>
+              <dt>Active links</dt>
+              <dd>None</dd>
+            </div>
+            <div>
+              <dt>Transport</dt>
+              <dd>Not connected</dd>
+            </div>
+          </dl>
+        </header>
+
+        <section className="sharing-template-section" aria-labelledby="sharing-template-title">
+          <div className="sharing-section-heading">
+            <div>
+              <p className="section-kicker">Relationship templates</p>
+              <h2 id="sharing-template-title">Minimum-access examples</h2>
+            </div>
+            <p>Every permission starts off and must be explicitly granted by the owner.</p>
           </div>
-        </article>
-        <article className="panel share-profile muted">
-          <div className="avatar neutral">EC</div>
-          <div className="profile-copy">
-            <span className="inactive-pill">Paused</span>
-            <h2>Emergency contact</h2>
-            <p>No fields currently visible</p>
+
+          <div className="sharing-template-table" role="table" aria-label="Sharing templates">
+            <div className="sharing-template-head" role="row">
+              <span role="columnheader">Relationship</span>
+              <span role="columnheader">Recipient could see</span>
+              <span role="columnheader">Expiry</span>
+              <span role="columnheader">State</span>
+            </div>
+            {relationshipTemplates.map((template) => (
+              <div className="sharing-template-row" role="row" key={template.relationship}>
+                <strong role="cell" data-label="Relationship">
+                  {template.relationship}
+                </strong>
+                <span role="cell" data-label="Recipient could see">
+                  {template.fields}
+                </span>
+                <span role="cell" data-label="Expiry">
+                  {template.expiry}
+                </span>
+                <span className="sharing-template-state" role="cell" data-label="State">
+                  Example only
+                </span>
+              </div>
+            ))}
           </div>
-        </article>
+        </section>
+
+        <aside className="sharing-guardrails" aria-labelledby="sharing-guardrails-title">
+          <div>
+            <p className="section-kicker">Before a link exists</p>
+            <h2 id="sharing-guardrails-title">Required guardrails</h2>
+          </div>
+          <ol>
+            <li>Preview the exact allowlisted recipient view.</li>
+            <li>Require an expiry; permanent links are not the default.</li>
+            <li>Keep revoke and access history available with every link.</li>
+            <li>Render failures as a contentless unavailable page.</li>
+          </ol>
+          <div className="sharing-private-boundary">
+            <strong>Never in a trusted link</strong>
+            <span>
+              Medication, diagnosis, raw activity, location, private calendar text, and rhythm
+              marker notes.
+            </span>
+          </div>
+        </aside>
       </section>
     </>
   );

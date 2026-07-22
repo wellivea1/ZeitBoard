@@ -102,9 +102,11 @@ function SleepEntryForm({
           <option value="nap">Nap</option>
         </select>
       </label>
-      <button className="button primary" type="submit" disabled={disabled}>
-        {submitLabel}
-      </button>
+      <div className="sleep-entry-submit">
+        <button className="button primary" type="submit" disabled={disabled}>
+          {submitLabel}
+        </button>
+      </div>
     </div>
   );
 }
@@ -425,45 +427,51 @@ export function DataSourcesScreen() {
         title="Data Sources"
         description="Enter or import sleep episodes, then review immutable observations and append-only corrections."
       />
-      <section className="screen-grid data-source-screen" aria-label="Data source review">
-        <section className="panel sleep-entry-panel" aria-labelledby="sleep-entry-title">
-          <div className="panel-heading">
-            <div>
-              <p className="section-kicker">Manual input</p>
-              <h2 id="sleep-entry-title">Add sleep entry</h2>
+      <section className="data-source-workspace" aria-label="Data source review">
+        <DataSourceStatusPanel entriesData={entriesData} syncStatus={syncStatus} />
+
+        <div className="data-source-input-grid">
+          <section className="sleep-entry-panel" aria-labelledby="sleep-entry-title">
+            <div className="data-source-section-heading">
+              <div>
+                <p className="section-kicker">Manual input</p>
+                <h2 id="sleep-entry-title">Add sleep entry</h2>
+              </div>
+              <p>Append one owner-reported principal sleep or nap.</p>
             </div>
-          </div>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              void submitEntry();
-            }}
-          >
-            <SleepEntryForm
-              form={form}
-              onChange={setForm}
-              submitLabel="Save sleep entry"
-              disabled={busy || entriesData.status === "unavailable"}
-            />
-          </form>
-          {formError && (
-            <p className="form-error" role="alert">
-              {formError}
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void submitEntry();
+              }}
+            >
+              <SleepEntryForm
+                form={form}
+                onChange={setForm}
+                submitLabel="Save sleep entry"
+                disabled={busy || entriesData.status === "unavailable"}
+              />
+            </form>
+            {formError && (
+              <p className="form-error" role="alert">
+                {formError}
+              </p>
+            )}
+            <p className="form-status" role="status" aria-live="polite">
+              {statusMessage || entriesData.message}
             </p>
-          )}
-          <p className="form-status" role="status" aria-live="polite">
-            {statusMessage || entriesData.message}
-          </p>
-        </section>
+          </section>
 
-        <SleepImportPanel onImported={refreshEntries} />
+          <SleepImportPanel onImported={refreshEntries} />
+        </div>
 
-        <section className="panel sleep-entry-list-panel" aria-labelledby="sleep-log-title">
-          <div className="panel-heading">
+        <section className="sleep-entry-list-panel" aria-labelledby="sleep-log-title">
+          <div className="data-source-section-heading">
             <div>
               <p className="section-kicker">Local observations</p>
               <h2 id="sleep-log-title">Sleep log</h2>
             </div>
+            <p>Corrections append history; suppression and permanent erasure remain distinct.</p>
           </div>
           {entriesData.entries.length === 0 ? (
             <div className="empty-state sleep-log-empty">
@@ -502,8 +510,6 @@ export function DataSourcesScreen() {
             </div>
           )}
         </section>
-
-        <DataSourceStatusPanel entriesData={entriesData} syncStatus={syncStatus} />
       </section>
     </>
   );

@@ -203,7 +203,13 @@ adherence-in-rhythm context, medication dose markers, and clinician export.
     under the cursor (double-plot day resolution, `predicted` qualifiers,
     structured row dates in the local DTO rather than parsed labels). The
     server/MCP projection remains a separate default-deny allowlist and does
-    not expose raw local zone identifiers.
+    not expose raw local zone identifiers. *U-F delivered:* Data Sources now
+    leads with a dense provenance ledger, Sharing uses an honest default-deny
+    capability/template ledger rather than fake active profile cards, and the
+    Android companion replaced its generic rounded section `Panel` with ruled
+    sections while retaining minimum touch targets. Desktop compact navigation
+    no longer exposes its internal horizontal scrollbar, and Android's 680 dp
+    large-width content cap is now actually enforced.
 
 **Small debts (fold into adjacent slices):** consolidate the correction-record
 → domain decoder (now duplicated across desktop storage, server readmodel, and

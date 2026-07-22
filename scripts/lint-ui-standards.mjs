@@ -17,6 +17,12 @@ function fail(path, message) {
   failures.push(`${relative(root, path)}: ${message}`);
 }
 
+function hasStaticClass(source, className) {
+  return [...source.matchAll(/className="([^"]+)"/g)].some((match) =>
+    match[1].split(/\s+/).includes(className),
+  );
+}
+
 const screenFiles = filesUnder(join(frontend, "screens"), ".tsx");
 const uiFiles = [...screenFiles, ...filesUnder(join(frontend, "components"), ".tsx")];
 
@@ -50,8 +56,53 @@ const overview = readFileSync(overviewPath, "utf8");
 for (const required of ["CycleStrip", "overview-surface", "overview-facts"]) {
   if (!overview.includes(required)) fail(overviewPath, `Overview must retain ${required}.`);
 }
-if (/metric-card|className="[^"]*\bpanel\b/.test(overview)) {
+if (/metric-card/.test(overview) || hasStaticClass(overview, "panel")) {
   fail(overviewPath, "Overview is one surface; generic panels and metric cards are forbidden.");
+}
+
+for (const [name, requiredClass] of [
+  ["DataSourcesScreen.tsx", "data-source-workspace"],
+  ["SharingScreen.tsx", "sharing-workspace"],
+]) {
+  const path = join(frontend, "screens", name);
+  const source = readFileSync(path, "utf8");
+  if (!source.includes(requiredClass)) {
+    fail(path, `${name} must retain its ruled ${requiredClass} composition.`);
+  }
+  if (hasStaticClass(source, "panel")) {
+    fail(path, `${name} must not restore generic rounded panel wrappers.`);
+  }
+}
+
+const sharingPath = join(frontend, "screens", "SharingScreen.tsx");
+const sharing = readFileSync(sharingPath, "utf8");
+if (/\bavatar\b|>\s*Active\s*</.test(sharing)) {
+  fail(sharingPath, "Sharing examples must not look like real people or active links.");
+}
+
+const androidAppPath = join(
+  root,
+  "apps",
+  "android",
+  "app",
+  "src",
+  "main",
+  "java",
+  "org",
+  "non24",
+  "planner",
+  "ui",
+  "Non24App.kt",
+);
+const androidApp = readFileSync(androidAppPath, "utf8");
+if (
+  /private fun Panel\s*\(/.test(androidApp) ||
+  !androidApp.includes("private fun RuledSection(")
+) {
+  fail(
+    androidAppPath,
+    "Android sections must use the ruled composition instead of a generic Panel wrapper.",
+  );
 }
 
 const componentStyles = filesUnder(join(frontend, "styles"), ".css");

@@ -247,18 +247,16 @@ private fun StatusScreen(
 @Composable
 private fun StatusEstimatePanel(state: AppUiState) {
     val estimate = requireNotNull(state.estimate)
-    val shape = MaterialTheme.shapes.large
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(shape)
             .background(
                 Brush.linearGradient(
                     colors = listOf(Color(0xFF31564F), Color(0xFF5A776E)),
                 ),
             )
-            .padding(horizontal = 18.dp, vertical = 17.dp),
-        verticalArrangement = Arrangement.spacedBy(13.dp),
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalArrangement = Arrangement.spacedBy(11.dp),
     ) {
         Text(
             estimate.label.uppercase(Locale.ROOT),
@@ -320,7 +318,7 @@ private fun StatusEstimatePanel(state: AppUiState) {
 
 @Composable
 private fun EmptyEstimatePanel() {
-    Panel {
+    RuledSection {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(9.dp),
@@ -365,7 +363,7 @@ private fun HealthConnectPanel(
     onRefreshHealth: () -> Unit,
     onOpenHealthConnectListing: () -> Unit,
 ) {
-    Panel {
+    RuledSection {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -482,11 +480,11 @@ private fun CorrectionScreen(
         InfoStrip("Imported observations stay unchanged. Corrections remain a separate history.")
 
         if (latest == null) {
-            Panel {
+            RuledSection {
                 Text("No sleep episode is available.", style = MaterialTheme.typography.bodyMedium)
             }
         } else {
-            Panel {
+            RuledSection {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -547,7 +545,7 @@ private fun MedicationScreen(
             title = "Medication event",
             description = "Record what happened without medication or timing advice.",
         )
-        Panel {
+        RuledSection {
             DenseTextField(
                 value = name,
                 onValueChange = { name = it },
@@ -579,7 +577,7 @@ private fun MedicationScreen(
 
         if (state.medicationEvents.isNotEmpty()) {
             SectionHeading("Recent local events")
-            Panel(contentPadding = 0.dp, spacing = 0.dp) {
+            RuledSection(verticalPadding = 0.dp, spacing = 0.dp) {
                 state.medicationEvents.take(5).forEachIndexed { index, event ->
                     MedicationEventRow(event, state.settings.use24HourTime)
                     if (index < minOf(4, state.medicationEvents.lastIndex)) {
@@ -608,7 +606,7 @@ private fun SettingsScreen(
         )
 
         SectionHeading("Data source")
-        Panel {
+        RuledSection {
             Text(
                 "Fixture mode is always labeled and contains synthetic data only.",
                 style = MaterialTheme.typography.bodyMedium,
@@ -622,7 +620,7 @@ private fun SettingsScreen(
         }
 
         SectionHeading("Display")
-        Panel {
+        RuledSection {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -647,7 +645,7 @@ private fun SettingsScreen(
         }
 
         SectionHeading("Privacy")
-        Panel {
+        RuledSection {
             Text("Local-first companion", style = MaterialTheme.typography.titleMedium)
             PrivacyLine("No analytics, telemetry, tracking SDKs, or health-data upload.")
             PrivacyLine("Medication labels and exact behavioral timestamps are never logged.")
@@ -660,7 +658,7 @@ private fun LatestSleepPanel(
     episode: EffectiveSleepEpisode?,
     use24HourTime: Boolean,
 ) {
-    Panel {
+    RuledSection {
         Text("Latest sleep observation", style = MaterialTheme.typography.titleMedium)
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
         if (episode == null) {
@@ -886,8 +884,8 @@ private fun PrimaryButton(
 ) {
     Button(
         onClick = onClick,
-        modifier = modifier.heightIn(min = 44.dp),
-        shape = MaterialTheme.shapes.medium,
+        modifier = modifier.heightIn(min = 48.dp),
+        shape = MaterialTheme.shapes.small,
         colors = ButtonDefaults.buttonColors(
             containerColor = SageDark,
             contentColor = Color.White,
@@ -907,7 +905,7 @@ private fun SecondaryButton(
     OutlinedButton(
         onClick = onClick,
         modifier = modifier.heightIn(min = 44.dp),
-        shape = MaterialTheme.shapes.medium,
+        shape = MaterialTheme.shapes.small,
         border = BorderStroke(1.dp, Color(0xFFCFD5D0)),
         colors = ButtonDefaults.outlinedButtonColors(contentColor = SageDark),
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
@@ -950,24 +948,22 @@ private fun CompactSwitch(
 }
 
 @Composable
-private fun Panel(
+private fun RuledSection(
     modifier: Modifier = Modifier,
-    contentPadding: Dp = 15.dp,
-    spacing: Dp = 11.dp,
+    verticalPadding: Dp = 12.dp,
+    spacing: Dp = 10.dp,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        shadowElevation = 0.dp,
-    ) {
+    Column(modifier = modifier.fillMaxWidth()) {
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline)
         Column(
-            modifier = Modifier.padding(contentPadding),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = verticalPadding),
             verticalArrangement = Arrangement.spacedBy(spacing),
             content = content,
         )
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline)
     }
 }
 
@@ -990,7 +986,12 @@ private fun ScreenHeader(kicker: String, title: String, description: String) {
 
 @Composable
 private fun SectionHeading(text: String) {
-    Text(text, style = MaterialTheme.typography.titleLarge)
+    Text(
+        text.uppercase(Locale.ROOT),
+        modifier = Modifier.padding(top = 2.dp),
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable
@@ -1247,11 +1248,11 @@ private fun ScreenColumn(content: @Composable ColumnScope.() -> Unit) {
     ) {
         Column(
             modifier = Modifier
-                .fillMaxWidth()
                 .widthIn(max = 680.dp)
+                .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 17.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp),
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(11.dp),
             content = content,
         )
     }

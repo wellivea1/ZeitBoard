@@ -192,13 +192,13 @@ export function SleepImportPanel({ onImported }: { onImported: () => Promise<voi
   };
 
   return (
-    <section className="panel sleep-import-panel" aria-labelledby="sleep-import-title">
-      <div className="panel-heading sleep-import-heading">
+    <section className="sleep-import-panel" aria-labelledby="sleep-import-title">
+      <div className="data-source-section-heading sleep-import-heading">
         <div>
           <p className="section-kicker">Local file import</p>
           <h2 id="sleep-import-title">Import a v1 observation set</h2>
         </div>
-        <span className="source-status connected">Local only</span>
+        <span className="data-source-scope">Local only</span>
       </div>
       <p className="sleep-import-intro">
         Choose contract-shaped JSON or canonical CSV. Preview is read-only; import reruns every

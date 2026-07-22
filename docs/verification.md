@@ -192,6 +192,25 @@ positive delta against this combined baseline.
   horizontal scrolling in `.actogram-chart`; hidden screen-reader tables use
   fixed layout so added columns cannot widen the page. The UI standards check
   guards these rules and the readable 760px double-plot width.
+- Reviewed the U-F Data Sources and Sharing remediation at the native 1280x720
+  viewport and 390x844 in Paper, system Dark, Amber, and High contrast. Data
+  Sources leads with a two-column provenance ledger and fits source status plus
+  both input paths above the native fold. Sharing reports that no link exists,
+  marks all relationship rows `Example only`, and uses no avatar or profile
+  card. Both routes use one ruled workspace, contain zero generic `.panel`
+  descendants, and reported zero page-level horizontal overflow. At 390 px the
+  ledgers collapse to label/value rows; the eight route icons remain reachable
+  while their internal scrollbar is visually suppressed. An exact 1440x900
+  metric pass also found no overflowing main-content descendants. Appearance
+  was restored to Auto and the viewport override was reset.
+- Installed the rebuilt debug APK on `Pixel_10_Pro_XL_API_36_1` and reviewed
+  Status, Correct, Medication, and Settings in portrait. The generic section
+  `Panel` is absent; rules and headings separate content without reducing the
+  44/48 dp control targets. Rotated the same AVD to landscape for the large-width
+  Settings check. Accessibility bounds proved the content column was 2040
+  physical pixels (680 dp at 480 dpi) after correcting the modifier order;
+  before that fix it incorrectly filled the 2992 px screen. Portrait was
+  restored. Logcat contained no app crash or ANR, and no text or control clipped.
 
 ## Previously verified artifacts
 
@@ -207,11 +226,8 @@ Verified on Windows 11 on 2026-06-15 and 2026-06-16:
 
 ## Environment limitations
 
-- Repeated the Android Status, Correct, Medication, and Settings review on the
-  `Pixel_10_Pro_XL_API_36_1` emulator after reinstalling the debug APK. The app
-  remained responsive with no app ANR, crash, clipping, or obscured controls.
-  This desktop-only slice changes no Android source. The shared rounded `Panel`
-  wrapper and excess vertical composition visible on those screens remain
-  explicitly open in `docs/ui-refactor-plan.md`; the app-wide UI goal is not
-  treated as complete.
+- Emulator semantics and screenshots were reviewed, but a full manual TalkBack
+  traversal with spoken-output verification was not performed. Periodic real
+  TalkBack and desktop screen-reader participant walkthroughs remain roadmap
+  work; automated roles and minimum target sizes do not substitute for them.
 - The installed Go toolchain has CGO disabled, so `go test -race` is unavailable.

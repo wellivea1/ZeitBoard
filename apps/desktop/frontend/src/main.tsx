@@ -11,6 +11,7 @@ import "./styles/rhythm.css";
 import "./styles/rhythm-markers.css";
 import "./styles/settings.css";
 import "./styles/data-sources.css";
+import "./styles/sharing.css";
 import "./styles/calendar.css";
 import "./styles/medications.css";
 import "./styles/medication-schedules.css";
