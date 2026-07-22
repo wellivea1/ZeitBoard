@@ -269,27 +269,49 @@ therefore do not invent a zone-dependent marker when that field is redacted.
   and reduced stimulation. Paint containment and fixed-layout hidden tables
   prevent chart or screen-reader content from widening the narrow page.
 
-## 8. Residual surface audit and next UI slice (open, 2026-07-22)
+## 8. Slice U-F (delivered 2026-07-22): residual ruled surfaces
 
-The earlier `U-B delivered` label applies to Overview and the primary Rhythm
-visuals, not to every route. A fresh 1440x900 structure and screenshot audit
-found no generic rounded panels on Overview, Calendar, Rhythm, Medications, or
-the core Settings layout. Lifecycle proposal objects on Tasks and Approvals
-still use bounded containers, which is consistent with section 2. Data Sources
-and Sharing remain materially below the target:
+The earlier `U-B delivered` label applied to Overview and the primary Rhythm
+visuals, not to every route. U-F completed the residual structural remediation
+identified by the follow-up audit:
 
-- Data Sources still defaults to four large rounded panels with excessive
-  internal padding and a long form-first page.
-- Sharing still uses large profile cards, circular avatar treatments, and
-  substantial unused canvas.
-- The Android refactor reduced scale, but its shared `Panel` composable remains
-  the default wrapper for status, correction, medication, data-source, display,
-  and privacy sections.
+- **Data Sources is source-first.** A two-column provenance ledger now precedes
+  entry tools, reports current local/sync state, and points calendar ownership
+  to the delivered Calendar workspace instead of calling it future work. Manual
+  entry and contract import share one divided workspace; the sleep ledger stays
+  ruled. There is no generic `.panel` wrapper in the route.
+- **Sharing is honest and dense.** The route first says that no trusted view is
+  being shared and that transport is not connected. Relationship templates are
+  explicitly examples, not fake people or active links. A compact ledger and a
+  guardrail column replace circular avatars and profile cards. Medication,
+  diagnosis, raw activity, location, private calendar text, and rhythm-marker
+  notes remain outside the trusted-link boundary.
+- **Android sections are ruled, not card-wrapped.** Status, latest sleep,
+  Health Connect, correction, medication, display, data-source, and privacy
+  sections now use top/bottom rules with content-level spacing. The generic
+  `Panel` composable is gone; primary actions retain the 48 dp Android target
+  and other controls retain at least 44 dp. The large-width review also found
+  and fixed the `fillMaxWidth().widthIn(...)` modifier ordering bug, so the
+  intended 680 dp content cap now measures 2040 physical pixels at 480 dpi.
+- **Narrow chrome is quiet.** Eight desktop route icons remain horizontally
+  reachable below 700 px without exposing a browser scrollbar.
 
-ADR-0026's Rhythm Context workspace is the reference for the next remediation:
-one ruled surface, dense label/value rows, rectangular controls, no avatar
-circles, and no card wrapper around each record. The next UI slice must apply
-that structure to Data Sources and Sharing, then remove Android's generic
-section panels where hierarchy can be expressed with rules and headings.
-Completion requires desktop and Pixel 10 Pro XL emulator review at compact and
-large widths. Until that lands, the app-wide UI robustness goal remains open.
+Repository UI lint now rejects a generic panel in Data Sources or Sharing,
+rejects avatar/active-link presentation in the sharing preview, and rejects a
+return of Android's generic `Panel` wrapper. Focused rendering tests verify
+source-first ordering, truthful Calendar status, template semantics, and the
+absence of the retired structures.
+
+Runtime review covered the desktop routes at the native 1280x720 viewport and
+390x844 in Paper, system Dark, Amber, and High contrast, with no page-level
+horizontal overflow. An exact 1440x900 layout measurement also found no
+overflowing main-content descendants. The named Pixel 10 Pro XL API 36.1
+emulator covered all four routes in portrait and Settings at the large
+landscape width after a fresh APK install; no app crash, ANR, clipping, or
+obscured control was observed.
+
+This closes the specifically recorded residual-surface slice. It does not claim
+that deferred product capabilities are present: trusted-link transport,
+Android sync and More destinations, tablet/fold two-pane navigation, and a
+full TalkBack/screen-reader participant walkthrough remain separate roadmap
+work.

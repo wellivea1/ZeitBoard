@@ -455,8 +455,7 @@
 }
 
 [data-reduced="true"] .task-row,
-[data-reduced="true"] .record-list article,
-[data-reduced="true"] .source-list article {
+[data-reduced="true"] .record-list article {
   min-height: 52px;
 }
 
@@ -909,31 +908,6 @@ button {
   font-size: 11px;
   line-height: 1.45;
 }
-.safety-banner {
-  margin: -8px 0 22px;
-  padding: 15px 18px;
-  display: flex;
-  gap: 12px;
-  color: var(--muted);
-  background: var(--sage-soft);
-  border: 1px solid var(--line);
-  border-radius: 9px;
-}
-.safety-banner svg {
-  width: 18px;
-  height: 18px;
-  margin-top: 2px;
-}
-.safety-banner p {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.5;
-}
-.safety-banner strong {
-  display: block;
-  color: var(--sage-dark);
-}
-
 .has-time-probe {
   cursor: crosshair;
 }
@@ -991,10 +965,7 @@ button {
 .rhythm-tabs,
 .correction-inspector,
 .refusal-panel,
-.source-conflicts-panel,
-.source-status-panel,
-.sleep-entry-panel,
-.sleep-entry-list-panel {
+.source-conflicts-panel {
   grid-column: span 12;
 }
 .approval-history-panel {
@@ -1064,8 +1035,6 @@ button {
 .correction-inspector,
 .refusal-panel,
 .source-conflicts-panel,
-.sleep-entry-panel,
-.sleep-entry-list-panel,
 .drift-panel,
 .actogram-panel {
   padding: 24px 26px;
@@ -1773,8 +1742,7 @@ button {
   table-layout: fixed;
 }
 
-.record-list,
-.source-list {
+.record-list {
   overflow: hidden;
 }
 .sleep-entry-fields {
@@ -1924,8 +1892,7 @@ button {
 .sleep-log-empty {
   padding-block: 28px;
 }
-.record-list article,
-.source-list article {
+.record-list article {
   min-height: 88px;
   padding: 17px 21px;
   display: grid;
@@ -1936,15 +1903,10 @@ button {
 .record-list article {
   grid-template-columns: 42px minmax(0, 1fr) auto;
 }
-.source-list article {
-  grid-template-columns: 42px minmax(0, 1fr) auto 82px;
-}
-.record-list article:last-child,
-.source-list article:last-child {
+.record-list article:last-child {
   border-bottom: 0;
 }
-.record-icon,
-.source-mark {
+.record-icon {
   width: 40px;
   height: 40px;
   display: grid;
@@ -1953,18 +1915,15 @@ button {
   background: var(--sage-soft);
   border-radius: 9px;
 }
-.record-icon svg,
-.source-mark svg {
+.record-icon svg {
   width: 18px;
   height: 18px;
 }
-.record-list h2,
-.source-list h2 {
+.record-list h2 {
   margin: 0 0 5px;
   font-size: 13px;
 }
-.record-list p,
-.source-list p {
+.record-list p {
   margin: 0;
   color: var(--muted);
   font-size: 10px;
@@ -1993,64 +1952,6 @@ button {
   height: 16px;
 }
 
-.profile-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 15px;
-}
-.share-profile {
-  min-height: 132px;
-  padding: 22px;
-  display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
-  align-items: center;
-  gap: 15px;
-}
-.share-profile.muted {
-  opacity: 0.72;
-}
-.avatar {
-  width: 46px;
-  height: 46px;
-  display: grid;
-  place-items: center;
-  color: var(--paper);
-  background: var(--sage);
-  border-radius: 50%;
-  font-size: 11px;
-  font-weight: 800;
-}
-.avatar.soft {
-  color: var(--sage-dark);
-  background: var(--sage-soft);
-}
-.avatar.neutral {
-  color: var(--muted);
-  background: var(--chrome);
-}
-.profile-copy h2 {
-  margin: 5px 0;
-  font-size: 14px;
-}
-.profile-copy p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 10px;
-  line-height: 1.5;
-}
-.active-pill,
-.inactive-pill {
-  font-size: 8px;
-  font-weight: 850;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.active-pill {
-  color: var(--confidence-high-text);
-}
-.inactive-pill {
-  color: var(--subtle);
-}
 .source-status {
   color: var(--muted);
   font-size: 10px;
@@ -2317,7 +2218,12 @@ button {
   }
   .primary-nav {
     display: flex;
+    gap: 2px;
     overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .primary-nav::-webkit-scrollbar {
+    display: none;
   }
   .nav-link {
     min-width: 44px;
@@ -2334,9 +2240,6 @@ button {
   }
   .page-actions {
     margin-top: 16px;
-  }
-  .profile-grid {
-    grid-template-columns: 1fr;
   }
   .task-row {
     grid-template-columns: minmax(180px, 1fr) 90px;
@@ -2370,8 +2273,7 @@ button {
   .actogram-row small {
     display: none;
   }
-  .record-list article,
-  .source-list article {
+  .record-list article {
     grid-template-columns: 42px minmax(0, 1fr) auto;
   }
   .sleep-entry-fields,
