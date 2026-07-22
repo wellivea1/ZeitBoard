@@ -21,7 +21,10 @@ visual refactor decisions remain in `ui-refactor-plan.md`.
   adapter also rejects reports whose row statuses do not reconcile with the
   aggregate counts. The calendar adapter additionally reconciles source
   ownership, source metadata, interval semantics, unique segment identifiers,
-  and consecutive civil dates before any local response renders.
+  and consecutive civil dates before any local response renders. The
+  medication adapter similarly reconciles unique definition/event IDs,
+  references, private display labels, stored-event counts, civil timestamps,
+  export counts, and the no-fixture invariant.
 - `src/state/` owns state that genuinely spans routes. Small invalidation
   signals, such as sleep-data and calendar changes, remain explicit events
   rather than a second application store.
@@ -63,6 +66,12 @@ rectangular foreground blocks with overlap lanes, and exact event details are
 available through an inspector and semantic table. The board owns its internal
 horizontal scroll at narrow widths and may not widen the document.
 
+Medications uses one ruled workspace rather than nested cards: quick logging
+and the civil-time evidence ledger remain primary, while definition management
+stays in a compact rail. Observed, predicted, and unavailable rhythm context
+are text-qualified. Correction and permanent erasure are separate editors;
+the latter cannot submit until the exact `DELETE` token is entered.
+
 `styles.css` contains global tokens, resets, shell primitives, and established
 shared components. Reworked route-specific composition lives in
 `src/styles/*.css`. New component CSS uses spacing, radius, type, and color
@@ -90,6 +99,10 @@ tokens rather than raw colors or ad-hoc radii.
   rows, then checkpoints the WAL and vacuums SQLite. IDs already sent to the
   backend remain only in the erasure outbox until tombstones propagate; no
   sleep payload remains there.
+- Medication edits and exclusion append corrections to immutable raw events.
+  Medication event/definition deletion uses separate `DELETE`-confirmed
+  bindings and compacts the same local SQLite/WAL boundary. M-A has no browser
+  fixture fallback, sync projection, assistant context, or interaction check.
 - Database erasure does not claim to remove copies held by external backups,
   filesystem snapshots, or storage-device wear leveling.
 

@@ -5,10 +5,10 @@ Most recent local verification: Windows 11 on 2026-07-22.
 ## Passing checks
 
 - Frontend formatting, ESLint, and repository UI standards. The UI guard passed
-  with 13 screen modules and 5 component stylesheets.
+  with 14 screen modules and 6 component stylesheets.
 - Frontend TypeScript and production builds for the desktop and trusted-view
   workspaces.
-- Frontend tests: 22 desktop test files with 180 tests, plus 2 trusted-view test
+- Frontend tests: 24 desktop test files with 187 tests, plus 2 trusted-view test
   files with 6 tests.
 - `scripts/dev.ps1 -Action check -Component desktop`: desktop production build.
 - `scripts/dev.ps1 -Action check -Component core`: Go formatting, tests, and vet
@@ -18,12 +18,19 @@ Most recent local verification: Windows 11 on 2026-07-22.
 - `scripts/dev.ps1 -Action check -Component server`: server formatting, tests,
   and vet, including the server/MCP projection privacy allowlist.
 - `scripts/dev.ps1 -Action check -Component contracts`: deterministic drift
-  check for 21 v1 fixture files, tools tests/vet, and schema validation.
-- Android Gradle `check` passed on the parent Android UI branch. This
-  desktop-only calendar slice changes no Android source and did not rerun it.
+  check for 24 v1 fixture files, tools tests/vet, and schema validation.
+- Native Wails production build at `apps/desktop/build/bin/ZeitBoard.exe`.
+- Android `testDebugUnitTest`, `lintDebug`, and `assembleDebug`; this medication
+  slice changes no Android source.
 - Sleep erasure regression: suppression remains exportable and excluded from
   effective reads; hard deletion removes observation/correction rows and the
   unique payload marker from the compacted SQLite database and WAL.
+- Medication evidence regression: exclusion remains an append-only correction
+  and stored evidence remains countable/exportable; event erasure removes the
+  selected event and correction chain without deleting its definition, while
+  medication erasure removes the definition and all dependent evidence. Both
+  paths remove unique payload markers from the compacted SQLite database and
+  WAL.
 - Calendar ownership regression: bounded ICS/CalDAV preview and import,
   recurrence/DST parsing, immutable imported rows, and source erasure all pass.
   Erasure removes private labels, titles, locations, notes, and saved endpoints
@@ -115,6 +122,11 @@ positive delta against this combined baseline.
 
 ## Visual verification
 
+- Reviewed the real Medications workspace with unavailable-service and populated
+  bridge states at 1440x900 and 390x844. Definition setup, compact quick log,
+  observed/predicted/unavailable timing context, correction, exclusion, and
+  typed hard-erasure controls remained legible and contained without document
+  overflow. Runtime console review reported no warnings or errors.
 - Reviewed the real-calendar replacement at 1440x900 in the browser fixture:
   source administration remains a compact rail, forecast ranges remain
   background bands, fixed events use rectangular overlap lanes, exact event
@@ -167,5 +179,6 @@ Verified on Windows 11 on 2026-06-15 and 2026-06-16:
 ## Environment limitations
 
 - Android UI was previously reviewed on the Pixel 10 Pro XL API 36 emulator;
-  this desktop-only slice changed no Android source and did not rerun Gradle.
+  this desktop-only slice changed no Android source. Gradle verification was
+  rerun, but the emulator visual matrix was not repeated.
 - The installed Go toolchain has CGO disabled, so `go test -race` is unavailable.

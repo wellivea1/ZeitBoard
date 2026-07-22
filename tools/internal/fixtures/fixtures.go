@@ -170,6 +170,65 @@ type calendarEvent struct {
 	ProposalID     string `json:"proposal_id,omitempty"`
 }
 
+type medicationSchedule struct {
+	Kind string `json:"kind"`
+}
+
+type medicationItem struct {
+	MedicationID  string             `json:"medication_id"`
+	Label         string             `json:"label"`
+	Form          string             `json:"form,omitempty"`
+	StrengthLabel string             `json:"strength_label,omitempty"`
+	Active        bool               `json:"active"`
+	Schedule      medicationSchedule `json:"schedule"`
+	CreatedAt     string             `json:"created_at"`
+	Revision      int                `json:"revision"`
+	UpdatedAt     string             `json:"updated_at"`
+}
+
+type medicationSet struct {
+	SchemaVersion string           `json:"schema_version"`
+	GeneratedAt   string           `json:"generated_at"`
+	Medications   []medicationItem `json:"medications"`
+}
+
+type medicationEventItem struct {
+	EventID      string     `json:"event_id"`
+	MedicationID string     `json:"medication_id"`
+	DoseAt       string     `json:"dose_at"`
+	ZoneID       string     `json:"zone_id"`
+	Status       string     `json:"status"`
+	Scheduled    bool       `json:"scheduled"`
+	Note         string     `json:"note,omitempty"`
+	Provenance   provenance `json:"provenance"`
+}
+
+type medicationEventChanges struct {
+	Note string `json:"note,omitempty"`
+}
+
+type medicationEventCorrection struct {
+	CorrectionID  string                 `json:"correction_id"`
+	TargetEventID string                 `json:"target_event_id"`
+	CreatedAt     string                 `json:"created_at"`
+	Reason        string                 `json:"reason"`
+	Changes       medicationEventChanges `json:"changes"`
+}
+
+type medicationEventSet struct {
+	SchemaVersion string                      `json:"schema_version"`
+	GeneratedAt   string                      `json:"generated_at"`
+	Events        []medicationEventItem       `json:"events"`
+	Corrections   []medicationEventCorrection `json:"corrections"`
+}
+
+type medicationDataExport struct {
+	SchemaVersion string             `json:"schema_version"`
+	GeneratedAt   string             `json:"generated_at"`
+	MedicationSet medicationSet      `json:"medication_set"`
+	EventSet      medicationEventSet `json:"event_set"`
+}
+
 type assistantActionTarget struct {
 	TaskID                    string `json:"task_id"`
 	EarliestStartAt           string `json:"earliest_start_at,omitempty"`
@@ -674,6 +733,60 @@ func Build() ([]File, error) {
 		},
 	}
 
+	medicationSetFixture := medicationSet{
+		SchemaVersion: "v1",
+		GeneratedAt:   ts(generatedAt),
+		Medications: []medicationItem{
+			{
+				MedicationID:  "med_synthetic_01",
+				Label:         "Synthetic medication record",
+				Form:          "tablet",
+				StrengthLabel: "user-entered strength",
+				Active:        true,
+				Schedule:      medicationSchedule{Kind: "as_needed"},
+				CreatedAt:     ts(generatedAt.Add(-14 * 24 * time.Hour)),
+				Revision:      1,
+				UpdatedAt:     ts(generatedAt.Add(-14 * 24 * time.Hour)),
+			},
+		},
+	}
+	medicationEventSetFixture := medicationEventSet{
+		SchemaVersion: "v1",
+		GeneratedAt:   ts(generatedAt),
+		Events: []medicationEventItem{
+			{
+				EventID:      "dose_synthetic_01",
+				MedicationID: "med_synthetic_01",
+				DoseAt:       ts(generatedAt.Add(-3 * time.Hour)),
+				ZoneID:       zoneID,
+				Status:       "taken",
+				Scheduled:    false,
+				Note:         "Synthetic local-only note",
+				Provenance: provenance{
+					AcquisitionMethod: "manual",
+					EvidenceStatus:    "user_reported",
+					RecordedAt:        ts(generatedAt.Add(-2 * time.Hour)),
+					SourceRecordID:    "synthetic-dose-row-01",
+				},
+			},
+		},
+		Corrections: []medicationEventCorrection{
+			{
+				CorrectionID:  "medcorr_synthetic_01",
+				TargetEventID: "dose_synthetic_01",
+				CreatedAt:     ts(generatedAt.Add(-time.Hour)),
+				Reason:        "user_edit",
+				Changes:       medicationEventChanges{Note: "Corrected synthetic local-only note"},
+			},
+		},
+	}
+	medicationDataExportFixture := medicationDataExport{
+		SchemaVersion: "v1",
+		GeneratedAt:   ts(generatedAt),
+		MedicationSet: medicationSetFixture,
+		EventSet:      medicationEventSetFixture,
+	}
+
 	assistantActionFixture := assistantAction{
 		SchemaVersion:     "v1",
 		RecommendedAction: "propose_place_task",
@@ -1101,6 +1214,9 @@ func Build() ([]File, error) {
 		{"sync-erase.json", syncEraseFixture},
 		{"task-set.json", taskSetFixture},
 		{"calendar-event-set.json", calendarEventSetFixture},
+		{"medication-set.json", medicationSetFixture},
+		{"medication-event-set.json", medicationEventSetFixture},
+		{"medication-data-export.json", medicationDataExportFixture},
 		{"assistant-action.json", assistantActionFixture},
 		{"direct-proposal-request.json", directProposalRequestFixture},
 		{"phase-estimate.json", estimateFixture},

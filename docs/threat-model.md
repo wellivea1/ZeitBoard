@@ -79,7 +79,10 @@ implemented: an authenticated erase endpoint hard-deletes synced payloads, tombs
 block resurrection, and devices apply pulled tombstones as local hard-deletes. The
 **local v1 sleep import boundary (ADR-0022)** is implemented with an 8 MiB / 20,000-row
 cap, strict JSON/CSV shape, per-row errors, source-id conflict detection, and atomic
-all-or-nothing commit. The
+all-or-nothing commit. **Local medication evidence (ADR-0024)** is implemented
+with private device-only definitions, immutable events, correction chains,
+contract export, and byte-checked hard erasure; no medication payload sync or
+agent projection exists in M-A. The
 **cloud skill wrapper and live trusted-view transport do not exist yet**; their rows
 remain design requirements for future workstreams, not current guarantees.
 
@@ -102,6 +105,8 @@ remain design requirements for future workstreams, not current guarantees.
 | Future Takeout / My Activity import | Resource exhaustion; misleading inference | Not implemented; must add bounded parsing and mark inferred sleep low-confidence (`inferred`) before it may affect estimation |
 | Source mutation | Audit history and estimator support become misleading | Append-only observations and corrections; effective read model; persistence tests |
 | Time-zone confusion | Incorrect drift or schedule proposals | UTC instants plus IANA zones; half-open intervals; DST-focused tests |
+| Medication correction mistaken for erasure | Sensitive raw evidence remains when the owner expected deletion | Ordinary edits and exclusion append immutable corrections and say that evidence remains; separate event/definition erasure requires exact `DELETE`, cascades corrections, checkpoints the WAL, vacuums SQLite, and is byte-tested |
+| Medication text crosses a projection boundary | Names or private notes reach a server, agent, trusted view, or log | M-A has no sync or agent projection; local DTOs are explicit, exports are owner-initiated, and privacy tests/architecture require opaque IDs before any later projection is enabled |
 | Estimator overclaim | Uncertain data appears authoritative | Typed refusal, ordinal confidence, widening windows, constrained product language; backtest harness measures calibration |
 | Fixed-event mutation | User calendar intent is changed | Imported rows are database-guarded immutable; source removal is a separate confirmed erasure; approval writes only a separately owned ZeitBoard block; export filters to app-owned events |
 | Stale local proposal approval | A task is placed against changed sleep or calendar evidence | Proposal IDs bind task revision, estimate, interval, sleep snapshot, and text-free event snapshot; the decision transaction recomputes task, sleep, and event state and fails closed before writing |

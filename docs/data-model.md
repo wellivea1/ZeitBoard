@@ -59,6 +59,23 @@ UTC interval. Snapshot replacement is atomic and imported rows cannot be
 updated in place. Removing a source is explicit erasure, not an append-only
 suppression.
 
+### Medication definition, event, and correction
+
+A medication definition is mutable private local intent with a monotonically
+increasing revision. M-A stores a user-entered label and optional form/strength
+text; absence of a schedule is represented as absence, not inferred as
+`as_needed`. Schedule fields in the v1 contract are reserved for M-B
+user-authored rules.
+
+A medication event is immutable evidence that the owner recorded `taken` or
+`skipped` at a UTC instant with an IANA zone. An edit appends a correction that
+may change effective time, zone, status, scheduled-elsewhere fact, note, or
+exclusion. The chain has one root and cannot fork. Wake-relative and
+before-sleep values are computed from current sleep evidence and are neither
+stored in raw records nor exported. Exclusion retains evidence; hard deletion
+is a separate typed operation that physically removes an event/corrections or
+the definition and all dependent history.
+
 ### Task, proposal, and decision
 
 Tasks contain duration and allowed bounds. The scheduler returns proposal
@@ -86,6 +103,8 @@ erDiagram
   ESTIMATE ||--|{ FORECAST_WINDOW : produces
   ESTIMATE ||--o{ SCHEDULE_REQUEST : informs
   CALENDAR_SOURCE ||--o{ CALENDAR_EVENT : contains
+  MEDICATION ||--o{ MEDICATION_EVENT : records
+  MEDICATION_EVENT ||--o{ MEDICATION_CORRECTION : corrected_by
   SCHEDULE_REQUEST ||--o{ CALENDAR_EVENT : constrained_by
   SCHEDULE_REQUEST ||--o{ TASK : contains
   TASK ||--o| PROPOSAL : may_receive

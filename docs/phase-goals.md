@@ -39,12 +39,13 @@ app-owned ICS export. Imported event text remains local. Remote write-back to
 an external calendar is still separately gated; the delivered path never
 mutates an imported event.
 
-**Gap 3 — "disease management" is planned, not built.** The
-Medisafe-benchmarked medication plan (M-A..M-F) is unimplemented; the
-Medications screen is the last full sample-preview surface. Disruption /
-travel / illness / forced-schedule markers and the §3.6 clinician report
-are deferred. These three together are what "disease management" means
-here — rhythm + meds + markers + a report a clinician will actually read.
+**Active gate 3 — disease management.** Medication slice M-A is delivered
+under ADR-0024: local definitions, append-only taken/skipped evidence,
+corrections, rhythm context, contract export, real erasure, and the real
+Medications workspace. M-B schedules/collision forecasts, M-C adherence and
+clinician export, and disruption/travel/illness/forced-schedule markers remain
+open. Together those remaining pieces complete the intended disease-management
+surface: rhythm + meds + markers + a report a clinician can inspect.
 
 **Gap 4 — the assistant is desktop-chat only.** Voice rides the MCP client
 (documented), but agent access to local device state (appearance, quick
@@ -69,8 +70,9 @@ operator VAPID keys; the Android companion as a second receiver). The
 companion still has no sync client (slice 9).
 
 **Sequencing logic.** Trust before reach: P1's estimator gate and P2's local
-calendar gate are closed. The next primary dependency is the health substance
-(P3), followed by maturing the assistant over it (P4), opening the portal
+calendar gate are closed and P3 has started with M-A. The next primary
+dependency is completing the health substance (M-B/M-C plus markers), followed
+by maturing the assistant over it (P4), opening the portal
 (P5), and fanning out notifications (P6). P3 and P4 can interleave; P5 can now
 build on P2's approved local placement path.
 
@@ -122,6 +124,9 @@ record in `verification.md`. External-provider write-back remains out of scope.
 > materializes a block visible on Calendar and in export.
 
 ### `/goal phase-3-disease-management`
+
+Status: in progress as of 2026-07-22. M-A local logging is delivered via
+ADR-0024; M-B, M-C, rhythm markers, and the clinician report remain open.
 
 > **Goal: implement medication tracking M-A..M-C and rhythm markers so the
 > app manages the disease, not just the schedule.**

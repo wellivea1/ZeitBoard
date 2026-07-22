@@ -39,6 +39,9 @@ Calendar import likewise reads only an owner-selected ICS file or an explicitly
 entered CalDAV collection. CalDAV is read-only, bounded, and device-side. The
 password is used for one request and cleared; it is never persisted. Stored
 collection endpoints are sanitized to exclude credentials and query secrets.
+Medication data is created only from labels, optional form/strength text, and
+taken/skipped events the owner explicitly enters. The app does not query a drug
+database, infer a schedule from a name, or upload medication text.
 Windows activity and Health Connect collection are disabled until
 the user enables them through a visible permission flow, and backend sync is
 opt-in and off by default. The application does not collect keystrokes, typed
@@ -83,11 +86,21 @@ separately owned ZeitBoard block; rejection creates no event; undo removes only
 that app-owned block. Calendar export contains app-owned placements only and
 never copies imported text.
 
+Medication definitions, raw events, and corrections remain in local SQLite.
+Derived wake/sleep relationships are recomputed and are not included in the
+medication export. Exclusion appends a correction and retains the raw evidence;
+typed `DELETE` erasure removes an event and its corrections, or a definition
+and all dependent history, then checkpoints and vacuums SQLite. Medication
+labels and notes are excluded from backend sync, trusted views, MCP/assistant
+context, telemetry, and logs in M-A. Future sync requires a new reviewed
+redaction and tombstone path before those records may leave the device.
+
 ## Logging
 
 Logs may contain component names, error categories, counts, durations, and
-opaque correlation IDs. They must not contain observation payloads, notes,
-health details, calendar content, tokens, exact behavioral timestamps, or raw
+opaque correlation IDs. They must not contain observation payloads, medication
+labels or notes, health details, calendar content, tokens, exact behavioral
+timestamps, or raw
 trusted-view URLs. Debug logging does not relax this rule.
 
 ## Sharing

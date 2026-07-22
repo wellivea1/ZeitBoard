@@ -142,6 +142,56 @@ func (s *Store) Migrate(ctx context.Context) error {
 			task_id TEXT NOT NULL,
 			pushed_at TEXT NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS local_medications (
+			medication_id TEXT PRIMARY KEY,
+			active INTEGER NOT NULL CHECK(active IN (0, 1)),
+			revision INTEGER NOT NULL CHECK(revision >= 1),
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			payload_json BLOB NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_local_medications_active
+			ON local_medications(active, updated_at)`,
+		`CREATE TABLE IF NOT EXISTS local_medication_events (
+			event_id TEXT PRIMARY KEY,
+			medication_id TEXT NOT NULL,
+			dose_at TEXT NOT NULL,
+			status TEXT NOT NULL CHECK(status IN ('taken', 'skipped')),
+			scheduled INTEGER NOT NULL CHECK(scheduled IN (0, 1)),
+			recorded_at TEXT NOT NULL,
+			payload_json BLOB NOT NULL,
+			FOREIGN KEY(medication_id) REFERENCES local_medications(medication_id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_local_medication_events_dose
+			ON local_medication_events(dose_at, event_id)`,
+		`CREATE TRIGGER IF NOT EXISTS trg_local_medication_events_immutable
+			BEFORE UPDATE ON local_medication_events
+			BEGIN
+				SELECT RAISE(ABORT, 'medication events are immutable');
+			END`,
+		`CREATE TABLE IF NOT EXISTS local_medication_event_corrections (
+			correction_id TEXT PRIMARY KEY,
+			target_event_id TEXT NOT NULL,
+			supersedes_correction_id TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			reason TEXT NOT NULL CHECK(reason IN ('user_edit', 'duplicate', 'invalid_time')),
+			changes_json BLOB NOT NULL,
+			payload_json BLOB NOT NULL,
+			FOREIGN KEY(target_event_id) REFERENCES local_medication_events(event_id) ON DELETE CASCADE
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_local_medication_corrections_target
+			ON local_medication_event_corrections(target_event_id, created_at, correction_id)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_local_medication_corrections_supersedes
+			ON local_medication_event_corrections(supersedes_correction_id)
+			WHERE supersedes_correction_id <> ''`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_local_medication_corrections_root
+			ON local_medication_event_corrections(target_event_id)
+			WHERE supersedes_correction_id = ''`,
+		`CREATE TRIGGER IF NOT EXISTS trg_local_medication_corrections_immutable
+			BEFORE UPDATE ON local_medication_event_corrections
+			BEGIN
+				SELECT RAISE(ABORT, 'medication event corrections are immutable');
+			END`,
 		`CREATE TABLE IF NOT EXISTS local_calendar_sources (
 			source_id TEXT PRIMARY KEY,
 			label TEXT NOT NULL,
@@ -239,7 +289,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		}
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	for _, version := range []int{1, 2, 3, 4, 5} {
+	for _, version := range []int{1, 2, 3, 4, 5, 6} {
 		if _, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(?, ?)`, version, now); err != nil {
 			return err
 		}
@@ -424,7 +474,7 @@ func (s *Store) DeleteAll(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	for _, table := range []string{"source_observations", "manual_corrections", "phase_estimates", "medication_events", "share_profiles", "local_sleep_corrections", "local_sleep_observations", "local_proposal_decisions", "local_calendar_events", "local_calendar_sources"} {
+	for _, table := range []string{"source_observations", "manual_corrections", "phase_estimates", "medication_events", "share_profiles", "local_sleep_corrections", "local_sleep_observations", "local_medication_event_corrections", "local_medication_events", "local_medications", "local_proposal_decisions", "local_calendar_events", "local_calendar_sources"} {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table); err != nil {
 			_ = tx.Rollback()
 			return err
