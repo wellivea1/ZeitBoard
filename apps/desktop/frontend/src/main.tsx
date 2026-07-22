@@ -10,6 +10,7 @@ import "./styles/overview.css";
 import "./styles/rhythm.css";
 import "./styles/settings.css";
 import "./styles/data-sources.css";
+import "./styles/calendar.css";
 
 loadAndApplyTheme();
 loadAndApplyReducedStimulation();

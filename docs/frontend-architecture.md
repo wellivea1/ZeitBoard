@@ -19,10 +19,12 @@ visual refactor decisions remain in `ui-refactor-plan.md`.
   adapter validates and normalizes an unknown DTO before returning typed UI
   data. `wailsBridge.ts` owns method discovery and binding. The sleep-import
   adapter also rejects reports whose row statuses do not reconcile with the
-  aggregate counts.
+  aggregate counts. The calendar adapter additionally reconciles source
+  ownership, source metadata, interval semantics, unique segment identifiers,
+  and consecutive civil dates before any local response renders.
 - `src/state/` owns state that genuinely spans routes. Small invalidation
-  signals, such as sleep-data changes, remain explicit events rather than a
-  second application store.
+  signals, such as sleep-data and calendar changes, remain explicit events
+  rather than a second application store.
 - `src/theme/` owns preset definitions, persistence, and root data attributes.
   Theme presets change semantic tokens; components do not branch on preset
   names.
@@ -53,6 +55,14 @@ exact useful-task window remains text because the current Overview DTO exposes
 it as a formatted label, not structured numeric bounds. The UI must not parse
 that prose to manufacture chart precision.
 
+Calendar has a route-specific ownership contract: source administration stays
+in a compact rail at desktop widths while the civil-time board remains the
+primary surface; below the tablet breakpoint the board precedes source
+administration. Forecast windows are background bands, fixed events are
+rectangular foreground blocks with overlap lanes, and exact event details are
+available through an inspector and semantic table. The board owns its internal
+horizontal scroll at narrow widths and may not widen the document.
+
 `styles.css` contains global tokens, resets, shell primitives, and established
 shared components. Reworked route-specific composition lives in
 `src/styles/*.css`. New component CSS uses spacing, radius, type, and color
@@ -71,6 +81,10 @@ tokens rather than raw colors or ad-hoc radii.
   strict validation in one transaction; the UI never treats a preview as write
   authorization. Any invalid row disables commit, while exact source-record
   duplicates remain visible and are not reinserted.
+- ICS and CalDAV preview/commit are likewise separate. CalDAV passwords are
+  cleared after every request. Imported sources require typed `REMOVE`
+  confirmation; the UI never presents imported events as editable or includes
+  them in the app-owned export.
 - Permanent deletion is a different binding and requires the exact `DELETE`
   token. It removes the observation, correction history, and local sync payload
   rows, then checkpoints the WAL and vacuums SQLite. IDs already sent to the
@@ -105,6 +119,7 @@ architecture guards, not substitutes for tests or visual review.
 | UI architecture was convention only | Added ESLint limits and the repository-specific UI standards check |
 | Theme selection was a text control | Replaced with a visual preset manager with previews and explicit selected state |
 | Synthetic previews exposed enabled controls with no action | Removed the dead affordances; preview surfaces now remain visibly read-only |
+| Calendar was a synthetic board with oversized card-like composition | Replaced it with validated real-source adapters, dense rules, background forecast bands, overlap lanes, explicit ownership controls, and contained narrow-width scrolling |
 | Repository checks could hide native Go failures | Hardened `scripts/dev.ps1` to propagate Go, npm, Wails, contract, and Gradle exit codes |
 
 Rhythm-linked appearance switching is implemented under ADR-0021. The

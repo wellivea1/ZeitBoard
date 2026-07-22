@@ -35,6 +35,10 @@ The desktop runs on the user's manually entered sleep data and shows an honest
 empty state until entries exist; synthetic data appears only in clearly labeled
 sample mode. Local sleep-file import reads only the JSON or CSV the user
 explicitly selects; it does not scan arbitrary folders or upload the file.
+Calendar import likewise reads only an owner-selected ICS file or an explicitly
+entered CalDAV collection. CalDAV is read-only, bounded, and device-side. The
+password is used for one request and cleared; it is never persisted. Stored
+collection endpoints are sanitized to exclude credentials and query secrets.
 Windows activity and Health Connect collection are disabled until
 the user enables them through a visible permission flow, and backend sync is
 opt-in and off by default. The application does not collect keystrokes, typed
@@ -67,6 +71,17 @@ request mode `0600`, require explicit overwrite, and still rely on an
 owner-controlled directory ACL on Windows. Preview reports may show row
 timestamps in the local UI; logs and committed verification retain counts and
 aggregate metrics only.
+
+Imported calendar snapshots remain private local records. Their titles,
+locations, and notes are available to the desktop Calendar UI but are excluded
+from scheduling requests, backend sync, trusted views, MCP tools, and LLM
+context. The scheduler receives only opaque event identifiers and UTC
+intervals. Removing an imported source requires typed confirmation, cascades
+through its events, checkpoints the WAL, and vacuums the local database.
+Imported events cannot be edited or suppressed in place. Approval creates a
+separately owned ZeitBoard block; rejection creates no event; undo removes only
+that app-owned block. Calendar export contains app-owned placements only and
+never copies imported text.
 
 ## Logging
 
@@ -105,5 +120,7 @@ identifiers.
 ## Product claims
 
 The product presents estimated sleep-wake phase, predicted sleep and waking
-windows, and confidence/uncertainty. It does not claim exact circadian phase or
-DLMO and does not provide diagnosis, treatment, or behavioral recommendations.
+windows, and confidence/uncertainty. Calendar overlays show scheduling
+constraints; they do not make those estimates more physiologically exact. The
+product does not claim exact circadian phase or DLMO and does not provide
+diagnosis, treatment, or behavioral recommendations.

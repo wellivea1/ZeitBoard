@@ -124,8 +124,9 @@ public availability portal) with a pasteable `/goal` prompt per phase is
    `estimate_unavailable` for real tasks without an estimate. *Task sync
    delivered* (ADR-0020): edits travel as immutable revision records over the
    append-only log with last-writer-wins application, and task deletion
-   erases all pushed revisions via ADR-0017 tombstones. Still deferred:
-   write-back of approved placements (Phase 3c).
+   erases all pushed revisions via ADR-0017 tombstones. Approved local
+   placement materialization is now delivered by ADR-0023; external-provider
+   write-back remains separately gated.
 5. ~~**Replace the remaining fixture UI.**~~ ✅ Delivered: in local/synced mode
    the Rhythm "Sources" tab now shows the estimator's real refusal, the real
    correction history (append-only inspector; the dead fixture undo button is
@@ -135,12 +136,16 @@ public availability portal) with a pasteable `/goal` prompt per phase is
    fixture mode, which is labeled "Sample data". A real *conflict* list still
    needs an engine-surfaced overlap DTO — deferred until multiple sources
    exist (slice 7), rather than faking overlap logic in the chart layer.
-6. **Calendar import (Phase 3a) — after an explicit placement ADR.** The
-   original scoping predates the backend; decide *where adapters live*
-   (device-side like Health Connect vs server-side on the instance), which
-   protocols first (ICS/CalDAV before Google OAuth verification burdens), and
-   how imported-event text is kept out of projections. Then implement
-   read-only import per the re-scoped ADR.
+6. ~~**Calendar import and local placement materialization.**~~ Delivered
+   (ADR-0023): device-side bounded ICS and read-only CalDAV snapshots, a strict
+   event-set contract, recurrence expansion with DST handling, atomic local
+   persistence and revocable source erasure, real fixed events in the
+   scheduler, and a dense Calendar board that keeps private text local.
+   Approval records bind transactionally to the exact task revision,
+   sleep-data snapshot, and text-free busy-event snapshot. Approval creates
+   only an app-owned local block; rejection writes no event; undo removes only
+   that block; app-owned placements export as RFC 5545 ICS. OAuth providers
+   and remote write-back remain future, separately permissioned work.
 7. **Takeout / "My Activity" import + activity→sleep inference.** File import
    (no Google API exists for My Activity) feeding the deferred probabilistic
    inference; emits low-confidence `inferred` episodes only, validated by the
@@ -228,25 +233,27 @@ an estimate as exact.
 **Delivered:** the desktop engine-backed proposal queue with explanation codes
 and honest unplaced reasons; backend-persisted assistant/agent proposals,
 one-use signed approval tokens, cross-device decisions, audit trail, real local
-tasks, and immutable task revision sync with erasure-grade deletion.
-**Not yet delivered:** calendar import, approved-placement write-back, batch
-review, surfaced decision history, and richer proposal expiry handling.
+tasks, immutable task revision sync with erasure-grade deletion, read-only
+calendar import, local approved-placement materialization, persistent local
+decision history/undo, and app-owned ICS export.
+**Not yet delivered:** external-provider calendar write-back, batch review,
+unified local/backend presentation, and richer proposal expiry handling.
 
-**3a. Read-only calendar import** — re-scope via ADR first (adapter placement,
-protocol order, OAuth verification realities); imported events are immutable
-inputs whose text never reaches trusted views or LLM context.
+**3a. Read-only calendar import - delivered locally (ADR-0023).** ICS and
+CalDAV adapters run device-side; imported events are immutable inputs whose
+text never reaches trusted views, sync envelopes, or LLM context.
 
 **3b. Approval queue completion** — the desktop already approves backend
-assistant/agent proposals through the decision endpoint. Remaining work is one
-combined presentation across local scheduler and backend origins, batch review,
-surfaced expiry, and decision history.
+assistant/agent proposals through the decision endpoint. Local scheduler
+decisions now persist with visible history and per-item undo. Remaining work is
+one combined presentation across local and backend origins, batch review, and
+surfaced expiry.
 
-**3c. Two-way calendar write-back — last, and separately gated.** Approved
-changes to app-owned flexible items may be written back via a least-privilege
-write scope. Gated behind the unified queue, explicit per-calendar write
-consent, and a dedicated security review + threat-model update before
-enablement. (The former "relay" review reference is superseded; the relay
-design survives only as input to trusted-view sharing.)
+**3c. External calendar write-back - last, and separately gated.** ADR-0023
+delivers the ownership-safe local precursor: approval materializes a ZeitBoard
+block and an owner can export those blocks as ICS. Writing into an external
+provider remains off. It requires least-privilege scope, explicit per-calendar
+consent, conflict semantics, and a dedicated security review before enablement.
 
 Exit criteria: no code path applies a calendar change without a recorded
 approval; import is revocable and least-privilege; write-back is off by

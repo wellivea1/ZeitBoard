@@ -149,7 +149,18 @@ function SyncedProposalsPanel() {
 }
 
 export function ApprovalsScreen() {
-  const { pending, pendingCount, unplaced, source } = useApprovals();
+  const {
+    pending,
+    decided,
+    pendingCount,
+    unplaced,
+    source,
+    undo,
+    busyProposalId,
+    error,
+    ready,
+    dismissError,
+  } = useApprovals();
   const byOrigin = (origin: ProposalOrigin) =>
     pending.filter((proposal) => proposal.origin === origin).length;
   return (
@@ -157,21 +168,33 @@ export function ApprovalsScreen() {
       <PageHeader
         title="Approvals"
         description={
-          pendingCount > 0
-            ? `${pendingCount} pending ${pendingCount === 1 ? "proposal" : "proposals"}. Approve or reject each change before anything moves.`
-            : "Nothing is waiting for your approval right now."
+          !ready
+            ? "Loading the local proposal queue."
+            : pendingCount > 0
+              ? `${pendingCount} pending ${pendingCount === 1 ? "proposal" : "proposals"}. Approve or reject each change before anything moves.`
+              : "Nothing is waiting for your approval right now."
         }
         actions={
           <div className="status-cluster">
             <span className="sync-dot" data-mode={source} aria-hidden="true" />
-            <span>{source === "backend" ? "Local plan" : "Sample data"}</span>
+            <span>
+              {!ready ? "Loading local plan" : source === "local" ? "Local plan" : "Sample data"}
+            </span>
           </div>
         }
       />
       <PlaceholderNotice>
-        Approving or rejecting updates the queue with one-tap undo. Fixed and imported events remain
-        immutable; nothing is written to a calendar yet.
+        Approval writes a ZeitBoard-owned block to the local calendar. Imported events remain
+        immutable, rejection writes nothing, and every local decision can be undone.
       </PlaceholderNotice>
+      {error && (
+        <div className="approval-error" role="alert">
+          <span>{error}</span>
+          <button className="text-button" type="button" onClick={dismissError}>
+            Dismiss
+          </button>
+        </div>
+      )}
       <section className="screen-grid approval-screen" aria-label="Pending approval queue">
         <div className="panel approval-filter" aria-label="Pending proposals by origin">
           <span>All {pendingCount}</span>
@@ -179,7 +202,13 @@ export function ApprovalsScreen() {
           <span>Assistant {byOrigin("assistant")}</span>
           <span>Sync {byOrigin("sync_conflict")}</span>
         </div>
-        {pendingCount > 0 ? (
+        {!ready ? (
+          <div className="panel empty-state" role="status">
+            <p className="section-kicker">Local planner</p>
+            <h2>Loading proposals</h2>
+            <p>Reading the current sleep, task, and fixed-event snapshots.</p>
+          </div>
+        ) : pendingCount > 0 ? (
           <div className="proposal-stack">
             {pending.map((proposal) => (
               <ProposalCard proposal={proposal} key={proposal.id} />
@@ -196,6 +225,40 @@ export function ApprovalsScreen() {
           </div>
         )}
 
+        {decided.length > 0 && (
+          <section className="panel approval-history-panel" aria-labelledby="local-decisions-title">
+            <div className="panel-heading">
+              <div>
+                <p className="section-kicker">Local decision record</p>
+                <h2 id="local-decisions-title">Approved and rejected proposals</h2>
+              </div>
+              <span>{decided.length} active</span>
+            </div>
+            <div className="approval-decision-list">
+              {decided.map((proposal) => (
+                <div key={proposal.id}>
+                  <span className="decision-state" data-decision={proposal.status}>
+                    {proposal.status}
+                  </span>
+                  <div>
+                    <strong>{proposal.title}</strong>
+                    <span>{proposal.to}</span>
+                    <small>{proposal.createdLabel}</small>
+                  </div>
+                  <button
+                    className="button ghost compact"
+                    type="button"
+                    disabled={!ready || busyProposalId !== null || !proposal.canUndo}
+                    onClick={() => undo(proposal.id)}
+                  >
+                    {busyProposalId === proposal.id ? "Undoing..." : "Undo decision"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         <SyncedProposalsPanel />
 
         {unplaced.length > 0 && (
@@ -207,7 +270,7 @@ export function ApprovalsScreen() {
             <ul className="unplaced-list">
               {unplaced.map((item) => (
                 <li key={item.title}>
-                  <strong>{item.title}</strong> — {item.reason}. <small>{item.nextAction}</small>
+                  <strong>{item.title}</strong> - {item.reason}. <small>{item.nextAction}</small>
                 </li>
               ))}
             </ul>

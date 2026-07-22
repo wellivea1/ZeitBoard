@@ -89,10 +89,13 @@ retained separately where needed for faithful civil-time rendering.
 ### Proposal consistency
 
 Local proposal identifiers are deterministic over the task identity and
-revision, estimate identity, proposed half-open interval, and fixed-event
-snapshot used to compute them. Approval recomputes proposals in the desktop
-service and accepts only an exact current identifier. If the task, estimate, or
-calendar changed, the stale proposal is refused and the UI must refresh.
+revision, estimate identity, proposed half-open interval, immutable sleep-data
+snapshot, and fixed-event snapshot used to compute them. Approval recomputes
+proposals in the desktop service and accepts only an exact current identifier.
+The storage transaction then rechecks the task revision plus sleep and
+text-free busy-event fingerprints before writing. If the task, sleep evidence,
+estimate, or calendar changed, the stale proposal is refused and the UI must
+refresh.
 
 Every successful placement write therefore has explicit approval and a
 revision trail. Approval never edits the imported event that constrained the

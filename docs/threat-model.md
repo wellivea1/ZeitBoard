@@ -97,11 +97,14 @@ remain design requirements for future workstreams, not current guarantees.
 | Malicious external agent (MCP/skill) | Exfiltration or unauthorized change | Local MCP exposes allowlisted read projections only (never the raw model), propose-only tools, call budgets, and no approval/apply tool; cloud skills remain future and require a separate privacy review |
 | Erased data lingering on the instance or other devices | A hard-deleted record survives elsewhere, defeating the erasure right | Authenticated `/v1/sync/erase` hard-deletes the synced payload and mints tombstones (record-id only, no health data) that every device applies on pull; the tombstone registry makes re-pushing an erased id a silent no-op (no resurrection). Residual: a device that never syncs again keeps its copy until it does (ADR-0017) |
 | Malicious or malformed local sleep import | Resource exhaustion; hidden row loss; misleading estimator input | 8 MiB and 20,000-row caps; strict v1 JSON/canonical CSV; only principal/nap `file_import` sleep rows; per-row errors; invalid/conflicting rows block the whole transaction; duplicate source IDs are explicitly reported; no payload logging |
+| Malicious or oversized ICS/CalDAV source | Resource exhaustion, recurrence explosion, parser ambiguity, or network pivot | Input/response/component/occurrence/work caps; strict content-line parsing; bounded recurrence horizon; HTTPS except loopback; cross-origin redirects refused; sanitized endpoint persistence; atomic preview/commit |
+| CalDAV credential disclosure | Password or secret-bearing URL survives locally or leaks in logs | Credentials are one-shot request fields and cleared by the UI; passwords are never persisted; userinfo/query secrets and non-loopback HTTP endpoints are rejected; calendar payloads and endpoints are excluded from logs |
 | Future Takeout / My Activity import | Resource exhaustion; misleading inference | Not implemented; must add bounded parsing and mark inferred sleep low-confidence (`inferred`) before it may affect estimation |
 | Source mutation | Audit history and estimator support become misleading | Append-only observations and corrections; effective read model; persistence tests |
 | Time-zone confusion | Incorrect drift or schedule proposals | UTC instants plus IANA zones; half-open intervals; DST-focused tests |
 | Estimator overclaim | Uncertain data appears authoritative | Typed refusal, ordinal confidence, widening windows, constrained product language; backtest harness measures calibration |
-| Fixed-event mutation | User calendar intent is changed | Immutable input DTOs; proposals are separate outputs |
+| Fixed-event mutation | User calendar intent is changed | Imported rows are database-guarded immutable; source removal is a separate confirmed erasure; approval writes only a separately owned ZeitBoard block; export filters to app-owned events |
+| Stale local proposal approval | A task is placed against changed sleep or calendar evidence | Proposal IDs bind task revision, estimate, interval, sleep snapshot, and text-free event snapshot; the decision transaction recomputes task, sleep, and event state and fails closed before writing |
 | Projection regression | Private fields enter a trusted view | Closed allowlisted DTO, explicit permissions, forbidden-key fixture checks, projection tests |
 | Stale or revoked share | Recipient retains unintended access | Expiry and revocation checked before projection; no view on inactive profile |
 | Sensitive logging | Payloads leak into support bundles or CI | Structured redaction; log categories/counts, never values, tokens, or exact timestamps |
@@ -138,8 +141,9 @@ server host remain part of the trusted computing base.
 - Projection: test output against a forbidden-field list across all permission
   combinations; revoked and expired profiles return no view.
 - Import: unit-test size/shape limits, row accounting, duplicate/conflict
-  handling, transaction atomicity, DST ambiguity, and erasure; fuzz/property
-  tests remain required for future Takeout parsing.
+  handling, transaction atomicity, DST ambiguity, recurrence work caps,
+  CalDAV redirect/credential boundaries, ownership-preserving calendar export,
+  and erasure; fuzz/property tests remain required for future Takeout parsing.
 - Logs: scan integration-test logs for representative sensitive values.
 - Process: revisit this model when adding a data source, an LLM provider, a sync change,
   or any new external surface; review platform permissions and network calls each release.

@@ -1,17 +1,30 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
-import type { ChangeProposalFixture } from "../data/phaseTwo";
 import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  decideLocalProposal,
+  hasLocalProposalService,
   loadProposals,
   proposalsFixture,
+  undoLocalProposalDecision,
+  type ProposalRecord,
+  type ProposalsResult,
   type ProposalsSource,
   type UnplacedProposal,
 } from "../data/proposals";
+import { notifyCalendarDataChanged } from "../data/calendar";
 import { sleepDataChangedEvent } from "../data/sleepDataEvents";
 
 export type ProposalDecision = "approved" | "rejected";
 export type ProposalStatus = "pending" | ProposalDecision;
 
-export interface DecidedProposal extends ChangeProposalFixture {
+export interface DecidedProposal extends ProposalRecord {
   status: ProposalStatus;
 }
 
@@ -24,84 +37,172 @@ interface LastDecision {
 interface ApprovalsContextValue {
   proposals: DecidedProposal[];
   pending: DecidedProposal[];
+  decided: DecidedProposal[];
   pendingCount: number;
   unplaced: UnplacedProposal[];
   source: ProposalsSource;
   decide: (id: string, decision: ProposalDecision) => void;
+  undo: (id: string) => void;
   undoLast: () => void;
   lastDecision: LastDecision | null;
+  busyProposalId: string | null;
+  error: string;
+  ready: boolean;
+  dismissError: () => void;
 }
 
 const ApprovalsContext = createContext<ApprovalsContextValue | null>(null);
 
-// Approval decisions stay in-session; nothing is written back to a calendar yet.
-// The pending proposals are seeded from the local scheduling engine (GetProposals)
-// and fall back to the shared fixture before the Wails service is ready.
+function withStatus(proposal: ProposalRecord): DecidedProposal {
+  return { ...proposal, status: proposal.decision };
+}
+
 export function ApprovalsProvider({ children }: { children: ReactNode }) {
+  const localServicePresent = hasLocalProposalService();
   const [proposals, setProposals] = useState<DecidedProposal[]>(() =>
-    proposalsFixture.proposals.map((proposal) => ({ ...proposal, status: "pending" })),
+    localServicePresent ? [] : proposalsFixture.proposals.map(withStatus),
   );
-  const [unplaced, setUnplaced] = useState<UnplacedProposal[]>(proposalsFixture.unplaced);
-  const [source, setSource] = useState<ProposalsSource>("fixture");
+  const [unplaced, setUnplaced] = useState<UnplacedProposal[]>(
+    localServicePresent ? [] : proposalsFixture.unplaced,
+  );
+  const [source, setSource] = useState<ProposalsSource>(localServicePresent ? "local" : "fixture");
+  const [ready, setReady] = useState(!localServicePresent);
   const [lastDecision, setLastDecision] = useState<LastDecision | null>(null);
+  const [busyProposalId, setBusyProposalId] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const mounted = useRef(false);
+  const requestVersion = useRef(0);
+  const busyRef = useRef<string | null>(null);
+
+  const applyResult = useCallback((result: ProposalsResult) => {
+    setSource(result.source);
+    setUnplaced(result.data.unplaced);
+    setProposals(result.data.proposals.map(withStatus));
+    setReady(true);
+  }, []);
+
+  const refresh = useCallback(async () => {
+    const version = ++requestVersion.current;
+    try {
+      const result = await loadProposals();
+      if (!mounted.current || version !== requestVersion.current) return;
+      applyResult(result);
+      setError("");
+    } catch (reason) {
+      if (!mounted.current || version !== requestVersion.current) return;
+      setReady(true);
+      setError(reason instanceof Error ? reason.message : "Proposal queue could not be loaded.");
+    }
+  }, [applyResult]);
 
   useEffect(() => {
-    let current = true;
-    const refresh = () =>
-      void loadProposals().then((result) => {
-        if (!current) return;
-        setSource(result.source);
-        setUnplaced(result.data.unplaced);
-        // Only seed the queue while it is still untouched, so an in-flight load
-        // never clobbers a decision the user already made.
-        setProposals((existing) =>
-          existing.some((proposal) => proposal.status !== "pending")
-            ? existing
-            : result.data.proposals.map((proposal) => ({ ...proposal, status: "pending" })),
-        );
-      });
-    refresh();
-    window.addEventListener(sleepDataChangedEvent, refresh);
-    return () => {
-      current = false;
-      window.removeEventListener(sleepDataChangedEvent, refresh);
+    busyRef.current = busyProposalId;
+  }, [busyProposalId]);
+
+  useEffect(() => {
+    mounted.current = true;
+    void Promise.resolve().then(refresh);
+    const onSleepChanged = () => {
+      if (busyRef.current === null) void refresh();
     };
-  }, []);
+    window.addEventListener(sleepDataChangedEvent, onSleepChanged);
+    return () => {
+      mounted.current = false;
+      window.removeEventListener(sleepDataChangedEvent, onSleepChanged);
+    };
+  }, [refresh]);
 
   const decide = (id: string, decision: ProposalDecision) => {
     const target = proposals.find((proposal) => proposal.id === id);
-    if (!target || target.status !== "pending") return;
-    setProposals((current) =>
-      current.map((proposal) =>
-        proposal.id === id ? { ...proposal, status: decision } : proposal,
-      ),
+    if (!ready || !target || target.status !== "pending" || busyProposalId) return;
+    if (source === "fixture") {
+      setProposals((current) =>
+        current.map((proposal) =>
+          proposal.id === id
+            ? { ...proposal, decision, status: decision, canUndo: true }
+            : proposal,
+        ),
+      );
+      setLastDecision({ id, title: target.title, decision });
+      return;
+    }
+
+    setBusyProposalId(id);
+    setError("");
+    void decideLocalProposal(id, decision).then(
+      async () => {
+        if (decision === "approved") notifyCalendarDataChanged();
+        await refresh();
+        if (!mounted.current) return;
+        setBusyProposalId(null);
+        setLastDecision({ id, title: target.title, decision });
+      },
+      (reason: unknown) => {
+        if (!mounted.current) return;
+        setBusyProposalId(null);
+        setError(reason instanceof Error ? reason.message : "Proposal decision failed.");
+        void refresh();
+      },
     );
-    setLastDecision({ id, title: target.title, decision });
+  };
+
+  const undo = (id: string) => {
+    const target = proposals.find((proposal) => proposal.id === id);
+    if (!ready || !target || target.status === "pending" || busyProposalId) return;
+    if (source === "fixture") {
+      setProposals((current) =>
+        current.map((proposal) =>
+          proposal.id === id
+            ? { ...proposal, decision: "pending", status: "pending", canUndo: false }
+            : proposal,
+        ),
+      );
+      setLastDecision(null);
+      return;
+    }
+
+    setBusyProposalId(id);
+    setError("");
+    void undoLocalProposalDecision(id).then(
+      async () => {
+        notifyCalendarDataChanged();
+        await refresh();
+        if (!mounted.current) return;
+        setBusyProposalId(null);
+        setLastDecision(null);
+      },
+      (reason: unknown) => {
+        if (!mounted.current) return;
+        setBusyProposalId(null);
+        setError(reason instanceof Error ? reason.message : "Proposal undo failed.");
+        void refresh();
+      },
+    );
   };
 
   const undoLast = () => {
-    if (!lastDecision) return;
-    const { id } = lastDecision;
-    setProposals((current) =>
-      current.map((proposal) =>
-        proposal.id === id ? { ...proposal, status: "pending" } : proposal,
-      ),
-    );
-    setLastDecision(null);
+    if (lastDecision) undo(lastDecision.id);
   };
 
   const dismiss = useCallback(() => setLastDecision(null), []);
-
+  const dismissError = useCallback(() => setError(""), []);
   const pending = proposals.filter((proposal) => proposal.status === "pending");
+  const decided = proposals.filter((proposal) => proposal.status !== "pending");
   const value: ApprovalsContextValue = {
     proposals,
     pending,
+    decided,
     pendingCount: pending.length,
     unplaced,
     source,
     decide,
+    undo,
     undoLast,
     lastDecision,
+    busyProposalId,
+    error,
+    ready,
+    dismissError,
   };
 
   return (
@@ -111,6 +212,7 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
         <ApprovalUndoToast
           key={`${lastDecision.id}-${lastDecision.decision}`}
           decision={lastDecision}
+          busy={busyProposalId === lastDecision.id}
           onUndo={undoLast}
           onDismiss={dismiss}
         />
@@ -121,10 +223,12 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
 
 function ApprovalUndoToast({
   decision,
+  busy,
   onUndo,
   onDismiss,
 }: {
   decision: LastDecision;
+  busy: boolean;
   onUndo: () => void;
   onDismiss: () => void;
 }) {
@@ -139,8 +243,8 @@ function ApprovalUndoToast({
       <span>
         {verb} {decision.title}.
       </span>
-      <button type="button" onClick={onUndo}>
-        Undo
+      <button type="button" disabled={busy} onClick={onUndo}>
+        {busy ? "Undoing..." : "Undo"}
       </button>
     </div>
   );

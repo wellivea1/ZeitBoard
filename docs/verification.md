@@ -5,10 +5,10 @@ Most recent local verification: Windows 11 on 2026-07-22.
 ## Passing checks
 
 - Frontend formatting, ESLint, and repository UI standards. The UI guard passed
-  with 13 screen modules and 4 component stylesheets.
+  with 13 screen modules and 5 component stylesheets.
 - Frontend TypeScript and production builds for the desktop and trusted-view
   workspaces.
-- Frontend tests: 18 desktop test files with 167 tests, plus 2 trusted-view test
+- Frontend tests: 22 desktop test files with 180 tests, plus 2 trusted-view test
   files with 6 tests.
 - `scripts/dev.ps1 -Action check -Component desktop`: desktop production build.
 - `scripts/dev.ps1 -Action check -Component core`: Go formatting, tests, and vet
@@ -18,11 +18,18 @@ Most recent local verification: Windows 11 on 2026-07-22.
 - `scripts/dev.ps1 -Action check -Component server`: server formatting, tests,
   and vet, including the server/MCP projection privacy allowlist.
 - `scripts/dev.ps1 -Action check -Component contracts`: deterministic drift
-  check for 20 v1 fixture files, tools tests/vet, and schema validation.
-- `scripts/dev.ps1 -Action check -Component android`: Gradle `check`.
+  check for 21 v1 fixture files, tools tests/vet, and schema validation.
+- Android Gradle `check` passed on the parent Android UI branch. This
+  desktop-only calendar slice changes no Android source and did not rerun it.
 - Sleep erasure regression: suppression remains exportable and excluded from
   effective reads; hard deletion removes observation/correction rows and the
   unique payload marker from the compacted SQLite database and WAL.
+- Calendar ownership regression: bounded ICS/CalDAV preview and import,
+  recurrence/DST parsing, immutable imported rows, and source erasure all pass.
+  Erasure removes private labels, titles, locations, notes, and saved endpoints
+  from both the compacted SQLite database and WAL. Text-free scheduler
+  projection, task/sleep/event stale-decision refusal, app-owned approval
+  materialization, rejection, undo, and import-free ICS export also pass.
 
 The check wrapper itself was also corrected: native Go, npm, Wails, contract,
 and Gradle failures now propagate as a non-zero script result.
@@ -108,6 +115,15 @@ positive delta against this combined baseline.
 
 ## Visual verification
 
+- Reviewed the real-calendar replacement at 1440x900 in the browser fixture:
+  source administration remains a compact rail, forecast ranges remain
+  background bands, fixed events use rectangular overlap lanes, exact event
+  details open in the inspector, and the document has no horizontal overflow.
+- Repeated Calendar at 390x844. The primary board precedes source
+  administration, date controls collapse to two compact rows, the 620px civil
+  board scrolls inside its column, and the document remains within the 375px
+  layout viewport. Runtime console review reported no warnings or errors.
+
 - Manually reviewed Overview and Rhythm at 1440x900 in Paper, Dark, Pitch black,
   Amber, and High contrast, with reduced stimulation both off and on. Appearance
   was restored to Auto with reduced stimulation off after the matrix.
@@ -151,5 +167,5 @@ Verified on Windows 11 on 2026-06-15 and 2026-06-16:
 ## Environment limitations
 
 - Android UI was previously reviewed on the Pixel 10 Pro XL API 36 emulator;
-  this desktop-only slice reran Gradle `check` and changed no Android source.
+  this desktop-only slice changed no Android source and did not rerun Gradle.
 - The installed Go toolchain has CGO disabled, so `go test -race` is unavailable.

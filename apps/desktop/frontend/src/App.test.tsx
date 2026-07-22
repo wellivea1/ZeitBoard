@@ -67,7 +67,8 @@ describe("desktop navigation", () => {
     expect(screen.getByLabelText("2 pending")).toBeVisible();
     fireEvent.click(screen.getAllByRole("button", { name: "Accept proposal" })[0] as HTMLElement);
 
-    expect(screen.queryByText("Email Dr. Okafor")).toBeNull();
+    expect(screen.getByText("Email Dr. Okafor")).toBeVisible();
+    expect(screen.getByText("approved")).toBeVisible();
     expect(screen.getAllByRole("button", { name: "Accept proposal" })).toHaveLength(1);
     expect(screen.getByLabelText("1 pending")).toBeVisible();
 

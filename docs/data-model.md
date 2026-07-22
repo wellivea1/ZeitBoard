@@ -49,12 +49,26 @@ A refusal stores a typed reason such as insufficient data, ambiguous cycle
 indexing, or conflicting observations. Refusal and successful estimate are
 mutually exclusive result variants.
 
-### Fixed event, task, and proposal
+### Calendar source and event
 
-Fixed events are immutable schedule constraints. Tasks contain duration and
-allowed bounds. The scheduler returns proposal records with explanations and
-never edits fixed events. User-entered timing constraints remain user-authored
-inputs; the system does not turn them into medical recommendations.
+A calendar source has one of three ownership-bearing kinds: `ics` and `caldav`
+are read-only imported snapshots; `zeitboard` contains only app-owned placement
+blocks. An imported event retains local title, location, and notes for display,
+but its scheduler projection contains only an opaque identifier and half-open
+UTC interval. Snapshot replacement is atomic and imported rows cannot be
+updated in place. Removing a source is explicit erasure, not an append-only
+suppression.
+
+### Task, proposal, and decision
+
+Tasks contain duration and allowed bounds. The scheduler returns proposal
+records with explanations and never edits fixed events. A local decision binds
+the exact task revision, estimate, proposed interval, sleep-data fingerprint,
+and text-free busy-event fingerprint. Approval appends a decision and creates a
+separately owned ZeitBoard block in one transaction; rejection creates no
+event. Undo appends an audit decision and removes only the linked app-owned
+block. User-entered constraints remain user-authored inputs; the system does
+not turn them into medical recommendations.
 
 ### Share profile and trusted view
 
@@ -71,9 +85,12 @@ erDiagram
   OBSERVATION }o--o{ ESTIMATE : supports
   ESTIMATE ||--|{ FORECAST_WINDOW : produces
   ESTIMATE ||--o{ SCHEDULE_REQUEST : informs
-  SCHEDULE_REQUEST ||--o{ FIXED_EVENT : constrains
+  CALENDAR_SOURCE ||--o{ CALENDAR_EVENT : contains
+  SCHEDULE_REQUEST ||--o{ CALENDAR_EVENT : constrained_by
   SCHEDULE_REQUEST ||--o{ TASK : contains
   TASK ||--o| PROPOSAL : may_receive
+  PROPOSAL ||--o{ PROPOSAL_DECISION : audited_by
+  PROPOSAL_DECISION ||--o| CALENDAR_EVENT : may_materialize
   SHARE_PROFILE ||--o{ TRUSTED_VIEW : projects
 ```
 

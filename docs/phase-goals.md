@@ -32,11 +32,12 @@ walk-forward backtest. It rejects blanket window tightening by measured delta
 and exposes a confidence-window calibration/misfit follow-up. Phase 1's stated
 acceptance criteria are met; broader pilot validation remains separate work.
 
-**Gap 2 — "calendar app" is still a fixture.** The Calendar screen is a
-synthetic five-day board; fixed events exist only as scheduler test inputs.
-Real ICS/CalDAV import (read-only first), real fixed events in planning,
-and write-back of approved placements (Phase 3c) are the distance between
-"planner with proposals" and "calendar app."
+**Closed gate 2 - real local calendar.** ADR-0023 delivers bounded read-only
+ICS and CalDAV snapshots, real fixed events in planning, a local civil-time
+board, persistent approved ZeitBoard placements, undo, source erasure, and an
+app-owned ICS export. Imported event text remains local. Remote write-back to
+an external calendar is still separately gated; the delivered path never
+mutates an imported event.
 
 **Gap 3 — "disease management" is planned, not built.** The
 Medisafe-benchmarked medication plan (M-A..M-F) is unimplemented; the
@@ -67,11 +68,11 @@ style alerts need a push path that works self-hosted (web push with
 operator VAPID keys; the Android companion as a second receiver). The
 companion still has no sync client (slice 9).
 
-**Sequencing logic.** Trust before reach: P1's estimator gate is now closed, so
-the next dependency is making the calendar real (P2) before requests have a
-place to land. Then build the health substance (P3), mature the assistant over
-it (P4), open the portal (P5), and fan out notifications (P6). P3 and P4 can
-interleave; P5 still depends on P2's real placement path.
+**Sequencing logic.** Trust before reach: P1's estimator gate and P2's local
+calendar gate are closed. The next primary dependency is the health substance
+(P3), followed by maturing the assistant over it (P4), opening the portal
+(P5), and fanning out notifications (P6). P3 and P4 can interleave; P5 can now
+build on P2's approved local placement path.
 
 ---
 
@@ -99,6 +100,9 @@ Status: achieved on 2026-07-19 via ADR-0022 and `verification.md`.
 > and at least one estimator decision cites a measured delta.
 
 ### `/goal phase-2-real-calendar`
+
+Status: achieved on 2026-07-22 via ADR-0023 and the calendar verification
+record in `verification.md`. External-provider write-back remains out of scope.
 
 > **Goal: make ZeitBoard a real calendar: imported events, real fixed
 > events in planning, and write-back of approved placements.**

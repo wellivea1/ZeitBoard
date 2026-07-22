@@ -980,73 +980,6 @@ button {
   transform: translate(-100%, -50%);
 }
 
-.calendar-board {
-  overflow: hidden;
-}
-.calendar-hours {
-  padding: 14px 22px 10px 104px;
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  color: var(--subtle);
-  border-bottom: 1px solid var(--line);
-  font-size: 9px;
-}
-.calendar-hours span:last-child {
-  text-align: right;
-}
-.calendar-days article {
-  min-height: 85px;
-  display: grid;
-  grid-template-columns: 82px minmax(0, 1fr);
-  align-items: center;
-  padding: 0 22px;
-  border-bottom: 1px solid var(--divider);
-}
-.calendar-days article:last-child {
-  border-bottom: 0;
-}
-.calendar-days h2 {
-  margin: 0;
-  font-size: 12px;
-}
-.day-track {
-  --probe-line: var(--line);
-  position: relative;
-  height: 36px;
-  overflow: hidden;
-  background-image: linear-gradient(to right, var(--divider) 1px, transparent 1px);
-  background-size: 25% 100%;
-  border-radius: 4px;
-}
-.sleep-band,
-.wake-band,
-.fixed-event {
-  position: absolute;
-  top: 7px;
-  height: 22px;
-  padding: 0 7px;
-  display: flex;
-  align-items: center;
-  overflow: hidden;
-  border-radius: 4px;
-  white-space: nowrap;
-  font-size: 8px;
-  font-weight: 750;
-}
-.sleep-band {
-  color: var(--ink);
-  background: var(--blue-soft);
-}
-.wake-band {
-  color: var(--confidence-high-text);
-  background: var(--confidence-high-bg);
-}
-.fixed-event {
-  color: var(--confidence-medium-text);
-  background: var(--confidence-medium-bg);
-  border-left: 3px solid var(--state-uncertain);
-}
-
 .table-panel {
   overflow: hidden;
 }
@@ -1063,6 +996,62 @@ button {
 .sleep-entry-panel,
 .sleep-entry-list-panel {
   grid-column: span 12;
+}
+.approval-history-panel {
+  grid-column: span 12;
+  overflow: hidden;
+}
+.approval-error {
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: var(--danger-text);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  font-size: 12px;
+}
+.approval-decision-list {
+  display: grid;
+}
+.approval-decision-list > div {
+  min-height: 62px;
+  padding: 10px 16px;
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  border-top: 1px solid var(--divider);
+}
+.approval-decision-list > div > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+.approval-decision-list strong,
+.approval-decision-list span,
+.approval-decision-list small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.approval-decision-list span,
+.approval-decision-list small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.decision-state {
+  padding-left: 8px;
+  color: var(--confidence-high-text) !important;
+  border-left: 3px solid var(--sage);
+  font-weight: 800;
+  text-transform: capitalize;
+}
+.decision-state[data-decision="rejected"] {
+  color: var(--danger-text) !important;
+  border-left-color: var(--danger-border);
 }
 .rhythm-panel {
   grid-column: span 12;
@@ -2370,14 +2359,6 @@ button {
   .task-row > span:nth-child(3),
   .task-row > span:nth-child(4) {
     display: none;
-  }
-  .calendar-hours {
-    padding-left: 20px;
-  }
-  .calendar-days article {
-    grid-template-columns: 1fr;
-    gap: 9px;
-    padding-block: 12px;
   }
   .timeline-axis {
     margin-left: 0;

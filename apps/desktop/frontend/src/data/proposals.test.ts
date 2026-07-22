@@ -36,7 +36,7 @@ describe("loadProposals", () => {
       go: { main: { App: { GetProposals: async () => backendProposals } } },
     });
 
-    expect(result.source).toBe("backend");
+    expect(result.source).toBe("local");
     expect(result.data.proposals).toHaveLength(1);
     expect(result.data.proposals[0]?.kind).toBe("Place");
     expect(result.data.proposals[0]?.confidence).toBe("High");
@@ -63,11 +63,12 @@ describe("loadProposals", () => {
     expect(result.source).toBe("fixture");
   });
 
-  it("falls back when the backend rejects", async () => {
-    const result = await loadProposals({
-      go: { svc: { App: { GetProposals: async () => Promise.reject(new Error("nope")) } } },
-    });
-    expect(result.source).toBe("fixture");
+  it("surfaces a local service failure instead of relabeling fixtures as live data", async () => {
+    await expect(
+      loadProposals({
+        go: { svc: { App: { GetProposals: async () => Promise.reject(new Error("nope")) } } },
+      }),
+    ).rejects.toThrow("nope");
   });
 
   it("rejects a proposal with no explanation codes (contract requires at least one)", () => {

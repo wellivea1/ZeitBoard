@@ -36,8 +36,15 @@ and UI specifications* to what implements them.
   semantic theme tokens, and an appearance manager with Auto plus five presets.
   Screen/data/style boundaries are enforced as described in
   [`frontend-architecture.md`](frontend-architecture.md).
-- Fixed events are immutable scheduler inputs; proposals carry contract
-  explanation codes and honest unplaced reasons.
+- The local Calendar is real under ADR-0023: bounded read-only ICS/CalDAV
+  snapshots persist locally, private event text renders only in the desktop,
+  scheduler projections contain identifiers and intervals only, and source
+  removal performs confirmed erasure. Approved local proposals create
+  ZeitBoard-owned blocks visible in Calendar and app-owned ICS export; reject
+  and undo preserve imported events.
+- Real fixed events are immutable scheduler inputs; proposals carry contract
+  explanation codes and honest unplaced reasons. Decisions transactionally
+  reject stale task, sleep, or calendar snapshots.
 - Trusted views are static synthetic projections, render only allowlisted
   fields, and disclose no private source data (unchanged since phase one).
 - Windows collection remains deliberately minimal; Android requests only
@@ -46,9 +53,10 @@ and UI specifications* to what implements them.
 ## Partially implemented (UI ahead of or behind data)
 
 - **Approvals:** local scheduler proposals and backend assistant/agent
-  proposals are both real, and the desktop decides backend proposals with
-  one-use tokens. They still appear as distinct queue sections; batch review,
-  surfaced expiry/history, and approved-placement write-back remain open.
+  proposals are both real. Local decisions persist with visible history,
+  per-item undo, and app-owned placement materialization; backend proposals
+  retain one-use tokens. They still appear as distinct queue sections; batch
+  review, combined presentation, and surfaced backend expiry remain open.
 - **Rhythm "Sources" tab and Data Sources:** driven by real local data in the
   desktop app (real refusal, real correction history, real per-source
   composition, real sync status); synthetic previews remain only in the
@@ -56,11 +64,12 @@ and UI specifications* to what implements them.
   still awaits an engine-surfaced overlap DTO.
 - **Tasks:** user-owned tasks are real and synced (contract, local CRUD, real
   Tasks screen, scheduler plans only stored open tasks — ADR-0018; cross-device
-  revision sync with erasure-grade deletion — ADR-0020). Write-back of
-  approved placements remains future work (Phase 3c).
-- **Appearance:** U-A through U-C are implemented. U-D rhythm-linked preset
-  switching and the agent-readable direct display action remain deferred until
-  their explicit ADR defines that reversible-action boundary.
+  revision sync with erasure-grade deletion — ADR-0020). Approved placements
+  now materialize in the app-owned local calendar; external-provider
+  write-back remains future work (Phase 3c).
+- **Appearance:** U-A through U-E are implemented. ADR-0021 defines the
+  reversible direct-action boundary for rhythm-linked preset switching; only
+  the agent-readable desktop-local action surface remains deferred.
 
 ## Deferred analysis work
 
