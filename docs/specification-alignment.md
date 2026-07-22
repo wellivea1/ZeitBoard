@@ -31,10 +31,11 @@ and UI specifications* to what implements them.
   empty/refusal states; export and hard erasure are implemented (ADR-0014);
   opt-in backend sync round-trips contract-shaped records (ADR-0015), and
   erasure propagates through server tombstones (ADR-0017).
-- The desktop UI implements the visual refactor's U-A..U-C boundary: one-surface
-  Overview with a source-matched cycle strip, a full-width Rhythm visual,
-  semantic theme tokens, and an appearance manager with Auto plus five presets.
-  Screen/data/style boundaries are enforced as described in
+- The desktop UI implements visual slices U-A through U-G: one-surface Overview
+  with a source-matched cycle strip, a full-width Rhythm visual, semantic theme
+  tokens, an appearance manager with Auto plus five presets, chronological time
+  probes, ruled Data Sources and Sharing workspaces, and compact ruled proposal
+  queues. Screen/data/style boundaries are enforced as described in
   [`frontend-architecture.md`](frontend-architecture.md).
 - The local Calendar is real under ADR-0023: bounded read-only ICS/CalDAV
   snapshots persist locally, private event text renders only in the desktop,
@@ -42,15 +43,18 @@ and UI specifications* to what implements them.
   removal performs confirmed erasure. Approved local proposals create
   ZeitBoard-owned blocks visible in Calendar and app-owned ICS export; reject
   and undo preserve imported events.
-- Medication M-A/M-B is real under ADR-0024/0025: the strict v1 logging
-  contracts remain valid and strict v2 definition/event/schedule/export
-  contracts carry M-B, alongside revision-checked local
+- Medication M-A through M-C is real under ADR-0024/0025/0027: the strict v1
+  logging contracts remain valid and strict v2 definition/event/schedule/export
+  contracts carry the local records, alongside revision-checked
   definitions, immutable raw events, correction chains, explicit civil-time
   schedules, neutral observed-versus-predicted collision context, opt-in
   claim-first desktop reminders, explicit exclusion, and separate typed hard
-  erasure. The desktop adapter rejects contradictory labels, references,
-  counts, schedule shapes, occurrence contexts, civil times, and fixture
-  claims.
+  erasure. ADR-0026 adds immutable local illness, travel, disruption, and
+  forced-schedule markers. M-C adds explicit-record adherence, dose/start
+  markers, descriptive association with named possible confounders, and a
+  redaction-first printable HTML clinician report. The desktop adapter rejects
+  contradictory labels, references, counts, schedule shapes, occurrence
+  contexts, civil times, and fixture claims.
 - Real fixed events are immutable scheduler inputs; proposals carry contract
   explanation codes and honest unplaced reasons. Decisions transactionally
   reject stale task, sleep, or calendar snapshots.
@@ -76,14 +80,15 @@ and UI specifications* to what implements them.
   revision sync with erasure-grade deletion — ADR-0020). Approved placements
   now materialize in the app-owned local calendar; external-provider
   write-back remains future work (Phase 3c).
-- **Appearance:** U-A through U-E are implemented. ADR-0021 defines the
-  reversible direct-action boundary for rhythm-linked preset switching; only
-  the agent-readable desktop-local action surface remains deferred.
-- **Medications:** M-A local logging and M-B user-authored schedules,
-  at-most-once desktop reminders, and neutral collision forecasts are
-  implemented; the sample preview is retired. M-C adherence and clinician
-  export, sync, agent projections, and missed-dose sharing remain separately
-  gated; the M-A/M-B UI does not imply that they exist.
+- **Appearance and visual system:** U-A through U-G are implemented. ADR-0021
+  defines the reversible direct-action boundary for rhythm-linked preset
+  switching; only the agent-readable desktop-local action surface remains
+  deferred.
+- **Medications:** M-A local logging, M-B user-authored schedules and neutral
+  collision forecasts, and M-C adherence plus clinician context export are
+  implemented; the sample preview is retired. M-D sync, M-E's explicitly
+  reviewed local-agent projection, and M-F missed-dose sharing remain
+  separately gated.
 
 ## Deferred analysis work
 
@@ -91,7 +96,9 @@ and UI specifications* to what implements them.
   boundary-error metrics (first consumer: Takeout/"My Activity" import,
   roadmap slice 7 — gated by the backtest).
 - Explicit missingness records, source reliability learning, conflict scoring,
-  forced-schedule qualification, and travel/illness/intervention markers.
+  and inferred forced-schedule qualification. Owner-entered travel, illness,
+  disruption, and forced-schedule context markers are implemented under
+  ADR-0026; source-derived marker inference is not.
 - Multi-window change-point classification and operating-state history. The
   ADR-0022 real-history baseline justifies evaluating an explicit
   calibration/misfit candidate (the high-confidence bucket was poorly
@@ -102,22 +109,25 @@ and UI specifications* to what implements them.
 - Optional language-model summaries, task parsing, voice extraction, and
   clinician-report drafting beyond the implemented propose-only assistant
   (whose desktop chat surface now ships — §4 rail with redacted context and
-  provider disclosure); these require the safety evaluation suite before they
-  can be enabled.
+  provider disclosure). The delivered clinician report is deterministic, not
+  language-model-authored; any generated drafting requires the safety
+  evaluation suite before it can be enabled.
 
 ## Deferred product and validation work
 
-- Full onboarding, Reports, the clinical actogram + clinician PDF export
-  (§3.6), and the complete accessibility acceptance matrix from
-  `ui-ux-design.md`.
+- Full onboarding, direct clinician PDF/PNG generation, reserved 48-hour
+  clinical orientation, a blank clinical sleep-log template, and the complete
+  accessibility acceptance matrix from `ui-ux-design.md`. The current
+  selected-range clinical chart and report already export as standalone,
+  printable HTML under ADR-0027.
 - A real trusted-view sharing transport (passcodes, access logs, remote
   revocation); the former relay design survives only as input to that path.
 - Local desktop DB encryption at rest and OS credential storage.
-- Emulator/device validation, real-world pilot validation, and calibration
-  plots. Of the plan's 20 synthetic scenarios, the 12 sleep-timing scenarios
-  plus boundary-level corruption checks are implemented with benchmark
-  reporting (ADR-0019); scenarios 11–15 and 18–19 await the multi-source
-  streams of roadmap slice 7.
+- Real-device and participant validation beyond the named Pixel 10 emulator,
+  real-world pilot validation, and calibration plots. Of the plan's 20
+  synthetic scenarios, the 12 sleep-timing scenarios plus boundary-level
+  corruption checks are implemented with benchmark reporting (ADR-0019);
+  scenarios 11–15 and 18–19 await the multi-source streams of roadmap slice 7.
 
 The specifications' central safety rule is preserved everywhere: the software
 declines to guess when evidence is inadequate, and every automation path ends

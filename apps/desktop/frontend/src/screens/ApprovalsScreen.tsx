@@ -20,7 +20,7 @@ function SyncedProposalCard({
   onDecide: (proposal: BackendProposal, decision: "approved" | "rejected") => void;
 }) {
   return (
-    <article className="panel proposal-card" data-origin="assistant">
+    <article className="proposal-card" data-origin="assistant">
       <div className="proposal-header">
         <span className="proposal-kind">Synced</span>
         <div>
@@ -196,7 +196,7 @@ export function ApprovalsScreen() {
         </div>
       )}
       <section className="screen-grid approval-screen" aria-label="Pending approval queue">
-        <div className="panel approval-filter" aria-label="Pending proposals by origin">
+        <div className="approval-filter" aria-label="Pending proposals by origin">
           <span>All {pendingCount}</span>
           <span>Scheduler {byOrigin("scheduler")}</span>
           <span>Assistant {byOrigin("assistant")}</span>
@@ -262,7 +262,7 @@ export function ApprovalsScreen() {
         <SyncedProposalsPanel />
 
         {unplaced.length > 0 && (
-          <section className="panel unplaced-panel" aria-labelledby="approvals-unplaced-title">
+          <section className="unplaced-panel" aria-labelledby="approvals-unplaced-title">
             <p className="section-kicker">Not proposed</p>
             <h2 id="approvals-unplaced-title">
               {unplaced.length} task{unplaced.length === 1 ? "" : "s"} without a safe window
@@ -270,7 +270,9 @@ export function ApprovalsScreen() {
             <ul className="unplaced-list">
               {unplaced.map((item) => (
                 <li key={item.title}>
-                  <strong>{item.title}</strong> - {item.reason}. <small>{item.nextAction}</small>
+                  <strong>{item.title}</strong>
+                  <span>{item.reason}</span>
+                  <small>{item.nextAction}</small>
                 </li>
               ))}
             </ul>

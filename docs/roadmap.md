@@ -212,7 +212,11 @@ M-E's separately reviewed local agent projection.
     Android companion replaced its generic rounded section `Panel` with ruled
     sections while retaining minimum touch targets. Desktop compact navigation
     no longer exposes its internal horizontal scrollbar, and Android's 680 dp
-    large-width content cap is now actually enforced.
+    large-width content cap is now actually enforced. *U-G delivered:* Tasks
+    and Approvals now share one ruled proposal-queue language, expose confidence
+    as text plus pattern, keep no-safe-window context in the same workflow, and
+    use compact mobile actions; the phone appearance picker is a two-column
+    selector and icon-only navigation retains explicit accessible names.
 
 **Small debts (fold into adjacent slices):** consolidate the correction-record
 → domain decoder (now duplicated across desktop storage, server readmodel, and

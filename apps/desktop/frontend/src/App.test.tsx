@@ -33,6 +33,18 @@ describe("desktop navigation", () => {
     ]) {
       expect(navigation).toHaveTextContent(label);
     }
+    for (const name of [
+      "Overview",
+      "Calendar",
+      "Tasks",
+      "Approvals, 2 pending",
+      "Rhythm",
+      "Medications",
+      "Sharing",
+      "Data Sources",
+    ]) {
+      expect(screen.getByRole("link", { name })).toBeVisible();
+    }
     expect(screen.getByRole("link", { name: "Settings" })).toBeVisible();
     expect(screen.getByText("Sample data")).toBeVisible();
   });
@@ -52,12 +64,26 @@ describe("desktop navigation", () => {
 
   it("renders approval proposals with explicit actions", () => {
     window.location.hash = "#/approvals";
-    render(<App />);
+    const { container } = render(<App />);
 
     expect(screen.getByRole("heading", { name: "Approvals" })).toBeVisible();
     expect(screen.getByText("Email Dr. Okafor")).toBeVisible();
     expect(screen.getAllByRole("button", { name: "Accept proposal" })).toHaveLength(2);
     expect(screen.getAllByRole("button", { name: "Reject proposal" })).toHaveLength(2);
+    expect(screen.getByText("Medium")).toBeVisible();
+    expect(container.querySelector(".approval-filter.panel")).toBeNull();
+    expect(container.querySelectorAll(".proposal-stack > .proposal-card")).toHaveLength(2);
+    expect(container.querySelector(".proposal-stack > .panel")).toBeNull();
+  });
+
+  it("keeps task proposals and no-safe-window context in one approval surface", () => {
+    window.location.hash = "#/tasks";
+    const { container } = render(<App />);
+
+    expect(container.querySelector(".approval-summary > .proposal-card")).not.toBeNull();
+    expect(container.querySelector(".approval-summary > .unplaced-row")).not.toBeNull();
+    expect(container.querySelector(".screen-grid > .unplaced-panel")).toBeNull();
+    expect(screen.getByRole("heading", { level: 3, name: "Call service provider" })).toBeVisible();
   });
 
   it("approves a proposal, updates the queue and badge, and supports undo", () => {

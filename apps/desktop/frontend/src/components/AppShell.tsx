@@ -49,7 +49,9 @@ function NavigationLink({ item, active }: { item: NavItem; active: boolean }) {
       className="nav-link"
       data-active={active}
       href={`#/${item.id}`}
+      aria-label={item.badge ? `${item.label}, ${item.badge} pending` : item.label}
       aria-current={active ? "page" : undefined}
+      title={item.label}
     >
       <Icon name={item.icon} />
       <span>{item.label}</span>

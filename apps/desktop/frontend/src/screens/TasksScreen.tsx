@@ -156,6 +156,22 @@ export function TasksScreen() {
           {pending.slice(0, 1).map((proposal) => (
             <ProposalCard proposal={proposal} key={proposal.id} />
           ))}
+          <aside className="unplaced-row" aria-labelledby="unplaced-title">
+            <div>
+              <p className="section-kicker">Not proposed</p>
+              <h3 id="unplaced-title">
+                {firstUnplaced ? firstUnplaced.title : "Nothing waiting on a window"}
+              </h3>
+            </div>
+            <div>
+              <p>
+                {firstUnplaced
+                  ? firstUnplaced.reason
+                  : "Every open task either has a proposal or there are no open tasks."}
+              </p>
+              {firstUnplaced && <small>{firstUnplaced.nextAction}</small>}
+            </div>
+          </aside>
         </section>
 
         {available && (
@@ -264,22 +280,6 @@ export function TasksScreen() {
             </p>
           </section>
         )}
-
-        <aside className="panel unplaced-panel" aria-labelledby="unplaced-title">
-          <p className="section-kicker">Not proposed</p>
-          {firstUnplaced ? (
-            <>
-              <h2 id="unplaced-title">{firstUnplaced.title}</h2>
-              <p>{firstUnplaced.reason}</p>
-              <small>{firstUnplaced.nextAction}</small>
-            </>
-          ) : (
-            <>
-              <h2 id="unplaced-title">Nothing waiting on a window</h2>
-              <p>Every open task either has a proposal or there are no open tasks.</p>
-            </>
-          )}
-        </aside>
       </section>
     </>
   );
