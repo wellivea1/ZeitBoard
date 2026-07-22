@@ -47,8 +47,8 @@ detail lives there rather than being repeated here.
   are confined to the labeled browser fixture mode.
 - Appearance manager with Auto plus Paper, Dark, Pitch black, Amber, and High
   contrast presets; reduced stimulation composes with each preset. Contrast,
-  Amber through-lens, and zero-blue token assertions are automated (ADR-0005,
-  UI slices U-A..U-C).
+  simulated dark-amber contrast, and blue-channel token assertions are
+  automated (ADR-0005, UI slices U-A..U-C).
 
 **Backend (`apps/server`, self-hosted)**
 - M1 sync: TLS, per-device bearer tokens (hashes stored), strict v1
@@ -159,7 +159,7 @@ public availability portal) with a pasteable `/goal` prompt per phase is
 9. **Android companion sync.** The Health Connect skeleton exists but the
    companion has no sync client; bring it onto the same enrollment + push/pull
    path (its ADR should reuse ADR-0015's model).
-10. **UI refactor + theme manager** (planned in
+10. **UI refactor + theme manager** (tracked in
     [`ui-refactor-plan.md`](ui-refactor-plan.md)). *U-A..U-C delivered:*
     the structural follow-up replaced Overview's metric-card grid with one
     status surface, a source-matched cycle strip, compact fact/confidence rows,
@@ -175,11 +175,13 @@ public availability portal) with a pasteable `/goal` prompt per phase is
     releases at predicted wake, honest civil-time fallback when the
     estimator refuses; display actions are direct local actions, never
     queue-gated. Agent-driven switching deferred until a desktop-local
-    agent endpoint exists (recorded in the ADR). *U-E planned*
+    agent endpoint exists (recorded in the ADR). *U-E delivered*
     (ui-refactor-plan §7): a hover time probe on every chronological
     surface — hairline + tabular-numeral chip showing the exact civil time
     under the cursor (double-plot day resolution, `predicted` qualifiers,
-    structured row dates in the DTO rather than parsed labels).
+    structured row dates in the local DTO rather than parsed labels). The
+    server/MCP projection remains a separate default-deny allowlist and does
+    not expose raw local zone identifiers.
 
 **Small debts (fold into adjacent slices):** consolidate the correction-record
 → domain decoder (now duplicated across desktop storage, server readmodel, and

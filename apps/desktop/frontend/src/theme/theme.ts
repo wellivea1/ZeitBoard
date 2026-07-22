@@ -1,9 +1,10 @@
 export type ThemePreference = "auto" | "light" | "dark" | "black" | "amber" | "contrast";
 export type EffectiveTheme = Exclude<ThemePreference, "auto">;
 
-// Preset registry (ui-refactor-plan.md). "Amber" targets dark amber
-// blue-blocking glasses: every foreground is long-wavelength so contrast
-// survives the lens; it doubles as a zero-blue-emission evening mode.
+// Preset registry (ui-refactor-plan.md). "Amber" is a display-compatibility
+// palette for dark amber eyewear. RGB tokens cannot make a spectral or
+// treatment claim; the regression only checks blue-channel minimization and
+// simulated through-lens contrast.
 export const themePresets: { id: ThemePreference; label: string; hint: string }[] = [
   { id: "auto", label: "Auto", hint: "Follows the system light/dark setting." },
   { id: "light", label: "Paper", hint: "Warm light theme for daytime." },
@@ -12,7 +13,7 @@ export const themePresets: { id: ThemePreference; label: string; hint: string }[
   {
     id: "amber",
     label: "Amber (glasses)",
-    hint: "Stays high-contrast through dark amber blue-blockers; emits no blue.",
+    hint: "Blue-minimized palette designed to stay legible through dark amber lenses.",
   },
   { id: "contrast", label: "High contrast", hint: "Maximum contrast, strong borders." },
 ];

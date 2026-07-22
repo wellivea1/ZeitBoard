@@ -578,12 +578,15 @@ func TestProjectionEndpointsUseServerEstimateFromSyncedSleep(t *testing.T) {
 			SlopeLabel   string `json:"slopeLabel"`
 			ForecastRows []struct {
 				DurationHours float64 `json:"durationHours"`
+				CivilDate     string  `json:"civilDate"`
 			} `json:"forecastRows"`
 			ObservedRows []struct {
-				ID string `json:"id"`
+				ID        string `json:"id"`
+				CivilDate string `json:"civilDate"`
 			} `json:"observedRows"`
 			DriftPoints []struct {
-				ID string `json:"id"`
+				ID        string `json:"id"`
+				CivilDate string `json:"civilDate"`
 			} `json:"driftPoints"`
 		} `json:"projection"`
 	}
@@ -604,6 +607,9 @@ func TestProjectionEndpointsUseServerEstimateFromSyncedSleep(t *testing.T) {
 	}
 	if len(rhythm.Projection.ObservedRows) < 7 || len(rhythm.Projection.DriftPoints) < 7 {
 		t.Fatalf("rhythm missing screen-reader equivalent rows: %+v", rhythm.Projection)
+	}
+	if rhythm.Projection.ObservedRows[0].CivilDate == "" || rhythm.Projection.ForecastRows[0].CivilDate == "" || rhythm.Projection.DriftPoints[0].CivilDate == "" {
+		t.Fatalf("rhythm missing structured civil dates: %+v", rhythm.Projection)
 	}
 	if !strings.HasPrefix(rhythm.Projection.ObservedRows[0].ID, "observed-") || !strings.HasPrefix(rhythm.Projection.DriftPoints[0].ID, "drift-") {
 		t.Fatalf("rhythm IDs were not sanitized: %+v %+v", rhythm.Projection.ObservedRows[0], rhythm.Projection.DriftPoints[0])

@@ -112,6 +112,7 @@
 }
 
 .cycle-strip-track {
+  --probe-line: var(--line);
   position: relative;
   height: 58px;
   margin-top: var(--space-2);

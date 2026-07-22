@@ -92,7 +92,8 @@ export function AppearanceSettings() {
           <small>
             Switch to a night preset before your predicted sleep onset and back after wake. The
             trigger is the forecast, so it drifts with you; without an estimate it honestly falls
-            back to fixed times. A local display setting — nothing goes through approvals.
+            back to fixed times. A local display preference, not light-therapy guidance; nothing
+            goes through approvals.
           </small>
         </span>
         <input

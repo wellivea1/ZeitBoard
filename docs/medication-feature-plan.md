@@ -42,7 +42,7 @@ reason. The two right-hand columns are the ones this plan exists for.
 | Medisafe capability | Disposition | Needs circadian tracking? | Needs agentic surface? |
 |---|---|---|---|
 | 1 Medication list | **Adopt** (label is private user text; form/strength optional labels) | – | read via opaque ids only |
-| 2 Complex schedules | **Adapt**: `fixed_clock` (how tasimelteon/melatonin are actually prescribed), `as_needed`, `cycling`; plus display-only wake-relative timing | **Yes** — the schedule kinds are only meaningful against the rhythm | schedule described in speakable form |
+| 2 Complex schedules | **Adapt**: `fixed_clock` for a user-entered clinician rule, `as_needed`, `cycling`; plus display-only wake-relative timing. No drug-specific schedule is built in. | **Yes** — the schedule kinds are only meaningful against the rhythm | schedule described in speakable form |
 | 3 Reminders | **Adapt**: reminders fire at civil times, but ZeitBoard adds **feasibility awareness** — a fixed-clock reminder that will land inside predicted sleep is *flagged*, never moved | **Yes** — core differentiator (§3) | reminder-shift **proposals** only (existing `propose_reminder_shift` action) |
 | 4 Adherence log | **Adopt**: taken/skipped/late per dose, append-only like all health evidence | **Yes** for the rhythm-context column (§3) | speakable summary |
 | 5 Refill tracking | **Adopt** (simple count + threshold; no pharmacy integration) | – | read + "propose refill task" via existing task proposals |
@@ -60,10 +60,10 @@ These are the aspects a normal tracker cannot do and ZeitBoard must — each
 consumes the estimator and inherits its honesty rules (typed refusals,
 confidence, no fabrication):
 
-1. **Dual-clock regimens.** Chronotherapeutics are prescribed at *fixed civil
-   times* (tasimelteon: same clock time nightly; melatonin: clinician-set
-   clock time) precisely because the patient's subjective cycle drifts. So the
-   schedule anchor is `fixed_clock` — but the *display* is dual: "22:00 —
+1. **Dual-clock regimens.** When the user enters a clinician-defined *fixed
+   civil time*, the schedule anchor is `fixed_clock`; ZeitBoard does not infer
+   a rule from a medication name or generalize how a drug is prescribed. The
+   *display* is dual: "22:00 —
    currently 3 h before your predicted sleep onset, drifting +40 min/day."
    Wake-relative (`after wake`) display uses the existing
    `medication.AttachRelativeTiming`; `ConfidenceUnknown` renders as "couldn't

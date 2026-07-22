@@ -99,11 +99,14 @@ export function OverviewScreen() {
 
   const hasEstimate = overview.status === "estimated";
   const hasMatchingRhythm = hasEstimate && rhythm.status === "estimated" && mode === rhythmMode;
-  const todayLabel = new Date().toLocaleDateString(undefined, {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
+  const todayLabel =
+    mode === "fixture" && hasMatchingRhythm
+      ? `Sample date · ${rhythm.actogram.now.day}`
+      : new Date().toLocaleDateString(undefined, {
+          weekday: "long",
+          month: "long",
+          day: "numeric",
+        });
 
   return (
     <>

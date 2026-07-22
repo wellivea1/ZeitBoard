@@ -73,21 +73,31 @@ the structural follow-up described in section 5:
 
 ### Why this is a circadian feature, not a skin
 
-Amber/orange blue-blocking glasses are standard evening practice in Non-24
-and DSPD management: dark amber lenses transmit long wavelengths nearly
-fully but cut blue (~400–490nm) to near zero and attenuate most green
-(~495–550nm) heavily. Consequences for UI seen through them:
+Amber is a compatibility and accessibility preset for users who already
+choose dark-amber eyewear or a blue-minimized display. It is **not** a
+treatment recommendation. The AASM guideline makes population-specific,
+mostly weak recommendations for selected circadian-disorder treatments and
+does not establish amber lenses as standard N24SWD/DSWPD care
+([guideline](https://pubmed.ncbi.nlm.nih.gov/26414986/)). Small randomized
+amber-lens trials studied insomnia symptoms, not Non-24
+([trial](https://pubmed.ncbi.nlm.nih.gov/29101797/)).
 
-- Blue elements go **black** (invisible); green loses most luminance;
-  white dims into amber. Any information encoded as blue-vs-anything or
-  green-vs-anything **disappears**.
+Lens transmission and display spectra vary by product. CSS cannot guarantee a
+wavelength cutoff: it controls RGB subpixels, not emitted spectra. The preset
+therefore makes the narrower engineering promise that its palette minimizes
+the commanded blue channel and remains legible under a conservative simulated
+dark-amber filter. Consequences for UI seen through many such lenses:
+
+- Blue elements can become very dark; green may lose substantial luminance;
+  white dims toward amber. Information must never depend on blue-vs-green.
 - The highest through-lens contrast available is **bright amber/orange
   (≈590–610nm) on true black** — the classic amber terminal, which is why
   that aesthetic exists.
 
-Define **through-lens luminance** for testing: `L' = 0.2126·R +
+Define a simulated **through-lens luminance** heuristic for regression testing: `L' = 0.2126·R +
 0.7152·(g·G) + 0.0722·(b·B)` with dark-amber transmission factors `g≈0.25,
-b≈0.02`. The Amber preset must hold **≥7:1 through-lens contrast** for body
+b≈0.02`. This is not spectroscopy or clinical validation. The Amber preset
+must hold **≥7:1 simulated through-lens contrast** for body
 text and ≥3:1 for secondary text — automated in the existing contrast
 regression test alongside the normal WCAG check (amber-on-black passes both:
 #ffb000 on #000 is ≈11:1 unfiltered and ≈10:1 through-lens).
@@ -99,7 +109,7 @@ regression test alongside the normal WCAG check (amber-on-black passes both:
 | **Paper** | current light, refined per §2 | daytime default | unchanged semantics |
 | **Dark** | current dark, refined | evening general | shadows off, borders carry structure |
 | **Pitch black** | `#000` canvas, `#0a0a0a` surfaces | OLED, minimal photon flux, night logging | no shadows; hairline `#1c1c1c` dividers; desaturated ink `#d9dcd8`; accents dimmed one step |
-| **Amber (glasses)** | `#000` canvas | worn-glasses evenings; also a zero-blue-emission mode on its own | all foregrounds ≥570nm: text `#ffb000`, dim text `#b37c00`, action `#ff8c42`, danger `#ff5c33`; **no blue or green pixels anywhere**, including charts — confidence/status re-encode as luminance steps + the existing band *patterns* (solid/striped/dashed), which were designed exactly for hue-free reading |
+| **Amber (glasses)** | `#000` canvas | compatibility for dark-amber eyewear; also a user-selectable blue-minimized display | long-wavelength-dominant RGB palette: text `#ffb000`, dim text `#b37c00`, action `#ff8c42`, danger `#ff5c33`; the token set minimizes the commanded blue channel, while confidence/status re-encode as luminance steps + the existing band *patterns* (solid/striped/dashed) |
 | **High contrast** | dark-based | low-vision / prefers-contrast | pure `#fff` on `#000`, ≥7:1 everywhere, 2px focus rings, underlined links, patterns mandatory |
 
 `Reduce stimulation` stays an orthogonal modifier (works with every preset),
@@ -137,8 +147,9 @@ Everything else stays propose-only.
 
 Sequencing: U-A first (everything else builds on tokens), U-B and U-C can
 interleave, U-D last. Each slice keeps the WCAG regression test green and
-extends it (U-C adds the through-lens assertions; U-B adds a "no container
-over 40% padding" review checklist item rather than an automated rule).
+extends it (U-C adds the simulated dark-amber assertions; U-B adds a "no
+container over 40% padding" review checklist item rather than an automated
+rule).
 
 ## 5. Implementation audit (2026-07-18)
 
@@ -152,15 +163,16 @@ over 40% padding" review checklist item rather than an automated rule).
   Rhythm's actogram is a full-width visual rather than another generic panel.
 - **U-C delivered.** Settings exposes Auto plus visual Paper, Dark, Pitch
   black, Amber, and High contrast choices with live swatches and an independent
-  reduced-stimulation control. Token-level normal, through-lens, and zero-blue
-  checks cover the presets.
+  reduced-stimulation control. Token-level normal contrast, simulated
+  dark-amber contrast, and blue-channel-limit checks cover the presets.
 - **Architecture remediation delivered.** The former 2,512-line multi-screen
   module was split by route, reusable proposal/rhythm components were
   extracted, Wails lookup was centralized in the data layer, and repository
   lint now enforces those boundaries. See `frontend-architecture.md`.
-- **U-D remains open.** Rhythm-linked switching and agent-readable display
-  actions require the planned direct-display-action ADR and are not implied by
-  U-A..U-C completion.
+- **U-D delivered (ADR-0021).** Rhythm-linked switching uses the structured
+  forecast with an honest civil-time fallback. Appearance changes are direct,
+  reversible local display actions; the agent-readable endpoint remains
+  separately deferred as recorded by the ADR.
 
 ## 6. Acceptance
 
@@ -170,9 +182,9 @@ over 40% padding" review checklist item rather than an automated rule).
    are blue-family; a screenshot diff of Rhythm shows three distinguishable
    semantic hues plus neutrals.
 3. All five presets pass the standard contrast regression; Amber and High
-   contrast additionally pass the through-lens assertion; Amber renders zero
-   sub-570nm pixels (assert: computed styles contain no color with B>10% or
-   G-dominant channels in the amber token set).
+   contrast additionally pass the simulated through-lens assertion; Amber's
+   computed token colors retain the existing blue-channel limit. No spectral
+   cutoff or treatment effect is claimed from CSS values.
 4. Pitch black emits no non-black canvas pixels at rest beyond hairlines and
    content ink.
 5. Reduced stimulation composes with every preset; charts stay readable in
@@ -186,7 +198,7 @@ approximately 568px high at the same viewport with no generic panel above the
 fold. Final verification commands and environment results are recorded in
 `verification.md`.
 
-## 7. Slice U-E (planned): chronological hover time probe
+## 7. Slice U-E (delivered 2026-07-22): chronological hover time probe
 
 Every chronological surface answers "what exact time is under my cursor."
 Hovering the actogram, the drift chart, the Overview cycle strip, or a
@@ -223,6 +235,10 @@ actogram/strip rows gain an ISO civil date (+ zone) in the DTO so
 `timeAtCursor(x, row)` is arithmetic on real instants. Formatted prose is
 not reverse-engineered (the §2.3 rule Codex's audit codified). Forecast
 rows keep their `predicted` qualifier; zone is the row's own display zone.
+The network-facing server/MCP projection remains an explicit allowlist rather
+than serializing the full core presentation struct. It retains the ISO civil
+date needed for chronology but excludes raw zone identifiers; synced clients
+therefore do not invent a zone-dependent marker when that field is redacted.
 
 ### Acceptance
 
@@ -235,3 +251,20 @@ rows keep their `predicted` qualifier; zone is the row's own display zone.
    chart grid token) and under reduced stimulation (no motion).
 5. No layout shift, no band re-render on pointermove (verified via React
    profiler or render counters in tests).
+
+### Delivery evidence
+
+- Core projection rows and the current-time marker carry validated ISO civil
+  dates and row-specific IANA zones. Frontend normalization rejects missing or
+  malformed local anchors; synced projections require civil dates while
+  preserving the server/MCP zone redaction.
+- Overview, actogram, drift, and calendar probes use one imperative overlay
+  controller. CSS transforms move the hairline, activating one probe dismisses
+  the prior probe, and React profiler tests show no pointer-move render.
+- Actogram tests cover the 24–48 h following-day mapping and forecast
+  qualification. Drift snaps to the nearest observed cycle and reports both
+  observed and fitted onset when they differ.
+- Runtime review covered 1440×900 and a 390×844 narrow override, edge chips,
+  internal actogram scrolling, Paper, Dark, Pitch black, Amber, High contrast,
+  and reduced stimulation. Paint containment and fixed-layout hidden tables
+  prevent chart or screen-reader content from widening the narrow page.

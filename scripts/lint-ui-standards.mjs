@@ -85,16 +85,30 @@ for (const token of [
 
 const rhythmStylesPath = join(frontend, "styles", "rhythm.css");
 const rhythmStyles = readFileSync(rhythmStylesPath, "utf8");
-if (!/\.actogram-panel\s*\{[^}]*overflow-x:\s*hidden;/s.test(rhythmStyles)) {
+if (!/\.rhythm-screen\s*\{[^}]*overflow-x:\s*clip;/s.test(rhythmStyles)) {
   fail(
     rhythmStylesPath,
-    "The actogram panel must contain nested chart overflow on narrow screens.",
+    "The Rhythm screen must clip nested visualization overflow at the page boundary.",
+  );
+}
+if (
+  !/\.actogram-panel\s*\{(?=[^}]*contain:\s*paint;)[^}]*overflow-x:\s*hidden;/s.test(rhythmStyles)
+) {
+  fail(
+    rhythmStylesPath,
+    "The actogram panel must paint-contain nested chart overflow on narrow screens.",
   );
 }
 if (!/\.actogram-chart\s*\{[^}]*overflow-x:\s*auto;/s.test(tokenSource)) {
   fail(
     join(frontend, "styles.css"),
     "The actogram chart must retain internal horizontal scrolling.",
+  );
+}
+if (!/\.sr-table\s*\{[^}]*table-layout:\s*fixed;/s.test(tokenSource)) {
+  fail(
+    join(frontend, "styles.css"),
+    "Visually hidden data tables must not expand the narrow page layout.",
   );
 }
 if (!/\.actogram-visual-grid\s*\{[^}]*min-width:\s*760px;/s.test(tokenSource)) {

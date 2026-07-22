@@ -861,6 +861,7 @@ func emptyRhythmProjection(state localEstimateState, now time.Time) estimation.R
 	if message == "" {
 		message = "Add at least seven principal sleep episodes before the app estimates a rhythm."
 	}
+	localNow := now.In(locationOrUTC(defaultZoneID))
 	return estimation.RhythmProjection{
 		FixtureMode:     false,
 		EstimateSource:  "local",
@@ -869,7 +870,13 @@ func emptyRhythmProjection(state localEstimateState, now time.Time) estimation.R
 		ActogramSummary: message,
 		ObservedRows:    []estimation.RhythmBand{},
 		ForecastRows:    []estimation.RhythmBand{},
-		Now:             estimation.RhythmNow{Label: "now", Day: now.Local().Format("Jan 2"), Hour: localClockHour(now.Local())},
+		Now: estimation.RhythmNow{
+			Label:     "now",
+			Day:       localNow.Format("Jan 2"),
+			CivilDate: localNow.Format("2006-01-02"),
+			ZoneID:    defaultZoneID,
+			Hour:      localClockHour(localNow),
+		},
 		DriftTitle:      "Sleep-onset drift",
 		SlopeLabel:      "Not enough data",
 		DriftConfidence: "Low",

@@ -109,5 +109,7 @@ architecture guards, not substitutes for tests or visual review.
 
 Rhythm-linked appearance switching is implemented under ADR-0021. The
 agent-readable appearance action remains deferred until a desktop-local agent
-surface exists; the U-E chronological hover probe remains planned in
-`ui-refactor-plan.md`.
+surface exists. The U-E chronological hover probe is implemented with strict
+local civil-date/zone normalization and an imperative, no-rerender overlay;
+the network-facing server/MCP projection retains civil dates but deliberately
+omits raw local zone identifiers.

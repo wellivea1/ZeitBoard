@@ -31,6 +31,9 @@ func TestEmptyLocalStoreReturnsHonestStates(t *testing.T) {
 	if rhythm.Status != "empty" || rhythm.FixtureMode || len(rhythm.ObservedRows) != 0 || len(rhythm.DriftPoints) != 0 {
 		t.Fatalf("unexpected empty rhythm projection: %#v", rhythm)
 	}
+	if rhythm.Now.CivilDate == "" || rhythm.Now.ZoneID != defaultZoneID {
+		t.Fatalf("empty rhythm missing civil anchor: %#v", rhythm.Now)
+	}
 
 	proposals, err := app.GetProposals()
 	if err != nil {

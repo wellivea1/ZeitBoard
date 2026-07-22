@@ -36,11 +36,13 @@ type RhythmProjection struct {
 }
 
 // RhythmBand is one sleep interval (observed or forecast) placed on the
-// 0-24h actogram track. StartHour/DurationHours are local clock hours so the
-// frontend can double-plot without re-deriving time math.
+// 0-24h actogram track. CivilDate/ZoneID keep hover-time arithmetic anchored
+// to structured civil data; StartHour/DurationHours place the visual band.
 type RhythmBand struct {
 	ID            string  `json:"id"`
 	Day           string  `json:"day"`
+	CivilDate     string  `json:"civilDate"`
+	ZoneID        string  `json:"zoneId"`
 	StartHour     float64 `json:"startHour"`
 	DurationHours float64 `json:"durationHours"`
 	Kind          string  `json:"kind"`
@@ -58,6 +60,8 @@ type RhythmBand struct {
 type RhythmDriftPoint struct {
 	ID           string  `json:"id"`
 	Day          string  `json:"day"`
+	CivilDate    string  `json:"civilDate"`
+	ZoneID       string  `json:"zoneId"`
 	OnsetHour    float64 `json:"onsetHour"`
 	FitHour      float64 `json:"fitHour"`
 	BandLowHour  float64 `json:"bandLowHour"`
@@ -68,9 +72,11 @@ type RhythmDriftPoint struct {
 }
 
 type RhythmNow struct {
-	Label string  `json:"label"`
-	Day   string  `json:"day"`
-	Hour  float64 `json:"hour"`
+	Label     string  `json:"label"`
+	Day       string  `json:"day"`
+	CivilDate string  `json:"civilDate"`
+	ZoneID    string  `json:"zoneId"`
+	Hour      float64 `json:"hour"`
 }
 
 // Project derives the Rhythm visualization from the same sessions and fit the
@@ -93,7 +99,6 @@ func (e RobustEstimator) Project(ctx context.Context, sessions []domain.SleepSes
 	indices, _ := cycleIndices(episodes)
 
 	base := episodes[0].Intervals[0].Interval.Start.UTC
-	zoneID := episodes[len(episodes)-1].Intervals[0].Interval.Start.ZoneID
 	x := make([]float64, len(episodes))
 	y := make([]float64, len(episodes))
 	for i, episode := range episodes {
@@ -122,7 +127,8 @@ func (e RobustEstimator) Project(ctx context.Context, sessions []domain.SleepSes
 	driftPoints := make([]RhythmDriftPoint, len(episodes))
 	for i, episode := range episodes {
 		onset := episode.Intervals[0].Interval.Start
-		fitInstant, ferr := domain.NewZonedInstant(base.Add(hoursDuration(intercept+slope*x[i])), zoneID)
+		pointZoneID := onset.ZoneID
+		fitInstant, ferr := domain.NewZonedInstant(base.Add(hoursDuration(intercept+slope*x[i])), pointZoneID)
 		if ferr != nil {
 			return RhythmProjection{}, ferr
 		}
@@ -142,6 +148,8 @@ func (e RobustEstimator) Project(ctx context.Context, sessions []domain.SleepSes
 		driftPoints[i] = RhythmDriftPoint{
 			ID:           "drift-" + string(episode.ID),
 			Day:          mustLocal(onset).Format("Jan 2"),
+			CivilDate:    mustLocal(onset).Format("2006-01-02"),
+			ZoneID:       pointZoneID,
 			OnsetHour:    round2(onsetPlot[i]),
 			FitHour:      round2(fitPlot[i]),
 			BandLowHour:  round2(low),
@@ -166,6 +174,8 @@ func (e RobustEstimator) Project(ctx context.Context, sessions []domain.SleepSes
 		forecast = append(forecast, RhythmBand{
 			ID:            fmt.Sprintf("forecast-%d", i+1),
 			Day:           start.Format("Jan 2"),
+			CivilDate:     start.Format("2006-01-02"),
+			ZoneID:        window.Interval.Start.ZoneID,
 			StartHour:     round2(clockHour(start)),
 			DurationHours: round2(window.Interval.Duration().Hours()),
 			Kind:          "forecast",
@@ -187,7 +197,13 @@ func (e RobustEstimator) Project(ctx context.Context, sessions []domain.SleepSes
 		ActogramSummary: "Double-plotted actogram of observed sleep with widening predicted sleep windows, all derived from the local estimate.",
 		ObservedRows:    observed,
 		ForecastRows:    forecast,
-		Now:             RhythmNow{Label: "now", Day: nowLocal.Format("Jan 2"), Hour: round2(clockHour(nowLocal))},
+		Now: RhythmNow{
+			Label:     "now",
+			Day:       nowLocal.Format("Jan 2"),
+			CivilDate: nowLocal.Format("2006-01-02"),
+			ZoneID:    estimate.AsOf.ZoneID,
+			Hour:      round2(clockHour(nowLocal)),
+		},
 		DriftTitle:      "Sleep-onset drift",
 		SlopeLabel:      fmt.Sprintf("%+d min per cycle", driftMinutes),
 		DriftConfidence: confLabel,
@@ -206,6 +222,8 @@ func observedBand(episode domain.SleepSession) RhythmBand {
 	return RhythmBand{
 		ID:            "sleep-" + string(episode.ID),
 		Day:           start.Format("Jan 2"),
+		CivilDate:     start.Format("2006-01-02"),
+		ZoneID:        interval.Start.ZoneID,
 		StartHour:     round2(clockHour(start)),
 		DurationHours: round2(interval.Duration().Hours()),
 		Kind:          kind,

@@ -41,10 +41,66 @@ type MedicationEventDTO struct {
 }
 
 type RhythmResponse struct {
-	SchemaVersion string                       `json:"schema_version"`
-	Status        string                       `json:"status"`
-	Refusal       *Refusal                     `json:"refusal,omitempty"`
-	Projection    *estimation.RhythmProjection `json:"projection,omitempty"`
+	SchemaVersion string               `json:"schema_version"`
+	Status        string               `json:"status"`
+	Refusal       *Refusal             `json:"refusal,omitempty"`
+	Projection    *RhythmProjectionDTO `json:"projection,omitempty"`
+}
+
+// RhythmProjectionDTO is the server/MCP allowlist. Civil dates preserve chart
+// chronology already represented by the display labels; raw zone identifiers
+// from the core projection remain absent from this network-facing form.
+type RhythmProjectionDTO struct {
+	FixtureMode    bool   `json:"fixtureMode"`
+	EstimateSource string `json:"estimateSource,omitempty"`
+	Status         string `json:"status,omitempty"`
+
+	ActogramSummary string          `json:"actogramSummary"`
+	ObservedRows    []RhythmBandDTO `json:"observedRows"`
+	ForecastRows    []RhythmBandDTO `json:"forecastRows"`
+	Now             RhythmNowDTO    `json:"now"`
+
+	DriftTitle      string                `json:"driftTitle"`
+	SlopeLabel      string                `json:"slopeLabel"`
+	DriftConfidence string                `json:"driftConfidence"`
+	DriftSummary    string                `json:"driftSummary"`
+	YMinHour        float64               `json:"yMinHour"`
+	YMaxHour        float64               `json:"yMaxHour"`
+	DriftPoints     []RhythmDriftPointDTO `json:"driftPoints"`
+}
+
+type RhythmBandDTO struct {
+	ID            string  `json:"id"`
+	Day           string  `json:"day"`
+	CivilDate     string  `json:"civilDate"`
+	StartHour     float64 `json:"startHour"`
+	DurationHours float64 `json:"durationHours"`
+	Kind          string  `json:"kind"`
+	StartLabel    string  `json:"startLabel"`
+	WakeLabel     string  `json:"wakeLabel"`
+	DurationLabel string  `json:"durationLabel"`
+	Source        string  `json:"source"`
+	Confidence    string  `json:"confidence"`
+}
+
+type RhythmNowDTO struct {
+	Label     string  `json:"label"`
+	Day       string  `json:"day"`
+	CivilDate string  `json:"civilDate"`
+	Hour      float64 `json:"hour"`
+}
+
+type RhythmDriftPointDTO struct {
+	ID           string  `json:"id"`
+	Day          string  `json:"day"`
+	CivilDate    string  `json:"civilDate"`
+	OnsetHour    float64 `json:"onsetHour"`
+	FitHour      float64 `json:"fitHour"`
+	BandLowHour  float64 `json:"bandLowHour"`
+	BandHighHour float64 `json:"bandHighHour"`
+	OnsetLabel   string  `json:"onsetLabel"`
+	Source       string  `json:"source"`
+	Confidence   string  `json:"confidence"`
 }
 
 type AccuracyResponse struct {
@@ -114,7 +170,8 @@ func (s Service) Rhythm(ctx context.Context, sessions []domain.SleepSession) (Rh
 	projection.FixtureMode = false
 	projection.ActogramSummary = "Double-plotted actogram of synced sleep with widening predicted sleep windows, all derived from the server estimate."
 	sanitizeRhythmIDs(&projection)
-	return RhythmResponse{SchemaVersion: SchemaVersion, Status: "estimated", Projection: &projection}, nil
+	dto := rhythmProjectionDTO(projection)
+	return RhythmResponse{SchemaVersion: SchemaVersion, Status: "estimated", Projection: &dto}, nil
 }
 
 func (s Service) Accuracy(ctx context.Context, sessions []domain.SleepSession) (AccuracyResponse, error) {
@@ -216,5 +273,68 @@ func sanitizeRhythmIDs(projection *estimation.RhythmProjection) {
 	}
 	for i := range projection.DriftPoints {
 		projection.DriftPoints[i].ID = fmt.Sprintf("drift-%d", i+1)
+	}
+}
+
+func rhythmProjectionDTO(projection estimation.RhythmProjection) RhythmProjectionDTO {
+	observed := make([]RhythmBandDTO, len(projection.ObservedRows))
+	for i, row := range projection.ObservedRows {
+		observed[i] = rhythmBandDTO(row)
+	}
+	forecast := make([]RhythmBandDTO, len(projection.ForecastRows))
+	for i, row := range projection.ForecastRows {
+		forecast[i] = rhythmBandDTO(row)
+	}
+	drift := make([]RhythmDriftPointDTO, len(projection.DriftPoints))
+	for i, point := range projection.DriftPoints {
+		drift[i] = RhythmDriftPointDTO{
+			ID:           point.ID,
+			Day:          point.Day,
+			CivilDate:    point.CivilDate,
+			OnsetHour:    point.OnsetHour,
+			FitHour:      point.FitHour,
+			BandLowHour:  point.BandLowHour,
+			BandHighHour: point.BandHighHour,
+			OnsetLabel:   point.OnsetLabel,
+			Source:       point.Source,
+			Confidence:   point.Confidence,
+		}
+	}
+	return RhythmProjectionDTO{
+		FixtureMode:     projection.FixtureMode,
+		EstimateSource:  projection.EstimateSource,
+		Status:          projection.Status,
+		ActogramSummary: projection.ActogramSummary,
+		ObservedRows:    observed,
+		ForecastRows:    forecast,
+		Now: RhythmNowDTO{
+			Label:     projection.Now.Label,
+			Day:       projection.Now.Day,
+			CivilDate: projection.Now.CivilDate,
+			Hour:      projection.Now.Hour,
+		},
+		DriftTitle:      projection.DriftTitle,
+		SlopeLabel:      projection.SlopeLabel,
+		DriftConfidence: projection.DriftConfidence,
+		DriftSummary:    projection.DriftSummary,
+		YMinHour:        projection.YMinHour,
+		YMaxHour:        projection.YMaxHour,
+		DriftPoints:     drift,
+	}
+}
+
+func rhythmBandDTO(row estimation.RhythmBand) RhythmBandDTO {
+	return RhythmBandDTO{
+		ID:            row.ID,
+		Day:           row.Day,
+		CivilDate:     row.CivilDate,
+		StartHour:     row.StartHour,
+		DurationHours: row.DurationHours,
+		Kind:          row.Kind,
+		StartLabel:    row.StartLabel,
+		WakeLabel:     row.WakeLabel,
+		DurationLabel: row.DurationLabel,
+		Source:        row.Source,
+		Confidence:    row.Confidence,
 	}
 }

@@ -41,6 +41,7 @@ describe("desktop navigation", () => {
     const { container } = render(<App />);
 
     expect(screen.getByRole("heading", { name: "Likely awake" })).toBeVisible();
+    expect(screen.getByText("Sample date · Jun 16")).toBeVisible();
     expect(screen.getByText("Today in your cycle")).toBeVisible();
     expect(screen.getByText("Today, 10:15 PM to 1:27 AM")).toBeVisible();
     expect(screen.getByText("+48 min per cycle")).toBeVisible();
@@ -161,7 +162,13 @@ describe("desktop navigation", () => {
             observedRows: [],
             forecastRows: [],
             driftPoints: [],
-            now: { day: "Jul 4", hour: 12, label: "Now" },
+            now: {
+              day: "Jul 4",
+              civilDate: "2026-07-04",
+              zoneId: "America/New_York",
+              hour: 12,
+              label: "Now",
+            },
             actogramSummary: "No chart yet",
             driftTitle: "Sleep-onset drift",
             slopeLabel: "n/a",

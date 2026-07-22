@@ -289,10 +289,10 @@
   --shadow-card: none;
 }
 
-/* Amber glasses mode: every foreground >=570nm-dominant so the UI keeps its
-   contrast through dark amber blue-blockers (blue reads black, green loses
-   most luminance through the lens). Blue channels held to <=10%; state is
-   carried by luminance and band patterns, never by hue families. */
+/* Amber compatibility mode: a blue-minimized RGB palette designed to remain
+   legible through many dark-amber lenses. CSS controls subpixels, not emitted
+   spectra, so this makes no wavelength or treatment claim. Blue channels are
+   held to <=10%; state also uses luminance and band patterns. */
 [data-theme="amber"] {
   color-scheme: dark;
   --ink: #ffc61a;
@@ -934,6 +934,52 @@ button {
   color: var(--sage-dark);
 }
 
+.has-time-probe {
+  cursor: crosshair;
+}
+
+.time-probe {
+  position: absolute;
+  z-index: var(--z-strip);
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 1px;
+  pointer-events: none;
+  background: var(--probe-line, var(--line));
+  transform: translateX(0);
+  will-change: transform;
+}
+
+.time-probe[hidden] {
+  display: none;
+}
+
+.time-probe-label {
+  position: absolute;
+  top: var(--probe-label-top, 50%);
+  left: 0;
+  padding: var(--space-1) var(--space-2);
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  font-size: var(--type-label);
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  line-height: 1;
+  white-space: nowrap;
+  transform: translate(-50%, -50%);
+}
+
+.time-probe[data-edge="start"] .time-probe-label {
+  transform: translate(0, -50%);
+}
+
+.time-probe[data-edge="end"] .time-probe-label {
+  transform: translate(-100%, -50%);
+}
+
 .calendar-board {
   overflow: hidden;
 }
@@ -964,6 +1010,7 @@ button {
   font-size: 12px;
 }
 .day-track {
+  --probe-line: var(--line);
   position: relative;
   height: 36px;
   overflow: hidden;
@@ -1381,6 +1428,7 @@ button {
   font-size: 10px;
 }
 .actogram-visual-track {
+  --probe-line: var(--actogram-grid);
   position: relative;
   height: 30px;
   overflow: hidden;
@@ -1545,9 +1593,15 @@ button {
   display: grid;
   grid-template-rows: 300px 30px;
 }
+.drift-plot {
+  --probe-label-top: var(--space-4);
+  --probe-line: var(--drift-grid);
+  position: relative;
+  height: 300px;
+}
 .drift-svg {
   width: 100%;
-  height: 300px;
+  height: 100%;
   overflow: visible;
   background-image: var(--drift-svg-bg);
   background-size: 20% 100%;
@@ -1724,6 +1778,10 @@ button {
   border: 0;
   clip: rect(0 0 0 0);
   white-space: nowrap;
+}
+
+.sr-table {
+  table-layout: fixed;
 }
 
 .record-list,
