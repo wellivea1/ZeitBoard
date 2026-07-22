@@ -110,6 +110,34 @@ func (o ParseOptions) validate() error {
 	return nil
 }
 
+func (s Source) Validate() error {
+	if !validIdentifier(s.SourceID) {
+		return fmt.Errorf("source id %q is not a v1 identifier", s.SourceID)
+	}
+	if err := boundedText("source label", s.Label, 1, maxSourceLabelRunes); err != nil {
+		return err
+	}
+	switch s.Kind {
+	case SourceICS, SourceCalDAV:
+		if !s.ReadOnly {
+			return errors.New("imported calendar sources must be read-only")
+		}
+	case SourceZeitBoard:
+		if s.ReadOnly {
+			return errors.New("the ZeitBoard calendar source must be writable")
+		}
+	default:
+		return fmt.Errorf("unknown calendar source kind %q", s.Kind)
+	}
+	if s.CoverageStartAt.IsZero() || s.CoverageEndAt.IsZero() || !s.CoverageStartAt.Before(s.CoverageEndAt) {
+		return errors.New("calendar source coverage must be a non-empty interval")
+	}
+	if s.LastImportedAt.IsZero() {
+		return errors.New("calendar source last_imported_at is required")
+	}
+	return nil
+}
+
 func (e Event) Validate() error {
 	if !validIdentifier(e.EventID) || !validIdentifier(e.SourceID) {
 		return errors.New("calendar event and source ids must be v1 identifiers")

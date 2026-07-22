@@ -142,6 +142,78 @@ func (s *Store) Migrate(ctx context.Context) error {
 			task_id TEXT NOT NULL,
 			pushed_at TEXT NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS local_calendar_sources (
+			source_id TEXT PRIMARY KEY,
+			label TEXT NOT NULL,
+			kind TEXT NOT NULL CHECK(kind IN ('ics', 'caldav', 'zeitboard')),
+			read_only INTEGER NOT NULL CHECK(read_only IN (0, 1)),
+			coverage_start_at TEXT NOT NULL,
+			coverage_end_at TEXT NOT NULL,
+			last_imported_at TEXT NOT NULL,
+			endpoint TEXT NOT NULL DEFAULT '',
+			CHECK(
+				(kind IN ('ics', 'caldav') AND read_only = 1) OR
+				(kind = 'zeitboard' AND read_only = 0)
+			)
+		)`,
+		`CREATE TABLE IF NOT EXISTS local_calendar_events (
+			event_id TEXT PRIMARY KEY,
+			source_id TEXT NOT NULL,
+			source_record_id TEXT NOT NULL,
+			title TEXT NOT NULL,
+			start_at TEXT NOT NULL,
+			end_at TEXT NOT NULL,
+			zone_id TEXT NOT NULL,
+			all_day INTEGER NOT NULL CHECK(all_day IN (0, 1)),
+			busy INTEGER NOT NULL CHECK(busy IN (0, 1)),
+			ownership TEXT NOT NULL CHECK(ownership IN ('imported', 'app_owned')),
+			created_at TEXT NOT NULL,
+			location TEXT NOT NULL DEFAULT '',
+			notes TEXT NOT NULL DEFAULT '',
+			task_id TEXT NOT NULL DEFAULT '',
+			task_revision INTEGER NOT NULL DEFAULT 0,
+			proposal_id TEXT NOT NULL DEFAULT '',
+			FOREIGN KEY(source_id) REFERENCES local_calendar_sources(source_id) ON DELETE CASCADE,
+			UNIQUE(source_id, source_record_id),
+			CHECK(end_at >= start_at),
+			CHECK(busy = 0 OR end_at > start_at),
+			CHECK(
+				(ownership = 'imported' AND task_id = '' AND task_revision = 0 AND proposal_id = '') OR
+				(ownership = 'app_owned' AND task_id <> '' AND task_revision >= 1 AND proposal_id <> '')
+			)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_local_calendar_events_interval
+			ON local_calendar_events(start_at, end_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_local_calendar_events_busy
+			ON local_calendar_events(busy, start_at, end_at)`,
+		`CREATE TRIGGER IF NOT EXISTS trg_local_calendar_imported_immutable
+			BEFORE UPDATE ON local_calendar_events
+			WHEN OLD.ownership = 'imported'
+			BEGIN
+				SELECT RAISE(ABORT, 'imported calendar events are immutable');
+			END`,
+		`CREATE TABLE IF NOT EXISTS local_proposal_decisions (
+			decision_id TEXT PRIMARY KEY,
+			proposal_id TEXT NOT NULL,
+			task_id TEXT NOT NULL,
+			task_revision INTEGER NOT NULL,
+			estimate_id TEXT NOT NULL,
+			decision TEXT NOT NULL CHECK(decision IN ('approved', 'rejected', 'undone')),
+			decided_at TEXT NOT NULL,
+			supersedes_decision_id TEXT NOT NULL DEFAULT '',
+			event_id TEXT NOT NULL DEFAULT '',
+			snapshot_start_at TEXT NOT NULL,
+			snapshot_end_at TEXT NOT NULL,
+			event_snapshot_hash TEXT NOT NULL,
+			CHECK(snapshot_end_at > snapshot_start_at),
+			CHECK(
+				(decision = 'approved' AND event_id <> '' AND supersedes_decision_id = '') OR
+				(decision = 'rejected' AND event_id = '' AND supersedes_decision_id = '') OR
+				(decision = 'undone' AND supersedes_decision_id <> '')
+			)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_local_proposal_decisions_proposal
+			ON local_proposal_decisions(proposal_id, decided_at, decision_id)`,
 	}
 	for _, statement := range statements {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {
@@ -149,7 +221,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		}
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	for _, version := range []int{1, 2, 3} {
+	for _, version := range []int{1, 2, 3, 4} {
 		if _, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(?, ?)`, version, now); err != nil {
 			return err
 		}
@@ -316,7 +388,7 @@ func (s *Store) DeleteAll(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	for _, table := range []string{"source_observations", "manual_corrections", "phase_estimates", "medication_events", "share_profiles", "local_sleep_corrections", "local_sleep_observations"} {
+	for _, table := range []string{"source_observations", "manual_corrections", "phase_estimates", "medication_events", "share_profiles", "local_sleep_corrections", "local_sleep_observations", "local_proposal_decisions", "local_calendar_events", "local_calendar_sources"} {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table); err != nil {
 			_ = tx.Rollback()
 			return err
