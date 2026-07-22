@@ -5,6 +5,8 @@ import (
 	"strings"
 	"time"
 	_ "time/tzdata"
+
+	"non24.app/core/domain"
 )
 
 var windowsZones = map[string]string{
@@ -79,23 +81,9 @@ func loadLocation(rawID string) (*time.Location, string, error) {
 // when a fall-back transition makes the same wall time occur twice, matching
 // RFC 5545's first-occurrence rule.
 func resolveCivil(loc *time.Location, year int, month time.Month, day, hour, minute, second int) (time.Time, error) {
-	candidate := time.Date(year, month, day, hour, minute, second, 0, loc)
-	if !sameCivil(candidate, year, month, day, hour, minute, second) {
-		return time.Time{}, fmt.Errorf("nonexistent civil time %04d-%02d-%02d %02d:%02d:%02d in %s", year, month, day, hour, minute, second, loc)
+	resolution, err := domain.ResolveCivilTime(loc, year, month, day, hour, minute, second)
+	if err != nil {
+		return time.Time{}, err
 	}
-
-	first := candidate
-	for _, delta := range []time.Duration{-3 * time.Hour, -2 * time.Hour, -time.Hour, -30 * time.Minute, 30 * time.Minute, time.Hour, 2 * time.Hour, 3 * time.Hour} {
-		other := candidate.Add(delta)
-		if sameCivil(other.In(loc), year, month, day, hour, minute, second) && other.Before(first) {
-			first = other
-		}
-	}
-	return first, nil
-}
-
-func sameCivil(value time.Time, year int, month time.Month, day, hour, minute, second int) bool {
-	y, m, d := value.Date()
-	h, min, sec := value.Clock()
-	return y == year && m == month && d == day && h == hour && min == minute && sec == second
+	return resolution.Time, nil
 }

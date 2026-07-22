@@ -18,13 +18,12 @@ import (
 
 const (
 	metaschemaURL = "https://json-schema.org/draft/2020-12/schema"
-	resourceBase  = "mem:///contracts/v1/"
 )
 
 // fixturePairs mirrors scripts/validate-contracts.sh, plus the refused
 // estimate fixture (validated against the same phase-estimate schema) for
 // fuller coverage.
-var fixturePairs = []struct{ schema, fixture string }{
+var v1FixturePairs = []struct{ schema, fixture string }{
 	{"observation-set.schema.json", "observations.json"},
 	{"correction-set.schema.json", "corrections.json"},
 	{"sleep-data-export.schema.json", "sleep-data-export.json"},
@@ -32,6 +31,9 @@ var fixturePairs = []struct{ schema, fixture string }{
 	{"sync-erase.schema.json", "sync-erase.json"},
 	{"task-set.schema.json", "task-set.json"},
 	{"calendar-event-set.schema.json", "calendar-event-set.json"},
+	{"medication-set.schema.json", "medication-set.json"},
+	{"medication-event-set.schema.json", "medication-event-set.json"},
+	{"medication-data-export.schema.json", "medication-data-export.json"},
 	{"assistant-action.schema.json", "assistant-action.json"},
 	{"direct-proposal-request.schema.json", "direct-proposal-request.json"},
 	{"phase-estimate.schema.json", "phase-estimate.json"},
@@ -48,9 +50,16 @@ var fixturePairs = []struct{ schema, fixture string }{
 	{"accuracy.schema.json", "accuracy.json"},
 }
 
+var v2FixturePairs = []struct{ schema, fixture string }{
+	{"medication-set.schema.json", "medication-set.json"},
+	{"medication-event-set.schema.json", "medication-event-set.json"},
+	{"medication-data-export.schema.json", "medication-data-export.json"},
+}
+
 // Set holds the compiled contract schemas for a repository checkout.
 type Set struct {
 	contractsDir string
+	resourceBase string
 	compiler     *jsonschema.Compiler
 	names        []string
 	cache        map[string]*jsonschema.Schema
@@ -60,7 +69,14 @@ type Set struct {
 // assertion enabled (so formats such as date-time are enforced, matching
 // check-jsonschema).
 func Load(root string) (*Set, error) {
-	contractsDir := filepath.Join(root, "contracts", "v1")
+	return loadVersion(root, "v1")
+}
+
+func loadVersion(root, version string) (*Set, error) {
+	if version != "v1" && version != "v2" {
+		return nil, fmt.Errorf("unsupported contract version %q", version)
+	}
+	contractsDir := filepath.Join(root, "contracts", version)
 	entries, err := os.ReadDir(contractsDir)
 	if err != nil {
 		return nil, fmt.Errorf("read contracts dir: %w", err)
@@ -71,6 +87,7 @@ func Load(root string) (*Set, error) {
 
 	set := &Set{
 		contractsDir: contractsDir,
+		resourceBase: "mem:///contracts/" + version + "/",
 		compiler:     compiler,
 		cache:        map[string]*jsonschema.Schema{},
 	}
@@ -84,7 +101,7 @@ func Load(root string) (*Set, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err := compiler.AddResource(resourceBase+name, doc); err != nil {
+		if err := compiler.AddResource(set.resourceBase+name, doc); err != nil {
 			return nil, fmt.Errorf("add resource %s: %w", name, err)
 		}
 		set.names = append(set.names, name)
@@ -96,7 +113,7 @@ func (s *Set) schema(name string) (*jsonschema.Schema, error) {
 	if sch, ok := s.cache[name]; ok {
 		return sch, nil
 	}
-	sch, err := s.compiler.Compile(resourceBase + name)
+	sch, err := s.compiler.Compile(s.resourceBase + name)
 	if err != nil {
 		return nil, fmt.Errorf("compile %s: %w", name, err)
 	}
@@ -162,23 +179,36 @@ func (s *Set) ValidateFile(schemaName, path string) error {
 // ValidateAll runs the full contract suite: metaschema checks, every fixture,
 // and the sample configuration.
 func ValidateAll(root string) error {
-	set, err := Load(root)
-	if err != nil {
-		return err
-	}
-
 	var errs []error
-	if err := set.CheckMetaschemas(); err != nil {
-		errs = append(errs, err)
+	suites := []struct {
+		version string
+		pairs   []struct{ schema, fixture string }
+	}{
+		{version: "v1", pairs: v1FixturePairs},
+		{version: "v2", pairs: v2FixturePairs},
 	}
-
-	testdataDir := filepath.Join(root, "testdata", "v1")
-	for _, pair := range fixturePairs {
-		if err := set.ValidateFile(pair.schema, filepath.Join(testdataDir, pair.fixture)); err != nil {
+	for _, suite := range suites {
+		set, err := loadVersion(root, suite.version)
+		if err != nil {
 			errs = append(errs, err)
+			continue
+		}
+		if err := set.CheckMetaschemas(); err != nil {
+			errs = append(errs, err)
+		}
+		testdataDir := filepath.Join(root, "testdata", suite.version)
+		for _, pair := range suite.pairs {
+			if err := set.ValidateFile(pair.schema, filepath.Join(testdataDir, pair.fixture)); err != nil {
+				errs = append(errs, err)
+			}
 		}
 	}
 
+	set, err := Load(root)
+	if err != nil {
+		errs = append(errs, err)
+		return errors.Join(errs...)
+	}
 	if err := set.ValidateFile("config.schema.json", filepath.Join(root, "config.example.json")); err != nil {
 		errs = append(errs, err)
 	}

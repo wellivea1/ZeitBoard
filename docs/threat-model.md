@@ -79,7 +79,12 @@ implemented: an authenticated erase endpoint hard-deletes synced payloads, tombs
 block resurrection, and devices apply pulled tombstones as local hard-deletes. The
 **local v1 sleep import boundary (ADR-0022)** is implemented with an 8 MiB / 20,000-row
 cap, strict JSON/CSV shape, per-row errors, source-id conflict detection, and atomic
-all-or-nothing commit. The
+all-or-nothing commit. **Local medication evidence and user-authored schedules
+(ADR-0024/0025)** are implemented with private device-only definitions,
+immutable events, correction chains, strict civil-time expansion, neutral
+sleep-collision forecasts, opt-in claim-first desktop reminders, contract
+export, and byte-checked hard erasure; no medication payload sync or agent
+projection exists in M-A/M-B. The
 **cloud skill wrapper and live trusted-view transport do not exist yet**; their rows
 remain design requirements for future workstreams, not current guarantees.
 
@@ -102,6 +107,11 @@ remain design requirements for future workstreams, not current guarantees.
 | Future Takeout / My Activity import | Resource exhaustion; misleading inference | Not implemented; must add bounded parsing and mark inferred sleep low-confidence (`inferred`) before it may affect estimation |
 | Source mutation | Audit history and estimator support become misleading | Append-only observations and corrections; effective read model; persistence tests |
 | Time-zone confusion | Incorrect drift or schedule proposals | UTC instants plus IANA zones; half-open intervals; DST-focused tests |
+| Medication correction mistaken for erasure | Sensitive raw evidence remains when the owner expected deletion | Ordinary edits and exclusion append immutable corrections and say that evidence remains; separate event/definition erasure requires exact `DELETE`, cascades corrections, checkpoints the WAL, vacuums SQLite, and is byte-tested |
+| Duplicate or misleading medication reminder | Repeated prompts could be mistaken for a second dose instruction | Reminders require an explicit owner-authored clock schedule and separate opt-in; an immutable unique occurrence claim is committed before notification delivery, delivery failures are not retried, and copy says "Reminder you set" rather than directing a dose |
+| Civil-time or forecast ambiguity | A DST transition, device-zone change, or forecast limit misstates schedule feasibility | Schedules own an explicit IANA zone; DST gaps are skipped and reported, repeated times use the first occurrence, cycles advance by civil date, and every occurrence outside the actual estimator horizon is labeled unavailable |
+| Medication notification disclosure | A private label appears on a shared or observed desktop | Medication notifications are off by default; the schedule editor discloses that opt-in allows the local OS notification surface to display the label, and control characters are stripped before delivery |
+| Medication text crosses a projection boundary | Names, clinician rules, or private notes reach a server, agent, trusted view, or log | M-A/M-B have no sync or agent projection; local DTOs are explicit, reminder claims contain no text, exports are owner-initiated, and privacy tests/architecture require opaque IDs before any later projection is enabled |
 | Estimator overclaim | Uncertain data appears authoritative | Typed refusal, ordinal confidence, widening windows, constrained product language; backtest harness measures calibration |
 | Fixed-event mutation | User calendar intent is changed | Imported rows are database-guarded immutable; source removal is a separate confirmed erasure; approval writes only a separately owned ZeitBoard block; export filters to app-owned events |
 | Stale local proposal approval | A task is placed against changed sleep or calendar evidence | Proposal IDs bind task revision, estimate, interval, sleep snapshot, and text-free event snapshot; the decision transaction recomputes task, sleep, and event state and fails closed before writing |

@@ -1,52 +1,302 @@
-import { Icon } from "../components/Icon";
-import { PageHeader, PlaceholderNotice } from "../components/AppShell";
+import { useCallback, useEffect, useState } from "react";
+import { PageHeader } from "../components/AppShell";
+import { MedicationHistory } from "../components/MedicationHistory";
+import { MedicationFeasibility } from "../components/MedicationFeasibility";
+import { MedicationLogForm } from "../components/MedicationLogForm";
+import { MedicationSetupPanel } from "../components/MedicationSetupPanel";
+import {
+  addMedication,
+  correctMedicationEvent,
+  deleteMedication,
+  deleteMedicationEvent,
+  downloadMedicationExport,
+  exportMedicationData,
+  hasLocalMedicationService,
+  loadMedications,
+  logMedicationEvent,
+  medicationDataChangedEvent,
+  notifyMedicationDataChanged,
+  updateMedication,
+  updateMedicationSchedule,
+  type MedicationEventCorrectionInput,
+  type MedicationEventInput,
+  type MedicationInput,
+  type MedicationScheduleInput,
+  type MedicationsData,
+  type MedicationUpdateInput,
+} from "../data/medications";
+
+function medicationError(reason: unknown, fallback: string) {
+  return reason instanceof Error ? reason.message : fallback;
+}
+
+function medicationServiceLabel(
+  localServicePresent: boolean,
+  data: MedicationsData | null,
+): string {
+  if (!localServicePresent) return "Desktop service unavailable";
+  if (!data) return "Loading local private data";
+  return data.status === "unavailable" ? "Desktop service unavailable" : "Local private data";
+}
+
+function useMedicationWorkspace() {
+  const localServicePresent = hasLocalMedicationService();
+  const [data, setData] = useState<MedicationsData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [error, setError] = useState("");
+  const [announcement, setAnnouncement] = useState("");
+  const [revision, setRevision] = useState(0);
+
+  const refresh = useCallback(() => setRevision((current) => current + 1), []);
+
+  useEffect(() => {
+    const changed = () => refresh();
+    window.addEventListener(medicationDataChangedEvent, changed);
+    return () => window.removeEventListener(medicationDataChangedEvent, changed);
+  }, [refresh]);
+
+  useEffect(() => {
+    let current = true;
+    void loadMedications().then(
+      (result) => {
+        if (!current) return;
+        setData(result);
+        setLoading(false);
+        setError("");
+      },
+      (reason: unknown) => {
+        if (!current) return;
+        setLoading(false);
+        setError(medicationError(reason, "Medication data could not be loaded."));
+      },
+    );
+    return () => {
+      current = false;
+    };
+  }, [revision]);
+
+  const mutate = async (
+    operation: () => Promise<MedicationsData>,
+    successMessage: string,
+  ): Promise<void> => {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      const result = await operation();
+      setData(result);
+      setAnnouncement(successMessage);
+      notifyMedicationDataChanged();
+    } catch (reason) {
+      setError(medicationError(reason, "Medication operation failed."));
+      throw reason;
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const exportData = () => {
+    if (!localServicePresent || exporting) return;
+    setExporting(true);
+    setError("");
+    void exportMedicationData().then(
+      (result) => {
+        setExporting(false);
+        const downloaded = downloadMedicationExport(result);
+        setAnnouncement(
+          `${result.medicationCount} ${result.medicationCount === 1 ? "medication" : "medications"} and ${result.eventCount} ${result.eventCount === 1 ? "event" : "events"} exported${downloaded ? ` to ${result.fileName}` : "."}`,
+        );
+      },
+      (reason: unknown) => {
+        setExporting(false);
+        setError(medicationError(reason, "Medication export failed."));
+      },
+    );
+  };
+
+  return {
+    data,
+    loading,
+    busy,
+    exporting,
+    error,
+    announcement,
+    localServicePresent,
+    mutate,
+    exportData,
+    dismissError: () => setError(""),
+  };
+}
+
+type MedicationMutation = (
+  operation: () => Promise<MedicationsData>,
+  successMessage: string,
+) => Promise<void>;
+
+function MedicationWorkspaceView({
+  data,
+  loading,
+  busy,
+  available,
+  mutate,
+}: {
+  data: MedicationsData | null;
+  loading: boolean;
+  busy: boolean;
+  available: boolean;
+  mutate: MedicationMutation;
+}) {
+  return (
+    <section className="medication-workspace">
+      <div className="medication-main-column">
+        <MedicationLogForm
+          medications={data?.medications ?? []}
+          available={available}
+          busy={busy}
+          onLog={(input: MedicationEventInput) =>
+            mutate(() => logMedicationEvent(input), `${input.status} medication event recorded.`)
+          }
+        />
+
+        <div
+          className="medication-data-status"
+          data-estimate={data?.estimateStatus ?? "unavailable"}
+        >
+          <div>
+            <strong>{loading && !data ? "Loading local medication data" : data?.message}</strong>
+            <span>{data?.estimateMessage}</span>
+          </div>
+          <small>{data?.updatedLabel}</small>
+        </div>
+
+        <MedicationFeasibility
+          medications={data?.medications ?? []}
+          reminderStatus={data?.reminderStatus ?? "unavailable"}
+          reminderMessage={
+            data?.reminderMessage ?? "Desktop reminders require the ZeitBoard desktop service."
+          }
+        />
+
+        {loading && !data ? (
+          <div className="medication-loading" role="status">
+            Loading medication history...
+          </div>
+        ) : (
+          <MedicationHistory
+            events={data?.events ?? []}
+            busy={busy}
+            onCorrect={(input: MedicationEventCorrectionInput) =>
+              mutate(() => correctMedicationEvent(input), "Medication event correction appended.")
+            }
+            onDelete={(eventId: string) =>
+              mutate(() => deleteMedicationEvent(eventId), "Medication event permanently erased.")
+            }
+          />
+        )}
+      </div>
+
+      <MedicationSetupPanel
+        medications={data?.medications ?? []}
+        available={available}
+        busy={busy}
+        onAdd={(input: MedicationInput) =>
+          mutate(() => addMedication(input), "Private medication label added.")
+        }
+        onUpdate={(input: MedicationUpdateInput) =>
+          mutate(() => updateMedication(input), "Medication definition revision saved.")
+        }
+        onSchedule={(input: MedicationScheduleInput) =>
+          mutate(() => updateMedicationSchedule(input), "Medication schedule revision saved.")
+        }
+        onDelete={(medicationId: string) =>
+          mutate(
+            () => deleteMedication(medicationId),
+            "Medication and its history permanently erased.",
+          )
+        }
+      />
+    </section>
+  );
+}
 
 export function MedicationsScreen() {
+  const {
+    data,
+    loading,
+    busy,
+    exporting,
+    error,
+    announcement,
+    localServicePresent,
+    mutate,
+    exportData,
+    dismissError,
+  } = useMedicationWorkspace();
+
+  const available = localServicePresent && data !== null && data.status !== "unavailable";
+
   return (
     <>
       <PageHeader
         title="Medications"
-        description="Keep a private record tied to your own wake or sleep events."
+        description="Keep a private factual record alongside observed and predicted rhythm context."
         actions={
-          <div className="status-cluster">
-            <span className="sync-dot" data-mode="fixture" aria-hidden="true" />
-            <span>Sample preview</span>
+          <div className="medication-page-actions">
+            <div className="status-cluster">
+              <span
+                className="sync-dot"
+                data-mode={available ? "local" : "unavailable"}
+                aria-hidden="true"
+              />
+              <span>{medicationServiceLabel(localServicePresent, data)}</span>
+            </div>
+            <button
+              className="button secondary compact"
+              type="button"
+              disabled={!available || exporting}
+              onClick={exportData}
+            >
+              {exporting ? "Exporting..." : "Export medication data"}
+            </button>
           </div>
         }
       />
-      <PlaceholderNotice>
-        These records are a synthetic design preview — medication logging is a planned feature. It
-        will record clock-time doses you enter; it will never recommend one.
-      </PlaceholderNotice>
-      <div className="safety-banner">
-        <Icon name="shield" />
-        <p>
-          <strong>Logging only</strong>This workspace records user-entered information. It does not
-          recommend a medication, dose, or timing.
-        </p>
-      </div>
-      <section className="panel record-list" aria-label="Synthetic medication records">
-        <article>
-          <div className="record-icon">
-            <Icon name="clock" />
-          </div>
-          <div>
-            <h2>Morning record</h2>
-            <p>Synthetic label - relative to waking</p>
-          </div>
-          <span className="record-time">Within 30 min after wake</span>
-        </article>
-        <article>
-          <div className="record-icon">
-            <Icon name="moon" />
-          </div>
-          <div>
-            <h2>Evening record</h2>
-            <p>Synthetic label - manual reminder</p>
-          </div>
-          <span className="record-time">No active reminder</span>
-        </article>
+
+      <section className="medication-boundary" aria-label="Medication safety boundary">
+        <div>
+          <strong>Logging and context only</strong>
+          <span>{data?.disclaimer ?? "Medication timing is not medical advice."}</span>
+        </div>
+        <div>
+          <strong>No interaction checking</strong>
+          <span>
+            {data?.interactionDisclaimer ??
+              "ZeitBoard does not check medication interactions; ask a pharmacist or clinician."}
+          </span>
+        </div>
       </section>
+
+      {error && (
+        <div className="medication-error" role="alert">
+          <span>{error}</span>
+          <button className="text-button" type="button" onClick={dismissError}>
+            Dismiss
+          </button>
+        </div>
+      )}
+      <p className="sr-only" role="status" aria-live="polite">
+        {announcement}
+      </p>
+
+      <MedicationWorkspaceView
+        data={data}
+        loading={loading}
+        busy={busy}
+        available={available}
+        mutate={mutate}
+      />
     </>
   );
 }

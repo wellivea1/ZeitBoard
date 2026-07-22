@@ -29,3 +29,11 @@ func TestMedicationTimingRelativeToWakeAndPredictedSleep(t *testing.T) {
 		t.Fatalf("time before sleep = %v", event.TimeBeforePredictedSleep)
 	}
 }
+
+func TestResolveRelativeTimingDoesNotInventContext(t *testing.T) {
+	at := domain.MustZonedInstant(time.Date(2026, 6, 15, 15, 0, 0, 0, time.UTC), "UTC")
+	result := ResolveRelativeTiming(at, nil, nil)
+	if result.TimeSinceWake != nil || result.TimeBeforePredictedSleep != nil || result.Confidence.Level != domain.ConfidenceUnknown {
+		t.Fatalf("relative timing = %#v", result)
+	}
+}

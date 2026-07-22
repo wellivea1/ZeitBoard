@@ -42,6 +42,12 @@ detail lives there rather than being repeated here.
 - User-owned tasks: contract-shaped task CRUD, a real Tasks screen, the
   scheduler planning only stored open tasks (ADR-0018), and cross-device task
   sync as immutable revision records with erasure-grade deletion (ADR-0020).
+- Medication M-A/M-B: private local definitions, append-only taken/skipped
+  events and correction chains, explicit user-authored schedules, neutral
+  observed/predicted collision context, opt-in claim-first desktop reminders,
+  versioned local export, typed hard erasure, and a dense real-data Medications
+  workspace (ADR-0024/0025). No schedule, reminder time, interaction check, or
+  treatment recommendation is inferred.
 - The Rhythm Sources tab and Data Sources run on real local state (refusals,
   correction history, per-source composition, sync status); synthetic previews
   are confined to the labeled browser fixture mode.
@@ -83,7 +89,7 @@ detail lives there rather than being repeated here.
 The actionable near-term plan. Each slice is self-contained and lands with an
 ADR when it changes architecture. The phase-level direction (through the
 public availability portal) with a pasteable `/goal` prompt per phase is
-[`phase-goals.md`](phase-goals.md); slices below map onto its phases 1-2.
+[`phase-goals.md`](phase-goals.md); slices below map onto its phases 1-3.
 
 1. ~~**Close the control loop — approvals unification + sync robustness.**~~
    ✅ Delivered (ADR-0016): cross-device decisions via listed one-use tokens, a
@@ -146,6 +152,15 @@ public availability portal) with a pasteable `/goal` prompt per phase is
    only an app-owned local block; rejection writes no event; undo removes only
    that block; app-owned placements export as RFC 5545 ICS. OAuth providers
    and remote write-back remain future, separately permissioned work.
+
+**Disease-management track.** ~~M-A local medication logging~~ and ~~M-B
+user-authored schedules + feasibility~~ are delivered (ADR-0024/0025),
+including byte-verified erasure distinct from append-only exclusion, explicit
+civil/DST semantics, neutral sleep-collision forecasts, and opt-in at-most-once
+desktop reminders. **Next:** M-C adherence-in-rhythm context, actogram markers,
+and clinician export. Markers for illness, travel, disruption, and forced
+schedules remain a parallel prerequisite for the association view.
+
 7. **Takeout / "My Activity" import + activity→sleep inference.** File import
    (no Google API exists for My Activity) feeding the deferred probabilistic
    inference; emits low-confidence `inferred` episodes only, validated by the
@@ -191,7 +206,7 @@ public availability portal) with a pasteable `/goal` prompt per phase is
 **Small debts (fold into adjacent slices):** consolidate the correction-record
 → domain decoder (now duplicated across desktop storage, server readmodel, and
 the sync validator); prefer a CA-cert path over localhost skip-verify for the
-MCP client; medication tracking now has a full feature plan
+MCP client; medication tracking M-A/M-B is delivered and M-C..M-F remain specified
 ([`medication-feature-plan.md`](medication-feature-plan.md), slices M-A..M-F:
 benchmarked against Medisafe; fixed-clock regimens + wake-relative display,
 reminder collision forecasts, adherence-in-rhythm-context, association-not-
@@ -215,7 +230,7 @@ Largely delivered (see "Where things stand"). Remaining in scope:
 - Local DB encryption at rest + OS credential storage for the desktop store
   (the token file is 0600; the SQLite store itself is not yet encrypted —
   privacy.md requires it).
-- **Automatic clinical charting + clinician export** (§3.6): the longitudinal
+- **Automatic clinical charting + clinician export** (§3.6 / medication M-C): the longitudinal
   clinical actogram with annotations and a printable, redaction-controlled
   PDF — replacing hand-kept sleep logs. Recording only; never a treatment
   recommendation. Depends on slices 3 (real history) and import hardening.
