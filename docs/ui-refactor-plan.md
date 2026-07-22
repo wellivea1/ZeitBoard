@@ -315,3 +315,38 @@ that deferred product capabilities are present: trusted-link transport,
 Android sync and More destinations, tablet/fold two-pane navigation, and a
 full TalkBack/screen-reader participant walkthrough remain separate roadmap
 work.
+
+## 9. Slice U-G (delivered 2026-07-22): proposal and compact-control density
+
+A runtime follow-up found that U-F's residual-route closure did not cover two
+shared desktop surfaces. Tasks nested a proposal card inside an approval card
+and placed the related no-safe-window state in a separate card. Approvals
+centered individually rounded proposal cards in an otherwise full-width queue.
+At 390x844, the first Tasks proposal measured 431px high and the two Approvals
+proposals measured 355px and 331px. The phone-width Settings appearance picker
+also consumed 821px before any other setting. Finally, the icon-only narrow
+navigation hid its text labels from the accessibility tree.
+
+The follow-up applies the same one-surface rule to these shared components:
+
+- Approvals is one bounded queue with ruled proposal rows. Origin retains a
+  semantic edge color, confidence is written as text as well as a three-part
+  meter, reasons are neutral inline facts rather than boxed chips, and actions
+  occupy a dedicated column on wide screens or one compact row on narrow
+  screens.
+- Tasks keeps the current proposal and the related not-proposed explanation in
+  one approval surface. Approvals renders no-safe-window tasks as a ruled
+  title/reason/next-action ledger without adding punctuation to backend copy.
+- The phone appearance selector uses a two-column compact preview grid while
+  preserving every preset's hint and radio semantics. Its measured height is
+  347px at the same narrow viewport.
+- Every primary-navigation link now has an explicit accessible name even when
+  its visible label is hidden; the Approvals name includes the current pending
+  count. Native hover titles identify compact desktop-rail icons.
+
+After the change, the first Tasks proposal measured 299px high, the two
+Approvals rows measured 220px and 217px at 390x844, and the same rows measured
+144px and 143px at 1440x900. Both viewports retained zero page-level horizontal
+overflow. The named Pixel 10 Pro XL emulator was rebuilt and rechecked across
+all four portrait routes plus large-width Settings; this slice changes no
+Android source.

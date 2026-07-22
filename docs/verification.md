@@ -8,7 +8,7 @@ Most recent local verification: Windows 11 on 2026-07-22.
   with 16 screen modules and 10 component stylesheets.
 - Frontend TypeScript and production builds for the desktop and trusted-view
   workspaces.
-- Frontend tests: 30 desktop test files with 212 tests, plus 2 trusted-view test
+- Frontend tests: 30 desktop test files with 213 tests, plus 2 trusted-view test
   files with 6 tests.
 - `scripts/dev.ps1 -Action check -Component desktop`: desktop production build.
 - `scripts/dev.ps1 -Action check -Component core`: Go formatting, tests, and vet
@@ -21,8 +21,8 @@ Most recent local verification: Windows 11 on 2026-07-22.
   check for 26 v1 fixtures plus 3 v2 fixtures, tools tests/vet, and schema
   validation.
 - Native Wails production build at `apps/desktop/build/bin/ZeitBoard.exe`.
-- Android `testDebugUnitTest`, `lintDebug`, and `assembleDebug`; this medication
-  slice changes no Android source.
+- Android `testDebugUnitTest`, `lintDebug`, and `assembleDebug`; U-G changes no
+  Android source.
 - Browser QA of the medication clinician-report workflow at 1440 x 900 and
   390 x 844: no page-level horizontal overflow, no console warnings or errors,
   and the dense chart, tables, controls, and explicit internal chart scrolling
@@ -226,6 +226,19 @@ positive delta against this combined baseline.
   physical pixels (680 dp at 480 dpi) after correcting the modifier order;
   before that fix it incorrectly filled the 2992 px screen. Portrait was
   restored. Logcat contained no app crash or ANR, and no text or control clipped.
+- Reviewed U-G's shared proposal surfaces at 1440x900 and 390x844 in system
+  Dark, Paper, and High contrast. Approvals rows measured 144/143 px at desktop
+  width and 220/217 px at narrow width; the first Tasks proposal measured 299
+  px instead of the prior 431 px. The narrow appearance picker measured 347 px
+  instead of 821 px. Both widths retained zero page-level horizontal overflow,
+  every icon-only route link retained an accessible name, and the browser
+  console reported no warnings or errors. Auto appearance and the browser
+  viewport were restored after review.
+- Reinstalled the current debug APK after U-G and repeated the four portrait
+  routes plus Settings in landscape on `Pixel_10_Pro_XL_API_36_1`. The app
+  process remained live, portrait rotation was restored, and logcat contained
+  only emulator/graphics compatibility warnings rather than an app exception,
+  crash, or ANR.
 
 ## Previously verified artifacts
 

@@ -13,9 +13,14 @@ export function ConfidenceDots({ value }: { value: ConfidenceLevel }) {
   const filled = confidenceSegments[value];
   return (
     <span className="proposal-confidence" aria-label={`${value} confidence`}>
-      {[0, 1, 2].map((index) => (
-        <span key={index} data-muted={index >= filled || undefined} />
-      ))}
+      <span className="proposal-confidence-label" aria-hidden="true">
+        {value}
+      </span>
+      <span className="proposal-confidence-meter" aria-hidden="true">
+        {[0, 1, 2].map((index) => (
+          <span key={index} data-muted={index >= filled || undefined} />
+        ))}
+      </span>
     </span>
   );
 }
@@ -24,7 +29,7 @@ export function ProposalCard({ proposal }: { proposal: ChangeProposalFixture }) 
   const { decide, busyProposalId, ready } = useApprovals();
   const busy = !ready || busyProposalId !== null;
   return (
-    <article className="panel proposal-card" data-origin={proposal.origin}>
+    <article className="proposal-card" data-origin={proposal.origin}>
       <div className="proposal-header">
         <span className="proposal-kind">{proposal.kind}</span>
         <div>
