@@ -2,6 +2,7 @@ import { useEffect, useState, type KeyboardEvent } from "react";
 import { Icon } from "../components/Icon";
 import { PageHeader } from "../components/AppShell";
 import { ActogramPanel, DriftPanel } from "../components/RhythmVisuals";
+import { RhythmMarkersPanel } from "../components/RhythmMarkersPanel";
 import {
   correctionPreviewFixture,
   refusalFixture,
@@ -16,6 +17,17 @@ import {
   type SleepEntriesData,
 } from "../data/sleepEntries";
 import { sleepDataChangedEvent } from "../data/sleepDataEvents";
+import {
+  addRhythmMarker,
+  deleteRhythmMarker,
+  downloadRhythmMarkerExport,
+  exportRhythmMarkers,
+  loadRhythmMarkers,
+  notifyRhythmMarkersChanged,
+  rhythmMarkersChangedEvent,
+  unavailableRhythmMarkers,
+  type RhythmMarkerInput,
+} from "../data/rhythmMarkers";
 
 function SourceConflictList({
   conflicts,
@@ -67,11 +79,12 @@ function CorrectionInspector() {
   );
 }
 
-type RhythmTab = "actogram" | "drift" | "sources";
+type RhythmTab = "actogram" | "drift" | "context" | "sources";
 
 const rhythmTabs: { id: RhythmTab; label: string }[] = [
   { id: "actogram", label: "Actogram" },
   { id: "drift", label: "Drift" },
+  { id: "context", label: "Context" },
   { id: "sources", label: "Sources" },
 ];
 
@@ -236,6 +249,11 @@ export function RhythmScreen() {
   const [tab, setTab] = useState<RhythmTab>("actogram");
   const [rhythm, setRhythm] = useState(rhythmFixture);
   const [mode, setMode] = useState<RhythmSource>("fixture");
+  const [markers, setMarkers] = useState(unavailableRhythmMarkers);
+  const [markerBusy, setMarkerBusy] = useState(false);
+  const [markerExporting, setMarkerExporting] = useState(false);
+  const [markerError, setMarkerError] = useState("");
+  const [markerAnnouncement, setMarkerAnnouncement] = useState("");
 
   useEffect(() => {
     let current = true;
@@ -253,6 +271,89 @@ export function RhythmScreen() {
       window.removeEventListener(sleepDataChangedEvent, refresh);
     };
   }, []);
+
+  useEffect(() => {
+    let current = true;
+    const refresh = () =>
+      void loadRhythmMarkers().then(
+        (result) => {
+          if (!current) return;
+          setMarkers(result);
+          setMarkerError("");
+        },
+        (reason: unknown) => {
+          if (!current) return;
+          setMarkerError(
+            reason instanceof Error ? reason.message : "Rhythm markers could not be loaded.",
+          );
+        },
+      );
+    refresh();
+    window.addEventListener(rhythmMarkersChangedEvent, refresh);
+    return () => {
+      current = false;
+      window.removeEventListener(rhythmMarkersChangedEvent, refresh);
+    };
+  }, []);
+
+  const appendMarker = async (input: RhythmMarkerInput) => {
+    if (markerBusy) return;
+    setMarkerBusy(true);
+    setMarkerError("");
+    try {
+      const result = await addRhythmMarker(input);
+      setMarkers(result);
+      setMarkerAnnouncement("Context marker appended.");
+      notifyRhythmMarkersChanged();
+    } catch (reason) {
+      setMarkerError(
+        reason instanceof Error ? reason.message : "Context marker could not be saved.",
+      );
+      throw reason;
+    } finally {
+      setMarkerBusy(false);
+    }
+  };
+
+  const eraseMarker = async (markerId: string, confirmation: string) => {
+    if (markerBusy) return;
+    setMarkerBusy(true);
+    setMarkerError("");
+    try {
+      const result = await deleteRhythmMarker(markerId, confirmation);
+      setMarkers(result);
+      setMarkerAnnouncement("Context marker permanently erased.");
+      notifyRhythmMarkersChanged();
+    } catch (reason) {
+      setMarkerError(
+        reason instanceof Error ? reason.message : "Context marker could not be erased.",
+      );
+      throw reason;
+    } finally {
+      setMarkerBusy(false);
+    }
+  };
+
+  const exportMarkers = () => {
+    if (markerExporting || markers.status === "unavailable") return;
+    setMarkerExporting(true);
+    setMarkerError("");
+    void exportRhythmMarkers().then(
+      (result) => {
+        setMarkerExporting(false);
+        const downloaded = downloadRhythmMarkerExport(result);
+        setMarkerAnnouncement(
+          `${result.markerCount} context ${result.markerCount === 1 ? "marker" : "markers"} exported${downloaded ? ` to ${result.fileName}` : "."}`,
+        );
+      },
+      (reason: unknown) => {
+        setMarkerExporting(false);
+        setMarkerError(
+          reason instanceof Error ? reason.message : "Context markers could not be exported.",
+        );
+      },
+    );
+  };
 
   const hasRhythm = rhythm.status === "estimated";
   const sourceLabel =
@@ -330,7 +431,10 @@ export function RhythmScreen() {
             aria-labelledby="rhythm-tab-actogram"
           >
             {hasRhythm ? (
-              <ActogramPanel actogram={rhythm.actogram} />
+              <ActogramPanel
+                actogram={rhythm.actogram}
+                markers={mode === "fixture" ? [] : markers.markers}
+              />
             ) : (
               <RhythmUnavailablePanel rhythm={rhythm} />
             )}
@@ -349,6 +453,26 @@ export function RhythmScreen() {
             ) : (
               <RhythmUnavailablePanel rhythm={rhythm} />
             )}
+          </div>
+        )}
+
+        {tab === "context" && (
+          <div
+            className="rhythm-panel"
+            role="tabpanel"
+            id="rhythm-panel-context"
+            aria-labelledby="rhythm-tab-context"
+          >
+            <RhythmMarkersPanel
+              data={markers}
+              busy={markerBusy}
+              exporting={markerExporting}
+              error={markerError}
+              announcement={markerAnnouncement}
+              onAdd={appendMarker}
+              onDelete={eraseMarker}
+              onExport={exportMarkers}
+            />
           </div>
         )}
 

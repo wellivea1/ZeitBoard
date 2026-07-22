@@ -1,0 +1,55 @@
+{
+  "schema_version": "v1",
+  "generated_at": "2026-03-15T00:00:00Z",
+  "markers": [
+    {
+      "marker_id": "marker_travel_01",
+      "kind": "travel",
+      "start_at": "2026-03-10T15:00:00Z",
+      "end_at": "2026-03-12T20:00:00Z",
+      "zone_id": "America/New_York",
+      "note": "Synthetic time-zone travel context",
+      "provenance": {
+        "acquisition_method": "manual",
+        "evidence_status": "user_reported",
+        "recorded_at": "2026-03-12T21:00:00Z"
+      }
+    },
+    {
+      "marker_id": "marker_illness_01",
+      "kind": "illness",
+      "start_at": "2026-03-13T12:00:00Z",
+      "end_at": "2026-03-14T12:00:00Z",
+      "zone_id": "America/New_York",
+      "provenance": {
+        "acquisition_method": "manual",
+        "evidence_status": "user_reported",
+        "recorded_at": "2026-03-14T13:00:00Z"
+      }
+    },
+    {
+      "marker_id": "marker_disruption_01",
+      "kind": "disruption",
+      "start_at": "2026-03-14T22:30:00Z",
+      "zone_id": "America/New_York",
+      "note": "Synthetic interrupted-sleep context",
+      "provenance": {
+        "acquisition_method": "manual",
+        "evidence_status": "user_reported",
+        "recorded_at": "2026-03-14T23:00:00Z"
+      }
+    },
+    {
+      "marker_id": "marker_forced_schedule_01",
+      "kind": "forced_schedule",
+      "start_at": "2026-03-14T23:30:00Z",
+      "end_at": "2026-03-15T00:00:00Z",
+      "zone_id": "America/New_York",
+      "provenance": {
+        "acquisition_method": "manual",
+        "evidence_status": "user_reported",
+        "recorded_at": "2026-03-15T00:00:00Z"
+      }
+    }
+  ]
+}

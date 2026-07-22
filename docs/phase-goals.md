@@ -43,16 +43,17 @@ mutates an imported event.
 delivered under ADR-0024/0025: local definitions, append-only taken/skipped
 evidence, corrections, explicit user-authored schedules, neutral collision
 forecasts, opt-in claim-first desktop reminders, contract export, real erasure,
-and the real Medications workspace. M-C adherence and clinician export plus
-disruption/travel/illness/forced-schedule markers remain open. Together those
-remaining pieces complete the intended disease-management surface: rhythm +
-meds + markers + a report a clinician can inspect.
+and the real Medications workspace. ADR-0026 also delivers local
+disruption/travel/illness/forced-schedule context markers. M-C adherence,
+medication dose markers, and clinician export remain open; those remaining
+pieces complete the intended disease-management surface: rhythm + meds +
+context + a report a clinician can inspect.
 
 **Gap 4 — the assistant is desktop-chat only.** Voice rides the MCP client
 (documented), but agent access to local device state (appearance, quick
 logging) waits on the desktop-local agent endpoint deferred in ADR-0021.
 "Local assistant" as stated needs that endpoint plus answer scope over
-meds/markers once they exist.
+medication and marker facts once their local agent projection is designed.
 
 **Gap 5 — the portal does not exist, and it is the largest threat-model
 change in the project's history.** Today's trusted-web prototype is static
@@ -72,8 +73,9 @@ companion still has no sync client (slice 9).
 
 **Sequencing logic.** Trust before reach: P1's estimator gate and P2's local
 calendar gate are closed and P3 has started with M-A/M-B. The next primary
-dependency is completing the health substance (M-C plus markers), followed
-by maturing the assistant over it (P4), opening the portal
+dependency is completing the health substance (M-C, using the delivered
+context-marker prerequisite), followed by maturing the assistant over it (P4),
+opening the portal
 (P5), and fanning out notifications (P6). P3 and P4 can interleave; P5 can now
 build on P2's approved local placement path.
 
@@ -126,18 +128,20 @@ record in `verification.md`. External-provider write-back remains out of scope.
 
 ### `/goal phase-3-disease-management`
 
-Status: in progress as of 2026-07-22. M-A local logging and M-B schedules +
-feasibility are delivered via ADR-0024/0025; M-C, rhythm markers, and the
-clinician report remain open.
+Status: in progress as of 2026-07-22. M-A local logging, M-B schedules +
+feasibility, and the local rhythm-marker prerequisite are delivered via
+ADR-0024/0025/0026. M-C adherence, medication dose markers, and the clinician
+report remain open.
 
-> **Goal: implement medication tracking M-A..M-C and rhythm markers so the
-> app manages the disease, not just the schedule.**
+> **Goal: complete medication tracking M-C using the delivered M-A/M-B and
+> rhythm-context foundations so the app manages the disease, not just the
+> schedule.**
 > Context: `docs/medication-feature-plan.md` (authoritative; Medisafe-
 > benchmarked, M-A local logging → M-B schedules/collision forecasts → M-C
 > adherence + clinician export), `core/medication` timing, validation-plan
-> scenario 19, ADR-0013 append-only pattern. Also add the deferred
-> **markers**: travel / illness / disruption / forced-schedule records
-> (append-only, erasable) rendered on the actogram and listed as
+> scenario 19, ADR-0013 append-only pattern, and ADR-0026's delivered
+> **context markers**: travel / illness / disruption / forced-schedule records
+> (immutable, erasable) rendered on the actogram and listed as
 > confounders in the association view. Then the §3.6 clinician report:
 > actogram + drift + dose markers + adherence-vs-rhythm table as printable
 > PDF/HTML export — redaction-checked, no diagnosis text. Invariants: no
@@ -153,7 +157,8 @@ clinician report remain open.
 > Context: ADR-0006/0010/0012/0021, slice-8 rail, `zeitboard-mcp`.
 > Implement the **desktop-local agent endpoint** deferred in ADR-0021: a
 > local-only surface (Wails-bound or loopback MCP) exposing allowlisted
-> reads (rhythm, tasks, meds/markers once built, appearance state) and the
+> reads (rhythm, tasks, medication/marker projections once explicitly designed,
+> appearance state) and the
 > direct display action (set appearance preset/night rule) plus propose-
 > only mutations — so a voice client on the same machine can drive the app
 > without the backend. Extend assistant answer scope to medication timing

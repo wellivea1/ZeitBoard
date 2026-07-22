@@ -5,10 +5,10 @@ Most recent local verification: Windows 11 on 2026-07-22.
 ## Passing checks
 
 - Frontend formatting, ESLint, and repository UI standards. The UI guard passed
-  with 14 screen modules and 7 component stylesheets.
+  with 14 screen modules and 8 component stylesheets.
 - Frontend TypeScript and production builds for the desktop and trusted-view
   workspaces.
-- Frontend tests: 24 desktop test files with 189 tests, plus 2 trusted-view test
+- Frontend tests: 26 desktop test files with 198 tests, plus 2 trusted-view test
   files with 6 tests.
 - `scripts/dev.ps1 -Action check -Component desktop`: desktop production build.
 - `scripts/dev.ps1 -Action check -Component core`: Go formatting, tests, and vet
@@ -18,8 +18,8 @@ Most recent local verification: Windows 11 on 2026-07-22.
 - `scripts/dev.ps1 -Action check -Component server`: server formatting, tests,
   and vet, including the server/MCP projection privacy allowlist.
 - `scripts/dev.ps1 -Action check -Component contracts`: deterministic drift
-  check for 24 unchanged v1 fixtures plus 3 medication v2 fixtures, tools
-  tests/vet, and schema validation.
+  check for 25 v1 fixtures plus 3 v2 fixtures, tools tests/vet, and schema
+  validation.
 - Native Wails production build at `apps/desktop/build/bin/ZeitBoard.exe`.
 - Android `testDebugUnitTest`, `lintDebug`, and `assembleDebug`; this medication
   slice changes no Android source.
@@ -38,6 +38,14 @@ Most recent local verification: Windows 11 on 2026-07-22.
   verify explicit opt-in, claim-before-notify, durable at-most-once behavior,
   no retry after notification failure, inactive-definition pause, private-label
   control-character normalization, immutable claims, and erasure cascade.
+- Rhythm-context regression: the four non-diagnostic marker kinds and manual,
+  user-reported provenance are schema-closed; SQLite rows are immutable; local
+  civil inputs reject future times and DST gaps while selecting the first
+  repeated-time occurrence; and adding a marker leaves the estimator projection
+  unchanged under an exact deep comparison. Contract-shaped export passes,
+  trusted-view contracts reject markers and private notes, actogram joins reject
+  a marker whose explicit zone does not match the row clock, and hard erasure
+  removes a unique private note from both the compacted database and WAL.
 - Calendar ownership regression: bounded ICS/CalDAV preview and import,
   recurrence/DST parsing, immutable imported rows, and source erasure all pass.
   Erasure removes private labels, titles, locations, notes, and saved endpoints
@@ -129,6 +137,16 @@ positive delta against this combined baseline.
 
 ## Visual verification
 
+- Reviewed unavailable and populated Rhythm Context states at 1440x900 and
+  390x844 in Paper, Dark, and High contrast. The ruled entry/ledger layout stays
+  within the page, all four marker kinds remain shape-distinct, exact date/zone
+  matches are duplicated across both actogram plots, the forecast remains off by
+  default, and the screen-reader table reports the same context. The export
+  control discloses that owner export includes private notes. Typed `DELETE`
+  enables the permanent-erasure action only after the explicit copy distinguishes
+  physical deletion from observation suppression. Runtime console review
+  reported no warnings or errors; the temporary contract-shaped preview was
+  removed and appearance and viewport overrides were reset.
 - Reviewed the real Medications workspace with unavailable-service and populated
   bridge states at 1440x900 and 390x844. Definition setup, compact quick log,
   observed/predicted/unavailable timing context, correction, exclusion, typed
@@ -189,7 +207,11 @@ Verified on Windows 11 on 2026-06-15 and 2026-06-16:
 
 ## Environment limitations
 
-- Android UI was previously reviewed on the Pixel 10 Pro XL API 36 emulator;
-  this desktop-only slice changed no Android source. Gradle verification was
-  rerun, but the emulator visual matrix was not repeated.
+- Repeated the Android Status, Correct, Medication, and Settings review on the
+  `Pixel_10_Pro_XL_API_36_1` emulator after reinstalling the debug APK. The app
+  remained responsive with no app ANR, crash, clipping, or obscured controls.
+  This desktop-only slice changes no Android source. The shared rounded `Panel`
+  wrapper and excess vertical composition visible on those screens remain
+  explicitly open in `docs/ui-refactor-plan.md`; the app-wide UI goal is not
+  treated as complete.
 - The installed Go toolchain has CGO disabled, so `go test -race` is unavailable.

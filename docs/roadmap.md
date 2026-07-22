@@ -153,13 +153,15 @@ public availability portal) with a pasteable `/goal` prompt per phase is
    that block; app-owned placements export as RFC 5545 ICS. OAuth providers
    and remote write-back remain future, separately permissioned work.
 
-**Disease-management track.** ~~M-A local medication logging~~ and ~~M-B
-user-authored schedules + feasibility~~ are delivered (ADR-0024/0025),
+**Disease-management track.** ~~M-A local medication logging~~, ~~M-B
+user-authored schedules + feasibility~~, and ~~local rhythm context markers~~
+are delivered (ADR-0024/0025/0026),
 including byte-verified erasure distinct from append-only exclusion, explicit
 civil/DST semantics, neutral sleep-collision forecasts, and opt-in at-most-once
-desktop reminders. **Next:** M-C adherence-in-rhythm context, actogram markers,
-and clinician export. Markers for illness, travel, disruption, and forced
-schedules remain a parallel prerequisite for the association view.
+desktop reminders. Context markers for illness, travel, disruption, and forced
+schedules are immutable, erasable, local-only actogram annotations and the
+future association view's confounder prerequisite. **Next:** M-C
+adherence-in-rhythm context, medication dose markers, and clinician export.
 
 7. **Takeout / "My Activity" import + activity→sleep inference.** File import
    (no Google API exists for My Activity) feeding the deferred probabilistic
@@ -222,7 +224,8 @@ Largely delivered (see "Where things stand"). Remaining in scope:
 
 - Import adapters beyond sleep observation-set JSON/CSV (the local sleep path
   is hardened by ADR-0022; Takeout/activity import remains slice 7).
-- Source-specific missingness and forced-schedule/travel disruption markers.
+- Source-specific missingness remains open. Manual forced-schedule, travel,
+  illness, and disruption markers are delivered in ADR-0026.
 - Correction *undo* as a one-click affordance (the Sources tab now shows the
   real correction history and diff; reversal today means appending another
   correction in Data Sources).

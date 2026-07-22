@@ -237,6 +237,28 @@ type medicationDataExport struct {
 	EventSet      medicationEventSet `json:"event_set"`
 }
 
+type rhythmMarkerItem struct {
+	MarkerID   string                 `json:"marker_id"`
+	Kind       string                 `json:"kind"`
+	StartAt    string                 `json:"start_at"`
+	EndAt      string                 `json:"end_at,omitempty"`
+	ZoneID     string                 `json:"zone_id"`
+	Note       string                 `json:"note,omitempty"`
+	Provenance rhythmMarkerProvenance `json:"provenance"`
+}
+
+type rhythmMarkerProvenance struct {
+	AcquisitionMethod string `json:"acquisition_method"`
+	EvidenceStatus    string `json:"evidence_status"`
+	RecordedAt        string `json:"recorded_at"`
+}
+
+type rhythmMarkerSet struct {
+	SchemaVersion string             `json:"schema_version"`
+	GeneratedAt   string             `json:"generated_at"`
+	Markers       []rhythmMarkerItem `json:"markers"`
+}
+
 type assistantActionTarget struct {
 	TaskID                    string `json:"task_id"`
 	EarliestStartAt           string `json:"earliest_start_at,omitempty"`
@@ -794,6 +816,61 @@ func Build() ([]File, error) {
 		MedicationSet: medicationSetFixture,
 		EventSet:      medicationEventSetFixture,
 	}
+	rhythmMarkerSetFixture := rhythmMarkerSet{
+		SchemaVersion: "v1",
+		GeneratedAt:   ts(generatedAt),
+		Markers: []rhythmMarkerItem{
+			{
+				MarkerID: "marker_travel_01",
+				Kind:     "travel",
+				StartAt:  "2026-03-10T15:00:00Z",
+				EndAt:    "2026-03-12T20:00:00Z",
+				ZoneID:   zoneID,
+				Note:     "Synthetic time-zone travel context",
+				Provenance: rhythmMarkerProvenance{
+					AcquisitionMethod: "manual",
+					EvidenceStatus:    "user_reported",
+					RecordedAt:        "2026-03-12T21:00:00Z",
+				},
+			},
+			{
+				MarkerID: "marker_illness_01",
+				Kind:     "illness",
+				StartAt:  "2026-03-13T12:00:00Z",
+				EndAt:    "2026-03-14T12:00:00Z",
+				ZoneID:   zoneID,
+				Provenance: rhythmMarkerProvenance{
+					AcquisitionMethod: "manual",
+					EvidenceStatus:    "user_reported",
+					RecordedAt:        "2026-03-14T13:00:00Z",
+				},
+			},
+			{
+				MarkerID: "marker_disruption_01",
+				Kind:     "disruption",
+				StartAt:  "2026-03-14T22:30:00Z",
+				ZoneID:   zoneID,
+				Note:     "Synthetic interrupted-sleep context",
+				Provenance: rhythmMarkerProvenance{
+					AcquisitionMethod: "manual",
+					EvidenceStatus:    "user_reported",
+					RecordedAt:        "2026-03-14T23:00:00Z",
+				},
+			},
+			{
+				MarkerID: "marker_forced_schedule_01",
+				Kind:     "forced_schedule",
+				StartAt:  "2026-03-14T23:30:00Z",
+				EndAt:    "2026-03-15T00:00:00Z",
+				ZoneID:   zoneID,
+				Provenance: rhythmMarkerProvenance{
+					AcquisitionMethod: "manual",
+					EvidenceStatus:    "user_reported",
+					RecordedAt:        "2026-03-15T00:00:00Z",
+				},
+			},
+		},
+	}
 	medicationSetFixtureV2 := medicationSet{
 		SchemaVersion: "v2",
 		GeneratedAt:   ts(generatedAt),
@@ -1256,6 +1333,7 @@ func Build() ([]File, error) {
 		{"medication-set.json", medicationSetFixture},
 		{"medication-event-set.json", medicationEventSetFixture},
 		{"medication-data-export.json", medicationDataExportFixture},
+		{"rhythm-marker-set.json", rhythmMarkerSetFixture},
 		{"assistant-action.json", assistantActionFixture},
 		{"direct-proposal-request.json", directProposalRequestFixture},
 		{"phase-estimate.json", estimateFixture},

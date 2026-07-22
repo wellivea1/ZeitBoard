@@ -1,6 +1,12 @@
 import { useCallback, useState } from "react";
 import type { RhythmDriftPointFixture, RhythmSleepBandFixture } from "../data/phaseTwo";
 import type { RhythmActogram, RhythmDrift } from "../data/rhythm";
+import {
+  rhythmMarkerKindLabels,
+  type RhythmMarker,
+  type RhythmMarkerKind,
+} from "../data/rhythmMarkers";
+import { RhythmMarkerGlyph } from "./RhythmMarkerGlyph";
 import { TimeProbe } from "./TimeProbe";
 import { civilProbeLabel, formatCivilDate, formatClock24, useTimeProbe } from "./timeProbeLogic";
 
@@ -156,7 +162,38 @@ function ActogramBand({
   );
 }
 
-function ActogramRow({ band, now }: { band: RhythmSleepBandFixture; now: RhythmActogram["now"] }) {
+function ActogramMarker({
+  marker,
+  duplicate = false,
+}: {
+  marker: RhythmMarker;
+  duplicate?: boolean;
+}) {
+  const hour = duplicate ? marker.hour + DAY_HOURS : marker.hour;
+  const label = `${marker.kindLabel}, self-reported context: ${marker.rangeLabel}${marker.note ? `. Note: ${marker.note}` : ""}`;
+  return (
+    <span
+      className={`actogram-marker${duplicate ? " is-duplicate" : ""}`}
+      style={{ left: hourToPercent(hour) }}
+      role={duplicate ? undefined : "img"}
+      aria-hidden={duplicate || undefined}
+      aria-label={duplicate ? undefined : label}
+      tabIndex={duplicate ? undefined : 0}
+    >
+      <RhythmMarkerGlyph kind={marker.kind} decorative />
+    </span>
+  );
+}
+
+function ActogramRow({
+  band,
+  now,
+  markers,
+}: {
+  band: RhythmSleepBandFixture;
+  now: RhythmActogram["now"];
+  markers: RhythmMarker[];
+}) {
   const duplicateFits = band.startHour + 24 < DOUBLE_PLOT_HOURS;
   const showNowTick = Boolean(
     band.zoneId && now.zoneId && band.civilDate === now.civilDate && band.zoneId === now.zoneId,
@@ -191,6 +228,12 @@ function ActogramRow({ band, now }: { band: RhythmSleepBandFixture; now: RhythmA
         )}
         <ActogramBand band={band} />
         {duplicateFits && <ActogramBand band={band} duplicate />}
+        {markers.map((marker) => (
+          <ActogramMarker marker={marker} key={marker.markerId} />
+        ))}
+        {markers.map((marker) => (
+          <ActogramMarker marker={marker} duplicate key={`${marker.markerId}-duplicate`} />
+        ))}
         {showNowTick && (
           <span
             className="actogram-now-tick"
@@ -205,10 +248,34 @@ function ActogramRow({ band, now }: { band: RhythmSleepBandFixture; now: RhythmA
   );
 }
 
-export function ActogramPanel({ actogram }: { actogram: RhythmActogram }) {
-  const [showForecast, setShowForecast] = useState(true);
+export function ActogramPanel({
+  actogram,
+  markers = [],
+}: {
+  actogram: RhythmActogram;
+  markers?: RhythmMarker[];
+}) {
+  const [showForecast, setShowForecast] = useState(false);
   const forecastRows = showForecast ? actogram.forecastRows : [];
   const allBands = [...actogram.observedRows, ...forecastRows];
+  const rowKey = (civilDate: string, zoneId?: string) => (zoneId ? `${civilDate}::${zoneId}` : "");
+  const plottedRows = new Set(allBands.map((band) => rowKey(band.civilDate, band.zoneId)));
+  const plottedMarkers = markers.filter((marker) =>
+    plottedRows.has(rowKey(marker.civilDate, marker.zoneId)),
+  );
+  const hiddenMarkerCount = markers.length - plottedMarkers.length;
+  const presentMarkerKinds = (
+    ["travel", "illness", "disruption", "forced_schedule"] as RhythmMarkerKind[]
+  ).filter((kind) => plottedMarkers.some((marker) => marker.kind === kind));
+  const markersByRow = new Map<string, RhythmMarker[]>();
+  for (const marker of plottedMarkers) {
+    const key = rowKey(marker.civilDate, marker.zoneId);
+    const sameRow = markersByRow.get(key) ?? [];
+    sameRow.push(marker);
+    markersByRow.set(key, sameRow);
+  }
+  const markersFor = (band: RhythmSleepBandFixture) =>
+    markersByRow.get(rowKey(band.civilDate, band.zoneId)) ?? [];
 
   return (
     <section className="rhythm-visual-surface actogram-panel" aria-labelledby="actogram-title">
@@ -243,7 +310,7 @@ export function ActogramPanel({ actogram }: { actogram: RhythmActogram }) {
         </div>
         <div className="actogram-visual-grid">
           {actogram.observedRows.map((band) => (
-            <ActogramRow band={band} now={actogram.now} key={band.id} />
+            <ActogramRow band={band} now={actogram.now} markers={markersFor(band)} key={band.id} />
           ))}
           {showForecast && (
             <div className="actogram-now-line" aria-hidden="true">
@@ -251,7 +318,7 @@ export function ActogramPanel({ actogram }: { actogram: RhythmActogram }) {
             </div>
           )}
           {forecastRows.map((band) => (
-            <ActogramRow band={band} now={actogram.now} key={band.id} />
+            <ActogramRow band={band} now={actogram.now} markers={markersFor(band)} key={band.id} />
           ))}
         </div>
       </div>
@@ -267,7 +334,23 @@ export function ActogramPanel({ actogram }: { actogram: RhythmActogram }) {
           <i className="legend-forecast" /> predicted
         </span>
         <span>| now</span>
+        {presentMarkerKinds.length > 0 && (
+          <span className="actogram-marker-legend" aria-label="Context marker legend">
+            {presentMarkerKinds.map((markerKind) => (
+              <span key={markerKind}>
+                <RhythmMarkerGlyph kind={markerKind} decorative />
+                {rhythmMarkerKindLabels[markerKind]}
+              </span>
+            ))}
+          </span>
+        )}
         <p>Approximate. Forecast widens with time and is shown as ranges, not hard lines.</p>
+        {hiddenMarkerCount > 0 && (
+          <p className="actogram-marker-note">
+            {hiddenMarkerCount} context {hiddenMarkerCount === 1 ? "marker falls" : "markers fall"}{" "}
+            outside the civil dates and time zones currently plotted.
+          </p>
+        )}
       </div>
 
       <table className="sr-table">
@@ -280,6 +363,7 @@ export function ActogramPanel({ actogram }: { actogram: RhythmActogram }) {
             <th>Duration</th>
             <th>Source</th>
             <th>Confidence</th>
+            <th>Context markers</th>
           </tr>
         </thead>
         <tbody>
@@ -291,6 +375,14 @@ export function ActogramPanel({ actogram }: { actogram: RhythmActogram }) {
               <td>{band.durationLabel}</td>
               <td>{band.source}</td>
               <td>{band.confidence}</td>
+              <td>
+                {markersFor(band)
+                  .map(
+                    (marker) =>
+                      `${marker.kindLabel}: ${marker.rangeLabel}${marker.note ? `; ${marker.note}` : ""}`,
+                  )
+                  .join(" | ") || "None"}
+              </td>
             </tr>
           ))}
         </tbody>

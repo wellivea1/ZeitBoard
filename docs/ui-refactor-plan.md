@@ -268,3 +268,28 @@ therefore do not invent a zone-dependent marker when that field is redacted.
   internal actogram scrolling, Paper, Dark, Pitch black, Amber, High contrast,
   and reduced stimulation. Paint containment and fixed-layout hidden tables
   prevent chart or screen-reader content from widening the narrow page.
+
+## 8. Residual surface audit and next UI slice (open, 2026-07-22)
+
+The earlier `U-B delivered` label applies to Overview and the primary Rhythm
+visuals, not to every route. A fresh 1440x900 structure and screenshot audit
+found no generic rounded panels on Overview, Calendar, Rhythm, Medications, or
+the core Settings layout. Lifecycle proposal objects on Tasks and Approvals
+still use bounded containers, which is consistent with section 2. Data Sources
+and Sharing remain materially below the target:
+
+- Data Sources still defaults to four large rounded panels with excessive
+  internal padding and a long form-first page.
+- Sharing still uses large profile cards, circular avatar treatments, and
+  substantial unused canvas.
+- The Android refactor reduced scale, but its shared `Panel` composable remains
+  the default wrapper for status, correction, medication, data-source, display,
+  and privacy sections.
+
+ADR-0026's Rhythm Context workspace is the reference for the next remediation:
+one ruled surface, dense label/value rows, rectangular controls, no avatar
+circles, and no card wrapper around each record. The next UI slice must apply
+that structure to Data Sources and Sharing, then remove Android's generic
+section panels where hierarchy can be expressed with rules and headings.
+Completion requires desktop and Pixel 10 Pro XL emulator review at compact and
+large widths. Until that lands, the app-wide UI robustness goal remains open.

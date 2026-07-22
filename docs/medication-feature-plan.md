@@ -1,7 +1,7 @@
 # Medication tracking: comprehensive feature plan
 
 > Implementation plan. M-A and M-B are delivered under ADR-0024 and ADR-0025;
-> M-C..M-F remain gated.
+> the marker prerequisite is delivered under ADR-0026; M-C..M-F remain gated.
 > Extends `ui-ux-design.md` §9.6 and the
 > roadmap's medication debt line into a full feature plan. Engineering notes
 > only; not medical advice. The app records and displays — it never recommends
@@ -21,8 +21,10 @@ SQLite/WAL tests. The sample preview is removed.
 
 Adding a medication still creates no schedule. A clock schedule requires the
 owner to enter its IANA zone and civil times, and ZeitBoard never infers or
-moves them. M-C remains responsible for adherence summaries, actogram markers,
-association-without-causality views, and clinician export.
+moves them. ADR-0026 now supplies local illness/travel/disruption/forced-
+schedule confounder records and actogram annotations. M-C remains responsible
+for adherence summaries, medication dose markers, the observational
+association view, and clinician export.
 
 Medical boundary evidence is intentionally conservative. The
 [AASM intrinsic circadian-rhythm guideline](https://pmc.ncbi.nlm.nih.gov/articles/PMC4582061/)
@@ -118,8 +120,9 @@ confidence, no fabrication):
    a medication becomes an actogram/drift **marker**; the drift chart can show
    before/after slope segments *labeled as association*, with simultaneous
    confounders listed (schedule changes, travel, light exposure if logged).
-   The copy never says "the medication changed your drift." This is also the
-   first consumer of the deferred intervention-marker records.
+   The copy never says "the medication changed your drift." M-C is the first
+   consumer of the delivered local rhythm-context records from ADR-0026; dose
+   markers remain separate M-C work.
 5. **Timezone-aware reminders** (Medisafe #3) use an explicit schedule-owned
    IANA zone. Civil occurrences resolve to UTC instants with tested DST-gap and
    repeated-time behavior; the app does not silently follow device-zone travel
@@ -182,7 +185,7 @@ are append-only evidence.**
 |---|---|---|
 | **M-A Local logging — delivered (ADR-0024)** | contract + storage + real Medications screen (quick log / backdate / skipped / notes), wake-relative + before-sleep display via `core/medication`, honest no-estimate states; sample preview retired | nothing (core exists) |
 | **M-B Schedules + feasibility — delivered (ADR-0025)** | `fixed_clock`/`as_needed`/`cycling` schedules, explicit-zone civil expansion, opt-in at-most-once desktop reminders, neutral collision forecast surface, clinician-rule attribution | M-A |
-| **M-C Adherence + clinician export** | taken/skipped history, adherence-vs-rhythm table, actogram dose markers, association view with confounder list; feeds the §3.6 clinician PDF | M-A; marker records |
+| **M-C Adherence + clinician export** | taken/skipped history, adherence-vs-rhythm table, actogram dose markers, observational association view with the ADR-0026 confounder list; feeds the §3.6 clinician PDF | M-A; marker records (delivered) |
 | **M-D Sync** | definitions as revision records, events as append-only records, tombstone deletion | M-A (mirrors ADR-0020) |
 | **M-E Agent surface** | redacted assistant/MCP context + `propose_log_dose`; refusal-boundary tests | M-A, slice-8 rail |
 | **M-F Missed-dose sharing** | Medfriend-equivalent as an off-by-default sharing permission | sharing transport (deferred) |
