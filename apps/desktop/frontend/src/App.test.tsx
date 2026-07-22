@@ -100,6 +100,13 @@ describe("desktop navigation", () => {
         "Approximate. Forecast widens with time and is shown as ranges, not hard lines.",
       ),
     ).toBeVisible();
+    expect(screen.getByLabelText("Show forecast")).not.toBeChecked();
+    expect(
+      screen.queryByRole("img", {
+        name: "Predicted sleep window: Jun 18, Jun 18, 11:21 PM earliest to Jun 19, 5:27 AM latest, 6 hr 6 min window, Forecast cycle 3, Low confidence",
+      }),
+    ).toBeNull();
+    fireEvent.click(screen.getByLabelText("Show forecast"));
     expect(
       screen.getByRole("img", {
         name: "Predicted sleep window: Jun 18, Jun 18, 11:21 PM earliest to Jun 19, 5:27 AM latest, 6 hr 6 min window, Forecast cycle 3, Low confidence",
@@ -107,12 +114,96 @@ describe("desktop navigation", () => {
     ).toBeVisible();
     expect(screen.queryByRole("heading", { name: "Correction inspector" })).toBeNull();
 
+    fireEvent.click(screen.getByRole("tab", { name: "Context" }));
+    expect(screen.getByRole("heading", { name: "Rhythm markers" })).toBeVisible();
+    expect(screen.getByText("This browser preview does not invent health context.")).toBeVisible();
+
     fireEvent.click(screen.getByRole("tab", { name: "Sources" }));
 
     expect(screen.getByRole("heading", { name: "Correction inspector" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "Undo correction" })).toBeNull();
     expect(screen.getByRole("heading", { name: "Source conflicts and missingness" })).toBeVisible();
     expect(screen.getByText("Wearable sleep overlaps desktop activity")).toBeVisible();
+  });
+
+  it("appends and permanently erases context through the real desktop bridge", async () => {
+    window.location.hash = "#/rhythm";
+    const marker = {
+      markerId: "marker_local_01",
+      kind: "travel",
+      kindLabel: "Travel / time-zone context",
+      startAt: "2026-07-22T13:00:00Z",
+      zoneId: "America/New_York",
+      civilDate: "2026-07-22",
+      hour: 9,
+      startLabel: "Jul 22, 2026, 9:00 AM",
+      rangeLabel: "Jul 22, 2026, 9:00 AM onward",
+      note: "Arrival context",
+      recordedLabel: "Jul 22, 2026, 12:00 PM",
+    };
+    const empty = {
+      status: "empty",
+      empty: true,
+      message: "No context markers yet.",
+      markers: [],
+      fixtureMode: false,
+      updatedLabel: "Updated Jul 22, 12:00 PM",
+    };
+    const ready = {
+      status: "ready",
+      empty: false,
+      message: "1 self-reported context marker. It does not establish cause.",
+      markers: [marker],
+      fixtureMode: false,
+      updatedLabel: "Updated Jul 22, 12:00 PM",
+    };
+    let current: typeof empty | typeof ready = empty;
+    const add = vi.fn(async () => {
+      current = ready;
+      return current;
+    });
+    const erase = vi.fn(async () => {
+      current = empty;
+      return current;
+    });
+    (globalThis as { go?: unknown }).go = {
+      main: {
+        App: {
+          GetRhythmMarkers: async () => current,
+          AddRhythmMarker: add,
+          DeleteRhythmMarker: erase,
+        },
+      },
+    };
+    render(<App />);
+    fireEvent.click(screen.getByRole("tab", { name: "Context" }));
+    expect(await screen.findByText("No markers recorded")).toBeVisible();
+
+    fireEvent.change(screen.getByLabelText("Started"), {
+      target: { value: "2026-07-22T09:00" },
+    });
+    fireEvent.change(screen.getByLabelText("IANA time zone"), {
+      target: { value: "America/New_York" },
+    });
+    fireEvent.change(screen.getByLabelText("Private note (optional)"), {
+      target: { value: "Arrival context" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Append marker" }));
+    expect(await screen.findByText("Arrival context")).toBeVisible();
+    expect(add).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: "travel",
+        startLocal: "2026-07-22T09:00",
+        zoneId: "America/New_York",
+        note: "Arrival context",
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Erase" }));
+    fireEvent.change(screen.getByLabelText("Type DELETE"), { target: { value: "DELETE" } });
+    fireEvent.click(screen.getByRole("button", { name: "Permanently erase" }));
+    expect(await screen.findByText("No markers recorded")).toBeVisible();
+    expect(erase).toHaveBeenCalledWith({ markerId: "marker_local_01", confirmation: "DELETE" });
   });
 
   it("drives the Sources tab from real local data instead of fixtures", async () => {

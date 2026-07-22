@@ -84,7 +84,11 @@ all-or-nothing commit. **Local medication evidence and user-authored schedules
 immutable events, correction chains, strict civil-time expansion, neutral
 sleep-collision forecasts, opt-in claim-first desktop reminders, contract
 export, and byte-checked hard erasure; no medication payload sync or agent
-projection exists in M-A/M-B. The
+projection exists in M-A/M-B. **Local rhythm context markers (ADR-0026)** are
+implemented as immutable manual/user-reported records with strict past-time
+and civil-zone validation, display-only actogram joins, owner-initiated
+contract export, typed byte-checked erasure, and no estimator, sync, sharing,
+agent, or logging path. The
 **cloud skill wrapper and live trusted-view transport do not exist yet**; their rows
 remain design requirements for future workstreams, not current guarantees.
 
@@ -107,6 +111,9 @@ remain design requirements for future workstreams, not current guarantees.
 | Future Takeout / My Activity import | Resource exhaustion; misleading inference | Not implemented; must add bounded parsing and mark inferred sleep low-confidence (`inferred`) before it may affect estimation |
 | Source mutation | Audit history and estimator support become misleading | Append-only observations and corrections; effective read model; persistence tests |
 | Time-zone confusion | Incorrect drift or schedule proposals | UTC instants plus IANA zones; half-open intervals; DST-focused tests |
+| Context marker mistaken for diagnosis or cause | A self-report annotation appears to explain or medically classify a rhythm change | Only four neutral user-report kinds exist; markers are structurally excluded from estimation and scheduling; UI and export provenance identify self-report; copy says they do not establish cause, diagnose, or recommend treatment |
+| Rhythm-marker text crosses a projection boundary | A private illness/travel note reaches a server, trusted recipient, agent, or log | Marker APIs exist only on the local desktop; the strict trusted-view schema rejects marker fields; no sync/MCP/assistant path exists; owner-initiated v1 export is the only egress |
+| Rhythm-marker erase mistaken for suppression | Sensitive context remains after the owner expects deletion | Markers have no suppress or update operation; exact `DELETE` removes the row, checkpoints/truncates the WAL, vacuums SQLite, and is byte-tested with a unique private note |
 | Medication correction mistaken for erasure | Sensitive raw evidence remains when the owner expected deletion | Ordinary edits and exclusion append immutable corrections and say that evidence remains; separate event/definition erasure requires exact `DELETE`, cascades corrections, checkpoints the WAL, vacuums SQLite, and is byte-tested |
 | Duplicate or misleading medication reminder | Repeated prompts could be mistaken for a second dose instruction | Reminders require an explicit owner-authored clock schedule and separate opt-in; an immutable unique occurrence claim is committed before notification delivery, delivery failures are not retried, and copy says "Reminder you set" rather than directing a dose |
 | Civil-time or forecast ambiguity | A DST transition, device-zone change, or forecast limit misstates schedule feasibility | Schedules own an explicit IANA zone; DST gaps are skipped and reported, repeated times use the first occurrence, cycles advance by civil date, and every occurrence outside the actual estimator horizon is labeled unavailable |

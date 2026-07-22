@@ -59,6 +59,70 @@ func TestMedicationContractV2DoesNotRedefineV1(t *testing.T) {
 	}
 }
 
+func TestRhythmMarkerContractIsStrictAndUserReported(t *testing.T) {
+	set, root := testSet(t)
+	if err := set.ValidateFile("rhythm-marker-set.schema.json", filepath.Join(root, "testdata", "v1", "rhythm-marker-set.json")); err != nil {
+		t.Fatalf("rhythm marker fixture does not validate: %v", err)
+	}
+	for name, bad := range map[string][]byte{
+		"diagnostic category": []byte(`{
+			"schema_version": "v1",
+			"generated_at": "2026-03-15T00:00:00Z",
+			"markers": [{
+				"marker_id": "marker_bad_01",
+				"kind": "diagnosis",
+				"start_at": "2026-03-14T12:00:00Z",
+				"zone_id": "UTC",
+				"provenance": {"acquisition_method": "manual", "evidence_status": "user_reported", "recorded_at": "2026-03-15T00:00:00Z"}
+			}]
+		}`),
+		"remote provenance": []byte(`{
+			"schema_version": "v1",
+			"generated_at": "2026-03-15T00:00:00Z",
+			"markers": [{
+				"marker_id": "marker_bad_02",
+				"kind": "travel",
+				"start_at": "2026-03-14T12:00:00Z",
+				"zone_id": "UTC",
+				"provenance": {"acquisition_method": "file_import", "evidence_status": "user_reported", "recorded_at": "2026-03-15T00:00:00Z"}
+			}]
+		}`),
+		"unexpected private field": []byte(`{
+			"schema_version": "v1",
+			"generated_at": "2026-03-15T00:00:00Z",
+			"markers": [{
+				"marker_id": "marker_bad_03",
+				"kind": "illness",
+				"start_at": "2026-03-14T12:00:00Z",
+				"zone_id": "UTC",
+				"diagnosis": "private",
+				"provenance": {"acquisition_method": "manual", "evidence_status": "user_reported", "recorded_at": "2026-03-15T00:00:00Z"}
+			}]
+		}`),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := set.ValidateBytes("rhythm-marker-set.schema.json", bad); err == nil {
+				t.Fatal("invalid rhythm marker set was accepted")
+			}
+		})
+	}
+}
+
+func TestTrustedViewDefaultDeniesRhythmMarkersAndPrivateNotes(t *testing.T) {
+	set, _ := testSet(t)
+	overShared := []byte(`{
+		"schema_version": "v1",
+		"generated_at": "2026-03-15T00:00:00Z",
+		"expires_at": "2026-03-16T00:00:00Z",
+		"granted_fields": [],
+		"rhythm_markers": [{"kind": "illness", "note": "private"}],
+		"notice": "Estimated windows are uncertain and are not medical advice."
+	}`)
+	if err := set.ValidateBytes("trusted-view.schema.json", overShared); err == nil {
+		t.Fatal("trusted view accepted local rhythm marker data")
+	}
+}
+
 // TestRejectsOverSharedTrustedView locks parity on the trusted-view
 // if/then/else: a window present without being granted must be rejected.
 func TestRejectsOverSharedTrustedView(t *testing.T) {

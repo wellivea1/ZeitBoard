@@ -1,5 +1,5 @@
 import { Profiler } from "react";
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { rhythmFixture } from "../data/rhythm";
@@ -31,6 +31,10 @@ describe("chronological time probes", () => {
         <ActogramPanel actogram={rhythmFixture.actogram} />
       </Profiler>,
     );
+    const forecastToggle = screen.getByLabelText("Show forecast");
+    expect(forecastToggle).not.toBeChecked();
+    fireEvent.click(forecastToggle);
+    const commitsAfterToggle = commits;
     const observedRow = container.querySelector(".actogram-visual-row");
     const forecastRow = Array.from(container.querySelectorAll(".actogram-visual-row")).at(-1);
     const observedTrack = observedRow?.querySelector(".actogram-visual-track");
@@ -43,18 +47,80 @@ describe("chronological time probes", () => {
     fireEvent.pointerMove(track as Element, { clientX: 360 });
 
     expect(visibleProbeLabel(container)).toHaveTextContent("Fri Jun 19 · 12:00 · predicted");
-    expect(commits).toBe(1);
+    expect(commits).toBe(commitsAfterToggle);
 
     fireEvent.pointerMove(observedTrack as Element, { clientX: 120 });
 
     expect(container.querySelectorAll(".time-probe:not([hidden])")).toHaveLength(1);
     expect(visibleProbeLabel(container)).toHaveTextContent("Mon Jun 15 · 12:00");
-    expect(commits).toBe(1);
+    expect(commits).toBe(commitsAfterToggle);
 
     fireEvent.pointerLeave(observedTrack as Element);
 
     expect(visibleProbeLabel(container)).toBeNull();
-    expect(commits).toBe(1);
+    expect(commits).toBe(commitsAfterToggle);
+  });
+
+  it("renders self-reported context with exact present-type legend and table text", () => {
+    const { container } = render(
+      <ActogramPanel
+        actogram={rhythmFixture.actogram}
+        markers={[
+          {
+            markerId: "marker_travel_01",
+            kind: "travel",
+            kindLabel: "Travel / time-zone context",
+            startAt: "2026-06-15T23:00:00Z",
+            zoneId: "America/New_York",
+            civilDate: "2026-06-15",
+            hour: 19,
+            startLabel: "Jun 15, 7:00 PM",
+            rangeLabel: "Jun 15, 7:00 PM onward",
+            note: "Flight arrival",
+            recordedLabel: "Jun 16, 1:00 PM",
+          },
+          {
+            markerId: "marker_outside_01",
+            kind: "illness",
+            kindLabel: "Illness / health disruption",
+            startAt: "2026-05-01T12:00:00Z",
+            zoneId: "America/New_York",
+            civilDate: "2026-05-01",
+            hour: 8,
+            startLabel: "May 1, 8:00 AM",
+            rangeLabel: "May 1, 8:00 AM onward",
+            recordedLabel: "May 1, 9:00 AM",
+          },
+          {
+            markerId: "marker_wrong_zone_01",
+            kind: "illness",
+            kindLabel: "Illness / health disruption",
+            startAt: "2026-06-14T13:00:00Z",
+            zoneId: "America/Chicago",
+            civilDate: "2026-06-14",
+            hour: 8,
+            startLabel: "Jun 14, 8:00 AM",
+            rangeLabel: "Jun 14, 8:00 AM onward",
+            note: "Different-zone marker",
+            recordedLabel: "Jun 14, 1:00 PM",
+          },
+        ]}
+      />,
+    );
+
+    expect(
+      screen.getByRole("img", {
+        name: /Travel \/ time-zone context, self-reported context:.*Flight arrival/,
+      }),
+    ).toBeVisible();
+    const legend = screen.getByLabelText("Context marker legend");
+    expect(legend).toHaveTextContent("Travel / time-zone context");
+    expect(legend).not.toHaveTextContent("Illness / health disruption");
+    expect(screen.getByText(/2 context markers fall outside/)).toBeVisible();
+    expect(container.querySelectorAll(".actogram-marker")).toHaveLength(2);
+    const table = container.querySelector(".sr-table");
+    expect(table).toHaveTextContent("Flight arrival");
+    expect(table).not.toHaveTextContent("Different-zone marker");
   });
 
   it("qualifies predicted positions on the Overview cycle strip", () => {

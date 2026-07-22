@@ -52,6 +52,11 @@ opt-in and off by default. The application does not collect keystrokes, typed
 content, screenshots, browser history, active-window titles, clipboard data,
 precise location, or unrelated files.
 
+Rhythm context markers are created only when the owner explicitly enters one
+of four self-report categories, a retrospective/current civil time, and an
+optional private note. The app does not infer markers from sleep, medication,
+calendar, activity, location, or text.
+
 Activity collection, when enabled, records only the minimum coarse state needed
 by the product boundary. It must not retain application names or content.
 
@@ -106,12 +111,19 @@ Erasing the SQLite record cannot retract a reminder label already delivered to
 Windows notification history; the opt-in disclosure treats that OS-managed
 copy as outside ZeitBoard's erasure boundary.
 
+Rhythm context markers and their notes remain in local SQLite. They are
+excluded from estimation, scheduling, reminders, backend sync, trusted views,
+MCP/assistant context, telemetry, and logs. The owner may deliberately export
+the strict v1 marker set, which includes private notes. Individual erasure
+requires typed `DELETE`, then checkpoints the WAL and vacuums SQLite; tests
+assert that a unique private-note marker no longer exists in either file.
+
 ## Logging
 
 Logs may contain component names, error categories, counts, durations, and
 opaque correlation IDs. They must not contain observation payloads, medication
-labels or notes, health details, calendar content, tokens, exact behavioral
-timestamps, or raw
+labels or notes, rhythm-marker kinds or notes, health details, calendar
+content, tokens, exact behavioral timestamps, or raw
 trusted-view URLs. Debug logging does not relax this rule.
 
 ## Sharing
@@ -121,7 +133,9 @@ and revoked or expired profiles produce no view. Projection code constructs the
 trusted DTO field by field and never serializes the private model. Server-side overview,
 rhythm, and accuracy projections are authenticated read DTOs built from the decrypted
 sync store and omit raw sync payloads, source record IDs, notes, medication names, and
-tokens. The phase-one trusted website is static, synthetic, and makes no network request.
+tokens. Rhythm markers are not a grantable field and the strict trusted-view
+schema rejects them. The phase-one trusted website is static, synthetic, and
+makes no network request.
 
 ## Agent connector
 

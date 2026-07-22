@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Rhythm context marker set v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "generated_at", "markers"],
+  "properties": {
+    "schema_version": {
+      "$ref": "common.schema.json#/$defs/schemaVersion"
+    },
+    "generated_at": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "markers": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/marker"
+      }
+    }
+  },
+  "$defs": {
+    "marker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["marker_id", "kind", "start_at", "zone_id", "provenance"],
+      "properties": {
+        "marker_id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["travel", "illness", "disruption", "forced_schedule"]
+        },
+        "start_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "end_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "zone_id": {
+          "$ref": "common.schema.json#/$defs/zoneId"
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["acquisition_method", "evidence_status", "recorded_at"],
+          "properties": {
+            "acquisition_method": {
+              "const": "manual"
+            },
+            "evidence_status": {
+              "const": "user_reported"
+            },
+            "recorded_at": {
+              "$ref": "common.schema.json#/$defs/timestamp"
+            }
+          }
+        }
+      }
+    }
+  }
+}

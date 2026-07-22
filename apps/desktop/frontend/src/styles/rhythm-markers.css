@@ -1,0 +1,359 @@
+.rhythm-marker-workspace {
+  min-width: 0;
+  padding-top: var(--space-6);
+}
+
+.rhythm-marker-heading {
+  padding-bottom: var(--space-4);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-5);
+  border-bottom: 1px solid var(--line);
+}
+
+.rhythm-marker-heading h2 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--type-data);
+}
+
+.rhythm-marker-heading p:last-child {
+  max-width: 760px;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-body);
+  line-height: 1.5;
+}
+
+.rhythm-marker-export {
+  display: grid;
+  justify-items: end;
+  gap: var(--space-1);
+}
+
+.rhythm-marker-export small {
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.rhythm-marker-boundary {
+  margin: var(--space-4) 0;
+  padding: var(--space-2) 0 var(--space-2) var(--space-4);
+  color: var(--muted);
+  border-left: 2px solid var(--state-uncertain);
+  font-size: var(--type-body);
+  line-height: 1.55;
+}
+
+.rhythm-marker-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: start;
+}
+
+.rhythm-marker-entry {
+  padding: var(--space-4) 0;
+  display: grid;
+  gap: var(--space-3);
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.rhythm-marker-section-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.rhythm-marker-section-label span {
+  font-size: var(--type-body-strong);
+  font-weight: 750;
+}
+
+.rhythm-marker-section-label small,
+.rhythm-marker-entry label > span,
+.rhythm-marker-entry label > small {
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.rhythm-marker-entry label {
+  display: grid;
+  gap: var(--space-1);
+  font-weight: 700;
+}
+
+.rhythm-marker-entry input,
+.rhythm-marker-entry select,
+.rhythm-marker-entry textarea,
+.rhythm-marker-erase input {
+  width: 100%;
+  min-height: 40px;
+  padding: var(--space-2) var(--space-3);
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  font-size: var(--type-body);
+}
+
+.rhythm-marker-entry textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.rhythm-marker-entry .button {
+  justify-self: start;
+}
+
+.rhythm-marker-ledger {
+  min-width: 0;
+  border-top: 1px solid var(--line);
+}
+
+.rhythm-marker-ledger-head,
+.rhythm-marker-row {
+  display: grid;
+  grid-template-columns: minmax(170px, 1fr) minmax(190px, 1.2fr) minmax(120px, 1fr) 58px;
+  gap: var(--space-3);
+}
+
+.rhythm-marker-ledger-head {
+  min-height: 34px;
+  align-items: center;
+  color: var(--subtle);
+  border-bottom: 1px solid var(--line);
+  font-size: var(--type-label);
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.rhythm-marker-row {
+  position: relative;
+  min-height: 72px;
+  padding: var(--space-3) 0;
+  align-items: center;
+  border-bottom: 1px solid var(--divider);
+}
+
+.rhythm-marker-kind {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.rhythm-marker-kind span:last-child,
+.rhythm-marker-range {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.rhythm-marker-kind strong,
+.rhythm-marker-range time {
+  overflow-wrap: anywhere;
+  font-size: var(--type-body);
+  font-weight: 700;
+}
+
+.rhythm-marker-kind small,
+.rhythm-marker-range small {
+  color: var(--subtle);
+  font-size: var(--type-label);
+}
+
+.rhythm-marker-row > p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: var(--type-label);
+  line-height: 1.45;
+}
+
+.rhythm-marker-erase-link {
+  min-height: 40px;
+  padding: 0;
+  color: var(--danger-text);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  font-size: var(--type-label);
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.rhythm-marker-erase {
+  grid-column: 1 / -1;
+  padding: var(--space-3) 0 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 220px) auto;
+  gap: var(--space-3);
+  align-items: end;
+  border-top: 1px solid var(--danger-border);
+}
+
+.rhythm-marker-erase p {
+  margin: 0;
+  color: var(--danger-text);
+  font-size: var(--type-label);
+  line-height: 1.5;
+}
+
+.rhythm-marker-erase label {
+  display: grid;
+  gap: var(--space-1);
+  color: var(--danger-text);
+  font-size: var(--type-label);
+  font-weight: 800;
+}
+
+.rhythm-marker-erase input {
+  border-color: var(--danger-border);
+}
+
+.rhythm-marker-erase > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.rhythm-marker-empty {
+  min-height: 112px;
+  display: grid;
+  place-content: center start;
+  gap: var(--space-1);
+  color: var(--muted);
+  border-bottom: 1px solid var(--divider);
+  font-size: var(--type-body);
+}
+
+.rhythm-marker-empty strong {
+  color: var(--ink);
+}
+
+.rhythm-marker-workspace > .form-error:empty {
+  display: none;
+}
+
+.rhythm-marker-glyph {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--ink);
+}
+
+.rhythm-marker-glyph i,
+.rhythm-marker-glyph i::before,
+.rhythm-marker-glyph i::after {
+  content: "";
+  position: absolute;
+  display: block;
+}
+
+.rhythm-marker-glyph.is-travel i {
+  width: 8px;
+  height: 8px;
+  border: 2px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.rhythm-marker-glyph.is-illness i {
+  width: 12px;
+  height: 12px;
+}
+
+.rhythm-marker-glyph.is-illness i::before,
+.rhythm-marker-glyph.is-illness i::after {
+  top: 5px;
+  left: 1px;
+  width: 10px;
+  height: 2px;
+  background: currentColor;
+}
+
+.rhythm-marker-glyph.is-illness i::after {
+  transform: rotate(90deg);
+}
+
+.rhythm-marker-glyph.is-disruption i {
+  width: 10px;
+  height: 10px;
+  border-left: 2px solid currentColor;
+  border-right: 2px solid currentColor;
+  transform: skewX(-24deg);
+}
+
+.rhythm-marker-glyph.is-forced_schedule i {
+  width: 10px;
+  height: 10px;
+  border: 2px solid currentColor;
+}
+
+.rhythm-marker-glyph.is-forced_schedule i::after {
+  inset: 2px;
+  background: currentColor;
+}
+
+.actogram-marker {
+  position: absolute;
+  top: 18px;
+  z-index: 2;
+  transform: translateX(-50%);
+}
+
+.actogram-marker.is-duplicate {
+  opacity: 0.45;
+}
+
+.actogram-marker-legend {
+  flex-basis: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+}
+
+.actogram-marker-note {
+  color: var(--subtle);
+}
+
+@media (max-width: 1000px) {
+  .rhythm-marker-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .rhythm-marker-heading {
+    grid-template-columns: 1fr;
+  }
+
+  .rhythm-marker-export {
+    justify-items: stretch;
+  }
+
+  .rhythm-marker-ledger-head {
+    display: none;
+  }
+
+  .rhythm-marker-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .rhythm-marker-range,
+  .rhythm-marker-row > p {
+    grid-column: 1 / -1;
+  }
+
+  .rhythm-marker-erase {
+    grid-template-columns: 1fr;
+  }
+}

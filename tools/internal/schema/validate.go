@@ -34,6 +34,7 @@ var v1FixturePairs = []struct{ schema, fixture string }{
 	{"medication-set.schema.json", "medication-set.json"},
 	{"medication-event-set.schema.json", "medication-event-set.json"},
 	{"medication-data-export.schema.json", "medication-data-export.json"},
+	{"rhythm-marker-set.schema.json", "rhythm-marker-set.json"},
 	{"assistant-action.schema.json", "assistant-action.json"},
 	{"direct-proposal-request.schema.json", "direct-proposal-request.json"},
 	{"phase-estimate.schema.json", "phase-estimate.json"},

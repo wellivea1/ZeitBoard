@@ -87,6 +87,22 @@ immutability provide at-most-once desktop delivery across polling and restarts.
 Claims are written before notification delivery, cascade on medication
 erasure, and are excluded from contract export and sync.
 
+### Rhythm context marker
+
+A rhythm context marker is immutable, private, user-reported annotation data.
+Its only kinds are `travel`, `illness`, `disruption`, and
+`forced_schedule`. It stores a start instant, optional end instant, explicit
+IANA zone, optional private note, and manual/user-reported provenance. It has
+no correction chain and no update operation: a wrong record is hard-erased
+with typed confirmation and replaced by a new append.
+
+Markers are deliberately not estimator evidence. They never enter the sleep
+session, estimate, scheduling, reminder, or proposal models. The desktop joins
+them to actogram rows by structured civil date and exact IANA zone only for
+display; it does not project a marker into an incompatible row clock. The
+strict v1 export preserves the raw record and provenance; no sync,
+trusted-view, MCP, or assistant projection exists.
+
 ### Task, proposal, and decision
 
 Tasks contain duration and allowed bounds. The scheduler returns proposal
@@ -117,6 +133,13 @@ erDiagram
   MEDICATION ||--o{ MEDICATION_EVENT : records
   MEDICATION ||--o{ MEDICATION_REMINDER_CLAIM : claims
   MEDICATION_EVENT ||--o{ MEDICATION_CORRECTION : corrected_by
+  RHYTHM_MARKER {
+    string marker_id
+    string kind
+    datetime start_at
+    datetime end_at
+    string zone_id
+  }
   SCHEDULE_REQUEST ||--o{ CALENDAR_EVENT : constrained_by
   SCHEDULE_REQUEST ||--o{ TASK : contains
   TASK ||--o| PROPOSAL : may_receive
@@ -135,4 +158,6 @@ DTOs, not database rows. Strict consumers reject unknown fields. M-A medication
 logging remains valid v1; M-B schedule fields use the medication v2 contracts
 because strict v1 consumers would reject them. A contract version change is
 required whenever an existing strict consumer would no longer accept or
-correctly interpret a payload.
+correctly interpret a payload. Rhythm context markers use the independent
+strict `contracts/v1/rhythm-marker-set.schema.json`; they do not extend the
+strict rhythm-estimate or trusted-view contracts.

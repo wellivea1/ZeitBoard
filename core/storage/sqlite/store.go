@@ -206,6 +206,23 @@ func (s *Store) Migrate(ctx context.Context) error {
 			BEGIN
 				SELECT RAISE(ABORT, 'medication reminder claims are immutable');
 			END`,
+		`CREATE TABLE IF NOT EXISTS local_rhythm_markers (
+			marker_id TEXT PRIMARY KEY,
+			kind TEXT NOT NULL CHECK(kind IN ('travel', 'illness', 'disruption', 'forced_schedule')),
+			start_at TEXT NOT NULL,
+			end_at TEXT NOT NULL DEFAULT '',
+			zone_id TEXT NOT NULL,
+			recorded_at TEXT NOT NULL,
+			payload_json BLOB NOT NULL,
+			CHECK(end_at = '' OR end_at > start_at)
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_local_rhythm_markers_start
+			ON local_rhythm_markers(start_at, marker_id)`,
+		`CREATE TRIGGER IF NOT EXISTS trg_local_rhythm_markers_immutable
+			BEFORE UPDATE ON local_rhythm_markers
+			BEGIN
+				SELECT RAISE(ABORT, 'rhythm markers are immutable');
+			END`,
 		`CREATE TABLE IF NOT EXISTS local_calendar_sources (
 			source_id TEXT PRIMARY KEY,
 			label TEXT NOT NULL,
@@ -303,7 +320,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		}
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
-	for _, version := range []int{1, 2, 3, 4, 5, 6, 7} {
+	for _, version := range []int{1, 2, 3, 4, 5, 6, 7, 8} {
 		if _, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(?, ?)`, version, now); err != nil {
 			return err
 		}
@@ -488,7 +505,7 @@ func (s *Store) DeleteAll(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	for _, table := range []string{"source_observations", "manual_corrections", "phase_estimates", "medication_events", "share_profiles", "local_sleep_corrections", "local_sleep_observations", "local_medication_reminder_claims", "local_medication_event_corrections", "local_medication_events", "local_medications", "local_proposal_decisions", "local_calendar_events", "local_calendar_sources"} {
+	for _, table := range []string{"source_observations", "manual_corrections", "phase_estimates", "medication_events", "share_profiles", "local_sleep_corrections", "local_sleep_observations", "local_medication_reminder_claims", "local_medication_event_corrections", "local_medication_events", "local_medications", "local_rhythm_markers", "local_proposal_decisions", "local_calendar_events", "local_calendar_sources"} {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table); err != nil {
 			_ = tx.Rollback()
 			return err

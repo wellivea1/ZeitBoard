@@ -8,6 +8,7 @@ import { loadAndApplyTheme } from "./theme/theme";
 import "./styles.css";
 import "./styles/overview.css";
 import "./styles/rhythm.css";
+import "./styles/rhythm-markers.css";
 import "./styles/settings.css";
 import "./styles/data-sources.css";
 import "./styles/calendar.css";
