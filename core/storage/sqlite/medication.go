@@ -6,18 +6,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
 
 	"non24.app/core/domain"
+	medicationcore "non24.app/core/medication"
 )
 
 const (
-	MedicationScheduleAsNeeded   = "as_needed"
-	MedicationScheduleFixedClock = "fixed_clock"
-	MedicationScheduleCycling    = "cycling"
+	MedicationScheduleAsNeeded   = medicationcore.ScheduleAsNeeded
+	MedicationScheduleFixedClock = medicationcore.ScheduleFixedClock
+	MedicationScheduleCycling    = medicationcore.ScheduleCycling
 
 	MedicationEventTaken   = "taken"
 	MedicationEventSkipped = "skipped"
@@ -27,8 +27,6 @@ const (
 	MedicationCorrectionInvalidTime = "invalid_time"
 )
 
-var medicationCivilTime = regexp.MustCompile(`^(?:[01][0-9]|2[0-3]):[0-5][0-9]$`)
-
 var (
 	ErrMedicationNotFound           = errors.New("medication does not exist")
 	ErrMedicationRevisionConflict   = errors.New("medication revision conflict")
@@ -36,20 +34,15 @@ var (
 	ErrMedicationCorrectionConflict = errors.New("medication correction chain changed")
 )
 
-type MedicationSchedule struct {
-	Kind           string   `json:"kind"`
-	CivilTimes     []string `json:"civil_times,omitempty"`
-	DaysOn         int      `json:"days_on,omitempty"`
-	DaysOff        int      `json:"days_off,omitempty"`
-	CycleStartedOn string   `json:"cycle_started_on,omitempty"`
-}
+type MedicationSchedule = medicationcore.Schedule
 
-// MedicationRecord matches medication-set.schema.json#/$defs/medication.
+// MedicationRecord matches contracts/v2/medication-set.schema.json.
 type MedicationRecord struct {
 	MedicationID  string              `json:"medication_id"`
 	Label         string              `json:"label"`
 	Form          string              `json:"form,omitempty"`
 	StrengthLabel string              `json:"strength_label,omitempty"`
+	ClinicianRule string              `json:"clinician_rule,omitempty"`
 	Active        bool                `json:"active"`
 	StartedAt     *time.Time          `json:"started_at,omitempty"`
 	StartedZoneID string              `json:"started_zone_id,omitempty"`
@@ -86,6 +79,13 @@ type MedicationEventCorrectionChanges struct {
 	Scheduled *bool      `json:"scheduled,omitempty"`
 	Note      *string    `json:"note,omitempty"`
 	Excluded  *bool      `json:"excluded,omitempty"`
+}
+
+type MedicationReminderClaim struct {
+	OccurrenceID string
+	MedicationID string
+	ScheduledAt  time.Time
+	ClaimedAt    time.Time
 }
 
 type EffectiveMedicationEvent struct {
@@ -215,6 +215,60 @@ func (s *Store) MedicationByID(ctx context.Context, medicationID string) (Medica
 		return MedicationRecord{}, err
 	}
 	return record, nil
+}
+
+// ClaimMedicationReminder durably claims an occurrence before notification.
+// A false result means the same medication occurrence was already claimed.
+func (s *Store) ClaimMedicationReminder(ctx context.Context, claim MedicationReminderClaim) (bool, error) {
+	if !contractIdentifier.MatchString(claim.OccurrenceID) {
+		return false, errors.New("occurrence_id must match the v1 identifier format")
+	}
+	if !contractIdentifier.MatchString(claim.MedicationID) {
+		return false, errors.New("medication_id must match the v1 identifier format")
+	}
+	if claim.ScheduledAt.IsZero() || claim.ClaimedAt.IsZero() {
+		return false, errors.New("scheduled_at and claimed_at are required")
+	}
+	if claim.ClaimedAt.Before(claim.ScheduledAt) {
+		return false, errors.New("claimed_at must not precede scheduled_at")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	var exists int
+	if err := tx.QueryRowContext(ctx, `SELECT 1 FROM local_medications WHERE medication_id = ?`, claim.MedicationID).Scan(&exists); errors.Is(err, sql.ErrNoRows) {
+		return false, ErrMedicationNotFound
+	} else if err != nil {
+		return false, err
+	}
+	result, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO local_medication_reminder_claims(
+		occurrence_id, medication_id, scheduled_at, claimed_at
+	) VALUES(?, ?, ?, ?)`, claim.OccurrenceID, claim.MedicationID,
+		formatSQLiteTime(claim.ScheduledAt.UTC()), formatSQLiteTime(claim.ClaimedAt.UTC()))
+	if err != nil {
+		return false, err
+	}
+	changed, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	if changed == 0 {
+		var existingMedicationID, existingScheduledAt string
+		if err := tx.QueryRowContext(ctx, `SELECT medication_id, scheduled_at
+			FROM local_medication_reminder_claims WHERE occurrence_id = ?`, claim.OccurrenceID).
+			Scan(&existingMedicationID, &existingScheduledAt); err != nil {
+			return false, err
+		}
+		if existingMedicationID != claim.MedicationID || existingScheduledAt != formatSQLiteTime(claim.ScheduledAt.UTC()) {
+			return false, errors.New("occurrence_id is already assigned to a different medication occurrence")
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return false, err
+	}
+	return changed == 1, nil
 }
 
 func (s *Store) AppendMedicationEvent(ctx context.Context, record MedicationEventRecord) error {
@@ -402,15 +456,15 @@ func (s *Store) ExportMedicationData(ctx context.Context, generatedAt time.Time)
 	}
 	generatedAt = generatedAt.UTC()
 	return MedicationDataExport{
-		SchemaVersion: "v1",
+		SchemaVersion: "v2",
 		GeneratedAt:   generatedAt,
 		MedicationSet: MedicationSet{
-			SchemaVersion: "v1",
+			SchemaVersion: "v2",
 			GeneratedAt:   generatedAt,
 			Medications:   medications,
 		},
 		EventSet: MedicationEventSet{
-			SchemaVersion: "v1",
+			SchemaVersion: "v2",
 			GeneratedAt:   generatedAt,
 			Events:        events,
 			Corrections:   corrections,
@@ -498,6 +552,9 @@ func validateMedicationRecord(record MedicationRecord) error {
 	if err := canonicalPrivateText("strength_label", record.StrengthLabel, 80, false); err != nil {
 		return err
 	}
+	if err := canonicalPrivateText("clinician_rule", record.ClinicianRule, 500, false); err != nil {
+		return err
+	}
 	if record.CreatedAt.IsZero() || record.UpdatedAt.IsZero() {
 		return errors.New("created_at and updated_at are required")
 	}
@@ -516,43 +573,9 @@ func validateMedicationRecord(record MedicationRecord) error {
 		}
 	}
 	if record.Schedule != nil {
-		if err := validateMedicationSchedule(*record.Schedule); err != nil {
+		if err := record.Schedule.Validate(); err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-func validateMedicationSchedule(schedule MedicationSchedule) error {
-	seen := make(map[string]struct{}, len(schedule.CivilTimes))
-	for _, civilTime := range schedule.CivilTimes {
-		if !medicationCivilTime.MatchString(civilTime) {
-			return errors.New("schedule civil times must use HH:MM")
-		}
-		if _, duplicate := seen[civilTime]; duplicate {
-			return errors.New("schedule civil times must be unique")
-		}
-		seen[civilTime] = struct{}{}
-	}
-	switch schedule.Kind {
-	case MedicationScheduleAsNeeded:
-		if len(schedule.CivilTimes) != 0 || schedule.DaysOn != 0 || schedule.DaysOff != 0 || schedule.CycleStartedOn != "" {
-			return errors.New("as-needed schedules cannot include clock or cycle fields")
-		}
-	case MedicationScheduleFixedClock:
-		if len(schedule.CivilTimes) == 0 || len(schedule.CivilTimes) > 8 || schedule.DaysOn != 0 || schedule.DaysOff != 0 || schedule.CycleStartedOn != "" {
-			return errors.New("fixed-clock schedules require 1 to 8 civil times and no cycle fields")
-		}
-	case MedicationScheduleCycling:
-		if len(schedule.CivilTimes) == 0 || len(schedule.CivilTimes) > 8 || schedule.DaysOn < 1 || schedule.DaysOn > 365 || schedule.DaysOff < 1 || schedule.DaysOff > 365 {
-			return errors.New("cycling schedules require civil times and 1 to 365 on/off days")
-		}
-		parsed, err := time.Parse("2006-01-02", schedule.CycleStartedOn)
-		if err != nil || parsed.Format("2006-01-02") != schedule.CycleStartedOn {
-			return errors.New("cycling schedule start must be a real YYYY-MM-DD date")
-		}
-	default:
-		return errors.New("schedule kind must be as_needed, fixed_clock, or cycling")
 	}
 	return nil
 }

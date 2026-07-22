@@ -3,8 +3,10 @@ import {
   medicationDeleteConfirmation,
   type MedicationDefinition,
   type MedicationInput,
+  type MedicationScheduleInput,
   type MedicationUpdateInput,
 } from "../data/medications";
+import { MedicationScheduleEditor } from "./MedicationScheduleEditor";
 
 const emptyMedication: MedicationInput = { label: "", form: "", strengthLabel: "" };
 
@@ -60,6 +62,7 @@ export function MedicationSetupPanel({
   busy,
   onAdd,
   onUpdate,
+  onSchedule,
   onDelete,
 }: {
   medications: MedicationDefinition[];
@@ -67,11 +70,15 @@ export function MedicationSetupPanel({
   busy: boolean;
   onAdd: (input: MedicationInput) => Promise<void>;
   onUpdate: (input: MedicationUpdateInput) => Promise<void>;
+  onSchedule: (input: MedicationScheduleInput) => Promise<void>;
   onDelete: (medicationId: string) => Promise<void>;
 }) {
   const [draft, setDraft] = useState<MedicationInput>(emptyMedication);
   const [editing, setEditing] = useState<MedicationDefinition | null>(null);
+  const [schedulingID, setSchedulingID] = useState("");
   const [erasing, setErasing] = useState<MedicationDefinition | null>(null);
+  const scheduling =
+    medications.find((medication) => medication.medicationId === schedulingID) ?? null;
 
   const add = (event: FormEvent) => {
     event.preventDefault();
@@ -180,7 +187,7 @@ export function MedicationSetupPanel({
                 </div>
                 <p>{medication.detailLabel}</p>
                 <small>
-                  Logging only - {medication.eventCount}{" "}
+                  {medication.schedule?.summary ?? "No schedule"} | {medication.eventCount}{" "}
                   {medication.eventCount === 1 ? "event" : "events"}
                 </small>
                 <div className="medication-row-actions">
@@ -190,10 +197,24 @@ export function MedicationSetupPanel({
                     disabled={busy}
                     onClick={() => {
                       setEditing({ ...medication });
+                      setSchedulingID("");
                       setErasing(null);
                     }}
                   >
                     Edit
+                  </button>
+                  <button
+                    className="text-button"
+                    type="button"
+                    disabled={busy}
+                    aria-label={`Schedule ${medication.label}`}
+                    onClick={() => {
+                      setSchedulingID(medication.medicationId);
+                      setEditing(null);
+                      setErasing(null);
+                    }}
+                  >
+                    Schedule
                   </button>
                   <button
                     className="text-button"
@@ -219,6 +240,7 @@ export function MedicationSetupPanel({
                     onClick={() => {
                       setErasing(medication);
                       setEditing(null);
+                      setSchedulingID("");
                     }}
                   >
                     Erase
@@ -229,6 +251,16 @@ export function MedicationSetupPanel({
           </div>
         )}
       </section>
+
+      {scheduling && (
+        <MedicationScheduleEditor
+          key={`${scheduling.medicationId}-${scheduling.revision}`}
+          medication={scheduling}
+          busy={busy}
+          onSave={onSchedule}
+          onCancel={() => setSchedulingID("")}
+        />
+      )}
 
       {editing && (
         <section

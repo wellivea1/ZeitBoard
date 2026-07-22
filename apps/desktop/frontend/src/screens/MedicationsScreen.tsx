@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "../components/AppShell";
 import { MedicationHistory } from "../components/MedicationHistory";
+import { MedicationFeasibility } from "../components/MedicationFeasibility";
 import { MedicationLogForm } from "../components/MedicationLogForm";
 import { MedicationSetupPanel } from "../components/MedicationSetupPanel";
 import {
@@ -16,9 +17,11 @@ import {
   medicationDataChangedEvent,
   notifyMedicationDataChanged,
   updateMedication,
+  updateMedicationSchedule,
   type MedicationEventCorrectionInput,
   type MedicationEventInput,
   type MedicationInput,
+  type MedicationScheduleInput,
   type MedicationsData,
   type MedicationUpdateInput,
 } from "../data/medications";
@@ -168,6 +171,14 @@ function MedicationWorkspaceView({
           <small>{data?.updatedLabel}</small>
         </div>
 
+        <MedicationFeasibility
+          medications={data?.medications ?? []}
+          reminderStatus={data?.reminderStatus ?? "unavailable"}
+          reminderMessage={
+            data?.reminderMessage ?? "Desktop reminders require the ZeitBoard desktop service."
+          }
+        />
+
         {loading && !data ? (
           <div className="medication-loading" role="status">
             Loading medication history...
@@ -195,6 +206,9 @@ function MedicationWorkspaceView({
         }
         onUpdate={(input: MedicationUpdateInput) =>
           mutate(() => updateMedication(input), "Medication definition revision saved.")
+        }
+        onSchedule={(input: MedicationScheduleInput) =>
+          mutate(() => updateMedicationSchedule(input), "Medication schedule revision saved.")
         }
         onDelete={(medicationId: string) =>
           mutate(

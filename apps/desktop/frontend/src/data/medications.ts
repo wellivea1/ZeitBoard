@@ -6,6 +6,60 @@ export const medicationDeleteConfirmation = "DELETE";
 export type MedicationEventStatus = "taken" | "skipped";
 export type MedicationEstimateStatus = "estimated" | "empty" | "refused" | "unavailable";
 export type MedicationSleepRelationKind = "observed" | "predicted" | "unavailable";
+export type MedicationScheduleKind = "as_needed" | "fixed_clock" | "cycling";
+export type MedicationForecastStatus =
+  | "not_applicable"
+  | "unavailable"
+  | "no_overlap"
+  | "collision";
+export type MedicationOccurrenceStatus =
+  | "inside_predicted_sleep"
+  | "outside_predicted_sleep"
+  | "outside_forecast";
+export type MedicationReminderStatus = "disabled" | "ready" | "error" | "unavailable";
+
+export interface MedicationScheduleOccurrence {
+  at: string;
+  civilDate: string;
+  civilTime: string;
+  civilLabel: string;
+  status: MedicationOccurrenceStatus;
+  context: string;
+  confidence: "High" | "Medium" | "Low" | "Unknown";
+  ambiguous: boolean;
+  dstNote?: string;
+}
+
+export interface MedicationScheduleGap {
+  civilDate: string;
+  civilTime: string;
+  civilLabel: string;
+  message: string;
+}
+
+export interface MedicationScheduleForecast {
+  status: MedicationForecastStatus;
+  message: string;
+  coveredCount: number;
+  collisionCount: number;
+  outsideHorizonCount: number;
+  coverageEndsAt?: string;
+  coverageLabel?: string;
+  occurrences: MedicationScheduleOccurrence[];
+  gaps: MedicationScheduleGap[];
+}
+
+export interface MedicationSchedule {
+  kind: MedicationScheduleKind;
+  zoneId?: string;
+  civilTimes: string[];
+  daysOn?: number;
+  daysOff?: number;
+  cycleStartedOn?: string;
+  reminderEnabled: boolean;
+  summary: string;
+  forecast: MedicationScheduleForecast;
+}
 
 export interface MedicationDefinition {
   medicationId: string;
@@ -13,9 +67,12 @@ export interface MedicationDefinition {
   form?: string;
   strengthLabel?: string;
   detailLabel: string;
+  clinicianRule?: string;
+  clinicianRuleAttribution?: string;
   active: boolean;
   revision: number;
-  scheduleKind: "none" | "as_needed" | "fixed_clock" | "cycling";
+  scheduleKind: "none" | MedicationScheduleKind;
+  schedule?: MedicationSchedule;
   createdLabel: string;
   eventCount: number;
 }
@@ -50,6 +107,8 @@ export interface MedicationsData {
   fixtureMode: false;
   disclaimer: string;
   interactionDisclaimer: string;
+  reminderStatus: MedicationReminderStatus;
+  reminderMessage: string;
   updatedLabel: string;
 }
 
@@ -63,6 +122,19 @@ export interface MedicationUpdateInput extends MedicationInput {
   medicationId: string;
   revision: number;
   active: boolean;
+}
+
+export interface MedicationScheduleInput {
+  medicationId: string;
+  revision: number;
+  kind: "none" | MedicationScheduleKind;
+  zoneId: string;
+  civilTimes: string[];
+  daysOn: number;
+  daysOff: number;
+  cycleStartedOn: string;
+  reminderEnabled: boolean;
+  clinicianRule: string;
 }
 
 export interface MedicationEventInput {
@@ -93,6 +165,9 @@ type UnknownRecord = Record<string, unknown>;
 const identifierPattern = /^[a-z][a-z0-9_-]{2,63}$/;
 const localDateTimePattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
 const timestampPattern = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
+const civilDatePattern = /^\d{4}-\d{2}-\d{2}$/;
+const civilClockPattern = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+const zonePattern = /^(?:UTC|[A-Za-z0-9._+-]+(?:\/[A-Za-z0-9._+-]+)+)$/;
 
 const unavailableMedications: MedicationsData = {
   status: "unavailable",
@@ -107,6 +182,8 @@ const unavailableMedications: MedicationsData = {
     "Medication timing shown here is user-entered or derived context, not medical advice.",
   interactionDisclaimer:
     "ZeitBoard records what you enter. It does not check medication interactions; ask a pharmacist or clinician.",
+  reminderStatus: "unavailable",
+  reminderMessage: "Desktop reminders require the running ZeitBoard desktop service.",
   updatedLabel: "Desktop service unavailable",
 };
 
@@ -154,6 +231,236 @@ function localDateTime(value: unknown): string | undefined {
     : undefined;
 }
 
+function civilDate(value: unknown): string | undefined {
+  const candidate = text(value);
+  if (!candidate || !civilDatePattern.test(candidate)) return undefined;
+  const parsed = new Date(`${candidate}T00:00:00Z`);
+  return !Number.isNaN(parsed.valueOf()) && parsed.toISOString().slice(0, 10) === candidate
+    ? candidate
+    : undefined;
+}
+
+function civilClock(value: unknown): string | undefined {
+  const candidate = text(value);
+  return candidate && civilClockPattern.test(candidate) ? candidate : undefined;
+}
+
+function zoneId(value: unknown): string | undefined {
+  const candidate = text(value);
+  return candidate && zonePattern.test(candidate) ? candidate : undefined;
+}
+
+function normalizeScheduleOccurrence(value: unknown): MedicationScheduleOccurrence | undefined {
+  if (!isRecord(value)) return undefined;
+  const at = timestamp(value.at);
+  const date = civilDate(value.civilDate);
+  const clock = civilClock(value.civilTime);
+  const civilLabel = text(value.civilLabel);
+  const status =
+    value.status === "inside_predicted_sleep" ||
+    value.status === "outside_predicted_sleep" ||
+    value.status === "outside_forecast"
+      ? value.status
+      : undefined;
+  const context = text(value.context);
+  const confidence =
+    value.confidence === "High" ||
+    value.confidence === "Medium" ||
+    value.confidence === "Low" ||
+    value.confidence === "Unknown"
+      ? value.confidence
+      : undefined;
+  const dstNote = optionalText(value.dstNote);
+  const expectedContext =
+    status === "inside_predicted_sleep"
+      ? "Inside a current predicted sleep window"
+      : status === "outside_predicted_sleep"
+        ? "Not inside a current predicted sleep window"
+        : status === "outside_forecast"
+          ? "Outside the current forecast horizon"
+          : undefined;
+  if (
+    !at ||
+    !date ||
+    !clock ||
+    !civilLabel ||
+    !status ||
+    !context ||
+    context !== expectedContext ||
+    !confidence ||
+    typeof value.ambiguous !== "boolean" ||
+    (status === "outside_forecast" && confidence !== "Unknown") ||
+    value.ambiguous !== Boolean(dstNote)
+  ) {
+    return undefined;
+  }
+  return {
+    at,
+    civilDate: date,
+    civilTime: clock,
+    civilLabel,
+    status,
+    context,
+    confidence,
+    ambiguous: value.ambiguous,
+    ...(dstNote ? { dstNote } : {}),
+  };
+}
+
+function normalizeScheduleGap(value: unknown): MedicationScheduleGap | undefined {
+  if (!isRecord(value)) return undefined;
+  const date = civilDate(value.civilDate);
+  const clock = civilClock(value.civilTime);
+  const civilLabel = text(value.civilLabel);
+  const message = text(value.message);
+  if (!date || !clock || !civilLabel || !message) return undefined;
+  return { civilDate: date, civilTime: clock, civilLabel, message };
+}
+
+function normalizeScheduleForecast(value: unknown): MedicationScheduleForecast | undefined {
+  if (!isRecord(value) || !Array.isArray(value.occurrences) || !Array.isArray(value.gaps)) {
+    return undefined;
+  }
+  const status =
+    value.status === "not_applicable" ||
+    value.status === "unavailable" ||
+    value.status === "no_overlap" ||
+    value.status === "collision"
+      ? value.status
+      : undefined;
+  const message = text(value.message);
+  const coveredCount = nonNegativeInteger(value.coveredCount);
+  const collisionCount = nonNegativeInteger(value.collisionCount);
+  const outsideHorizonCount = nonNegativeInteger(value.outsideHorizonCount);
+  const coverageEndsAt =
+    value.coverageEndsAt === undefined ? undefined : timestamp(value.coverageEndsAt);
+  const coverageLabel = optionalText(value.coverageLabel);
+  if (
+    !status ||
+    !message ||
+    coveredCount === undefined ||
+    collisionCount === undefined ||
+    outsideHorizonCount === undefined ||
+    (value.coverageEndsAt !== undefined && !coverageEndsAt) ||
+    Boolean(coverageEndsAt) !== Boolean(coverageLabel)
+  ) {
+    return undefined;
+  }
+  const occurrences: MedicationScheduleOccurrence[] = [];
+  let previousAt = -Infinity;
+  const seen = new Set<string>();
+  for (const item of value.occurrences) {
+    const occurrence = normalizeScheduleOccurrence(item);
+    if (!occurrence || seen.has(occurrence.at)) return undefined;
+    const atValue = Date.parse(occurrence.at);
+    if (atValue < previousAt) return undefined;
+    previousAt = atValue;
+    seen.add(occurrence.at);
+    occurrences.push(occurrence);
+  }
+  const gaps: MedicationScheduleGap[] = [];
+  for (const item of value.gaps) {
+    const gap = normalizeScheduleGap(item);
+    if (!gap) return undefined;
+    gaps.push(gap);
+  }
+  const inside = occurrences.filter((item) => item.status === "inside_predicted_sleep").length;
+  const outside = occurrences.filter((item) => item.status === "outside_predicted_sleep").length;
+  const unknown = occurrences.filter((item) => item.status === "outside_forecast").length;
+  if (
+    coveredCount !== inside + outside ||
+    collisionCount !== inside ||
+    outsideHorizonCount !== unknown ||
+    (status === "collision" && (inside === 0 || coveredCount === 0 || !coverageEndsAt)) ||
+    (status === "no_overlap" && (inside !== 0 || coveredCount === 0 || !coverageEndsAt)) ||
+    (status === "not_applicable" &&
+      (occurrences.length !== 0 || gaps.length !== 0 || coveredCount !== 0 || coverageEndsAt)) ||
+    (status === "unavailable" && coveredCount !== 0)
+  ) {
+    return undefined;
+  }
+  return {
+    status,
+    message,
+    coveredCount,
+    collisionCount,
+    outsideHorizonCount,
+    ...(coverageEndsAt && coverageLabel ? { coverageEndsAt, coverageLabel } : {}),
+    occurrences,
+    gaps,
+  };
+}
+
+function normalizeSchedule(value: unknown): MedicationSchedule | undefined {
+  if (!isRecord(value) || !Array.isArray(value.civilTimes)) return undefined;
+  const kind =
+    value.kind === "as_needed" || value.kind === "fixed_clock" || value.kind === "cycling"
+      ? value.kind
+      : undefined;
+  const scheduleZone = value.zoneId === undefined ? undefined : zoneId(value.zoneId);
+  const civilTimes = value.civilTimes.map(civilClock);
+  const summary = text(value.summary);
+  const forecast = normalizeScheduleForecast(value.forecast);
+  const daysOn = value.daysOn === undefined ? undefined : positiveInteger(value.daysOn);
+  const daysOff = value.daysOff === undefined ? undefined : positiveInteger(value.daysOff);
+  const cycleStartedOn =
+    value.cycleStartedOn === undefined ? undefined : civilDate(value.cycleStartedOn);
+  if (
+    !kind ||
+    civilTimes.some((item) => !item) ||
+    new Set(civilTimes).size !== civilTimes.length ||
+    civilTimes.some((item, index) => index > 0 && item! < civilTimes[index - 1]!) ||
+    !summary ||
+    !forecast ||
+    typeof value.reminderEnabled !== "boolean" ||
+    (value.zoneId !== undefined && !scheduleZone) ||
+    (value.daysOn !== undefined && !daysOn) ||
+    (value.daysOff !== undefined && !daysOff) ||
+    (value.cycleStartedOn !== undefined && !cycleStartedOn)
+  ) {
+    return undefined;
+  }
+  if (
+    (kind === "as_needed" &&
+      (scheduleZone ||
+        civilTimes.length !== 0 ||
+        daysOn ||
+        daysOff ||
+        cycleStartedOn ||
+        value.reminderEnabled ||
+        forecast.status !== "not_applicable")) ||
+    (kind === "fixed_clock" &&
+      (!scheduleZone ||
+        civilTimes.length < 1 ||
+        civilTimes.length > 8 ||
+        daysOn ||
+        daysOff ||
+        cycleStartedOn)) ||
+    (kind === "cycling" &&
+      (!scheduleZone ||
+        civilTimes.length < 1 ||
+        civilTimes.length > 8 ||
+        !daysOn ||
+        !daysOff ||
+        !cycleStartedOn ||
+        daysOn > 365 ||
+        daysOff > 365))
+  ) {
+    return undefined;
+  }
+  return {
+    kind,
+    ...(scheduleZone ? { zoneId: scheduleZone } : {}),
+    civilTimes: civilTimes as string[],
+    ...(daysOn ? { daysOn } : {}),
+    ...(daysOff ? { daysOff } : {}),
+    ...(cycleStartedOn ? { cycleStartedOn } : {}),
+    reminderEnabled: value.reminderEnabled,
+    summary,
+    forecast,
+  };
+}
+
 function normalizeMedication(value: unknown): MedicationDefinition | undefined {
   if (!isRecord(value)) return undefined;
   const medicationId = identifier(value.medicationId);
@@ -161,6 +468,8 @@ function normalizeMedication(value: unknown): MedicationDefinition | undefined {
   const form = optionalText(value.form);
   const strengthLabel = optionalText(value.strengthLabel);
   const detailLabel = text(value.detailLabel);
+  const clinicianRule = optionalText(value.clinicianRule);
+  const clinicianRuleAttribution = optionalText(value.clinicianRuleAttribution);
   const revision = positiveInteger(value.revision);
   const scheduleKind =
     value.scheduleKind === "none" ||
@@ -169,6 +478,7 @@ function normalizeMedication(value: unknown): MedicationDefinition | undefined {
     value.scheduleKind === "cycling"
       ? value.scheduleKind
       : undefined;
+  const schedule = value.schedule === undefined ? undefined : normalizeSchedule(value.schedule);
   const createdLabel = text(value.createdLabel);
   const eventCount = nonNegativeInteger(value.eventCount);
   if (
@@ -178,6 +488,11 @@ function normalizeMedication(value: unknown): MedicationDefinition | undefined {
     typeof value.active !== "boolean" ||
     revision === undefined ||
     !scheduleKind ||
+    (value.schedule !== undefined && !schedule) ||
+    (scheduleKind === "none" && schedule !== undefined) ||
+    (scheduleKind !== "none" && schedule?.kind !== scheduleKind) ||
+    Boolean(clinicianRule) !== Boolean(clinicianRuleAttribution) ||
+    (clinicianRule?.length ?? 0) > 500 ||
     !createdLabel ||
     eventCount === undefined
   ) {
@@ -189,9 +504,13 @@ function normalizeMedication(value: unknown): MedicationDefinition | undefined {
     ...(form ? { form } : {}),
     ...(strengthLabel ? { strengthLabel } : {}),
     detailLabel,
+    ...(clinicianRule && clinicianRuleAttribution
+      ? { clinicianRule, clinicianRuleAttribution }
+      : {}),
     active: value.active,
     revision,
     scheduleKind,
+    ...(schedule ? { schedule } : {}),
     createdLabel,
     eventCount,
   };
@@ -282,6 +601,14 @@ export function normalizeMedications(value: unknown): MedicationsData | undefine
   const estimateMessage = text(value.estimateMessage);
   const disclaimer = text(value.disclaimer);
   const interactionDisclaimer = text(value.interactionDisclaimer);
+  const reminderStatus =
+    value.reminderStatus === "disabled" ||
+    value.reminderStatus === "ready" ||
+    value.reminderStatus === "error" ||
+    value.reminderStatus === "unavailable"
+      ? value.reminderStatus
+      : undefined;
+  const reminderMessage = text(value.reminderMessage);
   const updatedLabel = text(value.updatedLabel);
   if (
     !status ||
@@ -292,6 +619,8 @@ export function normalizeMedications(value: unknown): MedicationsData | undefine
     value.fixtureMode !== false ||
     !disclaimer ||
     !interactionDisclaimer ||
+    !reminderStatus ||
+    !reminderMessage ||
     !updatedLabel
   ) {
     return undefined;
@@ -331,7 +660,12 @@ export function normalizeMedications(value: unknown): MedicationsData | undefine
     (status === "ready" && value.empty) ||
     (status === "empty" && !value.empty) ||
     (status === "unavailable" && (!value.empty || events.length > 0)) ||
-    (medications.length === 0 && events.length > 0)
+    (medications.length === 0 && events.length > 0) ||
+    (status !== "unavailable" &&
+      medications.some(
+        (medication) => medication.active && medication.schedule?.reminderEnabled === true,
+      ) !==
+        (reminderStatus !== "disabled"))
   ) {
     return undefined;
   }
@@ -346,6 +680,8 @@ export function normalizeMedications(value: unknown): MedicationsData | undefine
     fixtureMode: false,
     disclaimer,
     interactionDisclaimer,
+    reminderStatus,
+    reminderMessage,
     updatedLabel,
   };
 }
@@ -390,6 +726,13 @@ export function updateMedication(
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ) {
   return medicationMutation("UpdateMedication", input, root);
+}
+
+export function updateMedicationSchedule(
+  input: MedicationScheduleInput,
+  root: WailsRoot = globalThis as unknown as WailsRoot,
+) {
+  return medicationMutation("UpdateMedicationSchedule", input, root);
 }
 
 export function logMedicationEvent(
@@ -456,7 +799,7 @@ export async function exportMedicationData(
     const parsed: unknown = JSON.parse(json);
     if (
       !isRecord(parsed) ||
-      parsed.schema_version !== "v1" ||
+      parsed.schema_version !== "v2" ||
       parsed.generated_at !== generatedAt
     ) {
       throw new Error();
@@ -465,12 +808,12 @@ export async function exportMedicationData(
     const eventSet = parsed.event_set;
     if (
       !isRecord(medicationSet) ||
-      medicationSet.schema_version !== "v1" ||
+      medicationSet.schema_version !== "v2" ||
       medicationSet.generated_at !== generatedAt ||
       !Array.isArray(medicationSet.medications) ||
       medicationSet.medications.length !== medicationCount ||
       !isRecord(eventSet) ||
-      eventSet.schema_version !== "v1" ||
+      eventSet.schema_version !== "v2" ||
       eventSet.generated_at !== generatedAt ||
       !Array.isArray(eventSet.events) ||
       eventSet.events.length !== eventCount ||

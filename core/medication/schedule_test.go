@@ -153,6 +153,9 @@ func TestAsNeededScheduleCannotEnableReminders(t *testing.T) {
 	if err := (Schedule{Kind: ScheduleFixedClock, ZoneID: "Local", CivilTimes: []string{"09:00"}}).Validate(); err == nil {
 		t.Fatal("machine-local pseudo-zone was accepted as an explicit schedule zone")
 	}
+	if err := (Schedule{Kind: ScheduleFixedClock, ZoneID: "GMT", CivilTimes: []string{"09:00"}}).Validate(); err == nil {
+		t.Fatal("zone alias outside the v1 contract was accepted")
+	}
 	expansion, err := ExpandSchedule(Schedule{Kind: ScheduleAsNeeded}, time.Now(), time.Now().Add(24*time.Hour))
 	if err != nil {
 		t.Fatal(err)

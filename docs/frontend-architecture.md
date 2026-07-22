@@ -24,6 +24,8 @@ visual refactor decisions remain in `ui-refactor-plan.md`.
   and consecutive civil dates before any local response renders. The
   medication adapter similarly reconciles unique definition/event IDs,
   references, private display labels, stored-event counts, civil timestamps,
+  strict schedule shape, unique clock times, reminder-service state, occurrence
+  status/count totals, estimator-horizon coverage, neutral context labels,
   export counts, and the no-fixture invariant.
 - `src/state/` owns state that genuinely spans routes. Small invalidation
   signals, such as sleep-data and calendar changes, remain explicit events
@@ -70,7 +72,11 @@ Medications uses one ruled workspace rather than nested cards: quick logging
 and the civil-time evidence ledger remain primary, while definition management
 stays in a compact rail. Observed, predicted, and unavailable rhythm context
 are text-qualified. Correction and permanent erasure are separate editors;
-the latter cannot submit until the exact `DELETE` token is entered.
+the latter cannot submit until the exact `DELETE` token is entered. Schedule
+editing is a compact field grid in that rail. The feasibility surface uses a
+ruled occurrence table with contained horizontal scrolling, neutral
+inside/outside/out-of-horizon language, explicit DST-gap rows, and attributed
+clinician text; it never turns forecast context into a warning bubble.
 
 `styles.css` contains global tokens, resets, shell primitives, and established
 shared components. Reworked route-specific composition lives in
@@ -101,10 +107,13 @@ tokens rather than raw colors or ad-hoc radii.
   sleep payload remains there.
 - Medication edits and exclusion append corrections to immutable raw events.
   Medication event/definition deletion uses separate `DELETE`-confirmed
-  bindings and compacts the same local SQLite/WAL boundary. M-A has no browser
-  fixture fallback, sync projection, assistant context, or interaction check.
+  bindings and compacts the same local SQLite/WAL boundary. M-B schedule input
+  is explicit, revision-checked intent; reminders require a separate opt-in and
+  forecast labels never move a time. M-A/M-B have no browser fixture fallback,
+  sync projection, assistant context, or interaction check.
 - Database erasure does not claim to remove copies held by external backups,
-  filesystem snapshots, or storage-device wear leveling.
+  filesystem snapshots, storage-device wear leveling, or a medication label
+  already delivered to OS-managed notification history.
 
 ## Enforced standards
 

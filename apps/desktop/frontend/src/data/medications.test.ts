@@ -11,6 +11,7 @@ import {
   logMedicationEvent,
   normalizeMedications,
   updateMedication,
+  updateMedicationSchedule,
 } from "./medications";
 
 const medicationResponse = {
@@ -58,19 +59,76 @@ const medicationResponse = {
     "Medication timing shown here is user-entered or derived context, not medical advice.",
   interactionDisclaimer:
     "ZeitBoard records what you enter. It does not check medication interactions; ask a pharmacist or clinician.",
+  reminderStatus: "disabled",
+  reminderMessage: "Desktop reminders are off. Enable them only on a clock schedule you entered.",
   updatedLabel: "Updated Jul 22, 8:00 AM",
 };
 
+const scheduledResponse = {
+  ...medicationResponse,
+  reminderStatus: "ready",
+  reminderMessage: "Desktop reminders are active for 1 medication you configured.",
+  medications: [
+    {
+      ...medicationResponse.medications[0],
+      revision: 2,
+      scheduleKind: "fixed_clock",
+      clinicianRule: "Clinician instruction entered by the user",
+      clinicianRuleAttribution: "Clinician guidance entered verbatim by you",
+      schedule: {
+        kind: "fixed_clock",
+        zoneId: "UTC",
+        civilTimes: ["09:00"],
+        reminderEnabled: true,
+        summary: "09:00 in UTC",
+        forecast: {
+          status: "collision",
+          message:
+            "1 of 1 covered scheduled occurrences fall inside current predicted sleep windows. 1 later occurrence is outside the current forecast horizon.",
+          coveredCount: 1,
+          collisionCount: 1,
+          outsideHorizonCount: 1,
+          coverageEndsAt: "2026-07-23T15:00:00Z",
+          coverageLabel: "Jul 23, 3:00 PM UTC",
+          occurrences: [
+            {
+              at: "2026-07-23T09:00:00Z",
+              civilDate: "2026-07-23",
+              civilTime: "09:00",
+              civilLabel: "Thu Jul 23, 9:00 AM UTC",
+              status: "inside_predicted_sleep",
+              context: "Inside a current predicted sleep window",
+              confidence: "Medium",
+              ambiguous: false,
+            },
+            {
+              at: "2026-07-24T09:00:00Z",
+              civilDate: "2026-07-24",
+              civilTime: "09:00",
+              civilLabel: "Fri Jul 24, 9:00 AM UTC",
+              status: "outside_forecast",
+              context: "Outside the current forecast horizon",
+              confidence: "Unknown",
+              ambiguous: false,
+            },
+          ],
+          gaps: [],
+        },
+      },
+    },
+  ],
+};
+
 const exportJSON = JSON.stringify({
-  schema_version: "v1",
+  schema_version: "v2",
   generated_at: "2026-07-22T12:00:00Z",
   medication_set: {
-    schema_version: "v1",
+    schema_version: "v2",
     generated_at: "2026-07-22T12:00:00Z",
     medications: [{}],
   },
   event_set: {
-    schema_version: "v1",
+    schema_version: "v2",
     generated_at: "2026-07-22T12:00:00Z",
     events: [{}],
     corrections: [],
@@ -114,6 +172,38 @@ describe("medication data adapter", () => {
     expect(normalizeMedications(impossibleTime)).toBeUndefined();
   });
 
+  it("reconciles schedule shape, horizon counts, context, and reminder state", () => {
+    expect(normalizeMedications(scheduledResponse)).toMatchObject({
+      reminderStatus: "ready",
+      medications: [
+        {
+          scheduleKind: "fixed_clock",
+          clinicianRuleAttribution: "Clinician guidance entered verbatim by you",
+          schedule: {
+            reminderEnabled: true,
+            forecast: { coveredCount: 1, collisionCount: 1, outsideHorizonCount: 1 },
+          },
+        },
+      ],
+    });
+
+    const badCount = structuredClone(scheduledResponse);
+    badCount.medications[0]!.schedule.forecast.outsideHorizonCount = 0;
+    expect(normalizeMedications(badCount)).toBeUndefined();
+
+    const badContext = structuredClone(scheduledResponse);
+    badContext.medications[0]!.schedule.forecast.occurrences[0]!.context = "Good time";
+    expect(normalizeMedications(badContext)).toBeUndefined();
+
+    const badKind = structuredClone(scheduledResponse);
+    badKind.medications[0]!.scheduleKind = "cycling";
+    expect(normalizeMedications(badKind)).toBeUndefined();
+
+    const badReminder = structuredClone(scheduledResponse);
+    badReminder.reminderStatus = "disabled";
+    expect(normalizeMedications(badReminder)).toBeUndefined();
+  });
+
   it("uses an honest no-fixture state when the desktop bridge is absent", async () => {
     expect(hasLocalMedicationService({})).toBe(false);
     await expect(loadMedications({})).resolves.toMatchObject({
@@ -133,6 +223,7 @@ describe("medication data adapter", () => {
       GetMedications: vi.fn(async () => medicationResponse),
       AddMedication: vi.fn(async () => medicationResponse),
       UpdateMedication: vi.fn(async () => medicationResponse),
+      UpdateMedicationSchedule: vi.fn(async () => medicationResponse),
       LogMedicationEvent: vi.fn(async () => medicationResponse),
       CorrectMedicationEvent: vi.fn(async () => medicationResponse),
       DeleteMedication: vi.fn(async () => medicationResponse),
@@ -154,10 +245,23 @@ describe("medication data adapter", () => {
       scheduled: false,
       note: "",
     };
+    const schedule = {
+      medicationId: "med_local_01",
+      revision: 1,
+      kind: "fixed_clock" as const,
+      zoneId: "UTC",
+      civilTimes: ["09:00"],
+      daysOn: 0,
+      daysOff: 0,
+      cycleStartedOn: "",
+      reminderEnabled: true,
+      clinicianRule: "",
+    };
 
     await expect(loadMedications(root)).resolves.toMatchObject({ status: "ready" });
     await addMedication(definition, root);
     await updateMedication(update, root);
+    await updateMedicationSchedule(schedule, root);
     await logMedicationEvent(event, root);
     await correctMedicationEvent({ ...event, eventId: "dose_local_01", excluded: true }, root);
     await deleteMedication("med_local_01", root);
@@ -165,6 +269,7 @@ describe("medication data adapter", () => {
 
     expect(methods.AddMedication).toHaveBeenCalledWith(definition);
     expect(methods.UpdateMedication).toHaveBeenCalledWith(update);
+    expect(methods.UpdateMedicationSchedule).toHaveBeenCalledWith(schedule);
     expect(methods.LogMedicationEvent).toHaveBeenCalledWith(event);
     expect(methods.DeleteMedication).toHaveBeenCalledWith({
       medicationId: "med_local_01",
@@ -178,7 +283,7 @@ describe("medication data adapter", () => {
 
   it("validates export identity, nested versions, and declared counts", async () => {
     const exportValue = {
-      fileName: "zeitboard-medication-data-20260722.json",
+      fileName: "zeitboard-medication-data-v2-20260722.json",
       json: exportJSON,
       generatedAt: "2026-07-22T12:00:00Z",
       generatedLabel: "Jul 22, 2026, 8:00 AM",
@@ -196,5 +301,12 @@ describe("medication data adapter", () => {
       go: { main: { App: { ExportMedicationData: async () => badCount } } },
     };
     await expect(exportMedicationData(invalidRoot)).rejects.toThrow(/declared counts/);
+
+    const unsupported = structuredClone(exportValue);
+    unsupported.json = exportJSON.replaceAll('"v2"', '"v1"');
+    const unsupportedRoot = {
+      go: { main: { App: { ExportMedicationData: async () => unsupported } } },
+    };
+    await expect(exportMedicationData(unsupportedRoot)).rejects.toThrow(/declared counts/);
   });
 });

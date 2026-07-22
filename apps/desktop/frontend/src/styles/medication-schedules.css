@@ -1,0 +1,452 @@
+.medication-feasibility {
+  min-width: 0;
+  padding: var(--space-5);
+  border-bottom: 1px solid var(--line);
+}
+
+.medication-reminder-state {
+  min-height: 44px;
+  margin-bottom: var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  display: grid;
+  grid-template-columns: minmax(150px, 0.42fr) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+  border-block: 1px solid var(--divider);
+  background: var(--panel-alt);
+  box-shadow: inset 3px 0 0 var(--line);
+}
+
+.medication-reminder-state[data-status="ready"] {
+  box-shadow: inset 3px 0 0 var(--state-awake);
+}
+
+.medication-reminder-state[data-status="error"],
+.medication-reminder-state[data-status="unavailable"] {
+  box-shadow: inset 3px 0 0 var(--state-uncertain);
+}
+
+.medication-reminder-state strong {
+  color: var(--ink);
+  font-size: var(--type-body);
+  text-transform: capitalize;
+}
+
+.medication-reminder-state span {
+  color: var(--muted);
+  font-size: var(--type-label);
+  line-height: 1.4;
+}
+
+.medication-feasibility-empty {
+  min-height: 96px;
+  padding: var(--space-4) 0;
+  display: grid;
+  align-content: center;
+  gap: var(--space-1);
+  border-block: 1px solid var(--divider);
+}
+
+.medication-feasibility-empty strong {
+  color: var(--ink);
+  font-size: var(--type-body-strong);
+}
+
+.medication-feasibility-empty p {
+  max-width: 680px;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-body);
+  line-height: 1.45;
+}
+
+.medication-feasibility-list {
+  border-top: 1px solid var(--line);
+}
+
+.medication-feasibility-list > article {
+  min-width: 0;
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.medication-feasibility-record-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.medication-feasibility-record-header > div {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.medication-feasibility-record-header > div:last-child {
+  justify-items: end;
+  text-align: right;
+}
+
+.medication-feasibility-record-header strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--type-body-strong);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.medication-feasibility-record-header span {
+  color: var(--muted);
+  font-size: var(--type-body);
+  line-height: 1.35;
+}
+
+.medication-feasibility-record-header small {
+  color: var(--subtle);
+  font-size: var(--type-label);
+}
+
+.medication-clinician-rule {
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--line);
+  background: var(--panel-alt);
+}
+
+.medication-clinician-rule span {
+  color: var(--subtle);
+  font-size: var(--type-label);
+  font-weight: 700;
+}
+
+.medication-clinician-rule blockquote {
+  margin: var(--space-1) 0 0;
+  color: var(--ink);
+  font-size: var(--type-body);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.medication-forecast-summary {
+  margin-top: var(--space-3);
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(360px, 1.4fr);
+  gap: var(--space-4);
+  align-items: stretch;
+}
+
+.medication-forecast-summary > p {
+  margin: 0;
+  padding: var(--space-2) 0;
+  color: var(--muted);
+  font-size: var(--type-body);
+  line-height: 1.45;
+}
+
+.medication-forecast-summary dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-block: 1px solid var(--divider);
+}
+
+.medication-forecast-summary dl > div {
+  min-width: 0;
+  padding: var(--space-2);
+  display: grid;
+  align-content: start;
+  gap: 2px;
+}
+
+.medication-forecast-summary dl > div + div {
+  border-left: 1px solid var(--divider);
+}
+
+.medication-forecast-summary dt {
+  color: var(--subtle);
+  font-size: var(--type-label);
+  line-height: 1.3;
+}
+
+.medication-forecast-summary dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--type-body-strong);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.medication-forecast-table-wrap {
+  max-width: 100%;
+  max-height: 310px;
+  margin-top: var(--space-3);
+  overflow: auto;
+  border-block: 1px solid var(--line);
+}
+
+.medication-forecast-table-wrap:focus-visible {
+  outline: 2px solid var(--state-awake);
+  outline-offset: 2px;
+}
+
+.medication-forecast-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-size: var(--type-body);
+}
+
+.medication-forecast-table th,
+.medication-forecast-table td {
+  padding: var(--space-2) var(--space-3);
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--divider);
+}
+
+.medication-forecast-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: var(--subtle);
+  background: var(--panel-alt);
+  font-size: var(--type-label);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.medication-forecast-table th:nth-child(1) {
+  width: 25%;
+}
+
+.medication-forecast-table th:nth-child(2) {
+  width: 35%;
+}
+
+.medication-forecast-table th:nth-child(3) {
+  width: 14%;
+}
+
+.medication-forecast-table th:nth-child(4) {
+  width: 26%;
+}
+
+.medication-forecast-table td {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.medication-forecast-table td:first-child {
+  color: var(--ink);
+  border-left: 3px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+
+.medication-forecast-table tr[data-status="inside_predicted_sleep"] td:first-child {
+  border-left-color: var(--state-asleep);
+}
+
+.medication-forecast-table tr[data-status="outside_predicted_sleep"] td:first-child {
+  border-left-color: var(--state-awake);
+}
+
+.medication-forecast-table tr[data-status="outside_forecast"] td {
+  color: var(--subtle);
+  background: var(--panel-alt);
+}
+
+.medication-schedule-gaps {
+  margin-top: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+
+.medication-schedule-gaps > div {
+  padding: var(--space-2) var(--space-3);
+  display: grid;
+  grid-template-columns: minmax(180px, 0.35fr) minmax(0, 1fr);
+  gap: var(--space-3);
+  border-bottom: 1px solid var(--divider);
+  box-shadow: inset 3px 0 0 var(--state-uncertain);
+}
+
+.medication-schedule-gaps strong {
+  color: var(--ink);
+  font-size: var(--type-body);
+  font-variant-numeric: tabular-nums;
+}
+
+.medication-schedule-gaps span {
+  color: var(--muted);
+  font-size: var(--type-body);
+  line-height: 1.4;
+}
+
+.medication-schedule-editor {
+  min-width: 0;
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--line);
+  background: var(--paper);
+  box-shadow: inset 3px 0 0 var(--state-awake);
+}
+
+.medication-schedule-editor > header {
+  margin-bottom: var(--space-3);
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.medication-schedule-editor h2 {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--type-data);
+  line-height: 1.2;
+}
+
+.medication-schedule-boundary {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) 0;
+  color: var(--muted);
+  border-block: 1px solid var(--divider);
+  font-size: var(--type-label);
+  line-height: 1.45;
+}
+
+.medication-schedule-editor form {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.medication-schedule-editor label:not(.medication-check-row) {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-1);
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.medication-schedule-editor select,
+.medication-schedule-editor textarea,
+.medication-schedule-editor label:not(.medication-check-row) > input {
+  width: 100%;
+  min-width: 0;
+}
+
+.medication-schedule-editor label small {
+  color: var(--subtle);
+  font-size: var(--type-label);
+  line-height: 1.35;
+}
+
+.medication-clock-editor,
+.medication-cycle-editor {
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-3) 0;
+  border: 0;
+  border-block: 1px solid var(--divider);
+}
+
+.medication-clock-editor legend,
+.medication-cycle-editor legend {
+  padding: 0;
+  color: var(--ink);
+  font-size: var(--type-label);
+  font-weight: 750;
+}
+
+.medication-clock-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.medication-clock-list > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: var(--space-2);
+}
+
+.medication-clock-list .text-button {
+  margin-bottom: var(--space-2);
+}
+
+.medication-clock-editor > .text-button {
+  margin-top: var(--space-2);
+}
+
+.medication-cycle-editor {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.medication-cycle-editor legend {
+  grid-column: 1 / -1;
+}
+
+.medication-cycle-editor label:last-child {
+  grid-column: 1 / -1;
+}
+
+.medication-reminder-opt-in {
+  padding: var(--space-2) 0;
+  border-block: 1px solid var(--divider);
+}
+
+.medication-schedule-validation {
+  margin: 0;
+  padding-left: var(--space-2);
+  color: var(--danger-text);
+  border-left: 3px solid var(--danger-border);
+  font-size: var(--type-label);
+  line-height: 1.4;
+}
+
+@media (max-width: 1120px) {
+  .medication-forecast-summary {
+    grid-template-columns: 1fr;
+    gap: var(--space-2);
+  }
+}
+
+@media (max-width: 900px) {
+  .medication-schedule-editor {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 700px) {
+  .medication-feasibility {
+    padding: var(--space-3);
+  }
+
+  .medication-reminder-state,
+  .medication-feasibility-record-header,
+  .medication-schedule-gaps > div {
+    grid-template-columns: 1fr;
+  }
+
+  .medication-feasibility-record-header > div:last-child {
+    justify-items: start;
+    text-align: left;
+  }
+
+  .medication-forecast-summary dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .medication-forecast-summary dl > div:nth-child(3) {
+    border-left: 0;
+    border-top: 1px solid var(--divider);
+  }
+
+  .medication-forecast-summary dl > div:nth-child(4) {
+    border-top: 1px solid var(--divider);
+  }
+}

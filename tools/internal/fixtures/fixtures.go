@@ -22,8 +22,9 @@ var (
 
 // File is a generated fixture: its file name and encoded JSON bytes.
 type File struct {
-	Name string
-	Data []byte
+	Version string
+	Name    string
+	Data    []byte
 }
 
 func ts(t time.Time) string { return t.UTC().Format(time.RFC3339) }
@@ -171,7 +172,13 @@ type calendarEvent struct {
 }
 
 type medicationSchedule struct {
-	Kind string `json:"kind"`
+	Kind            string   `json:"kind"`
+	ZoneID          string   `json:"zone_id,omitempty"`
+	CivilTimes      []string `json:"civil_times,omitempty"`
+	DaysOn          int      `json:"days_on,omitempty"`
+	DaysOff         int      `json:"days_off,omitempty"`
+	CycleStartedOn  string   `json:"cycle_started_on,omitempty"`
+	ReminderEnabled bool     `json:"reminder_enabled,omitempty"`
 }
 
 type medicationItem struct {
@@ -179,6 +186,7 @@ type medicationItem struct {
 	Label         string             `json:"label"`
 	Form          string             `json:"form,omitempty"`
 	StrengthLabel string             `json:"strength_label,omitempty"`
+	ClinicianRule string             `json:"clinician_rule,omitempty"`
 	Active        bool               `json:"active"`
 	Schedule      medicationSchedule `json:"schedule"`
 	CreatedAt     string             `json:"created_at"`
@@ -786,6 +794,37 @@ func Build() ([]File, error) {
 		MedicationSet: medicationSetFixture,
 		EventSet:      medicationEventSetFixture,
 	}
+	medicationSetFixtureV2 := medicationSet{
+		SchemaVersion: "v2",
+		GeneratedAt:   ts(generatedAt),
+		Medications: []medicationItem{
+			{
+				MedicationID:  "med_synthetic_01",
+				Label:         "Synthetic medication record",
+				Form:          "tablet",
+				StrengthLabel: "user-entered strength",
+				ClinicianRule: "Synthetic clinician instruction entered verbatim by the user",
+				Active:        true,
+				Schedule: medicationSchedule{
+					Kind:            "fixed_clock",
+					ZoneID:          zoneID,
+					CivilTimes:      []string{"09:00", "21:00"},
+					ReminderEnabled: true,
+				},
+				CreatedAt: ts(generatedAt.Add(-14 * 24 * time.Hour)),
+				Revision:  2,
+				UpdatedAt: ts(generatedAt.Add(-time.Hour)),
+			},
+		},
+	}
+	medicationEventSetFixtureV2 := medicationEventSetFixture
+	medicationEventSetFixtureV2.SchemaVersion = "v2"
+	medicationDataExportFixtureV2 := medicationDataExport{
+		SchemaVersion: "v2",
+		GeneratedAt:   ts(generatedAt),
+		MedicationSet: medicationSetFixtureV2,
+		EventSet:      medicationEventSetFixtureV2,
+	}
 
 	assistantActionFixture := assistantAction{
 		SchemaVersion:     "v1",
@@ -1239,7 +1278,22 @@ func Build() ([]File, error) {
 		if err != nil {
 			return nil, fmt.Errorf("encode %s: %w", item.name, err)
 		}
-		files = append(files, File{Name: item.name, Data: data})
+		files = append(files, File{Version: "v1", Name: item.name, Data: data})
+	}
+	v2Ordered := []struct {
+		name  string
+		value any
+	}{
+		{"medication-set.json", medicationSetFixtureV2},
+		{"medication-event-set.json", medicationEventSetFixtureV2},
+		{"medication-data-export.json", medicationDataExportFixtureV2},
+	}
+	for _, item := range v2Ordered {
+		data, err := encode(item.value)
+		if err != nil {
+			return nil, fmt.Errorf("encode v2/%s: %w", item.name, err)
+		}
+		files = append(files, File{Version: "v2", Name: item.name, Data: data})
 	}
 
 	if err := assertSafety(observationsFixture, trustedViewDefaultDeny, trustedViewFixture); err != nil {

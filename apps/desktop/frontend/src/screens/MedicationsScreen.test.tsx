@@ -47,7 +47,64 @@ const response = {
     "Medication timing shown here is user-entered or derived context, not medical advice.",
   interactionDisclaimer:
     "ZeitBoard records what you enter. It does not check medication interactions; ask a pharmacist or clinician.",
+  reminderStatus: "disabled",
+  reminderMessage: "Desktop reminders are off. Enable them only on a clock schedule you entered.",
   updatedLabel: "Updated Jul 22, 8:00 AM",
+};
+
+const scheduledResponse = {
+  ...response,
+  reminderStatus: "ready",
+  reminderMessage: "Desktop reminders are active for 1 medication you configured.",
+  medications: [
+    {
+      ...response.medications[0],
+      revision: 2,
+      scheduleKind: "fixed_clock",
+      clinicianRule: "Use the clinician-provided written schedule",
+      clinicianRuleAttribution: "Clinician guidance entered verbatim by you",
+      schedule: {
+        kind: "fixed_clock",
+        zoneId: "UTC",
+        civilTimes: ["09:00"],
+        reminderEnabled: true,
+        summary: "09:00 in UTC",
+        forecast: {
+          status: "no_overlap",
+          message:
+            "None of 1 covered scheduled occurrences fall inside current predicted sleep windows. 1 later occurrence is outside the current forecast horizon.",
+          coveredCount: 1,
+          collisionCount: 0,
+          outsideHorizonCount: 1,
+          coverageEndsAt: "2026-07-23T15:00:00Z",
+          coverageLabel: "Jul 23, 3:00 PM UTC",
+          occurrences: [
+            {
+              at: "2026-07-23T09:00:00Z",
+              civilDate: "2026-07-23",
+              civilTime: "09:00",
+              civilLabel: "Thu Jul 23, 9:00 AM UTC",
+              status: "outside_predicted_sleep",
+              context: "Not inside a current predicted sleep window",
+              confidence: "Medium",
+              ambiguous: false,
+            },
+            {
+              at: "2026-07-24T09:00:00Z",
+              civilDate: "2026-07-24",
+              civilTime: "09:00",
+              civilLabel: "Fri Jul 24, 9:00 AM UTC",
+              status: "outside_forecast",
+              context: "Outside the current forecast horizon",
+              confidence: "Unknown",
+              ambiguous: false,
+            },
+          ],
+          gaps: [],
+        },
+      },
+    },
+  ],
 };
 
 type GlobalWithGo = typeof globalThis & { go?: unknown };
@@ -129,5 +186,61 @@ describe("MedicationsScreen", () => {
       }),
     );
     expect(await screen.findByText("No events recorded")).toBeInTheDocument();
+  });
+
+  it("saves an explicit schedule and renders a dense neutral forecast", async () => {
+    let current: unknown = structuredClone(response);
+    const getMedications = vi.fn(async () => structuredClone(current));
+    const updateSchedule = vi.fn(async () => {
+      current = structuredClone(scheduledResponse);
+      return structuredClone(current);
+    });
+    (globalThis as GlobalWithGo).go = {
+      main: {
+        App: {
+          GetMedications: getMedications,
+          UpdateMedicationSchedule: updateSchedule,
+        },
+      },
+    };
+
+    render(<MedicationsScreen />);
+
+    expect(await screen.findByText("No medication schedules stored")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Schedule Evening record" }));
+    const editor = screen.getByRole("region", { name: "Schedule: Evening record" });
+    fireEvent.change(within(editor).getByLabelText("Schedule type"), {
+      target: { value: "fixed_clock" },
+    });
+    fireEvent.change(within(editor).getByLabelText(/^Schedule time zone/), {
+      target: { value: "UTC" },
+    });
+    const reminderOptIn = within(editor).getByLabelText(/Show this label through Windows/);
+    expect(reminderOptIn.closest("label")).toHaveTextContent("including predicted sleep overlaps");
+    fireEvent.click(reminderOptIn);
+    fireEvent.change(within(editor).getByLabelText(/^Clinician guidance, entered by you/), {
+      target: { value: "Use the clinician-provided written schedule" },
+    });
+    fireEvent.click(within(editor).getByRole("button", { name: "Save schedule revision" }));
+
+    await waitFor(() => expect(updateSchedule).toHaveBeenCalledTimes(1));
+    expect(updateSchedule).toHaveBeenCalledWith({
+      medicationId: "med_local_01",
+      revision: 1,
+      kind: "fixed_clock",
+      zoneId: "UTC",
+      civilTimes: ["09:00"],
+      daysOn: 0,
+      daysOff: 0,
+      cycleStartedOn: "",
+      reminderEnabled: true,
+      clinicianRule: "Use the clinician-provided written schedule",
+    });
+    expect(await screen.findByText("Schedule feasibility")).toBeInTheDocument();
+    expect(screen.getByText("Use the clinician-provided written schedule")).toBeInTheDocument();
+    expect(screen.getByText("Not inside a current predicted sleep window")).toBeInTheDocument();
+    expect(screen.getByText("Outside the current forecast horizon")).toBeInTheDocument();
+    expect(screen.queryByText(/good time|bad time|safe time/i)).not.toBeInTheDocument();
+    expect(screen.getByRole("table")).toBeInTheDocument();
   });
 });

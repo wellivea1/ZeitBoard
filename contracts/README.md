@@ -36,9 +36,10 @@ trusted views, MCP payloads, telemetry, or server projections. Scheduling receiv
 only event identifiers and half-open UTC intervals. Imported events are read-only;
 only explicitly approved `app_owned` blocks may carry task and proposal links.
 
-`medication-set.schema.json`, `medication-event-set.schema.json`, and
-`medication-data-export.schema.json` are private, device-local contracts.
-Medication labels, strength/form text, future clinician-rule text, and event notes
-must not enter trusted views, LLM context, MCP output, telemetry, or logs.
-Wake-relative and predicted-sleep timing are read-time projections and are never
-stored as medication evidence.
+The `v1` medication schemas preserve the M-A logging contract. The `v2`
+medication schemas add explicit schedule zones, reminder opt-in, and private
+clinician-rule text without redefining strict v1 payloads. Both are private,
+device-local contracts. Medication labels, strength/form or clinician-rule
+text, and event notes must not enter trusted views, LLM context, MCP output,
+telemetry, or logs. Wake-relative and predicted-sleep timing are read-time
+projections and are never stored as medication evidence.

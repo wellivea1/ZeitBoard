@@ -25,7 +25,10 @@ const (
 	OccurrenceOutsideForecast       = "outside_forecast"
 )
 
-var civilClockPattern = regexp.MustCompile(`^(?:[01][0-9]|2[0-3]):[0-5][0-9]$`)
+var (
+	civilClockPattern   = regexp.MustCompile(`^(?:[01][0-9]|2[0-3]):[0-5][0-9]$`)
+	scheduleZonePattern = regexp.MustCompile(`^(?:UTC|[A-Za-z0-9._+-]+(?:/[A-Za-z0-9._+-]+)+)$`)
+)
 
 type Schedule struct {
 	Kind            string   `json:"kind"`
@@ -118,7 +121,7 @@ func validateClockSchedule(schedule Schedule) error {
 	if len(schedule.CivilTimes) == 0 || len(schedule.CivilTimes) > 8 {
 		return errors.New("clock schedules require 1 to 8 civil times")
 	}
-	if schedule.ZoneID == "" || schedule.ZoneID == "Local" {
+	if !scheduleZonePattern.MatchString(schedule.ZoneID) {
 		return errors.New("clock schedules require an IANA time zone")
 	}
 	if _, err := time.LoadLocation(schedule.ZoneID); err != nil {
