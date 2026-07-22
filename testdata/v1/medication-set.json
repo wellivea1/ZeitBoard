@@ -1,0 +1,19 @@
+{
+  "schema_version": "v1",
+  "generated_at": "2026-03-15T00:00:00Z",
+  "medications": [
+    {
+      "medication_id": "med_synthetic_01",
+      "label": "Synthetic medication record",
+      "form": "tablet",
+      "strength_label": "user-entered strength",
+      "active": true,
+      "schedule": {
+        "kind": "as_needed"
+      },
+      "created_at": "2026-03-01T00:00:00Z",
+      "revision": 1,
+      "updated_at": "2026-03-01T00:00:00Z"
+    }
+  ]
+}

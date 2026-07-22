@@ -42,6 +42,12 @@ detail lives there rather than being repeated here.
 - User-owned tasks: contract-shaped task CRUD, a real Tasks screen, the
   scheduler planning only stored open tasks (ADR-0018), and cross-device task
   sync as immutable revision records with erasure-grade deletion (ADR-0020).
+- Medication M-A/M-B: private local definitions, append-only taken/skipped
+  events and correction chains, explicit user-authored schedules, neutral
+  observed/predicted collision context, opt-in claim-first desktop reminders,
+  versioned local export, typed hard erasure, and a dense real-data Medications
+  workspace (ADR-0024/0025). No schedule, reminder time, interaction check, or
+  treatment recommendation is inferred.
 - The Rhythm Sources tab and Data Sources run on real local state (refusals,
   correction history, per-source composition, sync status); synthetic previews
   are confined to the labeled browser fixture mode.
@@ -83,7 +89,7 @@ detail lives there rather than being repeated here.
 The actionable near-term plan. Each slice is self-contained and lands with an
 ADR when it changes architecture. The phase-level direction (through the
 public availability portal) with a pasteable `/goal` prompt per phase is
-[`phase-goals.md`](phase-goals.md); slices below map onto its phases 1-2.
+[`phase-goals.md`](phase-goals.md); slices below map onto its phases 1-3.
 
 1. ~~**Close the control loop — approvals unification + sync robustness.**~~
    ✅ Delivered (ADR-0016): cross-device decisions via listed one-use tokens, a
@@ -124,8 +130,9 @@ public availability portal) with a pasteable `/goal` prompt per phase is
    `estimate_unavailable` for real tasks without an estimate. *Task sync
    delivered* (ADR-0020): edits travel as immutable revision records over the
    append-only log with last-writer-wins application, and task deletion
-   erases all pushed revisions via ADR-0017 tombstones. Still deferred:
-   write-back of approved placements (Phase 3c).
+   erases all pushed revisions via ADR-0017 tombstones. Approved local
+   placement materialization is now delivered by ADR-0023; external-provider
+   write-back remains separately gated.
 5. ~~**Replace the remaining fixture UI.**~~ ✅ Delivered: in local/synced mode
    the Rhythm "Sources" tab now shows the estimator's real refusal, the real
    correction history (append-only inspector; the dead fixture undo button is
@@ -135,12 +142,25 @@ public availability portal) with a pasteable `/goal` prompt per phase is
    fixture mode, which is labeled "Sample data". A real *conflict* list still
    needs an engine-surfaced overlap DTO — deferred until multiple sources
    exist (slice 7), rather than faking overlap logic in the chart layer.
-6. **Calendar import (Phase 3a) — after an explicit placement ADR.** The
-   original scoping predates the backend; decide *where adapters live*
-   (device-side like Health Connect vs server-side on the instance), which
-   protocols first (ICS/CalDAV before Google OAuth verification burdens), and
-   how imported-event text is kept out of projections. Then implement
-   read-only import per the re-scoped ADR.
+6. ~~**Calendar import and local placement materialization.**~~ Delivered
+   (ADR-0023): device-side bounded ICS and read-only CalDAV snapshots, a strict
+   event-set contract, recurrence expansion with DST handling, atomic local
+   persistence and revocable source erasure, real fixed events in the
+   scheduler, and a dense Calendar board that keeps private text local.
+   Approval records bind transactionally to the exact task revision,
+   sleep-data snapshot, and text-free busy-event snapshot. Approval creates
+   only an app-owned local block; rejection writes no event; undo removes only
+   that block; app-owned placements export as RFC 5545 ICS. OAuth providers
+   and remote write-back remain future, separately permissioned work.
+
+**Disease-management track.** ~~M-A local medication logging~~ and ~~M-B
+user-authored schedules + feasibility~~ are delivered (ADR-0024/0025),
+including byte-verified erasure distinct from append-only exclusion, explicit
+civil/DST semantics, neutral sleep-collision forecasts, and opt-in at-most-once
+desktop reminders. **Next:** M-C adherence-in-rhythm context, actogram markers,
+and clinician export. Markers for illness, travel, disruption, and forced
+schedules remain a parallel prerequisite for the association view.
+
 7. **Takeout / "My Activity" import + activity→sleep inference.** File import
    (no Google API exists for My Activity) feeding the deferred probabilistic
    inference; emits low-confidence `inferred` episodes only, validated by the
@@ -186,7 +206,7 @@ public availability portal) with a pasteable `/goal` prompt per phase is
 **Small debts (fold into adjacent slices):** consolidate the correction-record
 → domain decoder (now duplicated across desktop storage, server readmodel, and
 the sync validator); prefer a CA-cert path over localhost skip-verify for the
-MCP client; medication tracking now has a full feature plan
+MCP client; medication tracking M-A/M-B is delivered and M-C..M-F remain specified
 ([`medication-feature-plan.md`](medication-feature-plan.md), slices M-A..M-F:
 benchmarked against Medisafe; fixed-clock regimens + wake-relative display,
 reminder collision forecasts, adherence-in-rhythm-context, association-not-
@@ -210,7 +230,7 @@ Largely delivered (see "Where things stand"). Remaining in scope:
 - Local DB encryption at rest + OS credential storage for the desktop store
   (the token file is 0600; the SQLite store itself is not yet encrypted —
   privacy.md requires it).
-- **Automatic clinical charting + clinician export** (§3.6): the longitudinal
+- **Automatic clinical charting + clinician export** (§3.6 / medication M-C): the longitudinal
   clinical actogram with annotations and a printable, redaction-controlled
   PDF — replacing hand-kept sleep logs. Recording only; never a treatment
   recommendation. Depends on slices 3 (real history) and import hardening.
@@ -228,25 +248,27 @@ an estimate as exact.
 **Delivered:** the desktop engine-backed proposal queue with explanation codes
 and honest unplaced reasons; backend-persisted assistant/agent proposals,
 one-use signed approval tokens, cross-device decisions, audit trail, real local
-tasks, and immutable task revision sync with erasure-grade deletion.
-**Not yet delivered:** calendar import, approved-placement write-back, batch
-review, surfaced decision history, and richer proposal expiry handling.
+tasks, immutable task revision sync with erasure-grade deletion, read-only
+calendar import, local approved-placement materialization, persistent local
+decision history/undo, and app-owned ICS export.
+**Not yet delivered:** external-provider calendar write-back, batch review,
+unified local/backend presentation, and richer proposal expiry handling.
 
-**3a. Read-only calendar import** — re-scope via ADR first (adapter placement,
-protocol order, OAuth verification realities); imported events are immutable
-inputs whose text never reaches trusted views or LLM context.
+**3a. Read-only calendar import - delivered locally (ADR-0023).** ICS and
+CalDAV adapters run device-side; imported events are immutable inputs whose
+text never reaches trusted views, sync envelopes, or LLM context.
 
 **3b. Approval queue completion** — the desktop already approves backend
-assistant/agent proposals through the decision endpoint. Remaining work is one
-combined presentation across local scheduler and backend origins, batch review,
-surfaced expiry, and decision history.
+assistant/agent proposals through the decision endpoint. Local scheduler
+decisions now persist with visible history and per-item undo. Remaining work is
+one combined presentation across local and backend origins, batch review, and
+surfaced expiry.
 
-**3c. Two-way calendar write-back — last, and separately gated.** Approved
-changes to app-owned flexible items may be written back via a least-privilege
-write scope. Gated behind the unified queue, explicit per-calendar write
-consent, and a dedicated security review + threat-model update before
-enablement. (The former "relay" review reference is superseded; the relay
-design survives only as input to trusted-view sharing.)
+**3c. External calendar write-back - last, and separately gated.** ADR-0023
+delivers the ownership-safe local precursor: approval materializes a ZeitBoard
+block and an owner can export those blocks as ICS. Writing into an external
+provider remains off. It requires least-privilege scope, explicit per-calendar
+consent, conflict semantics, and a dedicated security review before enablement.
 
 Exit criteria: no code path applies a calendar change without a recorded
 approval; import is revocable and least-privilege; write-back is off by

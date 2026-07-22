@@ -112,6 +112,57 @@ type SleepSyncRecord struct {
 	PayloadHash string
 }
 
+// SleepPlanningFingerprint identifies the immutable sleep observations and
+// corrections used by local estimation without exposing their contents.
+func (s *Store) SleepPlanningFingerprint(ctx context.Context) (string, error) {
+	return sleepPlanningFingerprint(ctx, s.db)
+}
+
+func sleepPlanningFingerprint(ctx context.Context, query queryContext) (string, error) {
+	hash := sha256.New()
+	sets := []struct {
+		marker string
+		query  string
+	}{
+		{
+			marker: "observations",
+			query:  `SELECT observation_id, payload_json FROM local_sleep_observations ORDER BY start_at, observation_id`,
+		},
+		{
+			marker: "corrections",
+			query:  `SELECT correction_id, payload_json FROM local_sleep_corrections ORDER BY created_at, correction_id`,
+		},
+	}
+	for _, set := range sets {
+		hash.Write([]byte(set.marker))
+		hash.Write([]byte{0})
+		rows, err := query.QueryContext(ctx, set.query)
+		if err != nil {
+			return "", err
+		}
+		for rows.Next() {
+			var recordID string
+			var payload []byte
+			if err := rows.Scan(&recordID, &payload); err != nil {
+				_ = rows.Close()
+				return "", err
+			}
+			hash.Write([]byte(recordID))
+			hash.Write([]byte{0})
+			hash.Write(payload)
+			hash.Write([]byte{0})
+		}
+		if err := rows.Err(); err != nil {
+			_ = rows.Close()
+			return "", err
+		}
+		if err := rows.Close(); err != nil {
+			return "", err
+		}
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
 func (s *Store) AppendSleepObservation(ctx context.Context, record SleepObservationRecord) error {
 	if err := validateSleepObservation(record); err != nil {
 		return err

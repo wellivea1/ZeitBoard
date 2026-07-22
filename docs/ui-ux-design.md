@@ -1222,12 +1222,16 @@ explicitly asked.**
      predicted sleep.
   3. **Dose reminders** (opt-in, only if the user set a schedule — the app invents none):
      "Reminder you set: {label}." Phrased as the user's own reminder, never as medical
-     instruction.
+     instruction. Enabling a clock schedule's reminder is the explicit request
+     to deliver at those civil times even when a forecast predicts sleep; the
+     collision view flags that overlap, and ZeitBoard never silently moves or
+     suppresses the reminder.
   4. **Data attention** (low priority): "A source disconnected." Never urgent-styled.
   5. **Share activity** (optional): "Your family link was opened" / "expires tomorrow."
 - **Quiet by rhythm:** notifications respect the *predicted sleep window*, not civil night —
   the app suppresses non-urgent alerts during likely sleep and offers a "catch me when I
-  wake" digest.
+  wake" digest. Explicit fixed-time dose reminders are the exception above because changing
+  or suppressing a user-entered regimen would imply treatment discretion the app does not have.
 - **No streaks, no "you haven't logged today," no nagging, no re-engagement growth hacks.**
 - **Android:** uses notification channels mapped to the categories above so the OS gives the
   user native per-category control; respects Do Not Disturb; never full-screen/high-priority

@@ -2,7 +2,10 @@ module non24.app/core
 
 go 1.26.0
 
-require modernc.org/sqlite v1.52.0
+require (
+	github.com/teambition/rrule-go v1.8.2
+	modernc.org/sqlite v1.52.0
+)
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect

@@ -1,155 +1,201 @@
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { PageHeader, PlaceholderNotice } from "../components/AppShell";
-import { TimeProbe } from "../components/TimeProbe";
-import { civilProbeLabel, useTimeProbe } from "../components/timeProbeLogic";
+import { CalendarBoard } from "../components/CalendarBoard";
+import { CalendarImportPanel } from "../components/CalendarImportPanel";
+import { CalendarSourcesPanel } from "../components/CalendarSourcesPanel";
+import {
+  addCivilDays,
+  calendarDataChangedEvent,
+  downloadCalendarExport,
+  exportOwnedCalendar,
+  hasLocalCalendarService,
+  loadCalendar,
+  notifyCalendarDataChanged,
+  todayCivilDate,
+  type CalendarData,
+} from "../data/calendar";
 
-interface CalendarDayPreview {
-  civilDate: string;
-  dayLabel: string;
-  zoneId: string;
-  sleepStartHour: number;
-  usefulStartHour: number;
-  fixedEventHour?: number;
-}
-
-const calendarDays: CalendarDayPreview[] = [
-  {
-    civilDate: "2026-06-15",
-    dayLabel: "Mon 15",
-    zoneId: "America/New_York",
-    sleepStartHour: 0.96,
-    usefulStartHour: 8.16,
-    fixedEventHour: 18,
-  },
-  {
-    civilDate: "2026-06-16",
-    dayLabel: "Tue 16",
-    zoneId: "America/New_York",
-    sleepStartHour: 2.4,
-    usefulStartHour: 9.6,
-  },
-  {
-    civilDate: "2026-06-17",
-    dayLabel: "Wed 17",
-    zoneId: "America/New_York",
-    sleepStartHour: 3.84,
-    usefulStartHour: 11.04,
-  },
-  {
-    civilDate: "2026-06-18",
-    dayLabel: "Thu 18",
-    zoneId: "America/New_York",
-    sleepStartHour: 5.28,
-    usefulStartHour: 12.48,
-  },
-  {
-    civilDate: "2026-06-19",
-    dayLabel: "Fri 19",
-    zoneId: "America/New_York",
-    sleepStartHour: 6.72,
-    usefulStartHour: 13.92,
-  },
-];
-
-const SLEEP_DURATION_HOURS = 6;
-const USEFUL_DURATION_HOURS = 9.36;
-
-function hourPercent(hour: number) {
-  return `${(hour / 24) * 100}%`;
-}
-
-function withinSpan(hour: number, start: number, duration: number) {
-  return hour >= start && hour <= start + duration;
-}
-
-function CalendarDayTrack({ day }: { day: CalendarDayPreview }) {
-  const resolveProbe = useCallback(
-    (fraction: number) => {
-      const hour = fraction * 24;
-      const predicted =
-        withinSpan(hour, day.sleepStartHour, SLEEP_DURATION_HOURS) ||
-        withinSpan(hour, day.usefulStartHour, USEFUL_DURATION_HOURS);
-      return {
-        position: fraction,
-        label: civilProbeLabel(day.civilDate, fraction * 24 * 60, {
-          predicted,
-          approximate: predicted,
-        }),
-        zoneId: day.zoneId,
-      };
-    },
-    [day],
-  );
-  const probe = useTimeProbe(resolveProbe);
-
-  return (
-    <article>
-      <h2>
-        <time dateTime={day.civilDate}>{day.dayLabel}</time>
-      </h2>
-      <div
-        className="day-track has-time-probe"
-        onPointerMove={probe.onPointerMove}
-        onPointerLeave={probe.onPointerLeave}
-      >
-        <span
-          className="sleep-band"
-          style={{
-            left: hourPercent(day.sleepStartHour),
-            width: hourPercent(SLEEP_DURATION_HOURS),
-          }}
-        >
-          Predicted sleep
-        </span>
-        <span
-          className="wake-band"
-          style={{
-            left: hourPercent(day.usefulStartHour),
-            width: hourPercent(USEFUL_DURATION_HOURS),
-          }}
-        >
-          Useful window
-        </span>
-        {day.fixedEventHour !== undefined && (
-          <span className="fixed-event" style={{ left: hourPercent(day.fixedEventHour) }}>
-            Check-in
-          </span>
-        )}
-        <TimeProbe probeRef={probe.probeRef} labelRef={probe.labelRef} />
-      </div>
-    </article>
-  );
-}
+const calendarZone = "America/New_York";
+const visibleDays = 5;
 
 export function CalendarScreen() {
+  const localServicePresent = hasLocalCalendarService();
+  const [startDate, setStartDate] = useState(() => todayCivilDate(calendarZone));
+  const [data, setData] = useState<CalendarData | null>(null);
+  const [source, setSource] = useState<"local" | "fixture">(
+    localServicePresent ? "local" : "fixture",
+  );
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [announcement, setAnnouncement] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const [revision, setRevision] = useState(0);
+
+  const refresh = useCallback(() => setRevision((current) => current + 1), []);
+
+  useEffect(() => {
+    const onChanged = () => refresh();
+    window.addEventListener(calendarDataChangedEvent, onChanged);
+    return () => window.removeEventListener(calendarDataChangedEvent, onChanged);
+  }, [refresh]);
+
+  useEffect(() => {
+    let current = true;
+    void Promise.resolve().then(() => {
+      if (!current) return;
+      setLoading(true);
+      setError("");
+      void loadCalendar({
+        startCivilDate: startDate,
+        days: visibleDays,
+        zoneId: calendarZone,
+      }).then(
+        (result) => {
+          if (!current) return;
+          setData(result.data);
+          setSource(result.source);
+          setLoading(false);
+        },
+        (reason: unknown) => {
+          if (!current) return;
+          setLoading(false);
+          setError(reason instanceof Error ? reason.message : "Calendar data could not be loaded.");
+        },
+      );
+    });
+    return () => {
+      current = false;
+    };
+  }, [revision, startDate]);
+
+  const onDataChanged = () => {
+    setAnnouncement("Calendar source updated.");
+    notifyCalendarDataChanged();
+  };
+
+  const exportCalendar = () => {
+    if (source !== "local" || exporting) return;
+    setExporting(true);
+    setError("");
+    void exportOwnedCalendar().then(
+      (result) => {
+        setExporting(false);
+        const downloaded = downloadCalendarExport(result);
+        setAnnouncement(
+          `${result.eventCount} ZeitBoard ${result.eventCount === 1 ? "placement" : "placements"} exported${downloaded ? ` to ${result.fileName}` : "."}`,
+        );
+      },
+      (reason: unknown) => {
+        setExporting(false);
+        setError(reason instanceof Error ? reason.message : "Calendar export failed.");
+      },
+    );
+  };
+
   return (
     <>
       <PageHeader
         title="Calendar"
-        description="Compare fixed events with uncertain predicted sleep and waking windows."
+        description="Plan against real fixed events while keeping uncertain sleep and waking windows visually distinct."
         actions={
-          <div className="status-cluster">
-            <span className="sync-dot" data-mode="fixture" aria-hidden="true" />
-            <span>Sample preview</span>
+          <div className="calendar-page-actions">
+            <div className="calendar-date-controls" aria-label="Calendar date range">
+              <button
+                className="button ghost compact"
+                type="button"
+                onClick={() => setStartDate((current) => addCivilDays(current, -visibleDays))}
+              >
+                Previous
+              </button>
+              <input
+                type="date"
+                aria-label="Calendar start date"
+                value={startDate}
+                onChange={(event) => {
+                  if (event.currentTarget.value) setStartDate(event.currentTarget.value);
+                }}
+              />
+              <button
+                className="button ghost compact"
+                type="button"
+                onClick={() => setStartDate(todayCivilDate(calendarZone))}
+              >
+                Today
+              </button>
+              <button
+                className="button ghost compact"
+                type="button"
+                onClick={() => setStartDate((current) => addCivilDays(current, visibleDays))}
+              >
+                Next
+              </button>
+            </div>
+            <button
+              className="button secondary compact"
+              type="button"
+              disabled={source !== "local" || exporting}
+              onClick={exportCalendar}
+            >
+              {exporting ? "Exporting..." : "Export placements (.ics)"}
+            </button>
           </div>
         }
       />
-      <PlaceholderNotice>
-        This five-day board is a synthetic design preview. Calendar import arrives with the
-        interoperability phase; fixed events will remain immutable inputs.
-      </PlaceholderNotice>
-      <section className="panel calendar-board" aria-label="Five day planning preview">
-        <div className="calendar-hours" aria-hidden="true">
-          <span>12 AM</span>
-          <span>6 AM</span>
-          <span>12 PM</span>
-          <span>6 PM</span>
-          <span>12 AM</span>
-        </div>
-        <div className="calendar-days">
-          {calendarDays.map((day) => (
-            <CalendarDayTrack day={day} key={day.civilDate} />
+
+      {source === "fixture" && (
+        <PlaceholderNotice>
+          Sample mode is clearly isolated: it does not read files, contact CalDAV, or write
+          placements.
+        </PlaceholderNotice>
+      )}
+      {error && (
+        <p className="calendar-error" role="alert">
+          {error}
+        </p>
+      )}
+      <p className="sr-only" role="status" aria-live="polite">
+        {announcement}
+      </p>
+
+      <section className="calendar-workspace">
+        <aside className="calendar-control-rail" aria-label="Calendar sources and import controls">
+          <CalendarSourcesPanel
+            sources={data?.sources ?? []}
+            available={source === "local"}
+            onChanged={onDataChanged}
+          />
+          <CalendarImportPanel
+            available={source === "local"}
+            zoneId={data?.zoneId ?? calendarZone}
+            onChanged={onDataChanged}
+          />
+        </aside>
+
+        <div className="calendar-main-column">
+          {data && (
+            <div className="calendar-status-line">
+              <span className="sync-dot" data-mode={source} aria-hidden="true" />
+              <strong>{source === "local" ? "Local calendar" : "Sample preview"}</strong>
+              <span>{data.message}</span>
+              <small>{data.updatedLabel}</small>
+            </div>
+          )}
+          {data?.warnings.map((warning) => (
+            <p className="calendar-warning" key={warning}>
+              {warning}
+            </p>
           ))}
+          {loading && !data ? (
+            <div className="calendar-loading" role="status">
+              Loading calendar...
+            </div>
+          ) : data ? (
+            <CalendarBoard data={data} />
+          ) : (
+            <div className="calendar-loading" role="status">
+              Calendar unavailable.
+            </div>
+          )}
         </div>
       </section>
     </>

@@ -14,7 +14,13 @@ export interface UnplacedProposal {
   reasonCode?: string;
 }
 
-export type ProposalsSource = "backend" | "fixture";
+export type ProposalsSource = "local" | "fixture";
+export type ProposalDecisionState = "pending" | "approved" | "rejected";
+
+export interface ProposalRecord extends ChangeProposalFixture {
+  decision: ProposalDecisionState;
+  canUndo: boolean;
+}
 
 export interface ProposalsData {
   fixtureMode: boolean;
@@ -23,7 +29,7 @@ export interface ProposalsData {
     code: string;
     message: string;
   };
-  proposals: ChangeProposalFixture[];
+  proposals: ProposalRecord[];
   unplaced: UnplacedProposal[];
 }
 
@@ -37,7 +43,11 @@ export interface ProposalsResult {
 export const proposalsFixture: ProposalsData = {
   fixtureMode: true,
   status: "estimated",
-  proposals: proposalFixtures,
+  proposals: proposalFixtures.map((proposal) => ({
+    ...proposal,
+    decision: "pending",
+    canUndo: false,
+  })),
   unplaced: [
     {
       title: unplacedTaskFixture.title,
@@ -50,6 +60,12 @@ export const proposalsFixture: ProposalsData = {
 type UnknownRecord = Record<string, unknown>;
 
 const methodNames = ["GetProposals", "Proposals"] as const;
+
+export function hasLocalProposalService(
+  root: WailsRoot = globalThis as unknown as WailsRoot,
+): boolean {
+  return Boolean(findWailsMethod(root, methodNames));
+}
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null;
@@ -92,7 +108,7 @@ function refusal(value: unknown): ProposalsData["refusal"] | undefined {
   return code && message ? { code, message } : undefined;
 }
 
-function proposal(value: unknown): ChangeProposalFixture | undefined {
+function proposal(value: unknown): ProposalRecord | undefined {
   if (!isRecord(value)) return undefined;
   const id = str(value.id);
   const origin = str(value.origin) as ProposalOrigin | undefined;
@@ -105,6 +121,11 @@ function proposal(value: unknown): ChangeProposalFixture | undefined {
   const reasonLabels = strList(value.reasonLabels);
   const createdLabel = str(value.createdLabel);
   const expiresLabel = str(value.expiresLabel);
+  const decision =
+    value.decision === "approved" || value.decision === "rejected" || value.decision === "pending"
+      ? value.decision
+      : "pending";
+  const canUndo = value.canUndo === true;
   if (
     !id ||
     !origin ||
@@ -119,7 +140,9 @@ function proposal(value: unknown): ChangeProposalFixture | undefined {
     explanationCodes.length === 0 ||
     !reasonLabels ||
     !createdLabel ||
-    !expiresLabel
+    !expiresLabel ||
+    (decision === "pending" && canUndo) ||
+    (decision !== "pending" && !canUndo)
   ) {
     return undefined;
   }
@@ -137,6 +160,8 @@ function proposal(value: unknown): ChangeProposalFixture | undefined {
     reasonLabels,
     createdLabel,
     expiresLabel,
+    decision,
+    canUndo,
   };
 }
 
@@ -180,16 +205,55 @@ export async function loadProposals(
 ): Promise<ProposalsResult> {
   const method = findWailsMethod(root, methodNames);
   if (!method) return { data: proposalsFixture, source: "fixture" };
+  const result = await method();
+  const proposals = normalizeProposals(result);
+  if (!proposals) throw new Error("Proposal service returned an invalid response.");
+  return { data: proposals, source: proposals.fixtureMode ? "fixture" : "local" };
+}
 
-  try {
-    const result = await method();
-    const proposals = normalizeProposals(result);
-    if (proposals) {
-      return { data: proposals, source: proposals.fixtureMode ? "fixture" : "backend" };
-    }
-  } catch {
-    // Fixture mode keeps the Approvals gate usable before the Wails service is ready.
+export interface LocalProposalDecisionResult {
+  proposalId: string;
+  decision: "approved" | "rejected" | "undone";
+  eventId?: string;
+  message: string;
+}
+
+function normalizeDecisionResult(value: unknown): LocalProposalDecisionResult | undefined {
+  if (!isRecord(value)) return undefined;
+  const proposalId = str(value.proposalId);
+  const decision =
+    value.decision === "approved" || value.decision === "rejected" || value.decision === "undone"
+      ? value.decision
+      : undefined;
+  const message = str(value.message);
+  const eventId = str(value.eventId);
+  if (!proposalId || !decision || !message) return undefined;
+  return { proposalId, decision, message, ...(eventId ? { eventId } : {}) };
+}
+
+export async function decideLocalProposal(
+  proposalId: string,
+  decision: "approved" | "rejected",
+  root: WailsRoot = globalThis as unknown as WailsRoot,
+): Promise<LocalProposalDecisionResult> {
+  const method = findWailsMethod(root, ["DecideLocalProposal"]);
+  if (!method) throw new Error("Local proposal decisions require the ZeitBoard desktop service.");
+  const result = normalizeDecisionResult(await method({ proposalId, decision }));
+  if (!result || result.decision !== decision) {
+    throw new Error("Local proposal decision returned an invalid response.");
   }
+  return result;
+}
 
-  return { data: proposalsFixture, source: "fixture" };
+export async function undoLocalProposalDecision(
+  proposalId: string,
+  root: WailsRoot = globalThis as unknown as WailsRoot,
+): Promise<LocalProposalDecisionResult> {
+  const method = findWailsMethod(root, ["UndoLocalProposalDecision"]);
+  if (!method) throw new Error("Local proposal undo requires the ZeitBoard desktop service.");
+  const result = normalizeDecisionResult(await method({ proposalId }));
+  if (!result || result.decision !== "undone") {
+    throw new Error("Local proposal undo returned an invalid response.");
+  }
+  return result;
 }

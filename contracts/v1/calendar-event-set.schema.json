@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Calendar event set v1",
+  "description": "Private device-local calendar sources and materialized event occurrences.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "generated_at", "sources", "events"],
+  "properties": {
+    "schema_version": {
+      "$ref": "common.schema.json#/$defs/schemaVersion"
+    },
+    "generated_at": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/source"
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/event"
+      }
+    }
+  },
+  "$defs": {
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source_id",
+        "label",
+        "kind",
+        "read_only",
+        "coverage_start_at",
+        "coverage_end_at",
+        "last_imported_at"
+      ],
+      "properties": {
+        "source_id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["ics", "caldav", "zeitboard"]
+        },
+        "read_only": {
+          "type": "boolean"
+        },
+        "coverage_start_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "coverage_end_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "last_imported_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {"enum": ["ics", "caldav"]}
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "read_only": {"const": true}
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {"const": "zeitboard"}
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "read_only": {"const": false}
+            }
+          }
+        }
+      ]
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_id",
+        "source_id",
+        "source_record_id",
+        "title",
+        "start_at",
+        "end_at",
+        "zone_id",
+        "all_day",
+        "busy",
+        "ownership",
+        "created_at"
+      ],
+      "properties": {
+        "event_id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "source_id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "source_record_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "start_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "end_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "zone_id": {
+          "$ref": "common.schema.json#/$defs/zoneId"
+        },
+        "all_day": {
+          "type": "boolean"
+        },
+        "busy": {
+          "type": "boolean"
+        },
+        "ownership": {
+          "type": "string",
+          "enum": ["imported", "app_owned"]
+        },
+        "created_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "location": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "task_id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "task_revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "proposal_id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "ownership": {"const": "imported"}
+            },
+            "required": ["ownership"]
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                {"required": ["task_id"]},
+                {"required": ["task_revision"]},
+                {"required": ["proposal_id"]}
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "ownership": {"const": "app_owned"}
+            },
+            "required": ["ownership"]
+          },
+          "then": {
+            "required": ["task_id", "task_revision", "proposal_id"]
+          }
+        }
+      ]
+    }
+  }
+}

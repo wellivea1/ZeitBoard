@@ -21,7 +21,8 @@ export function ConfidenceDots({ value }: { value: ConfidenceLevel }) {
 }
 
 export function ProposalCard({ proposal }: { proposal: ChangeProposalFixture }) {
-  const { decide } = useApprovals();
+  const { decide, busyProposalId, ready } = useApprovals();
+  const busy = !ready || busyProposalId !== null;
   return (
     <article className="panel proposal-card" data-origin={proposal.origin}>
       <div className="proposal-header">
@@ -51,16 +52,18 @@ export function ProposalCard({ proposal }: { proposal: ChangeProposalFixture }) 
         <button
           className="button secondary"
           type="button"
+          disabled={busy}
           onClick={() => decide(proposal.id, "rejected")}
         >
-          Reject proposal
+          {busyProposalId === proposal.id ? "Recording..." : "Reject proposal"}
         </button>
         <button
           className="button primary"
           type="button"
+          disabled={busy}
           onClick={() => decide(proposal.id, "approved")}
         >
-          Accept proposal
+          {busyProposalId === proposal.id ? "Recording..." : "Accept proposal"}
         </button>
       </div>
     </article>

@@ -22,8 +22,9 @@ var (
 
 // File is a generated fixture: its file name and encoded JSON bytes.
 type File struct {
-	Name string
-	Data []byte
+	Version string
+	Name    string
+	Data    []byte
 }
 
 func ts(t time.Time) string { return t.UTC().Format(time.RFC3339) }
@@ -132,6 +133,108 @@ type taskItem struct {
 	MinimumConfidence         string `json:"minimum_confidence,omitempty"`
 	Revision                  int    `json:"revision,omitempty"`
 	UpdatedAt                 string `json:"updated_at,omitempty"`
+}
+
+type calendarEventSet struct {
+	SchemaVersion string           `json:"schema_version"`
+	GeneratedAt   string           `json:"generated_at"`
+	Sources       []calendarSource `json:"sources"`
+	Events        []calendarEvent  `json:"events"`
+}
+
+type calendarSource struct {
+	SourceID        string `json:"source_id"`
+	Label           string `json:"label"`
+	Kind            string `json:"kind"`
+	ReadOnly        bool   `json:"read_only"`
+	CoverageStartAt string `json:"coverage_start_at"`
+	CoverageEndAt   string `json:"coverage_end_at"`
+	LastImportedAt  string `json:"last_imported_at"`
+}
+
+type calendarEvent struct {
+	EventID        string `json:"event_id"`
+	SourceID       string `json:"source_id"`
+	SourceRecordID string `json:"source_record_id"`
+	Title          string `json:"title"`
+	StartAt        string `json:"start_at"`
+	EndAt          string `json:"end_at"`
+	ZoneID         string `json:"zone_id"`
+	AllDay         bool   `json:"all_day"`
+	Busy           bool   `json:"busy"`
+	Ownership      string `json:"ownership"`
+	CreatedAt      string `json:"created_at"`
+	Location       string `json:"location,omitempty"`
+	Notes          string `json:"notes,omitempty"`
+	TaskID         string `json:"task_id,omitempty"`
+	TaskRevision   int    `json:"task_revision,omitempty"`
+	ProposalID     string `json:"proposal_id,omitempty"`
+}
+
+type medicationSchedule struct {
+	Kind            string   `json:"kind"`
+	ZoneID          string   `json:"zone_id,omitempty"`
+	CivilTimes      []string `json:"civil_times,omitempty"`
+	DaysOn          int      `json:"days_on,omitempty"`
+	DaysOff         int      `json:"days_off,omitempty"`
+	CycleStartedOn  string   `json:"cycle_started_on,omitempty"`
+	ReminderEnabled bool     `json:"reminder_enabled,omitempty"`
+}
+
+type medicationItem struct {
+	MedicationID  string             `json:"medication_id"`
+	Label         string             `json:"label"`
+	Form          string             `json:"form,omitempty"`
+	StrengthLabel string             `json:"strength_label,omitempty"`
+	ClinicianRule string             `json:"clinician_rule,omitempty"`
+	Active        bool               `json:"active"`
+	Schedule      medicationSchedule `json:"schedule"`
+	CreatedAt     string             `json:"created_at"`
+	Revision      int                `json:"revision"`
+	UpdatedAt     string             `json:"updated_at"`
+}
+
+type medicationSet struct {
+	SchemaVersion string           `json:"schema_version"`
+	GeneratedAt   string           `json:"generated_at"`
+	Medications   []medicationItem `json:"medications"`
+}
+
+type medicationEventItem struct {
+	EventID      string     `json:"event_id"`
+	MedicationID string     `json:"medication_id"`
+	DoseAt       string     `json:"dose_at"`
+	ZoneID       string     `json:"zone_id"`
+	Status       string     `json:"status"`
+	Scheduled    bool       `json:"scheduled"`
+	Note         string     `json:"note,omitempty"`
+	Provenance   provenance `json:"provenance"`
+}
+
+type medicationEventChanges struct {
+	Note string `json:"note,omitempty"`
+}
+
+type medicationEventCorrection struct {
+	CorrectionID  string                 `json:"correction_id"`
+	TargetEventID string                 `json:"target_event_id"`
+	CreatedAt     string                 `json:"created_at"`
+	Reason        string                 `json:"reason"`
+	Changes       medicationEventChanges `json:"changes"`
+}
+
+type medicationEventSet struct {
+	SchemaVersion string                      `json:"schema_version"`
+	GeneratedAt   string                      `json:"generated_at"`
+	Events        []medicationEventItem       `json:"events"`
+	Corrections   []medicationEventCorrection `json:"corrections"`
+}
+
+type medicationDataExport struct {
+	SchemaVersion string             `json:"schema_version"`
+	GeneratedAt   string             `json:"generated_at"`
+	MedicationSet medicationSet      `json:"medication_set"`
+	EventSet      medicationEventSet `json:"event_set"`
 }
 
 type assistantActionTarget struct {
@@ -638,6 +741,91 @@ func Build() ([]File, error) {
 		},
 	}
 
+	medicationSetFixture := medicationSet{
+		SchemaVersion: "v1",
+		GeneratedAt:   ts(generatedAt),
+		Medications: []medicationItem{
+			{
+				MedicationID:  "med_synthetic_01",
+				Label:         "Synthetic medication record",
+				Form:          "tablet",
+				StrengthLabel: "user-entered strength",
+				Active:        true,
+				Schedule:      medicationSchedule{Kind: "as_needed"},
+				CreatedAt:     ts(generatedAt.Add(-14 * 24 * time.Hour)),
+				Revision:      1,
+				UpdatedAt:     ts(generatedAt.Add(-14 * 24 * time.Hour)),
+			},
+		},
+	}
+	medicationEventSetFixture := medicationEventSet{
+		SchemaVersion: "v1",
+		GeneratedAt:   ts(generatedAt),
+		Events: []medicationEventItem{
+			{
+				EventID:      "dose_synthetic_01",
+				MedicationID: "med_synthetic_01",
+				DoseAt:       ts(generatedAt.Add(-3 * time.Hour)),
+				ZoneID:       zoneID,
+				Status:       "taken",
+				Scheduled:    false,
+				Note:         "Synthetic local-only note",
+				Provenance: provenance{
+					AcquisitionMethod: "manual",
+					EvidenceStatus:    "user_reported",
+					RecordedAt:        ts(generatedAt.Add(-2 * time.Hour)),
+					SourceRecordID:    "synthetic-dose-row-01",
+				},
+			},
+		},
+		Corrections: []medicationEventCorrection{
+			{
+				CorrectionID:  "medcorr_synthetic_01",
+				TargetEventID: "dose_synthetic_01",
+				CreatedAt:     ts(generatedAt.Add(-time.Hour)),
+				Reason:        "user_edit",
+				Changes:       medicationEventChanges{Note: "Corrected synthetic local-only note"},
+			},
+		},
+	}
+	medicationDataExportFixture := medicationDataExport{
+		SchemaVersion: "v1",
+		GeneratedAt:   ts(generatedAt),
+		MedicationSet: medicationSetFixture,
+		EventSet:      medicationEventSetFixture,
+	}
+	medicationSetFixtureV2 := medicationSet{
+		SchemaVersion: "v2",
+		GeneratedAt:   ts(generatedAt),
+		Medications: []medicationItem{
+			{
+				MedicationID:  "med_synthetic_01",
+				Label:         "Synthetic medication record",
+				Form:          "tablet",
+				StrengthLabel: "user-entered strength",
+				ClinicianRule: "Synthetic clinician instruction entered verbatim by the user",
+				Active:        true,
+				Schedule: medicationSchedule{
+					Kind:            "fixed_clock",
+					ZoneID:          zoneID,
+					CivilTimes:      []string{"09:00", "21:00"},
+					ReminderEnabled: true,
+				},
+				CreatedAt: ts(generatedAt.Add(-14 * 24 * time.Hour)),
+				Revision:  2,
+				UpdatedAt: ts(generatedAt.Add(-time.Hour)),
+			},
+		},
+	}
+	medicationEventSetFixtureV2 := medicationEventSetFixture
+	medicationEventSetFixtureV2.SchemaVersion = "v2"
+	medicationDataExportFixtureV2 := medicationDataExport{
+		SchemaVersion: "v2",
+		GeneratedAt:   ts(generatedAt),
+		MedicationSet: medicationSetFixtureV2,
+		EventSet:      medicationEventSetFixtureV2,
+	}
+
 	assistantActionFixture := assistantAction{
 		SchemaVersion:     "v1",
 		RecommendedAction: "propose_place_task",
@@ -792,6 +980,65 @@ func Build() ([]File, error) {
 		},
 		Unplaced: []unplaced{
 			{TaskID: "task_flexible_02", Reason: "no_available_interval"},
+		},
+	}
+
+	coverageStart := generatedAt.Add(-366 * 24 * time.Hour)
+	coverageEnd := generatedAt.Add(732 * 24 * time.Hour)
+	calendarEventSetFixture := calendarEventSet{
+		SchemaVersion: "v1",
+		GeneratedAt:   ts(generatedAt),
+		Sources: []calendarSource{
+			{
+				SourceID:        "calendar_source_ics_01",
+				Label:           "Synthetic commitments",
+				Kind:            "ics",
+				ReadOnly:        true,
+				CoverageStartAt: ts(coverageStart),
+				CoverageEndAt:   ts(coverageEnd),
+				LastImportedAt:  ts(generatedAt),
+			},
+			{
+				SourceID:        "calendar_source_zeitboard",
+				Label:           "ZeitBoard placements",
+				Kind:            "zeitboard",
+				ReadOnly:        false,
+				CoverageStartAt: ts(coverageStart),
+				CoverageEndAt:   ts(coverageEnd),
+				LastImportedAt:  ts(generatedAt),
+			},
+		},
+		Events: []calendarEvent{
+			{
+				EventID:        "calendar_event_imported_01",
+				SourceID:       "calendar_source_ics_01",
+				SourceRecordID: "fixture-event-01@zeitboard.local/20260315T190000Z",
+				Title:          "Synthetic fixed commitment",
+				StartAt:        ts(forecastWake1.Add(2 * time.Hour)),
+				EndAt:          ts(forecastWake1.Add(3 * time.Hour)),
+				ZoneID:         zoneID,
+				AllDay:         false,
+				Busy:           true,
+				Ownership:      "imported",
+				CreatedAt:      ts(generatedAt),
+				Location:       "Synthetic location",
+			},
+			{
+				EventID:        "calendar_event_owned_01",
+				SourceID:       "calendar_source_zeitboard",
+				SourceRecordID: "proposal_task_01",
+				Title:          "Synthetic paperwork block",
+				StartAt:        ts(proposalStart),
+				EndAt:          ts(proposalStart.Add(minutes(30))),
+				ZoneID:         zoneID,
+				AllDay:         false,
+				Busy:           true,
+				Ownership:      "app_owned",
+				CreatedAt:      ts(generatedAt),
+				TaskID:         "task_flexible_01",
+				TaskRevision:   1,
+				ProposalID:     "proposal_task_01",
+			},
 		},
 	}
 
@@ -1005,6 +1252,10 @@ func Build() ([]File, error) {
 		{"sync-batch.json", syncBatchFixture},
 		{"sync-erase.json", syncEraseFixture},
 		{"task-set.json", taskSetFixture},
+		{"calendar-event-set.json", calendarEventSetFixture},
+		{"medication-set.json", medicationSetFixture},
+		{"medication-event-set.json", medicationEventSetFixture},
+		{"medication-data-export.json", medicationDataExportFixture},
 		{"assistant-action.json", assistantActionFixture},
 		{"direct-proposal-request.json", directProposalRequestFixture},
 		{"phase-estimate.json", estimateFixture},
@@ -1027,7 +1278,22 @@ func Build() ([]File, error) {
 		if err != nil {
 			return nil, fmt.Errorf("encode %s: %w", item.name, err)
 		}
-		files = append(files, File{Name: item.name, Data: data})
+		files = append(files, File{Version: "v1", Name: item.name, Data: data})
+	}
+	v2Ordered := []struct {
+		name  string
+		value any
+	}{
+		{"medication-set.json", medicationSetFixtureV2},
+		{"medication-event-set.json", medicationEventSetFixtureV2},
+		{"medication-data-export.json", medicationDataExportFixtureV2},
+	}
+	for _, item := range v2Ordered {
+		data, err := encode(item.value)
+		if err != nil {
+			return nil, fmt.Errorf("encode v2/%s: %w", item.name, err)
+		}
+		files = append(files, File{Version: "v2", Name: item.name, Data: data})
 	}
 
 	if err := assertSafety(observationsFixture, trustedViewDefaultDeny, trustedViewFixture); err != nil {

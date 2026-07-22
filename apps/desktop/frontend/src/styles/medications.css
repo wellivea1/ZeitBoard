@@ -1,0 +1,702 @@
+.medication-page-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.medication-page-actions .button.compact,
+.medication-workspace .button.compact {
+  min-height: 34px;
+  padding-inline: var(--space-3);
+  border-radius: var(--radius-control);
+}
+
+.medication-workspace .text-button,
+.medication-error .text-button {
+  margin: 0;
+  padding: 0;
+  color: var(--button-secondary-text);
+  border: 0;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  font-size: var(--type-label);
+  font-weight: 750;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.medication-workspace .text-button:hover:not(:disabled),
+.medication-error .text-button:hover:not(:disabled) {
+  border-bottom-color: currentColor;
+}
+
+.medication-workspace .text-button.danger,
+.medication-error .text-button.danger {
+  color: var(--danger-text);
+}
+
+.medication-workspace .text-button:disabled,
+.medication-error .text-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.medication-boundary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: var(--space-5);
+  border-block: 1px solid var(--line);
+  background: var(--panel-alt);
+}
+
+.medication-boundary > div {
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  display: grid;
+  gap: var(--space-1);
+}
+
+.medication-boundary > div + div {
+  border-left: 1px solid var(--line);
+}
+
+.medication-boundary strong {
+  color: var(--ink);
+  font-size: var(--type-body);
+}
+
+.medication-boundary span {
+  color: var(--muted);
+  font-size: var(--type-label);
+  line-height: 1.45;
+}
+
+.medication-error {
+  margin-bottom: var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  color: var(--danger-text);
+  border-left: 3px solid var(--danger-border);
+  background: var(--danger-bg);
+  font-size: var(--type-body);
+}
+
+.medication-workspace {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  border-block: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.medication-main-column {
+  min-width: 0;
+}
+
+.medication-definition-rail {
+  min-width: 0;
+  border-left: 1px solid var(--line);
+  background: var(--panel-alt);
+}
+
+.medication-log-section,
+.medication-history-section,
+.medication-rail-section {
+  min-width: 0;
+}
+
+.medication-log-section,
+.medication-history-section {
+  padding: var(--space-5);
+}
+
+.medication-log-section {
+  border-bottom: 1px solid var(--line);
+}
+
+.medication-section-heading,
+.medication-rail-heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.medication-section-heading h2,
+.medication-rail-section h2,
+.medication-correction-editor h3,
+.medication-event-erasure h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--type-data);
+  line-height: 1.2;
+}
+
+.medication-section-heading > span,
+.medication-rail-heading > span {
+  color: var(--muted);
+  font-size: var(--type-label);
+  font-variant-numeric: tabular-nums;
+}
+
+.medication-log-form {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.2fr) minmax(175px, 1fr) minmax(160px, 0.9fr) auto;
+  gap: var(--space-3);
+  align-items: end;
+}
+
+.medication-log-form label,
+.medication-definition-form label,
+.medication-correction-editor label,
+.medication-erasure label,
+.medication-event-erasure label {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-1);
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.medication-log-form input,
+.medication-log-form select,
+.medication-definition-form input,
+.medication-correction-editor input,
+.medication-correction-editor select,
+.medication-erasure input,
+.medication-event-erasure input {
+  width: 100%;
+  min-width: 0;
+}
+
+.medication-status-field {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(70px, 1fr));
+  border: 0;
+}
+
+.medication-status-field legend {
+  margin-bottom: var(--space-1);
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.medication-status-field label {
+  position: relative;
+  display: block;
+}
+
+.medication-status-field input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.medication-status-field span {
+  min-height: 34px;
+  padding: 7px var(--space-3);
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  background: var(--paper);
+  font-size: var(--type-body);
+  cursor: pointer;
+}
+
+.medication-status-field label + label span {
+  border-left: 0;
+}
+
+.medication-status-field input:checked + span {
+  color: var(--ink);
+  border-color: var(--state-awake);
+  box-shadow: inset 0 -2px 0 var(--state-awake);
+}
+
+.medication-status-field input:focus-visible + span {
+  outline: 2px solid var(--state-awake);
+  outline-offset: 2px;
+}
+
+.medication-log-note {
+  grid-column: 1 / span 2;
+}
+
+.medication-scheduled-check {
+  grid-column: 3 / span 1;
+  align-self: center;
+}
+
+.medication-log-submit {
+  grid-column: 4;
+}
+
+.medication-check-row {
+  display: flex !important;
+  align-items: center;
+  gap: var(--space-2) !important;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.medication-check-row input {
+  width: 16px !important;
+  min-width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.medication-log-unavailable,
+.medication-rail-empty,
+.medication-data-status span,
+.medication-history-empty p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-body);
+  line-height: 1.5;
+}
+
+.medication-data-status {
+  min-height: 48px;
+  padding: var(--space-2) var(--space-5);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-alt);
+}
+
+.medication-data-status > div {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.medication-data-status strong {
+  color: var(--ink);
+  font-size: var(--type-body);
+}
+
+.medication-data-status small {
+  flex: 0 0 auto;
+  color: var(--subtle);
+  font-size: var(--type-label);
+}
+
+.medication-data-status[data-estimate="refused"],
+.medication-data-status[data-estimate="unavailable"] {
+  box-shadow: inset 3px 0 0 var(--state-uncertain);
+}
+
+.medication-loading,
+.medication-history-empty {
+  min-height: 180px;
+  padding: var(--space-8) var(--space-4);
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: var(--space-2);
+  border-block: 1px solid var(--divider);
+  color: var(--muted);
+}
+
+.medication-ledger {
+  border-top: 1px solid var(--line);
+}
+
+.medication-ledger-header,
+.medication-ledger article {
+  display: grid;
+  grid-template-columns: 88px minmax(180px, 1fr) minmax(230px, 1.35fr) 104px;
+  gap: var(--space-3);
+}
+
+.medication-ledger-header {
+  min-height: 30px;
+  padding: 7px var(--space-3);
+  align-items: center;
+  color: var(--subtle);
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-alt);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.medication-ledger article {
+  position: relative;
+  min-height: 104px;
+  padding: var(--space-3);
+  align-items: start;
+  border-bottom: 1px solid var(--divider);
+  box-shadow: inset 3px 0 0 var(--state-asleep);
+}
+
+.medication-ledger article[data-relation="observed"] {
+  box-shadow: inset 3px 0 0 var(--ink);
+}
+
+.medication-ledger article[data-relation="unavailable"] {
+  box-shadow: inset 3px 0 0 var(--line);
+}
+
+.medication-ledger article[data-excluded="true"] {
+  opacity: 0.64;
+  background: var(--panel-alt);
+}
+
+.medication-ledger-status,
+.medication-ledger-identity,
+.medication-ledger-actions {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: var(--space-1);
+}
+
+.medication-ledger-status strong {
+  color: var(--ink);
+  font-size: var(--type-body-strong);
+  text-transform: capitalize;
+}
+
+.medication-ledger-status span,
+.medication-ledger-status small,
+.medication-ledger-actions small {
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.medication-ledger-identity > strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--type-body-strong);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.medication-ledger-identity time {
+  color: var(--ink);
+  font-size: var(--type-body);
+  font-variant-numeric: tabular-nums;
+}
+
+.medication-ledger-identity p {
+  margin: var(--space-1) 0 0;
+  color: var(--muted);
+  font-size: var(--type-body);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.medication-ledger-identity small {
+  color: var(--subtle);
+  font-size: var(--type-label);
+}
+
+.medication-rhythm-facts {
+  min-width: 0;
+  margin: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.medication-rhythm-facts > div {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 66px minmax(0, 1fr);
+  gap: var(--space-2);
+}
+
+.medication-rhythm-facts dt {
+  color: var(--subtle);
+  font-size: var(--type-label);
+}
+
+.medication-rhythm-facts dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--type-body);
+  line-height: 1.35;
+}
+
+.medication-ledger-actions {
+  justify-items: start;
+}
+
+.medication-ledger-actions .text-button {
+  padding: 2px 0;
+}
+
+.medication-correction-editor,
+.medication-event-erasure {
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  display: grid;
+  grid-template-columns: minmax(140px, 0.8fr) repeat(3, minmax(130px, 1fr));
+  gap: var(--space-3);
+  align-items: end;
+  border-block: 1px solid var(--line);
+  background: var(--panel-alt);
+}
+
+.medication-correction-editor header,
+.medication-event-erasure > div:first-child {
+  align-self: center;
+}
+
+.medication-correction-note {
+  grid-column: 1 / span 2;
+}
+
+.medication-correction-editor .medication-check-row {
+  align-self: center;
+}
+
+.medication-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.medication-correction-editor .medication-editor-actions {
+  grid-column: 4;
+}
+
+.medication-event-erasure {
+  grid-template-columns: minmax(220px, 1fr) minmax(180px, 0.7fr) auto;
+}
+
+.medication-event-erasure p,
+.medication-erasure p {
+  margin: var(--space-1) 0 0;
+  color: var(--muted);
+  font-size: var(--type-body);
+  line-height: 1.45;
+}
+
+.medication-rail-section {
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.medication-rail-section > header:not(.medication-rail-heading) {
+  margin-bottom: var(--space-3);
+}
+
+.medication-definition-form {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.medication-field-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.medication-definition-form > small {
+  color: var(--subtle);
+  font-size: var(--type-label);
+  line-height: 1.4;
+}
+
+.medication-definition-list {
+  border-top: 1px solid var(--line);
+}
+
+.medication-definition-list article {
+  padding: var(--space-3) 0;
+  display: grid;
+  gap: var(--space-1);
+  border-bottom: 1px solid var(--divider);
+}
+
+.medication-definition-title {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.medication-definition-title strong {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--type-body-strong);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.medication-definition-title span {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.medication-definition-list article[data-active="true"] .medication-definition-title span {
+  color: var(--state-awake);
+}
+
+.medication-definition-list p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-body);
+}
+
+.medication-definition-list small {
+  color: var(--subtle);
+  font-size: var(--type-label);
+}
+
+.medication-row-actions {
+  margin-top: var(--space-1);
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.medication-row-actions .text-button {
+  padding: 2px 0;
+}
+
+.medication-rail-editor,
+.medication-erasure {
+  background: var(--paper);
+}
+
+.medication-erasure {
+  display: grid;
+  gap: var(--space-3);
+  box-shadow: inset 3px 0 0 var(--danger-border);
+}
+
+@media (max-width: 1120px) {
+  .medication-workspace {
+    grid-template-columns: minmax(0, 1fr) 250px;
+  }
+
+  .medication-log-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .medication-log-note,
+  .medication-scheduled-check,
+  .medication-log-submit {
+    grid-column: auto;
+  }
+
+  .medication-ledger-header,
+  .medication-ledger article {
+    grid-template-columns: 76px minmax(150px, 1fr) minmax(190px, 1.2fr) 82px;
+  }
+}
+
+@media (max-width: 900px) {
+  .medication-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .medication-definition-rail {
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .medication-definition-rail {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .medication-rail-section:nth-child(odd) {
+    border-right: 1px solid var(--line);
+  }
+
+  .medication-correction-editor {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .medication-correction-editor .medication-editor-actions {
+    grid-column: 2;
+  }
+}
+
+@media (max-width: 700px) {
+  .medication-page-actions,
+  .medication-data-status {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .medication-boundary,
+  .medication-definition-rail {
+    grid-template-columns: 1fr;
+  }
+
+  .medication-boundary > div + div,
+  .medication-rail-section:nth-child(odd) {
+    border-top: 1px solid var(--line);
+    border-left: 0;
+    border-right: 0;
+  }
+
+  .medication-log-section,
+  .medication-history-section,
+  .medication-rail-section {
+    padding: var(--space-3);
+  }
+
+  .medication-log-form,
+  .medication-correction-editor,
+  .medication-event-erasure {
+    grid-template-columns: 1fr;
+  }
+
+  .medication-ledger-header {
+    display: none;
+  }
+
+  .medication-ledger article {
+    min-height: 0;
+    grid-template-columns: 78px minmax(0, 1fr);
+  }
+
+  .medication-rhythm-facts,
+  .medication-ledger-actions {
+    grid-column: 1 / -1;
+  }
+
+  .medication-rhythm-facts {
+    padding-top: var(--space-2);
+    border-top: 1px solid var(--divider);
+  }
+
+  .medication-ledger-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .medication-correction-note,
+  .medication-correction-editor .medication-editor-actions {
+    grid-column: 1;
+  }
+
+  .medication-field-pair {
+    grid-template-columns: 1fr;
+  }
+}

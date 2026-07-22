@@ -22,5 +22,5 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	fmt.Println("Validated all v1 fixtures and sample configuration.")
+	fmt.Println("Validated all versioned fixtures and sample configuration.")
 }

@@ -22,6 +22,7 @@ take precedence when terminology or field shapes differ.
 ```mermaid
 flowchart LR
   Sources["User-controlled sources"] --> Interfaces["Platform interfaces"]
+  CalendarSources["Selected ICS / read-only CalDAV"] --> Desktop
   Interfaces --> Core["Go core"]
   Core --> SQLite["Local SQLite"]
   Core --> Projection["Allowlisted projection"]
@@ -57,6 +58,12 @@ can use them. Backend sync is opt-in and off by default; with sync off the
 desktop is purely local. Screen, component, styling, and lint boundaries are
 defined in [`frontend-architecture.md`](frontend-architecture.md).
 
+Calendar adapters are deliberately device-side (ADR-0023). Imported text is
+stored and rendered only in the local trust zone. Core scheduling receives a
+text-free fixed-event projection. The local SQLite ownership boundary keeps
+imported snapshots immutable and app-owned approved placements separate; only
+the latter are eligible for ICS export.
+
 ### Self-hosted backend and agent connector
 
 `apps/server` ships two binaries the operator runs: `zeitboardd` (device
@@ -90,7 +97,10 @@ arbitrary private-domain JSON.
    estimate with provenance, algorithm version, confidence, and uncertainty or
    returns a typed refusal.
 5. Scheduling treats fixed events as immutable inputs and emits proposals with
-   explanation codes.
+   explanation codes. A local approval transaction revalidates the task,
+   sleep-data fingerprint, and calendar fingerprint before creating an
+   app-owned placement; rejection creates no event and undo cannot alter an
+   imported event.
 6. Sharing projects private state through an explicit permission allowlist.
    Revoked or expired profiles produce no view.
 

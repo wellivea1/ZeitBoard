@@ -10,6 +10,9 @@ import "./styles/overview.css";
 import "./styles/rhythm.css";
 import "./styles/settings.css";
 import "./styles/data-sources.css";
+import "./styles/calendar.css";
+import "./styles/medications.css";
+import "./styles/medication-schedules.css";
 
 loadAndApplyTheme();
 loadAndApplyReducedStimulation();

@@ -7,6 +7,42 @@ import (
 	_ "time/tzdata"
 )
 
+type CivilTimeResolution struct {
+	Time      time.Time
+	Ambiguous bool
+}
+
+// ResolveCivilTime rejects wall times skipped by a time-zone transition and
+// chooses the earlier instant when a fall-back transition repeats a wall time.
+func ResolveCivilTime(location *time.Location, year int, month time.Month, day, hour, minute, second int) (CivilTimeResolution, error) {
+	if location == nil {
+		return CivilTimeResolution{}, errors.New("time zone is required")
+	}
+	candidate := time.Date(year, month, day, hour, minute, second, 0, location)
+	if !sameCivilTime(candidate, year, month, day, hour, minute, second) {
+		return CivilTimeResolution{}, fmt.Errorf("nonexistent civil time %04d-%02d-%02d %02d:%02d:%02d in %s", year, month, day, hour, minute, second, location)
+	}
+
+	first := candidate
+	ambiguous := false
+	for _, delta := range []time.Duration{-3 * time.Hour, -2 * time.Hour, -time.Hour, -30 * time.Minute, 30 * time.Minute, time.Hour, 2 * time.Hour, 3 * time.Hour} {
+		other := candidate.Add(delta)
+		if sameCivilTime(other.In(location), year, month, day, hour, minute, second) {
+			ambiguous = ambiguous || !other.Equal(candidate)
+			if other.Before(first) {
+				first = other
+			}
+		}
+	}
+	return CivilTimeResolution{Time: first, Ambiguous: ambiguous}, nil
+}
+
+func sameCivilTime(value time.Time, year int, month time.Month, day, hour, minute, second int) bool {
+	y, m, d := value.Date()
+	h, min, sec := value.Clock()
+	return y == year && m == month && d == day && h == hour && min == minute && sec == second
+}
+
 func NewZonedInstant(value time.Time, zoneID string) (ZonedInstant, error) {
 	if value.IsZero() {
 		return ZonedInstant{}, errors.New("instant must not be zero")
