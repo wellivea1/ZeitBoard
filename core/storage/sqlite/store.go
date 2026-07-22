@@ -198,6 +198,12 @@ func (s *Store) Migrate(ctx context.Context) error {
 			task_id TEXT NOT NULL,
 			task_revision INTEGER NOT NULL,
 			estimate_id TEXT NOT NULL,
+			proposal_title TEXT NOT NULL,
+			proposal_start_at TEXT NOT NULL,
+			proposal_end_at TEXT NOT NULL,
+			zone_id TEXT NOT NULL,
+			confidence TEXT NOT NULL CHECK(confidence IN ('low', 'medium', 'high')),
+			explanation_codes_json BLOB NOT NULL,
 			decision TEXT NOT NULL CHECK(decision IN ('approved', 'rejected', 'undone')),
 			decided_at TEXT NOT NULL,
 			supersedes_decision_id TEXT NOT NULL DEFAULT '',
@@ -206,6 +212,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 			snapshot_end_at TEXT NOT NULL,
 			event_snapshot_hash TEXT NOT NULL,
 			CHECK(snapshot_end_at > snapshot_start_at),
+			CHECK(proposal_end_at > proposal_start_at),
 			CHECK(
 				(decision = 'approved' AND event_id <> '' AND supersedes_decision_id = '') OR
 				(decision = 'rejected' AND event_id = '' AND supersedes_decision_id = '') OR

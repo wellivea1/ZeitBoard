@@ -30,13 +30,15 @@ const (
 )
 
 type App struct {
-	ctx       context.Context
-	collector *ingest.Manager
-	sink      *ingest.MemorySink
-	tray      tray.Controller
-	store     *storage.Store
-	storeErr  error
-	configDir string
+	ctx                context.Context
+	collector          *ingest.Manager
+	sink               *ingest.MemorySink
+	tray               tray.Controller
+	store              *storage.Store
+	storeErr           error
+	configDir          string
+	calendarHTTPClient calendarHTTPDoer
+	nowFn              func() time.Time
 }
 
 type RefusalDTO struct {
@@ -81,6 +83,8 @@ type ProposalDTO struct {
 	ReasonLabels     []string `json:"reasonLabels"`
 	CreatedLabel     string   `json:"createdLabel"`
 	ExpiresLabel     string   `json:"expiresLabel"`
+	Decision         string   `json:"decision"`
+	CanUndo          bool     `json:"canUndo"`
 }
 
 type UnplacedDTO struct {
@@ -185,12 +189,21 @@ func NewApp() *App {
 func newAppWithStore(store *storage.Store, storeErr error) *App {
 	sink := &ingest.MemorySink{}
 	return &App{
-		sink:      sink,
-		collector: ingest.NewManager(sink, activity.SafeCollector{ZoneID: defaultZoneID}),
-		tray:      tray.New(),
-		store:     store,
-		storeErr:  storeErr,
+		sink:               sink,
+		collector:          ingest.NewManager(sink, activity.SafeCollector{ZoneID: defaultZoneID}),
+		tray:               tray.New(),
+		store:              store,
+		storeErr:           storeErr,
+		calendarHTTPClient: newCalendarHTTPClient(),
+		nowFn:              time.Now,
 	}
+}
+
+func (a *App) currentTime() time.Time {
+	if a.nowFn != nil {
+		return a.nowFn()
+	}
+	return time.Now()
 }
 
 func openDesktopStore() (*storage.Store, error) {
@@ -474,8 +487,19 @@ func (a *App) GetOverview() (OverviewDTO, error) {
 			At:         lastWake,
 			Confidence: state.Estimate.Confidence,
 		}
+		store, storeErr := a.requireStore()
+		if storeErr != nil {
+			return OverviewDTO{}, storeErr
+		}
+		fixedEvents, _, eventsErr := store.BusyDomainEvents(
+			context.Background(), currentAvailability.Interval.Start.UTC,
+			currentAvailability.Interval.End.UTC, state.Estimate.AsOf.ZoneID,
+		)
+		if eventsErr != nil {
+			return OverviewDTO{}, eventsErr
+		}
 		proposal, proposalErr := (scheduling.Scheduler{}).Propose(scheduling.Request{
-			Task: task, Availability: []domain.AvailabilityWindow{currentAvailability}, WakeAnchor: &wakeAnchor, Now: now,
+			Task: task, Availability: []domain.AvailabilityWindow{currentAvailability}, Events: fixedEvents, WakeAnchor: &wakeAnchor, Now: now,
 		})
 		if proposalErr == nil {
 			usefulWindow = formatRange(proposal.Window)
@@ -712,75 +736,6 @@ func taskDTO(record storage.TaskRecord) TaskDTO {
 		dto.AfterWakeLabel = fmt.Sprintf("At least %d min after waking", *record.PreferredAfterWakeMinutes)
 	}
 	return dto
-}
-
-func (a *App) GetProposals() (ProposalsDTO, error) {
-	now := time.Now().UTC().Truncate(time.Minute)
-	ctx := context.Background()
-	state, err := a.localEstimate(ctx, now)
-	if err != nil {
-		return ProposalsDTO{}, err
-	}
-	store, err := a.requireStore()
-	if err != nil {
-		return ProposalsDTO{}, err
-	}
-	if state.Status != "estimated" {
-		tasks, _, terr := store.OpenDomainTasks(ctx, defaultZoneID)
-		if terr != nil {
-			return ProposalsDTO{}, terr
-		}
-		return ProposalsDTO{
-			Status:      state.Status,
-			Refusal:     refusalDTO(state.Refusal, state.Message),
-			FixtureMode: false,
-			Proposals:   []ProposalDTO{},
-			Unplaced:    unplacedForUnavailableEstimate(tasks),
-		}, nil
-	}
-	zoneID := state.Estimate.AsOf.ZoneID
-	tasks, _, err := store.OpenDomainTasks(ctx, zoneID)
-	if err != nil {
-		return ProposalsDTO{}, err
-	}
-	availability := localPlanningAvailability(state, now)
-	latest, _ := latestPrincipalSession(state.Sessions)
-	wakeAnchor := domain.WakeAnchor{
-		ID:         "latest-wake",
-		At:         latest.Intervals[0].Interval.End,
-		Confidence: state.Estimate.Confidence,
-	}
-	result := ProposalsDTO{Status: "estimated", FixtureMode: false, Proposals: []ProposalDTO{}, Unplaced: []UnplacedDTO{}}
-	scheduler := scheduling.Scheduler{}
-	for _, task := range tasks {
-		proposal, perr := scheduler.Propose(scheduling.Request{
-			Task: task, Availability: availability, WakeAnchor: &wakeAnchor, Now: now,
-		})
-		if perr != nil {
-			reason := scheduling.ClassifyUnplaced(perr)
-			result.Unplaced = append(result.Unplaced, UnplacedDTO{
-				Title:      task.Title,
-				ReasonCode: string(reason),
-				Reason:     unplacedReasonLabel(reason),
-				NextAction: "Keep manual until the next estimate refresh.",
-			})
-			continue
-		}
-		result.Proposals = append(result.Proposals, ProposalDTO{
-			ID:               "proposal-" + string(task.ID),
-			Origin:           "scheduler",
-			Kind:             "Place",
-			Title:            task.Title,
-			To:               formatRange(proposal.Window),
-			RhythmContext:    rhythmContext(proposal, availability),
-			Confidence:       confidenceTitle(proposal.Confidence.Level),
-			ExplanationCodes: proposal.ExplanationCodes,
-			ReasonLabels:     reasonLabels(proposal.ExplanationCodes),
-			CreatedLabel:     "Proposed by Scheduler from local sleep entries",
-			ExpiresLabel:     "valid for the current estimate",
-		})
-	}
-	return result, nil
 }
 
 func (a *App) requireStore() (*storage.Store, error) {

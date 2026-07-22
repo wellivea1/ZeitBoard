@@ -45,6 +45,12 @@ type ProposalDecisionInput struct {
 	TaskID            string
 	TaskRevision      int
 	EstimateID        string
+	ProposalTitle     string
+	ProposalStartAt   time.Time
+	ProposalEndAt     time.Time
+	ZoneID            string
+	Confidence        string
+	ExplanationCodes  []string
 	Decision          string
 	DecidedAt         time.Time
 	SnapshotStartAt   time.Time
@@ -58,6 +64,12 @@ type ProposalDecisionRecord struct {
 	TaskID            string    `json:"task_id"`
 	TaskRevision      int       `json:"task_revision"`
 	EstimateID        string    `json:"estimate_id"`
+	ProposalTitle     string    `json:"proposal_title"`
+	ProposalStartAt   time.Time `json:"proposal_start_at"`
+	ProposalEndAt     time.Time `json:"proposal_end_at"`
+	ZoneID            string    `json:"zone_id"`
+	Confidence        string    `json:"confidence"`
+	ExplanationCodes  []string  `json:"explanation_codes"`
 	Decision          string    `json:"decision"`
 	DecidedAt         time.Time `json:"decided_at"`
 	SupersedesID      string    `json:"supersedes_decision_id,omitempty"`
@@ -203,6 +215,28 @@ func (s *Store) CalendarEvents(ctx context.Context, start, end time.Time) ([]cal
 	return events, rows.Err()
 }
 
+func (s *Store) OwnedCalendarEvents(ctx context.Context) ([]calendarcore.Event, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT
+		event_id, source_id, source_record_id, title, start_at, end_at, zone_id,
+		all_day, busy, ownership, created_at, location, notes, task_id, task_revision, proposal_id
+		FROM local_calendar_events
+		WHERE ownership = 'app_owned'
+		ORDER BY start_at, end_at, event_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var events []calendarcore.Event
+	for rows.Next() {
+		event, err := scanCalendarEvent(rows)
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, event)
+	}
+	return events, rows.Err()
+}
+
 func (s *Store) BusyDomainEvents(ctx context.Context, start, end time.Time, zoneID string) ([]domain.CalendarEvent, string, error) {
 	if start.IsZero() || end.IsZero() || !start.Before(end) {
 		return nil, "", errors.New("calendar query requires a non-empty interval")
@@ -241,6 +275,9 @@ func (s *Store) DecideProposal(ctx context.Context, input ProposalDecisionInput,
 	if task.Status != TaskStatusOpen || effectiveRevision(task) != input.TaskRevision {
 		return ProposalDecisionRecord{}, ErrStaleProposal
 	}
+	if input.ProposalTitle != task.Title {
+		return ProposalDecisionRecord{}, ErrStaleProposal
+	}
 	_, fingerprint, err := busyDomainEvents(ctx, tx, input.SnapshotStartAt, input.SnapshotEndAt, "UTC")
 	if err != nil {
 		return ProposalDecisionRecord{}, err
@@ -255,6 +292,12 @@ func (s *Store) DecideProposal(ctx context.Context, input ProposalDecisionInput,
 		TaskID:            input.TaskID,
 		TaskRevision:      input.TaskRevision,
 		EstimateID:        input.EstimateID,
+		ProposalTitle:     input.ProposalTitle,
+		ProposalStartAt:   input.ProposalStartAt.UTC(),
+		ProposalEndAt:     input.ProposalEndAt.UTC(),
+		ZoneID:            input.ZoneID,
+		Confidence:        input.Confidence,
+		ExplanationCodes:  append([]string(nil), input.ExplanationCodes...),
 		Decision:          input.Decision,
 		DecidedAt:         input.DecidedAt.UTC(),
 		SnapshotStartAt:   input.SnapshotStartAt.UTC(),
@@ -374,7 +417,9 @@ const calendarEventsQuery = `SELECT
 	ORDER BY start_at, end_at, event_id`
 
 const proposalDecisionSelect = `SELECT
-	decision_id, proposal_id, task_id, task_revision, estimate_id, decision, decided_at,
+	decision_id, proposal_id, task_id, task_revision, estimate_id,
+	proposal_title, proposal_start_at, proposal_end_at, zone_id, confidence, explanation_codes_json,
+	decision, decided_at,
 	supersedes_decision_id, event_id, snapshot_start_at, snapshot_end_at, event_snapshot_hash
 	FROM local_proposal_decisions`
 
@@ -561,6 +606,26 @@ func validateProposalDecisionInput(input ProposalDecisionInput) error {
 	if input.TaskRevision < 1 {
 		return errors.New("task revision must be at least 1")
 	}
+	if strings.TrimSpace(input.ProposalTitle) == "" || len([]rune(input.ProposalTitle)) > 120 {
+		return errors.New("proposal title must contain 1 to 120 characters")
+	}
+	if input.ProposalStartAt.IsZero() || input.ProposalEndAt.IsZero() || !input.ProposalStartAt.Before(input.ProposalEndAt) {
+		return errors.New("proposal interval must be non-empty")
+	}
+	if _, err := time.LoadLocation(input.ZoneID); err != nil {
+		return fmt.Errorf("proposal zone: %w", err)
+	}
+	if input.Confidence != "low" && input.Confidence != "medium" && input.Confidence != "high" {
+		return errors.New("proposal confidence must be low, medium, or high")
+	}
+	if len(input.ExplanationCodes) == 0 || len(input.ExplanationCodes) > 16 {
+		return errors.New("proposal requires 1 to 16 explanation codes")
+	}
+	for _, code := range input.ExplanationCodes {
+		if !contractIdentifier.MatchString(code) {
+			return fmt.Errorf("invalid proposal explanation code %q", code)
+		}
+	}
 	if input.Decision != ProposalApproved && input.Decision != ProposalRejected {
 		return errors.New("decision must be approved or rejected")
 	}
@@ -584,6 +649,9 @@ func validatePlacementEvent(event calendarcore.Event, input ProposalDecisionInpu
 	if event.TaskID != input.TaskID || event.TaskRevision != input.TaskRevision || event.ProposalID != input.ProposalID || event.SourceRecordID != input.ProposalID {
 		return errors.New("approved placement links do not match the proposal decision")
 	}
+	if !event.StartAt.Equal(input.ProposalStartAt) || !event.EndAt.Equal(input.ProposalEndAt) || event.ZoneID != input.ZoneID {
+		return errors.New("approved placement interval does not match the proposal")
+	}
 	if event.Title != task.Title || event.EndAt.Sub(event.StartAt) != time.Duration(task.DurationMinutes)*time.Minute {
 		return errors.New("approved placement does not match the current task title and duration")
 	}
@@ -604,12 +672,20 @@ func ensureZeitBoardSource(ctx context.Context, tx *sql.Tx, createdAt time.Time)
 }
 
 func insertProposalDecision(ctx context.Context, tx *sql.Tx, record ProposalDecisionRecord) error {
-	_, err := tx.ExecContext(ctx, `INSERT INTO local_proposal_decisions(
-		decision_id, proposal_id, task_id, task_revision, estimate_id, decision, decided_at,
+	explanationCodes, err := json.Marshal(record.ExplanationCodes)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO local_proposal_decisions(
+		decision_id, proposal_id, task_id, task_revision, estimate_id,
+		proposal_title, proposal_start_at, proposal_end_at, zone_id, confidence, explanation_codes_json,
+		decision, decided_at,
 		supersedes_decision_id, event_id, snapshot_start_at, snapshot_end_at, event_snapshot_hash
-	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		record.DecisionID, record.ProposalID, record.TaskID, record.TaskRevision,
-		record.EstimateID, record.Decision, formatSQLiteTime(record.DecidedAt),
+		record.EstimateID, record.ProposalTitle, formatSQLiteTime(record.ProposalStartAt),
+		formatSQLiteTime(record.ProposalEndAt), record.ZoneID, record.Confidence, explanationCodes,
+		record.Decision, formatSQLiteTime(record.DecidedAt),
 		record.SupersedesID, record.EventID, formatSQLiteTime(record.SnapshotStartAt),
 		formatSQLiteTime(record.SnapshotEndAt), record.EventSnapshotHash,
 	)
@@ -627,15 +703,27 @@ func latestProposalDecision(ctx context.Context, tx *sql.Tx, proposalID string) 
 
 func scanProposalDecision(scanner rowScanner) (ProposalDecisionRecord, error) {
 	var record ProposalDecisionRecord
-	var decidedAt, snapshotStart, snapshotEnd string
+	var proposalStart, proposalEnd, decidedAt, snapshotStart, snapshotEnd string
+	var explanationCodes []byte
 	if err := scanner.Scan(
 		&record.DecisionID, &record.ProposalID, &record.TaskID, &record.TaskRevision,
-		&record.EstimateID, &record.Decision, &decidedAt, &record.SupersedesID,
+		&record.EstimateID, &record.ProposalTitle, &proposalStart, &proposalEnd,
+		&record.ZoneID, &record.Confidence, &explanationCodes,
+		&record.Decision, &decidedAt, &record.SupersedesID,
 		&record.EventID, &snapshotStart, &snapshotEnd, &record.EventSnapshotHash,
 	); err != nil {
 		return ProposalDecisionRecord{}, err
 	}
 	var err error
+	if record.ProposalStartAt, err = parseCalendarTime(proposalStart); err != nil {
+		return ProposalDecisionRecord{}, err
+	}
+	if record.ProposalEndAt, err = parseCalendarTime(proposalEnd); err != nil {
+		return ProposalDecisionRecord{}, err
+	}
+	if err := json.Unmarshal(explanationCodes, &record.ExplanationCodes); err != nil {
+		return ProposalDecisionRecord{}, err
+	}
 	if record.DecidedAt, err = parseCalendarTime(decidedAt); err != nil {
 		return ProposalDecisionRecord{}, err
 	}
