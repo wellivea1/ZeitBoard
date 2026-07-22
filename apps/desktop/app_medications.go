@@ -20,6 +20,8 @@ type MedicationInput struct {
 	Label         string `json:"label"`
 	Form          string `json:"form"`
 	StrengthLabel string `json:"strengthLabel"`
+	StartedLocal  string `json:"startedLocal"`
+	StartedZoneID string `json:"startedZoneId"`
 }
 
 type MedicationUpdateInput struct {
@@ -29,6 +31,8 @@ type MedicationUpdateInput struct {
 	Form          string `json:"form"`
 	StrengthLabel string `json:"strengthLabel"`
 	Active        bool   `json:"active"`
+	StartedLocal  string `json:"startedLocal"`
+	StartedZoneID string `json:"startedZoneId"`
 }
 
 type MedicationScheduleInput struct {
@@ -87,6 +91,10 @@ type MedicationDTO struct {
 	Schedule                 *MedicationScheduleDTO `json:"schedule,omitempty"`
 	CreatedLabel             string                 `json:"createdLabel"`
 	EventCount               int                    `json:"eventCount"`
+	StartedAt                string                 `json:"startedAt,omitempty"`
+	StartedLocal             string                 `json:"startedLocal,omitempty"`
+	StartedZoneID            string                 `json:"startedZoneId,omitempty"`
+	StartedLabel             string                 `json:"startedLabel,omitempty"`
 }
 
 type MedicationScheduleDTO struct {
@@ -186,11 +194,17 @@ func (a *App) AddMedication(input MedicationInput) (MedicationsDTO, error) {
 		return MedicationsDTO{}, err
 	}
 	now := a.currentTime().UTC().Truncate(time.Second)
+	startedAt, startedZoneID, err := medicationStartedValues(input.StartedLocal, input.StartedZoneID, now)
+	if err != nil {
+		return MedicationsDTO{}, err
+	}
 	record := storage.MedicationRecord{
 		MedicationID:  newLocalID("med"),
 		Label:         strings.TrimSpace(input.Label),
 		Form:          strings.TrimSpace(input.Form),
 		StrengthLabel: strings.TrimSpace(input.StrengthLabel),
+		StartedAt:     startedAt,
+		StartedZoneID: startedZoneID,
 		Active:        true,
 		CreatedAt:     now,
 		Revision:      1,
@@ -216,12 +230,18 @@ func (a *App) UpdateMedication(input MedicationUpdateInput) (MedicationsDTO, err
 		return MedicationsDTO{}, storage.ErrMedicationRevisionConflict
 	}
 	now := a.currentTime().UTC().Truncate(time.Second)
+	startedAt, startedZoneID, err := medicationStartedValues(input.StartedLocal, input.StartedZoneID, now)
+	if err != nil {
+		return MedicationsDTO{}, err
+	}
 	if now.Before(current.UpdatedAt) {
 		now = current.UpdatedAt
 	}
 	current.Label = strings.TrimSpace(input.Label)
 	current.Form = strings.TrimSpace(input.Form)
 	current.StrengthLabel = strings.TrimSpace(input.StrengthLabel)
+	current.StartedAt = startedAt
+	current.StartedZoneID = startedZoneID
 	current.Active = input.Active
 	current.Revision++
 	current.UpdatedAt = now
@@ -560,6 +580,19 @@ func medicationDTO(record storage.MedicationRecord, eventCount int, state localE
 	if record.ClinicianRule != "" {
 		attribution = "Clinician guidance entered verbatim by you"
 	}
+	startedAt := ""
+	startedLocal := ""
+	startedLabel := ""
+	if record.StartedAt != nil {
+		location, err := time.LoadLocation(record.StartedZoneID)
+		if err != nil {
+			return MedicationDTO{}, fmt.Errorf("load medication start time zone %q: %w", record.StartedZoneID, err)
+		}
+		local := record.StartedAt.In(location)
+		startedAt = record.StartedAt.UTC().Format(time.RFC3339)
+		startedLocal = local.Format("2006-01-02T15:04")
+		startedLabel = local.Format("Jan 2, 2006, 3:04 PM MST")
+	}
 	return MedicationDTO{
 		MedicationID:             record.MedicationID,
 		Label:                    record.Label,
@@ -574,7 +607,35 @@ func medicationDTO(record storage.MedicationRecord, eventCount int, state localE
 		Schedule:                 scheduleDTO,
 		CreatedLabel:             "Added " + record.CreatedAt.Local().Format("Jan 2, 2006"),
 		EventCount:               eventCount,
+		StartedAt:                startedAt,
+		StartedLocal:             startedLocal,
+		StartedZoneID:            record.StartedZoneID,
+		StartedLabel:             startedLabel,
 	}, nil
+}
+
+func medicationStartedValues(rawLocal, rawZoneID string, now time.Time) (*time.Time, string, error) {
+	startedLocal := strings.TrimSpace(rawLocal)
+	zoneID := strings.TrimSpace(rawZoneID)
+	if startedLocal == "" && zoneID == "" {
+		return nil, "", nil
+	}
+	if startedLocal == "" || zoneID == "" {
+		return nil, "", errors.New("medication start requires both a local date-time and an explicit IANA time zone")
+	}
+	location, err := time.LoadLocation(zoneID)
+	if err != nil {
+		return nil, "", fmt.Errorf("load medication start time zone %q: %w", zoneID, err)
+	}
+	startedAt, err := resolveRhythmMarkerCivil(startedLocal, location)
+	if err != nil {
+		return nil, "", fmt.Errorf("medication start: %w", err)
+	}
+	if startedAt.UTC().After(now.UTC().Add(5 * time.Minute)) {
+		return nil, "", errors.New("medication start cannot be in the future")
+	}
+	startedUTC := startedAt.UTC()
+	return &startedUTC, zoneID, nil
 }
 
 func medicationScheduleDTO(schedule storage.MedicationSchedule, state localEstimateState, now time.Time) (MedicationScheduleDTO, error) {

@@ -1,0 +1,765 @@
+.medication-report {
+  min-width: 0;
+  margin-bottom: var(--space-5);
+  border-block: 1px solid var(--line);
+  background: var(--paper);
+}
+
+.medication-report-heading {
+  min-height: 72px;
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.medication-report-heading h2,
+.medication-report-subheading h3,
+.medication-report-associations h4,
+.medication-report-provenance h3,
+.medication-report-export h3 {
+  margin: 0;
+  color: var(--ink);
+}
+
+.medication-report-heading h2 {
+  font-size: var(--type-data);
+}
+
+.medication-report-heading p:not(.section-kicker),
+.medication-report-unavailable,
+.medication-report-figure-summary,
+.medication-report-empty,
+.medication-report-export p,
+.medication-report-provenance p {
+  margin: var(--space-1) 0 0;
+  color: var(--muted);
+  font-size: var(--type-body);
+  line-height: 1.45;
+}
+
+.medication-report-unavailable {
+  margin: 0;
+  padding: 0 var(--space-4) var(--space-3);
+}
+
+.medication-report-workspace {
+  border-top: 1px solid var(--line);
+}
+
+.medication-report-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  background: var(--panel-alt);
+}
+
+.medication-report-controls fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: var(--space-2) var(--space-3);
+  border: 0;
+}
+
+.medication-report-controls fieldset + fieldset {
+  border-left: 1px solid var(--line);
+}
+
+.medication-report-controls legend {
+  padding: var(--space-3) 0 var(--space-1);
+  color: var(--ink);
+  font-size: var(--type-body-strong);
+  font-weight: 750;
+}
+
+.medication-report-controls label:not(.medication-check-row),
+.medication-report-export-confirmation label {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-1);
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.medication-report-controls input,
+.medication-report-controls select,
+.medication-report-export-confirmation input {
+  width: 100%;
+  min-width: 0;
+}
+
+.medication-report-controls .medication-check-row {
+  grid-column: 1 / -1;
+  min-height: 25px;
+}
+
+.medication-report-range-shortcuts {
+  grid-column: 1 / -1;
+  min-width: 0;
+  display: grid;
+  gap: var(--space-1);
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.medication-report-range-shortcuts > div {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.medication-report-private-option {
+  padding-left: var(--space-5);
+  border-left: 2px solid var(--line);
+}
+
+.medication-report-control-actions {
+  grid-column: 1 / -1;
+  min-height: 48px;
+  padding: var(--space-2) var(--space-4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  border-top: 1px solid var(--line);
+}
+
+.medication-report-control-actions p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.medication-report-error {
+  padding: var(--space-2) var(--space-4);
+  color: var(--danger-text);
+  border-top: 1px solid var(--danger-border);
+  border-left: 3px solid var(--danger-border);
+  background: var(--danger-bg);
+  font-size: var(--type-body);
+}
+
+.medication-report-status {
+  min-height: 52px;
+  padding: var(--space-2) var(--space-4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  border-block: 1px solid var(--line);
+}
+
+.medication-report-status > div {
+  display: grid;
+  gap: 2px;
+}
+
+.medication-report-status strong {
+  color: var(--ink);
+  font-size: var(--type-body-strong);
+}
+
+.medication-report-status span {
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.medication-report-status > span {
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.medication-report-status[data-status="partial"],
+.medication-report-status[data-status="insufficient"] {
+  box-shadow: inset 3px 0 0 var(--state-uncertain);
+}
+
+.medication-report-metrics {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  border-bottom: 1px solid var(--line);
+}
+
+.medication-report-metrics > div {
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  display: grid;
+  gap: 2px;
+}
+
+.medication-report-metrics > div + div {
+  border-left: 1px solid var(--divider);
+}
+
+.medication-report-metrics dt {
+  color: var(--subtle);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.medication-report-metrics dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--type-data);
+  font-variant-numeric: tabular-nums;
+}
+
+.medication-report-redactions {
+  padding: var(--space-2) var(--space-4);
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  border-bottom: 1px solid var(--line);
+  background: var(--panel-alt);
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.medication-report-redactions strong {
+  color: var(--ink);
+}
+
+.medication-report-redactions ul,
+.medication-report-context ul,
+.medication-report-provenance ul {
+  margin: 0;
+  padding-left: var(--space-5);
+}
+
+.medication-report-visuals {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(300px, 0.65fr);
+  border-bottom: 1px solid var(--line);
+}
+
+.medication-report-tables {
+  display: grid;
+  grid-template-columns: minmax(370px, 0.7fr) minmax(0, 1.3fr);
+  border-bottom: 1px solid var(--line);
+}
+
+.medication-report-figure,
+.medication-report-tables > section,
+.medication-report-associations,
+.medication-report-provenance {
+  min-width: 0;
+  padding: var(--space-4);
+}
+
+.medication-report-figure + .medication-report-figure,
+.medication-report-tables > section + section {
+  border-left: 1px solid var(--line);
+}
+
+.medication-report-subheading {
+  min-width: 0;
+  margin-bottom: var(--space-2);
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.medication-report-subheading h3,
+.medication-report-export h3,
+.medication-report-provenance h3 {
+  font-size: var(--type-body-strong);
+}
+
+.medication-report-subheading > span {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: var(--type-label);
+  font-variant-numeric: tabular-nums;
+}
+
+.medication-report-figure-summary {
+  margin-bottom: var(--space-3);
+}
+
+.clinical-actogram {
+  min-width: 540px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.medication-report-figure:has(.clinical-actogram) {
+  overflow-x: auto;
+}
+
+.clinical-actogram-axis,
+.clinical-actogram-month,
+.clinical-actogram-row {
+  min-width: 540px;
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+}
+
+.clinical-actogram-month {
+  min-height: 26px;
+  align-items: center;
+  color: var(--ink);
+  border-top: 1px solid var(--ink);
+  border-bottom: 1px solid var(--divider);
+  background: var(--panel-alt);
+  font-size: var(--type-label);
+  font-weight: 750;
+}
+
+.clinical-actogram-month span {
+  grid-column: 1 / -1;
+  padding-inline: var(--space-2);
+}
+
+.clinical-actogram-axis {
+  grid-template-columns: 92px repeat(5, minmax(0, 1fr));
+  min-height: 24px;
+  align-items: center;
+  color: var(--subtle);
+  background: var(--panel-alt);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.clinical-actogram-axis span:not(:first-child) {
+  padding-left: var(--space-1);
+  border-left: 1px solid var(--divider);
+}
+
+.clinical-actogram-row {
+  min-height: 22px;
+  border-top: 1px solid var(--divider);
+}
+
+.clinical-actogram-row[data-month="true"] {
+  border-top-color: var(--ink);
+}
+
+.clinical-actogram-row[data-weekend="true"] {
+  background: var(--panel-alt);
+}
+
+.clinical-actogram-date {
+  padding: 3px var(--space-2);
+  overflow: hidden;
+  color: var(--muted);
+  border-right: 1px solid var(--line);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.clinical-actogram-track {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  background-image: linear-gradient(
+    to right,
+    transparent calc(25% - 1px),
+    var(--divider) calc(25% - 1px),
+    var(--divider) 25%,
+    transparent 25%,
+    transparent calc(50% - 1px),
+    var(--divider) calc(50% - 1px),
+    var(--divider) 50%,
+    transparent 50%,
+    transparent calc(75% - 1px),
+    var(--divider) calc(75% - 1px),
+    var(--divider) 75%,
+    transparent 75%
+  );
+}
+
+.clinical-actogram-gap {
+  position: absolute;
+  inset: 3px auto auto var(--space-2);
+  color: var(--subtle);
+  font-size: 9px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.clinical-sleep-segment {
+  position: absolute;
+  top: 5px;
+  height: 12px;
+  min-width: 2px;
+  background: var(--state-asleep);
+}
+
+.clinical-sleep-segment[data-kind="sleep_inferred"] {
+  background: repeating-linear-gradient(
+    90deg,
+    var(--state-asleep) 0,
+    var(--state-asleep) 4px,
+    transparent 4px,
+    transparent 7px
+  );
+  outline: 1px solid var(--state-asleep);
+}
+
+.clinical-sleep-segment[data-kind="sleep_nap"] {
+  top: 7px;
+  height: 8px;
+  background: var(--state-uncertain);
+}
+
+.clinical-sleep-segment[data-kind="forecast"] {
+  background: transparent;
+  border: 1px dashed var(--state-asleep);
+}
+
+.clinical-annotation {
+  position: absolute;
+  top: 2px;
+  z-index: 2;
+  width: 15px;
+  height: 17px;
+  display: grid;
+  place-items: center;
+  transform: translateX(-50%);
+  color: var(--paper);
+  border: 1px solid var(--paper);
+  background: var(--ink);
+  font-size: 8px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.clinical-annotation[data-kind="medication_skipped"] {
+  color: var(--ink);
+  border-color: var(--ink);
+  background: var(--paper);
+}
+
+.clinical-annotation[data-kind="medication_start"] {
+  color: var(--ink);
+  border-color: var(--state-awake);
+  background: var(--panel-alt);
+}
+
+.clinical-annotation[data-kind^="context_"] {
+  color: var(--ink);
+  border-color: var(--state-uncertain);
+  background: var(--panel-alt);
+}
+
+.medication-report-legend {
+  padding: var(--space-2) 0;
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.medication-report-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.medication-report-legend i {
+  width: 12px;
+  height: 8px;
+  display: inline-block;
+  background: var(--state-asleep);
+}
+
+.medication-report-legend i[data-kind^="medication_"],
+.medication-report-legend i[data-kind^="context_"] {
+  width: 8px;
+  height: 12px;
+  background: var(--ink);
+}
+
+.medication-report-pagination {
+  padding-top: var(--space-2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.clinical-drift-plot {
+  min-height: 240px;
+  padding: var(--space-2) 0 0;
+  border-block: 1px solid var(--line);
+}
+
+.clinical-drift-plot svg {
+  width: 100%;
+  height: 212px;
+  display: block;
+  overflow: visible;
+}
+
+.clinical-drift-grid {
+  stroke: var(--divider);
+  stroke-width: 0.5;
+}
+
+.clinical-drift-band {
+  fill: var(--state-asleep);
+  opacity: 0.12;
+}
+
+.clinical-drift-fit {
+  fill: none;
+  stroke: var(--state-asleep);
+  stroke-width: 1.5;
+}
+
+.clinical-drift-point {
+  fill: var(--ink);
+  stroke: var(--paper);
+  stroke-width: 1;
+}
+
+.clinical-drift-axis {
+  padding: 3px 0;
+  display: flex;
+  justify-content: space-between;
+  color: var(--subtle);
+  font-size: 10px;
+}
+
+.medication-report-table-wrap {
+  max-height: 310px;
+  overflow: auto;
+  border: 1px solid var(--line);
+}
+
+.medication-report-table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--ink);
+  font-size: var(--type-label);
+}
+
+.medication-report-table th,
+.medication-report-table td {
+  padding: 6px var(--space-2);
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--divider);
+}
+
+.medication-report-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  color: var(--subtle);
+  background: var(--panel-alt);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.medication-report-table tbody th {
+  font-weight: 750;
+}
+
+.medication-report-table td small {
+  margin-top: 2px;
+  display: block;
+  color: var(--muted);
+}
+
+.medication-report-associations {
+  border-bottom: 1px solid var(--line);
+}
+
+.medication-report-associations article {
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--divider);
+}
+
+.medication-report-associations h4 {
+  font-size: var(--type-body-strong);
+}
+
+.medication-report-associations article > p,
+.medication-report-context {
+  margin: var(--space-1) 0 0;
+  color: var(--muted);
+  font-size: var(--type-body);
+  line-height: 1.45;
+}
+
+.medication-report-associations dl {
+  margin: var(--space-2) 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  border-block: 1px solid var(--divider);
+}
+
+.medication-report-associations dl > div {
+  padding: var(--space-2);
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: var(--space-2);
+}
+
+.medication-report-associations dl > div + div {
+  border-left: 1px solid var(--divider);
+}
+
+.medication-report-associations dt {
+  color: var(--subtle);
+  font-size: var(--type-label);
+}
+
+.medication-report-associations dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--type-body);
+}
+
+.medication-report-context strong {
+  color: var(--ink);
+}
+
+.medication-report-provenance {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-2) var(--space-5);
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.medication-report-provenance p {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.medication-report-export {
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  background: var(--panel-alt);
+}
+
+.medication-report-export-confirmation {
+  min-width: min(100%, 390px);
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  gap: var(--space-2);
+  align-items: end;
+}
+
+.medication-report-export-confirmation > div {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.medication-start-fields {
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-3);
+  display: grid;
+  gap: var(--space-2);
+  border: 1px solid var(--line);
+}
+
+.medication-start-fields legend {
+  padding-inline: var(--space-1);
+  color: var(--ink);
+  font-size: var(--type-label);
+  font-weight: 750;
+}
+
+.medication-start-fields small {
+  color: var(--muted);
+  font-size: var(--type-label);
+  line-height: 1.4;
+}
+
+@media (max-width: 1050px) {
+  .medication-report-metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .medication-report-metrics > div:nth-child(4) {
+    border-left: 0;
+    border-top: 1px solid var(--divider);
+  }
+
+  .medication-report-metrics > div:nth-child(n + 5) {
+    border-top: 1px solid var(--divider);
+  }
+
+  .medication-report-visuals,
+  .medication-report-tables {
+    grid-template-columns: 1fr;
+  }
+
+  .medication-report-figure + .medication-report-figure,
+  .medication-report-tables > section + section {
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .medication-report-heading,
+  .medication-report-export,
+  .medication-report-control-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .medication-report-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .medication-report-controls fieldset + fieldset {
+    border-top: 1px solid var(--line);
+    border-left: 0;
+  }
+
+  .medication-report-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .medication-report-metrics > div:nth-child(odd) {
+    border-left: 0;
+  }
+
+  .medication-report-metrics > div:nth-child(n + 3) {
+    border-top: 1px solid var(--divider);
+  }
+
+  .medication-report-redactions,
+  .medication-report-provenance,
+  .medication-report-export-confirmation {
+    grid-template-columns: 1fr;
+  }
+
+  .medication-report-associations dl {
+    grid-template-columns: 1fr;
+  }
+
+  .medication-report-associations dl > div + div {
+    border-top: 1px solid var(--divider);
+    border-left: 0;
+  }
+
+  .medication-report-pagination {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Clinical chart request v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "range",
+    "orientation",
+    "day_start_hour",
+    "zone_id",
+    "include",
+    "redactions"
+  ],
+  "properties": {
+    "schema_version": {
+      "$ref": "common.schema.json#/$defs/schemaVersion"
+    },
+    "range": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode"],
+          "properties": {
+            "mode": { "const": "all" }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "from", "to"],
+          "properties": {
+            "mode": { "const": "custom" },
+            "from": { "type": "string", "format": "date" },
+            "to": { "type": "string", "format": "date" }
+          }
+        }
+      ]
+    },
+    "orientation": {
+      "type": "string",
+      "enum": ["24h", "48h"]
+    },
+    "day_start_hour": {
+      "type": "integer",
+      "enum": [12, 18]
+    },
+    "zone_id": {
+      "$ref": "common.schema.json#/$defs/zoneId"
+    },
+    "include": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["forecast", "medication", "rhythm_context"],
+      "properties": {
+        "forecast": { "type": "boolean" },
+        "medication": { "type": "boolean" },
+        "rhythm_context": { "type": "boolean" }
+      }
+    },
+    "redactions": {
+      "type": "array",
+      "minItems": 3,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "diagnosis",
+          "location",
+          "clinician_rule",
+          "medication_labels",
+          "medication_notes",
+          "rhythm_context_notes"
+        ]
+      }
+    }
+  },
+  "allOf": [
+    {
+      "properties": {
+        "redactions": { "contains": { "const": "diagnosis" } }
+      }
+    },
+    {
+      "properties": {
+        "redactions": { "contains": { "const": "location" } }
+      }
+    },
+    {
+      "properties": {
+        "redactions": { "contains": { "const": "clinician_rule" } }
+      }
+    }
+  ]
+}

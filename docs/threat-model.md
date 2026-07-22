@@ -88,7 +88,11 @@ projection exists in M-A/M-B. **Local rhythm context markers (ADR-0026)** are
 implemented as immutable manual/user-reported records with strict past-time
 and civil-zone validation, display-only actogram joins, owner-initiated
 contract export, typed byte-checked erasure, and no estimator, sync, sharing,
-agent, or logging path. The
+agent, or logging path. **The local clinician context report (ADR-0027)** is
+implemented as a redaction-first Go projection over effective local records,
+with explicit-record adherence, range-scoped drift, non-causal association,
+typed export confirmation, and standalone script-free HTML; it adds no sync,
+trusted-view, agent, or network surface. The
 **cloud skill wrapper and live trusted-view transport do not exist yet**; their rows
 remain design requirements for future workstreams, not current guarantees.
 
@@ -118,7 +122,10 @@ remain design requirements for future workstreams, not current guarantees.
 | Duplicate or misleading medication reminder | Repeated prompts could be mistaken for a second dose instruction | Reminders require an explicit owner-authored clock schedule and separate opt-in; an immutable unique occurrence claim is committed before notification delivery, delivery failures are not retried, and copy says "Reminder you set" rather than directing a dose |
 | Civil-time or forecast ambiguity | A DST transition, device-zone change, or forecast limit misstates schedule feasibility | Schedules own an explicit IANA zone; DST gaps are skipped and reported, repeated times use the first occurrence, cycles advance by civil date, and every occurrence outside the actual estimator horizon is labeled unavailable |
 | Medication notification disclosure | A private label appears on a shared or observed desktop | Medication notifications are off by default; the schedule editor discloses that opt-in allows the local OS notification surface to display the label, and control characters are stripped before delivery |
-| Medication text crosses a projection boundary | Names, clinician rules, or private notes reach a server, agent, trusted view, or log | M-A/M-B have no sync or agent projection; local DTOs are explicit, reminder claims contain no text, exports are owner-initiated, and privacy tests/architecture require opaque IDs before any later projection is enabled |
+| Medication text crosses a projection boundary | Names, clinician rules, or private notes reach a server, agent, trusted view, or log | M-A/M-B/M-C have no sync or agent projection; local DTOs are explicit, reminder claims contain no text, exports are owner-initiated, and privacy tests/architecture require opaque IDs before any later projection is enabled |
+| Clinician report over-discloses private text | A saved report unexpectedly contains labels, notes, diagnosis, or location data | Redaction is applied in Go before preview/render; diagnosis and calendar/location are mandatory omissions; labels use aliases and both note classes are opt-in; the adapter reconciles the redaction list |
+| Adherence or start comparison implies a missed dose or treatment effect | Sparse logging or simultaneous context is interpreted as medical causality | Only explicit scheduled records enter the denominator; as-needed is separate; absence is never missed; each association side requires five episodes, uses robust descriptive slopes, lists possible confounders, and states that alignment does not establish cause |
+| Exported report loads active or remote content | Opening a local health artifact leaks data or executes injected markup | `html/template` auto-escapes private text; the standalone document has no script/external assets and a default-deny CSP; export is typed-confirmed and no network call is made |
 | Estimator overclaim | Uncertain data appears authoritative | Typed refusal, ordinal confidence, widening windows, constrained product language; backtest harness measures calibration |
 | Fixed-event mutation | User calendar intent is changed | Imported rows are database-guarded immutable; source removal is a separate confirmed erasure; approval writes only a separately owned ZeitBoard block; export filters to app-owned events |
 | Stale local proposal approval | A task is placed against changed sleep or calendar evidence | Proposal IDs bind task revision, estimate, interval, sleep snapshot, and text-free event snapshot; the decision transaction recomputes task, sleep, and event state and fails closed before writing |

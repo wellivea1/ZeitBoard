@@ -5,10 +5,10 @@ Most recent local verification: Windows 11 on 2026-07-22.
 ## Passing checks
 
 - Frontend formatting, ESLint, and repository UI standards. The UI guard passed
-  with 14 screen modules and 8 component stylesheets.
+  with 16 screen modules and 10 component stylesheets.
 - Frontend TypeScript and production builds for the desktop and trusted-view
   workspaces.
-- Frontend tests: 26 desktop test files with 198 tests, plus 2 trusted-view test
+- Frontend tests: 30 desktop test files with 212 tests, plus 2 trusted-view test
   files with 6 tests.
 - `scripts/dev.ps1 -Action check -Component desktop`: desktop production build.
 - `scripts/dev.ps1 -Action check -Component core`: Go formatting, tests, and vet
@@ -18,11 +18,17 @@ Most recent local verification: Windows 11 on 2026-07-22.
 - `scripts/dev.ps1 -Action check -Component server`: server formatting, tests,
   and vet, including the server/MCP projection privacy allowlist.
 - `scripts/dev.ps1 -Action check -Component contracts`: deterministic drift
-  check for 25 v1 fixtures plus 3 v2 fixtures, tools tests/vet, and schema
+  check for 26 v1 fixtures plus 3 v2 fixtures, tools tests/vet, and schema
   validation.
 - Native Wails production build at `apps/desktop/build/bin/ZeitBoard.exe`.
 - Android `testDebugUnitTest`, `lintDebug`, and `assembleDebug`; this medication
   slice changes no Android source.
+- Browser QA of the medication clinician-report workflow at 1440 x 900 and
+  390 x 844: no page-level horizontal overflow, no console warnings or errors,
+  and the dense chart, tables, controls, and explicit internal chart scrolling
+  remained usable. Changing report controls invalidated export until a fresh
+  preview was generated, and export stayed disabled until the exact `EXPORT`
+  confirmation was entered.
 - Sleep erasure regression: suppression remains exportable and excluded from
   effective reads; hard deletion removes observation/correction rows and the
   unique payload marker from the compacted SQLite database and WAL.
@@ -38,6 +44,15 @@ Most recent local verification: Windows 11 on 2026-07-22.
   verify explicit opt-in, claim-before-notify, durable at-most-once behavior,
   no retry after notification failure, inactive-definition pause, private-label
   control-character normalization, immutable claims, and erasure cascade.
+- Medication clinician-report regression: local civil range and DST handling,
+  observed and inferred sleep layers, opt-in forecast and private fields,
+  pseudonymized medication labels, explicit taken/skipped adherence only,
+  rhythm-context annotations, selected-range drift, and robust descriptive
+  before/after medication-start association all pass. Export requires the exact
+  confirmation phrase and emits canonical, script-free standalone HTML with a
+  restrictive CSP, complete chart text alternative, mandatory redactions, and
+  no IANA zone identifier. A transient renderer pass also exercised the full
+  standalone document outside the desktop response adapter.
 - Rhythm-context regression: the four non-diagnostic marker kinds and manual,
   user-reported provenance are schema-closed; SQLite rows are immutable; local
   civil inputs reject future times and DST gaps while selecting the first

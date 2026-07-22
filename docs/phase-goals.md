@@ -39,15 +39,16 @@ app-owned ICS export. Imported event text remains local. Remote write-back to
 an external calendar is still separately gated; the delivered path never
 mutates an imported event.
 
-**Active gate 3 — disease management.** Medication slices M-A and M-B are
-delivered under ADR-0024/0025: local definitions, append-only taken/skipped
-evidence, corrections, explicit user-authored schedules, neutral collision
+**Closed gate 3 - local disease-management substance.** Medication slices M-A
+through M-C are delivered under ADR-0024/0025/0027: local definitions,
+append-only taken/skipped evidence, corrections, explicit user-authored
+schedules, neutral collision
 forecasts, opt-in claim-first desktop reminders, contract export, real erasure,
 and the real Medications workspace. ADR-0026 also delivers local
-disruption/travel/illness/forced-schedule context markers. M-C adherence,
-medication dose markers, and clinician export remain open; those remaining
-pieces complete the intended disease-management surface: rhythm + meds +
-context + a report a clinician can inspect.
+disruption/travel/illness/forced-schedule context markers. ADR-0027 completes
+explicit-record adherence, dose/start markers, descriptive association with
+named possible confounders, and the redaction-first local clinician report.
+M-D sync, M-E agent projection, and M-F sharing remain separate future gates.
 
 **Gap 4 — the assistant is desktop-chat only.** Voice rides the MCP client
 (documented), but agent access to local device state (appearance, quick
@@ -71,13 +72,12 @@ style alerts need a push path that works self-hosted (web push with
 operator VAPID keys; the Android companion as a second receiver). The
 companion still has no sync client (slice 9).
 
-**Sequencing logic.** Trust before reach: P1's estimator gate and P2's local
-calendar gate are closed and P3 has started with M-A/M-B. The next primary
-dependency is completing the health substance (M-C, using the delivered
-context-marker prerequisite), followed by maturing the assistant over it (P4),
-opening the portal
-(P5), and fanning out notifications (P6). P3 and P4 can interleave; P5 can now
-build on P2's approved local placement path.
+**Sequencing logic.** Trust before reach: P1's estimator gate, P2's local
+calendar gate, and P3's local disease-management substance through M-C are
+closed. The next primary dependency is maturing the assistant over an explicitly
+reviewed projection (P4), then opening the portal (P5) and fanning out
+notifications (P6). P3 and P4 can interleave; P5 can now build on P2's approved
+local placement path.
 
 ---
 
@@ -128,10 +128,9 @@ record in `verification.md`. External-provider write-back remains out of scope.
 
 ### `/goal phase-3-disease-management`
 
-Status: in progress as of 2026-07-22. M-A local logging, M-B schedules +
-feasibility, and the local rhythm-marker prerequisite are delivered via
-ADR-0024/0025/0026. M-C adherence, medication dose markers, and the clinician
-report remain open.
+Status: delivered as of 2026-07-22. M-A local logging, M-B schedules +
+feasibility, the local rhythm-marker prerequisite, and M-C clinician context
+are delivered via ADR-0024/0025/0026/0027. M-D..M-F remain separately gated.
 
 > **Goal: complete medication tracking M-C using the delivered M-A/M-B and
 > rhythm-context foundations so the app manages the disease, not just the

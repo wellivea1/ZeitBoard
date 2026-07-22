@@ -450,6 +450,14 @@ Acceptance:
 
 ### 3.6 Automatic sleep charting (clinician actogram + export)
 
+> **M-C baseline delivered under ADR-0027 (2026-07-22):** the desktop now
+> renders the real-data 24-hour clinical orientation with 6 PM/noon anchors,
+> one row per date, month/weekend structure, exact-present dose/context legend,
+> range-scoped drift, explicit-record adherence, accessible tables, and a
+> confirmed redaction-first standalone HTML export that prints to PDF. The
+> reserved 48-hour clinical orientation, direct PNG/PDF generation, and blank
+> clinical-log template remain refinements rather than current guarantees.
+
 **Why this exists.** The canonical reference is a real patient record spanning
 2021–2023 in two forms: (a) a hand-kept clinical **"Sleep Log"** (Raleigh
 Neurology) — days as rows, **1-hour columns**, sleep shaded by hand, with a

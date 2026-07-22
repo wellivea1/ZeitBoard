@@ -10,6 +10,10 @@ import { MedicationScheduleEditor } from "./MedicationScheduleEditor";
 
 const emptyMedication: MedicationInput = { label: "", form: "", strengthLabel: "" };
 
+function localMedicationZone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+}
+
 function MedicationErasurePanel({
   medication,
   busy,
@@ -52,6 +56,131 @@ function MedicationErasurePanel({
           Erase medication and history
         </button>
       </div>
+    </section>
+  );
+}
+
+function MedicationEditor({
+  medication,
+  busy,
+  onChange,
+  onSave,
+  onCancel,
+}: {
+  medication: MedicationDefinition;
+  busy: boolean;
+  onChange: (medication: MedicationDefinition) => void;
+  onSave: (event: FormEvent) => void;
+  onCancel: () => void;
+}) {
+  const changeStart = (startedLocal: string) => {
+    onChange({
+      ...medication,
+      startedLocal: startedLocal || undefined,
+      startedZoneId: startedLocal ? medication.startedZoneId || localMedicationZone() : undefined,
+    });
+  };
+
+  return (
+    <section
+      className="medication-rail-section medication-rail-editor"
+      aria-label="Edit medication"
+    >
+      <header>
+        <p className="section-kicker">Revision {medication.revision}</p>
+        <h2>Edit private label</h2>
+      </header>
+      <form className="medication-definition-form" onSubmit={onSave}>
+        <label>
+          <span>Label</span>
+          <input
+            value={medication.label}
+            maxLength={120}
+            disabled={busy}
+            onChange={(event) => onChange({ ...medication, label: event.target.value })}
+          />
+        </label>
+        <label>
+          <span>Form</span>
+          <input
+            value={medication.form ?? ""}
+            maxLength={80}
+            disabled={busy}
+            onChange={(event) => onChange({ ...medication, form: event.target.value })}
+          />
+        </label>
+        <label>
+          <span>Strength label</span>
+          <input
+            value={medication.strengthLabel ?? ""}
+            maxLength={80}
+            disabled={busy}
+            onChange={(event) => onChange({ ...medication, strengthLabel: event.target.value })}
+          />
+        </label>
+        <label className="medication-check-row">
+          <input
+            type="checkbox"
+            checked={medication.active}
+            disabled={busy}
+            onChange={(event) => onChange({ ...medication, active: event.target.checked })}
+          />
+          <span>Available in quick log</span>
+        </label>
+        <fieldset className="medication-start-fields">
+          <legend>Recorded start marker (optional)</legend>
+          <label>
+            <span>Local date and time</span>
+            <input
+              type="datetime-local"
+              value={medication.startedLocal ?? ""}
+              disabled={busy}
+              onChange={(event) => changeStart(event.target.value)}
+            />
+          </label>
+          <label>
+            <span>IANA time zone</span>
+            <input
+              value={medication.startedZoneId ?? ""}
+              disabled={busy || !medication.startedLocal}
+              placeholder="America/New_York"
+              onChange={(event) => onChange({ ...medication, startedZoneId: event.target.value })}
+            />
+          </label>
+          <small>
+            Used for descriptive before/after rhythm context. A start marker does not establish a
+            medication effect.
+          </small>
+          {medication.startedLocal && (
+            <button
+              className="text-button"
+              type="button"
+              disabled={busy}
+              onClick={() =>
+                onChange({
+                  ...medication,
+                  startedLocal: undefined,
+                  startedZoneId: undefined,
+                })
+              }
+            >
+              Clear start marker
+            </button>
+          )}
+        </fieldset>
+        <div className="medication-editor-actions">
+          <button className="button ghost compact" type="button" disabled={busy} onClick={onCancel}>
+            Cancel
+          </button>
+          <button
+            className="button primary compact"
+            type="submit"
+            disabled={busy || !medication.label.trim()}
+          >
+            Save revision
+          </button>
+        </div>
+      </form>
     </section>
   );
 }
@@ -103,6 +232,8 @@ export function MedicationSetupPanel({
       form: editing.form?.trim() ?? "",
       strengthLabel: editing.strengthLabel?.trim() ?? "",
       active: editing.active,
+      startedLocal: editing.startedLocal ?? "",
+      startedZoneId: editing.startedZoneId ?? "",
     }).then(
       () => setEditing(null),
       () => undefined,
@@ -190,6 +321,7 @@ export function MedicationSetupPanel({
                   {medication.schedule?.summary ?? "No schedule"} | {medication.eventCount}{" "}
                   {medication.eventCount === 1 ? "event" : "events"}
                 </small>
+                {medication.startedLabel && <small>Start marker: {medication.startedLabel}</small>}
                 <div className="medication-row-actions">
                   <button
                     className="text-button"
@@ -228,6 +360,8 @@ export function MedicationSetupPanel({
                         form: medication.form ?? "",
                         strengthLabel: medication.strengthLabel ?? "",
                         active: !medication.active,
+                        startedLocal: medication.startedLocal ?? "",
+                        startedZoneId: medication.startedZoneId ?? "",
                       }).catch(() => undefined)
                     }
                   >
@@ -263,86 +397,13 @@ export function MedicationSetupPanel({
       )}
 
       {editing && (
-        <section
-          className="medication-rail-section medication-rail-editor"
-          aria-label="Edit medication"
-        >
-          <header>
-            <p className="section-kicker">Revision {editing.revision}</p>
-            <h2>Edit private label</h2>
-          </header>
-          <form className="medication-definition-form" onSubmit={save}>
-            <label>
-              <span>Label</span>
-              <input
-                value={editing.label}
-                maxLength={120}
-                disabled={busy}
-                onChange={(event) =>
-                  setEditing((current) =>
-                    current ? { ...current, label: event.target.value } : current,
-                  )
-                }
-              />
-            </label>
-            <label>
-              <span>Form</span>
-              <input
-                value={editing.form ?? ""}
-                maxLength={80}
-                disabled={busy}
-                onChange={(event) =>
-                  setEditing((current) =>
-                    current ? { ...current, form: event.target.value } : current,
-                  )
-                }
-              />
-            </label>
-            <label>
-              <span>Strength label</span>
-              <input
-                value={editing.strengthLabel ?? ""}
-                maxLength={80}
-                disabled={busy}
-                onChange={(event) =>
-                  setEditing((current) =>
-                    current ? { ...current, strengthLabel: event.target.value } : current,
-                  )
-                }
-              />
-            </label>
-            <label className="medication-check-row">
-              <input
-                type="checkbox"
-                checked={editing.active}
-                disabled={busy}
-                onChange={(event) =>
-                  setEditing((current) =>
-                    current ? { ...current, active: event.target.checked } : current,
-                  )
-                }
-              />
-              <span>Available in quick log</span>
-            </label>
-            <div className="medication-editor-actions">
-              <button
-                className="button ghost compact"
-                type="button"
-                disabled={busy}
-                onClick={() => setEditing(null)}
-              >
-                Cancel
-              </button>
-              <button
-                className="button primary compact"
-                type="submit"
-                disabled={busy || !editing.label.trim()}
-              >
-                Save revision
-              </button>
-            </div>
-          </form>
-        </section>
+        <MedicationEditor
+          medication={editing}
+          busy={busy}
+          onChange={setEditing}
+          onSave={save}
+          onCancel={() => setEditing(null)}
+        />
       )}
 
       {erasing && (

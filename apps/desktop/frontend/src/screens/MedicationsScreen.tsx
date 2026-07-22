@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "../components/AppShell";
 import { MedicationHistory } from "../components/MedicationHistory";
 import { MedicationFeasibility } from "../components/MedicationFeasibility";
+import { MedicationClinicalReport } from "../components/MedicationClinicalReport";
 import { MedicationLogForm } from "../components/MedicationLogForm";
 import { MedicationSetupPanel } from "../components/MedicationSetupPanel";
 import {
@@ -289,6 +290,8 @@ export function MedicationsScreen() {
       <p className="sr-only" role="status" aria-live="polite">
         {announcement}
       </p>
+
+      <MedicationClinicalReport available={available} />
 
       <MedicationWorkspaceView
         data={data}
