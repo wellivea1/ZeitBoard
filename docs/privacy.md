@@ -39,9 +39,13 @@ Calendar import likewise reads only an owner-selected ICS file or an explicitly
 entered CalDAV collection. CalDAV is read-only, bounded, and device-side. The
 password is used for one request and cleared; it is never persisted. Stored
 collection endpoints are sanitized to exclude credentials and query secrets.
-Medication data is created only from labels, optional form/strength text, and
-taken/skipped events the owner explicitly enters. The app does not query a drug
-database, infer a schedule from a name, or upload medication text.
+Medication data is created only from labels, optional form/strength and
+clinician-rule text, schedules, and taken/skipped events the owner explicitly
+enters. The app does not query a drug database, infer a schedule from a name or
+history, move a scheduled time, or upload medication text. Desktop medication
+notifications are off by default. Enabling them for an explicit clock schedule
+allows the local operating-system notification surface to display the
+owner-entered label at those times, including forecasted sleep overlaps.
 Windows activity and Health Connect collection are disabled until
 the user enables them through a visible permission flow, and backend sync is
 opt-in and off by default. The application does not collect keystrokes, typed
@@ -86,14 +90,21 @@ separately owned ZeitBoard block; rejection creates no event; undo removes only
 that app-owned block. Calendar export contains app-owned placements only and
 never copies imported text.
 
-Medication definitions, raw events, and corrections remain in local SQLite.
-Derived wake/sleep relationships are recomputed and are not included in the
-medication export. Exclusion appends a correction and retains the raw evidence;
-typed `DELETE` erasure removes an event and its corrections, or a definition
-and all dependent history, then checkpoints and vacuums SQLite. Medication
-labels and notes are excluded from backend sync, trusted views, MCP/assistant
-context, telemetry, and logs in M-A. Future sync requires a new reviewed
+Medication definitions, schedules, raw events, corrections, and reminder
+claims remain in local SQLite. Derived wake/sleep relationships are recomputed
+and are not included in the medication export. Reminder claims contain only an
+opaque occurrence ID, medication ID, and scheduled/claimed UTC instants; they
+are inserted before delivery to prevent duplicate prompts and are excluded
+from export and sync. Exclusion appends a correction and retains the raw
+evidence; typed `DELETE` erasure removes an event and its corrections, or a
+definition and all dependent events, corrections, schedules, and reminder
+claims, then checkpoints and vacuums SQLite. Medication labels, clinician
+rules, and notes are excluded from backend sync, trusted views, MCP/assistant
+context, telemetry, and logs in M-A/M-B. Future sync requires a new reviewed
 redaction and tombstone path before those records may leave the device.
+Erasing the SQLite record cannot retract a reminder label already delivered to
+Windows notification history; the opt-in disclosure treats that OS-managed
+copy as outside ZeitBoard's erasure boundary.
 
 ## Logging
 

@@ -35,3 +35,23 @@ func TestTimeRangeSpansMidnightWithoutCivilDayAssumption(t *testing.T) {
 		t.Fatalf("duration = %v", got)
 	}
 }
+
+func TestResolveCivilTimeRejectsGapAndUsesFirstRepeatedInstant(t *testing.T) {
+	location, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ResolveCivilTime(location, 2026, time.March, 8, 2, 30, 0); err == nil {
+		t.Fatal("nonexistent spring-forward wall time was accepted")
+	}
+	repeated, err := ResolveCivilTime(location, 2026, time.November, 1, 1, 30, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !repeated.Ambiguous {
+		t.Fatal("fall-back wall time was not marked ambiguous")
+	}
+	if got := repeated.Time.UTC(); !got.Equal(time.Date(2026, 11, 1, 5, 30, 0, 0, time.UTC)) {
+		t.Fatalf("repeated wall time = %v, want first occurrence at 05:30Z", got)
+	}
+}

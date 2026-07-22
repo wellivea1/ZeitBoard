@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Medication event set v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "generated_at", "events", "corrections"],
+  "properties": {
+    "schema_version": {
+      "$ref": "common.schema.json#/$defs/schemaVersion"
+    },
+    "generated_at": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/event"
+      }
+    },
+    "corrections": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/correction"
+      }
+    }
+  },
+  "$defs": {
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "event_id",
+        "medication_id",
+        "dose_at",
+        "zone_id",
+        "status",
+        "scheduled",
+        "provenance"
+      ],
+      "properties": {
+        "event_id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "medication_id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "dose_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "zone_id": {
+          "$ref": "common.schema.json#/$defs/zoneId"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["taken", "skipped"]
+        },
+        "scheduled": {
+          "type": "boolean"
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "provenance": {
+          "$ref": "common.schema.json#/$defs/provenance"
+        }
+      }
+    },
+    "correction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["correction_id", "target_event_id", "created_at", "reason", "changes"],
+      "properties": {
+        "correction_id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "target_event_id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "supersedes_correction_id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "created_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "reason": {
+          "type": "string",
+          "enum": ["user_edit", "duplicate", "invalid_time"]
+        },
+        "changes": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "dose_at": {
+              "$ref": "common.schema.json#/$defs/timestamp"
+            },
+            "zone_id": {
+              "$ref": "common.schema.json#/$defs/zoneId"
+            },
+            "status": {
+              "type": "string",
+              "enum": ["taken", "skipped"]
+            },
+            "scheduled": {
+              "type": "boolean"
+            },
+            "note": {
+              "type": "string",
+              "maxLength": 500
+            },
+            "excluded": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    }
+  }
+}

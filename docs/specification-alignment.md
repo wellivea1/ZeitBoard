@@ -42,11 +42,15 @@ and UI specifications* to what implements them.
   removal performs confirmed erasure. Approved local proposals create
   ZeitBoard-owned blocks visible in Calendar and app-owned ICS export; reject
   and undo preserve imported events.
-- Medication M-A is real under ADR-0024: strict v1 definition/event/export
-  contracts, revision-checked local definitions, immutable raw events,
-  correction chains, observed-versus-predicted rhythm context, explicit
-  exclusion, and separate typed hard erasure. The desktop adapter rejects
-  contradictory labels, references, counts, civil times, and fixture claims.
+- Medication M-A/M-B is real under ADR-0024/0025: the strict v1 logging
+  contracts remain valid and strict v2 definition/event/schedule/export
+  contracts carry M-B, alongside revision-checked local
+  definitions, immutable raw events, correction chains, explicit civil-time
+  schedules, neutral observed-versus-predicted collision context, opt-in
+  claim-first desktop reminders, explicit exclusion, and separate typed hard
+  erasure. The desktop adapter rejects contradictory labels, references,
+  counts, schedule shapes, occurrence contexts, civil times, and fixture
+  claims.
 - Real fixed events are immutable scheduler inputs; proposals carry contract
   explanation codes and honest unplaced reasons. Decisions transactionally
   reject stale task, sleep, or calendar snapshots.
@@ -75,10 +79,11 @@ and UI specifications* to what implements them.
 - **Appearance:** U-A through U-E are implemented. ADR-0021 defines the
   reversible direct-action boundary for rhythm-linked preset switching; only
   the agent-readable desktop-local action surface remains deferred.
-- **Medications:** M-A local logging is implemented and the sample preview is
-  retired. M-B schedules/reminders/collision forecasts, M-C adherence and
-  clinician export, sync, agent projections, and missed-dose sharing remain
-  separately gated; the M-A UI does not imply that they exist.
+- **Medications:** M-A local logging and M-B user-authored schedules,
+  at-most-once desktop reminders, and neutral collision forecasts are
+  implemented; the sample preview is retired. M-C adherence and clinician
+  export, sync, agent projections, and missed-dose sharing remain separately
+  gated; the M-A/M-B UI does not imply that they exist.
 
 ## Deferred analysis work
 

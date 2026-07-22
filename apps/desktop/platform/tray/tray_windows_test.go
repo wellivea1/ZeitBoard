@@ -2,7 +2,10 @@
 
 package tray
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestWindowsTrayDispatchesShowAndQuitCallbacks(t *testing.T) {
 	controller := newPlatformController().(*windowsController)
@@ -22,5 +25,25 @@ func TestWindowsTrayDispatchesShowAndQuitCallbacks(t *testing.T) {
 	}
 	if quitCount != 1 {
 		t.Fatalf("quit callback dispatched %d times, want 1", quitCount)
+	}
+}
+
+func TestWindowsTrayNotificationRequiresStartedTray(t *testing.T) {
+	controller := newPlatformController().(*windowsController)
+	if err := controller.Notify("Medication reminder", "Reminder you set: label."); !errors.Is(err, ErrNotificationsUnavailable) {
+		t.Fatalf("notification before tray start error = %v", err)
+	}
+}
+
+func TestCopyUTF16TruncatedPreservesTerminationAndSurrogatePairs(t *testing.T) {
+	buffer := []uint16{0xffff, 0xffff, 0xffff}
+	if err := copyUTF16Truncated(buffer, "A\U0001F600B"); err != nil {
+		t.Fatal(err)
+	}
+	if buffer[0] != uint16('A') || buffer[1] != 0 || buffer[2] != 0 {
+		t.Fatalf("truncation left a partial surrogate pair: %#v", buffer)
+	}
+	if err := copyUTF16Truncated(buffer, "bad\x00text"); err == nil {
+		t.Fatal("notification text with a null character was accepted")
 	}
 }

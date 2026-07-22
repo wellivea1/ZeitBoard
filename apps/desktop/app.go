@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -39,6 +40,11 @@ type App struct {
 	configDir          string
 	calendarHTTPClient calendarHTTPDoer
 	nowFn              func() time.Time
+	reminderMu         sync.RWMutex
+	reminderCancel     context.CancelFunc
+	reminderDone       chan struct{}
+	reminderRunning    bool
+	reminderLastError  string
 }
 
 type RefusalDTO struct {
@@ -221,7 +227,7 @@ func openDesktopStore() (*storage.Store, error) {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	_ = a.collector.Start(ctx)
-	_ = a.tray.Start(tray.Callbacks{
+	trayErr := a.tray.Start(tray.Callbacks{
 		Show: func() {
 			runtime.WindowUnminimise(ctx)
 			runtime.WindowShow(ctx)
@@ -229,9 +235,15 @@ func (a *App) startup(ctx context.Context) {
 		},
 		Quit: func() { runtime.Quit(ctx) },
 	})
+	if trayErr != nil {
+		a.setMedicationReminderError("Desktop notifications are unavailable; enabled reminders will not be shown.")
+		return
+	}
+	a.startMedicationReminderService(ctx)
 }
 
 func (a *App) shutdown(ctx context.Context) {
+	a.stopMedicationReminderService()
 	_ = a.tray.Stop()
 	_ = a.collector.Stop(ctx)
 	if a.store != nil {

@@ -31,6 +31,19 @@ type MedicationUpdateInput struct {
 	Active        bool   `json:"active"`
 }
 
+type MedicationScheduleInput struct {
+	MedicationID    string   `json:"medicationId"`
+	Revision        int      `json:"revision"`
+	Kind            string   `json:"kind"`
+	ZoneID          string   `json:"zoneId"`
+	CivilTimes      []string `json:"civilTimes"`
+	DaysOn          int      `json:"daysOn"`
+	DaysOff         int      `json:"daysOff"`
+	CycleStartedOn  string   `json:"cycleStartedOn"`
+	ReminderEnabled bool     `json:"reminderEnabled"`
+	ClinicianRule   string   `json:"clinicianRule"`
+}
+
 type MedicationEventInput struct {
 	MedicationID string `json:"medicationId"`
 	DoseLocal    string `json:"doseLocal"`
@@ -61,16 +74,62 @@ type MedicationEventDeleteInput struct {
 }
 
 type MedicationDTO struct {
-	MedicationID  string `json:"medicationId"`
-	Label         string `json:"label"`
-	Form          string `json:"form,omitempty"`
-	StrengthLabel string `json:"strengthLabel,omitempty"`
-	DetailLabel   string `json:"detailLabel"`
-	Active        bool   `json:"active"`
-	Revision      int    `json:"revision"`
-	ScheduleKind  string `json:"scheduleKind"`
-	CreatedLabel  string `json:"createdLabel"`
-	EventCount    int    `json:"eventCount"`
+	MedicationID             string                 `json:"medicationId"`
+	Label                    string                 `json:"label"`
+	Form                     string                 `json:"form,omitempty"`
+	StrengthLabel            string                 `json:"strengthLabel,omitempty"`
+	DetailLabel              string                 `json:"detailLabel"`
+	ClinicianRule            string                 `json:"clinicianRule,omitempty"`
+	ClinicianRuleAttribution string                 `json:"clinicianRuleAttribution,omitempty"`
+	Active                   bool                   `json:"active"`
+	Revision                 int                    `json:"revision"`
+	ScheduleKind             string                 `json:"scheduleKind"`
+	Schedule                 *MedicationScheduleDTO `json:"schedule,omitempty"`
+	CreatedLabel             string                 `json:"createdLabel"`
+	EventCount               int                    `json:"eventCount"`
+}
+
+type MedicationScheduleDTO struct {
+	Kind            string                        `json:"kind"`
+	ZoneID          string                        `json:"zoneId,omitempty"`
+	CivilTimes      []string                      `json:"civilTimes"`
+	DaysOn          int                           `json:"daysOn,omitempty"`
+	DaysOff         int                           `json:"daysOff,omitempty"`
+	CycleStartedOn  string                        `json:"cycleStartedOn,omitempty"`
+	ReminderEnabled bool                          `json:"reminderEnabled"`
+	Summary         string                        `json:"summary"`
+	Forecast        MedicationScheduleForecastDTO `json:"forecast"`
+}
+
+type MedicationScheduleForecastDTO struct {
+	Status              string                            `json:"status"`
+	Message             string                            `json:"message"`
+	CoveredCount        int                               `json:"coveredCount"`
+	CollisionCount      int                               `json:"collisionCount"`
+	OutsideHorizonCount int                               `json:"outsideHorizonCount"`
+	CoverageEndsAt      string                            `json:"coverageEndsAt,omitempty"`
+	CoverageLabel       string                            `json:"coverageLabel,omitempty"`
+	Occurrences         []MedicationScheduleOccurrenceDTO `json:"occurrences"`
+	Gaps                []MedicationScheduleGapDTO        `json:"gaps"`
+}
+
+type MedicationScheduleOccurrenceDTO struct {
+	At         string `json:"at"`
+	CivilDate  string `json:"civilDate"`
+	CivilTime  string `json:"civilTime"`
+	CivilLabel string `json:"civilLabel"`
+	Status     string `json:"status"`
+	Context    string `json:"context"`
+	Confidence string `json:"confidence"`
+	Ambiguous  bool   `json:"ambiguous"`
+	DSTNote    string `json:"dstNote,omitempty"`
+}
+
+type MedicationScheduleGapDTO struct {
+	CivilDate  string `json:"civilDate"`
+	CivilTime  string `json:"civilTime"`
+	CivilLabel string `json:"civilLabel"`
+	Message    string `json:"message"`
 }
 
 type MedicationLogDTO struct {
@@ -103,6 +162,8 @@ type MedicationsDTO struct {
 	FixtureMode           bool               `json:"fixtureMode"`
 	Disclaimer            string             `json:"disclaimer"`
 	InteractionDisclaimer string             `json:"interactionDisclaimer"`
+	ReminderStatus        string             `json:"reminderStatus"`
+	ReminderMessage       string             `json:"reminderMessage"`
 	UpdatedLabel          string             `json:"updatedLabel"`
 }
 
@@ -168,6 +229,71 @@ func (a *App) UpdateMedication(input MedicationUpdateInput) (MedicationsDTO, err
 		return MedicationsDTO{}, err
 	}
 	return a.medicationsAt(now)
+}
+
+func (a *App) UpdateMedicationSchedule(input MedicationScheduleInput) (MedicationsDTO, error) {
+	store, err := a.requireStore()
+	if err != nil {
+		return MedicationsDTO{}, err
+	}
+	ctx := context.Background()
+	current, err := store.MedicationByID(ctx, strings.TrimSpace(input.MedicationID))
+	if err != nil {
+		return MedicationsDTO{}, err
+	}
+	if current.Revision != input.Revision {
+		return MedicationsDTO{}, storage.ErrMedicationRevisionConflict
+	}
+	schedule, clinicianRule, err := medicationScheduleValues(input)
+	if err != nil {
+		return MedicationsDTO{}, err
+	}
+	now := a.currentTime().UTC().Truncate(time.Second)
+	if now.Before(current.UpdatedAt) {
+		now = current.UpdatedAt
+	}
+	current.Schedule = schedule
+	current.ClinicianRule = clinicianRule
+	current.Revision++
+	current.UpdatedAt = now
+	if err := store.UpdateMedication(ctx, current, input.Revision); err != nil {
+		return MedicationsDTO{}, err
+	}
+	return a.medicationsAt(now)
+}
+
+func medicationScheduleValues(input MedicationScheduleInput) (*storage.MedicationSchedule, string, error) {
+	kind := strings.TrimSpace(input.Kind)
+	clinicianRule := strings.TrimSpace(input.ClinicianRule)
+	civilTimes := make([]string, len(input.CivilTimes))
+	for index, civilTime := range input.CivilTimes {
+		civilTimes[index] = strings.TrimSpace(civilTime)
+	}
+	if kind == "none" {
+		if strings.TrimSpace(input.ZoneID) != "" || len(civilTimes) != 0 || input.DaysOn != 0 || input.DaysOff != 0 || strings.TrimSpace(input.CycleStartedOn) != "" || input.ReminderEnabled {
+			return nil, "", errors.New("a removed schedule cannot retain clock, cycle, or reminder fields")
+		}
+		if len(clinicianRule) > 500 {
+			return nil, "", errors.New("clinician rule must be 500 characters or fewer")
+		}
+		return nil, clinicianRule, nil
+	}
+	schedule := &storage.MedicationSchedule{
+		Kind:            kind,
+		ZoneID:          strings.TrimSpace(input.ZoneID),
+		CivilTimes:      civilTimes,
+		DaysOn:          input.DaysOn,
+		DaysOff:         input.DaysOff,
+		CycleStartedOn:  strings.TrimSpace(input.CycleStartedOn),
+		ReminderEnabled: input.ReminderEnabled,
+	}
+	if err := schedule.Validate(); err != nil {
+		return nil, "", err
+	}
+	if len(clinicianRule) > 500 {
+		return nil, "", errors.New("clinician rule must be 500 characters or fewer")
+	}
+	return schedule, clinicianRule, nil
 }
 
 func (a *App) LogMedicationEvent(input MedicationEventInput) (MedicationsDTO, error) {
@@ -315,7 +441,7 @@ func (a *App) ExportMedicationData() (MedicationExportDTO, error) {
 	}
 	encoded = append(encoded, '\n')
 	return MedicationExportDTO{
-		FileName:        "zeitboard-medication-data-" + now.Format("20060102") + ".json",
+		FileName:        "zeitboard-medication-data-v2-" + now.Format("20060102") + ".json",
 		JSON:            string(encoded),
 		GeneratedAt:     now.Format(time.RFC3339),
 		GeneratedLabel:  now.Local().Format("Jan 2, 2006, 3:04 PM"),
@@ -352,7 +478,11 @@ func (a *App) medicationsAt(now time.Time) (MedicationsDTO, error) {
 	}
 	medicationDTOs := make([]MedicationDTO, 0, len(medications))
 	for _, record := range medications {
-		medicationDTOs = append(medicationDTOs, medicationDTO(record, eventCounts[record.MedicationID]))
+		item, err := medicationDTO(record, eventCounts[record.MedicationID], state, now)
+		if err != nil {
+			return MedicationsDTO{}, fmt.Errorf("project medication %s: %w", record.MedicationID, err)
+		}
+		medicationDTOs = append(medicationDTOs, item)
 	}
 	sort.SliceStable(medicationDTOs, func(i, j int) bool {
 		if medicationDTOs[i].Active != medicationDTOs[j].Active {
@@ -386,6 +516,7 @@ func (a *App) medicationsAt(now time.Time) (MedicationsDTO, error) {
 		status = "empty"
 		message = "No medications yet. Add a private label before logging a taken or skipped event."
 	}
+	reminderStatus, reminderMessage := a.medicationReminderStatus(medications)
 	return MedicationsDTO{
 		Status:                status,
 		Empty:                 len(medications) == 0,
@@ -397,11 +528,13 @@ func (a *App) medicationsAt(now time.Time) (MedicationsDTO, error) {
 		FixtureMode:           false,
 		Disclaimer:            "Medication timing shown here is user-entered or derived context, not medical advice.",
 		InteractionDisclaimer: medicationInteractionDisclaimer,
+		ReminderStatus:        reminderStatus,
+		ReminderMessage:       reminderMessage,
 		UpdatedLabel:          now.Local().Format("Updated Jan 2, 3:04 PM"),
 	}, nil
 }
 
-func medicationDTO(record storage.MedicationRecord, eventCount int) MedicationDTO {
+func medicationDTO(record storage.MedicationRecord, eventCount int, state localEstimateState, now time.Time) (MedicationDTO, error) {
 	detailParts := make([]string, 0, 2)
 	if record.Form != "" {
 		detailParts = append(detailParts, record.Form)
@@ -414,21 +547,170 @@ func medicationDTO(record storage.MedicationRecord, eventCount int) MedicationDT
 		detail = "No form or strength label"
 	}
 	scheduleKind := "none"
+	var scheduleDTO *MedicationScheduleDTO
 	if record.Schedule != nil {
 		scheduleKind = record.Schedule.Kind
+		projected, err := medicationScheduleDTO(*record.Schedule, state, now)
+		if err != nil {
+			return MedicationDTO{}, err
+		}
+		scheduleDTO = &projected
+	}
+	attribution := ""
+	if record.ClinicianRule != "" {
+		attribution = "Clinician guidance entered verbatim by you"
 	}
 	return MedicationDTO{
-		MedicationID:  record.MedicationID,
-		Label:         record.Label,
-		Form:          record.Form,
-		StrengthLabel: record.StrengthLabel,
-		DetailLabel:   detail,
-		Active:        record.Active,
-		Revision:      record.Revision,
-		ScheduleKind:  scheduleKind,
-		CreatedLabel:  "Added " + record.CreatedAt.Local().Format("Jan 2, 2006"),
-		EventCount:    eventCount,
+		MedicationID:             record.MedicationID,
+		Label:                    record.Label,
+		Form:                     record.Form,
+		StrengthLabel:            record.StrengthLabel,
+		DetailLabel:              detail,
+		ClinicianRule:            record.ClinicianRule,
+		ClinicianRuleAttribution: attribution,
+		Active:                   record.Active,
+		Revision:                 record.Revision,
+		ScheduleKind:             scheduleKind,
+		Schedule:                 scheduleDTO,
+		CreatedLabel:             "Added " + record.CreatedAt.Local().Format("Jan 2, 2006"),
+		EventCount:               eventCount,
+	}, nil
+}
+
+func medicationScheduleDTO(schedule storage.MedicationSchedule, state localEstimateState, now time.Time) (MedicationScheduleDTO, error) {
+	location, err := time.LoadLocation(schedule.ZoneID)
+	if schedule.Kind == storage.MedicationScheduleAsNeeded {
+		location = time.UTC
+		err = nil
 	}
+	if err != nil {
+		return MedicationScheduleDTO{}, err
+	}
+	through := now.In(location).AddDate(0, 0, 14)
+	expansion, err := medicationcore.ExpandSchedule(schedule, now, through)
+	if err != nil {
+		return MedicationScheduleDTO{}, err
+	}
+	var estimate *domain.PhaseEstimate
+	if state.Status == "estimated" {
+		estimate = &state.Estimate
+	}
+	forecast, err := medicationcore.AnalyzeCollisions(expansion, estimate, now)
+	if err != nil {
+		return MedicationScheduleDTO{}, err
+	}
+	occurrences := make([]MedicationScheduleOccurrenceDTO, 0, len(forecast.Assessments))
+	for _, assessment := range forecast.Assessments {
+		contextLabel := "Outside the current forecast horizon"
+		switch assessment.Status {
+		case medicationcore.OccurrenceInsidePredictedSleep:
+			contextLabel = "Inside a current predicted sleep window"
+		case medicationcore.OccurrenceOutsidePredictedSleep:
+			contextLabel = "Not inside a current predicted sleep window"
+		}
+		dstNote := ""
+		if assessment.Occurrence.Ambiguous {
+			dstNote = "Repeated civil time; the first occurrence is used."
+		}
+		occurrences = append(occurrences, MedicationScheduleOccurrenceDTO{
+			At:         assessment.Occurrence.At.UTC.Format(time.RFC3339),
+			CivilDate:  assessment.Occurrence.CivilDate,
+			CivilTime:  assessment.Occurrence.CivilTime,
+			CivilLabel: assessment.Occurrence.At.UTC.In(location).Format("Mon Jan 2, 3:04 PM MST"),
+			Status:     assessment.Status,
+			Context:    contextLabel,
+			Confidence: medicationForecastConfidence(assessment.Confidence),
+			Ambiguous:  assessment.Occurrence.Ambiguous,
+			DSTNote:    dstNote,
+		})
+	}
+	gaps := make([]MedicationScheduleGapDTO, 0, len(forecast.Gaps))
+	for _, gap := range forecast.Gaps {
+		gaps = append(gaps, MedicationScheduleGapDTO{
+			CivilDate:  gap.CivilDate,
+			CivilTime:  gap.CivilTime,
+			CivilLabel: medicationGapCivilLabel(gap, schedule.ZoneID),
+			Message:    "This civil time does not exist on this DST transition; no schedule occurrence is generated.",
+		})
+	}
+	projectedForecast := MedicationScheduleForecastDTO{
+		Status:              forecast.Status,
+		Message:             medicationForecastMessage(forecast, len(occurrences), len(gaps)),
+		CoveredCount:        forecast.CoveredCount,
+		CollisionCount:      forecast.CollisionCount,
+		OutsideHorizonCount: forecast.OutsideHorizonCount,
+		Occurrences:         occurrences,
+		Gaps:                gaps,
+	}
+	if forecast.CoverageEndsAt != nil {
+		projectedForecast.CoverageEndsAt = forecast.CoverageEndsAt.UTC().Format(time.RFC3339)
+		projectedForecast.CoverageLabel = forecast.CoverageEndsAt.In(location).Format("Jan 2, 3:04 PM MST")
+	}
+	return MedicationScheduleDTO{
+		Kind:            schedule.Kind,
+		ZoneID:          schedule.ZoneID,
+		CivilTimes:      append([]string{}, schedule.CivilTimes...),
+		DaysOn:          schedule.DaysOn,
+		DaysOff:         schedule.DaysOff,
+		CycleStartedOn:  schedule.CycleStartedOn,
+		ReminderEnabled: schedule.ReminderEnabled,
+		Summary:         medicationScheduleSummary(schedule),
+		Forecast:        projectedForecast,
+	}, nil
+}
+
+func medicationScheduleSummary(schedule storage.MedicationSchedule) string {
+	switch schedule.Kind {
+	case storage.MedicationScheduleAsNeeded:
+		return "As needed; no clock times"
+	case storage.MedicationScheduleFixedClock:
+		return strings.Join(schedule.CivilTimes, ", ") + " in " + schedule.ZoneID
+	case storage.MedicationScheduleCycling:
+		return fmt.Sprintf("%d days on, %d days off; %s in %s", schedule.DaysOn, schedule.DaysOff, strings.Join(schedule.CivilTimes, ", "), schedule.ZoneID)
+	default:
+		return "Schedule unavailable"
+	}
+}
+
+func medicationForecastMessage(forecast medicationcore.CollisionForecast, occurrenceCount, gapCount int) string {
+	var message string
+	switch forecast.Status {
+	case medicationcore.ForecastNotApplicable:
+		message = "As-needed schedules do not create timed occurrences."
+	case medicationcore.ForecastCollision:
+		message = fmt.Sprintf("%d of %d covered scheduled occurrences fall inside current predicted sleep windows.", forecast.CollisionCount, forecast.CoveredCount)
+	case medicationcore.ForecastNoOverlap:
+		message = fmt.Sprintf("None of %d covered scheduled occurrences fall inside current predicted sleep windows.", forecast.CoveredCount)
+	default:
+		if occurrenceCount == 0 && gapCount == 0 {
+			message = "No scheduled occurrences fall in the next 14 civil days."
+		} else if occurrenceCount == 0 {
+			message = "No occurrence is generated for the reported nonexistent civil time; scheduled times remain unchanged."
+		} else if forecast.OutsideHorizonCount > 0 {
+			message = "Current rhythm coverage does not extend to these scheduled occurrences; their times remain unchanged."
+		} else {
+			message = "Current rhythm forecast is unavailable; scheduled times remain unchanged."
+		}
+	}
+	if forecast.OutsideHorizonCount > 0 && forecast.CoveredCount > 0 {
+		message += fmt.Sprintf(" %d later %s outside the current forecast horizon.", forecast.OutsideHorizonCount, plural(forecast.OutsideHorizonCount, "occurrence is", "occurrences are"))
+	}
+	return message
+}
+
+func medicationForecastConfidence(confidence domain.InferenceConfidence) string {
+	if confidence.Level == domain.ConfidenceUnknown {
+		return "Unknown"
+	}
+	return confidenceTitle(confidence.Level)
+}
+
+func medicationGapCivilLabel(gap medicationcore.ScheduleGap, zoneID string) string {
+	date, err := time.Parse(time.DateOnly, gap.CivilDate)
+	if err != nil {
+		return gap.CivilDate + " " + gap.CivilTime + " " + zoneID
+	}
+	return date.Format("Mon Jan 2") + ", " + gap.CivilTime + " " + zoneID
 }
 
 func medicationEventDTO(item storage.EffectiveMedicationEvent, label string, state localEstimateState, anchors []domain.WakeAnchor, latestWake *domain.WakeAnchor) MedicationLogDTO {

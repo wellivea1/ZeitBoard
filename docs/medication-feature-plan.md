@@ -1,6 +1,7 @@
 # Medication tracking: comprehensive feature plan
 
-> Implementation plan. M-A is delivered under ADR-0024; M-B..M-F remain gated.
+> Implementation plan. M-A and M-B are delivered under ADR-0024 and ADR-0025;
+> M-C..M-F remain gated.
 > Extends `ui-ux-design.md` §9.6 and the
 > roadmap's medication debt line into a full feature plan. Engineering notes
 > only; not medical advice. The app records and displays — it never recommends
@@ -8,18 +9,20 @@
 
 ## Delivery status (2026-07-22)
 
-**M-A local logging is delivered.** The desktop now has strict v1 medication,
-event, and export contracts; revision-checked local definitions; immutable raw
-taken/skipped events with correction chains; real observed/predicted/unavailable
-rhythm context; owner-initiated JSON export; and distinct typed hard erasure
-for an event or a definition with byte-level SQLite/WAL tests. The sample
-preview is removed.
+**M-A local logging and M-B schedules + feasibility are delivered.** The
+desktop preserves the strict v1 logging contract and adds strict v2
+schedule-capable medication, event, and export contracts;
+revision-checked local definitions; immutable raw taken/skipped events with
+correction chains; owner-entered `as_needed`, `fixed_clock`, and `cycling`
+rules; neutral 14-day civil occurrence and sleep-collision forecasts; opt-in
+at-most-once Windows desktop reminders; owner-initiated JSON export; and
+distinct typed hard erasure for an event or a definition with byte-level
+SQLite/WAL tests. The sample preview is removed.
 
-M-A deliberately creates no schedule when the owner adds a label. M-B remains
-responsible for explicit `as_needed`, `fixed_clock`, and `cycling` rules,
-desktop reminders, and collision forecasts. M-C remains responsible for
-adherence summaries, actogram markers, association-without-causality views,
-and clinician export.
+Adding a medication still creates no schedule. A clock schedule requires the
+owner to enter its IANA zone and civil times, and ZeitBoard never infers or
+moves them. M-C remains responsible for adherence summaries, actogram markers,
+association-without-causality views, and clinician export.
 
 Medical boundary evidence is intentionally conservative. The
 [AASM intrinsic circadian-rhythm guideline](https://pmc.ncbi.nlm.nih.gov/articles/PMC4582061/)
@@ -29,8 +32,11 @@ it does not justify app-generated individual timing advice. A
 [MedISAFE-BP randomized trial](https://pmc.ncbi.nlm.nih.gov/articles/PMC6145760/)
 found a small self-reported adherence improvement without a blood-pressure
 difference, which does not establish dosing guidance or clinical benefit for
-this product. ZeitBoard therefore records facts and qualifies derived context;
-it never recommends a medication, dose, or time.
+this product. The large
+[REMIND randomized trial](https://pmc.ncbi.nlm.nih.gov/articles/PMC5470369/)
+found no adherence improvement from its low-cost reminder devices. ZeitBoard
+therefore records facts and qualifies derived context; it never recommends a
+medication, dose, or time or claims that reminders improve outcomes.
 
 ## 1. Reference review: Medisafe
 
@@ -114,9 +120,10 @@ confidence, no fabrication):
    confounders listed (schedule changes, travel, light exposure if logged).
    The copy never says "the medication changed your drift." This is also the
    first consumer of the deferred intervention-marker records.
-5. **Timezone-aware reminders** (Medisafe #3) come free: all storage is
-   UTC+zone (`ZonedInstant`), and travel semantics are already validated
-   (ADR-0019 scenario 16).
+5. **Timezone-aware reminders** (Medisafe #3) use an explicit schedule-owned
+   IANA zone. Civil occurrences resolve to UTC instants with tested DST-gap and
+   repeated-time behavior; the app does not silently follow device-zone travel
+   or reinterpret the owner's rule.
 
 ## 4. Where agentic functionality is required (ADR-0006)
 
@@ -149,17 +156,23 @@ are append-only evidence.**
 - `medication` (mutable, revision-synced like tasks, ADR-0020):
   `med_id`, `label` (private), optional `form`/`strength_label`,
   `schedule` (`kind: fixed_clock|as_needed|cycling`, civil times, cycle
-  days-on/off), optional `clinician_rule` (verbatim user-entered text,
-  always attributed to the clinician in UI), `refill {count, threshold}`,
-  `active` flag, `started_at` (drives the association marker).
+  days-on/off, explicit IANA zone, reminder opt-in), optional
+  `clinician_rule` (verbatim user-entered text, always attributed to the
+  clinician in UI), `active` flag, and optional `started_at` (drives the
+  future association marker). Refill state remains future work.
 - `medication_event` (append-only, correction-chained like sleep records,
   ADR-0013): `event_id`, `medication_id`, `dose_at` (ZonedInstant), `status`
   (`taken|skipped`), `scheduled` flag, optional private note; wake-relative
   fields are *computed*, never stored (they change when the estimate does).
-- Contracts: M-A delivers `medication-set.schema.json`,
-  `medication-event-set.schema.json`, and a local export envelope. M-D must add
-  explicit sync-batch kinds and remote erasure tombstones before any medication
-  payload leaves the device.
+- Reminder claims (local delivery state): opaque occurrence digest,
+  medication ID, scheduled UTC instant, and claimed UTC instant. The unique,
+  immutable claim is inserted before notification delivery and is excluded
+  from export and sync.
+- Contracts: M-A's strict v1 medication/event/export schemas remain unchanged.
+  M-B adds schedule-capable v2 versions of `medication-set.schema.json`,
+  `medication-event-set.schema.json`, and the local export envelope. M-D
+  must add explicit sync-batch kinds and remote erasure tombstones before any
+  medication payload leaves the device.
 - Erasure/export: M-A delivers `ExportSleepData`-style contract export and the
   separate DELETE-typed local erasure flow (ADR-0014/0024).
 
@@ -168,14 +181,14 @@ are append-only evidence.**
 | Slice | Scope | Depends on |
 |---|---|---|
 | **M-A Local logging — delivered (ADR-0024)** | contract + storage + real Medications screen (quick log / backdate / skipped / notes), wake-relative + before-sleep display via `core/medication`, honest no-estimate states; sample preview retired | nothing (core exists) |
-| **M-B Schedules + feasibility** | `fixed_clock`/`as_needed`/`cycling` schedules, civil-time reminders (desktop notification), collision forecast surface, clinician-rule tag | M-A |
+| **M-B Schedules + feasibility — delivered (ADR-0025)** | `fixed_clock`/`as_needed`/`cycling` schedules, explicit-zone civil expansion, opt-in at-most-once desktop reminders, neutral collision forecast surface, clinician-rule attribution | M-A |
 | **M-C Adherence + clinician export** | taken/skipped history, adherence-vs-rhythm table, actogram dose markers, association view with confounder list; feeds the §3.6 clinician PDF | M-A; marker records |
 | **M-D Sync** | definitions as revision records, events as append-only records, tombstone deletion | M-A (mirrors ADR-0020) |
 | **M-E Agent surface** | redacted assistant/MCP context + `propose_log_dose`; refusal-boundary tests | M-A, slice-8 rail |
 | **M-F Missed-dose sharing** | Medfriend-equivalent as an off-by-default sharing permission | sharing transport (deferred) |
 
-Ordering rationale: M-A retires the last full "Sample preview" screen; M-B
-completes the explicit schedule/collision part of §9.6. M-C is where circadian
+Ordering rationale: M-A retired the last full "Sample preview" screen; M-B
+completed the explicit schedule/collision part of §9.6. M-C is where circadian
 value peaks (and what the
 clinician actually wants); M-D/M-E reuse proven machinery nearly verbatim.
 
@@ -185,8 +198,8 @@ clinician actually wants); M-D/M-E reuse proven machinery nearly verbatim.
    medication, dose, or time. Timing facts are neutral ink, never red.
 2. Wherever a prompt surface exists, the medical refusal script is
    byte-identical across chat and MCP, and a medical prompt creates no proposal
-   (already tested; extend to medication-specific prompts in M-E). The M-A
-   record UI has no prompt or recommendation action.
+   (already tested; extend to medication-specific prompts in M-E). The M-A/M-B
+   record and schedule UI has no prompt or recommendation action.
 3. Interaction checking is explicitly disclaimed in the UI, not silently
    absent.
 4. Medication labels/notes: never in LLM context, MCP output, trusted views,

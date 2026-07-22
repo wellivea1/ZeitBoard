@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"path/filepath"
 	"testing"
 
 	"non24.app/tools/internal/repo"
@@ -25,6 +26,36 @@ func TestValidateAll(t *testing.T) {
 	_, root := testSet(t)
 	if err := ValidateAll(root); err != nil {
 		t.Fatalf("contract validation failed: %v", err)
+	}
+}
+
+func TestMedicationContractV2DoesNotRedefineV1(t *testing.T) {
+	v1, root := testSet(t)
+	if err := v1.ValidateFile("medication-set.schema.json", filepath.Join(root, "testdata", "v1", "medication-set.json")); err != nil {
+		t.Fatalf("v1 medication fixture no longer validates: %v", err)
+	}
+	v2, err := loadVersion(root, "v2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := v2.ValidateFile("medication-data-export.schema.json", filepath.Join(root, "testdata", "v2", "medication-data-export.json")); err != nil {
+		t.Fatalf("v2 medication export fixture does not validate: %v", err)
+	}
+	bad := []byte(`{
+		"schema_version": "v2",
+		"generated_at": "2026-03-15T00:00:00Z",
+		"medications": [{
+			"medication_id": "med_test_01",
+			"label": "Synthetic",
+			"active": true,
+			"schedule": {"kind": "fixed_clock", "civil_times": ["09:00"], "reminder_enabled": true},
+			"created_at": "2026-03-01T00:00:00Z",
+			"revision": 1,
+			"updated_at": "2026-03-01T00:00:00Z"
+		}]
+	}`)
+	if err := v2.ValidateBytes("medication-set.schema.json", bad); err == nil {
+		t.Fatal("v2 fixed-clock schedule without an explicit zone was accepted")
 	}
 }
 

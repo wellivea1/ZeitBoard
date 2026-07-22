@@ -5,8 +5,10 @@ package tray
 import (
 	"errors"
 	"runtime"
+	"strings"
 	"sync"
 	"syscall"
+	"unicode/utf16"
 	"unsafe"
 )
 
@@ -19,10 +21,13 @@ const (
 	wmTray          = 0x8001
 
 	nimAdd     = 0x00000000
+	nimModify  = 0x00000001
 	nimDelete  = 0x00000002
 	nifMessage = 0x00000001
 	nifIcon    = 0x00000002
 	nifTip     = 0x00000004
+	nifInfo    = 0x00000010
+	niifInfo   = 0x00000001
 
 	mfString       = 0x00000000
 	tpmRightButton = 0x0002
@@ -145,6 +150,34 @@ func (controller *windowsController) Stop() error {
 	return nil
 }
 
+func (controller *windowsController) Notify(title, message string) error {
+	if strings.TrimSpace(title) == "" || strings.TrimSpace(message) == "" {
+		return errors.New("notification title and message are required")
+	}
+	controller.mu.Lock()
+	defer controller.mu.Unlock()
+	if controller.window == 0 {
+		return ErrNotificationsUnavailable
+	}
+	data := notifyIconData{
+		Size:      uint32(unsafe.Sizeof(notifyIconData{})),
+		Window:    controller.window,
+		ID:        1,
+		Flags:     nifInfo,
+		InfoFlags: niifInfo,
+	}
+	if err := copyUTF16Truncated(data.InfoTitle[:], title); err != nil {
+		return err
+	}
+	if err := copyUTF16Truncated(data.Info[:], message); err != nil {
+		return err
+	}
+	if result, _, callErr := procShellNotifyIcon.Call(nimModify, uintptr(unsafe.Pointer(&data))); result == 0 {
+		return errors.New("show Windows notification: " + callErr.Error())
+	}
+	return nil
+}
+
 func (controller *windowsController) run() {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
@@ -248,4 +281,24 @@ func (controller *windowsController) showMenu(window uintptr) {
 	if command != 0 {
 		procPostMessage.Call(window, wmCommand, command, 0)
 	}
+}
+
+func copyUTF16Truncated(destination []uint16, value string) error {
+	if len(destination) == 0 {
+		return errors.New("notification text buffer is empty")
+	}
+	clear(destination)
+	if strings.ContainsRune(value, '\x00') {
+		return errors.New("notification text contains a null character")
+	}
+	encoded := utf16.Encode([]rune(value))
+	limit := len(destination) - 1
+	if len(encoded) > limit {
+		encoded = encoded[:limit]
+		if len(encoded) > 0 && encoded[len(encoded)-1] >= 0xd800 && encoded[len(encoded)-1] <= 0xdbff {
+			encoded = encoded[:len(encoded)-1]
+		}
+	}
+	copy(destination, encoded)
+	return nil
 }

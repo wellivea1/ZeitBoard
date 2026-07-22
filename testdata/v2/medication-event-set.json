@@ -1,0 +1,32 @@
+{
+  "schema_version": "v2",
+  "generated_at": "2026-03-15T00:00:00Z",
+  "events": [
+    {
+      "event_id": "dose_synthetic_01",
+      "medication_id": "med_synthetic_01",
+      "dose_at": "2026-03-14T21:00:00Z",
+      "zone_id": "America/New_York",
+      "status": "taken",
+      "scheduled": false,
+      "note": "Synthetic local-only note",
+      "provenance": {
+        "acquisition_method": "manual",
+        "evidence_status": "user_reported",
+        "recorded_at": "2026-03-14T22:00:00Z",
+        "source_record_id": "synthetic-dose-row-01"
+      }
+    }
+  ],
+  "corrections": [
+    {
+      "correction_id": "medcorr_synthetic_01",
+      "target_event_id": "dose_synthetic_01",
+      "created_at": "2026-03-14T23:00:00Z",
+      "reason": "user_edit",
+      "changes": {
+        "note": "Corrected synthetic local-only note"
+      }
+    }
+  ]
+}

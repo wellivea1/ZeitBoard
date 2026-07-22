@@ -46,6 +46,7 @@ func TestMedicationDefinitionsEventsAndCorrectionsPreserveRawEvidence(t *testing
 	store, ctx := openCalendarTestStore(t)
 	now := time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)
 	medication := testMedicationRecord(now)
+	medication.ClinicianRule = "Clinician instruction entered verbatim by the user"
 	if err := store.CreateMedication(ctx, medication); err != nil {
 		t.Fatal(err)
 	}
@@ -127,6 +128,12 @@ func TestMedicationDefinitionsEventsAndCorrectionsPreserveRawEvidence(t *testing
 	}
 	if len(exported.MedicationSet.Medications) != 1 || len(exported.EventSet.Events) != 1 || len(exported.EventSet.Corrections) != 2 {
 		t.Fatalf("export = %#v", exported)
+	}
+	if exported.SchemaVersion != "v2" || exported.MedicationSet.SchemaVersion != "v2" || exported.EventSet.SchemaVersion != "v2" {
+		t.Fatalf("schedule-capable export versions = %#v", exported)
+	}
+	if exported.MedicationSet.Medications[0].ClinicianRule != medication.ClinicianRule {
+		t.Fatal("export did not preserve the user-entered clinician rule")
 	}
 	if exported.EventSet.Events[0].Status != MedicationEventTaken || exported.EventSet.Events[0].Note != event.Note {
 		t.Fatal("export rewrote raw medication evidence instead of preserving corrections")
@@ -228,7 +235,7 @@ func TestMedicationErasureRemovesPrivateBytesFromDatabaseAndWAL(t *testing.T) {
 
 func stringPointer(value string) *string { return &value }
 
-func TestMedicationScheduleValidationRejectsAdviceLikeOrMalformedRules(t *testing.T) {
+func TestMedicationScheduleValidationRequiresExplicitUserAuthoredRules(t *testing.T) {
 	now := time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)
 	record := testMedicationRecord(now)
 	record.Schedule = &MedicationSchedule{Kind: MedicationScheduleFixedClock}
@@ -242,5 +249,73 @@ func TestMedicationScheduleValidationRejectsAdviceLikeOrMalformedRules(t *testin
 	record.Schedule = &MedicationSchedule{Kind: MedicationScheduleFixedClock, CivilTimes: []string{"22:00", "22:00"}}
 	if err := validateMedicationRecord(record); err == nil {
 		t.Fatal("duplicate fixed-clock times were accepted")
+	}
+	record.Schedule = &MedicationSchedule{Kind: MedicationScheduleAsNeeded, ReminderEnabled: true}
+	if err := validateMedicationRecord(record); err == nil {
+		t.Fatal("as-needed schedule with a timed reminder was accepted")
+	}
+	record.Schedule = &MedicationSchedule{Kind: MedicationScheduleFixedClock, ZoneID: "Local", CivilTimes: []string{"22:00"}}
+	if err := validateMedicationRecord(record); err == nil {
+		t.Fatal("machine-local pseudo-zone was accepted")
+	}
+	record.Schedule = &MedicationSchedule{
+		Kind:            MedicationScheduleFixedClock,
+		ZoneID:          "America/New_York",
+		CivilTimes:      []string{"22:00", "08:00"},
+		ReminderEnabled: true,
+	}
+	record.ClinicianRule = "Use the schedule provided by my clinician"
+	if err := validateMedicationRecord(record); err != nil {
+		t.Fatalf("valid user-authored schedule was rejected: %v", err)
+	}
+	normalized := normalizeMedicationRecord(record)
+	if normalized.Schedule.CivilTimes[0] != "08:00" || normalized.Schedule.CivilTimes[1] != "22:00" {
+		t.Fatalf("schedule times were not normalized: %#v", normalized.Schedule.CivilTimes)
+	}
+}
+
+func TestMedicationReminderClaimsAreAtMostOnceAndCascadeOnErasure(t *testing.T) {
+	store, ctx := openCalendarTestStore(t)
+	now := time.Date(2026, 7, 22, 12, 0, 0, 0, time.UTC)
+	medication := testMedicationRecord(now)
+	if err := store.CreateMedication(ctx, medication); err != nil {
+		t.Fatal(err)
+	}
+	claim := MedicationReminderClaim{
+		OccurrenceID: "reminder_occurrence_01",
+		MedicationID: medication.MedicationID,
+		ScheduledAt:  now,
+		ClaimedAt:    now.Add(10 * time.Second),
+	}
+	claimed, err := store.ClaimMedicationReminder(ctx, claim)
+	if err != nil || !claimed {
+		t.Fatalf("first claim = %t, %v", claimed, err)
+	}
+	claimed, err = store.ClaimMedicationReminder(ctx, claim)
+	if err != nil || claimed {
+		t.Fatalf("duplicate claim = %t, %v", claimed, err)
+	}
+	if _, err := store.db.ExecContext(ctx, `UPDATE local_medication_reminder_claims
+		SET claimed_at = ? WHERE occurrence_id = ?`, formatSQLiteTime(now.Add(time.Minute)), claim.OccurrenceID); err == nil {
+		t.Fatal("database allowed a reminder claim to be edited in place")
+	}
+	reused := claim
+	reused.ScheduledAt = now.Add(time.Hour)
+	reused.ClaimedAt = reused.ScheduledAt
+	if _, err := store.ClaimMedicationReminder(ctx, reused); err == nil {
+		t.Fatal("claim identifier was reused for a different occurrence")
+	}
+	if err := store.DeleteMedication(ctx, medication.MedicationID); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM local_medication_reminder_claims`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatalf("reminder claims remained after medication erasure: %d", count)
+	}
+	if _, err := store.ClaimMedicationReminder(ctx, claim); !errors.Is(err, ErrMedicationNotFound) {
+		t.Fatalf("claim for erased medication error = %v", err)
 	}
 }
