@@ -151,6 +151,22 @@ are delivered via ADR-0024/0025/0026/0027. M-D..M-F remain separately gated.
 
 ### `/goal phase-4-local-assistant`
 
+Slice plan (2026-07-22): **P4-a** desktop-local agent endpoint — a
+loopback-only MCP served by the desktop app itself (not the backend),
+exposing allowlisted read projections (overview, rhythm summary, tasks,
+medication timing facts, markers, appearance state) and two action
+classes: propose-only mutations (reusing the existing action registry)
+and the ADR-0021 direct display action (set preset / night rule). Every
+projection passes the same redaction review as the M-E gate in
+`medication-feature-plan.md`; labels stay local because the endpoint IS
+local, but the tool results must still exclude raw records. **P4-b**
+assistant answer scope over medication/marker facts (server-side, using
+the same redacted context discipline; medical refusal byte-identical).
+**P4-c** voice-path polish: runbook walkthrough of Claude Desktop voice →
+local endpoint, call budgets, and a scripted smoke test. Acceptance
+carries the prompt below; P4-a is the prerequisite for "local assistant"
+as stated.
+
 > **Goal: mature the assistant into the app's local agent: a desktop-local
 > agent endpoint, richer answer scope, and voice-path polish.**
 > Context: ADR-0006/0010/0012/0021, slice-8 rail, `zeitboard-mcp`.
@@ -168,6 +184,15 @@ are delivered via ADR-0024/0025/0026/0027. M-D..M-F remain separately gated.
 > redaction tests extended to the new surface.
 
 ### `/goal phase-5-availability-portal`
+
+Implementation-ready design: [`portal-design.md`](portal-design.md)
+(projection firewall, hashed link tokens with uniform 410s, origin-
+`visitor` proposals, requester secrets, messaging caps, threat-model v2
+delta, slices P5-a..P5-d with a default-off exposure gate, and the
+honesty budget derived from the measured 1.71 h median / 5.41 h P90
+backtest — windows only, no public confidence labels until calibration
+is fixed). Four owner decisions are listed in its §9 and should be
+answered before P5-a starts.
 
 > **Goal: the public-facing portal: share a link that shows when the user
 > is likely awake, lets visitors ask, and lets them request a time — every
