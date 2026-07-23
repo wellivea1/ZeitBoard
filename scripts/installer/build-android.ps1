@@ -157,3 +157,5 @@ catch {
     Write-ZbLog -Level fail -Message 'Android build did not complete.'
     exit 1
 }
+
+exit 0

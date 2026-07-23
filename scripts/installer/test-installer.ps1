@@ -93,3 +93,4 @@ Test-Case 'Show-ZbBanner and Show-ZbFinale are ASCII-only' {
 Write-Host ''
 Write-Host "  $script:pass passed, $script:fail failed" -ForegroundColor $(if ($script:fail -eq 0) { 'Green' } else { 'Red' })
 if ($script:fail -gt 0) { exit 1 }
+exit 0

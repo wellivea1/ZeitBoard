@@ -118,3 +118,5 @@ catch {
     Write-ZbLog -Level fail -Message 'Server install did not complete.'
     exit 1
 }
+
+exit 0

@@ -45,7 +45,7 @@ if ($Rollback) {
         Write-ZbLog -Message 'Data was not changed. If you need an earlier data state, restore a backup zip from the log dir.'
     }
     Show-ZbFinale -Kind update
-    return
+    exit 0
 }
 
 try {
@@ -148,3 +148,4 @@ catch {
     Write-ZbLog -Level fail -Message 'Update did not complete.'
     exit 1
 }
+exit 0

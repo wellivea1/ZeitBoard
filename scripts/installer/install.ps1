@@ -178,3 +178,4 @@ catch {
     Write-ZbLog -Level fail -Message 'Installation did not complete.'
     exit 1
 }
+exit 0

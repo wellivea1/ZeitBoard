@@ -96,3 +96,5 @@ catch {
     Write-ZbLog -Level fail -Message 'Uninstall did not complete.'
     exit 1
 }
+
+exit 0
