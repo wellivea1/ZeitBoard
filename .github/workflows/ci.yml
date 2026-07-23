@@ -205,3 +205,28 @@ jobs:
         if: steps.detect.outputs.present == 'true'
         working-directory: apps/android
         run: bash ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug
+
+  installer:
+    name: Installer tooling (dry-run)
+    runs-on: windows-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Library unit tests + pin validation
+        shell: powershell
+        run: |
+          .\scripts\installer\test-installer.ps1
+          if ($LASTEXITCODE -ne 0) { throw "installer library tests failed" }
+
+      - name: install.ps1 dry-run (no side effects)
+        shell: powershell
+        run: |
+          .\scripts\installer\install.ps1 -DryRun -NonInteractive
+          if ($LASTEXITCODE -ne 0) { throw "install.ps1 dry-run failed" }
+
+      - name: update.ps1 dry-run
+        shell: powershell
+        run: |
+          .\scripts\installer\update.ps1 -DryRun -NonInteractive
+          if ($LASTEXITCODE -ne 0) { throw "update.ps1 dry-run failed" }

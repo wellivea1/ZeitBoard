@@ -169,13 +169,20 @@ attached → finale (`APK READY` variant).
 
 ## 9. Verification of the tooling itself
 
-- Every script supports `-DryRun` (full plan, zero side effects); CI runs
-  `install.ps1 -DryRun -NonInteractive` and `update.ps1 -DryRun` on
-  windows-latest so the phase lists can't rot.
-- Pester tests for `_zb.common.ps1` (pin parsing, SHA mismatch refusal,
-  step skip/resume logic, Run-key add/remove round-trip in a sandbox key).
-- `pins.psd1` gets a CI check that every URL is https and every entry has
-  a SHA-256.
+- Every script supports `-DryRun` (full plan, zero side effects); the CI
+  `installer` job runs `install.ps1 -DryRun -NonInteractive` and
+  `update.ps1 -DryRun` on windows-latest so the phase lists can't rot.
+- `scripts\installer\test-installer.ps1` unit-tests `_zb.common.ps1`:
+  path resolution, pin validation, `Read-ZbChoice` precedence, the
+  placeholder-checksum refusal, `Invoke-ZbStep` skip/dry-run behavior,
+  Run-key add/remove round-trip against a sandbox key, and ASCII-only
+  banners. It uses plain assertions with an exit code rather than Pester —
+  stock Windows ships Pester 3.4 while CI has 5.x and their assertion
+  syntaxes are incompatible, so a dependency-free runner is the portable
+  choice and runs identically in both places.
+- Pin integrity is enforced by `Test-ZbPins` (called from the test runner):
+  every `Url`/`Sha256Url` is https and every downloadable entry carries
+  exactly one integrity source (literal `Sha256` or vendor `Sha256Url`).
 
 ## 10. Banners
 

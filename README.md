@@ -28,7 +28,23 @@ testdata                    Synthetic observations and projected sharing fixture
 - The Android companion remains a build-ready Health Connect skeleton and does not yet sync. The trusted-view prototype remains static and synthetic.
 - Browser-only desktop preview data is synthetic and visibly labeled `Sample data`; it is not used by the running Wails desktop service.
 
-## Build and test
+## Install (end users)
+
+To build and install the desktop app in one step — dependencies, build, a
+behavior decision tree (shortcuts, launch-at-startup), and optional server /
+MCP / Android extras:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\installer\install.ps1
+```
+
+Add `-DryRun` to preview every step without changes, or `-NonInteractive`
+with flags (`-Startup`, `-DesktopShortcut`, `-WithServer`, ...) for an
+unattended install. Update in place with `scripts\installer\update.ps1`
+(auto-backs-up data, `-Rollback` to revert). Full scheme:
+[`docs/install-update-design.md`](docs/install-update-design.md).
+
+## Build and test (contributors)
 
 From the repository root on Windows:
 
