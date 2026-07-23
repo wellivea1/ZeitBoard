@@ -59,7 +59,7 @@ middleware:
   then notifies open SSE streams. The projection row carries
   `generated_at`; the page always renders the age.
 - Public handlers run behind a dedicated mux with its own middleware
-  stack: rate limiter → link resolver → optional passcode gate → handler.
+  stack: rate limiter → link resolver → passcode gate (required) → handler.
   They can only reach the **portal projection store**, a separate read
   model — by construction they have no code path to sync records,
   proposals, tasks, or medication tables.
