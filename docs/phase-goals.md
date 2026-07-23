@@ -190,9 +190,12 @@ Implementation-ready design: [`portal-design.md`](portal-design.md)
 `visitor` proposals, requester secrets, messaging caps, threat-model v2
 delta, slices P5-a..P5-d with a default-off exposure gate, and the
 honesty budget derived from the measured 1.71 h median / 5.41 h P90
-backtest — windows only, no public confidence labels until calibration
-is fixed). Four owner decisions are listed in its §9 and should be
-answered before P5-a starts.
+backtest — windows with a live now-state, no public confidence labels
+until calibration is fixed). The four §9 owner decisions were resolved
+2026-07-22: live dashboard yes (SSE + polling + meta-refresh, freshness
+always visible), passcodes required on every link, request horizon
+uncapped with a beyond-horizon warning, and calendar-inline
+approve/decline that also materializes the ADR-0023 block.
 
 > **Goal: the public-facing portal: share a link that shows when the user
 > is likely awake, lets visitors ask, and lets them request a time — every

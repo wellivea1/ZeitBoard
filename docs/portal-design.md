@@ -15,9 +15,14 @@ budget: median onset error **1.71 h**, P90 **5.41 h**, hit rate **0.78**
 on ~14.7 h windows — and confidence buckets are imperfectly calibrated
 (High 0.61 < Medium 0.81). Therefore:
 
-- The portal shows **windows, never times**: "likely awake roughly
-  15:00–23:00" with a visible qualifier ("estimate from recent sleep
-  patterns; typically off by ~2 h, occasionally more").
+- The portal is a **live dashboard** (owner decision 2026-07-22:
+  up-to-date information is paramount): it shows the current state ("likely
+  awake now" / "likely asleep now" derived from the projection at render
+  time), today's window, and the coming windows — always with a freshness
+  line ("updated 12 min ago") so staleness is visible, never hidden.
+- Availability is expressed as **windows, never exact times**: "likely
+  awake roughly 15:00–23:00" with a visible qualifier ("estimate from
+  recent sleep patterns; typically off by ~2 h, occasionally more").
 - No per-window confidence *labels* on the public page until the
   calibration follow-up lands (the inversion would make "high" a lie);
   the qualifier sentence carries uncertainty instead.
@@ -40,10 +45,19 @@ middleware:
 /p/{linkToken}/requests/{id}/messages POST append visitor message
 ```
 
-- **Server-rendered, zero-JS-required HTML** with a strict CSP
-  (`default-src 'none'; style-src 'self'`): no third-party origins, no
-  analytics, no LLM anywhere on the public path. Progressive enhancement
-  only for auto-refresh.
+- **Server-rendered HTML with live refresh.** Strict CSP
+  (`default-src 'none'; style-src 'self'; script-src 'self'; connect-src
+  'self'`): no third-party origins, no analytics, no LLM anywhere on the
+  public path. Liveness is layered: an SSE stream
+  (`GET /p/{linkToken}/events`) pushes projection updates the moment the
+  materializer runs; first-party JS falls back to 60 s polling; with JS
+  disabled a meta-refresh (300 s) still keeps the page honest. The
+  now-state is computed server-side from the projection at render time,
+  so even the no-JS page is correct when served.
+- **Freshness pipeline:** the materializer re-runs on every accepted sync
+  push that contains sleep records (and on estimate-affecting erasures),
+  then notifies open SSE streams. The projection row carries
+  `generated_at`; the page always renders the age.
 - Public handlers run behind a dedicated mux with its own middleware
   stack: rate limiter → link resolver → optional passcode gate → handler.
   They can only reach the **portal projection store**, a separate read
@@ -62,8 +76,11 @@ Extends §9.7 sharing profiles (ADR to confirm numbering at build time):
 - `share_profile`: id, display label (private), **granted fields**
   (`waking_windows` bool — the only projection field v1 offers),
   `allow_requests` bool, `allow_messages` bool, `expires_at` (required,
-  max 90 days), optional passcode (argon2id hash), `revoked_at`,
-  created/updated audit.
+  max 90 days), **required passcode** (argon2id hash; owner decision
+  2026-07-22: every public link is passcode-gated — creation refuses an
+  empty passcode), `revoked_at`, created/updated audit. A correct
+  passcode issues a per-link HttpOnly session cookie (24 h) so visitors
+  enter it once per device.
 - `share_link`: profile id + `link_token` = 256-bit random, base64url,
   stored **hashed** (SHA-256) like device tokens; shown once at creation.
   Constant-time lookup by hash; unknown/expired/revoked → uniform `410
@@ -80,12 +97,29 @@ Extends §9.7 sharing profiles (ADR to confirm numbering at build time):
 
 A request is `{window_start, window_end, duration_minutes?, message?}`
 (message ≤ 500 chars, control characters stripped, stored encrypted like
-proposal payloads). The server validates bounds (must be ≥ now, ≤ 60 days
-out, ≤ 8 h span) and creates a **pending proposal with origin `visitor`**
+proposal payloads). The server validates bounds (must be ≥ now, span
+≤ 8 h; **no upper horizon** — owner decision 2026-07-22) and creates a
+**pending proposal with origin `visitor`**
 in the existing store: same one-use decision tokens, same queue, same
 audit, decidable from any enrolled device (ADR-0016). Nothing about the
 queue grows new authority — the portal cannot approve, list others'
 proposals, or see the calendar.
+
+Requests beyond the forecast horizon are accepted but marked: the
+visitor sees an explicit warning at creation ("this date is further out
+than sleep patterns can be predicted (~7 cycles); availability there is
+unknown"), and the proposal carries a `beyond_horizon` flag rendered as a
+neutral chip in-app. Long-horizon prediction is never faked to make a
+request look safer.
+
+**Calendar integration (owner decision 2026-07-22):** pending visitor
+requests render on the owner's Calendar at their requested window as a
+distinct "requested" band (neutral origin stripe), with an inline
+approve/decline dialog. One explicit approval does both things at once:
+records the proposal decision (one-use token, audited) and materializes
+the ZeitBoard-owned calendar block via the ADR-0023 placement path.
+Decline removes the band. The Approvals screen remains the second,
+equivalent decision surface.
 
 Decision mapping, deliberately coarse: `approved` → "suggested time
 accepted"; `rejected` → "couldn't make that time". The visitor never
@@ -100,12 +134,14 @@ with the request decision + 14 days, then is erased.
 
 ## 5. Abuse resistance
 
-- **Rate limits** (per link token and per IP): availability reads 60/h;
-  request creation 5/day/link with 20 open-thread cap per profile;
-  messages 20/day/thread. 429 with Retry-After; limits enforced in the
-  portal store so they survive restarts.
-- Passcode gate optional per profile (argon2id, constant-time, 5
-  attempts/h then temporary lock of that link only).
+- **Rate limits** (per link token and per IP): page + availability reads
+  120/h, SSE capped at 2 concurrent streams per link (excess falls back
+  to polling); request creation 5/day/link with 20 open-thread cap per
+  profile; messages 20/day/thread. 429 with Retry-After; limits enforced
+  in the portal store so they survive restarts.
+- Passcode gate on every link (argon2id, constant-time, 5 attempts/h
+  then temporary lock of that link only; lockout responses identical to
+  wrong-passcode responses).
 - Request bodies hard-capped (4 KB); JSON strictly decoded; every string
   length-bounded exactly like sync validation.
 - The public page never triggers estimator work: it serves the
@@ -153,13 +189,19 @@ P6 interface note: P5-b/c emit internal events (`request_created`,
 subscribes web-push/companion transports to those events without touching
 portal code.
 
-## 9. Open decisions for the owner (before P5-a starts)
+## 9. Owner decisions (resolved 2026-07-22)
 
-1. Availability granularity on the public page: windows only (recommended)
-   vs windows + "now awake/asleep" live dot (more useful, leaks more).
-2. Passcode default: off (link-only) vs required for request-enabled
-   profiles (recommended: required when `allow_messages`).
-3. Request horizon: 60 days proposed — shorten?
-4. Whether approved requests should auto-create a calendar block via the
-   ADR-0023 placement path (recommended: yes, as a *second* explicit
-   approval step in-app, never automatic).
+1. **Live dashboard — yes.** The public page is live: now-state + windows
+   with SSE/polling/meta-refresh layering and a visible freshness line.
+   Up-to-date information is paramount; staleness is disclosed, never
+   masked.
+2. **Passcode — required on every link.** Creation refuses an empty
+   passcode; a correct entry issues a 24 h per-link session cookie.
+3. **Request horizon — uncapped, with an honesty warning.** Visitors may
+   request any future time; beyond the forecast horizon the portal warns
+   that prediction there is infeasible and flags the proposal
+   `beyond_horizon`.
+4. **Calendar-integrated decisions — yes.** Pending visitor requests
+   appear on the owner's Calendar with an inline approve/decline dialog;
+   a single explicit approval records the decision and materializes the
+   ADR-0023 placement block.
