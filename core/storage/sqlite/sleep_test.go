@@ -3,6 +3,7 @@ package sqlite
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
@@ -242,6 +243,80 @@ func TestLocalSleepExportAndDeleteDistinguishSuppressFromErasure(t *testing.T) {
 	}
 	if bytes.Contains(walBytes, []byte(payloadMarker)) {
 		t.Fatal("deleted sleep payload remains in the SQLite WAL")
+	}
+}
+
+func TestSleepExportReadsObservationAndCorrectionSetsFromOneSnapshot(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "snapshot.db")
+	reader, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	writer, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer writer.Close()
+
+	ctx := context.Background()
+	start := time.Date(2026, 3, 4, 5, 0, 0, 0, time.UTC)
+	observation := testSleepObservation("obs_snapshot_01", start, start.Add(8*time.Hour))
+	if err := reader.AppendSleepObservation(ctx, observation); err != nil {
+		t.Fatal(err)
+	}
+	excluded := true
+	correction := SleepCorrectionRecord{
+		CorrectionID:        "corr_snapshot_01",
+		TargetObservationID: observation.ObservationID,
+		CreatedAt:           start.Add(9 * time.Hour),
+		Reason:              CorrectionReasonUserEdit,
+		Changes:             SleepCorrectionChanges{Excluded: &excluded},
+	}
+	if err := reader.AppendSleepCorrection(ctx, correction); err != nil {
+		t.Fatal(err)
+	}
+
+	tx, err := reader.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	var count int
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM local_sleep_observations`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("snapshot setup count = %d, want 1", count)
+	}
+
+	if _, err := writer.db.ExecContext(ctx, `DELETE FROM local_sleep_corrections`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.db.ExecContext(ctx, `DELETE FROM local_sleep_observations`); err != nil {
+		t.Fatal(err)
+	}
+	generatedAt := time.Date(2026, 3, 4, 14, 0, 0, 0, time.UTC)
+	exported, err := readSleepDataExport(ctx, tx, generatedAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(exported.ObservationSet.Observations) != 1 || len(exported.CorrectionSet.Corrections) != 1 {
+		t.Fatalf("snapshot export split its related sets: %#v", exported)
+	}
+	if !exported.GeneratedAt.Equal(generatedAt) || !exported.ObservationSet.GeneratedAt.Equal(generatedAt) || !exported.CorrectionSet.GeneratedAt.Equal(generatedAt) {
+		t.Fatalf("snapshot export timestamps diverged: %#v", exported)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	current, err := reader.ExportSleepData(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(current.ObservationSet.Observations) != 0 || len(current.CorrectionSet.Corrections) != 0 {
+		t.Fatalf("post-commit export did not see the writer's deletion: %#v", current)
 	}
 }
 

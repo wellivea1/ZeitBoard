@@ -54,6 +54,11 @@ Keys:
 | n/a | `ZEITBOARD_LLM_API_KEY` | Required when a provider is enabled and no key file is set | Provider API key; never returned by status APIs. |
 | `assistant.endpoint` | `ZEITBOARD_LLM_ENDPOINT` | Required for `opencode_zen`, optional override otherwise | Plain HTTPS endpoint for the provider transport. |
 
+Relative file and directory paths in a JSON config resolve from the directory
+containing that config file. Relative paths supplied through environment
+variables retain normal process-working-directory semantics; use absolute paths
+for service deployments.
+
 Do not commit key files, enrollment secrets, device tokens, provider keys, or real config
 files.
 
@@ -62,13 +67,20 @@ files.
 PowerShell:
 
 ```powershell
-$bytes = New-Object byte[] 32
-[Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
-[Convert]::ToBase64String($bytes) | Set-Content -NoNewline secrets\data-key.txt
+New-Item -ItemType Directory -Force secrets | Out-Null
+$rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+try {
+    $bytes = New-Object byte[] 32
+    $rng.GetBytes($bytes)
+    [Convert]::ToBase64String($bytes) | Set-Content -NoNewline -Encoding ASCII secrets\data-key.txt
 
-$enrollment = New-Object byte[] 32
-[Security.Cryptography.RandomNumberGenerator]::Fill($enrollment)
-[Convert]::ToBase64String($enrollment) | Set-Content -NoNewline secrets\enrollment-secret.txt
+    $enrollment = New-Object byte[] 32
+    $rng.GetBytes($enrollment)
+    [Convert]::ToBase64String($enrollment) | Set-Content -NoNewline -Encoding ASCII secrets\enrollment-secret.txt
+}
+finally {
+    $rng.Dispose()
+}
 ```
 
 OpenSSL:
@@ -118,6 +130,44 @@ curl -k https://127.0.0.1:8765/v1/devices \
 
 The response contains a per-device bearer token. Store it in that device's local secret
 storage. The server stores only a hash of the token.
+
+## Native Windows Service
+
+From the repository root, use an elevated Windows PowerShell prompt:
+
+```powershell
+.\scripts\installer\install-server.ps1
+```
+
+The installer defaults to `%PROGRAMDATA%\ZeitBoard`, generates secrets only
+when absent, restricts the managed root to SYSTEM and Administrators, validates
+the staged config before changing service registration, and starts a delayed
+automatic service named `ZeitBoardServer`. The daemon uses the native Windows
+SCM lifecycle: it reports Running only after its listener is established and
+performs a bounded graceful shutdown on Stop or system shutdown.
+
+A custom `-InstallRoot` must be a dedicated service directory outside Desktop,
+Documents, and Downloads, and it must not contain junctions or symbolic links;
+the installer replaces ACL inheritance recursively and fails closed otherwise.
+
+Loopback is the default. A non-loopback `-ListenAddress` requires both
+`-TlsCertPath` and `-TlsKeyPath`. `-Firewall` creates a Private-profile inbound
+rule tied to the managed daemon executable; the installer preserves same-named
+rules that point elsewhere. Service logs rotate at 10 MiB with one `.1` backup.
+TLS paths passed on the command line are normalized to absolute paths; relative
+paths already stored in `config.json` resolve from that file's directory.
+The public availability portal is not implemented or exposed by this command.
+
+Rerunning the command upgrades an owned service and restores its prior files,
+registration, and running/stopped state if publication or startup fails. It
+refuses to modify a same-named service owned by another executable.
+
+To remove the desktop installation and owned service registration while
+preserving the server root:
+
+```powershell
+.\scripts\installer\uninstall.ps1 -RemoveServer
+```
 
 ## Backups
 

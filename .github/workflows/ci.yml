@@ -78,6 +78,9 @@ jobs:
           - name: server
             os: ubuntu-latest
             path: apps/server
+          - name: server-windows
+            os: windows-latest
+            path: apps/server
           - name: desktop-service
             os: windows-latest
             path: apps/desktop
@@ -197,6 +200,13 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      - name: Install pinned Android SDK packages
+        if: steps.detect.outputs.present == 'true'
+        shell: bash
+        run: |
+          printf 'y\n%.0s' {1..100} | sdkmanager --licenses > /dev/null
+          sdkmanager 'platforms;android-36.1' 'build-tools;36.1.0' 'platform-tools'
+
       - name: Set up Gradle cache
         if: steps.detect.outputs.present == 'true'
         uses: gradle/actions/setup-gradle@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
@@ -219,14 +229,16 @@ jobs:
           .\scripts\installer\test-installer.ps1
           if ($LASTEXITCODE -ne 0) { throw "installer library tests failed" }
 
-      - name: install.ps1 dry-run (no side effects)
+      - name: Installer entry points dry-run (no side effects)
         shell: powershell
         run: |
-          .\scripts\installer\install.ps1 -DryRun -NonInteractive
+          .\scripts\installer\install.ps1 -DryRun -NonInteractive -WithMcp -WithServer -WithAndroid -AcceptAndroidLicenses
           if ($LASTEXITCODE -ne 0) { throw "install.ps1 dry-run failed" }
-
-      - name: update.ps1 dry-run
-        shell: powershell
-        run: |
-          .\scripts\installer\update.ps1 -DryRun -NonInteractive
+          .\scripts\installer\update.ps1 -DryRun -NonInteractive -WithMcp
           if ($LASTEXITCODE -ne 0) { throw "update.ps1 dry-run failed" }
+          .\scripts\installer\build-android.ps1 -DryRun -NonInteractive -AcceptAndroidLicenses -AdbInstall
+          if ($LASTEXITCODE -ne 0) { throw "build-android.ps1 dry-run failed" }
+          .\scripts\installer\install-server.ps1 -DryRun -NonInteractive
+          if ($LASTEXITCODE -ne 0) { throw "install-server.ps1 dry-run failed" }
+          .\scripts\installer\uninstall.ps1 -DryRun -NonInteractive -RemoveServer -PurgeData
+          if ($LASTEXITCODE -ne 0) { throw "uninstall.ps1 dry-run failed" }

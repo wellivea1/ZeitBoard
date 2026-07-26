@@ -5,11 +5,29 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+val releaseKeystore = providers.environmentVariable("ZEITBOARD_KEYSTORE").orNull
+val releaseKeystorePassword = providers.environmentVariable("ZEITBOARD_KEYSTORE_PASS").orNull
+val releaseKeyAlias = providers.environmentVariable("ZEITBOARD_KEY_ALIAS").orNull
+val releaseKeyPassword = providers.environmentVariable("ZEITBOARD_KEY_PASS").orNull
+val releaseSigningConfigured = listOf(releaseKeystore, releaseKeystorePassword, releaseKeyAlias, releaseKeyPassword)
+    .all { !it.isNullOrBlank() }
+
 android {
     namespace = "org.non24.planner"
     compileSdk {
         version = release(36) {
             minorApiLevel = 1
+        }
+    }
+
+    signingConfigs {
+        if (releaseSigningConfigured) {
+            create("zeitboardRelease") {
+                storeFile = file(requireNotNull(releaseKeystore))
+                storePassword = requireNotNull(releaseKeystorePassword)
+                keyAlias = requireNotNull(releaseKeyAlias)
+                keyPassword = requireNotNull(releaseKeyPassword)
+            }
         }
     }
 
@@ -25,6 +43,7 @@ android {
 
     buildTypes {
         release {
+            signingConfig = signingConfigs.findByName("zeitboardRelease")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
