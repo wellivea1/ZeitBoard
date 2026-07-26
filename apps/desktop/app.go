@@ -1050,7 +1050,7 @@ func validInputClassification(value string) bool {
 }
 
 func requireDeleteConfirmation(value string) error {
-	if strings.TrimSpace(value) != deleteConfirm {
+	if value != deleteConfirm {
 		return errors.New("type DELETE to confirm permanent erasure")
 	}
 	return nil

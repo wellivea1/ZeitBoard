@@ -483,7 +483,11 @@ func (s *Store) Export(ctx context.Context) (ExportBundle, error) {
 }
 
 func (s *Store) readJSONRows(ctx context.Context, query string, visit func([]byte) error) error {
-	rows, err := s.db.QueryContext(ctx, query)
+	return readJSONRows(ctx, s.db, query, visit)
+}
+
+func readJSONRows(ctx context.Context, queryer queryContext, query string, visit func([]byte) error) error {
+	rows, err := queryer.QueryContext(ctx, query)
 	if err != nil {
 		return err
 	}

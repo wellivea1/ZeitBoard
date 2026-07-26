@@ -13,9 +13,11 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -69,9 +71,15 @@ func Load(path string) (Config, error) {
 		DataDir:       "data",
 	}
 	if path != "" {
+		absolutePath, err := filepath.Abs(path)
+		if err != nil {
+			return Config{}, fmt.Errorf("resolve config path: %w", err)
+		}
+		path = absolutePath
 		if err := loadFile(path, &cfg); err != nil {
 			return Config{}, err
 		}
+		resolveConfigFilePaths(&cfg, filepath.Dir(path))
 	}
 
 	overrideString(&cfg.ListenAddress, EnvListenAddress)
@@ -156,7 +164,32 @@ func loadFile(path string, cfg *Config) error {
 	if err := dec.Decode(cfg); err != nil {
 		return fmt.Errorf("decode config file: %w", err)
 	}
+	if err := dec.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return errors.New("decode config file: expected exactly one JSON value")
+		}
+		return fmt.Errorf("decode config file trailing data: %w", err)
+	}
 	return nil
+}
+
+func resolveConfigFilePaths(cfg *Config, baseDir string) {
+	cfg.TLSCertPath = resolveConfigFilePath(baseDir, cfg.TLSCertPath)
+	cfg.TLSKeyPath = resolveConfigFilePath(baseDir, cfg.TLSKeyPath)
+	cfg.DataDir = resolveConfigFilePath(baseDir, cfg.DataDir)
+	cfg.DataKeyFile = resolveConfigFilePath(baseDir, cfg.DataKeyFile)
+	cfg.EnrollmentSecretFile = resolveConfigFilePath(baseDir, cfg.EnrollmentSecretFile)
+	cfg.Assistant.APIKeyFile = resolveConfigFilePath(baseDir, cfg.Assistant.APIKeyFile)
+}
+
+func resolveConfigFilePath(baseDir, value string) string {
+	if value == "" {
+		return ""
+	}
+	if filepath.IsAbs(value) {
+		return filepath.Clean(value)
+	}
+	return filepath.Join(baseDir, value)
 }
 
 func overrideString(target *string, envName string) {

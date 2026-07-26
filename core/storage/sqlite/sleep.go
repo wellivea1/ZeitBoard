@@ -187,8 +187,12 @@ func (s *Store) AppendSleepObservation(ctx context.Context, record SleepObservat
 }
 
 func (s *Store) ListSleepObservations(ctx context.Context) ([]SleepObservationRecord, error) {
+	return listSleepObservations(ctx, s.db)
+}
+
+func listSleepObservations(ctx context.Context, query queryContext) ([]SleepObservationRecord, error) {
 	var records []SleepObservationRecord
-	err := s.readJSONRows(ctx, `SELECT payload_json FROM local_sleep_observations ORDER BY start_at, observation_id`, func(value []byte) error {
+	err := readJSONRows(ctx, query, `SELECT payload_json FROM local_sleep_observations ORDER BY start_at, observation_id`, func(value []byte) error {
 		var record SleepObservationRecord
 		if err := json.Unmarshal(value, &record); err != nil {
 			return err
@@ -233,8 +237,12 @@ func (s *Store) AppendSleepCorrection(ctx context.Context, record SleepCorrectio
 }
 
 func (s *Store) ListSleepCorrections(ctx context.Context) ([]SleepCorrectionRecord, error) {
+	return listSleepCorrections(ctx, s.db)
+}
+
+func listSleepCorrections(ctx context.Context, query queryContext) ([]SleepCorrectionRecord, error) {
 	var records []SleepCorrectionRecord
-	err := s.readJSONRows(ctx, `SELECT payload_json FROM local_sleep_corrections ORDER BY created_at, correction_id`, func(value []byte) error {
+	err := readJSONRows(ctx, query, `SELECT payload_json FROM local_sleep_corrections ORDER BY created_at, correction_id`, func(value []byte) error {
 		var record SleepCorrectionRecord
 		if err := json.Unmarshal(value, &record); err != nil {
 			return err
@@ -428,6 +436,45 @@ func (s *Store) InsertSyncedSleepCorrection(ctx context.Context, record SleepCor
 
 func (s *Store) ExportSleepData(ctx context.Context) (SleepDataExport, error) {
 	generatedAt := time.Now().UTC()
+	result := newSleepDataExport(generatedAt)
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return result, err
+	}
+	defer tx.Rollback()
+
+	result, err = readSleepDataExport(ctx, tx, generatedAt)
+	if err != nil {
+		return result, err
+	}
+	if err := tx.Commit(); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+func readSleepDataExport(ctx context.Context, query queryContext, generatedAt time.Time) (SleepDataExport, error) {
+	result := newSleepDataExport(generatedAt)
+	observations, err := listSleepObservations(ctx, query)
+	if err != nil {
+		return result, err
+	}
+	corrections, err := listSleepCorrections(ctx, query)
+	if err != nil {
+		return result, err
+	}
+	if observations == nil {
+		observations = []SleepObservationRecord{}
+	}
+	if corrections == nil {
+		corrections = []SleepCorrectionRecord{}
+	}
+	result.ObservationSet.Observations = observations
+	result.CorrectionSet.Corrections = corrections
+	return result, nil
+}
+
+func newSleepDataExport(generatedAt time.Time) SleepDataExport {
 	result := SleepDataExport{
 		SchemaVersion: "v1",
 		GeneratedAt:   generatedAt,
@@ -442,23 +489,7 @@ func (s *Store) ExportSleepData(ctx context.Context) (SleepDataExport, error) {
 			Corrections:   []SleepCorrectionRecord{},
 		},
 	}
-	observations, err := s.ListSleepObservations(ctx)
-	if err != nil {
-		return result, err
-	}
-	corrections, err := s.ListSleepCorrections(ctx)
-	if err != nil {
-		return result, err
-	}
-	if observations == nil {
-		observations = []SleepObservationRecord{}
-	}
-	if corrections == nil {
-		corrections = []SleepCorrectionRecord{}
-	}
-	result.ObservationSet.Observations = observations
-	result.CorrectionSet.Corrections = corrections
-	return result, nil
+	return result
 }
 
 func (s *Store) DeleteSleepObservation(ctx context.Context, observationID string) error {

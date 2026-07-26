@@ -18,6 +18,7 @@
         Sha256Url = 'https://nodejs.org/dist/v24.16.0/SHASUMS256.txt'
         Match     = 'node-v24.16.0-win-x64.zip'
         DirName   = 'node-v24.16.0-win-x64'
+        ProbePath = 'node.exe'
     }
 
     Go = @{
@@ -27,6 +28,7 @@
         Sha256Url = 'https://go.dev/dl/go1.26.0.windows-amd64.zip.sha256'
         Match     = ''  # the .sha256 endpoint is a bare hash, no filename column
         DirName   = 'go'
+        ProbePath = 'bin\go.exe'
     }
 
     Wails = @{
@@ -44,18 +46,18 @@
         Sha256Url = 'https://github.com/adoptium/temurin17-binaries/releases/download/jdk-17.0.12%2B7/OpenJDK17U-jdk_x64_windows_hotspot_17.0.12_7.zip.sha256.txt'
         Match     = 'OpenJDK17U-jdk_x64_windows_hotspot_17.0.12_7.zip'
         DirName   = 'jdk-17.0.12+7'
+        ProbePath = 'bin\java.exe'
     }
 
     AndroidCmdlineTools = @{
-        # Android SDK command-line tools; sdkmanager fetches the rest. License
-        # acceptance is an explicit prompt in build-android.ps1, never silent.
-        # Google does not publish a stable sibling checksum file for this
-        # archive, so pin the literal SHA-256 here. Refresh when the version
-        # bumps: (Get-FileHash -Algorithm SHA256 <file>).Hash.ToLowerInvariant()
-        Version = '11076708'
-        Url     = 'https://dl.google.com/android/repository/commandlinetools-win-11076708_latest.zip'
-        Sha256  = 'REPLACE_WITH_VERIFIED_CMDLINE_TOOLS_11076708_WIN_ZIP_SHA256'
-        DirName = 'android-cmdline-tools'
+        # Android SDK command-line tools; sdkmanager fetches the rest. The
+        # checksum is published beside the download on developer.android.com.
+        # License acceptance remains an explicit build-android.ps1 decision.
+        Version   = '15859902'
+        Url       = 'https://dl.google.com/android/repository/commandlinetools-win-15859902_latest.zip'
+        Sha256    = '90ae805d20434428bffcb699c290860f19bb5f66a67e6b330067e3de801fb04a'
+        DirName   = 'android-cmdline-tools'
+        ProbePath = 'bin\sdkmanager.bat'
     }
 
     # System-only dependencies: detected or instructed, never downloaded blind.
@@ -65,6 +67,6 @@
     }
 
     WebView2 = @{
-        Note = 'Evergreen WebView2 Runtime ships with Windows 11. If absent, install.ps1 offers a per-user install via winget or the Evergreen bootstrapper.'
+        Note = 'Evergreen WebView2 Runtime ships with Windows 11. If absent, install.ps1 offers per-user winget installation and otherwise fails with the official manual-install URL.'
     }
 }

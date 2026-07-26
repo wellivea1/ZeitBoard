@@ -4,13 +4,15 @@
   and one-command rollback. Design: docs/install-update-design.md.
 
 .DESCRIPTION
-  Backs up the data directory ALWAYS before touching anything, moves the
-  current install to previous\, rebuilds, runs the test suites (unless
-  -SkipTests), and swaps in. A failed test run auto-restores previous\.
-  Data is never rolled back automatically - the schema is additive-only.
+  Fetches and fast-forwards the repository, restarts itself under any newly
+  pulled installer code, validates the build with tests (unless -SkipTests),
+  verifies the desktop build, and only then requires the desktop and MCP
+  processes to be stopped before data backup and atomic executable publication.
+  Data is never rolled back automatically.
 
     -Rollback     restore previous\ and exit (no rebuild)
     -SkipTests    skip the Go + frontend suites (faster, less safe)
+    -WithMcp      install/update the MCP connector (existing installs update it)
     -AllowDirty   proceed with an uncommitted working tree (prints the diff)
     -NonInteractive / -DryRun   as in install.ps1
 
@@ -21,6 +23,7 @@
 param(
     [switch]$Rollback,
     [switch]$SkipTests,
+    [switch]$WithMcp,
     [switch]$AllowDirty,
     [switch]$NonInteractive,
     [switch]$DryRun
@@ -30,28 +33,56 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\_zb.common.ps1"
 
 $resume = "powershell -ExecutionPolicy Bypass -File `"$PSCommandPath`""
-Start-ZbLog -Name 'update' | Out-Null
+Start-ZbLog -Name 'update' -DryRun:$DryRun | Out-Null
 Show-ZbBanner
 $paths = Get-ZbPaths
 $installedExe = Join-Path $paths.InstallDir 'ZeitBoard.exe'
 $previousExe = Join-Path $paths.InstallDir 'previous\ZeitBoard.exe'
+$installedMcp = Join-Path $paths.InstallDir 'zeitboard-mcp.exe'
+$updateMcp = [bool]$WithMcp -or (Test-Path -LiteralPath $installedMcp)
+$script:ZbPulled = $false
+$script:ZbDesktopPublished = $false
+$lifecycleLock = $null
 
 # --- Rollback path ---------------------------------------------------------
 if ($Rollback) {
-    Invoke-ZbStep -Name 'Rollback to previous build' -DryRun:$DryRun -ResumeHint $resume -Action {
-        if (-not (Test-Path -LiteralPath $previousExe)) { throw "No previous build to roll back to ($previousExe)." }
-        Copy-Item -LiteralPath $previousExe -Destination $installedExe -Force
-        Write-ZbLog -Level ok -Message 'restored the previous ZeitBoard.exe'
-        Write-ZbLog -Message 'Data was not changed. If you need an earlier data state, restore a backup zip from the log dir.'
+    $rollbackExitCode = 0
+    try {
+        $lifecycleLock = Enter-ZbLifecycleLock
+        Invoke-ZbStep -Name 'Rollback to previous build' -DryRun:$DryRun -ResumeHint $resume -Action {
+            Restore-ZbPreviousBuild -InstallDir $paths.InstallDir
+            if (-not (Test-ZbInstalledBuild -InstallDir $paths.InstallDir)) {
+                throw 'The restored build failed its SHA-256 verification.'
+            }
+            Write-ZbLog -Message 'Data was not changed. Restore a backup zip separately only when that is explicitly intended.'
+        }
+        if ($DryRun) {
+            Write-ZbLog -Level ok -Message 'dry-run rollback plan complete; no files were changed'
+        }
+        else {
+            Show-ZbFinale -Kind update
+        }
     }
-    Show-ZbFinale -Kind update
-    exit 0
+    catch {
+        Write-ZbLog -Level fail -Message $_.Exception.Message
+        $rollbackExitCode = 1
+    }
+    finally {
+        Exit-ZbLifecycleLock -Mutex $lifecycleLock
+    }
+    exit $rollbackExitCode
 }
 
+$exitCode = 0
 try {
+    $lifecycleLock = Enter-ZbLifecycleLock
     Invoke-ZbStep -Name 'Preflight' -DryRun:$DryRun -ResumeHint $resume -Action {
         if (-not (Test-Path -LiteralPath $installedExe)) {
             throw "ZeitBoard is not installed yet. Run install.ps1 first."
+        }
+        if (-not (Test-ZbInstalledBuild -InstallDir $paths.InstallDir)) {
+            $recovery = if (Test-Path -LiteralPath $previousExe) { 'Run update.ps1 -Rollback.' } else { 'Run install.ps1 again.' }
+            throw "An installed ZeitBoard artifact does not match version.txt; the prior update may have been interrupted. $recovery"
         }
         if (-not (Test-ZbCommand 'git')) { throw 'git not found.' }
         Assert-ZbRepoClean -AllowDirty:$AllowDirty
@@ -62,34 +93,59 @@ try {
         try {
             $before = (Get-ZbVersionStamp).Commit
             & git fetch --quiet
-            $behind = (& git rev-list --count "HEAD..@{u}") 2>&1 | Out-String
-            if ($behind.Trim() -eq '0') {
+            if ($LASTEXITCODE -ne 0) { throw 'git fetch failed.' }
+            $upstream = (& git rev-parse --abbrev-ref --symbolic-full-name '@{u}') 2>&1 | Out-String
+            if ($LASTEXITCODE -ne 0) { throw 'This branch has no upstream tracking branch; configure one before updating.' }
+            $behindText = (& git rev-list --count 'HEAD..@{u}') 2>&1 | Out-String
+            if ($LASTEXITCODE -ne 0) { throw 'Could not compare the current branch with its upstream.' }
+            $behind = 0
+            if (-not [int]::TryParse($behindText.Trim(), [ref]$behind)) { throw "Unexpected git rev-list result: $behindText" }
+            if ($behind -eq 0) {
                 Write-ZbLog -Level ok -Message "already at the latest tracked commit ($before)"
             }
             else {
-                Write-ZbLog -Message "upstream is $($behind.Trim()) commit(s) ahead"
-                $go = Read-ZbChoice -Question "Pull and rebuild?" -Default $true -NonInteractive:$NonInteractive
+                Write-ZbLog -Message "upstream is $behind commit(s) ahead"
+                $go = Read-ZbChoice -Question 'Pull and rebuild?' -Default $true -NonInteractive:$NonInteractive
                 if (-not $go) { throw 'Update declined by user.' }
                 & git pull --ff-only
                 if ($LASTEXITCODE -ne 0) { throw 'git pull --ff-only failed (non-fast-forward?). Resolve manually.' }
+                $script:ZbPulled = $true
             }
         }
         finally { Pop-Location }
     }
 
-    # Backup BEFORE any build/swap.
-    Invoke-ZbStep -Name 'Back up data' -DryRun:$DryRun -ResumeHint $resume -Action { Backup-ZbData -Reason 'update' | Out-Null }
+    if ($script:ZbPulled) {
+        Write-ZbLog -Message 'restarting under the installer code from the pulled commit'
+        Exit-ZbLifecycleLock -Mutex $lifecycleLock
+        $lifecycleLock = $null
+        $restartArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath)
+        if ($SkipTests) { $restartArgs += '-SkipTests' }
+        if ($AllowDirty) { $restartArgs += '-AllowDirty' }
+        if ($WithMcp) { $restartArgs += '-WithMcp' }
+        if ($NonInteractive) { $restartArgs += '-NonInteractive' }
+        & powershell.exe @restartArgs
+        exit $LASTEXITCODE
+    }
 
     # Dependencies may have moved with the new commit.
     Invoke-ZbStep -Name 'Toolchain' -DryRun:$DryRun -ResumeHint $resume -Action {
         Assert-ZbGo -DryRun:$DryRun; Assert-ZbNode -DryRun:$DryRun; Assert-ZbWails -DryRun:$DryRun
     }
 
+    Invoke-ZbStep -Name 'Install JavaScript dependencies' -DryRun:$DryRun -ResumeHint $resume -Action {
+        Push-Location $paths.RepoRoot
+        try {
+            & npm ci
+            if ($LASTEXITCODE -ne 0) { throw 'npm ci failed.' }
+        }
+        finally { Pop-Location }
+    }
+
     if (-not $SkipTests) {
         Invoke-ZbStep -Name 'Run test suites (gate)' -DryRun:$DryRun -ResumeHint $resume -Action {
             Push-Location $paths.RepoRoot
             try {
-                & npm ci; if ($LASTEXITCODE -ne 0) { throw 'npm ci failed.' }
                 & npm run test --workspace '@zeitboard/desktop-frontend' -- --run
                 if ($LASTEXITCODE -ne 0) { throw 'frontend tests failed - aborting update.' }
             }
@@ -102,41 +158,82 @@ try {
         }
     }
 
-    Invoke-ZbStep -Name 'Preserve current build' -DryRun:$DryRun -ResumeHint $resume -Action {
-        $prev = Join-Path $paths.InstallDir 'previous'
-        New-Item -ItemType Directory -Force -Path $prev | Out-Null
-        Copy-Item -LiteralPath $installedExe -Destination (Join-Path $prev 'ZeitBoard.exe') -Force
+    $built = Join-Path $paths.RepoRoot 'apps\desktop\build\bin\ZeitBoard.exe'
+    Invoke-ZbStep -Name 'Build desktop' -DryRun:$DryRun -ResumeHint $resume -Action {
+        Push-Location (Join-Path $paths.RepoRoot 'apps\desktop')
+        try {
+            & wails build
+            if ($LASTEXITCODE -ne 0) { throw 'wails build failed.' }
+        }
+        finally { Pop-Location }
+        if (-not (Test-Path -LiteralPath $built)) { throw "build output missing: $built" }
     }
 
-    $swapFailed = $false
+    $builtMcp = Join-Path $paths.RepoRoot 'apps\server\bin\zeitboard-mcp.exe'
+    if ($updateMcp) {
+        Invoke-ZbStep -Name 'Build MCP connector' -DryRun:$DryRun -ResumeHint $resume -Action {
+            $binDir = Split-Path -Parent $builtMcp
+            New-Item -ItemType Directory -Force -Path $binDir | Out-Null
+            Push-Location (Join-Path $paths.RepoRoot 'apps\server')
+            try {
+                & go build -o $builtMcp ./cmd/zeitboard-mcp
+                if ($LASTEXITCODE -ne 0) { throw 'zeitboard-mcp build failed.' }
+            }
+            finally { Pop-Location }
+        }
+    }
+
+    Invoke-ZbStep -Name 'Verify processes stopped and back up quiesced data' -DryRun:$DryRun -ResumeHint $resume -Action {
+        Assert-ZbAppStopped -TargetPath $installedExe
+        if ($updateMcp -and (Test-Path -LiteralPath $installedMcp)) {
+            Assert-ZbExecutableStopped -TargetPath $installedMcp
+        }
+        Backup-ZbData -Reason 'update' | Out-Null
+    }
+
     try {
-        Invoke-ZbStep -Name 'Rebuild and swap in' -DryRun:$DryRun -ResumeHint $resume -Action {
-            Push-Location $paths.RepoRoot
-            try { & npm ci; if ($LASTEXITCODE -ne 0) { throw 'npm ci failed.' } }
-            finally { Pop-Location }
-            Push-Location (Join-Path $paths.RepoRoot 'apps\desktop')
-            try { & wails build; if ($LASTEXITCODE -ne 0) { throw 'wails build failed.' } }
-            finally { Pop-Location }
-            $built = Join-Path $paths.RepoRoot 'apps\desktop\build\bin\ZeitBoard.exe'
-            if (-not (Test-Path -LiteralPath $built)) { throw "build output missing: $built" }
-            Copy-Item -LiteralPath $built -Destination $installedExe -Force
-            $stamp = Get-ZbVersionStamp
-            "$($stamp.Commit)  $($stamp.Date)" | Set-Content -Encoding UTF8 -LiteralPath (Join-Path $paths.InstallDir 'version.txt')
+        Invoke-ZbStep -Name 'Publish desktop build' -DryRun:$DryRun -ResumeHint $resume -Action {
+            Publish-ZbDesktopBuild -SourceExe $built -InstallDir $paths.InstallDir -VersionText (Get-ZbVersionText)
+            $script:ZbDesktopPublished = $true
+        }
+        if ($updateMcp) {
+            Invoke-ZbStep -Name 'Publish MCP connector' -DryRun:$DryRun -ResumeHint $resume -Action {
+                $mcpHash = Publish-ZbVerifiedFile -SourcePath $builtMcp -DestinationPath $installedMcp -BackupPath (Join-Path $paths.InstallDir 'previous\zeitboard-mcp.exe')
+                Set-ZbInstalledArtifactHash -InstallDir $paths.InstallDir -Key 'mcp-sha256' -Hash $mcpHash
+            }
+        }
+        Invoke-ZbStep -Name 'Verify installed build' -DryRun:$DryRun -ResumeHint $resume -Action {
+            if (-not (Test-ZbInstalledBuild -InstallDir $paths.InstallDir)) { throw 'An installed artifact failed its SHA-256 verification.' }
         }
     }
     catch {
-        $swapFailed = $true
-        Write-ZbLog -Level warn -Message 'rebuild/swap failed - auto-restoring the previous build'
-        if (Test-Path -LiteralPath $previousExe) { Copy-Item -LiteralPath $previousExe -Destination $installedExe -Force }
-        throw
+        $publishError = $_
+        $restoreFailure = $null
+        if ($script:ZbDesktopPublished) {
+            Write-ZbLog -Level warn -Message 'artifact publication failed; restoring the previous coherent install'
+            try {
+                if (-not (Test-Path -LiteralPath $previousExe)) {
+                    throw "Previous desktop build is missing: $previousExe"
+                }
+                Restore-ZbPreviousBuild -InstallDir $paths.InstallDir
+                if (-not (Test-ZbInstalledBuild -InstallDir $paths.InstallDir)) {
+                    throw 'The automatically restored build failed its SHA-256 verification.'
+                }
+            }
+            catch { $restoreFailure = $_ }
+        }
+        if ($restoreFailure) {
+            Write-ZbLog -Level fail -Message "automatic restore also failed: $($restoreFailure.Exception.Message)"
+            throw "Artifact publication failed ($($publishError.Exception.Message)); restoring the prior install also failed: $($restoreFailure.Exception.Message)"
+        }
+        throw $publishError
     }
 
-    Invoke-ZbStep -Name 'Smoke test' -DryRun:$DryRun -ResumeHint $resume -Check { $DryRun } -Action {
-        if (-not (Test-Path -LiteralPath $installedExe)) { throw 'installed binary missing after swap.' }
+    if ($DryRun) {
+        Write-ZbLog -Level ok -Message 'dry-run update plan complete; no files were changed'
     }
-
-    Show-ZbFinale -Kind update
-    if (-not $DryRun) {
+    else {
+        Show-ZbFinale -Kind update
         $stamp = Get-ZbVersionStamp
         Write-Host "   Now at: $($stamp.Commit)  $($stamp.Date)" -ForegroundColor Green
         Write-Host "   Roll back: scripts\installer\update.ps1 -Rollback" -ForegroundColor Green
@@ -146,6 +243,10 @@ try {
 catch {
     Write-Host ''
     Write-ZbLog -Level fail -Message 'Update did not complete.'
-    exit 1
+    Write-ZbLog -Level fail -Message $_.Exception.Message
+    $exitCode = 1
 }
-exit 0
+finally {
+    Exit-ZbLifecycleLock -Mutex $lifecycleLock
+}
+exit $exitCode

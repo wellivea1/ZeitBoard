@@ -298,6 +298,9 @@ func TestSleepExportAndDeleteRequireExplicitErasure(t *testing.T) {
 	if _, err := app.DeleteSleepObservation(SleepDeleteInput{ObservationID: added.ObservationID, Confirmation: "suppress"}); err == nil {
 		t.Fatal("delete should require the exact erasure confirmation")
 	}
+	if _, err := app.DeleteSleepObservation(SleepDeleteInput{ObservationID: added.ObservationID, Confirmation: " DELETE "}); err == nil {
+		t.Fatal("delete should reject confirmation with surrounding whitespace")
+	}
 	entries, err := app.DeleteSleepObservation(SleepDeleteInput{ObservationID: added.ObservationID, Confirmation: deleteConfirm})
 	if err != nil {
 		t.Fatal(err)

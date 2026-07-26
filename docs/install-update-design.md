@@ -1,232 +1,240 @@
-# Installation & update scheme design
+# Installation and update tooling
 
-> Design for the ZeitBoard install/update tooling: a shared base support
-> library with thin scripts on top — all-in-one Windows installer with a
-> behavior decision tree, updater with rollback, Android builder, server
-> installer, uninstaller. Windows PowerShell 5.1 is the floor (no pwsh
-> assumption); Linux server hosts keep the `self-hosting.md` path with a
-> bash twin of the base library later.
+> Implemented contract for the ZeitBoard Windows lifecycle scripts. Windows
+> PowerShell 5.1 is the compatibility floor. Linux server operation remains a
+> manual path in `docs/self-hosting.md`; there is no Linux installer twin yet.
 
-## 1. Principles
+## 1. Scope and guarantees
 
-1. **Pinned and vendored, never "latest".** Every toolchain lands in the
-   repo-local `.tools\` directory (the pattern node and wails.exe already
-   use), pinned by version and SHA-256 in one manifest. The system is
-   touched only when a component genuinely requires it (WebView2, a
-   Windows service). No `curl | iex`, ever.
-2. **Idempotent and resumable.** Re-running any script is always safe;
-   completed steps are detected and skipped; a failed run prints the exact
-   command to resume.
-3. **Consent-shaped.** Anything that persists outside the repo/app dirs —
-   startup entries, services, firewall rules, SDK license acceptance — is
-   an explicit decision-tree question (or flag), never a side effect.
-   Elevation is requested per-step only when the chosen component needs
-   it, and the script says why.
-4. **Honest failure.** No art on failure. The failing step, its last log
-   lines, the full log path, and the resume command — nothing else.
-5. **Data outlives binaries.** `%APPDATA%\ZeitBoard` (store, tokens,
-   config) is never written by the installer and never removed by the
-   uninstaller without the separate `-PurgeData` + typed `DELETE`
-   confirmation (mirroring ADR-0014 in-app semantics).
+The tooling consists of a shared, side-effect-free-on-load PowerShell library
+and five entry scripts:
 
-## 2. Evaluation: base support file vs. alternatives
-
-| Option | Verdict |
-|---|---|
-| **Shared dot-sourced library + thin entry scripts** | **Chosen.** One tested implementation of logging, probing, downloading, verifying, extracting, shortcuts, and art; entry scripts read as plain phase lists; PS 5.1-native; unit-testable with Pester. |
-| One monolithic `install.ps1` | Rejected: updater/Android/uninstall would copy-paste the same 400 lines; drift guaranteed. |
-| Makefile / Taskfile | Rejected as the *user-facing* layer: adds a dependency before dependencies are installed, and Windows-hostile. Fine internally for CI, which already calls the npm/go commands directly. |
-| MSI / MSIX / Inno Setup now | Deferred: packaging binaries is a distribution problem; today's audience builds from source. The library is designed so a packaging script later becomes just another consumer (`package.ps1`). |
-
-Layering:
-
-```
+```text
 scripts/installer/
-  _zb.common.ps1      <- the base support file (library, no side effects on load)
-  pins.psd1           <- single version/URL/SHA-256 manifest
-  install.ps1         <- all-in-one Windows app installer
-  update.ps1          <- updater with backup + rollback
-  build-android.ps1   <- Android APK builder
-  install-server.ps1  <- zeitboardd as a Windows service (optional host role)
-  uninstall.ps1       <- reverse of install; data purge is separate + typed
+  _zb.common.ps1
+  pins.psd1
+  install.ps1
+  update.ps1
+  build-android.ps1
+  install-server.ps1
+  uninstall.ps1
+  test-installer.ps1
 ```
 
-## 3. Base support file contract (`_zb.common.ps1`)
+The implemented guarantees are deliberately narrower than "one command can
+never fail":
 
-Dot-sourced first by every entry script. Provides, and nothing else runs on
-load:
+1. Downloads are version-pinned and SHA-256 verified before extraction.
+2. Tool archives are staged before publication. Incomplete local tool folders
+   are quarantined instead of silently reused.
+3. Desktop, MCP, daemon, config, and version metadata publication verifies the
+   installed bytes. Replacement paths retain one prior release for rollback.
+4. A publication failure attempts to restore the previous coherent release and
+   reports recovery failure separately from the original error.
+5. Re-running is supported, but it is not promised to be a no-op. Dependencies
+   and build outputs are revalidated, and selected behavior is reconciled.
+6. `%APPDATA%\ZeitBoard` is never modified by install or update. Uninstall
+   preserves it unless `-PurgeData` is selected and `DELETE` is typed.
+7. `-PurgeData` creates a raw recovery ZIP first. That ZIP can contain database
+   files and tokens; it is not the portable ADR-0014 export.
+8. Dry-run prints the phase plan and skips every action block. It has no intended
+   side effects, but it is not a substitute for dependency, build, or runtime
+   validation.
+9. Startup entries, shortcuts, services, and firewall rules are changed only
+   when their current target is owned by this ZeitBoard installation. A
+   same-named foreign target is preserved.
+10. Entry points take one named lifecycle mutex. Concurrent lifecycle commands
+    in the same Windows session fail before mutation; update releases the mutex
+    before restarting under newly pulled installer code.
 
-- `Get-ZbPaths` — the single source of truth: repo root, `.tools\`,
-  install dir (`%LOCALAPPDATA%\Programs\ZeitBoard`), data dir
-  (`%APPDATA%\ZeitBoard`), log dir (`%TEMP%\zeitboard-install\`).
-- `Write-ZbLog -Level info|warn|fail -Message` — console + transcript file.
-- `Invoke-ZbStep -Name -Action { }` — step runner: timing, skip-detection
-  hook, failure capture (last 20 log lines + resume hint), `-DryRun`
-  support (prints the plan instead of acting).
-- `Test-ZbDependency` / `Install-ZbDependency -Name` — probe order:
-  `.tools\` pin → acceptable system version → download from `pins.psd1`
-  URL, **verify SHA-256**, extract into `.tools\<name>-<version>`.
-  Never PATH-pollutes the machine; each script prepends `.tools` paths to
-  its own process `PATH` only (exactly like `scripts/dev.ps1` today).
-- `Assert-ZbRepoClean`, `Get-ZbVersionStamp` (commit hash + date),
-  `Backup-ZbData` (db + `-wal`/`-shm` + config, timestamped zip),
-  `New-ZbShortcut`, `Set-ZbStartupEntry` (HKCU Run key add/remove),
-  `Show-ZbBanner` / `Show-ZbFinale -Kind install|update|android`.
-- All prompts route through `Read-ZbChoice`, which honors
-  `-NonInteractive` + per-question flags so CI and unattended installs
-  answer everything from the command line.
+Failures inside an `Invoke-ZbStep` action print the failed step, log location
+when logging is active, and an exact resume command. Entry-script catch blocks
+print the underlying error. Success art is never printed on failure.
 
-## 4. Dependency matrix (what "all needed dependencies" means)
+## 2. Shared library contract
 
-| Dependency | Pin | Detect | Install action | Elevation |
-|---|---|---|---|---|
-| Git | any ≥ 2.40 | `git --version` | instruct only (installer refuses to fetch git itself — it is how you got the repo) | – |
-| Go | **1.26.0** | `.tools\go\` → `go version` | portable zip → `.tools\go` | no |
-| Node | **v24.16.0** | `.tools\node-v24.16.0-win-x64` (already vendored) | zip → `.tools` if missing | no |
-| Wails CLI | **v2.12.0** | `.tools\bin\wails.exe` | `go install` into `.tools\bin` (GOBIN) | no |
-| WebView2 Runtime | Evergreen | registry key | winget per-user, else Evergreen bootstrapper; Win11 ships it — usually a no-op | only if machine-wide chosen |
-| C compiler | **none** | – | not needed: `modernc.org/sqlite` is pure Go — the design explicitly forbids adding cgo deps without updating this doc | – |
-| npm packages | lockfile | `node_modules` freshness | `npm ci` (workspace root) | no |
-| JDK (Android only) | Temurin **17** | `.tools\jdk-17` | portable zip → `.tools` | no |
-| Android SDK (Android only) | cmdline-tools pinned | `.tools\android-sdk` | sdkmanager fetch; **license acceptance is an explicit prompt**, never `--licenses` piped `y` silently | no |
+`_zb.common.ps1` is dot-sourced by each entry script and does not perform work
+when loaded. Its main responsibilities are:
 
-## 5. `install.ps1` — the all-in-one installer
+- `Get-ZbPaths`: repo, tool, install, data, and temporary log locations.
+- `Start-ZbLog`, `Write-ZbLog`, and `Invoke-ZbStep`: transcript logging, step
+  boundaries, resume hints, check hooks, and dry-run behavior.
+- `Enter-ZbLifecycleLock` and `Exit-ZbLifecycleLock`: process serialization.
+- `Get-ZbPins`, `Test-ZbPins`, `Get-ZbExpectedHash`, and
+  `Install-ZbArchivePin`: runtime pin and path-containment validation, HTTPS
+  downloads, hash checks, staged extraction, wrapper-directory normalization,
+  and collision-safe quarantine of incomplete installs.
+- `Assert-ZbGo`, `Assert-ZbNode`, `Assert-ZbWails`, and `Assert-ZbWebView2`:
+  exact tool probes and process-local PATH changes. Nothing edits machine PATH.
+- `Assert-ZbRepoClean`, `Get-ZbVersionStamp`, and `Backup-ZbData`.
+- `Publish-ZbVerifiedFile`, `Publish-ZbDesktopBuild`,
+  `Restore-ZbPreviousBuild`, and `Test-ZbInstalledBuild`: staged publication,
+  SHA-256 metadata, post-publication verification, and restoration of the prior
+  destination on any failed publication.
+- Service, executable, firewall, shortcut, startup-entry, and server-root
+  ownership guards.
+- ASCII-only banners and finale output.
 
-Phases (each an `Invoke-ZbStep`): banner → preflight (OS ≥ Win10 1809 for
-WebView2, disk space, repo clean-or-warn, execution-policy *note* — the doc
-tells users to run `powershell -ExecutionPolicy Bypass -File install.ps1`;
-the script never rewrites policy) → dependencies (§4) → build (npm ci →
-frontend build → `wails build` → server + MCP binaries via `go build`) →
-install (copy `ZeitBoard.exe` + version stamp to install dir; previous
-build preserved in `previous\`) → **decision tree** → smoke test (binary
-launches and writes its version stamp; data dir untouched check) → finale.
+The test runner uses plain PowerShell assertions instead of Pester so the same
+suite runs under stock Windows PowerShell and GitHub Actions.
 
-### Decision tree (interactive; every branch has a flag twin)
+## 3. Dependency matrix
 
-```
-Install ZeitBoard how?
-├─ Desktop app (default: yes)
-│   ├─ Start Menu shortcut?          [Y/n]   -StartMenu:$false
-│   ├─ Desktop shortcut?             [y/N]   -DesktopShortcut
-│   ├─ Launch at Windows startup?    [y/N]   -Startup
-│   │    └─ (HKCU Run key; the app starts to tray — matches the
-│   │        existing tray Start/Quit behavior; removable by
-│   │        uninstall.ps1 or the same flag with :$false)
-│   └─ Launch now when finished?     [Y/n]   -NoLaunch
-├─ Self-hosted server on THIS machine (default: no)  -WithServer
-│   └─ delegates to install-server.ps1 (service, config, firewall Q)
-├─ MCP connector on PATH? (default: no)              -WithMcp
-│   └─ copies zeitboard-mcp.exe to install dir + prints the
-│       Claude Desktop config snippet from self-hosting.md
-└─ Android APK build? (default: no)                  -WithAndroid
-    └─ delegates to build-android.ps1
-```
+| Dependency | Accepted or pinned version | Implemented behavior | Elevation |
+|---|---|---|---|
+| Git | system Git 2.40+ | Required preflight; never bootstrapped | No |
+| Go | system Go 1.26.x or pinned Go 1.26.0 | Portable ZIP under `.tools\go` when needed | No |
+| Node | exactly v24.16.0 | Portable ZIP under `.tools` when needed | No |
+| Wails CLI | exactly v2.12.0 | `go install` into `.tools\bin`; installed version is checked | No |
+| WebView2 | installed Evergreen runtime | Detect registry; offer per-user `winget`; fail with the official manual-install URL if declined or unavailable | No |
+| npm dependencies | root lockfile | `npm ci` at workspace root | No |
+| JDK for Android | JDK 17 through 21 accepted; Temurin 17.0.12+7 fallback | Existing JDK/Android Studio JBR first, then pinned portable ZIP | No |
+| Android command tools | 15859902 | SHA-pinned portable bootstrap | No |
+| Android platform/build tools | API 36.1 / build-tools 36.1.0 | `sdkmanager` after explicit license consent | No |
 
-Defaults are deliberately conservative: nothing auto-starts, nothing
-listens on a port, unless chosen.
+The Android license flow first asks for consent. Only after consent does the
+script feed automated `y` responses to `sdkmanager --licenses`. This keeps the
+license decision explicit without requiring the user to answer repeated copies
+of the same accepted prompt.
 
-## 6. `update.ps1` — updater with rollback
+## 4. Desktop install
 
-banner → `Get-ZbVersionStamp` current vs `git fetch` target → show commit
-summary + confirm → **`Backup-ZbData`** (always, before anything) → move
-current install to `previous\` → rebuild exactly as install does →
-optional `-SkipTests` (default runs the Go + frontend suites; an update
-that fails tests aborts and auto-restores `previous\`) → swap in → smoke
-test → finale.
+`install.ps1` performs these phases:
 
-- `update.ps1 -Rollback` restores `previous\` in one move. Data is never
-  rolled back automatically — the backup zip path is printed instead,
-  because the schema is additive-only (`CREATE TABLE IF NOT EXISTS`
-  migrations; a destructive migration requires its own ADR and explicit
-  updater support before it may ship).
-- The updater refuses a dirty working tree (`Assert-ZbRepoClean`) unless
-  `-AllowDirty`, and prints exactly what it would discard.
+1. Check Windows 10 build 17763+, Git 2.40+, repository cleanliness, disk space,
+   and administrator status when `-WithServer` was selected.
+2. Resolve Go, Node, Wails, and WebView2.
+3. Run `npm ci` and `wails build`.
+4. Build the MCP connector when `-WithMcp` is selected or one is already
+   installed. An existing connector is always kept in sync with the desktop.
+5. Stage, publish, and hash-verify the desktop and optional MCP artifacts.
+6. Reconcile Start Menu, desktop shortcut, and HKCU startup choices.
+7. Delegate optional server and Android work.
+8. Reverify installed hashes, optionally launch, and print the success finale.
 
-## 7. `build-android.ps1`
+The desktop/MCP publication is one recovery unit. It handles an existing
+release, a legacy release without hash metadata, and an unusual pre-existing MCP
+connector without a desktop executable. Optional server and Android delegates
+are separate operations; failure in one does not pretend that earlier desktop
+publication never happened.
 
-JDK + SDK bootstrap per §4 (license prompt is a hard consent gate) →
-`gradlew assembleDebug` by default → `-Release` requires
-`-Keystore <path>` (+ passwords via prompt or env, never argv) and refuses
-to fabricate a keystore silently — first-time keystore creation is its own
-guided, clearly-labeled branch that stores the file **outside** the repo →
-prints APK path → optional `-AdbInstall` when exactly one device is
-attached → finale (`APK READY` variant).
+Behavior flags are `-StartMenu`, `-DesktopShortcut`, `-Startup`, `-NoLaunch`,
+`-WithServer`, `-WithMcp`, `-WithAndroid`, `-AcceptAndroidLicenses`,
+`-NonInteractive`, `-AllowDirty`, and `-DryRun`. `-WithServer` requires the
+parent PowerShell process to already be elevated; the script does not relaunch
+itself with elevation midway through a transaction.
 
-## 8. `install-server.ps1` and `uninstall.ps1`
+## 5. Update and rollback
 
-- Server: builds `zeitboardd`, materializes a config from the
-  `self-hosting.md` template (secrets generated per its Generate Secrets
-  section, never defaults), registers a Windows service (`sc.exe create`,
-  delayed-auto), asks separately about a firewall rule (default: LAN only;
-  the portal remains `portal.enabled=off` regardless — exposure stays a
-  deliberate config edit per `portal-design.md`). Linux hosts keep the
-  existing runbook; the bash twin of `_zb.common` is a later, separate
-  deliverable so parity is tested, not assumed.
-- Uninstall: removes binaries, shortcuts, Run key, service (if present) —
-  then stops. `-PurgeData` additionally requires typing `DELETE` and
-  removes `%APPDATA%\ZeitBoard` after offering a final export, mirroring
-  the in-app erasure ceremony.
+`update.ps1` uses this order:
 
-## 9. Verification of the tooling itself
+1. Verify the current installed hashes and repository state.
+2. Fetch the tracked upstream and pull only with `--ff-only` after consent.
+3. Restart under newly pulled installer code when a pull occurred.
+4. Resolve toolchains and run `npm ci`.
+5. Run frontend and Go tests unless `-SkipTests` was selected.
+6. Build desktop and any installed/requested MCP connector while the current app
+   remains available.
+7. Require the desktop and MCP processes to be stopped, then create a quiesced
+   raw data backup.
+8. Publish and verify the new artifacts, restoring and verifying the previous
+   coherent install if publication fails.
 
-- Every script supports `-DryRun` (full plan, zero side effects); the CI
-  `installer` job runs `install.ps1 -DryRun -NonInteractive` and
-  `update.ps1 -DryRun` on windows-latest so the phase lists can't rot.
-- `scripts\installer\test-installer.ps1` unit-tests `_zb.common.ps1`:
-  path resolution, pin validation, `Read-ZbChoice` precedence, the
-  placeholder-checksum refusal, `Invoke-ZbStep` skip/dry-run behavior,
-  Run-key add/remove round-trip against a sandbox key, and ASCII-only
-  banners. It uses plain assertions with an exit code rather than Pester —
-  stock Windows ships Pester 3.4 while CI has 5.x and their assertion
-  syntaxes are incompatible, so a dependency-free runner is the portable
-  choice and runs identically in both places.
-- Pin integrity is enforced by `Test-ZbPins` (called from the test runner):
-  every `Url`/`Sha256Url` is https and every downloadable entry carries
-  exactly one integrity source (literal `Sha256` or vendor `Sha256Url`).
+A test or build failure happens before publication, so there is nothing to roll
+back in that case. `update.ps1 -Rollback` restores `previous\` and verifies it.
+Application data is never rolled back automatically.
 
-## 10. Banners
+`-AllowDirty` prints `git status --porcelain` and proceeds with those local
+changes in place. It does not discard, reset, or stash them. Git may still
+refuse a fast-forward pull when local files conflict.
 
-ASCII-only (Windows PowerShell 5.1 consoles on legacy codepages garble
-box-drawing and block glyphs). Start banner, all scripts:
+## 6. Android builder
 
-```
-=================================================================
-  ZZZZZ EEEEE IIIII TTTTT BBBB   OOO   AAA  RRRR  DDDD
-     Z  E       I     T   B   B O   O A   A R   R D   D
-    Z   EEEE    I     T   BBBB  O   O AAAAA RRRR  D   D
-   Z    E       I     T   B   B O   O A   A R  R  D   D
-  ZZZZZ EEEEE IIIII   T   BBBB   OOO  A   A R   R DDDD
-              a planner for free-running rhythms
-=================================================================
-```
+`build-android.ps1` resolves JDK and SDK tools, reconciles one `sdk.dir` entry in
+`local.properties`, then runs `assembleDebug` by default.
 
-Install finale (congratulatory — success only, per §1.4):
+`-Release` requires an existing keystore and alias. Passwords come from a secure
+prompt or `ZEITBOARD_KEYSTORE_PASS` / `ZEITBOARD_KEY_PASS`; signing inputs are
+passed through process-only environment variables, not command-line arguments.
+The script does not create or choose a signing key. It verifies the resulting
+APK with pinned `apksigner` and optionally runs `adb install -r` only when
+exactly one authorized device is attached.
 
-```
-        .   *        .       *          .        *
-   *        .   ________________   .          .
-       .       /                \        *
-  ------------|  Z E I T B O A R D  |------------------
-               \___ installed! ___/
-        (  -_-) zzZ   ~ your rhythm, your clock ~  (^-^ )
-   .        *        .        *       .        *      .
-   Every day is a little longer. Now your planner knows it.
-=================================================================
-   Launch:  ZeitBoard from the Start Menu (or it's already up)
-   Update:  scripts\installer\update.ps1
-=================================================================
-```
+## 7. Windows server installer
 
-Update finale swaps the marquee line for `up to date!` and prints
-old → new commit; Android finale prints `APK READY` with the artifact
-path in the box. Failure output uses no art (§1.4).
+`install-server.ps1` requires an elevated PowerShell process and defaults to the
+canonical `%PROGRAMDATA%\ZeitBoard` root. It:
 
-## 11. Rollout slices
+- rejects personal-file subtrees, reparse points, unsafe roots, and unrelated
+  non-empty roots before recursive ACL changes;
+- marks the managed root and restricts it to SYSTEM and Administrators;
+- generates 32-byte data and enrollment secrets only when absent;
+- preserves an existing config except for explicitly supplied listen/TLS values;
+- validates the staged config with the staged daemon before service mutation;
+- normalizes explicitly supplied TLS paths to absolute paths and resolves paths
+  already stored in config relative to the config file directory;
+- atomically publishes daemon and config files;
+- registers a delayed-auto Windows service with `sc.exe`;
+- runs the daemon through the native Windows SCM handler, which reports Running
+  only after the listener is established and performs bounded graceful shutdown;
+- writes a 10 MiB rotating service log with one backup;
+- defaults to loopback and requires TLS files for a non-loopback bind; and
+- creates only an explicitly accepted Private-profile firewall rule tied to the
+  managed daemon path.
 
-| Slice | Scope | Acceptance |
-|---|---|---|
-| **I-A** | `_zb.common.ps1` + `pins.psd1` + `install.ps1` (desktop path only) | fresh Win11 VM: repo clone → one command → running tray app; re-run is a no-op; `-DryRun` in CI |
-| **I-B** | `update.ps1` + rollback + data backup | update across a real commit pair; forced test-failure auto-restores `previous\` |
-| **I-C** | `build-android.ps1` | debug APK from a machine with no prior JDK/SDK; release path refuses without keystore |
-| **I-D** | `install-server.ps1` + `uninstall.ps1` + Pester suite | service survives reboot; uninstall leaves data; `-PurgeData` ceremony verified |
-```
+Reruns refuse to modify a same-named service pointing to another executable.
+Service failure recovery restores prior registration, description, start mode,
+running/stopped state, daemon, and config. A failed first install removes newly
+published daemon/config files but deliberately retains generated secrets and the
+managed root so a rerun can recover safely.
+
+Firewall reconciliation is a post-service commit step. If that later step
+fails, the script exits unsuccessfully but leaves the verified running service
+in place and tells the operator to rerun the same command.
+
+No public availability portal route is implemented or enabled by this tooling.
+
+## 8. Uninstall and erasure
+
+`uninstall.ps1` removes owned desktop binaries, MCP connector, shortcuts, and
+startup state. `-RemoveServer` additionally removes the owned service and owned
+firewall rules, but preserves the entire server root, including its data,
+config, secrets, logs, and binaries.
+
+`-PurgeData` applies only to `%APPDATA%\ZeitBoard`. It is rejected in
+non-interactive mode, requires the exact typed word `DELETE`, creates a raw ZIP
+under `%TEMP%\zeitboard-install`, warns that the backup is sensitive, and only
+then recursively erases the desktop data directory. This is real filesystem
+erasure and is distinct from append-only record suppression inside the app.
+
+## 9. Verification and acceptance status
+
+GitHub CI performs:
+
+- contract fixture drift checks and trusted-prototype network guards;
+- Go format, test, and vet on core, desktop service, Linux server, and Windows
+  server builds;
+- frontend and trusted-view tests/builds plus frontend lint;
+- Android JVM tests, lint, and debug assembly after installing API 36.1 and
+  build-tools 36.1.0 explicitly; and
+- installer library tests plus dry-run coverage of all entry points and major
+  optional branches.
+
+Local verification in the implementation pass covered the server suites, all
+PowerShell parsers, the installer regression suite, Android JVM tests/lint,
+debug APK assembly, APK signature verification, emulator install, launch, and
+screen-level accessibility/layout inspection.
+
+The following remain manual release checks and must not be described as already
+proven by CI:
+
+| Check | Status |
+|---|---|
+| Fresh Windows 11 VM from clone to launched tray app | Pending manual release check |
+| Update across two published commits and explicit rollback | Pending manual release check |
+| Android bootstrap on a machine with no usable JDK or SDK | Pending manual release check |
+| Release APK with the user's production keystore | Pending operator check |
+| Elevated native service install, reboot survival, and uninstall on a clean VM | Pending manual release check |
+| Interactive `-PurgeData` ceremony against disposable test data | Pending manual release check |
+
+These checks are release acceptance gates, not implementation claims.
