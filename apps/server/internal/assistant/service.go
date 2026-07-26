@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
+	"non24.app/core/agentpolicy"
 	"non24.app/core/domain"
 	"non24.app/core/scheduling"
 	"non24.app/server/internal/provider"
@@ -54,7 +56,7 @@ func (s *Service) HandleMessage(ctx context.Context, device store.Device, req Me
 		return MessageResponse{}, errors.New("unsupported schema version")
 	}
 	req.Message = strings.TrimSpace(req.Message)
-	if req.Message == "" || len(req.Message) > 2000 {
+	if req.Message == "" || utf8.RuneCountInString(req.Message) > 2000 {
 		return MessageResponse{}, errors.New("message is required and must be bounded")
 	}
 	if req.Context.ZoneID == "" {
@@ -63,8 +65,18 @@ func (s *Service) HandleMessage(ctx context.Context, device store.Device, req Me
 	if req.Context.Now.IsZero() {
 		req.Context.Now = s.now()
 	}
-	if isMedicalPrompt(req.Message) {
-		return s.answer(ResultRefused, "answer_only", medicalRefusal()), nil
+	if agentpolicy.IsMedicalDecisionPrompt(req.Message) {
+		return s.answer(ResultRefused, "answer_only", agentpolicy.MedicalRefusal), nil
+	}
+	if agentpolicy.ContainsMedicalSubject(req.Message) || agentpolicy.ContainsMarkerSubject(req.Message) {
+		answer := factualHealthAnswer(req.Message, req.Context)
+		if strings.TrimSpace(answer) == "" {
+			return s.answer(ResultRefused, "answer_only", agentpolicy.MedicalRefusal), nil
+		}
+		return s.answer(ResultAnswerOnly, "answer_only", answer), nil
+	}
+	if err := validatePlanningContext(req.Context); err != nil {
+		return MessageResponse{}, err
 	}
 	if !s.status.Configured {
 		return s.answer(ResultAnswerOnly, "answer_only", localFallback(req.Message, s.status)), nil
@@ -82,6 +94,10 @@ func (s *Service) HandleMessage(ctx context.Context, device store.Device, req Me
 	}
 	if err != nil {
 		return s.answer(ResultUnknown, "answer_only", "I could not turn that into a safe schedule action. No proposal was created."), nil
+	}
+	if agentpolicy.ContainsMedicalSubject(req.Message) &&
+		(action.RecommendedAction != "answer_only" || agentpolicy.IsUnsafeMedicalAnswer(action.Answer)) {
+		return s.answer(ResultRefused, "answer_only", agentpolicy.MedicalRefusal), nil
 	}
 	return s.resolveAction(ctx, device, req, action)
 }
@@ -127,6 +143,9 @@ func parseModelAction(text string) (modelAction, error) {
 }
 
 func validateAction(action modelAction) error {
+	if utf8.RuneCountInString(action.Answer) > 2000 {
+		return errors.New("assistant answer is too long")
+	}
 	if action.SchemaVersion != SchemaVersion {
 		return errors.New("unsupported action schema version")
 	}
@@ -136,8 +155,23 @@ func validateAction(action modelAction) error {
 			return errors.New("answer_only must not include a target")
 		}
 	case "propose_move_task", "propose_place_task", "propose_reminder_shift":
-		if action.Target == nil || action.Target.TaskID == "" {
+		if action.Target == nil || !contextIdentifierPattern.MatchString(action.Target.TaskID) {
 			return errors.New("proposal action requires a task target")
+		}
+		if action.Target.ReminderID != "" && !contextIdentifierPattern.MatchString(action.Target.ReminderID) {
+			return errors.New("proposal reminder id is invalid")
+		}
+		if action.Target.DurationMinutes < 0 || action.Target.DurationMinutes > 1440 {
+			return errors.New("proposal duration is outside the allowed range")
+		}
+		if action.Target.PreferredAfterWakeMinutes != nil && (*action.Target.PreferredAfterWakeMinutes < 0 || *action.Target.PreferredAfterWakeMinutes > 1440) {
+			return errors.New("proposal wake offset is outside the allowed range")
+		}
+		if (action.Target.EarliestStartAt != nil && action.Target.EarliestStartAt.IsZero()) || (action.Target.LatestFinishAt != nil && action.Target.LatestFinishAt.IsZero()) {
+			return errors.New("proposal timing bounds are invalid")
+		}
+		if action.Target.EarliestStartAt != nil && action.Target.LatestFinishAt != nil && !action.Target.EarliestStartAt.Before(*action.Target.LatestFinishAt) {
+			return errors.New("proposal finish must be after its start")
 		}
 	default:
 		return errors.New("unknown recommended action")
@@ -153,7 +187,6 @@ func (s *Service) HandleDirectProposal(ctx context.Context, device store.Device,
 		SchemaVersion:     req.SchemaVersion,
 		RecommendedAction: req.RecommendedAction,
 		Target:            req.Target,
-		Answer:            safeAnswer(req.Answer),
 	}
 	if err := validateAction(action); err != nil {
 		return MessageResponse{}, err
@@ -166,6 +199,9 @@ func (s *Service) HandleDirectProposal(ctx context.Context, device store.Device,
 	}
 	if req.Context.Now.IsZero() {
 		req.Context.Now = s.now()
+	}
+	if err := validatePlanningContext(req.Context); err != nil {
+		return MessageResponse{}, err
 	}
 	return s.createPendingProposal(ctx, device, req.Context, action, "agent")
 }
@@ -248,7 +284,7 @@ func (s *Service) storePendingProposal(ctx context.Context, device store.Device,
 	}
 	answer := action.Answer
 	if source != "assistant" {
-		answer = withHumanApprovalNotice(answer)
+		answer = "I queued a schedule proposal for approval. It awaits human approval."
 	} else if answer == "" {
 		answer = "I queued a schedule proposal for approval. It awaits human approval."
 	}
@@ -265,17 +301,6 @@ func (s *Service) storePendingProposal(ctx context.Context, device store.Device,
 			Payload:       record.Payload,
 		}},
 	}, nil
-}
-
-func withHumanApprovalNotice(answer string) string {
-	answer = strings.TrimSpace(answer)
-	if answer == "" {
-		return "I queued a schedule proposal for approval. It awaits human approval."
-	}
-	if strings.Contains(strings.ToLower(answer), "human approval") {
-		return answer
-	}
-	return answer + " It awaits human approval."
 }
 
 func (s *Service) resolveProposal(input PlanningContext, action modelAction) (scheduling.Proposal, error) {
@@ -470,21 +495,6 @@ func newID(prefix string) (string, error) {
 	return prefix + "_" + hex.EncodeToString(raw[:]), nil
 }
 
-func isMedicalPrompt(message string) bool {
-	lower := strings.ToLower(message)
-	terms := []string{"diagnose", "diagnosis", "dose", "dosing", "medicine", "medication", "melatonin", "light therapy", "treatment", "prescribe", "dlmo"}
-	for _, term := range terms {
-		if strings.Contains(lower, term) {
-			return true
-		}
-	}
-	return false
-}
-
-func medicalRefusal() string {
-	return "I can't help with medical decisions like medication or dosing. I can show when you logged doses relative to your rhythm, or help you plan around appointments."
-}
-
 func localFallback(message string, status provider.Status) string {
 	if strings.Contains(strings.ToLower(message), "where") && strings.Contains(strings.ToLower(message), "data") {
 		return "No LLM provider is configured. The assistant is answering from this self-hosted instance only, and no provider call was made."
@@ -499,6 +509,10 @@ func safeAnswer(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return ""
+	}
+	runes := []rune(value)
+	if len(runes) > 2000 {
+		value = string(runes[:2000])
 	}
 	replacements := map[string]string{
 		"DLMO":             "estimated sleep-wake phase",

@@ -89,6 +89,13 @@ func TestNoApprovalToolIsExposed(t *testing.T) {
 			}
 		}
 	}
+	properties, ok := proposeSchema()["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("proposal schema properties are malformed: %#v", proposeSchema())
+	}
+	if _, exposed := properties["answer"]; exposed {
+		t.Fatal("proposal schema lets callers inject approval-card text")
+	}
 	if knownTool("approve_proposal") || knownTool("apply_proposal") || knownTool("decide_proposal") {
 		t.Fatalf("approval/apply tool should not be known")
 	}

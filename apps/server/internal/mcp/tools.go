@@ -5,6 +5,11 @@ import (
 	"errors"
 )
 
+const (
+	identifierSchemaPattern = `^[a-z][a-z0-9_-]{2,79}$`
+	zoneSchemaPattern       = `^(?:UTC|[A-Za-z0-9._+-]+(?:/[A-Za-z0-9._+-]+)+)$`
+)
+
 type toolDefinition struct {
 	Name        string         `json:"name"`
 	Title       string         `json:"title,omitempty"`
@@ -75,7 +80,6 @@ func proposeSchema() map[string]any {
 		"properties": map[string]any{
 			"context": planningContextSchema(),
 			"target":  actionTargetSchema(),
-			"answer":  map[string]any{"type": "string", "maxLength": 240},
 		},
 	}
 }
@@ -86,20 +90,23 @@ func planningContextSchema() map[string]any {
 		"additionalProperties": false,
 		"required":             []string{"zone_id", "now", "tasks", "availability"},
 		"properties": map[string]any{
-			"zone_id":     map[string]any{"type": "string", "minLength": 1, "maxLength": 64},
+			"zone_id":     map[string]any{"type": "string", "pattern": zoneSchemaPattern, "maxLength": 64},
 			"now":         map[string]any{"type": "string", "format": "date-time"},
-			"estimate_id": map[string]any{"type": "string", "maxLength": 64},
+			"estimate_id": map[string]any{"type": "string", "pattern": identifierSchemaPattern},
 			"tasks": map[string]any{
-				"type":  "array",
-				"items": taskSchema(),
+				"type":     "array",
+				"maxItems": 100,
+				"items":    taskSchema(),
 			},
 			"availability": map[string]any{
-				"type":  "array",
-				"items": availabilitySchema(),
+				"type":     "array",
+				"maxItems": 128,
+				"items":    availabilitySchema(),
 			},
 			"fixed_events": map[string]any{
-				"type":  "array",
-				"items": fixedEventSchema(),
+				"type":     "array",
+				"maxItems": 256,
+				"items":    fixedEventSchema(),
 			},
 		},
 	}
@@ -111,15 +118,15 @@ func taskSchema() map[string]any {
 		"additionalProperties": false,
 		"required":             []string{"task_id", "duration_minutes"},
 		"properties": map[string]any{
-			"task_id":                      map[string]any{"type": "string", "minLength": 1, "maxLength": 80},
+			"task_id":                      map[string]any{"type": "string", "pattern": identifierSchemaPattern},
 			"duration_minutes":             map[string]any{"type": "integer", "minimum": 1, "maximum": 1440},
 			"earliest_start_at":            map[string]any{"type": "string", "format": "date-time"},
 			"latest_finish_at":             map[string]any{"type": "string", "format": "date-time"},
 			"preferred_after_wake_minutes": map[string]any{"type": "integer", "minimum": 0, "maximum": 1440},
 			"minimum_confidence":           map[string]any{"type": "string", "enum": []string{"low", "medium", "high"}},
 			"business_hours":               map[string]any{"type": "boolean"},
-			"business_start_local":         map[string]any{"type": "string", "maxLength": 8},
-			"business_end_local":           map[string]any{"type": "string", "maxLength": 8},
+			"business_start_local":         map[string]any{"type": "string", "pattern": `^(?:[01]\d|2[0-3]):[0-5]\d$`},
+			"business_end_local":           map[string]any{"type": "string", "pattern": `^(?:[01]\d|2[0-3]):[0-5]\d$`},
 		},
 	}
 }
@@ -133,7 +140,7 @@ func availabilitySchema() map[string]any {
 			"kind":       map[string]any{"type": "string", "enum": []string{"predicted_wake", "predicted_sleep", "functional", "free"}},
 			"start_at":   map[string]any{"type": "string", "format": "date-time"},
 			"end_at":     map[string]any{"type": "string", "format": "date-time"},
-			"zone_id":    map[string]any{"type": "string", "minLength": 1, "maxLength": 64},
+			"zone_id":    map[string]any{"type": "string", "pattern": zoneSchemaPattern, "maxLength": 64},
 			"confidence": map[string]any{"type": "string", "enum": []string{"low", "medium", "high"}},
 		},
 	}
@@ -145,10 +152,10 @@ func fixedEventSchema() map[string]any {
 		"additionalProperties": false,
 		"required":             []string{"event_id", "start_at", "end_at", "zone_id"},
 		"properties": map[string]any{
-			"event_id": map[string]any{"type": "string", "minLength": 1, "maxLength": 80},
+			"event_id": map[string]any{"type": "string", "pattern": identifierSchemaPattern},
 			"start_at": map[string]any{"type": "string", "format": "date-time"},
 			"end_at":   map[string]any{"type": "string", "format": "date-time"},
-			"zone_id":  map[string]any{"type": "string", "minLength": 1, "maxLength": 64},
+			"zone_id":  map[string]any{"type": "string", "pattern": zoneSchemaPattern, "maxLength": 64},
 		},
 	}
 }
@@ -159,12 +166,12 @@ func actionTargetSchema() map[string]any {
 		"additionalProperties": false,
 		"required":             []string{"task_id"},
 		"properties": map[string]any{
-			"task_id":                      map[string]any{"type": "string", "minLength": 1, "maxLength": 80},
+			"task_id":                      map[string]any{"type": "string", "pattern": identifierSchemaPattern},
 			"earliest_start_at":            map[string]any{"type": "string", "format": "date-time"},
 			"latest_finish_at":             map[string]any{"type": "string", "format": "date-time"},
 			"duration_minutes":             map[string]any{"type": "integer", "minimum": 1, "maximum": 1440},
 			"preferred_after_wake_minutes": map[string]any{"type": "integer", "minimum": 0, "maximum": 1440},
-			"reminder_id":                  map[string]any{"type": "string", "maxLength": 80},
+			"reminder_id":                  map[string]any{"type": "string", "pattern": identifierSchemaPattern},
 		},
 	}
 }
@@ -172,7 +179,6 @@ func actionTargetSchema() map[string]any {
 type proposeArguments struct {
 	Context json.RawMessage `json:"context"`
 	Target  json.RawMessage `json:"target"`
-	Answer  string          `json:"answer,omitempty"`
 }
 
 func (a proposeArguments) directProposalPayload(action string) (json.RawMessage, error) {
@@ -184,9 +190,6 @@ func (a proposeArguments) directProposalPayload(action string) (json.RawMessage,
 		"recommended_action": action,
 		"context":            json.RawMessage(a.Context),
 		"target":             json.RawMessage(a.Target),
-	}
-	if a.Answer != "" {
-		payload["answer"] = a.Answer
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {

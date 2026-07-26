@@ -193,7 +193,30 @@ assistant provider; arbitrary web access is not exposed to the assistant path.
 ## Voice Via An MCP Client (Claude Desktop)
 
 ZeitBoard ships no speech stack (ADR-0006): live voice comes from an MCP-capable
-client driving the local connector. With Claude Desktop:
+client driving a connector. There are two, and they answer different questions.
+
+### Option A - desktop-local endpoint (works with the backend off)
+
+The desktop app serves its own loopback MCP endpoint while it runs (ADR-0028).
+Use this when you want voice control of *this machine's* ZeitBoard, including
+appearance and night mode, without depending on the server.
+
+1. Build the bridge: `go build ./cmd/zeitboard-local-mcp` (in `apps/desktop`), or
+   let `scripts\installer\install.ps1 -WithMcp` publish it for you.
+2. Register that binary in Claude Desktop's MCP configuration as a stdio server.
+   It discovers the running app through a `0600` descriptor file in the desktop
+   config directory - there is no port or token to copy by hand.
+3. Start ZeitBoard, then use the client's voice mode.
+
+The endpoint binds `127.0.0.1` on an ephemeral port, requires a bearer token,
+rejects any request carrying an `Origin` header, and exposes allowlisted read
+projections plus one direct display action (`set_appearance`, per ADR-0021).
+Scheduling requests are propose-only and need an enrolled backend; there is no
+approve or apply tool. Settings shows its status and the descriptor path.
+
+### Option B - backend connector (works from any machine)
+
+Use this when the agent should reach your instance rather than one desktop.
 
 1. Build the connector: `go build ./cmd/zeitboard-mcp` (in `apps/server`).
 2. Register it in Claude Desktop's MCP configuration as a stdio server, pointing it
@@ -204,7 +227,7 @@ client driving the local connector. With Claude Desktop:
    apply tool (ADR-0012), so spoken requests end as pending proposals you approve in
    the app.
 
-What the agent can see is the same redacted, speakable projection surface the UI
+Either way, what the agent can see is the same redacted, speakable projection surface the UI
 uses. Which *model* hears it is the client's configuration and the user's provider
 relationship — the same BYOK posture as the in-app assistant. Cloud skill packaging
 remains future work behind its own privacy review.

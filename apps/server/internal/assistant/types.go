@@ -17,12 +17,14 @@ type MessageRequest struct {
 }
 
 type PlanningContext struct {
-	ZoneID       string                `json:"zone_id"`
-	Now          time.Time             `json:"now"`
-	EstimateID   string                `json:"estimate_id,omitempty"`
-	Tasks        []TaskContext         `json:"tasks,omitempty"`
-	Availability []AvailabilityContext `json:"availability,omitempty"`
-	FixedEvents  []FixedEventContext   `json:"fixed_events,omitempty"`
+	ZoneID          string                    `json:"zone_id"`
+	Now             time.Time                 `json:"now"`
+	EstimateID      string                    `json:"estimate_id,omitempty"`
+	Tasks           []TaskContext             `json:"tasks,omitempty"`
+	Availability    []AvailabilityContext     `json:"availability,omitempty"`
+	FixedEvents     []FixedEventContext       `json:"fixed_events,omitempty"`
+	MedicationFacts []MedicationFactContext   `json:"medication_facts,omitempty"`
+	Markers         []RhythmMarkerFactContext `json:"markers,omitempty"`
 }
 
 type TaskContext struct {
@@ -52,6 +54,29 @@ type FixedEventContext struct {
 	ZoneID  string    `json:"zone_id"`
 }
 
+type MedicationFactContext struct {
+	MedicationID             string `json:"medication_id"`
+	Active                   bool   `json:"active"`
+	ScheduleKind             string `json:"schedule_kind"`
+	ScheduledOccurrenceCount int    `json:"scheduled_occurrence_count"`
+	CollisionCount           int    `json:"collision_count"`
+	NextScheduledCivilDate   string `json:"next_scheduled_civil_date,omitempty"`
+	NextScheduledCivilTime   string `json:"next_scheduled_civil_time,omitempty"`
+	ScheduleZoneID           string `json:"schedule_zone_id,omitempty"`
+	LoggedEventCount         int    `json:"logged_event_count"`
+	LastLoggedStatus         string `json:"last_logged_status,omitempty"`
+	LastWakeRelation         string `json:"last_wake_relation,omitempty"`
+	LastSleepRelation        string `json:"last_sleep_relation,omitempty"`
+	Confidence               string `json:"confidence,omitempty"`
+}
+
+type RhythmMarkerFactContext struct {
+	MarkerID       string `json:"marker_id"`
+	Kind           string `json:"kind"`
+	CivilStartDate string `json:"civil_start_date"`
+	CivilEndDate   string `json:"civil_end_date,omitempty"`
+}
+
 type MessageResponse struct {
 	SchemaVersion string            `json:"schema_version"`
 	Backend       provider.Status   `json:"backend"`
@@ -72,7 +97,6 @@ type DirectProposalRequest struct {
 	SchemaVersion     string          `json:"schema_version"`
 	RecommendedAction string          `json:"recommended_action"`
 	Target            *ActionTarget   `json:"target,omitempty"`
-	Answer            string          `json:"answer,omitempty"`
 	Context           PlanningContext `json:"context"`
 }
 

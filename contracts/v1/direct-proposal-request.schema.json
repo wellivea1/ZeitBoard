@@ -11,7 +11,6 @@
       "enum": ["propose_move_task", "propose_place_task", "propose_reminder_shift"]
     },
     "target": {"$ref": "assistant-action.schema.json#/$defs/target"},
-    "answer": {"type": "string", "minLength": 1, "maxLength": 800},
     "context": {"$ref": "#/$defs/planningContext"}
   },
   "$defs": {

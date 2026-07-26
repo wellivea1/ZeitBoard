@@ -39,6 +39,7 @@ $paths = Get-ZbPaths
 $installedExe = Join-Path $paths.InstallDir 'ZeitBoard.exe'
 $previousExe = Join-Path $paths.InstallDir 'previous\ZeitBoard.exe'
 $installedMcp = Join-Path $paths.InstallDir 'zeitboard-mcp.exe'
+$installedLocalMcp = Join-Path $paths.InstallDir 'zeitboard-local-mcp.exe'
 $updateMcp = [bool]$WithMcp -or (Test-Path -LiteralPath $installedMcp)
 $script:ZbPulled = $false
 $script:ZbDesktopPublished = $false
@@ -169,6 +170,18 @@ try {
         if (-not (Test-Path -LiteralPath $built)) { throw "build output missing: $built" }
     }
 
+    $builtLocalMcp = Join-Path $paths.RepoRoot 'apps\desktop\build\bin\zeitboard-local-mcp.exe'
+    Invoke-ZbStep -Name 'Build desktop-local MCP bridge' -DryRun:$DryRun -ResumeHint $resume -Action {
+        $binDir = Split-Path -Parent $builtLocalMcp
+        New-Item -ItemType Directory -Force -Path $binDir | Out-Null
+        Push-Location (Join-Path $paths.RepoRoot 'apps\desktop')
+        try {
+            & go build -o $builtLocalMcp ./cmd/zeitboard-local-mcp
+            if ($LASTEXITCODE -ne 0) { throw 'zeitboard-local-mcp build failed.' }
+        }
+        finally { Pop-Location }
+    }
+
     $builtMcp = Join-Path $paths.RepoRoot 'apps\server\bin\zeitboard-mcp.exe'
     if ($updateMcp) {
         Invoke-ZbStep -Name 'Build MCP connector' -DryRun:$DryRun -ResumeHint $resume -Action {
@@ -185,6 +198,9 @@ try {
 
     Invoke-ZbStep -Name 'Verify processes stopped and back up quiesced data' -DryRun:$DryRun -ResumeHint $resume -Action {
         Assert-ZbAppStopped -TargetPath $installedExe
+        if (Test-Path -LiteralPath $installedLocalMcp) {
+            Assert-ZbExecutableStopped -TargetPath $installedLocalMcp
+        }
         if ($updateMcp -and (Test-Path -LiteralPath $installedMcp)) {
             Assert-ZbExecutableStopped -TargetPath $installedMcp
         }
@@ -195,6 +211,10 @@ try {
         Invoke-ZbStep -Name 'Publish desktop build' -DryRun:$DryRun -ResumeHint $resume -Action {
             Publish-ZbDesktopBuild -SourceExe $built -InstallDir $paths.InstallDir -VersionText (Get-ZbVersionText)
             $script:ZbDesktopPublished = $true
+        }
+        Invoke-ZbStep -Name 'Publish desktop-local MCP bridge' -DryRun:$DryRun -ResumeHint $resume -Action {
+            $localMcpHash = Publish-ZbVerifiedFile -SourcePath $builtLocalMcp -DestinationPath $installedLocalMcp -BackupPath (Join-Path $paths.InstallDir 'previous\zeitboard-local-mcp.exe')
+            Set-ZbInstalledArtifactHash -InstallDir $paths.InstallDir -Key 'local-mcp-sha256' -Hash $localMcpHash
         }
         if ($updateMcp) {
             Invoke-ZbStep -Name 'Publish MCP connector' -DryRun:$DryRun -ResumeHint $resume -Action {

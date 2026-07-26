@@ -309,36 +309,49 @@ Test-Case 'Backup-ZbData supports an empty data directory' {
     finally { Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
-Test-Case 'desktop and MCP publish verify hashes and roll back coherently' {
+Test-Case 'desktop and MCP companions publish, verify, and roll back coherently' {
     $root = Join-Path ([IO.Path]::GetTempPath()) ('zb-publish-' + [guid]::NewGuid().ToString('N'))
     $install = Join-Path $root 'install'
     $first = Join-Path $root 'first.exe'
     $second = Join-Path $root 'second.exe'
     $firstMcp = Join-Path $root 'first-mcp.exe'
     $secondMcp = Join-Path $root 'second-mcp.exe'
+    $firstLocalMcp = Join-Path $root 'first-local-mcp.exe'
+    $secondLocalMcp = Join-Path $root 'second-local-mcp.exe'
     New-Item -ItemType Directory -Path $root -Force | Out-Null
     try {
         Set-ZbUtf8File -Path $first -Content 'first-build'
         Set-ZbUtf8File -Path $second -Content 'second-build'
         Set-ZbUtf8File -Path $firstMcp -Content 'first-mcp-build'
         Set-ZbUtf8File -Path $secondMcp -Content 'second-mcp-build'
+        Set-ZbUtf8File -Path $firstLocalMcp -Content 'first-local-mcp-build'
+        Set-ZbUtf8File -Path $secondLocalMcp -Content 'second-local-mcp-build'
 
         Publish-ZbDesktopBuild -SourceExe $first -InstallDir $install -VersionText "commit=one`ndate=one"
         $firstMcpHash = Publish-ZbVerifiedFile -SourcePath $firstMcp -DestinationPath (Join-Path $install 'zeitboard-mcp.exe') -BackupPath (Join-Path $install 'previous\zeitboard-mcp.exe')
         Set-ZbInstalledArtifactHash -InstallDir $install -Key 'mcp-sha256' -Hash $firstMcpHash
+        $firstLocalMcpHash = Publish-ZbVerifiedFile -SourcePath $firstLocalMcp -DestinationPath (Join-Path $install 'zeitboard-local-mcp.exe') -BackupPath (Join-Path $install 'previous\zeitboard-local-mcp.exe')
+        Set-ZbInstalledArtifactHash -InstallDir $install -Key 'local-mcp-sha256' -Hash $firstLocalMcpHash
         Assert-True (Test-ZbInstalledBuild -InstallDir $install) 'first release should verify'
 
         Publish-ZbDesktopBuild -SourceExe $second -InstallDir $install -VersionText "commit=two`ndate=two"
         $secondMcpHash = Publish-ZbVerifiedFile -SourcePath $secondMcp -DestinationPath (Join-Path $install 'zeitboard-mcp.exe') -BackupPath (Join-Path $install 'previous\zeitboard-mcp.exe')
         Set-ZbInstalledArtifactHash -InstallDir $install -Key 'mcp-sha256' -Hash $secondMcpHash
+        $secondLocalMcpHash = Publish-ZbVerifiedFile -SourcePath $secondLocalMcp -DestinationPath (Join-Path $install 'zeitboard-local-mcp.exe') -BackupPath (Join-Path $install 'previous\zeitboard-local-mcp.exe')
+        Set-ZbInstalledArtifactHash -InstallDir $install -Key 'local-mcp-sha256' -Hash $secondLocalMcpHash
         Assert-True (Test-ZbInstalledBuild -InstallDir $install) 'second release should verify'
         Assert-Equal 'first-build' (Get-Content -Raw -LiteralPath (Join-Path $install 'previous\ZeitBoard.exe'))
         Assert-Equal 'first-mcp-build' (Get-Content -Raw -LiteralPath (Join-Path $install 'previous\zeitboard-mcp.exe'))
+        Assert-Equal 'first-local-mcp-build' (Get-Content -Raw -LiteralPath (Join-Path $install 'previous\zeitboard-local-mcp.exe'))
 
         Set-ZbUtf8File -Path (Join-Path $install 'zeitboard-mcp.exe') -Content 'corrupted-mcp'
         Assert-True (-not (Test-ZbInstalledBuild -InstallDir $install)) 'MCP tampering should fail hash verification'
         Set-ZbUtf8File -Path (Join-Path $install 'zeitboard-mcp.exe') -Content 'second-mcp-build'
         Assert-True (Test-ZbInstalledBuild -InstallDir $install) 'restored MCP bytes should verify'
+
+        Set-ZbUtf8File -Path (Join-Path $install 'zeitboard-local-mcp.exe') -Content 'corrupted-local-mcp'
+        Assert-True (-not (Test-ZbInstalledBuild -InstallDir $install)) 'desktop-local MCP tampering should fail hash verification'
+        Set-ZbUtf8File -Path (Join-Path $install 'zeitboard-local-mcp.exe') -Content 'second-local-mcp-build'
 
         Set-ZbUtf8File -Path (Join-Path $install 'ZeitBoard.exe') -Content 'corrupted-desktop'
         Assert-True (-not (Test-ZbInstalledBuild -InstallDir $install)) 'desktop tampering should fail hash verification'
@@ -347,9 +360,11 @@ Test-Case 'desktop and MCP publish verify hashes and roll back coherently' {
         Assert-True (Test-ZbInstalledBuild -InstallDir $install) 'rollback should restore a coherent release'
         Assert-Equal 'first-build' (Get-Content -Raw -LiteralPath (Join-Path $install 'ZeitBoard.exe'))
         Assert-Equal 'first-mcp-build' (Get-Content -Raw -LiteralPath (Join-Path $install 'zeitboard-mcp.exe'))
+        Assert-Equal 'first-local-mcp-build' (Get-Content -Raw -LiteralPath (Join-Path $install 'zeitboard-local-mcp.exe'))
         $version = Get-Content -Raw -LiteralPath (Join-Path $install 'version.txt')
         Assert-True ($version -match 'commit=one') 'rollback should restore previous version metadata'
         Assert-True ($version -match 'mcp-sha256=') 'rollback metadata should include the previous MCP hash'
+        Assert-True ($version -match 'local-mcp-sha256=') 'rollback metadata should include the previous local MCP hash'
     }
     finally { Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue }
 }

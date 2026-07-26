@@ -21,6 +21,7 @@ import (
 	"non24.app/core/platform/activity"
 	"non24.app/core/scheduling"
 	storage "non24.app/core/storage/sqlite"
+	"non24.app/desktop/internal/localagent"
 	"non24.app/desktop/platform/tray"
 )
 
@@ -31,20 +32,28 @@ const (
 )
 
 type App struct {
-	ctx                context.Context
-	collector          *ingest.Manager
-	sink               *ingest.MemorySink
-	tray               tray.Controller
-	store              *storage.Store
-	storeErr           error
-	configDir          string
-	calendarHTTPClient calendarHTTPDoer
-	nowFn              func() time.Time
-	reminderMu         sync.RWMutex
-	reminderCancel     context.CancelFunc
-	reminderDone       chan struct{}
-	reminderRunning    bool
-	reminderLastError  string
+	ctx                 context.Context
+	collector           *ingest.Manager
+	sink                *ingest.MemorySink
+	tray                tray.Controller
+	store               *storage.Store
+	storeErr            error
+	configDir           string
+	calendarHTTPClient  calendarHTTPDoer
+	nowFn               func() time.Time
+	reminderMu          sync.RWMutex
+	reminderCancel      context.CancelFunc
+	reminderDone        chan struct{}
+	reminderRunning     bool
+	reminderLastError   string
+	localAgentMu        sync.RWMutex
+	localAgent          *localagent.Endpoint
+	localAgentErr       string
+	appearanceMu        sync.RWMutex
+	appearance          LocalAppearanceStateDTO
+	appearanceRevision  uint64
+	appearancePersisted bool
+	appearanceErr       string
 }
 
 type RefusalDTO struct {
@@ -189,7 +198,16 @@ type localEstimateState struct {
 
 func NewApp() *App {
 	store, err := openDesktopStore()
-	return newAppWithStore(store, err)
+	app := newAppWithStore(store, err)
+	if dir, dirErr := desktopDataDir(); dirErr == nil {
+		app.configDir = dir
+		if appearanceErr := app.loadAppearanceFromDisk(); appearanceErr != nil {
+			app.appearanceErr = "Stored appearance settings could not be read; local settings remain unchanged."
+		}
+	} else if app.storeErr == nil {
+		app.storeErr = dirErr
+	}
+	return app
 }
 
 func newAppWithStore(store *storage.Store, storeErr error) *App {
@@ -202,6 +220,7 @@ func newAppWithStore(store *storage.Store, storeErr error) *App {
 		storeErr:           storeErr,
 		calendarHTTPClient: newCalendarHTTPClient(),
 		nowFn:              time.Now,
+		appearance:         defaultLocalAppearanceState(),
 	}
 }
 
@@ -227,6 +246,7 @@ func openDesktopStore() (*storage.Store, error) {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	_ = a.collector.Start(ctx)
+	a.startLocalAgent(ctx)
 	trayErr := a.tray.Start(tray.Callbacks{
 		Show: func() {
 			runtime.WindowUnminimise(ctx)
@@ -237,13 +257,14 @@ func (a *App) startup(ctx context.Context) {
 	})
 	if trayErr != nil {
 		a.setMedicationReminderError("Desktop notifications are unavailable; enabled reminders will not be shown.")
-		return
+	} else {
+		a.startMedicationReminderService(ctx)
 	}
-	a.startMedicationReminderService(ctx)
 }
 
 func (a *App) shutdown(ctx context.Context) {
 	a.stopMedicationReminderService()
+	a.stopLocalAgent(ctx)
 	_ = a.tray.Stop()
 	_ = a.collector.Stop(ctx)
 	if a.store != nil {

@@ -57,6 +57,7 @@ $desktopOverride = $null; if ($PSBoundParameters.ContainsKey('DesktopShortcut'))
 $startupOverride = $null; if ($PSBoundParameters.ContainsKey('Startup')) { $startupOverride = [bool]$Startup }
 $androidLicensesSupplied = $PSBoundParameters.ContainsKey('AcceptAndroidLicenses')
 $installedMcp = Join-Path $paths.InstallDir 'zeitboard-mcp.exe'
+$installedLocalMcp = Join-Path $paths.InstallDir 'zeitboard-local-mcp.exe'
 $installMcp = [bool]$WithMcp -or (Test-Path -LiteralPath $installedMcp)
 $lifecycleLock = $null
 $exitCode = 0
@@ -103,6 +104,16 @@ try {
         try { & wails build; if ($LASTEXITCODE -ne 0) { throw 'wails build failed.' } }
         finally { Pop-Location }
     }
+    Invoke-ZbStep -Name 'Build desktop-local MCP bridge (go build)' -DryRun:$DryRun -ResumeHint $resume -Action {
+        Push-Location (Join-Path $paths.RepoRoot 'apps\desktop')
+        try {
+            $desktopBin = Join-Path $paths.RepoRoot 'apps\desktop\build\bin'
+            New-Item -ItemType Directory -Force -Path $desktopBin | Out-Null
+            & go build -o (Join-Path $desktopBin 'zeitboard-local-mcp.exe') ./cmd/zeitboard-local-mcp
+            if ($LASTEXITCODE -ne 0) { throw 'zeitboard-local-mcp build failed.' }
+        }
+        finally { Pop-Location }
+    }
     if ($installMcp) {
         Invoke-ZbStep -Name 'Build MCP connector (go build)' -DryRun:$DryRun -ResumeHint $resume -Action {
             Push-Location (Join-Path $paths.RepoRoot 'apps\server')
@@ -118,12 +129,20 @@ try {
     $installedExe = Join-Path $paths.InstallDir 'ZeitBoard.exe'
     $hadInstalledExe = Test-Path -LiteralPath $installedExe
     $hadInstalledMcp = Test-Path -LiteralPath $installedMcp
+    $hadInstalledLocalMcp = Test-Path -LiteralPath $installedLocalMcp
     $orphanMcpBackup = $null
     $orphanMcpHash = $null
+    $orphanLocalMcpBackup = $null
+    $orphanLocalMcpHash = $null
     if (-not $DryRun -and -not $hadInstalledExe -and $hadInstalledMcp) {
         $orphanMcpBackup = Join-Path $paths.InstallDir ('.install-rollback-mcp-' + [guid]::NewGuid().ToString('N') + '.exe')
         Copy-Item -LiteralPath $installedMcp -Destination $orphanMcpBackup
         $orphanMcpHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $orphanMcpBackup).Hash.ToLowerInvariant()
+    }
+    if (-not $DryRun -and -not $hadInstalledExe -and $hadInstalledLocalMcp) {
+        $orphanLocalMcpBackup = Join-Path $paths.InstallDir ('.install-rollback-local-mcp-' + [guid]::NewGuid().ToString('N') + '.exe')
+        Copy-Item -LiteralPath $installedLocalMcp -Destination $orphanLocalMcpBackup
+        $orphanLocalMcpHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $orphanLocalMcpBackup).Hash.ToLowerInvariant()
     }
     $script:ZbInstallDesktopPublished = $false
     try {
@@ -133,6 +152,13 @@ try {
             Publish-ZbDesktopBuild -SourceExe $built -InstallDir $paths.InstallDir -VersionText "commit=$($stamp.Commit)`ndate=$($stamp.Date)"
             $script:ZbInstallDesktopPublished = $true
             Write-ZbLog -Level ok -Message "installed $($stamp.Commit) to $installedExe"
+        }
+        Invoke-ZbStep -Name 'Install desktop-local MCP bridge' -DryRun:$DryRun -ResumeHint $resume -Action {
+            $localMcpSource = Join-Path $paths.RepoRoot 'apps\desktop\build\bin\zeitboard-local-mcp.exe'
+            $localMcpBackup = Join-Path $paths.InstallDir 'previous\zeitboard-local-mcp.exe'
+            $localMcpHash = Publish-ZbVerifiedFile -SourcePath $localMcpSource -DestinationPath $installedLocalMcp -BackupPath $localMcpBackup
+            Set-ZbInstalledArtifactHash -InstallDir $paths.InstallDir -Key 'local-mcp-sha256' -Hash $localMcpHash
+            Write-ZbLog -Level ok -Message "desktop-local MCP bridge at $installedLocalMcp"
         }
         if ($installMcp) {
             Invoke-ZbStep -Name 'Install MCP connector' -DryRun:$DryRun -ResumeHint $resume -Action {
@@ -166,6 +192,20 @@ try {
             else {
                 Remove-Item -LiteralPath $installedExe -Force -ErrorAction SilentlyContinue
                 Remove-Item -LiteralPath (Join-Path $paths.InstallDir 'version.txt') -Force -ErrorAction SilentlyContinue
+                if ($hadInstalledLocalMcp) {
+                    try {
+                        if (-not $orphanLocalMcpBackup -or -not (Test-Path -LiteralPath $orphanLocalMcpBackup)) {
+                            throw 'The pre-existing desktop-local MCP rollback copy is missing.'
+                        }
+                        Publish-ZbVerifiedFile -SourcePath $orphanLocalMcpBackup -DestinationPath $installedLocalMcp -BackupPath (Join-Path $paths.InstallDir 'previous\failed-current-local-mcp.exe') | Out-Null
+                        $restoredLocalMcpHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $installedLocalMcp).Hash.ToLowerInvariant()
+                        if ($restoredLocalMcpHash -ne $orphanLocalMcpHash) { throw 'The restored desktop-local MCP bridge failed its SHA-256 verification.' }
+                    }
+                    catch { if (-not $restoreFailure) { $restoreFailure = $_ } }
+                }
+                else {
+                    Remove-Item -LiteralPath $installedLocalMcp -Force -ErrorAction SilentlyContinue
+                }
                 if ($hadInstalledMcp) {
                     try {
                         if (-not $orphanMcpBackup -or -not (Test-Path -LiteralPath $orphanMcpBackup)) {
@@ -175,7 +215,7 @@ try {
                         $restoredMcpHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $installedMcp).Hash.ToLowerInvariant()
                         if ($restoredMcpHash -ne $orphanMcpHash) { throw 'The restored MCP connector failed its SHA-256 verification.' }
                     }
-                    catch { $restoreFailure = $_ }
+                    catch { if (-not $restoreFailure) { $restoreFailure = $_ } }
                 }
                 else {
                     Remove-Item -LiteralPath $installedMcp -Force -ErrorAction SilentlyContinue
@@ -191,6 +231,9 @@ try {
     finally {
         if ($orphanMcpBackup -and (Test-Path -LiteralPath $orphanMcpBackup)) {
             Remove-Item -LiteralPath $orphanMcpBackup -Force -ErrorAction SilentlyContinue
+        }
+        if ($orphanLocalMcpBackup -and (Test-Path -LiteralPath $orphanLocalMcpBackup)) {
+            Remove-Item -LiteralPath $orphanLocalMcpBackup -Force -ErrorAction SilentlyContinue
         }
     }
 

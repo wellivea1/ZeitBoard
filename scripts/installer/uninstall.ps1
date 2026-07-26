@@ -34,6 +34,7 @@ $paths = Get-ZbPaths
 $ServerRoot = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($ServerRoot)
 $installedExe = Join-Path $paths.InstallDir 'ZeitBoard.exe'
 $installedMcp = Join-Path $paths.InstallDir 'zeitboard-mcp.exe'
+$installedLocalMcp = Join-Path $paths.InstallDir 'zeitboard-local-mcp.exe'
 $serverExe = Join-Path $ServerRoot 'zeitboardd.exe'
 $script:ZbPurgeConfirmed = $false
 $lifecycleLock = $null
@@ -45,6 +46,9 @@ try {
         Assert-ZbAppStopped -TargetPath $installedExe
         if (Test-Path -LiteralPath $installedMcp) {
             Assert-ZbExecutableStopped -TargetPath $installedMcp
+        }
+        if (Test-Path -LiteralPath $installedLocalMcp) {
+            Assert-ZbExecutableStopped -TargetPath $installedLocalMcp
         }
         if ($RemoveServer) {
             if ($ServiceName -notmatch '^[A-Za-z0-9_.-]+$') {
@@ -158,6 +162,9 @@ try {
         Assert-ZbAppStopped -TargetPath $installedExe
         if (Test-Path -LiteralPath $installedMcp) {
             Assert-ZbExecutableStopped -TargetPath $installedMcp
+        }
+        if (Test-Path -LiteralPath $installedLocalMcp) {
+            Assert-ZbExecutableStopped -TargetPath $installedLocalMcp
         }
         if (Test-Path -LiteralPath $paths.InstallDir) {
             Remove-Item -LiteralPath $paths.InstallDir -Recurse -Force

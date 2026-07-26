@@ -67,6 +67,9 @@ detail lives there rather than being repeated here.
   core-engine overview/rhythm/accuracy projections, typed refusals (ADR-0011).
 - M4 local MCP connector: stateless stdio adapter, allowlisted read +
   propose-only tools, call budgets, **no approve/apply tool** (ADR-0012).
+  The desktop additionally serves its own loopback agent endpoint for
+  backend-independent local control (ADR-0028); both share the medical-refusal
+  policy in `core/agentpolicy`.
 
 **Measurement**
 - `estimation.Backtest` (walk-forward validation) scores point error,
@@ -182,6 +185,13 @@ M-E's separately reviewed local agent projection.
    (`Connected: <provider>` / `Offline`). The Claude-Desktop-over-MCP voice
    path is documented in the self-hosting runbook. Cloud skill packaging and
    any reviewer-gated auto-apply stay future and separately gated.
+   *Desktop-local agent endpoint delivered (ADR-0028):* the app serves its own
+   loopback MCP (token + `Origin` rejection + `0600` descriptor), exposing
+   allowlisted read projections, `set_appearance` as the ADR-0021 direct
+   display action, and propose-only mutations with **no approve/apply tool**,
+   so a voice client works with the backend off. The medical refusal moved to
+   shared `core/agentpolicy` and is byte-identical across chat, backend MCP,
+   and the local endpoint.
 9. **Android companion sync.** The Health Connect skeleton exists but the
    companion has no sync client; bring it onto the same enrollment + push/pull
    path (its ADR should reuse ADR-0015's model).
