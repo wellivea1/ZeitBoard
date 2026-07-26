@@ -200,12 +200,11 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Install pinned Android SDK packages
+      - name: Set up Android SDK and pinned packages
         if: steps.detect.outputs.present == 'true'
-        shell: bash
-        run: |
-          printf 'y\n%.0s' {1..100} | sdkmanager --licenses > /dev/null
-          sdkmanager 'platforms;android-36.1' 'build-tools;36.1.0' 'platform-tools'
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+        with:
+          packages: "platforms;android-36.1 build-tools;36.1.0 platform-tools"
 
       - name: Set up Gradle cache
         if: steps.detect.outputs.present == 'true'
