@@ -1,5 +1,6 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { LocalAppearanceEnvelope } from "../data/localAgent";
 import { AppearanceProvider, useAppearanceContext } from "./AppearanceProvider";
 
 function TestSettings() {
@@ -28,6 +29,7 @@ function TestSettings() {
           data-testid="reduced-toggle"
         />
       </label>
+      <div data-testid="theme-state">{theme}</div>
       <div data-testid="effective-theme">{effectiveTheme}</div>
       <div data-testid="reduced-attr">{reducedStimulation ? "true" : "false"}</div>
     </div>
@@ -35,6 +37,12 @@ function TestSettings() {
 }
 
 describe("useAppearance", () => {
+  afterEach(() => {
+    delete (globalThis as { go?: unknown }).go;
+    delete (globalThis as { runtime?: unknown }).runtime;
+    localStorage.clear();
+  });
+
   it("applies theme changes to the document element", async () => {
     render(
       <AppearanceProvider>
@@ -65,5 +73,75 @@ describe("useAppearance", () => {
 
     await waitFor(() => expect(screen.getByTestId("reduced-attr")).toHaveTextContent("true"));
     expect(localStorage.getItem("zeitboard-reduced")).toBe("true");
+  });
+
+  it("keeps a newer agent command when an older UI save resolves with a conflict", async () => {
+    let appearanceEvent: ((value: unknown) => void) | undefined;
+    let resolveSave: ((value: LocalAppearanceEnvelope) => void) | undefined;
+    const saved = new Promise<LocalAppearanceEnvelope>((resolve) => {
+      resolveSave = resolve;
+    });
+    const initialState = {
+      theme: "light",
+      reducedStimulation: false,
+      nightRule: {
+        enabled: false,
+        preset: "amber",
+        leadHours: 2,
+        fallbackStartLocal: "",
+        fallbackEndLocal: "",
+      },
+    } as const;
+    const commandState = { ...initialState, theme: "amber" as const };
+    const save = vi.fn(() => saved);
+    (globalThis as { go?: unknown }).go = {
+      main: {
+        App: {
+          LoadLocalAppearanceState: async () => ({
+            state: initialState,
+            revision: 1,
+            conflict: false,
+          }),
+          SaveLocalAppearanceState: save,
+        },
+      },
+    };
+    (globalThis as { runtime?: unknown }).runtime = {
+      EventsOn: (_eventName: string, callback: (value: unknown) => void) => {
+        appearanceEvent = callback;
+        return () => {};
+      },
+    };
+
+    render(
+      <AppearanceProvider>
+        <TestSettings />
+      </AppearanceProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId("theme-state")).toHaveTextContent("light"));
+
+    fireEvent.change(screen.getByTestId("theme-select"), { target: { value: "dark" } });
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect(save).toHaveBeenCalledWith({
+      state: { ...initialState, theme: "dark" },
+      baseRevision: 1,
+    });
+
+    act(() => {
+      appearanceEvent?.({ state: commandState, revision: 2, conflict: false });
+    });
+    await waitFor(() => expect(screen.getByTestId("theme-state")).toHaveTextContent("amber"));
+
+    await act(async () => {
+      resolveSave?.({
+        state: { ...initialState, theme: "dark" },
+        revision: 2,
+        conflict: true,
+      });
+      await saved;
+    });
+
+    expect(screen.getByTestId("theme-state")).toHaveTextContent("amber");
+    expect(localStorage.getItem("zeitboard-theme")).toBe("amber");
   });
 });

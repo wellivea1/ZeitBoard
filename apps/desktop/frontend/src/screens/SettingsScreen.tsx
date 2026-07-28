@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "../components/AppShell";
 import {
   configureBackendSync,
@@ -8,11 +8,13 @@ import {
   type BackendSyncInput,
   type BackendSyncStatus,
 } from "../data/backendSync";
+import { loadLocalAgentStatus, type LocalAgentStatus } from "../data/localAgent";
 import { deleteConfirmationToken, downloadSleepDataExport } from "../data/sleepDataControl";
 import { notifySleepDataChanged } from "../data/sleepDataEvents";
 import { deleteAllSleepData, exportSleepData, type SleepDataExport } from "../data/sleepEntries";
 import { AppearanceSettings } from "./settings/AppearanceSettings";
 import { BackendSyncSettings } from "./settings/BackendSyncSettings";
+import { LocalAgentSettings } from "./settings/LocalAgentSettings";
 import { SleepDataSettings } from "./settings/SleepDataSettings";
 
 const initialBackendSyncStatus: BackendSyncStatus = {
@@ -53,6 +55,47 @@ export function SettingsScreen() {
   const [backendSyncMessage, setBackendSyncMessage] = useState("");
   const [backendSyncError, setBackendSyncError] = useState("");
   const [backendSyncBusy, setBackendSyncBusy] = useState(false);
+  const [localAgentStatus, setLocalAgentStatus] = useState<LocalAgentStatus | null>(null);
+  const [localAgentError, setLocalAgentError] = useState("");
+
+  const refreshLocalAgentStatus = useCallback(async () => {
+    try {
+      const status = await loadLocalAgentStatus();
+      setLocalAgentStatus(status);
+      setLocalAgentError("");
+    } catch (error) {
+      setLocalAgentError(
+        error instanceof Error ? error.message : "Could not read desktop-local agent status.",
+      );
+    }
+  }, []);
+
+  // Polls through an explicit promise chain (like the backend-sync effect
+  // below) so state only ever settles after the await boundary, and never
+  // after unmount.
+  useEffect(() => {
+    let current = true;
+    const refresh = () => {
+      void loadLocalAgentStatus()
+        .then((status) => {
+          if (!current) return;
+          setLocalAgentStatus(status);
+          setLocalAgentError("");
+        })
+        .catch((error: unknown) => {
+          if (!current) return;
+          setLocalAgentError(
+            error instanceof Error ? error.message : "Could not read desktop-local agent status.",
+          );
+        });
+    };
+    refresh();
+    const interval = window.setInterval(refresh, 15_000);
+    return () => {
+      current = false;
+      window.clearInterval(interval);
+    };
+  }, []);
 
   useEffect(() => {
     let current = true;
@@ -128,6 +171,7 @@ export function SettingsScreen() {
     try {
       const status = await action();
       setBackendSyncStatus(status);
+      await refreshLocalAgentStatus();
       setBackendSyncMessage(success(status));
     } catch (error) {
       setBackendSyncError(error instanceof Error ? error.message : "Backend sync action failed.");
@@ -191,6 +235,7 @@ export function SettingsScreen() {
           onDisable={handleDisableBackendSync}
           onSyncNow={handleSyncNow}
         />
+        <LocalAgentSettings status={localAgentStatus} error={localAgentError} />
         <SleepDataSettings
           exported={exportedSleepData}
           confirmation={deleteAllConfirmation}

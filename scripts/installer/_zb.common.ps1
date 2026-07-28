@@ -663,8 +663,14 @@ function Assert-ZbSafeServerRoot {
 }
 
 function Get-ZbVersionText {
+    # Components are recorded so a later validation can demand them even if a
+    # publish was interrupted before their hash lines were written.
+    param([string[]]$Components = @())
     $stamp = Get-ZbVersionStamp
-    "commit=$($stamp.Commit)`ndate=$($stamp.Date)"
+    $text = "commit=$($stamp.Commit)`ndate=$($stamp.Date)"
+    $normalized = @($Components | ForEach-Object { "$_".Trim().ToLowerInvariant() } | Where-Object { $_ })
+    if ($normalized.Count -gt 0) { $text = "$text`ncomponents=$($normalized -join ',')" }
+    $text
 }
 
 function Publish-ZbVerifiedFile {
@@ -740,6 +746,22 @@ function Publish-ZbVerifiedFile {
     }
 }
 
+function Copy-ZbSnapshotFile {
+    # Copy one artifact into a staged snapshot and prove the copy is byte-exact.
+    # Used to build a rollback set before anything in the live install moves.
+    param(
+        [Parameter(Mandatory)][string]$SourcePath,
+        [Parameter(Mandatory)][string]$DestinationPath
+    )
+    Copy-Item -LiteralPath $SourcePath -Destination $DestinationPath -Force
+    $sourceHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $SourcePath).Hash.ToLowerInvariant()
+    $copyHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $DestinationPath).Hash.ToLowerInvariant()
+    if ($sourceHash -ne $copyHash) {
+        throw "Rollback snapshot copy failed its SHA-256 check: $DestinationPath"
+    }
+    return $copyHash
+}
+
 function Set-ZbInstalledArtifactHash {
     param(
         [Parameter(Mandatory)][string]$InstallDir,
@@ -778,11 +800,14 @@ function Publish-ZbDesktopBuild {
 
     $stageDir = Join-Path $InstallDir ('.staging-' + [guid]::NewGuid().ToString('N'))
     $installedMcp = Join-Path $InstallDir 'zeitboard-mcp.exe'
+    $installedLocalMcp = Join-Path $InstallDir 'zeitboard-local-mcp.exe'
     if (Test-Path -LiteralPath $installedMcp) { Assert-ZbExecutableStopped -TargetPath $installedMcp }
+    if (Test-Path -LiteralPath $installedLocalMcp) { Assert-ZbExecutableStopped -TargetPath $installedLocalMcp }
     $stageExe = Join-Path $stageDir 'ZeitBoard.exe'
     $previousDir = Join-Path $InstallDir 'previous'
     $previousExe = Join-Path $previousDir 'ZeitBoard.exe'
     $previousMcp = Join-Path $previousDir 'zeitboard-mcp.exe'
+    $previousLocalMcp = Join-Path $previousDir 'zeitboard-local-mcp.exe'
     $versionFile = Join-Path $InstallDir 'version.txt'
     $hadInstalledExe = Test-Path -LiteralPath $installedExe
     $desktopReplaced = $false
@@ -801,6 +826,12 @@ function Publish-ZbDesktopBuild {
             }
             elseif (Test-Path -LiteralPath $previousMcp) {
                 Remove-Item -LiteralPath $previousMcp -Force
+            }
+            if (Test-Path -LiteralPath $installedLocalMcp) {
+                Copy-Item -LiteralPath $installedLocalMcp -Destination $previousLocalMcp -Force
+            }
+            elseif (Test-Path -LiteralPath $previousLocalMcp) {
+                Remove-Item -LiteralPath $previousLocalMcp -Force
             }
             if (Test-Path -LiteralPath $versionFile) {
                 Copy-Item -LiteralPath $versionFile -Destination (Join-Path $previousDir 'version.txt') -Force
@@ -852,11 +883,14 @@ function Restore-ZbPreviousBuild {
     $previousExe = Join-Path $previousDir 'ZeitBoard.exe'
     $installedMcp = Join-Path $InstallDir 'zeitboard-mcp.exe'
     $previousMcp = Join-Path $previousDir 'zeitboard-mcp.exe'
+    $installedLocalMcp = Join-Path $InstallDir 'zeitboard-local-mcp.exe'
+    $previousLocalMcp = Join-Path $previousDir 'zeitboard-local-mcp.exe'
     if (-not (Test-Path -LiteralPath $previousExe)) {
         throw "No previous build to roll back to ($previousExe)."
     }
     Assert-ZbAppStopped -TargetPath $installedExe
     if (Test-Path -LiteralPath $installedMcp) { Assert-ZbExecutableStopped -TargetPath $installedMcp }
+    if (Test-Path -LiteralPath $installedLocalMcp) { Assert-ZbExecutableStopped -TargetPath $installedLocalMcp }
     $stage = Join-Path $InstallDir ('.rollback-' + [guid]::NewGuid().ToString('N') + '.exe')
     try {
         Copy-Item -LiteralPath $previousExe -Destination $stage
@@ -882,6 +916,15 @@ function Restore-ZbPreviousBuild {
             Move-Item -LiteralPath $installedMcp -Destination $failedMcp
         }
 
+        if (Test-Path -LiteralPath $previousLocalMcp) {
+            Publish-ZbVerifiedFile -SourcePath $previousLocalMcp -DestinationPath $installedLocalMcp -BackupPath (Join-Path $previousDir 'failed-current-local-mcp.exe') | Out-Null
+        }
+        elseif (Test-Path -LiteralPath $installedLocalMcp) {
+            $failedLocalMcp = Join-Path $previousDir 'failed-current-local-mcp.exe'
+            if (Test-Path -LiteralPath $failedLocalMcp) { Remove-Item -LiteralPath $failedLocalMcp -Force }
+            Move-Item -LiteralPath $installedLocalMcp -Destination $failedLocalMcp
+        }
+
         if (Test-Path -LiteralPath $previousVersion) {
             Copy-Item -LiteralPath $previousVersion -Destination $currentVersion -Force
         }
@@ -895,12 +938,74 @@ function Restore-ZbPreviousBuild {
     }
 }
 
-function Test-ZbInstalledBuild {
+function Get-ZbPendingMarkerPath {
     param([Parameter(Mandatory)][string]$InstallDir)
+    Join-Path $InstallDir '.install-pending'
+}
+
+function Start-ZbPublishTransaction {
+    # Mark the installation as mid-publication so an interruption between
+    # artifacts can never be mistaken for a complete, coherent install. The
+    # marker also records which components this release is required to contain,
+    # so validation can demand them even before their hashes are recorded.
+    param(
+        [Parameter(Mandatory)][string]$InstallDir,
+        [Parameter(Mandatory)][string[]]$Components
+    )
+    New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
+    $normalized = @($Components | ForEach-Object { "$_".Trim().ToLowerInvariant() } | Where-Object { $_ })
+    if ($normalized -notcontains 'desktop') { $normalized = @('desktop') + $normalized }
+    $content = "started=$([DateTimeOffset]::UtcNow.ToString('o'))`ncomponents=$($normalized -join ',')`n"
+    Set-ZbUtf8File -Path (Get-ZbPendingMarkerPath -InstallDir $InstallDir) -Content $content
+    return $normalized
+}
+
+function Complete-ZbPublishTransaction {
+    # Verify every published artifact, then clear the pending marker. The marker
+    # is only ever removed after the whole release validates, so a crash at any
+    # earlier point leaves the install detectably incomplete.
+    param([Parameter(Mandatory)][string]$InstallDir)
+    if (-not (Test-ZbInstalledBuild -InstallDir $InstallDir -IgnorePendingMarker)) {
+        throw 'An installed artifact failed its SHA-256 verification.'
+    }
+    $marker = Get-ZbPendingMarkerPath -InstallDir $InstallDir
+    if (Test-Path -LiteralPath $marker) { Remove-Item -LiteralPath $marker -Force }
+}
+
+function Get-ZbDeclaredComponents {
+    # Components a release claims to contain, from version.txt (authoritative
+    # once written) or the in-flight pending marker.
+    param([Parameter(Mandatory)][string]$InstallDir)
+    foreach ($file in @((Join-Path $InstallDir 'version.txt'), (Get-ZbPendingMarkerPath -InstallDir $InstallDir))) {
+        if (-not (Test-Path -LiteralPath $file)) { continue }
+        $line = @(Get-Content -LiteralPath $file) | Where-Object { $_ -match '^components=' } | Select-Object -First 1
+        if (-not $line) { continue }
+        $value = $line.Substring(11).Trim()
+        if (-not $value) { continue }
+        return @($value -split ',' | ForEach-Object { $_.Trim().ToLowerInvariant() } | Where-Object { $_ })
+    }
+    return @()
+}
+
+function Test-ZbInstalledBuild {
+    param(
+        [Parameter(Mandatory)][string]$InstallDir,
+        [switch]$IgnorePendingMarker
+    )
     $exe = Join-Path $InstallDir 'ZeitBoard.exe'
     $mcp = Join-Path $InstallDir 'zeitboard-mcp.exe'
+    $localMcp = Join-Path $InstallDir 'zeitboard-local-mcp.exe'
     $version = Join-Path $InstallDir 'version.txt'
+    # An install still inside a publish transaction is incomplete by definition.
+    if (-not $IgnorePendingMarker) {
+        if (Test-Path -LiteralPath (Get-ZbPendingMarkerPath -InstallDir $InstallDir)) { return $false }
+    }
     if (-not (Test-Path -LiteralPath $exe)) { return $false }
+    # Declared components must be present even if their hash lines were never
+    # reached, which is what makes a half-published release fail closed.
+    $declared = Get-ZbDeclaredComponents -InstallDir $InstallDir
+    if ($declared -contains 'local-mcp' -and -not (Test-Path -LiteralPath $localMcp)) { return $false }
+    if ($declared -contains 'mcp' -and -not (Test-Path -LiteralPath $mcp)) { return $false }
     if (-not (Test-Path -LiteralPath $version)) { return $true } # Legacy install.
     $lines = @(Get-Content -LiteralPath $version)
     $hashLine = $lines | Where-Object { $_ -match '^sha256=' } | Select-Object -First 1
@@ -916,13 +1021,25 @@ function Test-ZbInstalledBuild {
         $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $exe).Hash.ToLowerInvariant()
         if ($expected -ne $actual) { return $false }
     }
+    # A declared component whose hash was never recorded is a half-published
+    # release: the file on disk may be a stale copy from the prior install.
     $mcpHashLine = $lines | Where-Object { $_ -match '^mcp-sha256=' } | Select-Object -First 1
+    if ($declared -contains 'mcp' -and -not $mcpHashLine) { return $false }
     if ($mcpHashLine) {
         if (-not (Test-Path -LiteralPath $mcp)) { return $false }
         $expectedMcp = $mcpHashLine.Substring(11).Trim().ToLowerInvariant()
         if ($expectedMcp -notmatch '^[0-9a-f]{64}$') { return $false }
         $actualMcp = (Get-FileHash -Algorithm SHA256 -LiteralPath $mcp).Hash.ToLowerInvariant()
         if ($expectedMcp -ne $actualMcp) { return $false }
+    }
+    $localMcpHashLine = $lines | Where-Object { $_ -match '^local-mcp-sha256=' } | Select-Object -First 1
+    if ($declared -contains 'local-mcp' -and -not $localMcpHashLine) { return $false }
+    if ($localMcpHashLine) {
+        if (-not (Test-Path -LiteralPath $localMcp)) { return $false }
+        $expectedLocalMcp = $localMcpHashLine.Substring(17).Trim().ToLowerInvariant()
+        if ($expectedLocalMcp -notmatch '^[0-9a-f]{64}$') { return $false }
+        $actualLocalMcp = (Get-FileHash -Algorithm SHA256 -LiteralPath $localMcp).Hash.ToLowerInvariant()
+        if ($expectedLocalMcp -ne $actualLocalMcp) { return $false }
     }
     return $true
 }

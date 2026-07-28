@@ -50,11 +50,13 @@ explicit-record adherence, dose/start markers, descriptive association with
 named possible confounders, and the redaction-first local clinician report.
 M-D sync, M-E agent projection, and M-F sharing remain separate future gates.
 
-**Gap 4 — the assistant is desktop-chat only.** Voice rides the MCP client
-(documented), but agent access to local device state (appearance, quick
-logging) waits on the desktop-local agent endpoint deferred in ADR-0021.
-"Local assistant" as stated needs that endpoint plus answer scope over
-medication and marker facts once their local agent projection is designed.
+**Closed gate 4 - the local assistant.** ADR-0028 delivers the desktop-local
+agent endpoint ADR-0021 deferred: a loopback MCP the desktop app serves
+itself, so a voice client can read state and switch appearance with the
+backend off. Medication timing facts and context markers are answerable
+through `ask_zeitboard_facts`, and the medical refusal now lives in shared
+`core/agentpolicy` so chat, backend MCP, and the local endpoint cannot drift
+apart. Cloud skill packaging remains separately gated.
 
 **Gap 5 — the portal does not exist, and it is the largest threat-model
 change in the project's history.** Today's trusted-web prototype is static
@@ -74,10 +76,10 @@ companion still has no sync client (slice 9).
 
 **Sequencing logic.** Trust before reach: P1's estimator gate, P2's local
 calendar gate, and P3's local disease-management substance through M-C are
-closed. The next primary dependency is maturing the assistant over an explicitly
-reviewed projection (P4), then opening the portal (P5) and fanning out
-notifications (P6). P3 and P4 can interleave; P5 can now build on P2's approved
-local placement path.
+closed. P4's local assistant gate is
+closed as well. The next primary dependency is opening the portal (P5), then
+fanning out notifications (P6); P5 can now build on P2's approved local
+placement path and on P4's reviewed projection surface.
 
 ---
 
@@ -150,6 +152,15 @@ are delivered via ADR-0024/0025/0026/0027. M-D..M-F remain separately gated.
 > collision forecast; the clinician export renders from real data.
 
 ### `/goal phase-4-local-assistant`
+
+Status: delivered 2026-07-26 via ADR-0028. P4-a ships the desktop-local
+loopback MCP endpoint (allowlisted read projections, `set_appearance` as the
+ADR-0021 direct display action, propose-only mutations, no approve/apply
+tool), P4-b ships `ask_zeitboard_facts` over medication timing facts and
+context markers with the medical refusal moved to shared `core/agentpolicy`
+so it is byte-identical on every surface, and P4-c ships the runbook voice
+walkthrough plus `scripts/smoke-local-mcp.ps1`. Residual recorded in the ADR:
+the endpoint runs whenever the app runs and is not behind an opt-in toggle.
 
 Slice plan (2026-07-22): **P4-a** desktop-local agent endpoint — a
 loopback-only MCP served by the desktop app itself (not the backend),

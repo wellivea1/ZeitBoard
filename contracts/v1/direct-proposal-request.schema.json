@@ -11,7 +11,12 @@
       "enum": ["propose_move_task", "propose_place_task", "propose_reminder_shift"]
     },
     "target": {"$ref": "assistant-action.schema.json#/$defs/target"},
-    "answer": {"type": "string", "minLength": 1, "maxLength": 800},
+    "answer": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 800,
+      "description": "Accepted but ignored by the server. Retained because v1 is strict (additionalProperties false), so dropping it would reject existing clients that still send it; per contracts/README.md a breaking field change requires a new version directory."
+    },
     "context": {"$ref": "#/$defs/planningContext"}
   },
   "$defs": {

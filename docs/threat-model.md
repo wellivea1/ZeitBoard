@@ -43,6 +43,10 @@ availability.
 10. Owner-selected v1 sleep file → local importer; future external adapters
     (e.g. Google "My Activity" Takeout) → core.
 11. Development tools / CI → synthetic fixtures only.
+12. Local agent client (MCP) ↔ **desktop-local endpoint** on loopback: a
+    same-machine boundary crossed with a bearer token, guarded by a loopback
+    bind and per-request check, rejection of any request carrying an `Origin`
+    header, and an owner-restricted descriptor (ADR-0028).
 
 ## Adversaries
 
@@ -153,10 +157,23 @@ relationship); a trusted recipient copying a projection before revocation; secur
 guarantees on all filesystems. The desktop webview, Android runtime, and the operator's
 server host remain part of the trusted computing base.
 
+The desktop-local agent endpoint adds two accepted residuals. It runs whenever the app
+runs rather than behind an opt-in switch, so its exposure is bounded only by the loopback
+bind, the bearer token, the `Origin` rejection, and the descriptor's owner-only ACL. And
+any process already running as the user can read that descriptor and therefore drive the
+endpoint with the user's own authority — it is a user-level boundary, not a sandbox. What
+such a process could obtain is the allowlisted projection surface (including medication
+timing facts and context markers) plus reversible appearance changes; it still cannot
+approve or apply a schedule change, because no tool on any surface can.
+
 ## Security verification
 
 - Sync: assert authentication is required, transport is TLS, and replayed messages are
   rejected.
+- Desktop-local endpoint: assert non-loopback callers, absent or invalid tokens, and any
+  request carrying an `Origin` header are refused; assert the descriptor's DACL is
+  owner-only and does not inherit; assert the medical refusal is byte-identical to the
+  shared constant and that fact tools answer without a provider call.
 - Agent/assistant: assert there is no path to mutate the schedule except by creating a
   pending proposal (no direct-mutation API); MCP exposes no approval/apply tool; read
   tools expose only allowlisted projection fields.

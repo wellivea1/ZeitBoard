@@ -4,10 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
+	"non24.app/core/agentpolicy"
 	storage "non24.app/core/storage/sqlite"
+)
+
+const (
+	maxBackendAssistantTasks        = 100
+	maxBackendAssistantAvailability = 128
+	maxBackendAssistantFixedEvents  = 256
 )
 
 // Assistant bindings (roadmap slice 8): the desktop chat surface over the M2
@@ -55,11 +65,14 @@ type assistantMessageRequest struct {
 }
 
 type assistantContextPayload struct {
-	ZoneID       string                       `json:"zone_id"`
-	Now          time.Time                    `json:"now"`
-	EstimateID   string                       `json:"estimate_id,omitempty"`
-	Tasks        []assistantTaskContext       `json:"tasks,omitempty"`
-	Availability []assistantAvailabilityEntry `json:"availability,omitempty"`
+	ZoneID          string                       `json:"zone_id"`
+	Now             time.Time                    `json:"now"`
+	EstimateID      string                       `json:"estimate_id,omitempty"`
+	Tasks           []assistantTaskContext       `json:"tasks,omitempty"`
+	Availability    []assistantAvailabilityEntry `json:"availability,omitempty"`
+	FixedEvents     []assistantFixedEventContext `json:"fixed_events,omitempty"`
+	MedicationFacts []assistantMedicationFact    `json:"medication_facts,omitempty"`
+	Markers         []assistantMarkerFact        `json:"markers,omitempty"`
 }
 
 type assistantTaskContext struct {
@@ -77,6 +90,41 @@ type assistantAvailabilityEntry struct {
 	EndAt      time.Time `json:"end_at"`
 	ZoneID     string    `json:"zone_id"`
 	Confidence string    `json:"confidence"`
+}
+
+type assistantFixedEventContext struct {
+	EventID string    `json:"event_id"`
+	StartAt time.Time `json:"start_at"`
+	EndAt   time.Time `json:"end_at"`
+	ZoneID  string    `json:"zone_id"`
+}
+
+type assistantMedicationFact struct {
+	MedicationID             string `json:"medication_id"`
+	Active                   bool   `json:"active"`
+	ScheduleKind             string `json:"schedule_kind"`
+	ScheduledOccurrenceCount int    `json:"scheduled_occurrence_count"`
+	CollisionCount           int    `json:"collision_count"`
+	NextScheduledCivilDate   string `json:"next_scheduled_civil_date,omitempty"`
+	NextScheduledCivilTime   string `json:"next_scheduled_civil_time,omitempty"`
+	ScheduleZoneID           string `json:"schedule_zone_id,omitempty"`
+	LoggedEventCount         int    `json:"logged_event_count"`
+	LastLoggedStatus         string `json:"last_logged_status,omitempty"`
+	LastWakeRelation         string `json:"last_wake_relation,omitempty"`
+	LastSleepRelation        string `json:"last_sleep_relation,omitempty"`
+	Confidence               string `json:"confidence,omitempty"`
+}
+
+type assistantMarkerFact struct {
+	MarkerID       string `json:"marker_id"`
+	Kind           string `json:"kind"`
+	CivilStartDate string `json:"civil_start_date"`
+	CivilEndDate   string `json:"civil_end_date,omitempty"`
+}
+
+type assistantFactScope struct {
+	Medication bool
+	Markers    bool
 }
 
 type assistantMessageResponse struct {
@@ -131,7 +179,7 @@ func (a *App) SendAssistantMessage(input AssistantMessageInput) (AssistantReplyD
 	if message == "" {
 		return AssistantReplyDTO{}, errors.New("message is required")
 	}
-	if len(message) > 2000 {
+	if utf8.RuneCountInString(message) > 2000 {
 		return AssistantReplyDTO{}, errors.New("message is too long (2000 characters max)")
 	}
 	cfg, token, err := a.requireBackendSync()
@@ -143,7 +191,14 @@ func (a *App) SendAssistantMessage(input AssistantMessageInput) (AssistantReplyD
 	}
 
 	ctx := context.Background()
-	planning, err := a.assistantPlanningContext(ctx)
+	scope := assistantFactScope{}
+	// A prompt that will be refused does not need health facts to cross even
+	// the owner-controlled backend boundary.
+	if !agentpolicy.IsMedicalDecisionPrompt(message) {
+		scope.Medication = agentpolicy.ContainsMedicationFactSubject(message)
+		scope.Markers = agentpolicy.ContainsMarkerSubject(message)
+	}
+	planning, err := a.assistantPlanningContext(ctx, scope)
 	if err != nil {
 		return AssistantReplyDTO{}, err
 	}
@@ -174,8 +229,8 @@ func (a *App) SendAssistantMessage(input AssistantMessageInput) (AssistantReplyD
 // assistantPlanningContext builds the redacted context: zone, now, estimate
 // id, availability windows, and task ids with bounds. Titles never leave the
 // device; the rail re-attaches them locally for display.
-func (a *App) assistantPlanningContext(ctx context.Context) (assistantContextPayload, error) {
-	now := time.Now().UTC().Truncate(time.Minute)
+func (a *App) assistantPlanningContext(ctx context.Context, scope assistantFactScope) (assistantContextPayload, error) {
+	now := a.currentTime().UTC().Truncate(time.Minute)
 	payload := assistantContextPayload{ZoneID: defaultZoneID, Now: now}
 	store, err := a.requireStore()
 	if err != nil {
@@ -186,16 +241,47 @@ func (a *App) assistantPlanningContext(ctx context.Context) (assistantContextPay
 		return payload, err
 	}
 	if state.Status == "estimated" {
-		payload.ZoneID = state.Estimate.AsOf.ZoneID
+		if zoneID := strings.TrimSpace(state.Estimate.AsOf.ZoneID); zoneID != "" {
+			payload.ZoneID = zoneID
+		}
 		payload.EstimateID = string(state.Estimate.ID)
-		for _, window := range localPlanningAvailability(state, now) {
+		availability := localPlanningAvailability(state, now)
+		if len(availability) > maxBackendAssistantAvailability {
+			availability = availability[:maxBackendAssistantAvailability]
+		}
+		for _, window := range availability {
+			zoneID := strings.TrimSpace(window.Interval.Start.ZoneID)
+			if zoneID == "" {
+				zoneID = payload.ZoneID
+			}
 			payload.Availability = append(payload.Availability, assistantAvailabilityEntry{
 				Kind:       string(window.Kind),
 				StartAt:    window.Interval.Start.UTC,
 				EndAt:      window.Interval.End.UTC,
-				ZoneID:     window.Interval.Start.ZoneID,
+				ZoneID:     zoneID,
 				Confidence: string(window.Confidence.Level),
 			})
+		}
+		if start, end, ok := planningSnapshotRange(availability); ok {
+			fixedEvents, _, eventErr := store.BusyDomainEvents(ctx, start, end, payload.ZoneID)
+			if eventErr != nil {
+				return payload, eventErr
+			}
+			if len(fixedEvents) > maxBackendAssistantFixedEvents {
+				fixedEvents = fixedEvents[:maxBackendAssistantFixedEvents]
+			}
+			for index, event := range fixedEvents {
+				zoneID := strings.TrimSpace(event.Interval.Start.ZoneID)
+				if zoneID == "" {
+					zoneID = payload.ZoneID
+				}
+				payload.FixedEvents = append(payload.FixedEvents, assistantFixedEventContext{
+					EventID: fmt.Sprintf("event_%03d", index+1),
+					StartAt: event.Interval.Start.UTC,
+					EndAt:   event.Interval.End.UTC,
+					ZoneID:  zoneID,
+				})
+			}
 		}
 	}
 	records, err := store.ListTasks(ctx)
@@ -206,6 +292,9 @@ func (a *App) assistantPlanningContext(ctx context.Context) (assistantContextPay
 		if record.Status != storage.TaskStatusOpen {
 			continue
 		}
+		if len(payload.Tasks) >= maxBackendAssistantTasks {
+			break
+		}
 		payload.Tasks = append(payload.Tasks, assistantTaskContext{
 			TaskID:                    record.TaskID,
 			DurationMinutes:           record.DurationMinutes,
@@ -214,6 +303,68 @@ func (a *App) assistantPlanningContext(ctx context.Context) (assistantContextPay
 			PreferredAfterWakeMinutes: record.PreferredAfterWakeMinutes,
 			MinimumConfidence:         record.MinimumConfidence,
 		})
+	}
+
+	if !scope.Medication && !scope.Markers {
+		return payload, nil
+	}
+
+	if scope.Medication {
+		medicationProjection, err := a.agentMedicationProjection()
+		if err != nil {
+			return payload, err
+		}
+		medications := append([]agentMedicationDTO{}, medicationProjection.Medications...)
+		sort.Slice(medications, func(i, j int) bool {
+			return medications[i].MedicationID < medications[j].MedicationID
+		})
+		if len(medications) > 8 {
+			medications = medications[:8]
+		}
+		for _, medication := range medications {
+			fact := assistantMedicationFact{
+				MedicationID:     medication.MedicationID,
+				Active:           medication.Active,
+				ScheduleKind:     medication.ScheduleKind,
+				LoggedEventCount: medication.IncludedEventCount,
+			}
+			if medication.Schedule != nil {
+				fact.ScheduledOccurrenceCount = medication.Schedule.Forecast.CoveredCount
+				fact.CollisionCount = medication.Schedule.Forecast.CollisionCount
+				fact.ScheduleZoneID = medication.Schedule.ZoneID
+				if len(medication.Schedule.Forecast.Occurrences) > 0 {
+					next := medication.Schedule.Forecast.Occurrences[0]
+					fact.NextScheduledCivilDate = next.CivilDate
+					fact.NextScheduledCivilTime = next.CivilTime
+				}
+			}
+			if latest := medication.LogSummary.Latest; latest != nil {
+				fact.LastLoggedStatus = latest.Status
+				fact.LastWakeRelation = latest.WakeRelation
+				fact.LastSleepRelation = latest.SleepRelation
+				fact.Confidence = latest.Confidence
+			}
+			payload.MedicationFacts = append(payload.MedicationFacts, fact)
+		}
+	}
+
+	if scope.Markers {
+		markerProjection, err := a.agentMarkerProjection()
+		if err != nil {
+			return payload, err
+		}
+		markers := append([]agentMarkerDTO{}, markerProjection.Markers...)
+		if len(markers) > 12 {
+			markers = markers[:12]
+		}
+		for _, marker := range markers {
+			payload.Markers = append(payload.Markers, assistantMarkerFact{
+				MarkerID:       marker.MarkerID,
+				Kind:           marker.Kind,
+				CivilStartDate: marker.CivilStartDate,
+				CivilEndDate:   marker.CivilEndDate,
+			})
+		}
 	}
 	return payload, nil
 }
@@ -277,7 +428,7 @@ type AppearanceClockDTO struct {
 }
 
 func (a *App) GetAppearanceClock() (AppearanceClockDTO, error) {
-	now := time.Now().UTC()
+	now := a.currentTime().UTC()
 	state, err := a.localEstimate(context.Background(), now)
 	if err != nil {
 		return AppearanceClockDTO{}, err

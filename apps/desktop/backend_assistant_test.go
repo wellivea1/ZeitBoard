@@ -103,13 +103,20 @@ func TestAssistantMessageSendsRedactedContextAndMapsProposals(t *testing.T) {
 
 func TestAssistantMedicalRefusalPassesThroughWithoutProposal(t *testing.T) {
 	app := newTestApp(t)
+	medications, err := app.AddMedication(MedicationInput{Label: "Private melatonin label"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	medicationID := medications.Medications[0].MedicationID
+	var assistantBody []byte
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/v1/devices":
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(registerDeviceResponse{SchemaVersion: "v1", DeviceID: "device_desktop", Token: "refusal-token"})
 		case "/v1/assistant/message":
-			_, _ = w.Write([]byte(`{"schema_version":"v1","backend":{"configured":false,"provider":"none"},"result":"refused_medical","action":"answer_only","answer":"I can't help with medical decisions like medication or dosing.","proposals":[]}`))
+			assistantBody, _ = io.ReadAll(r.Body)
+			_, _ = w.Write([]byte(`{"schema_version":"v1","backend":{"configured":false,"provider":"none"},"result":"refused_medical","action":"answer_only","answer":"I can't help with medical decisions like medication or dosing. I can show when you logged doses relative to your rhythm, or help you plan around appointments.","proposals":[]}`))
 		default:
 			http.NotFound(w, r)
 		}
@@ -123,6 +130,12 @@ func TestAssistantMedicalRefusalPassesThroughWithoutProposal(t *testing.T) {
 	}
 	if reply.Result != "refused_medical" || len(reply.Proposals) != 0 {
 		t.Fatalf("medical refusal must create no proposal: %#v", reply)
+	}
+	if strings.Contains(string(assistantBody), `"medication_facts"`) || strings.Contains(string(assistantBody), medicationID) {
+		t.Fatalf("refused prompt sent unnecessary medication facts: %s", assistantBody)
+	}
+	if !strings.Contains(reply.Answer, "help you plan around appointments") {
+		t.Fatalf("medical refusal was not passed through byte-completely: %q", reply.Answer)
 	}
 }
 

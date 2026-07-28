@@ -7,9 +7,11 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"non24.app/core/agentpolicy"
 	"non24.app/server/internal/auth"
 	"non24.app/server/internal/provider"
 	"non24.app/server/internal/store"
@@ -109,11 +111,30 @@ func TestAssistantRedactsContextSentToProvider(t *testing.T) {
 	fake := &fakeProvider{responses: []provider.Response{{Text: `{"schema_version":"v1","recommended_action":"answer_only","answer":"You have a predicted waking window available."}`}}}
 	service := New(fake, fake.Status(), st)
 	service.now = fixedNow
+	planning := planningContext()
+	planning.MedicationFacts = []MedicationFactContext{
+		{
+			MedicationID: "med_opaque_01", Active: true, ScheduleKind: "fixed_clock",
+			ScheduledOccurrenceCount: 14, CollisionCount: 2,
+			NextScheduledCivilDate: "2026-03-06", NextScheduledCivilTime: "20:00", ScheduleZoneID: "UTC",
+			LoggedEventCount: 3, LastLoggedStatus: "taken",
+			LastWakeRelation:  "2 h after recorded wake",
+			LastSleepRelation: "4 h 30 min before predicted sleep", Confidence: "Medium",
+		},
+		{
+			MedicationID: "med_opaque_02", ScheduleKind: "none",
+			LastWakeRelation: "Metformin private timing", LastSleepRelation: "api-key-secret",
+		},
+	}
+	planning.Markers = []RhythmMarkerFactContext{
+		{MarkerID: "marker_opaque_01", Kind: "travel", CivilStartDate: "2026-03-01", CivilEndDate: "2026-03-03"},
+		{MarkerID: "marker_opaque_02", Kind: "calendar-secret-text", CivilStartDate: "2026-03-02"},
+	}
 
 	_, err := service.HandleMessage(context.Background(), device, MessageRequest{
 		SchemaVersion: SchemaVersion,
 		Message:       "Can I fit the task before Friday?",
-		Context:       planningContext(),
+		Context:       planning,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -130,10 +151,19 @@ func TestAssistantRedactsContextSentToProvider(t *testing.T) {
 		[]byte("calendar-secret-text"),
 		[]byte("api-key-secret"),
 		[]byte("2026-03-05T"),
+		[]byte("med_opaque_01"),
+		[]byte("marker_opaque_01"),
+		[]byte("medication_facts"),
+		[]byte(`"markers"`),
 	}
 	for _, item := range forbidden {
 		if bytes.Contains(captured, item) {
 			t.Fatalf("provider request leaked forbidden value %q: %s", item, captured)
+		}
+	}
+	for _, required := range [][]byte{[]byte("task_flexible_01"), []byte("event_fixed_01"), []byte("fixed_events"), []byte("predicted_wake")} {
+		if !bytes.Contains(captured, required) {
+			t.Fatalf("provider request omitted redacted planning field %q: %s", required, captured)
 		}
 	}
 }
@@ -202,8 +232,114 @@ func TestAssistantMedicalPromptRefusesWithoutProposal(t *testing.T) {
 	if resp.Result != ResultRefused || len(resp.Proposals) != 0 {
 		t.Fatalf("response = %+v, want refusal with zero proposals", resp)
 	}
+	if resp.Answer != agentpolicy.MedicalRefusal {
+		t.Fatalf("medical refusal = %q", resp.Answer)
+	}
 	if len(fake.requests) != 0 {
 		t.Fatalf("provider was called for a medical prompt")
+	}
+}
+
+func TestAssistantMedicationFactsAreDeterministicAndProviderFree(t *testing.T) {
+	st, device := testStoreAndDevice(t)
+	fake := &fakeProvider{responses: []provider.Response{{Text: `{"schema_version":"v1","recommended_action":"answer_only","answer":"You should take 5 mg at 8 PM."}`}}}
+	service := New(fake, fake.Status(), st)
+	service.now = fixedNow
+	planning := planningContext()
+	planning.MedicationFacts = []MedicationFactContext{
+		{
+			MedicationID: "med_opaque_01", Active: true, ScheduleKind: "fixed_clock",
+			ScheduledOccurrenceCount: 14, CollisionCount: 2,
+			NextScheduledCivilDate: "2026-03-06", NextScheduledCivilTime: "20:00", ScheduleZoneID: "UTC",
+			LoggedEventCount: 3, LastLoggedStatus: "taken", LastWakeRelation: "2 h after recorded wake",
+		},
+		{
+			MedicationID: "med_opaque_02", ScheduleKind: "none",
+			LastWakeRelation: "private-medication-note", LastSleepRelation: "api-key-secret",
+		},
+	}
+
+	resp, err := service.HandleMessage(context.Background(), device, MessageRequest{
+		SchemaVersion: SchemaVersion,
+		Message:       "Show my next scheduled medication timing fact.",
+		Context:       planning,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Result != ResultAnswerOnly || len(resp.Proposals) != 0 ||
+		!strings.Contains(resp.Answer, "2026-03-06 20:00 UTC") ||
+		!strings.Contains(resp.Answer, "not dosing or treatment advice") {
+		t.Fatalf("deterministic medication answer = %#v", resp)
+	}
+	for _, forbidden := range []string{"You should take", "private-medication-note", "api-key-secret"} {
+		if strings.Contains(resp.Answer, forbidden) {
+			t.Fatalf("deterministic medication answer leaked %q: %q", forbidden, resp.Answer)
+		}
+	}
+	if len(fake.requests) != 0 {
+		t.Fatalf("provider was called for medication facts: %#v", fake.requests)
+	}
+	count, err := st.CountProposals(context.Background())
+	if err != nil || count != 0 {
+		t.Fatalf("medication fact answer created proposals: count=%d err=%v", count, err)
+	}
+}
+
+func TestAssistantMarkerFactsDoNotIncludeMedicationFacts(t *testing.T) {
+	st, device := testStoreAndDevice(t)
+	fake := &fakeProvider{responses: []provider.Response{{Text: `{"schema_version":"v1","recommended_action":"answer_only","answer":"provider should not run"}`}}}
+	service := New(fake, fake.Status(), st)
+	service.now = fixedNow
+	planning := planningContext()
+	planning.MedicationFacts = []MedicationFactContext{{
+		MedicationID: "med_opaque_01", Active: true, ScheduleKind: "fixed_clock",
+		NextScheduledCivilDate: "2026-03-06", NextScheduledCivilTime: "20:00", ScheduleZoneID: "UTC",
+	}}
+	planning.Markers = []RhythmMarkerFactContext{
+		{MarkerID: "marker_opaque_01", Kind: "travel", CivilStartDate: "2026-03-01", CivilEndDate: "2026-03-03"},
+		{MarkerID: "marker_opaque_02", Kind: "private-causal-claim", CivilStartDate: "2026-03-02"},
+	}
+
+	resp, err := service.HandleMessage(context.Background(), device, MessageRequest{
+		SchemaVersion: SchemaVersion,
+		Message:       "List my light therapy markers.",
+		Context:       planning,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Result != ResultAnswerOnly || len(resp.Proposals) != 0 ||
+		!strings.Contains(resp.Answer, "travel on 2026-03-01 through 2026-03-03") ||
+		strings.Contains(resp.Answer, "Medication") || strings.Contains(resp.Answer, "private-causal-claim") {
+		t.Fatalf("marker-only answer = %#v", resp)
+	}
+	if len(fake.requests) != 0 {
+		t.Fatalf("provider was called for marker facts: %#v", fake.requests)
+	}
+}
+
+func TestAssistantRejectsInvalidPlanningContextBeforeProvider(t *testing.T) {
+	st, device := testStoreAndDevice(t)
+	fake := &fakeProvider{responses: []provider.Response{{Text: `{"schema_version":"v1","recommended_action":"answer_only","answer":"provider should not run"}`}}}
+	service := New(fake, fake.Status(), st)
+	planning := planningContext()
+	planning.FixedEvents[0].EndAt = planning.FixedEvents[0].StartAt
+
+	_, err := service.HandleMessage(context.Background(), device, MessageRequest{
+		SchemaVersion: SchemaVersion,
+		Message:       "Find a task window.",
+		Context:       planning,
+	})
+	if err == nil {
+		t.Fatal("invalid fixed event was accepted")
+	}
+	if len(fake.requests) != 0 {
+		t.Fatalf("provider was called with invalid planning context: %#v", fake.requests)
+	}
+	count, countErr := st.CountProposals(context.Background())
+	if countErr != nil || count != 0 {
+		t.Fatalf("invalid planning context created proposals: count=%d err=%v", count, countErr)
 	}
 }
 
@@ -350,5 +486,58 @@ func validateScheduleProposalsPayload(t *testing.T, value scheduleProposalsPaylo
 	}
 	if err := schema.Validate(doc); err != nil {
 		t.Fatalf("schedule proposal payload did not validate: %v\n%s", err, data)
+	}
+}
+
+// Regression: the post-provider guard used to be gated on the PROMPT looking
+// medical, which made it unreachable (medical prompts already returned before
+// the provider call). A benign-looking prompt whose answer smuggles a dosing
+// directive must now be refused on the way out.
+func TestAssistantScreensUnsolicitedDosingAdviceInModelAnswer(t *testing.T) {
+	st, device := testStoreAndDevice(t)
+	fake := &fakeProvider{responses: []provider.Response{{
+		Text: `{"schema_version":"v1","recommended_action":"answer_only","answer":"Your afternoon looks open. Also, start taking 5 mg an hour before bed."}`,
+	}}}
+	service := New(fake, fake.Status(), st)
+	service.now = fixedNow
+
+	resp, err := service.HandleMessage(context.Background(), device, MessageRequest{
+		SchemaVersion: SchemaVersion,
+		Message:       "when is my next good window?",
+		Context:       planningContext(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.requests) != 1 {
+		t.Fatalf("expected the provider to be called for a non-medical prompt, got %d calls", len(fake.requests))
+	}
+	if resp.Result != ResultRefused || resp.Answer != agentpolicy.MedicalRefusal {
+		t.Fatalf("unsolicited dosing advice was not screened: %+v", resp)
+	}
+	if len(resp.Proposals) != 0 {
+		t.Fatalf("refused answer must create no proposal: %+v", resp.Proposals)
+	}
+}
+
+// The same screening must not fire on ordinary scheduling language.
+func TestAssistantAllowsOrdinarySchedulingAnswer(t *testing.T) {
+	st, device := testStoreAndDevice(t)
+	fake := &fakeProvider{responses: []provider.Response{{
+		Text: `{"schema_version":"v1","recommended_action":"answer_only","answer":"You should be awake from about 2 PM. Take the 3 PM slot; it is the best time before your predicted sleep."}`,
+	}}}
+	service := New(fake, fake.Status(), st)
+	service.now = fixedNow
+
+	resp, err := service.HandleMessage(context.Background(), device, MessageRequest{
+		SchemaVersion: SchemaVersion,
+		Message:       "when is my next good window?",
+		Context:       planningContext(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Result == ResultRefused {
+		t.Fatalf("ordinary scheduling answer was falsely refused: %+v", resp)
 	}
 }

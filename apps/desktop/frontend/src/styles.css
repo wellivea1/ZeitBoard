@@ -2154,7 +2154,8 @@ button {
   grid-template-columns: 1fr;
   align-items: start;
 }
-.backend-sync-panel {
+.backend-sync-panel,
+.local-agent-panel {
   grid-template-columns: 1fr;
   align-items: start;
 }
@@ -2250,6 +2251,15 @@ button {
   overflow-wrap: anywhere;
   color: var(--ink);
   font-size: 12px;
+}
+.settings-boundary-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
 }
 .danger-zone {
   color: var(--danger-text);
