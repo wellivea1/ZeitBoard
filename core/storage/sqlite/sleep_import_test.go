@@ -88,6 +88,61 @@ func TestSleepImportFileErrorBlocksAndAccountsForOtherwiseValidRows(t *testing.T
 	}
 }
 
+func TestSleepImportJSONRejectsUnknownTopLevelField(t *testing.T) {
+	store := openSleepImportTestStore(t)
+	observation := importedSleepObservation("obs_import_strict", "fitbit-strict", time.Date(2022, 2, 1, 5, 0, 0, 0, time.UTC))
+	contents := strings.Replace(sleepImportJSON(t, observation), `"generated_at":`, `"unexpected":true,"generated_at":`, 1)
+
+	report, err := store.PreviewSleepImport(context.Background(), SleepImportInput{FileName: "strict.json", Contents: contents})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if report.CanImport || len(report.Errors) != 1 || !strings.Contains(report.Errors[0], "unknown field") {
+		t.Fatalf("unknown top-level field was not rejected strictly: %#v", report)
+	}
+}
+
+func TestSleepImportConflictLookupIgnoresUnrelatedMalformedPayload(t *testing.T) {
+	store := openSleepImportTestStore(t)
+	ctx := context.Background()
+	unrelated := importedSleepObservation(
+		"obs_import_unrelated",
+		"fitbit-unrelated",
+		time.Date(2022, 2, 2, 5, 0, 0, 0, time.UTC),
+	)
+	if _, err := store.db.ExecContext(ctx, `INSERT INTO local_sleep_observations(
+		observation_id, kind, start_at, end_at, zone_id, classification,
+		acquisition_method, evidence_status, recorded_at, source_record_id, payload_json
+	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		unrelated.ObservationID,
+		unrelated.Kind,
+		formatSQLiteTime(unrelated.StartAt),
+		formatSQLiteTime(unrelated.EndAt),
+		unrelated.ZoneID,
+		unrelated.Sleep.Classification,
+		unrelated.Provenance.AcquisitionMethod,
+		unrelated.Provenance.EvidenceStatus,
+		formatSQLiteTime(unrelated.Provenance.RecordedAt),
+		unrelated.Provenance.SourceRecordID,
+		[]byte("{"),
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	candidate := importedSleepObservation(
+		"obs_import_candidate",
+		"fitbit-candidate",
+		time.Date(2022, 2, 3, 5, 0, 0, 0, time.UTC),
+	)
+	report, err := store.PreviewSleepImport(ctx, SleepImportInput{FileName: "candidate.json", Contents: sleepImportJSON(t, candidate)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.CanImport || report.ReadyRows != 1 {
+		t.Fatalf("unrelated history should not be decoded during conflict lookup: %#v", report)
+	}
+}
+
 func TestSleepImportDeduplicatesExactSourceRowsAndRejectsConflicts(t *testing.T) {
 	store := openSleepImportTestStore(t)
 	start := time.Date(2023, 3, 1, 5, 0, 0, 0, time.UTC)

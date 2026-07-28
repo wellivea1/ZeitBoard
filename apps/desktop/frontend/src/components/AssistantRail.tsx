@@ -6,12 +6,8 @@ import {
   type AssistantReply,
   type AssistantStatus,
 } from "../data/assistant";
-import {
-  decideBackendProposal,
-  loadBackendProposals,
-  type BackendProposal,
-  type BackendProposalsData,
-} from "../data/backendProposals";
+import type { BackendProposal } from "../data/backendProposals";
+import { useBackendProposals } from "../state/backendProposals";
 
 // The §4 assistant rail: chat over the propose-only backend. Action cards are
 // shortcuts to the same one-use-token queue decisions as the Approvals screen;
@@ -107,7 +103,13 @@ export function AssistantRail({ open, onClose }: { open: boolean; onClose: () =>
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
-  const [queue, setQueue] = useState<BackendProposalsData>({ status: "off", proposals: [] });
+  const {
+    data: queue,
+    busyProposalId,
+    refresh: refreshProposals,
+    ingest: ingestProposals,
+    decide: decideProposal,
+  } = useBackendProposals();
   const transcriptRef = useRef<HTMLDivElement>(null);
   const nextId = useRef(1);
 
@@ -117,13 +119,11 @@ export function AssistantRail({ open, onClose }: { open: boolean; onClose: () =>
     void loadAssistantStatus().then((loaded) => {
       if (current) setStatus(loaded);
     });
-    void loadBackendProposals().then((loaded) => {
-      if (current) setQueue(loaded);
-    });
+    refreshProposals();
     return () => {
       current = false;
     };
-  }, [open]);
+  }, [open, refreshProposals]);
 
   useEffect(() => {
     const transcript = transcriptRef.current;
@@ -135,6 +135,7 @@ export function AssistantRail({ open, onClose }: { open: boolean; onClose: () =>
   };
 
   const applyReply = (reply: AssistantReply) => {
+    ingestProposals(reply.proposals);
     appendMessage({
       role: "assistant",
       text: reply.answer,
@@ -178,30 +179,14 @@ export function AssistantRail({ open, onClose }: { open: boolean; onClose: () =>
 
   const onDecide = (proposal: BackendProposal, decision: "approved" | "rejected") => {
     if (!proposal.decisionToken) return;
-    setBusy(true);
-    decideBackendProposal({
-      proposalId: proposal.proposalId,
-      decision,
-      token: proposal.decisionToken,
-    })
-      .then((refreshed) => {
-        setQueue(refreshed);
-        setMessages((existing) =>
-          existing.map((message) => ({
-            ...message,
-            proposals: message.proposals?.map((item) =>
-              item.proposalId === proposal.proposalId
-                ? { ...item, status: decision, decisionToken: undefined }
-                : item,
-            ),
-          })),
-        );
-      })
-      .finally(() => setBusy(false));
+    void decideProposal(proposal, decision);
   };
 
   const backend = backendLabel(status);
   const pendingQueue = queue.proposals.filter((proposal) => proposal.status === "pending");
+  const currentProposal = new Map(
+    queue.proposals.map((proposal) => [proposal.proposalId, proposal]),
+  );
 
   if (!open) return null;
 
@@ -274,8 +259,8 @@ export function AssistantRail({ open, onClose }: { open: boolean; onClose: () =>
                 </div>
                 {message.proposals?.map((proposal) => (
                   <ActionCard
-                    proposal={proposal}
-                    busy={busy}
+                    proposal={currentProposal.get(proposal.proposalId) ?? proposal}
+                    busy={busy || busyProposalId !== null}
                     onDecide={onDecide}
                     key={proposal.proposalId}
                   />
@@ -333,7 +318,7 @@ export function AssistantRail({ open, onClose }: { open: boolean; onClose: () =>
           {pendingQueue.map((proposal) => (
             <ActionCard
               proposal={proposal}
-              busy={busy}
+              busy={busy || busyProposalId !== null}
               onDecide={onDecide}
               key={proposal.proposalId}
             />

@@ -1,5 +1,10 @@
 package org.non24.planner.data
 
+import java.time.Instant
+import java.time.ZoneId
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import org.non24.planner.domain.AcquisitionMethod
 import org.non24.planner.domain.Confidence
 import org.non24.planner.domain.EstimateSnapshot
@@ -8,9 +13,14 @@ import org.non24.planner.domain.Provenance
 import org.non24.planner.domain.SleepEpisode
 import org.non24.planner.domain.TimeWindow
 
-class FixtureSleepRepository : CorrectableSleepRepository(
-    initialEpisodes = fixtureSleepEpisodes(),
-) {
+internal class FixtureSleepRepository(
+    localUserDataRepository: LocalUserDataRepository =
+        LocalUserDataRepository(InMemoryLocalUserDataStore()),
+    sourceEpisodes: List<SleepEpisode> = fixtureSleepEpisodes(),
+) : CorrectableSleepRepository(localUserDataRepository) {
+    private val mutableSourceEpisodes = MutableStateFlow(sourceEpisodes)
+    override val sourceEpisodes: StateFlow<List<SleepEpisode>> = mutableSourceEpisodes.asStateFlow()
+
     override suspend fun refresh() = Unit
 }
 
@@ -41,33 +51,51 @@ fun fixtureEstimateRepository(): EstimateRepository =
         ),
     )
 
-private fun fixtureSleepEpisodes(): List<SleepEpisode> {
+internal fun fixtureSleepEpisodes(): List<SleepEpisode> {
     val provenance = Provenance(
         acquisitionMethod = AcquisitionMethod.FIXTURE,
         evidenceStatus = EvidenceStatus.SYNTHETIC,
         sourceId = "android-phase-one-fixture",
     )
+    val zone = ZoneId.of("America/New_York")
     return listOf(
-        SleepEpisode(
+        fixtureSleepEpisode(
             id = "fixture-sleep-2026-06-14",
             start = fixtureInstant("2026-06-14T03:55:00Z"),
             end = fixtureInstant("2026-06-14T12:05:00Z"),
-            timeZoneId = "America/New_York",
+            zone = zone,
             provenance = provenance,
         ),
-        SleepEpisode(
+        fixtureSleepEpisode(
             id = "fixture-sleep-2026-06-13",
             start = fixtureInstant("2026-06-13T03:08:00Z"),
             end = fixtureInstant("2026-06-13T11:20:00Z"),
-            timeZoneId = "America/New_York",
+            zone = zone,
             provenance = provenance,
         ),
-        SleepEpisode(
+        fixtureSleepEpisode(
             id = "fixture-sleep-2026-06-12",
             start = fixtureInstant("2026-06-12T02:22:00Z"),
             end = fixtureInstant("2026-06-12T10:35:00Z"),
-            timeZoneId = "America/New_York",
+            zone = zone,
             provenance = provenance,
         ),
     )
 }
+
+private fun fixtureSleepEpisode(
+    id: String,
+    start: Instant,
+    end: Instant,
+    zone: ZoneId,
+    provenance: Provenance,
+): SleepEpisode = SleepEpisode(
+    id = id,
+    logicalSourceId = id,
+    start = start,
+    end = end,
+    ianaTimeZoneId = zone.id,
+    startZoneOffset = zone.rules.getOffset(start),
+    endZoneOffset = zone.rules.getOffset(end),
+    provenance = provenance,
+)

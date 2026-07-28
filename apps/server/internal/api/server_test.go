@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	stdsync "sync"
 	"testing"
@@ -414,6 +416,162 @@ func TestAnyEnrolledDeviceCanDecideViaListedToken(t *testing.T) {
 	}
 }
 
+func TestProposalListUsesOpaqueStableCursorAndStrictLimits(t *testing.T) {
+	h := newTestHarness(t)
+	token := h.registerDevice(t, "desktop")
+	createdIDs := make([]string, 0, 4)
+	create := func() {
+		t.Helper()
+		status, body := h.request(t, http.MethodPost, "/v1/proposals", token, directProposalRequestBody("propose_place_task"))
+		if status != http.StatusCreated {
+			t.Fatalf("create status = %d body = %s", status, body)
+		}
+		var created struct {
+			Proposals []struct {
+				ProposalID string `json:"proposalId"`
+			} `json:"proposals"`
+		}
+		if err := json.Unmarshal(body, &created); err != nil {
+			t.Fatal(err)
+		}
+		if len(created.Proposals) != 1 {
+			t.Fatalf("create response = %s", body)
+		}
+		createdIDs = append(createdIDs, created.Proposals[0].ProposalID)
+	}
+	create()
+	create()
+	create()
+
+	status, body := h.request(t, http.MethodGet, "/v1/proposals?limit=2", token, "")
+	if status != http.StatusOK {
+		t.Fatalf("first page status = %d body = %s", status, body)
+	}
+	var first proposalListResponse
+	if err := json.Unmarshal(body, &first); err != nil {
+		t.Fatal(err)
+	}
+	if first.SchemaVersion != syncmodel.SchemaVersion || len(first.Proposals) != 2 {
+		t.Fatalf("first page = %+v", first)
+	}
+	if first.Proposals[0].ID != createdIDs[2] || first.Proposals[1].ID != createdIDs[1] {
+		t.Fatalf("first page order = %q, %q", first.Proposals[0].ID, first.Proposals[1].ID)
+	}
+	if first.Proposals[0].DecisionToken == "" || first.Proposals[1].DecisionToken == "" {
+		t.Fatal("pending proposal page must include one-use decision tokens")
+	}
+	if first.Pagination.Limit != 2 || !first.Pagination.HasMore || first.Pagination.NextCursor == "" {
+		t.Fatalf("first pagination = %+v", first.Pagination)
+	}
+	if _, err := strconv.ParseInt(first.Pagination.NextCursor, 10, 64); err == nil {
+		t.Fatalf("cursor exposed its row sequence: %q", first.Pagination.NextCursor)
+	}
+	if _, err := decodeProposalCursor(first.Pagination.NextCursor); err != nil {
+		t.Fatalf("server emitted an invalid cursor: %v", err)
+	}
+
+	// A new proposal inserted after page one is newer than the cursor and must
+	// not shift the continuation or appear in it.
+	create()
+	status, body = h.request(t, http.MethodGet, "/v1/proposals?limit=2&cursor="+first.Pagination.NextCursor, token, "")
+	if status != http.StatusOK {
+		t.Fatalf("second page status = %d body = %s", status, body)
+	}
+	var second proposalListResponse
+	if err := json.Unmarshal(body, &second); err != nil {
+		t.Fatal(err)
+	}
+	if len(second.Proposals) != 1 || second.Proposals[0].ID != createdIDs[0] {
+		t.Fatalf("stable second page = %+v", second.Proposals)
+	}
+	if second.Pagination.Limit != 2 || second.Pagination.HasMore || second.Pagination.NextCursor != "" {
+		t.Fatalf("second pagination = %+v", second.Pagination)
+	}
+
+	status, body = h.request(t, http.MethodGet, "/v1/proposals", token, "")
+	if status != http.StatusOK {
+		t.Fatalf("default page status = %d body = %s", status, body)
+	}
+	var defaultPage proposalListResponse
+	if err := json.Unmarshal(body, &defaultPage); err != nil {
+		t.Fatal(err)
+	}
+	if defaultPage.Pagination.Limit != store.DefaultProposalPageLimit {
+		t.Fatalf("default limit = %d, want %d", defaultPage.Pagination.Limit, store.DefaultProposalPageLimit)
+	}
+	status, body = h.request(t, http.MethodGet, "/v1/proposals?limit=100", token, "")
+	if status != http.StatusOK {
+		t.Fatalf("maximum page status = %d body = %s", status, body)
+	}
+	var maximumPage proposalListResponse
+	if err := json.Unmarshal(body, &maximumPage); err != nil {
+		t.Fatal(err)
+	}
+	if maximumPage.Pagination.Limit != store.MaxProposalPageLimit {
+		t.Fatalf("maximum limit = %d, want %d", maximumPage.Pagination.Limit, store.MaxProposalPageLimit)
+	}
+
+	futureCursor, err := decodeProposalCursor(first.Pagination.NextCursor)
+	if err != nil {
+		t.Fatal(err)
+	}
+	futureCursor.AsOf = time.Now().UTC().Add(time.Hour)
+	invalidPaths := []string{
+		"/v1/proposals?unknown=1",
+		"/v1/proposals?limit=1;cursor=ignored",
+		"/v1/proposals?limit=",
+		"/v1/proposals?limit=0",
+		"/v1/proposals?limit=01",
+		"/v1/proposals?limit=+1",
+		"/v1/proposals?limit=101",
+		"/v1/proposals?limit=1&limit=2",
+		"/v1/proposals?cursor=",
+		"/v1/proposals?cursor=not-a-cursor",
+		"/v1/proposals?cursor=" + first.Pagination.NextCursor + "&cursor=" + first.Pagination.NextCursor,
+		"/v1/proposals?cursor=" + encodeProposalCursor(futureCursor),
+	}
+	for _, path := range invalidPaths {
+		status, body := h.request(t, http.MethodGet, path, token, "")
+		if status != http.StatusBadRequest {
+			t.Errorf("GET %s status = %d body = %s, want %d", path, status, body, http.StatusBadRequest)
+		}
+	}
+}
+
+func TestProposalCursorRoundTripsSnapshotAndRejectsInvalidGroup(t *testing.T) {
+	want := store.ProposalPageCursor{
+		AfterRowID:   42,
+		ThroughRowID: 99,
+		Active:       true,
+		AsOf:         time.Date(2026, 7, 28, 12, 34, 56, 123456789, time.UTC),
+	}
+	encoded := encodeProposalCursor(want)
+	got, err := decodeProposalCursor(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.AfterRowID != want.AfterRowID || got.ThroughRowID != want.ThroughRowID || got.Active != want.Active || !got.AsOf.Equal(want.AsOf) {
+		t.Fatalf("proposal cursor round trip = %+v, want %+v", got, want)
+	}
+
+	raw, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw[1] = 2
+	if _, err := decodeProposalCursor(base64.RawURLEncoding.EncodeToString(raw)); err == nil {
+		t.Fatal("proposal cursor accepted an invalid active-group flag")
+	}
+
+	raw[1] = 0
+	for index := 10; index < 18; index++ {
+		raw[index] = 0
+	}
+	if _, err := decodeProposalCursor(base64.RawURLEncoding.EncodeToString(raw)); err == nil {
+		t.Fatal("proposal cursor accepted a high-water row before its continuation row")
+	}
+}
+
 func TestDirectProposalEndpointRequiresAuthAndRejectsRevokedToken(t *testing.T) {
 	h := newTestHarness(t)
 	first := h.registerDeviceFull(t, "desktop")
@@ -457,7 +615,7 @@ func TestEraseHardDeletesMintsTombstonesAndBlocksResurrection(t *testing.T) {
 	}
 
 	// The pull stream no longer contains the record's payload; it contains a
-	// tombstone whose payload carries only the record id.
+	// metadata-only tombstone carrying the record id and original kind.
 	status, body = h.request(t, http.MethodGet, "/v1/sync/pull?since=0", phone, "")
 	if status != http.StatusOK {
 		t.Fatalf("pull status = %d", status)
@@ -477,7 +635,7 @@ func TestEraseHardDeletesMintsTombstonesAndBlocksResurrection(t *testing.T) {
 			if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
 				t.Fatal(err)
 			}
-			if payload.RecordID != erasedID {
+			if payload.RecordID != erasedID || payload.RecordKind != syncmodel.KindObservation {
 				t.Fatalf("tombstone payload = %+v", payload)
 			}
 			if bytes.Contains(envelope.Payload, []byte("start_at")) {
@@ -933,9 +1091,10 @@ func TestTaskRevisionSyncLifecycle(t *testing.T) {
 		t.Fatalf("off-enum status accepted: %d", status)
 	}
 
-	// Deleting the task erases every pushed revision: payloads hard-deleted,
-	// tombstones minted, resurrection blocked (ADR-0017 machinery, unchanged).
-	eraseBody := `{"schema_version":"v1","record_ids":["task_paperwork_01_r1","task_paperwork_01_r2"]}`
+	// Naming any known task revision deletes the logical task: every retained
+	// revision is hard-erased, and later revision ids are blocked too. This
+	// closes the stale-device resurrection gap in record-id-only erasure.
+	eraseBody := `{"schema_version":"v1","record_ids":["task_paperwork_01_r1"]}`
 	status, body = h.request(t, http.MethodPost, "/v1/sync/erase", laptop, eraseBody)
 	if status != http.StatusOK {
 		t.Fatalf("erase status = %d body = %s", status, body)
@@ -947,7 +1106,7 @@ func TestTaskRevisionSyncLifecycle(t *testing.T) {
 	if erase.Erased != 2 || erase.Tombstones != 2 {
 		t.Fatalf("erase = %+v, want 2 erased + 2 tombstones", erase)
 	}
-	h.pushRecords(t, desktop, taskRevisionRecord("task_paperwork_01", 1, "File paperwork", "open")) // silent no-op
+	h.pushRecords(t, desktop, taskRevisionRecord("task_paperwork_01", 3, "Offline stale edit", "open")) // silent no-op
 	status, body = h.request(t, http.MethodGet, "/v1/sync/pull?since=0", desktop, "")
 	if status != http.StatusOK {
 		t.Fatalf("pull status = %d", status)
@@ -956,10 +1115,23 @@ func TestTaskRevisionSyncLifecycle(t *testing.T) {
 	if err := json.Unmarshal(body, &pull); err != nil {
 		t.Fatal(err)
 	}
+	taskTombstones := 0
 	for _, envelope := range pull.Records {
 		if envelope.Kind == syncmodel.KindTask {
 			t.Fatalf("erased task revision resurfaced: %s", envelope.RecordID)
 		}
+		if envelope.Kind == syncmodel.KindTombstone {
+			var payload syncmodel.TombstonePayload
+			if err := json.Unmarshal(envelope.Payload, &payload); err != nil {
+				t.Fatal(err)
+			}
+			if payload.RecordKind == syncmodel.KindTask {
+				taskTombstones++
+			}
+		}
+	}
+	if taskTombstones != 2 {
+		t.Fatalf("task tombstones = %d, want one per erased retained revision", taskTombstones)
 	}
 
 	// Task records must not disturb server-side sleep estimation.

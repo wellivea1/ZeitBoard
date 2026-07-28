@@ -42,6 +42,27 @@ func TestTaskRevisionsFlowThroughSyncBookkeeping(t *testing.T) {
 		t.Fatalf("payload = %v", payload)
 	}
 
+	count, err := store.PendingTaskSyncRecordCount(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("pending task count = %d, want 1", count)
+	}
+	page, err := store.PendingTaskSyncRecords(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page) != 1 || page[0].RecordID != unpushed[0].RecordID {
+		t.Fatalf("pending task page = %+v", page)
+	}
+	if _, err := store.PendingTaskSyncRecords(ctx, 0); err == nil {
+		t.Fatal("zero task page limit should be rejected")
+	}
+	if _, err := store.PendingTaskSyncRecords(ctx, MaxTaskSyncPageSize+1); err == nil {
+		t.Fatal("oversized task page limit should be rejected")
+	}
+
 	// Marking pushed empties the queue; an edit bumps the revision and queues
 	// exactly the new revision.
 	if err := store.MarkTaskSyncRecordsPushed(ctx, unpushed, created.Add(time.Minute)); err != nil {
@@ -51,7 +72,9 @@ func TestTaskRevisionsFlowThroughSyncBookkeeping(t *testing.T) {
 		t.Fatalf("after push: %v %v", unpushed, err)
 	}
 	task.Title = "File paperwork (rescoped)"
-	if err := store.UpdateTask(ctx, task); err != nil {
+	task.Revision = 2
+	task.UpdatedAt = created.Add(2 * time.Minute)
+	if err := store.UpdateTask(ctx, task, 1); err != nil {
 		t.Fatal(err)
 	}
 	if unpushed, err = store.UnpushedTaskSyncRecords(ctx); err != nil || len(unpushed) != 1 || unpushed[0].RecordID != "task_paperwork_01_r2" {
@@ -63,7 +86,7 @@ func TestTaskRevisionsFlowThroughSyncBookkeeping(t *testing.T) {
 
 	// Deleting the task enqueues erasures for BOTH pushed revisions in the
 	// shared erasure outbox, inside the delete transaction.
-	if err := store.DeleteTask(ctx, "task_paperwork_01"); err != nil {
+	if err := store.DeleteTask(ctx, "task_paperwork_01", 2); err != nil {
 		t.Fatal(err)
 	}
 	pending, err := store.PendingSyncErasures(ctx)
@@ -81,7 +104,7 @@ func TestNeverPushedTaskDeletesWithoutErasures(t *testing.T) {
 	if err := store.AddTask(ctx, TaskRecord{TaskID: "task_local_only", Title: "Never synced", DurationMinutes: 30, Status: TaskStatusOpen, CreatedAt: created}); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.DeleteTask(ctx, "task_local_only"); err != nil {
+	if err := store.DeleteTask(ctx, "task_local_only", 1); err != nil {
 		t.Fatal(err)
 	}
 	pending, err := store.PendingSyncErasures(ctx)

@@ -70,6 +70,29 @@ describe("SleepImportPanel", () => {
     expect(onImported).toHaveBeenCalledTimes(1);
   });
 
+  it("releases selected file contents after a successful commit", async () => {
+    const preview = vi.fn(async () => readyReport);
+    const commit = vi.fn(async () => ({
+      ...readyReport,
+      message: "The commit completed without retaining the selected file.",
+    }));
+    (globalThis as { go?: unknown }).go = {
+      main: { App: { PreviewSleepImport: preview, ImportSleepData: commit } },
+    };
+    render(<SleepImportPanel onImported={vi.fn(async () => undefined)} />);
+
+    const file = new File(["{}"], "owner-history.json", { type: "application/json" });
+    Object.defineProperty(file, "text", { value: async () => "{}" });
+    fireEvent.change(screen.getByLabelText("Observation file"), { target: { files: [file] } });
+
+    const importButton = await screen.findByRole("button", { name: "Import 1 ready rows" });
+    fireEvent.click(importButton);
+    await waitFor(() => expect(commit).toHaveBeenCalledTimes(1));
+    expect(importButton).toBeDisabled();
+
+    fireEvent.click(importButton);
+    expect(commit).toHaveBeenCalledTimes(1);
+  });
   it("paginates large reports instead of rendering every row at once", async () => {
     const rows = Array.from({ length: 101 }, (_, index) => ({
       ...readyReport.rows[0],
@@ -98,5 +121,44 @@ describe("SleepImportPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Next rows" }));
     expect(await screen.findByText("Rows 101-101 of 101")).toBeVisible();
     expect(screen.getByText("fitbit-owner-101")).toBeVisible();
+  });
+
+  it("uses a native one-use token without reading file contents in the renderer", async () => {
+    const nativePreview = vi.fn(async () => ({
+      ...readyReport,
+      importToken: "sleep_import_token",
+      canceled: false,
+    }));
+    const nativeCommit = vi.fn(async () => ({
+      ...readyReport,
+      dryRun: false,
+      readyRows: 0,
+      importedRows: 1,
+      canImport: false,
+      canceled: false,
+      message: "Imported 1 sleep observation.",
+      rows: [{ ...readyReport.rows[0], status: "imported", statusDetail: "Imported" }],
+    }));
+    (globalThis as { go?: unknown }).go = {
+      main: {
+        App: {
+          PreviewSleepImportFile: nativePreview,
+          ImportSleepDataFile: nativeCommit,
+        },
+      },
+    };
+    const onImported = vi.fn(async () => undefined);
+    render(<SleepImportPanel onImported={onImported} />);
+
+    expect(screen.queryByLabelText("Observation file")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Choose observation file" }));
+    expect(await screen.findByText(readyReport.message)).toBeVisible();
+    expect(nativePreview).toHaveBeenCalledWith();
+
+    fireEvent.click(screen.getByRole("button", { name: "Import 1 ready rows" }));
+    await waitFor(() =>
+      expect(nativeCommit).toHaveBeenCalledWith({ importToken: "sleep_import_token" }),
+    );
+    expect(onImported).toHaveBeenCalledTimes(1);
   });
 });

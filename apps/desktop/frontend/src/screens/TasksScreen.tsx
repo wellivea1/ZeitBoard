@@ -258,12 +258,15 @@ export function TasksScreen() {
                     busy={busy}
                     onToggleDone={(target) =>
                       runMutation(
-                        setTaskDone(target.taskId, target.status !== "done"),
+                        setTaskDone(target.taskId, target.revision, target.status !== "done"),
                         `${target.title} marked ${target.status === "done" ? "open" : "done"}.`,
                       )
                     }
                     onDelete={(target) =>
-                      runMutation(deleteTask(target.taskId), `Deleted ${target.title}.`)
+                      runMutation(
+                        deleteTask(target.taskId, target.revision),
+                        `Deleted ${target.title}.`,
+                      )
                     }
                     key={task.taskId}
                   />

@@ -423,7 +423,9 @@
   font-weight: 800;
 }
 
-.sleep-import-pagination {
+.sleep-import-pagination,
+.sleep-log-pagination,
+.sleep-history-pagination {
   display: flex;
   align-items: center;
   justify-content: flex-end;
@@ -432,6 +434,16 @@
   margin-bottom: var(--space-2);
   color: var(--muted);
   font-size: var(--type-label);
+}
+
+.sleep-log-pagination,
+.sleep-history-pagination {
+  margin-block: var(--space-2);
+}
+
+.sleep-log-pagination .button,
+.sleep-history-pagination .button {
+  min-height: 32px;
 }
 
 .sleep-import-pagination .button {

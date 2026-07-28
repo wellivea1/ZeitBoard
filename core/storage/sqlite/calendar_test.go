@@ -404,10 +404,10 @@ func TestProposalDecisionRejectsTaskCalendarAndSleepRaces(t *testing.T) {
 	}
 	input.SleepSnapshotHash = currentSleepFingerprint
 	input.DecisionID = "decision_calendar_stale_03"
-	task.Revision = 1
+	task.Revision = 2
 	task.UpdatedAt = created.Add(2 * time.Hour)
 	task.Title = "Changed planning review"
-	if err := store.UpdateTask(ctx, task); err != nil {
+	if err := store.UpdateTask(ctx, task, 1); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.DecideProposal(ctx, input, nil); !errors.Is(err, ErrStaleProposal) {

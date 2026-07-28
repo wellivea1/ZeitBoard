@@ -61,10 +61,7 @@ type BacktestRefusal struct {
 // walk-forward validation: for each prefix of the principal sleep episodes it
 // refits, predicts the onset of the next actual episode, and scores it.
 func (e RobustEstimator) Backtest(ctx context.Context, sessions []domain.SleepSession) (BacktestReport, error) {
-	config := e.Config
-	if config.MinimumEpisodes == 0 {
-		config = DefaultConfig()
-	}
+	config := configWithDefaults(e.Config)
 	// Use the full principal-episode history (no recency cap) as the timeline.
 	full, err := selectEpisodes(sessions, 0)
 	if err != nil {
@@ -76,6 +73,7 @@ func (e RobustEstimator) Backtest(ctx context.Context, sessions []domain.SleepSe
 			Message: "not enough principal sleep episodes to hold any out for validation",
 		}
 	}
+	normalized, configErr := normalizedConfig(config)
 	report := BacktestReport{}
 	var errors []float64
 	hits := 0
@@ -87,31 +85,22 @@ func (e RobustEstimator) Backtest(ctx context.Context, sessions []domain.SleepSe
 			return BacktestReport{}, ctx.Err()
 		default:
 		}
-		sub := full[:k]
-		asOf := full[k-1].Intervals[0].Interval.End.UTC
-		estimate, perr := e.Estimate(ctx, sub, asOf)
+		actual := full[k].Intervals[0].Interval.Start.UTC
+		if configErr != nil {
+			if appendBacktestRefusal(&report, k, actual, configErr) {
+				continue
+			}
+			return BacktestReport{}, configErr
+		}
+		modelEpisodes := boundedEpisodeWindow(full[:k], normalized.MaximumEpisodes)
+		model, perr := fitOrderedEpisodes(modelEpisodes, normalized)
 		if perr != nil {
-			if appendBacktestRefusal(&report, k, full[k].Intervals[0].Interval.Start.UTC, perr) {
+			if appendBacktestRefusal(&report, k, actual, perr) {
 				continue
 			}
 			return BacktestReport{}, perr
 		}
-		modelEpisodes, serr := selectEpisodes(sub, config.MaximumEpisodes)
-		if serr != nil {
-			if appendBacktestRefusal(&report, k, full[k].Intervals[0].Interval.Start.UTC, serr) {
-				continue
-			}
-			return BacktestReport{}, serr
-		}
-		fit, ferr := fitOnsetTrend(modelEpisodes)
-		if ferr != nil {
-			if appendBacktestRefusal(&report, k, full[k].Intervals[0].Interval.Start.UTC, ferr) {
-				continue
-			}
-			return BacktestReport{}, ferr
-		}
 
-		actual := full[k].Intervals[0].Interval.Start.UTC
 		lastModelOnset := modelEpisodes[len(modelEpisodes)-1].Intervals[0].Interval.Start.UTC
 		horizon, herr := cycleStep(actual.Sub(lastModelOnset))
 		if herr != nil {
@@ -120,19 +109,19 @@ func (e RobustEstimator) Backtest(ctx context.Context, sessions []domain.SleepSe
 			}
 			return BacktestReport{}, herr
 		}
-		predicted := fit.onsetAt(fit.lastIndex + horizon)
+		predicted := model.onset.onsetAt(model.onset.lastIndex + horizon)
 		absError := math.Abs(predicted.Sub(actual).Hours())
 		within := false
 		var windowStart, windowEnd time.Time
 		var windowWidth float64
-		if horizon >= 1 && horizon <= len(estimate.PredictedSleepWindows) {
-			window := estimate.PredictedSleepWindows[horizon-1].Interval
+		if horizon >= 1 && horizon <= normalized.ForecastCycles {
+			window, _ := forecastIntervals(model, normalized, horizon, modelEpisodes[len(modelEpisodes)-1].Intervals[0].Interval.Start.ZoneID)
 			within = window.Contains(actual)
 			windowStart = window.Start.UTC
 			windowEnd = window.End.UTC
 			windowWidth = window.Duration().Hours()
 		}
-		level := estimate.Confidence.Level
+		level := model.confidence.Level
 
 		report.Points = append(report.Points, BacktestPoint{
 			EpisodesUsed:     k,
@@ -192,40 +181,6 @@ func (e RobustEstimator) Backtest(ctx context.Context, sessions []domain.SleepSe
 type bucketAccumulator struct {
 	errors []float64
 	hits   int
-}
-
-// fitOnsetTrend is the shared robust sleep-onset fit: a Theil-Sen slope (hours per
-// cycle) and median intercept over cycle-indexed onsets. It is the single place the
-// linear model lives for prediction outside Estimate.
-type onsetFit struct {
-	base      time.Time
-	slope     float64
-	intercept float64
-	lastIndex int
-}
-
-func fitOnsetTrend(episodes []domain.SleepSession) (onsetFit, error) {
-	indices, err := cycleIndices(episodes)
-	if err != nil {
-		return onsetFit{}, err
-	}
-	base := episodes[0].Intervals[0].Interval.Start.UTC
-	x := make([]float64, len(episodes))
-	y := make([]float64, len(episodes))
-	for i, episode := range episodes {
-		x[i] = float64(indices[i])
-		y[i] = episode.Intervals[0].Interval.Start.UTC.Sub(base).Hours()
-	}
-	slope := theilSenSlope(x, y)
-	intercepts := make([]float64, len(x))
-	for i := range x {
-		intercepts[i] = y[i] - slope*x[i]
-	}
-	return onsetFit{base: base, slope: slope, intercept: median(intercepts), lastIndex: indices[len(indices)-1]}, nil
-}
-
-func (f onsetFit) onsetAt(index int) time.Time {
-	return f.base.Add(hoursDuration(f.intercept + f.slope*float64(index)))
 }
 
 func appendBacktestRefusal(report *BacktestReport, episodes int, actual time.Time, err error) bool {

@@ -20,9 +20,11 @@ import (
 )
 
 const (
-	backendSyncConfigFile = "backend-sync.json"
-	backendSyncTokenFile  = "backend-sync-token"
-	backendRequestTimeout = 10 * time.Second
+	backendSyncConfigFile   = "backend-sync.json"
+	backendSyncTokenFile    = "backend-sync-token"
+	backendRequestTimeout   = 10 * time.Second
+	maxSyncPushRecords      = 100
+	maxSyncPushRequestBytes = 1024 * 1024
 )
 
 var newBackendHTTPClient = func(insecureSkipVerify bool) *http.Client {
@@ -124,7 +126,8 @@ type syncEraseResponse struct {
 }
 
 type syncTombstonePayload struct {
-	RecordID string `json:"record_id"`
+	RecordID   string `json:"record_id"`
+	RecordKind string `json:"record_kind,omitempty"`
 }
 
 type serverOverviewResponse struct {
@@ -192,7 +195,7 @@ func (a *App) ConfigureBackendSync(input BackendSyncInput) (BackendSyncStatusDTO
 	if label == "" {
 		label = "ZeitBoard desktop"
 	}
-	client := newDesktopBackendClient(cfg, "")
+	client := a.newDesktopBackendClient(cfg, "")
 	var response registerDeviceResponse
 	err = client.postJSON(context.Background(), "/v1/devices", registerDeviceRequest{
 		EnrollmentSecret: input.EnrollmentSecret,
@@ -272,16 +275,17 @@ func (a *App) syncSleepRecords(ctx context.Context, cfg backendSyncConfig, token
 	if err != nil {
 		return counts, err
 	}
-	client := newDesktopBackendClient(cfg, token)
-	counts.pushed, err = a.pushSleepRecords(ctx, store, client)
+	client := a.newDesktopBackendClient(cfg, token)
+	sleepPushed, err := a.pushSleepRecords(ctx, store, client)
+	counts.pushed += sleepPushed
 	if err != nil {
 		return counts, err
 	}
 	tasksPushed, err := a.pushTaskRecords(ctx, store, client)
+	counts.pushed += tasksPushed
 	if err != nil {
 		return counts, err
 	}
-	counts.pushed += tasksPushed
 	counts.erasuresPushed, err = a.pushSleepErasures(ctx, store, client)
 	if err != nil {
 		return counts, err
@@ -293,30 +297,41 @@ func (a *App) syncSleepRecords(ctx context.Context, cfg backendSyncConfig, token
 // pushTaskRecords pushes the current revision of every locally-edited task as
 // an immutable revision record (ADR-0020).
 func (a *App) pushTaskRecords(ctx context.Context, store *storage.Store, client desktopBackendClient) (int, error) {
-	records, err := store.UnpushedTaskSyncRecords(ctx)
-	if err != nil {
-		return 0, err
+	totalPushed := 0
+	for {
+		records, err := store.PendingTaskSyncRecords(ctx, storage.MaxTaskSyncPageSize)
+		if err != nil {
+			return totalPushed, err
+		}
+		if len(records) == 0 {
+			return totalPushed, nil
+		}
+		pushRecords := make([]syncPushRecord, 0, len(records))
+		for _, record := range records {
+			pushRecords = append(pushRecords, syncPushRecord{
+				RecordID:  record.RecordID,
+				Kind:      "task",
+				CreatedAt: record.CreatedAt.UTC(),
+				Payload:   record.Payload,
+			})
+		}
+		for offset := 0; offset < len(records); {
+			batchLength, err := nextSyncPushBatchLength(pushRecords[offset:])
+			if err != nil {
+				return totalPushed, err
+			}
+			end := offset + batchLength
+			var response syncPushResponse
+			if err := client.postJSON(ctx, "/v1/sync/push", syncPushRequest{SchemaVersion: "v1", Records: pushRecords[offset:end]}, &response); err != nil {
+				return totalPushed, err
+			}
+			if err := store.MarkTaskSyncRecordsPushed(ctx, records[offset:end], time.Now().UTC()); err != nil {
+				return totalPushed, err
+			}
+			offset = end
+			totalPushed += batchLength
+		}
 	}
-	if len(records) == 0 {
-		return 0, nil
-	}
-	pushRecords := make([]syncPushRecord, 0, len(records))
-	for _, record := range records {
-		pushRecords = append(pushRecords, syncPushRecord{
-			RecordID:  record.RecordID,
-			Kind:      "task",
-			CreatedAt: record.CreatedAt.UTC(),
-			Payload:   record.Payload,
-		})
-	}
-	var response syncPushResponse
-	if err := client.postJSON(ctx, "/v1/sync/push", syncPushRequest{SchemaVersion: "v1", Records: pushRecords}, &response); err != nil {
-		return 0, err
-	}
-	if err := store.MarkTaskSyncRecordsPushed(ctx, records, time.Now().UTC()); err != nil {
-		return 0, err
-	}
-	return len(records), nil
 }
 
 // pushSleepErasures propagates local hard-deletes of already-pushed records to
@@ -345,30 +360,64 @@ func (a *App) pushSleepErasures(ctx context.Context, store *storage.Store, clien
 }
 
 func (a *App) pushSleepRecords(ctx context.Context, store *storage.Store, client desktopBackendClient) (int, error) {
-	records, err := store.UnpushedSleepSyncRecords(ctx)
-	if err != nil {
-		return 0, err
+	totalPushed := 0
+	for {
+		records, err := store.PendingSleepSyncRecords(ctx, storage.MaxSleepSyncPageSize)
+		if err != nil {
+			return totalPushed, err
+		}
+		if len(records) == 0 {
+			return totalPushed, nil
+		}
+		pushRecords := make([]syncPushRecord, 0, len(records))
+		for _, record := range records {
+			pushRecords = append(pushRecords, syncPushRecord{
+				RecordID:  record.RecordID,
+				Kind:      record.Kind,
+				CreatedAt: record.CreatedAt.UTC(),
+				Payload:   record.Payload,
+			})
+		}
+		for offset := 0; offset < len(records); {
+			batchLength, err := nextSyncPushBatchLength(pushRecords[offset:])
+			if err != nil {
+				return totalPushed, err
+			}
+			end := offset + batchLength
+			var response syncPushResponse
+			if err := client.postJSON(ctx, "/v1/sync/push", syncPushRequest{SchemaVersion: "v1", Records: pushRecords[offset:end]}, &response); err != nil {
+				return totalPushed, err
+			}
+			if err := store.MarkSleepSyncRecordsPushed(ctx, records[offset:end], time.Now().UTC()); err != nil {
+				return totalPushed, err
+			}
+			offset = end
+			totalPushed += batchLength
+		}
 	}
-	if len(records) == 0 {
-		return 0, nil
+}
+
+func nextSyncPushBatchLength(records []syncPushRecord) (int, error) {
+	limit := min(len(records), maxSyncPushRecords)
+	for end := 1; end <= limit; end++ {
+		data, err := json.Marshal(syncPushRequest{SchemaVersion: "v1", Records: records[:end]})
+		if err != nil {
+			return 0, err
+		}
+		if len(data) <= maxSyncPushRequestBytes {
+			continue
+		}
+		if end == 1 {
+			return 0, fmt.Errorf(
+				"sync record %q cannot be pushed: encoded request body is %d bytes; maximum is %d bytes",
+				records[0].RecordID,
+				len(data),
+				maxSyncPushRequestBytes,
+			)
+		}
+		return end - 1, nil
 	}
-	pushRecords := make([]syncPushRecord, 0, len(records))
-	for _, record := range records {
-		pushRecords = append(pushRecords, syncPushRecord{
-			RecordID:  record.RecordID,
-			Kind:      record.Kind,
-			CreatedAt: record.CreatedAt.UTC(),
-			Payload:   record.Payload,
-		})
-	}
-	var response syncPushResponse
-	if err := client.postJSON(ctx, "/v1/sync/push", syncPushRequest{SchemaVersion: "v1", Records: pushRecords}, &response); err != nil {
-		return 0, err
-	}
-	if err := store.MarkSleepSyncRecordsPushed(ctx, records, time.Now().UTC()); err != nil {
-		return 0, err
-	}
-	return len(records), nil
+	return limit, nil
 }
 
 func (a *App) pullSleepRecords(ctx context.Context, store *storage.Store, client desktopBackendClient, deviceID string) (int, int, int, error) {
@@ -380,11 +429,7 @@ func (a *App) pullSleepRecords(ctx context.Context, store *storage.Store, client
 	if err := client.getJSON(ctx, fmt.Sprintf("/v1/sync/pull?since=%d", cursor), &response); err != nil {
 		return 0, 0, 0, err
 	}
-	inserted := 0
-	skipped := 0
-	tombstonesApplied := 0
-	corrections := make([]storage.SleepCorrectionRecord, 0)
-	tombstones := make([]string, 0)
+	records := make([]storage.SyncPullRecord, 0, len(response.Records))
 	for _, record := range response.Records {
 		if record.DeviceID == deviceID {
 			continue
@@ -393,39 +438,25 @@ func (a *App) pullSleepRecords(ctx context.Context, store *storage.Store, client
 		case storage.SleepSyncKindObservation:
 			var observation storage.SleepObservationRecord
 			if err := json.Unmarshal(record.Payload, &observation); err != nil {
-				return inserted, skipped, tombstonesApplied, err
+				return 0, 0, 0, err
 			}
-			ok, err := store.InsertSyncedSleepObservation(ctx, observation)
-			if err != nil {
-				return inserted, skipped, tombstonesApplied, err
-			}
-			if ok {
-				inserted++
-			}
+			records = append(records, storage.SyncPullObservation{Observation: observation})
 		case storage.SleepSyncKindCorrection:
 			var correction storage.SleepCorrectionRecord
 			if err := json.Unmarshal(record.Payload, &correction); err != nil {
-				return inserted, skipped, tombstonesApplied, err
+				return 0, 0, 0, err
 			}
-			corrections = append(corrections, correction)
+			records = append(records, storage.SyncPullCorrection{Correction: correction})
 		case "task":
 			var task storage.TaskRecord
 			if err := json.Unmarshal(record.Payload, &task); err != nil {
-				return inserted, skipped, tombstonesApplied, err
+				return 0, 0, 0, err
 			}
-			applied, err := store.ApplySyncedTask(ctx, task)
-			if err != nil {
-				return inserted, skipped, tombstonesApplied, err
-			}
-			if applied {
-				inserted++
-			} else {
-				skipped++ // stale revision: local state is newer (LWW)
-			}
+			records = append(records, storage.SyncPullTask{Task: task})
 		case "tombstone":
 			var payload syncTombstonePayload
 			if err := json.Unmarshal(record.Payload, &payload); err != nil {
-				return inserted, skipped, tombstonesApplied, err
+				return 0, 0, 0, err
 			}
 			id := payload.RecordID
 			if id == "" {
@@ -433,48 +464,21 @@ func (a *App) pullSleepRecords(ctx context.Context, store *storage.Store, client
 			}
 			// Applied after observations/corrections so a tombstone in the
 			// same batch always wins over the record it erases.
-			tombstones = append(tombstones, id)
+			records = append(records, storage.SyncPullTombstone{
+				RecordID: id, RecordKind: payload.RecordKind,
+			})
 		default:
-			return inserted, skipped, tombstonesApplied, fmt.Errorf("unsupported synced record kind %q", record.Kind)
+			return 0, 0, 0, fmt.Errorf("unsupported synced record kind %q", record.Kind)
 		}
 	}
-	for _, correction := range corrections {
-		ok, err := store.InsertSyncedSleepCorrection(ctx, correction)
-		if errors.Is(err, storage.ErrSleepObservationMissing) {
-			// The target observation is not in the local store — usually
-			// because the user hard-erased it (ADR-0014). The correction is a
-			// permanent orphan for this device: skip it so a single
-			// unresolvable record can never wedge the pull cursor.
-			skipped++
-			continue
-		}
-		if err != nil {
-			return inserted, skipped, tombstonesApplied, err
-		}
-		if ok {
-			inserted++
-		}
+	result, err := store.ApplySyncPullPage(ctx, storage.SyncPullPage{
+		Cursor:  response.Cursor,
+		Records: records,
+	})
+	if err != nil {
+		return result.Applied, result.Skipped, result.TombstonesApplied, err
 	}
-	for _, id := range tombstones {
-		var applied bool
-		var err error
-		if storage.IsTaskRevisionID(id) {
-			// Any tombstoned revision means the task was deleted somewhere.
-			applied, err = store.EraseSyncedTaskRecord(ctx, id)
-		} else {
-			applied, err = store.EraseSyncedSleepRecord(ctx, id)
-		}
-		if err != nil {
-			return inserted, skipped, tombstonesApplied, err
-		}
-		if applied {
-			tombstonesApplied++
-		}
-	}
-	if err := store.SaveSleepSyncCursor(ctx, response.Cursor); err != nil {
-		return inserted, skipped, tombstonesApplied, err
-	}
-	return inserted, skipped, tombstonesApplied, nil
+	return result.Applied, result.Skipped, result.TombstonesApplied, nil
 }
 
 func (a *App) serverOverview(ctx context.Context, now time.Time) (OverviewDTO, bool) {
@@ -483,7 +487,7 @@ func (a *App) serverOverview(ctx context.Context, now time.Time) (OverviewDTO, b
 		return OverviewDTO{}, false
 	}
 	var response serverOverviewResponse
-	if err := newDesktopBackendClient(cfg, token).getJSON(ctx, "/v1/overview", &response); err != nil {
+	if err := a.newDesktopBackendClient(cfg, token).getJSON(ctx, "/v1/overview", &response); err != nil {
 		a.recordBackendSyncError(cfg, err)
 		return OverviewDTO{}, false
 	}
@@ -496,7 +500,7 @@ func (a *App) serverRhythm(ctx context.Context, now time.Time) (estimation.Rhyth
 		return estimation.RhythmProjection{}, false
 	}
 	var response serverRhythmResponse
-	if err := newDesktopBackendClient(cfg, token).getJSON(ctx, "/v1/rhythm", &response); err != nil {
+	if err := a.newDesktopBackendClient(cfg, token).getJSON(ctx, "/v1/rhythm", &response); err != nil {
 		a.recordBackendSyncError(cfg, err)
 		return estimation.RhythmProjection{}, false
 	}
@@ -594,9 +598,16 @@ type backendProposalRecord struct {
 	DecisionToken string          `json:"decisionToken"`
 }
 
+type backendProposalPagination struct {
+	Limit      int    `json:"limit"`
+	HasMore    bool   `json:"hasMore"`
+	NextCursor string `json:"nextCursor"`
+}
+
 type backendProposalListResponse struct {
-	SchemaVersion string                  `json:"schema_version"`
-	Proposals     []backendProposalRecord `json:"proposals"`
+	SchemaVersion string                    `json:"schema_version"`
+	Proposals     []backendProposalRecord   `json:"proposals"`
+	Pagination    backendProposalPagination `json:"pagination"`
 }
 
 type backendProposalPayload struct {
@@ -630,10 +641,20 @@ type BackendProposalDTO struct {
 	DecisionToken string   `json:"decisionToken,omitempty"`
 }
 
+type BackendProposalPaginationDTO struct {
+	Limit      int    `json:"limit"`
+	HasMore    bool   `json:"hasMore"`
+	NextCursor string `json:"nextCursor,omitempty"`
+}
+
 type BackendProposalsDTO struct {
-	Status    string               `json:"status"`
-	Message   string               `json:"message,omitempty"`
-	Proposals []BackendProposalDTO `json:"proposals"`
+	Status     string                       `json:"status"`
+	Message    string                       `json:"message,omitempty"`
+	Proposals  []BackendProposalDTO         `json:"proposals"`
+	Pagination BackendProposalPaginationDTO `json:"pagination"`
+}
+type BackendProposalPageInput struct {
+	Cursor string `json:"cursor"`
 }
 
 type BackendProposalDecisionInput struct {
@@ -646,6 +667,23 @@ type BackendProposalDecisionInput struct {
 // origins) with their one-use decision tokens so this device can decide them.
 // When sync is off it reports status "off" without touching the network.
 func (a *App) GetBackendProposals() (BackendProposalsDTO, error) {
+	return a.getBackendProposalPage("")
+}
+
+// GetBackendProposalPage returns the next opaque-cursor page without making
+// the frontend retain or reinterpret server row identifiers.
+func (a *App) GetBackendProposalPage(input BackendProposalPageInput) (BackendProposalsDTO, error) {
+	cursor := strings.TrimSpace(input.Cursor)
+	if cursor == "" {
+		return BackendProposalsDTO{}, errors.New("proposal cursor is required")
+	}
+	if len(cursor) > 512 {
+		return BackendProposalsDTO{}, errors.New("proposal cursor is too long")
+	}
+	return a.getBackendProposalPage(cursor)
+}
+
+func (a *App) getBackendProposalPage(cursor string) (BackendProposalsDTO, error) {
 	cfg, token, err := a.requireBackendSync()
 	if err != nil {
 		if !cfg.Enabled {
@@ -653,7 +691,7 @@ func (a *App) GetBackendProposals() (BackendProposalsDTO, error) {
 		}
 		return BackendProposalsDTO{Status: "error", Message: sanitizeBackendError(err), Proposals: []BackendProposalDTO{}}, nil
 	}
-	return a.fetchBackendProposals(context.Background(), cfg, token), nil
+	return a.fetchBackendProposals(a.applicationContext(), cfg, token, cursor), nil
 }
 
 // DecideBackendProposal approves or rejects a pending synced proposal via the
@@ -670,22 +708,27 @@ func (a *App) DecideBackendProposal(input BackendProposalDecisionInput) (Backend
 	if err != nil {
 		return BackendProposalsDTO{Status: "error", Message: sanitizeBackendError(err), Proposals: []BackendProposalDTO{}}, nil
 	}
-	client := newDesktopBackendClient(cfg, token)
+	client := a.newDesktopBackendClient(cfg, token)
 	payload := map[string]string{"decision": input.Decision, "token": input.Token}
 	var decided map[string]json.RawMessage
-	if err := client.postJSON(context.Background(), "/v1/proposals/"+url.PathEscape(input.ProposalID)+"/decision", payload, &decided); err != nil {
-		result := a.fetchBackendProposals(context.Background(), cfg, token)
+	ctx := a.applicationContext()
+	if err := client.postJSON(ctx, "/v1/proposals/"+url.PathEscape(input.ProposalID)+"/decision", payload, &decided); err != nil {
+		result := a.fetchBackendProposals(ctx, cfg, token, "")
 		result.Status = "error"
 		result.Message = sanitizeBackendError(err)
 		return result, nil
 	}
-	return a.fetchBackendProposals(context.Background(), cfg, token), nil
+	return a.fetchBackendProposals(ctx, cfg, token, ""), nil
 }
 
-func (a *App) fetchBackendProposals(ctx context.Context, cfg backendSyncConfig, token string) BackendProposalsDTO {
-	client := newDesktopBackendClient(cfg, token)
+func (a *App) fetchBackendProposals(ctx context.Context, cfg backendSyncConfig, token, cursor string) BackendProposalsDTO {
+	client := a.newDesktopBackendClient(cfg, token)
+	path := "/v1/proposals"
+	if cursor != "" {
+		path += "?" + url.Values{"cursor": []string{cursor}}.Encode()
+	}
 	var response backendProposalListResponse
-	if err := client.getJSON(ctx, "/v1/proposals", &response); err != nil {
+	if err := client.getJSON(ctx, path, &response); err != nil {
 		a.recordBackendSyncError(cfg, err)
 		return BackendProposalsDTO{Status: "error", Message: sanitizeBackendError(err), Proposals: []BackendProposalDTO{}}
 	}
@@ -693,7 +736,15 @@ func (a *App) fetchBackendProposals(ctx context.Context, cfg backendSyncConfig, 
 	for _, record := range response.Proposals {
 		proposals = append(proposals, backendProposalDTO(record))
 	}
-	return BackendProposalsDTO{Status: "ok", Proposals: proposals}
+	return BackendProposalsDTO{
+		Status:    "ok",
+		Proposals: proposals,
+		Pagination: BackendProposalPaginationDTO{
+			Limit:      response.Pagination.Limit,
+			HasMore:    response.Pagination.HasMore,
+			NextCursor: response.Pagination.NextCursor,
+		},
+	}
 }
 
 func backendProposalDTO(record backendProposalRecord) BackendProposalDTO {
@@ -801,10 +852,14 @@ func (a *App) backendSyncStatusCounts(cfg backendSyncConfig, counts syncCounts) 
 	pending := 0
 	cursor := int64(0)
 	if store, err := a.requireStore(); err == nil {
-		if records, err := store.UnpushedSleepSyncRecords(context.Background()); err == nil {
-			pending = len(records)
+		ctx := a.applicationContext()
+		if count, err := store.PendingSleepSyncRecordCount(ctx); err == nil {
+			pending += count
 		}
-		if value, err := store.SleepSyncCursor(context.Background()); err == nil {
+		if count, err := store.PendingTaskSyncRecordCount(ctx); err == nil {
+			pending += count
+		}
+		if value, err := store.SleepSyncCursor(ctx); err == nil {
 			cursor = value
 		}
 	}
@@ -914,11 +969,38 @@ func desktopDataDir() (string, error) {
 	return filepath.Join(base, "ZeitBoard"), nil
 }
 
-func newDesktopBackendClient(cfg backendSyncConfig, token string) desktopBackendClient {
+func (a *App) backendHTTPClient(insecureSkipVerify bool) *http.Client {
+	a.backendHTTPMu.Lock()
+	defer a.backendHTTPMu.Unlock()
+	if a.backendHTTPClients == nil {
+		a.backendHTTPClients = make(map[bool]*http.Client, 2)
+	}
+	client := a.backendHTTPClients[insecureSkipVerify]
+	if client == nil {
+		client = newBackendHTTPClient(insecureSkipVerify)
+		a.backendHTTPClients[insecureSkipVerify] = client
+	}
+	return client
+}
+
+func (a *App) closeBackendHTTPClients() {
+	a.backendHTTPMu.Lock()
+	clients := a.backendHTTPClients
+	a.backendHTTPClients = nil
+	a.backendHTTPMu.Unlock()
+
+	for _, client := range clients {
+		if client != nil {
+			client.CloseIdleConnections()
+		}
+	}
+}
+
+func (a *App) newDesktopBackendClient(cfg backendSyncConfig, token string) desktopBackendClient {
 	return desktopBackendClient{
 		baseURL: strings.TrimRight(cfg.BackendURL, "/"),
 		token:   token,
-		client:  newBackendHTTPClient(cfg.InsecureSkipVerify),
+		client:  a.backendHTTPClient(cfg.InsecureSkipVerify),
 	}
 }
 

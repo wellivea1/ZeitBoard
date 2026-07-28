@@ -6,6 +6,7 @@ import { findWailsMethod, type WailsRoot } from "./wailsBridge";
 
 export interface Task {
   taskId: string;
+  revision: number;
   title: string;
   durationMinutes: number;
   durationLabel: string;
@@ -23,6 +24,7 @@ export interface TasksData {
 
 export interface TaskInput {
   taskId?: string;
+  revision?: number;
   title: string;
   durationMinutes: number;
   earliestStartLocal?: string;
@@ -48,6 +50,10 @@ function str(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
+function positiveInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : undefined;
+}
+
 function normalizeTask(value: unknown): Task | undefined {
   if (!isRecord(value)) return undefined;
   const taskId = str(value.taskId);
@@ -59,12 +65,14 @@ function normalizeTask(value: unknown): Task | undefined {
     typeof value.durationMinutes === "number" && Number.isInteger(value.durationMinutes)
       ? value.durationMinutes
       : undefined;
+  const revision = positiveInteger(value.revision);
   if (
     !taskId ||
     !title ||
     !durationLabel ||
     !createdLabel ||
     !status ||
+    revision === undefined ||
     durationMinutes === undefined
   ) {
     return undefined;
@@ -73,6 +81,7 @@ function normalizeTask(value: unknown): Task | undefined {
   const afterWakeLabel = str(value.afterWakeLabel);
   return {
     taskId,
+    revision,
     title,
     durationMinutes,
     durationLabel,
@@ -142,15 +151,22 @@ export function updateTask(
 
 export function setTaskDone(
   taskId: string,
+  revision: number,
   done: boolean,
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<TasksData> {
-  return mutateTasks(root, ["SetTaskDone"], { taskId, done }, "The task status could not change.");
+  return mutateTasks(
+    root,
+    ["SetTaskDone"],
+    { taskId, revision, done },
+    "The task status could not change.",
+  );
 }
 
 export function deleteTask(
   taskId: string,
+  revision: number,
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<TasksData> {
-  return mutateTasks(root, ["DeleteTask"], { taskId }, "The task could not be deleted.");
+  return mutateTasks(root, ["DeleteTask"], { taskId, revision }, "The task could not be deleted.");
 }

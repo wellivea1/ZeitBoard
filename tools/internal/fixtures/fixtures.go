@@ -8,6 +8,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"path"
+	"sort"
+	"strings"
 	"time"
 )
 
@@ -20,11 +23,72 @@ var (
 	notice      = "Estimated windows are uncertain and are not medical advice."
 )
 
-// File is a generated fixture: its file name and encoded JSON bytes.
-type File struct {
+// ManifestEntry is the authoritative mapping from a generated fixture to its
+// contract version and validating schema.
+type ManifestEntry struct {
 	Version string
 	Name    string
-	Data    []byte
+	Schema  string
+}
+
+// GeneratedPath returns the repository-relative path owned by this entry.
+func (entry ManifestEntry) GeneratedPath() string {
+	return path.Join("testdata", entry.Version, entry.Name)
+}
+
+// File is a generated fixture and its manifest metadata.
+type File struct {
+	ManifestEntry
+	Data []byte
+}
+
+type fixtureID string
+
+type fixtureSpec struct {
+	id fixtureID
+	ManifestEntry
+}
+
+var fixtureManifest = []fixtureSpec{
+	{"v1/observations", ManifestEntry{Version: "v1", Name: "observations.json", Schema: "observation-set.schema.json"}},
+	{"v1/corrections", ManifestEntry{Version: "v1", Name: "corrections.json", Schema: "correction-set.schema.json"}},
+	{"v1/sleep-data-export", ManifestEntry{Version: "v1", Name: "sleep-data-export.json", Schema: "sleep-data-export.schema.json"}},
+	{"v1/sync-batch", ManifestEntry{Version: "v1", Name: "sync-batch.json", Schema: "sync-batch.schema.json"}},
+	{"v1/sync-erase", ManifestEntry{Version: "v1", Name: "sync-erase.json", Schema: "sync-erase.schema.json"}},
+	{"v1/task-set", ManifestEntry{Version: "v1", Name: "task-set.json", Schema: "task-set.schema.json"}},
+	{"v1/calendar-event-set", ManifestEntry{Version: "v1", Name: "calendar-event-set.json", Schema: "calendar-event-set.schema.json"}},
+	{"v1/medication-set", ManifestEntry{Version: "v1", Name: "medication-set.json", Schema: "medication-set.schema.json"}},
+	{"v1/medication-event-set", ManifestEntry{Version: "v1", Name: "medication-event-set.json", Schema: "medication-event-set.schema.json"}},
+	{"v1/medication-data-export", ManifestEntry{Version: "v1", Name: "medication-data-export.json", Schema: "medication-data-export.schema.json"}},
+	{"v1/rhythm-marker-set", ManifestEntry{Version: "v1", Name: "rhythm-marker-set.json", Schema: "rhythm-marker-set.schema.json"}},
+	{"v1/clinical-chart-request", ManifestEntry{Version: "v1", Name: "clinical-chart-request.json", Schema: "clinical-chart-request.schema.json"}},
+	{"v1/assistant-action", ManifestEntry{Version: "v1", Name: "assistant-action.json", Schema: "assistant-action.schema.json"}},
+	{"v1/direct-proposal-request", ManifestEntry{Version: "v1", Name: "direct-proposal-request.json", Schema: "direct-proposal-request.schema.json"}},
+	{"v1/phase-estimate", ManifestEntry{Version: "v1", Name: "phase-estimate.json", Schema: "phase-estimate.schema.json"}},
+	{"v1/phase-estimate-refused", ManifestEntry{Version: "v1", Name: "phase-estimate-refused.json", Schema: "phase-estimate.schema.json"}},
+	{"v1/schedule-request", ManifestEntry{Version: "v1", Name: "schedule-request.json", Schema: "schedule-request.schema.json"}},
+	{"v1/schedule-proposals", ManifestEntry{Version: "v1", Name: "schedule-proposals.json", Schema: "schedule-proposals.schema.json"}},
+	{"v1/proposal-response", ManifestEntry{Version: "v1", Name: "proposal-response.json", Schema: "proposal-response.schema.json"}},
+	{"v1/share-profile-default-deny", ManifestEntry{Version: "v1", Name: "share-profile-default-deny.json", Schema: "share-profile.schema.json"}},
+	{"v1/share-profile-allowlisted", ManifestEntry{Version: "v1", Name: "share-profile-allowlisted.json", Schema: "share-profile.schema.json"}},
+	{"v1/trusted-view-default-deny", ManifestEntry{Version: "v1", Name: "trusted-view-default-deny.json", Schema: "trusted-view.schema.json"}},
+	{"v1/trusted-view", ManifestEntry{Version: "v1", Name: "trusted-view.json", Schema: "trusted-view.schema.json"}},
+	{"v1/overview", ManifestEntry{Version: "v1", Name: "overview.json", Schema: "overview.schema.json"}},
+	{"v1/rhythm", ManifestEntry{Version: "v1", Name: "rhythm.json", Schema: "rhythm.schema.json"}},
+	{"v1/accuracy", ManifestEntry{Version: "v1", Name: "accuracy.json", Schema: "accuracy.schema.json"}},
+	{"v2/medication-set", ManifestEntry{Version: "v2", Name: "medication-set.json", Schema: "medication-set.schema.json"}},
+	{"v2/medication-event-set", ManifestEntry{Version: "v2", Name: "medication-event-set.json", Schema: "medication-event-set.schema.json"}},
+	{"v2/medication-data-export", ManifestEntry{Version: "v2", Name: "medication-data-export.json", Schema: "medication-data-export.schema.json"}},
+}
+
+// Manifest returns a copy of the generated fixture registry in stable output
+// order. Callers cannot mutate the package's authoritative registry.
+func Manifest() []ManifestEntry {
+	entries := make([]ManifestEntry, len(fixtureManifest))
+	for i, spec := range fixtureManifest {
+		entries[i] = spec.ManifestEntry
+	}
+	return entries
 }
 
 func ts(t time.Time) string { return t.UTC().Format(time.RFC3339) }
@@ -1350,66 +1414,94 @@ func Build() ([]File, error) {
 		},
 	}
 
-	ordered := []struct {
-		name  string
-		value any
-	}{
-		{"observations.json", observationsFixture},
-		{"corrections.json", correctionsFixture},
-		{"sleep-data-export.json", sleepDataExportFixture},
-		{"sync-batch.json", syncBatchFixture},
-		{"sync-erase.json", syncEraseFixture},
-		{"task-set.json", taskSetFixture},
-		{"calendar-event-set.json", calendarEventSetFixture},
-		{"medication-set.json", medicationSetFixture},
-		{"medication-event-set.json", medicationEventSetFixture},
-		{"medication-data-export.json", medicationDataExportFixture},
-		{"rhythm-marker-set.json", rhythmMarkerSetFixture},
-		{"clinical-chart-request.json", clinicalChartRequestFixture},
-		{"assistant-action.json", assistantActionFixture},
-		{"direct-proposal-request.json", directProposalRequestFixture},
-		{"phase-estimate.json", estimateFixture},
-		{"phase-estimate-refused.json", refusedEstimateFixture},
-		{"schedule-request.json", scheduleRequestFixture},
-		{"schedule-proposals.json", scheduleProposalsFixture},
-		{"proposal-response.json", directProposalResponseFixture},
-		{"share-profile-default-deny.json", shareProfileDefaultDeny},
-		{"share-profile-allowlisted.json", shareProfileAllowlisted},
-		{"trusted-view-default-deny.json", trustedViewDefaultDeny},
-		{"trusted-view.json", trustedViewFixture},
-		{"overview.json", overviewFixture},
-		{"rhythm.json", rhythmFixture},
-		{"accuracy.json", accuracyFixture},
-	}
-
-	files := make([]File, 0, len(ordered))
-	for _, item := range ordered {
-		data, err := encode(item.value)
-		if err != nil {
-			return nil, fmt.Errorf("encode %s: %w", item.name, err)
-		}
-		files = append(files, File{Version: "v1", Name: item.name, Data: data})
-	}
-	v2Ordered := []struct {
-		name  string
-		value any
-	}{
-		{"medication-set.json", medicationSetFixtureV2},
-		{"medication-event-set.json", medicationEventSetFixtureV2},
-		{"medication-data-export.json", medicationDataExportFixtureV2},
-	}
-	for _, item := range v2Ordered {
-		data, err := encode(item.value)
-		if err != nil {
-			return nil, fmt.Errorf("encode v2/%s: %w", item.name, err)
-		}
-		files = append(files, File{Version: "v2", Name: item.name, Data: data})
-	}
-
 	if err := assertSafety(observationsFixture, trustedViewDefaultDeny, trustedViewFixture); err != nil {
 		return nil, err
 	}
+
+	values := map[fixtureID]any{
+		"v1/observations":               observationsFixture,
+		"v1/corrections":                correctionsFixture,
+		"v1/sleep-data-export":          sleepDataExportFixture,
+		"v1/sync-batch":                 syncBatchFixture,
+		"v1/sync-erase":                 syncEraseFixture,
+		"v1/task-set":                   taskSetFixture,
+		"v1/calendar-event-set":         calendarEventSetFixture,
+		"v1/medication-set":             medicationSetFixture,
+		"v1/medication-event-set":       medicationEventSetFixture,
+		"v1/medication-data-export":     medicationDataExportFixture,
+		"v1/rhythm-marker-set":          rhythmMarkerSetFixture,
+		"v1/clinical-chart-request":     clinicalChartRequestFixture,
+		"v1/assistant-action":           assistantActionFixture,
+		"v1/direct-proposal-request":    directProposalRequestFixture,
+		"v1/phase-estimate":             estimateFixture,
+		"v1/phase-estimate-refused":     refusedEstimateFixture,
+		"v1/schedule-request":           scheduleRequestFixture,
+		"v1/schedule-proposals":         scheduleProposalsFixture,
+		"v1/proposal-response":          directProposalResponseFixture,
+		"v1/share-profile-default-deny": shareProfileDefaultDeny,
+		"v1/share-profile-allowlisted":  shareProfileAllowlisted,
+		"v1/trusted-view-default-deny":  trustedViewDefaultDeny,
+		"v1/trusted-view":               trustedViewFixture,
+		"v1/overview":                   overviewFixture,
+		"v1/rhythm":                     rhythmFixture,
+		"v1/accuracy":                   accuracyFixture,
+		"v2/medication-set":             medicationSetFixtureV2,
+		"v2/medication-event-set":       medicationEventSetFixtureV2,
+		"v2/medication-data-export":     medicationDataExportFixtureV2,
+	}
+	return encodeFixtureManifest(fixtureManifest, values)
+}
+
+func encodeFixtureManifest(specs []fixtureSpec, values map[fixtureID]any) ([]File, error) {
+	files := make([]File, 0, len(specs))
+	seenIDs := make(map[fixtureID]struct{}, len(specs))
+	seenPaths := make(map[string]struct{}, len(specs))
+	for _, spec := range specs {
+		if spec.id == "" || spec.Version == "" || spec.Name == "" || spec.Schema == "" {
+			return nil, fmt.Errorf("fixture manifest contains incomplete entry for %q", spec.id)
+		}
+		if !validPathElement(spec.Version) || !validPathElement(spec.Name) || !validPathElement(spec.Schema) {
+			return nil, fmt.Errorf("fixture manifest entry %q contains a non-base path component", spec.id)
+		}
+		if !strings.HasSuffix(spec.Name, ".json") || !strings.HasSuffix(spec.Schema, ".schema.json") {
+			return nil, fmt.Errorf("fixture manifest entry %q has invalid fixture or schema suffix", spec.id)
+		}
+		if _, duplicate := seenIDs[spec.id]; duplicate {
+			return nil, fmt.Errorf("fixture manifest contains duplicate id %q", spec.id)
+		}
+		seenIDs[spec.id] = struct{}{}
+		generatedPath := spec.GeneratedPath()
+		if _, duplicate := seenPaths[generatedPath]; duplicate {
+			return nil, fmt.Errorf("fixture manifest contains duplicate generated path %q", generatedPath)
+		}
+		seenPaths[generatedPath] = struct{}{}
+
+		value, ok := values[spec.id]
+		if !ok {
+			return nil, fmt.Errorf("fixture manifest entry %q has no generated value", spec.id)
+		}
+		data, err := encode(value)
+		if err != nil {
+			return nil, fmt.Errorf("encode %s: %w", generatedPath, err)
+		}
+		files = append(files, File{ManifestEntry: spec.ManifestEntry, Data: data})
+	}
+
+	var unexpected []string
+	for id := range values {
+		if _, ok := seenIDs[id]; !ok {
+			unexpected = append(unexpected, string(id))
+		}
+	}
+	if len(unexpected) > 0 {
+		sort.Strings(unexpected)
+		return nil, fmt.Errorf("generated fixture values are absent from the manifest: %v", unexpected)
+	}
 	return files, nil
+}
+
+func validPathElement(value string) bool {
+	return value != "" && value != "." && value != ".." && !strings.ContainsAny(value, `/\`)
 }
 
 // encode matches the former Python json.dumps(indent=2) + "\n" output: two

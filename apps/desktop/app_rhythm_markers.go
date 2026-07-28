@@ -131,11 +131,18 @@ func (a *App) ExportRhythmMarkers() (RhythmMarkerExportDTO, error) {
 }
 
 func (a *App) rhythmMarkersAt(now time.Time) (RhythmMarkersDTO, error) {
+	return a.rhythmMarkersAtContext(a.applicationContext(), now)
+}
+
+func (a *App) rhythmMarkersAtContext(ctx context.Context, now time.Time) (RhythmMarkersDTO, error) {
 	store, err := a.requireStore()
 	if err != nil {
 		return RhythmMarkersDTO{}, err
 	}
-	records, err := store.ListRhythmMarkers(context.Background())
+	if ctx == nil {
+		ctx = a.applicationContext()
+	}
+	records, err := store.ListRhythmMarkers(ctx)
 	if err != nil {
 		return RhythmMarkersDTO{}, err
 	}

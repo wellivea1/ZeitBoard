@@ -7,11 +7,13 @@ import org.non24.planner.domain.HealthConnectAvailability
 import org.non24.planner.domain.HealthPermissionState
 import org.non24.planner.domain.MedicationEvent
 import org.non24.planner.domain.SleepCorrection
+import org.non24.planner.domain.SleepCorrectionReview
 import org.non24.planner.domain.SleepEpisode
 
 interface SleepRepository {
     val sourceEpisodes: StateFlow<List<SleepEpisode>>
-    val corrections: StateFlow<List<SleepCorrection>>
+    val activeCorrections: StateFlow<Map<String, SleepCorrection>>
+    val correctionReviews: StateFlow<List<SleepCorrectionReview>>
 
     suspend fun refresh()
 
@@ -38,6 +40,7 @@ interface HealthConnectRepository : SleepRepository {
     val availability: StateFlow<HealthConnectAvailability>
     val permissionState: StateFlow<HealthPermissionState>
     val requiredPermissions: Set<String>
+    val lastRefreshError: StateFlow<String?>
 
     suspend fun refreshPermissionState()
 

@@ -2,8 +2,11 @@ import { useState } from "react";
 
 import {
   downloadTranscriptionTemplate,
+  hasNativeSleepImport,
   importSleepData,
+  importNativeSleepData,
   previewSleepImport,
+  previewNativeSleepImport,
   type SleepImportInput,
   type SleepImportReport,
   type SleepImportRow,
@@ -12,6 +15,10 @@ import { notifySleepDataChanged } from "../data/sleepDataEvents";
 
 const maxImportBytes = 8 * 1024 * 1024;
 const importRowsPerPage = 100;
+
+type ImportSelection =
+  | { kind: "browser"; input: SleepImportInput }
+  | { kind: "native"; importToken: string };
 
 function ImportCounts({ report }: { report: SleepImportReport }) {
   return (
@@ -147,13 +154,14 @@ function ImportResults({ report }: { report: SleepImportReport }) {
 }
 
 export function SleepImportPanel({ onImported }: { onImported: () => Promise<void> }) {
-  const [input, setInput] = useState<SleepImportInput | null>(null);
+  const nativeImportAvailable = hasNativeSleepImport();
+  const [selection, setSelection] = useState<ImportSelection | null>(null);
   const [report, setReport] = useState<SleepImportReport | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   const chooseFile = async (file: File | undefined) => {
-    setInput(null);
+    setSelection(null);
     setReport(null);
     setError("");
     if (!file) return;
@@ -164,8 +172,27 @@ export function SleepImportPanel({ onImported }: { onImported: () => Promise<voi
     setBusy(true);
     try {
       const selected = { fileName: file.name, contents: await file.text() };
-      setInput(selected);
+      setSelection({ kind: "browser", input: selected });
       setReport(await previewSleepImport(selected));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not preview the import file.");
+      setSelection(null);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const chooseNativeFile = async () => {
+    setSelection(null);
+    setReport(null);
+    setError("");
+    setBusy(true);
+    try {
+      const selected = await previewNativeSleepImport();
+      if (selected.canceled) return;
+      if (!selected.importToken) throw new Error("Sleep import preview token is missing.");
+      setSelection({ kind: "native", importToken: selected.importToken });
+      setReport(selected);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not preview the import file.");
     } finally {
@@ -174,11 +201,15 @@ export function SleepImportPanel({ onImported }: { onImported: () => Promise<voi
   };
 
   const commit = async () => {
-    if (!input || !report?.canImport) return;
+    if (!selection || !report?.canImport) return;
     setBusy(true);
     setError("");
     try {
-      const committed = await importSleepData(input);
+      const committed =
+        selection.kind === "native"
+          ? await importNativeSleepData(selection.importToken)
+          : await importSleepData(selection.input);
+      setSelection(null);
       setReport(committed);
       if (committed.importedRows > 0) {
         notifySleepDataChanged();
@@ -186,6 +217,7 @@ export function SleepImportPanel({ onImported }: { onImported: () => Promise<voi
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not import sleep data.");
+      if (selection.kind === "native") setSelection(null);
     } finally {
       setBusy(false);
     }
@@ -206,19 +238,30 @@ export function SleepImportPanel({ onImported }: { onImported: () => Promise<voi
         record duplicates remain visible in the report.
       </p>
       <div className="sleep-import-controls">
-        <label className="sleep-import-picker">
-          Observation file
-          <input
-            type="file"
-            accept=".json,.csv,application/json,text/csv"
+        {nativeImportAvailable ? (
+          <button
+            className="button secondary"
+            type="button"
             disabled={busy}
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = "";
-              void chooseFile(file);
-            }}
-          />
-        </label>
+            onClick={() => void chooseNativeFile()}
+          >
+            Choose observation file
+          </button>
+        ) : (
+          <label className="sleep-import-picker">
+            Observation file
+            <input
+              type="file"
+              accept=".json,.csv,application/json,text/csv"
+              disabled={busy}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                void chooseFile(file);
+              }}
+            />
+          </label>
+        )}
         <button
           className="button secondary"
           type="button"
@@ -230,7 +273,7 @@ export function SleepImportPanel({ onImported }: { onImported: () => Promise<voi
         <button
           className="button primary"
           type="button"
-          disabled={busy || !report?.canImport}
+          disabled={busy || !selection || !report?.canImport}
           onClick={() => void commit()}
         >
           {busy ? "Checking..." : `Import ${report?.readyRows ?? 0} ready rows`}

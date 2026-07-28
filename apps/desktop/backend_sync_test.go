@@ -21,6 +21,16 @@ func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
 }
 
+type closeTrackingTransport struct {
+	closed *int
+}
+
+func (t closeTrackingTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	return nil, http.ErrServerClosed
+}
+
+func (t closeTrackingTransport) CloseIdleConnections() { (*t.closed)++ }
+
 func TestBackendSyncOffMakesNoNetworkCalls(t *testing.T) {
 	app := newTestApp(t)
 	calls := 0
@@ -51,6 +61,38 @@ func TestBackendSyncOffMakesNoNetworkCalls(t *testing.T) {
 	}
 	if calls != 0 {
 		t.Fatalf("sync off made %d network calls", calls)
+	}
+}
+
+func TestBackendHTTPClientsAreReusedAndClosed(t *testing.T) {
+	app := newTestApp(t)
+	previousClient := newBackendHTTPClient
+	created := 0
+	closed := 0
+	newBackendHTTPClient = func(bool) *http.Client {
+		created++
+		return &http.Client{Transport: closeTrackingTransport{closed: &closed}}
+	}
+	t.Cleanup(func() {
+		app.closeBackendHTTPClients()
+		newBackendHTTPClient = previousClient
+	})
+
+	strict := app.backendHTTPClient(false)
+	if again := app.backendHTTPClient(false); again != strict {
+		t.Fatal("strict backend HTTP client was not reused")
+	}
+	insecure := app.backendHTTPClient(true)
+	if insecure == strict || created != 2 {
+		t.Fatalf("backend client pools = strict %p insecure %p created %d", strict, insecure, created)
+	}
+
+	app.closeBackendHTTPClients()
+	if closed != 2 {
+		t.Fatalf("closed idle transports = %d, want 2", closed)
+	}
+	if replacement := app.backendHTTPClient(false); replacement == strict || created != 3 {
+		t.Fatalf("client cache was not reset after close: replacement %p created %d", replacement, created)
 	}
 }
 
@@ -379,6 +421,7 @@ func TestBackendProposalsListAndCrossDeviceDecision(t *testing.T) {
 		"answer": "Queued for approval.",
 	})
 	var decisions []map[string]string
+	var cursors []string
 	decided := false
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -386,6 +429,7 @@ func TestBackendProposalsListAndCrossDeviceDecision(t *testing.T) {
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(registerDeviceResponse{SchemaVersion: "v1", DeviceID: "device_desktop", Token: "proposal-token"})
 		case r.URL.Path == "/v1/proposals" && r.Method == http.MethodGet:
+			cursors = append(cursors, r.URL.Query().Get("cursor"))
 			record := map[string]any{
 				"proposalId": "proposal_abc123def456",
 				"actionId":   "propose_place_task",
@@ -401,7 +445,11 @@ func TestBackendProposalsListAndCrossDeviceDecision(t *testing.T) {
 			} else {
 				record["decisionToken"] = "one-use-token"
 			}
-			_ = json.NewEncoder(w).Encode(map[string]any{"schema_version": "v1", "proposals": []any{record}})
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"schema_version": "v1",
+				"proposals":      []any{record},
+				"pagination":     map[string]any{"limit": 50, "hasMore": true, "nextCursor": "opaque-next-page"},
+			})
 		case strings.HasSuffix(r.URL.Path, "/decision") && r.Method == http.MethodPost:
 			var body map[string]string
 			_ = json.NewDecoder(r.Body).Decode(&body)
@@ -421,6 +469,19 @@ func TestBackendProposalsListAndCrossDeviceDecision(t *testing.T) {
 	}
 	if list.Status != "ok" || len(list.Proposals) != 1 {
 		t.Fatalf("unexpected proposal list: %#v", list)
+	}
+	if list.Pagination.Limit != 50 || !list.Pagination.HasMore || list.Pagination.NextCursor != "opaque-next-page" {
+		t.Fatalf("proposal pagination metadata was not retained: %#v", list.Pagination)
+	}
+	nextPage, err := app.GetBackendProposalPage(BackendProposalPageInput{Cursor: list.Pagination.NextCursor})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if nextPage.Status != "ok" || len(nextPage.Proposals) != 1 {
+		t.Fatalf("unexpected next proposal page: %#v", nextPage)
+	}
+	if len(cursors) != 2 || cursors[0] != "" || cursors[1] != "opaque-next-page" {
+		t.Fatalf("proposal cursors = %#v", cursors)
 	}
 	proposal := list.Proposals[0]
 	if proposal.Status != "pending" || proposal.DecisionToken != "one-use-token" {
@@ -450,6 +511,9 @@ func TestBackendProposalsListAndCrossDeviceDecision(t *testing.T) {
 
 	if _, err := app.DecideBackendProposal(BackendProposalDecisionInput{ProposalID: "x", Decision: "applied", Token: "t"}); err == nil {
 		t.Fatal("invalid decision verbs must be rejected")
+	}
+	if _, err := app.GetBackendProposalPage(BackendProposalPageInput{}); err == nil {
+		t.Fatal("empty proposal cursor must be rejected")
 	}
 }
 
@@ -818,7 +882,8 @@ func TestTaskEditsPushRevisionsAndDeletePropagatesErasure(t *testing.T) {
 	}
 
 	// Edit + sync: exactly the new revision goes out.
-	if _, err := app.UpdateTask(TaskInput{TaskID: taskID, Title: "File paperwork (rescoped)", DurationMinutes: 30}); err != nil {
+	list, err = app.UpdateTask(TaskInput{TaskID: taskID, Revision: list.Tasks[0].Revision, Title: "File paperwork (rescoped)", DurationMinutes: 30})
+	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := app.SyncNow(); err != nil {
@@ -829,7 +894,8 @@ func TestTaskEditsPushRevisionsAndDeletePropagatesErasure(t *testing.T) {
 	}
 
 	// Delete + sync: both pushed revisions are erased server-side.
-	if _, err := app.DeleteTask(TaskActionInput{TaskID: taskID}); err != nil {
+	list, err = app.DeleteTask(TaskActionInput{TaskID: taskID, Revision: list.Tasks[0].Revision})
+	if err != nil {
 		t.Fatal(err)
 	}
 	status, err := app.SyncNow()
@@ -848,13 +914,13 @@ func TestPulledTaskRevisionsApplyLWWAndTombstoneDeletes(t *testing.T) {
 	app := newTestApp(t)
 	created := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
 	remote := storage.TaskRecord{
-		TaskID: "task_from_phone", Title: "Call clinic", DurationMinutes: 20,
+		TaskID: "phone_task", Title: "Call clinic", DurationMinutes: 20,
 		Status: storage.TaskStatusOpen, CreatedAt: created, Revision: 2, UpdatedAt: created.Add(time.Hour),
 	}
 	stale := remote
 	stale.Revision = 1
 	stale.Title = "Old title"
-	tombstonePayload := mustJSON(t, syncTombstonePayload{RecordID: "task_from_phone_r2"})
+	tombstonePayload := mustJSON(t, syncTombstonePayload{RecordID: "phone_task_r2", RecordKind: "task"})
 	phase := 0
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -864,13 +930,13 @@ func TestPulledTaskRevisionsApplyLWWAndTombstoneDeletes(t *testing.T) {
 		case "/v1/sync/pull":
 			if phase == 0 {
 				_ = json.NewEncoder(w).Encode(syncPullResponse{SchemaVersion: "v1", Cursor: 2, Records: []syncEnvelope{
-					{Seq: 1, RecordID: "task_from_phone_r2", Kind: "task", DeviceID: "phone_device", CreatedAt: remote.UpdatedAt, Payload: mustJSON(t, remote)},
-					{Seq: 2, RecordID: "task_from_phone_r1", Kind: "task", DeviceID: "phone_device", CreatedAt: created, Payload: mustJSON(t, stale)},
+					{Seq: 1, RecordID: "phone_task_r2", Kind: "task", DeviceID: "phone_device", CreatedAt: remote.UpdatedAt, Payload: mustJSON(t, remote)},
+					{Seq: 2, RecordID: "phone_task_r1", Kind: "task", DeviceID: "phone_device", CreatedAt: created, Payload: mustJSON(t, stale)},
 				}})
 				return
 			}
 			_ = json.NewEncoder(w).Encode(syncPullResponse{SchemaVersion: "v1", Cursor: 3, Records: []syncEnvelope{
-				{Seq: 3, RecordID: "task_from_phone_r2", Kind: "tombstone", DeviceID: "phone_device", CreatedAt: created.Add(2 * time.Hour), Payload: tombstonePayload},
+				{Seq: 3, RecordID: "phone_task_r2", Kind: "tombstone", DeviceID: "phone_device", CreatedAt: created.Add(2 * time.Hour), Payload: tombstonePayload},
 			}})
 		default:
 			http.NotFound(w, r)

@@ -7,12 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"non24.app/core/domain"
@@ -31,6 +33,8 @@ const (
 	deleteConfirm = "DELETE"
 )
 
+var saveSleepDataDialog = runtime.SaveFileDialog
+
 type App struct {
 	ctx                 context.Context
 	collector           *ingest.Manager
@@ -40,6 +44,10 @@ type App struct {
 	storeErr            error
 	configDir           string
 	calendarHTTPClient  calendarHTTPDoer
+	backendHTTPMu       sync.Mutex
+	backendHTTPClients  map[bool]*http.Client
+	sleepImportMu       sync.Mutex
+	sleepImportPending  map[string]pendingSleepImportFile
 	nowFn               func() time.Time
 	reminderMu          sync.RWMutex
 	reminderCancel      context.CancelFunc
@@ -160,6 +168,17 @@ type SleepDataExportDTO struct {
 	CorrectionCount  int    `json:"correctionCount"`
 }
 
+type SleepDataExportSummaryDTO struct {
+	FileName         string `json:"fileName"`
+	GeneratedLabel   string `json:"generatedLabel"`
+	ObservationCount int    `json:"observationCount"`
+	CorrectionCount  int    `json:"correctionCount"`
+	Preview          string `json:"preview"`
+	PreviewTruncated bool   `json:"previewTruncated"`
+	Saved            bool   `json:"saved"`
+	Canceled         bool   `json:"canceled"`
+}
+
 type SleepEntryDTO struct {
 	ObservationID           string               `json:"observationId"`
 	StartLocal              string               `json:"startLocal"`
@@ -231,6 +250,13 @@ func (a *App) currentTime() time.Time {
 	return time.Now()
 }
 
+func (a *App) applicationContext() context.Context {
+	if a.ctx != nil {
+		return a.ctx
+	}
+	return context.Background()
+}
+
 func openDesktopStore() (*storage.Store, error) {
 	base, err := os.UserConfigDir()
 	if err != nil {
@@ -265,6 +291,8 @@ func (a *App) startup(ctx context.Context) {
 func (a *App) shutdown(ctx context.Context) {
 	a.stopMedicationReminderService()
 	a.stopLocalAgent(ctx)
+	a.closeBackendHTTPClients()
+	a.clearPendingSleepImports()
 	_ = a.tray.Stop()
 	_ = a.collector.Stop(ctx)
 	if a.store != nil {
@@ -329,25 +357,96 @@ func (a *App) ListSleepEntries() (SleepEntriesDTO, error) {
 }
 
 func (a *App) ExportSleepData() (SleepDataExportDTO, error) {
-	store, err := a.requireStore()
-	if err != nil {
-		return SleepDataExportDTO{}, err
-	}
-	exported, err := store.ExportSleepData(context.Background())
-	if err != nil {
-		return SleepDataExportDTO{}, err
-	}
-	encoded, err := json.MarshalIndent(exported, "", "  ")
+	payload, err := a.sleepDataExportPayload(a.applicationContext())
 	if err != nil {
 		return SleepDataExportDTO{}, err
 	}
 	return SleepDataExportDTO{
-		FileName:         "zeitboard-sleep-export-" + exported.GeneratedAt.Format("20060102-150405") + ".json",
-		JSON:             string(encoded),
-		GeneratedLabel:   exported.GeneratedAt.Local().Format("Jan 2, 2006, 3:04 PM"),
-		ObservationCount: len(exported.ObservationSet.Observations),
-		CorrectionCount:  len(exported.CorrectionSet.Corrections),
+		FileName:         payload.fileName,
+		JSON:             string(payload.encoded),
+		GeneratedLabel:   payload.generatedLabel,
+		ObservationCount: payload.observationCount,
+		CorrectionCount:  payload.correctionCount,
 	}, nil
+}
+
+// SaveSleepDataExport keeps the unbounded contract payload on the Go side of
+// the Wails bridge. The renderer receives only bounded display metadata.
+func (a *App) SaveSleepDataExport() (SleepDataExportSummaryDTO, error) {
+	payload, err := a.sleepDataExportPayload(a.applicationContext())
+	if err != nil {
+		return SleepDataExportSummaryDTO{}, err
+	}
+	preview, truncated := utf8Preview(payload.encoded, 512)
+	summary := SleepDataExportSummaryDTO{
+		FileName:         payload.fileName,
+		GeneratedLabel:   payload.generatedLabel,
+		ObservationCount: payload.observationCount,
+		CorrectionCount:  payload.correctionCount,
+		Preview:          preview,
+		PreviewTruncated: truncated,
+	}
+	path, err := saveSleepDataDialog(a.applicationContext(), runtime.SaveDialogOptions{
+		Title:                "Export sleep data",
+		DefaultFilename:      payload.fileName,
+		CanCreateDirectories: true,
+		Filters: []runtime.FileFilter{{
+			DisplayName: "JSON files (*.json)",
+			Pattern:     "*.json",
+		}},
+	})
+	if err != nil {
+		return SleepDataExportSummaryDTO{}, fmt.Errorf("select sleep export destination: %w", err)
+	}
+	if path == "" {
+		summary.Canceled = true
+		return summary, nil
+	}
+	if err := writePrivateFileAtomic(path, payload.encoded); err != nil {
+		return SleepDataExportSummaryDTO{}, fmt.Errorf("write sleep export: %w", err)
+	}
+	summary.FileName = filepath.Base(path)
+	summary.Saved = true
+	return summary, nil
+}
+
+type sleepDataExportPayload struct {
+	fileName         string
+	encoded          []byte
+	generatedLabel   string
+	observationCount int
+	correctionCount  int
+}
+
+func (a *App) sleepDataExportPayload(ctx context.Context) (sleepDataExportPayload, error) {
+	store, err := a.requireStore()
+	if err != nil {
+		return sleepDataExportPayload{}, err
+	}
+	exported, err := store.ExportSleepData(ctx)
+	if err != nil {
+		return sleepDataExportPayload{}, err
+	}
+	encoded, err := json.MarshalIndent(exported, "", "  ")
+	if err != nil {
+		return sleepDataExportPayload{}, err
+	}
+	return sleepDataExportPayload{
+		fileName:         "zeitboard-sleep-export-" + exported.GeneratedAt.Format("20060102-150405") + ".json",
+		encoded:          encoded,
+		generatedLabel:   exported.GeneratedAt.Local().Format("Jan 2, 2006, 3:04 PM"),
+		observationCount: len(exported.ObservationSet.Observations),
+		correctionCount:  len(exported.CorrectionSet.Corrections),
+	}, nil
+}
+
+func utf8Preview(value []byte, maxRunes int) (string, bool) {
+	end := 0
+	for count := 0; end < len(value) && count < maxRunes; count++ {
+		_, size := utf8.DecodeRune(value[end:])
+		end += size
+	}
+	return string(value[:end]), end < len(value)
 }
 
 func (a *App) DeleteSleepObservation(input SleepDeleteInput) (SleepEntriesDTO, error) {
@@ -467,11 +566,16 @@ func (a *App) SuppressSleepEntry(input SleepSuppressInput) (SleepEntryDTO, error
 }
 
 func (a *App) GetOverview() (OverviewDTO, error) {
-	now := time.Now().UTC().Truncate(time.Minute)
-	if overview, ok := a.serverOverview(context.Background(), now); ok {
+	ctx := a.applicationContext()
+	now := a.currentTime().UTC().Truncate(time.Minute)
+	if overview, ok := a.serverOverview(ctx, now); ok {
 		return overview, nil
 	}
-	state, err := a.localEstimate(context.Background(), now)
+	return a.localOverview(ctx, now)
+}
+
+func (a *App) localOverview(ctx context.Context, now time.Time) (OverviewDTO, error) {
+	state, err := a.localEstimate(ctx, now)
 	if err != nil {
 		return OverviewDTO{}, err
 	}
@@ -525,7 +629,7 @@ func (a *App) GetOverview() (OverviewDTO, error) {
 			return OverviewDTO{}, storeErr
 		}
 		fixedEvents, _, eventsErr := store.BusyDomainEvents(
-			context.Background(), currentAvailability.Interval.Start.UTC,
+			ctx, currentAvailability.Interval.Start.UTC,
 			currentAvailability.Interval.End.UTC, state.Estimate.AsOf.ZoneID,
 		)
 		if eventsErr != nil {
@@ -557,18 +661,23 @@ func (a *App) GetOverview() (OverviewDTO, error) {
 }
 
 func (a *App) GetRhythm() (estimation.RhythmProjection, error) {
-	now := time.Now().UTC().Truncate(time.Minute)
-	if rhythm, ok := a.serverRhythm(context.Background(), now); ok {
+	ctx := a.applicationContext()
+	now := a.currentTime().UTC().Truncate(time.Minute)
+	if rhythm, ok := a.serverRhythm(ctx, now); ok {
 		return rhythm, nil
 	}
-	state, err := a.localEstimate(context.Background(), now)
+	return a.localRhythm(ctx, now)
+}
+
+func (a *App) localRhythm(ctx context.Context, now time.Time) (estimation.RhythmProjection, error) {
+	state, err := a.localEstimate(ctx, now)
 	if err != nil {
 		return estimation.RhythmProjection{}, err
 	}
 	if state.Status != "estimated" {
 		return emptyRhythmProjection(state, now), nil
 	}
-	projection, err := (estimation.RobustEstimator{}).Project(context.Background(), state.Sessions, now)
+	projection, err := (estimation.RobustEstimator{}).Project(ctx, state.Sessions, now)
 	if err != nil {
 		return estimation.RhythmProjection{}, err
 	}
@@ -580,6 +689,7 @@ func (a *App) GetRhythm() (estimation.RhythmProjection, error) {
 
 type TaskInput struct {
 	TaskID                    string `json:"taskId,omitempty"`
+	Revision                  int    `json:"revision,omitempty"`
 	Title                     string `json:"title"`
 	DurationMinutes           int    `json:"durationMinutes"`
 	EarliestStartLocal        string `json:"earliestStartLocal,omitempty"`
@@ -591,6 +701,7 @@ type TaskInput struct {
 
 type TaskDTO struct {
 	TaskID          string `json:"taskId"`
+	Revision        int    `json:"revision"`
 	Title           string `json:"title"`
 	DurationMinutes int    `json:"durationMinutes"`
 	DurationLabel   string `json:"durationLabel"`
@@ -607,8 +718,9 @@ type TasksDTO struct {
 }
 
 type TaskActionInput struct {
-	TaskID string `json:"taskId"`
-	Done   bool   `json:"done,omitempty"`
+	TaskID   string `json:"taskId"`
+	Revision int    `json:"revision"`
+	Done     bool   `json:"done,omitempty"`
 }
 
 // AddTask stores a user-owned flexible task. Tasks are planning items the
@@ -653,29 +765,20 @@ func (a *App) UpdateTask(input TaskInput) (TasksDTO, error) {
 	if err != nil {
 		return TasksDTO{}, err
 	}
-	existing, err := store.ListTasks(context.Background())
+	existing, err := store.GetTask(context.Background(), input.TaskID)
 	if err != nil {
 		return TasksDTO{}, err
 	}
-	status := storage.TaskStatusOpen
-	created := time.Now().UTC()
-	found := false
-	for _, record := range existing {
-		if record.TaskID == input.TaskID {
-			status = record.Status
-			created = record.CreatedAt
-			found = true
-			break
-		}
+	if input.Revision != existing.Revision {
+		return TasksDTO{}, storage.ErrTaskRevisionConflict
 	}
-	if !found {
-		return TasksDTO{}, storage.ErrTaskNotFound
-	}
-	record, err := taskRecordFromInput(input, input.TaskID, created, status)
+	record, err := taskRecordFromInput(input, input.TaskID, existing.CreatedAt, existing.Status)
 	if err != nil {
 		return TasksDTO{}, err
 	}
-	if err := store.UpdateTask(context.Background(), record); err != nil {
+	record.Revision = input.Revision + 1
+	record.UpdatedAt = time.Now().UTC()
+	if err := store.UpdateTask(context.Background(), record, input.Revision); err != nil {
 		return TasksDTO{}, err
 	}
 	return a.ListTasks()
@@ -690,7 +793,7 @@ func (a *App) SetTaskDone(input TaskActionInput) (TasksDTO, error) {
 	if input.Done {
 		status = storage.TaskStatusDone
 	}
-	if err := store.SetTaskStatus(context.Background(), input.TaskID, status); err != nil {
+	if err := store.SetTaskStatus(context.Background(), input.TaskID, status, input.Revision); err != nil {
 		return TasksDTO{}, err
 	}
 	return a.ListTasks()
@@ -701,7 +804,7 @@ func (a *App) DeleteTask(input TaskActionInput) (TasksDTO, error) {
 	if err != nil {
 		return TasksDTO{}, err
 	}
-	if err := store.DeleteTask(context.Background(), input.TaskID); err != nil {
+	if err := store.DeleteTask(context.Background(), input.TaskID, input.Revision); err != nil {
 		return TasksDTO{}, err
 	}
 	return a.ListTasks()
@@ -754,6 +857,7 @@ func taskDTO(record storage.TaskRecord) TaskDTO {
 		DurationMinutes: record.DurationMinutes,
 		DurationLabel:   formatDuration(time.Duration(record.DurationMinutes) * time.Minute),
 		Status:          record.Status,
+		Revision:        record.Revision,
 		CreatedLabel:    "Added " + record.CreatedAt.Local().Format("Jan 2"),
 	}
 	switch {
@@ -886,10 +990,11 @@ func refusalDTO(refusal *estimation.EstimationRefusal, fallback string) *Refusal
 }
 
 func (a *App) listSleepEntriesWithStore(ctx context.Context, store *storage.Store) (SleepEntriesDTO, error) {
-	observations, err := store.ListSleepObservations(ctx)
+	snapshot, err := store.ReadSleepSnapshot(ctx)
 	if err != nil {
 		return SleepEntriesDTO{}, err
 	}
+	observations := snapshot.Observations
 	if len(observations) == 0 {
 		return SleepEntriesDTO{
 			Status:  "empty",
@@ -898,18 +1003,9 @@ func (a *App) listSleepEntriesWithStore(ctx context.Context, store *storage.Stor
 			Entries: []SleepEntryDTO{},
 		}, nil
 	}
-	rawSessions, err := store.RawSleepSessions(ctx)
-	if err != nil {
-		return SleepEntriesDTO{}, err
-	}
-	correctedSessions, err := store.CorrectedSleepSessions(ctx)
-	if err != nil {
-		return SleepEntriesDTO{}, err
-	}
-	corrections, err := store.ListSleepCorrections(ctx)
-	if err != nil {
-		return SleepEntriesDTO{}, err
-	}
+	rawSessions := snapshot.RawSessions
+	correctedSessions := snapshot.CorrectedSessions
+	corrections := snapshot.Corrections
 	rawByID := map[string]domain.SleepSession{}
 	for _, session := range rawSessions {
 		rawByID[string(session.ID)] = session
@@ -947,16 +1043,11 @@ func (a *App) sleepEntryByID(observationID string) (SleepEntryDTO, error) {
 	if err != nil {
 		return SleepEntryDTO{}, err
 	}
-	entries, err := a.listSleepEntriesWithStore(context.Background(), store)
+	snapshot, err := store.ReadSleepObservationSnapshot(a.applicationContext(), observationID)
 	if err != nil {
 		return SleepEntryDTO{}, err
 	}
-	for _, entry := range entries.Entries {
-		if entry.ObservationID == observationID {
-			return entry, nil
-		}
-	}
-	return SleepEntryDTO{}, fmt.Errorf("sleep entry %s not found", observationID)
+	return sleepEntryDTO(snapshot.Observation, snapshot.RawSession, snapshot.CorrectedSession, snapshot.Corrections), nil
 }
 
 func sleepEntryDTO(observation storage.SleepObservationRecord, rawSession, correctedSession domain.SleepSession, corrections []storage.SleepCorrectionRecord) SleepEntryDTO {
@@ -1101,7 +1192,7 @@ func localPlanningAvailability(state localEstimateState, now time.Time) []domain
 
 func latestPrincipalSession(sessions []domain.SleepSession) (domain.SleepSession, bool) {
 	for i := len(sessions) - 1; i >= 0; i-- {
-		if sessions[i].Suppressed || sessions[i].IsNap || len(sessions[i].Intervals) == 0 {
+		if !sessions[i].IsPrincipalSleep() || len(sessions[i].Intervals) == 0 {
 			continue
 		}
 		return sessions[i], true
@@ -1211,10 +1302,7 @@ func unplacedReasonLabel(reason scheduling.UnplacedReason) string {
 }
 
 func classificationFromSession(session domain.SleepSession) string {
-	if session.IsNap {
-		return storage.SleepClassificationNap
-	}
-	return storage.SleepClassificationPrincipal
+	return string(session.EffectiveClassification())
 }
 
 func provenanceLabel(provenance storage.SleepObservationProvenance) string {

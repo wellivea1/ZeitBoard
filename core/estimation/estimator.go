@@ -68,29 +68,53 @@ func (e RobustEstimator) Estimate(ctx context.Context, sessions []domain.SleepSe
 		return domain.PhaseEstimate{}, ctx.Err()
 	default:
 	}
-	config := e.Config
-	if config.MinimumEpisodes == 0 {
-		config = DefaultConfig()
-	}
-	if config.UncertaintyScale == 0 {
-		config.UncertaintyScale = 1
-	}
-	if config.UncertaintyScale <= 0 {
-		return domain.PhaseEstimate{}, &EstimationRefusal{Code: RefusalUnsupportedInput, Message: "uncertainty scale must be positive"}
+	config, err := normalizedConfig(e.Config)
+	if err != nil {
+		return domain.PhaseEstimate{}, err
 	}
 	episodes, err := selectEpisodes(sessions, config.MaximumEpisodes)
 	if err != nil {
 		return domain.PhaseEstimate{}, err
 	}
-	if len(episodes) < config.MinimumEpisodes {
-		return domain.PhaseEstimate{}, &EstimationRefusal{
-			Code:    RefusalInsufficientData,
-			Message: fmt.Sprintf("need at least %d usable principal sleep episodes; found %d", config.MinimumEpisodes, len(episodes)),
-		}
+	estimate, _, err := estimateOrderedEpisodes(episodes, asOf, config)
+	return estimate, err
+}
+
+func configWithDefaults(config Config) Config {
+	if config.MinimumEpisodes == 0 {
+		return DefaultConfig()
 	}
+	return config
+}
+
+func normalizedConfig(config Config) (Config, error) {
+	config = configWithDefaults(config)
+	if config.UncertaintyScale == 0 {
+		config.UncertaintyScale = 1
+	}
+	if config.UncertaintyScale <= 0 {
+		return Config{}, &EstimationRefusal{Code: RefusalUnsupportedInput, Message: "uncertainty scale must be positive"}
+	}
+	return config, nil
+}
+
+// fitOnsetTrend is the shared bounded-window fit used by estimate generation and
+// holdout scoring.
+type onsetFit struct {
+	base           time.Time
+	slope          float64
+	intercept      float64
+	lastIndex      int
+	residualMAD    float64
+	durationMedian float64
+	durationMAD    float64
+	slopeChange    float64
+}
+
+func fitOnsetTrend(episodes []domain.SleepSession) (onsetFit, error) {
 	indices, err := cycleIndices(episodes)
 	if err != nil {
-		return domain.PhaseEstimate{}, err
+		return onsetFit{}, err
 	}
 	base := episodes[0].Intervals[0].Interval.Start.UTC
 	x := make([]float64, len(episodes))
@@ -102,13 +126,6 @@ func (e RobustEstimator) Estimate(ctx context.Context, sessions []domain.SleepSe
 		durations[i] = episode.Intervals[0].Interval.Duration().Hours()
 	}
 	slope := theilSenSlope(x, y)
-	period := hoursDuration(slope)
-	if period < config.MinimumPeriod || period > config.MaximumPeriod {
-		return domain.PhaseEstimate{}, &EstimationRefusal{
-			Code:    RefusalUnsupportedInput,
-			Message: fmt.Sprintf("observed cycle length %s is outside the prototype validation range", period.Round(time.Minute)),
-		}
-	}
 	intercepts := make([]float64, len(x))
 	for i := range x {
 		intercepts[i] = y[i] - slope*x[i]
@@ -118,74 +135,129 @@ func (e RobustEstimator) Estimate(ctx context.Context, sessions []domain.SleepSe
 	for i := range x {
 		residuals[i] = math.Abs(y[i] - (intercept + slope*x[i]))
 	}
-	residualMAD := median(residuals)
 	durationMedian := median(durations)
 	durationDeviations := make([]float64, len(durations))
 	for i, value := range durations {
 		durationDeviations[i] = math.Abs(value - durationMedian)
 	}
-	durationMAD := median(durationDeviations)
-	slopeChange := segmentedSlopeChange(x, y)
-	confidence := assessConfidence(episodes, residualMAD, slopeChange)
-	zoneID := episodes[len(episodes)-1].Intervals[0].Interval.Start.ZoneID
-	lastIndex := indices[len(indices)-1]
-	characteristic := base.Add(hoursDuration(intercept + slope*float64(lastIndex)))
-	characteristicInstant, err := domain.NewZonedInstant(characteristic, zoneID)
+	return onsetFit{
+		base:           base,
+		slope:          slope,
+		intercept:      intercept,
+		lastIndex:      indices[len(indices)-1],
+		residualMAD:    median(residuals),
+		durationMedian: durationMedian,
+		durationMAD:    median(durationDeviations),
+		slopeChange:    segmentedSlopeChange(x, y),
+	}, nil
+}
+
+func (f onsetFit) onsetAt(index int) time.Time {
+	return f.base.Add(hoursDuration(f.intercept + f.slope*float64(index)))
+}
+
+// estimateOrderedEpisodes estimates from an already filtered, chronological,
+// bounded principal-episode window. Keeping this path selection-free lets
+// backtesting walk one ordered history without rescanning each growing prefix.
+func estimateOrderedEpisodes(episodes []domain.SleepSession, asOf time.Time, config Config) (domain.PhaseEstimate, fittedEpisodeModel, error) {
+	model, err := fitOrderedEpisodes(episodes, config)
 	if err != nil {
-		return domain.PhaseEstimate{}, err
+		return domain.PhaseEstimate{}, fittedEpisodeModel{}, err
+	}
+	zoneID := episodes[len(episodes)-1].Intervals[0].Interval.Start.ZoneID
+	characteristicInstant, err := domain.NewZonedInstant(model.onset.onsetAt(model.onset.lastIndex), zoneID)
+	if err != nil {
+		return domain.PhaseEstimate{}, fittedEpisodeModel{}, err
 	}
 	asOfInstant, err := domain.NewZonedInstant(asOf.UTC(), zoneID)
 	if err != nil {
-		return domain.PhaseEstimate{}, err
+		return domain.PhaseEstimate{}, fittedEpisodeModel{}, err
 	}
 	id := estimateID(episodes, asOf)
 	estimate := domain.PhaseEstimate{
 		ID:                       id,
 		AsOf:                     asOfInstant,
 		CharacteristicSleepStart: characteristicInstant,
-		ObservedCycleLength:      period,
-		ObservedDriftPerCycle:    period - 24*time.Hour,
-		TypicalSleepDuration:     hoursDuration(durationMedian),
-		Confidence:               confidence,
+		ObservedCycleLength:      model.period,
+		ObservedDriftPerCycle:    model.period - 24*time.Hour,
+		TypicalSleepDuration:     hoursDuration(model.onset.durationMedian),
+		Confidence:               model.confidence,
 		AlgorithmVersion:         AlgorithmVersion,
 		CreatedAt:                time.Now().UTC(),
 	}
 	for _, episode := range episodes {
 		estimate.InputSessionIDs = append(estimate.InputSessionIDs, episode.ID)
 	}
-	baseUncertaintyHours := config.UncertaintyScale * math.Max(config.BaseUncertainty.Hours(), 1.4826*residualMAD)
 	for horizon := 1; horizon <= config.ForecastCycles; horizon++ {
-		center := base.Add(hoursDuration(intercept + slope*float64(lastIndex+horizon)))
-		uncertainty := hoursDuration(baseUncertaintyHours + config.UncertaintyScale*float64(horizon)*math.Max(0.25, residualMAD*0.35))
-		durationUncertainty := hoursDuration(config.UncertaintyScale * math.Max(0.25, 1.4826*durationMAD))
-		sleepStart, _ := domain.NewZonedInstant(center.Add(-uncertainty), zoneID)
-		sleepEnd, _ := domain.NewZonedInstant(center.Add(hoursDuration(durationMedian)).Add(uncertainty+durationUncertainty), zoneID)
-		wakeStart, _ := domain.NewZonedInstant(center.Add(hoursDuration(durationMedian)).Add(-uncertainty-durationUncertainty), zoneID)
-		wakeEnd, _ := domain.NewZonedInstant(center.Add(period).Add(uncertainty), zoneID)
+		sleepInterval, wakeInterval := forecastIntervals(model, config, horizon, zoneID)
 		estimate.PredictedSleepWindows = append(estimate.PredictedSleepWindows, domain.AvailabilityWindow{
 			ID:          domain.AvailabilityWindowID(fmt.Sprintf("%s-sleep-%d", id, horizon)),
 			Kind:        domain.AvailabilityPredictedSleep,
-			Interval:    domain.TimeRange{Start: sleepStart, End: sleepEnd},
-			Confidence:  confidence,
+			Interval:    sleepInterval,
+			Confidence:  model.confidence,
 			EstimateID:  id,
 			Explanation: "Robust projection from recent principal sleep-start trajectory; bounds widen with forecast distance.",
 		})
 		estimate.PredictedWakingWindows = append(estimate.PredictedWakingWindows, domain.AvailabilityWindow{
 			ID:          domain.AvailabilityWindowID(fmt.Sprintf("%s-wake-%d", id, horizon)),
 			Kind:        domain.AvailabilityPredictedWake,
-			Interval:    domain.TimeRange{Start: wakeStart, End: wakeEnd},
-			Confidence:  confidence,
+			Interval:    wakeInterval,
+			Confidence:  model.confidence,
 			EstimateID:  id,
 			Explanation: "Conservative waking window between uncertain wake and next projected sleep.",
 		})
 	}
-	return estimate, nil
+	return estimate, model, nil
+}
+
+type fittedEpisodeModel struct {
+	onset      onsetFit
+	period     time.Duration
+	confidence domain.InferenceConfidence
+}
+
+func fitOrderedEpisodes(episodes []domain.SleepSession, config Config) (fittedEpisodeModel, error) {
+	if len(episodes) < config.MinimumEpisodes {
+		return fittedEpisodeModel{}, &EstimationRefusal{
+			Code:    RefusalInsufficientData,
+			Message: fmt.Sprintf("need at least %d usable principal sleep episodes; found %d", config.MinimumEpisodes, len(episodes)),
+		}
+	}
+	fit, err := fitOnsetTrend(episodes)
+	if err != nil {
+		return fittedEpisodeModel{}, err
+	}
+	period := hoursDuration(fit.slope)
+	if period < config.MinimumPeriod || period > config.MaximumPeriod {
+		return fittedEpisodeModel{}, &EstimationRefusal{
+			Code:    RefusalUnsupportedInput,
+			Message: fmt.Sprintf("observed cycle length %s is outside the prototype validation range", period.Round(time.Minute)),
+		}
+	}
+	return fittedEpisodeModel{
+		onset:      fit,
+		period:     period,
+		confidence: assessConfidence(episodes, fit.residualMAD, fit.slopeChange),
+	}, nil
+}
+
+func forecastIntervals(model fittedEpisodeModel, config Config, horizon int, zoneID string) (domain.TimeRange, domain.TimeRange) {
+	fit := model.onset
+	baseUncertaintyHours := config.UncertaintyScale * math.Max(config.BaseUncertainty.Hours(), 1.4826*fit.residualMAD)
+	center := fit.onsetAt(fit.lastIndex + horizon)
+	uncertainty := hoursDuration(baseUncertaintyHours + config.UncertaintyScale*float64(horizon)*math.Max(0.25, fit.residualMAD*0.35))
+	durationUncertainty := hoursDuration(config.UncertaintyScale * math.Max(0.25, 1.4826*fit.durationMAD))
+	sleepStart, _ := domain.NewZonedInstant(center.Add(-uncertainty), zoneID)
+	sleepEnd, _ := domain.NewZonedInstant(center.Add(hoursDuration(fit.durationMedian)).Add(uncertainty+durationUncertainty), zoneID)
+	wakeStart, _ := domain.NewZonedInstant(center.Add(hoursDuration(fit.durationMedian)).Add(-uncertainty-durationUncertainty), zoneID)
+	wakeEnd, _ := domain.NewZonedInstant(center.Add(model.period).Add(uncertainty), zoneID)
+	return domain.TimeRange{Start: sleepStart, End: sleepEnd}, domain.TimeRange{Start: wakeStart, End: wakeEnd}
 }
 
 func selectEpisodes(sessions []domain.SleepSession, maximum int) ([]domain.SleepSession, error) {
 	var episodes []domain.SleepSession
 	for _, session := range sessions {
-		if session.IsNap || session.Suppressed {
+		if !session.IsPrincipalSleep() {
 			continue
 		}
 		if len(session.Intervals) == 0 {
@@ -202,10 +274,14 @@ func selectEpisodes(sessions []domain.SleepSession, maximum int) ([]domain.Sleep
 	sort.Slice(episodes, func(i, j int) bool {
 		return episodes[i].Intervals[0].Interval.Start.UTC.Before(episodes[j].Intervals[0].Interval.Start.UTC)
 	})
+	return boundedEpisodeWindow(episodes, maximum), nil
+}
+
+func boundedEpisodeWindow(episodes []domain.SleepSession, maximum int) []domain.SleepSession {
 	if maximum > 0 && len(episodes) > maximum {
-		episodes = episodes[len(episodes)-maximum:]
+		return episodes[len(episodes)-maximum:]
 	}
-	return episodes, nil
+	return episodes
 }
 
 func cycleIndices(episodes []domain.SleepSession) ([]int, error) {

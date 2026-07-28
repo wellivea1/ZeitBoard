@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   decideBackendProposal,
+  loadBackendProposalPage,
   loadBackendProposals,
+  normalizeBackendProposalPage,
   normalizeBackendProposals,
 } from "./backendProposals";
 
@@ -23,6 +25,7 @@ const backendList = {
       decisionToken: "one-use-token",
     },
   ],
+  pagination: { nextCursor: "cursor-older-01", hasMore: true },
 };
 
 describe("backend proposals", () => {
@@ -31,6 +34,26 @@ describe("backend proposals", () => {
     expect(data?.status).toBe("ok");
     expect(data?.proposals[0]?.confidence).toBe("Medium");
     expect(data?.proposals[0]?.decisionToken).toBe("one-use-token");
+    expect(data?.pagination).toEqual({ nextCursor: "cursor-older-01", hasMore: true });
+  });
+
+  it("defaults legacy lists to a terminal page and validates cursor invariants", () => {
+    expect(
+      normalizeBackendProposals({ status: "ok", proposals: backendList.proposals })?.pagination,
+    ).toEqual({ nextCursor: "", hasMore: false });
+    expect(
+      normalizeBackendProposalPage({
+        ...backendList,
+        pagination: { nextCursor: "", hasMore: true },
+      }),
+    ).toBeUndefined();
+    expect(
+      normalizeBackendProposalPage({
+        ...backendList,
+        pagination: { nextCursor: "cursor-without-more", hasMore: false },
+      }),
+    ).toBeUndefined();
+    expect(normalizeBackendProposalPage({ status: "ok", proposals: [] })).toBeUndefined();
   });
 
   it("rejects an off-enum status or malformed proposal", () => {
@@ -44,16 +67,29 @@ describe("backend proposals", () => {
   });
 
   it("is absent (off) when the Wails bridge is missing", async () => {
-    await expect(loadBackendProposals({})).resolves.toEqual({ status: "off", proposals: [] });
+    await expect(loadBackendProposals({})).resolves.toEqual({
+      status: "off",
+      proposals: [],
+      pagination: { nextCursor: "", hasMore: false },
+    });
   });
 
-  it("loads through the Wails method and decides with the one-use token", async () => {
+  it("loads both page methods and decides with the one-use token", async () => {
     const decisions: unknown[] = [];
+    const pageRequests: unknown[] = [];
     const root = {
       go: {
         main: {
           App: {
             GetBackendProposals: async () => backendList,
+            GetBackendProposalPage: async (input: unknown) => {
+              pageRequests.push(input);
+              return {
+                status: "ok",
+                proposals: [],
+                pagination: { nextCursor: "", hasMore: false },
+              };
+            },
             DecideBackendProposal: async (input: unknown) => {
               decisions.push(input);
               return {
@@ -68,6 +104,11 @@ describe("backend proposals", () => {
     const loaded = await loadBackendProposals(root);
     expect(loaded.status).toBe("ok");
     expect(loaded.proposals).toHaveLength(1);
+
+    const older = await loadBackendProposalPage("cursor-older-01", root);
+    expect(pageRequests).toEqual([{ cursor: "cursor-older-01" }]);
+    expect(older.status).toBe("ok");
+    expect(older.pagination).toEqual({ nextCursor: "", hasMore: false });
 
     const refreshed = await decideBackendProposal(
       { proposalId: "proposal_abc123def456", decision: "approved", token: "one-use-token" },
@@ -87,5 +128,6 @@ describe("backend proposals", () => {
     const result = await loadBackendProposals(root);
     expect(result.status).toBe("error");
     expect(result.proposals).toEqual([]);
+    expect(result.pagination).toEqual({ nextCursor: "", hasMore: false });
   });
 });

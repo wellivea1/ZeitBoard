@@ -2,10 +2,13 @@ package api
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -20,7 +23,10 @@ import (
 	syncmodel "non24.app/server/internal/sync"
 )
 
-const maxDeviceBodyBytes = 16 * 1024
+const (
+	maxDeviceBodyBytes    = 16 * 1024
+	proposalCursorVersion = byte(2)
+)
 
 type Server struct {
 	store            *store.Store
@@ -123,23 +129,120 @@ func (s *Server) handleAssistantMessage(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, resp)
 }
 
+type proposalListPagination struct {
+	Limit      int    `json:"limit"`
+	HasMore    bool   `json:"hasMore"`
+	NextCursor string `json:"nextCursor,omitempty"`
+}
+
+type proposalListResponse struct {
+	SchemaVersion string                 `json:"schema_version"`
+	Proposals     []store.ProposalRecord `json:"proposals"`
+	Pagination    proposalListPagination `json:"pagination"`
+}
+
 func (s *Server) handleListProposals(w http.ResponseWriter, r *http.Request) {
-	records, err := s.store.ListProposals(r.Context())
+	query, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid proposal list query")
+		return
+	}
+	cursor, limit, err := parseProposalListQuery(query)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid proposal list query")
+		return
+	}
+	listTime := s.now().UTC()
+	if cursor.AfterRowID > 0 && cursor.AsOf.After(listTime) {
+		writeError(w, http.StatusBadRequest, "invalid proposal list query")
+		return
+	}
+	page, err := s.store.ListProposalPage(r.Context(), cursor, limit, listTime)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "proposal list failed")
 		return
 	}
-	// Any enrolled device may decide a pending proposal (ADR-0016), so the
-	// list carries the one-use decision token for pending, unexpired items.
-	records, err = s.store.AttachDecisionTokens(r.Context(), records, s.now())
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "proposal list failed")
-		return
+	pagination := proposalListPagination{Limit: limit, HasMore: page.HasMore}
+	if page.HasMore {
+		pagination.NextCursor = encodeProposalCursor(page.NextCursor)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"schema_version": syncmodel.SchemaVersion,
-		"proposals":      records,
+	writeJSON(w, http.StatusOK, proposalListResponse{
+		SchemaVersion: syncmodel.SchemaVersion,
+		Proposals:     page.Records,
+		Pagination:    pagination,
 	})
+}
+
+func parseProposalListQuery(query map[string][]string) (store.ProposalPageCursor, int, error) {
+	for key, values := range query {
+		switch key {
+		case "cursor", "limit":
+		default:
+			return store.ProposalPageCursor{}, 0, errors.New("unsupported proposal list parameter")
+		}
+		if len(values) != 1 || values[0] == "" {
+			return store.ProposalPageCursor{}, 0, errors.New("proposal list parameters must have one value")
+		}
+	}
+
+	cursor := store.ProposalPageCursor{}
+	if values, ok := query["cursor"]; ok {
+		decoded, err := decodeProposalCursor(values[0])
+		if err != nil {
+			return store.ProposalPageCursor{}, 0, err
+		}
+		cursor = decoded
+	}
+
+	limit := store.DefaultProposalPageLimit
+	if values, ok := query["limit"]; ok {
+		raw := values[0]
+		for _, digit := range raw {
+			if digit < '0' || digit > '9' {
+				return store.ProposalPageCursor{}, 0, errors.New("proposal page limit must be decimal")
+			}
+		}
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed <= 0 || parsed > store.MaxProposalPageLimit || strconv.Itoa(parsed) != raw {
+			return store.ProposalPageCursor{}, 0, errors.New("proposal page limit is out of range")
+		}
+		limit = parsed
+	}
+	return cursor, limit, nil
+}
+
+func encodeProposalCursor(cursor store.ProposalPageCursor) string {
+	var raw [26]byte
+	raw[0] = proposalCursorVersion
+	if cursor.Active {
+		raw[1] = 1
+	}
+	binary.BigEndian.PutUint64(raw[2:10], uint64(cursor.AfterRowID))
+	binary.BigEndian.PutUint64(raw[10:18], uint64(cursor.ThroughRowID))
+	binary.BigEndian.PutUint64(raw[18:26], uint64(cursor.AsOf.UTC().UnixNano()))
+	return base64.RawURLEncoding.EncodeToString(raw[:])
+}
+
+func decodeProposalCursor(encoded string) (store.ProposalPageCursor, error) {
+	if len(encoded) != base64.RawURLEncoding.EncodedLen(26) {
+		return store.ProposalPageCursor{}, errors.New("invalid proposal cursor")
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(encoded)
+	if err != nil || len(raw) != 26 || raw[0] != proposalCursorVersion || raw[1] > 1 {
+		return store.ProposalPageCursor{}, errors.New("invalid proposal cursor")
+	}
+	afterRowID := binary.BigEndian.Uint64(raw[2:10])
+	throughRowID := binary.BigEndian.Uint64(raw[10:18])
+	asOfNanos := binary.BigEndian.Uint64(raw[18:26])
+	if afterRowID == 0 || afterRowID > uint64(1<<63-1) || throughRowID < afterRowID || throughRowID > uint64(1<<63-1) || asOfNanos == 0 || asOfNanos > uint64(1<<63-1) {
+		return store.ProposalPageCursor{}, errors.New("invalid proposal cursor")
+	}
+	return store.ProposalPageCursor{
+		AfterRowID:   int64(afterRowID),
+		ThroughRowID: int64(throughRowID),
+		Active:       raw[1] == 1,
+		AsOf:         time.Unix(0, int64(asOfNanos)).UTC(),
+	}, nil
 }
 
 func (s *Server) handleCreateProposal(w http.ResponseWriter, r *http.Request) {

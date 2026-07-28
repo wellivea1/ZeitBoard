@@ -159,7 +159,7 @@ func (a *App) GetAssistantStatus() (AssistantStatusDTO, error) {
 		}
 		return AssistantStatusDTO{Enabled: false, Message: sanitizeBackendError(err)}, nil
 	}
-	client := newDesktopBackendClient(cfg, token)
+	client := a.newDesktopBackendClient(cfg, token)
 	var response assistantStatusResponse
 	if err := client.getJSON(context.Background(), "/v1/status", &response); err != nil {
 		return AssistantStatusDTO{Enabled: false, Message: sanitizeBackendError(err)}, nil
@@ -202,7 +202,7 @@ func (a *App) SendAssistantMessage(input AssistantMessageInput) (AssistantReplyD
 	if err != nil {
 		return AssistantReplyDTO{}, err
 	}
-	client := newDesktopBackendClient(cfg, token)
+	client := a.newDesktopBackendClient(cfg, token)
 	var response assistantMessageResponse
 	request := assistantMessageRequest{SchemaVersion: "v1", Message: message, Context: planning}
 	if err := client.postJSON(ctx, "/v1/assistant/message", request, &response); err != nil {
@@ -310,7 +310,7 @@ func (a *App) assistantPlanningContext(ctx context.Context, scope assistantFactS
 	}
 
 	if scope.Medication {
-		medicationProjection, err := a.agentMedicationProjection()
+		medicationProjection, err := a.agentMedicationProjection(ctx)
 		if err != nil {
 			return payload, err
 		}
@@ -349,7 +349,7 @@ func (a *App) assistantPlanningContext(ctx context.Context, scope assistantFactS
 	}
 
 	if scope.Markers {
-		markerProjection, err := a.agentMarkerProjection()
+		markerProjection, err := a.agentMarkerProjection(ctx)
 		if err != nil {
 			return payload, err
 		}

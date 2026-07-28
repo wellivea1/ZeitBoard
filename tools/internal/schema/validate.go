@@ -14,48 +14,13 @@ import (
 	"strings"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
+
+	"non24.app/tools/internal/fixtures"
 )
 
 const (
 	metaschemaURL = "https://json-schema.org/draft/2020-12/schema"
 )
-
-// fixturePairs mirrors scripts/validate-contracts.sh, plus the refused
-// estimate fixture (validated against the same phase-estimate schema) for
-// fuller coverage.
-var v1FixturePairs = []struct{ schema, fixture string }{
-	{"observation-set.schema.json", "observations.json"},
-	{"correction-set.schema.json", "corrections.json"},
-	{"sleep-data-export.schema.json", "sleep-data-export.json"},
-	{"sync-batch.schema.json", "sync-batch.json"},
-	{"sync-erase.schema.json", "sync-erase.json"},
-	{"task-set.schema.json", "task-set.json"},
-	{"calendar-event-set.schema.json", "calendar-event-set.json"},
-	{"medication-set.schema.json", "medication-set.json"},
-	{"medication-event-set.schema.json", "medication-event-set.json"},
-	{"medication-data-export.schema.json", "medication-data-export.json"},
-	{"rhythm-marker-set.schema.json", "rhythm-marker-set.json"},
-	{"assistant-action.schema.json", "assistant-action.json"},
-	{"direct-proposal-request.schema.json", "direct-proposal-request.json"},
-	{"phase-estimate.schema.json", "phase-estimate.json"},
-	{"phase-estimate.schema.json", "phase-estimate-refused.json"},
-	{"schedule-request.schema.json", "schedule-request.json"},
-	{"schedule-proposals.schema.json", "schedule-proposals.json"},
-	{"proposal-response.schema.json", "proposal-response.json"},
-	{"share-profile.schema.json", "share-profile-default-deny.json"},
-	{"share-profile.schema.json", "share-profile-allowlisted.json"},
-	{"trusted-view.schema.json", "trusted-view-default-deny.json"},
-	{"trusted-view.schema.json", "trusted-view.json"},
-	{"overview.schema.json", "overview.json"},
-	{"rhythm.schema.json", "rhythm.json"},
-	{"accuracy.schema.json", "accuracy.json"},
-}
-
-var v2FixturePairs = []struct{ schema, fixture string }{
-	{"medication-set.schema.json", "medication-set.json"},
-	{"medication-event-set.schema.json", "medication-event-set.json"},
-	{"medication-data-export.schema.json", "medication-data-export.json"},
-}
 
 // Set holds the compiled contract schemas for a repository checkout.
 type Set struct {
@@ -74,8 +39,8 @@ func Load(root string) (*Set, error) {
 }
 
 func loadVersion(root, version string) (*Set, error) {
-	if version != "v1" && version != "v2" {
-		return nil, fmt.Errorf("unsupported contract version %q", version)
+	if !validContractVersion(version) {
+		return nil, fmt.Errorf("invalid contract version %q", version)
 	}
 	contractsDir := filepath.Join(root, "contracts", version)
 	entries, err := os.ReadDir(contractsDir)
@@ -108,6 +73,18 @@ func loadVersion(root, version string) (*Set, error) {
 		set.names = append(set.names, name)
 	}
 	return set, nil
+}
+
+func validContractVersion(version string) bool {
+	if len(version) < 2 || version[0] != 'v' {
+		return false
+	}
+	for _, char := range version[1:] {
+		if char < '0' || char > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Set) schema(name string) (*jsonschema.Schema, error) {
@@ -178,39 +155,52 @@ func (s *Set) ValidateFile(schemaName, path string) error {
 }
 
 // ValidateAll runs the full contract suite: metaschema checks, every fixture,
-// and the sample configuration.
+// and the sample configuration. Fixture paths, versions, and schemas come from
+// the generator manifest so generation and validation cannot silently diverge.
 func ValidateAll(root string) error {
 	var errs []error
-	suites := []struct {
-		version string
-		pairs   []struct{ schema, fixture string }
-	}{
-		{version: "v1", pairs: v1FixturePairs},
-		{version: "v2", pairs: v2FixturePairs},
+	sets := make(map[string]*Set)
+	generated, err := fixtures.Build()
+	if err != nil {
+		errs = append(errs, fmt.Errorf("build fixture manifest: %w", err))
+		return errors.Join(errs...)
 	}
-	for _, suite := range suites {
-		set, err := loadVersion(root, suite.version)
-		if err != nil {
-			errs = append(errs, err)
+	for _, entry := range generated {
+		if _, loaded := sets[entry.Version]; loaded {
 			continue
 		}
+		set, err := loadVersion(root, entry.Version)
+		if err != nil {
+			errs = append(errs, err)
+			sets[entry.Version] = nil
+			continue
+		}
+		sets[entry.Version] = set
 		if err := set.CheckMetaschemas(); err != nil {
 			errs = append(errs, err)
 		}
-		testdataDir := filepath.Join(root, "testdata", suite.version)
-		for _, pair := range suite.pairs {
-			if err := set.ValidateFile(pair.schema, filepath.Join(testdataDir, pair.fixture)); err != nil {
-				errs = append(errs, err)
-			}
+	}
+	for _, entry := range generated {
+		set := sets[entry.Version]
+		if set == nil {
+			continue
+		}
+		fixturePath := filepath.Join(root, filepath.FromSlash(entry.GeneratedPath()))
+		if err := set.ValidateFile(entry.Schema, fixturePath); err != nil {
+			errs = append(errs, err)
 		}
 	}
 
-	set, err := Load(root)
-	if err != nil {
-		errs = append(errs, err)
-		return errors.Join(errs...)
+	v1 := sets["v1"]
+	if v1 == nil {
+		var err error
+		v1, err = Load(root)
+		if err != nil {
+			errs = append(errs, err)
+			return errors.Join(errs...)
+		}
 	}
-	if err := set.ValidateFile("config.schema.json", filepath.Join(root, "config.example.json")); err != nil {
+	if err := v1.ValidateFile("config.schema.json", filepath.Join(root, "config.example.json")); err != nil {
 		errs = append(errs, err)
 	}
 

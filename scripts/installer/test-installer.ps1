@@ -25,6 +25,33 @@ function Assert-True { param($Value, $Message = 'expected true') if (-not $Value
 function Assert-Equal { param($Expected, $Actual) if ($Expected -ne $Actual) { throw "expected [$Expected], got [$Actual]" } }
 function Assert-Throws { param([scriptblock]$Body, $Message = 'expected an exception') $threw = $false; try { & $Body } catch { $threw = $true }; if (-not $threw) { throw $Message } }
 
+function Get-InstallerFunctionDefinition {
+    param(
+        [Parameter(Mandatory)][string]$ScriptName,
+        [Parameter(Mandatory)][string]$FunctionName
+    )
+    $scriptPath = Join-Path $PSScriptRoot $ScriptName
+    $tokens = $null
+    $parseErrors = $null
+    $ast = [Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$parseErrors)
+    if ($parseErrors.Count -gt 0) {
+        throw "Cannot import $FunctionName from ${ScriptName}: $($parseErrors[0].Message)"
+    }
+    $definition = $ast.Find({
+        param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $FunctionName
+    }, $true)
+    if (-not $definition) { throw "Function $FunctionName was not found in $ScriptName" }
+    [scriptblock]::Create($definition.Extent.Text)
+}
+
+# Import only pure helper definitions; do not execute either installer script.
+. (Get-InstallerFunctionDefinition -ScriptName 'update.ps1' -FunctionName 'Get-ZbInstalledReleaseMetadata')
+. (Get-InstallerFunctionDefinition -ScriptName 'update.ps1' -FunctionName 'Get-ZbUpdateDecision')
+. (Get-InstallerFunctionDefinition -ScriptName 'install-server.ps1' -FunctionName 'Test-ZbRestrictedAclPolicy')
+. (Get-InstallerFunctionDefinition -ScriptName 'install-server.ps1' -FunctionName 'Test-ZbAclPolicyMarker')
+
 function Remove-TestTree {
     param([Parameter(Mandatory)][string]$Path)
     $tempRoot = [IO.Path]::GetTempPath()
@@ -70,6 +97,147 @@ Test-Case 'Get-ZbPaths resolves the repo root to the working tree' {
     Assert-True (Test-Path (Join-Path $p.RepoRoot 'go.work')) 'repo root should contain go.work'
     Assert-True ($p.InstallDir -like '*Programs\ZeitBoard') 'install dir under Programs'
     Assert-True ($p.DataDir -like '*ZeitBoard') 'data dir named ZeitBoard'
+}
+
+Test-Case 'update no-op requires an exact verified release and ForceRebuild overrides it' {
+    $head = 'a' * 40
+    $exact = Get-ZbUpdateDecision `
+        -InstalledBuildVerified $true `
+        -InstalledCommit $head `
+        -InstalledComponents @('LOCAL-MCP', 'desktop') `
+        -HeadCommit $head `
+        -RequestedComponents @('desktop', 'local-mcp') `
+        -RepositoryClean $true
+    Assert-True (-not $exact.ShouldRebuild) 'an exact verified release should be the only no-op case'
+
+    $cases = @(
+        (Get-ZbUpdateDecision -InstalledBuildVerified $false -InstalledCommit $head -InstalledComponents @('desktop', 'local-mcp') -HeadCommit $head -RequestedComponents @('desktop', 'local-mcp') -RepositoryClean $true),
+        (Get-ZbUpdateDecision -InstalledBuildVerified $true -InstalledCommit ('b' * 40) -InstalledComponents @('desktop', 'local-mcp') -HeadCommit $head -RequestedComponents @('desktop', 'local-mcp') -RepositoryClean $true),
+        (Get-ZbUpdateDecision -InstalledBuildVerified $true -InstalledCommit '' -InstalledComponents @('desktop', 'local-mcp') -HeadCommit $head -RequestedComponents @('desktop', 'local-mcp') -RepositoryClean $true),
+        (Get-ZbUpdateDecision -InstalledBuildVerified $true -InstalledCommit $head -InstalledComponents @('desktop', 'local-mcp') -HeadCommit '' -RequestedComponents @('desktop', 'local-mcp') -RepositoryClean $true),
+        (Get-ZbUpdateDecision -InstalledBuildVerified $true -InstalledCommit $head -InstalledComponents @('desktop') -HeadCommit $head -RequestedComponents @('desktop', 'local-mcp') -RepositoryClean $true),
+        (Get-ZbUpdateDecision -InstalledBuildVerified $true -InstalledCommit $head -InstalledComponents @('desktop', 'local-mcp', 'local-mcp') -HeadCommit $head -RequestedComponents @('desktop', 'local-mcp') -RepositoryClean $true),
+        (Get-ZbUpdateDecision -InstalledBuildVerified $true -InstalledCommit $head -InstalledComponents @('desktop', 'local-mcp') -HeadCommit $head -RequestedComponents @('desktop', 'local-mcp') -RepositoryClean $false),
+        (Get-ZbUpdateDecision -InstalledBuildVerified $true -InstalledCommit $head -InstalledComponents @('desktop', 'local-mcp') -HeadCommit $head -RequestedComponents @('desktop', 'local-mcp') -RepositoryClean $true -ForceRebuild)
+    )
+    foreach ($decision in $cases) {
+        Assert-True $decision.ShouldRebuild 'any verification, commit, component, cleanliness, or force difference must rebuild'
+    }
+}
+
+Test-Case 'installed release metadata rejects missing, blank, and duplicate declarations' {
+    $root = Join-Path ([IO.Path]::GetTempPath()) ('zb-release-metadata-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $root -Force | Out-Null
+    try {
+        $version = Join-Path $root 'version.txt'
+        Set-ZbUtf8File -Path $version -Content "commit=abcdef1`ncomponents=desktop,local-mcp`n"
+        $metadata = Get-ZbInstalledReleaseMetadata -InstallDir $root
+        Assert-Equal 'abcdef1' $metadata.Commit
+        Assert-Equal 'desktop,local-mcp' ($metadata.Components -join ',')
+
+        Set-ZbUtf8File -Path $version -Content "commit=abcdef1`ncomponents=desktop,,local-mcp`n"
+        Assert-True ($null -eq (Get-ZbInstalledReleaseMetadata -InstallDir $root)) 'blank component entries must not qualify for no-op'
+        Set-ZbUtf8File -Path $version -Content "commit=abcdef1`ncomponents=desktop,local-mcp,local-mcp`n"
+        Assert-True ($null -eq (Get-ZbInstalledReleaseMetadata -InstallDir $root)) 'duplicate component entries must not qualify for no-op'
+        Set-ZbUtf8File -Path $version -Content "commit=abcdef1`ncommit=abcdef2`ncomponents=desktop,local-mcp`n"
+        Assert-True ($null -eq (Get-ZbInstalledReleaseMetadata -InstallDir $root)) 'duplicate commit declarations must not qualify for no-op'
+        Set-ZbUtf8File -Path $version -Content "commit=abcdef1`n"
+        Assert-True ($null -eq (Get-ZbInstalledReleaseMetadata -InstallDir $root)) 'missing component metadata must rebuild'
+    }
+    finally { Remove-TestTree -Path $root }
+}
+
+Test-Case 'server ACL policy is protected, exact, and inheritable for new descendants' {
+    function New-TestServerAcl {
+        param([switch]$Unprotected, [switch]$ExtraPrincipal, [switch]$MissingInheritance)
+        $acl = [Security.AccessControl.DirectorySecurity]::new()
+        $acl.SetAccessRuleProtection((-not $Unprotected), $false)
+        $inheritance = if ($MissingInheritance) {
+            [Security.AccessControl.InheritanceFlags]::None
+        }
+        else {
+            [Security.AccessControl.InheritanceFlags]::ContainerInherit -bor
+                [Security.AccessControl.InheritanceFlags]::ObjectInherit
+        }
+        foreach ($sidText in @('S-1-5-18', 'S-1-5-32-544')) {
+            $sid = [Security.Principal.SecurityIdentifier]::new($sidText)
+            $rule = [Security.AccessControl.FileSystemAccessRule]::new(
+                $sid,
+                [Security.AccessControl.FileSystemRights]::FullControl,
+                $inheritance,
+                [Security.AccessControl.PropagationFlags]::None,
+                [Security.AccessControl.AccessControlType]::Allow
+            )
+            [void]$acl.AddAccessRule($rule)
+        }
+        if ($ExtraPrincipal) {
+            $extraRule = [Security.AccessControl.FileSystemAccessRule]::new(
+                [Security.Principal.SecurityIdentifier]::new('S-1-5-11'),
+                [Security.AccessControl.FileSystemRights]::ReadAndExecute,
+                $inheritance,
+                [Security.AccessControl.PropagationFlags]::None,
+                [Security.AccessControl.AccessControlType]::Allow
+            )
+            [void]$acl.AddAccessRule($extraRule)
+        }
+        $acl
+    }
+
+    Assert-True (Test-ZbRestrictedAclPolicy -Acl (New-TestServerAcl)) 'exact protected OI/CI policy should be reusable without a recursive rewrite'
+    Assert-True (-not (Test-ZbRestrictedAclPolicy -Acl (New-TestServerAcl -Unprotected))) 'inherited root ACLs are not restricted enough'
+    Assert-True (-not (Test-ZbRestrictedAclPolicy -Acl (New-TestServerAcl -ExtraPrincipal))) 'extra principals must fail closed'
+    Assert-True (-not (Test-ZbRestrictedAclPolicy -Acl (New-TestServerAcl -MissingInheritance))) 'new descendants must inherit the restricted policy'
+}
+
+Test-Case 'server ACL skip marker proves the descendant reset completed' {
+    $root = Join-Path ([IO.Path]::GetTempPath()) ('zb-acl-marker-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $root -Force | Out-Null
+    try {
+        $marker = Join-Path $root '.zeitboard-acl-policy-v2'
+        Assert-True (-not (Test-ZbAclPolicyMarker -Path $marker)) 'a missing marker must force reconciliation'
+        Set-ZbUtf8File -Path $marker -Content "ZeitBoard server ACL policy v1`n"
+        Assert-True (-not (Test-ZbAclPolicyMarker -Path $marker)) 'an old marker must force reconciliation'
+        Set-ZbUtf8File -Path $marker -Content "ZeitBoard server ACL policy v2`n"
+        Assert-True (Test-ZbAclPolicyMarker -Path $marker) 'the current post-reset marker may skip reconciliation'
+    }
+    finally {
+        Remove-TestTree -Path $root
+    }
+}
+
+Test-Case 'server installer performs one post-stop safety walk and one ACL reconciliation' {
+    $text = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'install-server.ps1')
+    $stopOffset = $text.IndexOf('Stop-Service -Name $ServiceName -Force')
+    $walkOffset = $text.IndexOf('Assert-ZbSafeServerRoot -Path $InstallRoot | Out-Null')
+    $aclOffset = $text.IndexOf('Set-ZbRestrictedAcl -Path $InstallRoot')
+    $buildOffset = $text.IndexOf("Invoke-ZbStep -Name 'Build staged zeitboardd'")
+    $resetOffset = $text.IndexOf('& icacls.exe')
+    $markerOffset = $text.IndexOf('Set-ZbUtf8File -Path $policyMarker')
+    Assert-True ($buildOffset -ge 0 -and $buildOffset -lt $stopOffset) 'expensive build work should finish before service downtime'
+    Assert-True ($stopOffset -ge 0 -and $stopOffset -lt $walkOffset) 'an owned running service must stop before the safety walk'
+    Assert-True ($walkOffset -lt $aclOffset) 'the fail-closed safety walk must precede recursive ACL work'
+    Assert-Equal 1 ([regex]::Matches($text, '(?m)^\s*Assert-ZbSafeServerRoot -Path \$InstallRoot \| Out-Null\s*$').Count)
+    Assert-Equal 1 ([regex]::Matches($text, '(?m)^\s*Set-ZbRestrictedAcl -Path \$InstallRoot\s*$').Count)
+	Assert-Equal 1 ([regex]::Matches($text, '(?m)^\s*& icacls\.exe .*''/reset''.*''/T''').Count)
+	Assert-True ($text -match 'DirectorySecurity\]::new') 'reconciliation must replace the root DACL rather than preserve unknown explicit principals'
+	Assert-True ($text -notmatch "'/grant:r'") 'grant:r cannot remove unrelated explicit principals'
+    Assert-True ($text -match 'Test-ZbRestrictedAclPolicy -Acl \(Get-Acl') 'the root ACL policy must be checked before a skip'
+    Assert-True ($text -match '\$rootPolicyCurrent -and \(Test-ZbAclPolicyMarker') 'a root-only match must not skip descendant reconciliation'
+    Assert-True ($resetOffset -ge 0 -and $resetOffset -lt $markerOffset) 'the marker must be written only after descendant reset succeeds'
+}
+
+Test-Case 'update decision runs before all expensive or mutating phases' {
+    $text = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'update.ps1')
+    $decisionOffset = $text.IndexOf('$decision = Get-ZbUpdateDecision')
+    Assert-True ($decisionOffset -ge 0 -and $decisionOffset -lt $text.IndexOf('& npm ci')) 'decision must precede npm'
+    Assert-True ($decisionOffset -lt $text.IndexOf("Invoke-ZbStep -Name 'Run test suites")) 'decision must precede tests'
+    Assert-True ($decisionOffset -lt $text.IndexOf("Invoke-ZbStep -Name 'Build desktop'")) 'decision must precede builds'
+    Assert-True ($decisionOffset -lt $text.IndexOf("Backup-ZbData -Reason 'update'")) 'decision must precede backup'
+    Assert-True ($decisionOffset -lt $text.IndexOf('Start-ZbPublishTransaction')) 'decision must precede publication'
+    Assert-True ($text -match "restartArgs \+= '-ForceRebuild'") 'ForceRebuild must survive the post-pull restart'
+    Assert-True ($text.Contains("`$resume += ' -ForceRebuild'")) 'ForceRebuild must survive a failure resume hint'
+    Assert-True ($text -match '\[dry-run\]') 'dry-run must label the release-decision explanation'
+    Assert-True ($text -match 'live run would exit here only after fetch') 'dry-run must explain the conditional no-op without fetching'
 }
 
 Test-Case 'pins.psd1 is structurally valid (https + one integrity source each)' {

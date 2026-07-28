@@ -122,37 +122,13 @@ jobs:
           go vet ./...
 
   web:
-    name: Web build (${{ matrix.name }})
+    name: Web format, lint, types, tests, and builds
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: desktop
-            path: apps/desktop/frontend
-          - name: trusted-view
-            path: apps/trusted-web-prototype
     steps:
       - name: Check out repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
-      - name: Detect web package
-        id: detect
-        shell: bash
-        run: |
-          if [[ -f "${{ matrix.path }}/package.json" ]]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-            if [[ ! -f package-lock.json ]]; then
-              echo "The root package-lock.json is required for npm workspaces." >&2
-              exit 1
-            fi
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "${{ matrix.path }} is not present; web checks are skipped."
-          fi
-
       - name: Set up Node.js
-        if: steps.detect.outputs.present == 'true'
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
           node-version: "24.16.0"
@@ -160,20 +136,10 @@ jobs:
           cache-dependency-path: package-lock.json
 
       - name: Install locked dependencies
-        if: steps.detect.outputs.present == 'true'
         run: npm ci
 
-      - name: Test when configured
-        if: steps.detect.outputs.present == 'true'
-        run: npm --prefix "${{ matrix.path }}" run test --if-present
-
-      - name: Lint web workspaces
-        if: steps.detect.outputs.present == 'true' && matrix.name == 'desktop'
-        run: npm run lint
-
-      - name: Build
-        if: steps.detect.outputs.present == 'true'
-        run: npm --prefix "${{ matrix.path }}" run build
+      - name: Run canonical web checks
+        run: npm run check:web
 
   android:
     name: Android JVM tests, lint, and debug APK

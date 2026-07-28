@@ -45,8 +45,22 @@ $certBound = $PSBoundParameters.ContainsKey('TlsCertPath')
 $keyBound = $PSBoundParameters.ContainsKey('TlsKeyPath')
 $firewallBound = $PSBoundParameters.ContainsKey('Firewall')
 $script:ZbServiceCommitted = $false
+$script:ZbPublishStarted = $false
+$script:ZbStoppedExistingService = $false
 $lifecycleLock = $null
 $exitCode = 0
+$script:ZbExistingService = $null
+$script:ZbExistingServiceWasRunning = $false
+$script:ZbOriginalRegistration = $null
+$script:ZbServiceKey = $null
+$exe = Join-Path $InstallRoot 'zeitboardd.exe'
+$stageRoot = Join-Path ([IO.Path]::GetTempPath()) ('zeitboard-server-stage-' + [guid]::NewGuid().ToString('N'))
+$stageExe = Join-Path $stageRoot 'zeitboardd.exe'
+$stageConfig = Join-Path $stageRoot 'config.json'
+$serviceLog = Join-Path $InstallRoot 'logs\zeitboardd.log'
+$previousDir = Join-Path $InstallRoot 'previous'
+$previousExe = Join-Path $previousDir 'zeitboardd.exe'
+$previousConfig = Join-Path $previousDir 'config.json'
 
 function New-ZbSecretFile {
     param([Parameter(Mandatory)][string]$Path)
@@ -86,23 +100,81 @@ function Test-ZbLoopbackListen {
     return $Address -match '^(localhost|127\.0\.0\.1|\[::1\]):[0-9]+$'
 }
 
+function Test-ZbRestrictedAclPolicy {
+    param([Parameter(Mandatory)]$Acl)
+
+    if (-not $Acl.AreAccessRulesProtected) { return $false }
+    $rules = @($Acl.GetAccessRules($true, $true, [Security.Principal.SecurityIdentifier]))
+    if ($rules.Count -ne 2) { return $false }
+
+    $requiredSids = @('S-1-5-18', 'S-1-5-32-544')
+    $requiredInheritance = [Security.AccessControl.InheritanceFlags]::ContainerInherit -bor
+        [Security.AccessControl.InheritanceFlags]::ObjectInherit
+    foreach ($rule in $rules) {
+        if ($rule.IsInherited -or $requiredSids -notcontains $rule.IdentityReference.Value) { return $false }
+        if ($rule.AccessControlType -ne [Security.AccessControl.AccessControlType]::Allow) { return $false }
+        if ($rule.FileSystemRights -ne [Security.AccessControl.FileSystemRights]::FullControl) { return $false }
+        if ($rule.InheritanceFlags -ne $requiredInheritance) { return $false }
+        if ($rule.PropagationFlags -ne [Security.AccessControl.PropagationFlags]::None) { return $false }
+    }
+    return $true
+}
+
+function Test-ZbAclPolicyMarker {
+    param([Parameter(Mandatory)][string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $false }
+    try {
+        return (Get-Content -Raw -LiteralPath $Path).Trim() -eq 'ZeitBoard server ACL policy v2'
+    }
+    catch {
+        return $false
+    }
+}
+
 function Set-ZbRestrictedAcl {
     param([Parameter(Mandatory)][string]$Path)
+
+    # Assert-ZbSafeServerRoot must run exactly once before this helper. It owns
+    # the reparse-point walk; this helper only reconciles the DACL policy.
     New-Item -ItemType Directory -Force -Path $Path | Out-Null
-    $rootItem = Get-Item -LiteralPath $Path -Force -ErrorAction Stop
-    if (($rootItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
-        throw "Refusing recursive ACL replacement on a reparse-point server root: $Path"
+    $policyMarker = Join-Path $Path '.zeitboard-acl-policy-v2'
+    $rootPolicyCurrent = Test-ZbRestrictedAclPolicy -Acl (Get-Acl -LiteralPath $Path)
+    if ($rootPolicyCurrent -and (Test-ZbAclPolicyMarker -Path $policyMarker)) {
+        Write-ZbLog -Level ok -Message 'restricted root ACL and descendant-reset marker are current; recursive rewrite skipped'
+        return
     }
-    $nestedReparsePoints = @(Get-ChildItem -LiteralPath $Path -Force -Recurse -ErrorAction Stop | Where-Object {
-        ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0
-    })
-    if ($nestedReparsePoints.Count -gt 0) {
-        throw "Refusing recursive ACL replacement because the server root contains a reparse point: $($nestedReparsePoints[0].FullName)"
+
+    $acl = [Security.AccessControl.DirectorySecurity]::new()
+    $acl.SetAccessRuleProtection($true, $false)
+    $inheritance = [Security.AccessControl.InheritanceFlags]::ContainerInherit -bor
+        [Security.AccessControl.InheritanceFlags]::ObjectInherit
+    foreach ($sidText in @('S-1-5-18', 'S-1-5-32-544')) {
+        $rule = [Security.AccessControl.FileSystemAccessRule]::new(
+            [Security.Principal.SecurityIdentifier]::new($sidText),
+            [Security.AccessControl.FileSystemRights]::FullControl,
+            $inheritance,
+            [Security.AccessControl.PropagationFlags]::None,
+            [Security.AccessControl.AccessControlType]::Allow
+        )
+        [void]$acl.AddAccessRule($rule)
     }
-    & icacls.exe $Path '/inheritance:r' '/grant:r' '*S-1-5-18:(OI)(CI)F' '*S-1-5-32-544:(OI)(CI)F' '/T' '/C' | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to restrict ACLs on $Path (icacls exit $LASTEXITCODE)."
+    Set-Acl -LiteralPath $Path -AclObject $acl
+
+    # The marker is written only after this reset succeeds. An exact root DACL
+    # by itself cannot prove that older descendants lack explicit principals.
+    $children = @(Get-ChildItem -LiteralPath $Path -Force)
+    if ($children.Count -gt 0) {
+        & icacls.exe (Join-Path $Path '*') '/reset' '/T' '/C' | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to reset descendants under $Path (icacls exit $LASTEXITCODE)."
+        }
     }
+    if (-not (Test-ZbRestrictedAclPolicy -Acl (Get-Acl -LiteralPath $Path))) {
+        throw "Server-root ACL is not the exact protected SYSTEM/Administrators policy after reconciliation: $Path"
+    }
+    Set-ZbUtf8File -Path $policyMarker -Content "ZeitBoard server ACL policy v2`n"
+    Write-ZbLog -Level ok -Message 'installed the restricted root ACL and recorded a successful descendant reset'
 }
 
 function Invoke-ZbSc {
@@ -129,15 +201,74 @@ try {
         if (-not $elevated) {
             throw 'Registering a Windows service needs an elevated prompt. Re-run this script as Administrator.'
         }
-
-        Assert-ZbSafeServerRoot -Path $InstallRoot | Out-Null
         if ($ServiceName -notmatch '^[A-Za-z0-9_.-]+$') {
             throw 'ServiceName may contain only letters, digits, dot, underscore, and hyphen.'
         }
-
         if ($certBound -xor $keyBound) {
             throw '-TlsCertPath and -TlsKeyPath must be supplied together, including when clearing them.'
         }
+
+        $script:ZbExistingService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+        if ($script:ZbExistingService) {
+            Assert-ZbServiceOwned -ServiceName $ServiceName -ExpectedExecutable $exe
+        }
+    }
+
+    Invoke-ZbStep -Name 'Toolchain (Go)' -DryRun:$DryRun -ResumeHint $resume -Action { Assert-ZbGo -DryRun:$DryRun }
+
+    Invoke-ZbStep -Name 'Build staged zeitboardd' -DryRun:$DryRun -ResumeHint $resume -Action {
+        New-Item -ItemType Directory -Force -Path $stageRoot | Out-Null
+        Push-Location (Join-Path $paths.RepoRoot 'apps\server')
+        try { & go build -o $stageExe ./cmd/zeitboardd; if ($LASTEXITCODE -ne 0) { throw 'zeitboardd build failed.' } }
+        finally { Pop-Location }
+    }
+
+    Invoke-ZbStep -Name 'Stop owned service and secure install root' -DryRun:$DryRun -ResumeHint $resume -Action {
+        $currentService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+        if ($script:ZbExistingService) {
+            if (-not $currentService) { throw "Service '$ServiceName' disappeared during the staged build; refusing to continue." }
+            Assert-ZbServiceOwned -ServiceName $ServiceName -ExpectedExecutable $exe
+        }
+        elseif ($currentService) {
+            throw "Service '$ServiceName' appeared during the staged build; refusing to modify it."
+        }
+
+        $script:ZbExistingService = $currentService
+        if ($currentService) {
+            $script:ZbExistingServiceWasRunning = $currentService.Status -ne 'Stopped'
+            $script:ZbServiceKey = "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName"
+            $registration = Get-ItemProperty -LiteralPath $script:ZbServiceKey -ErrorAction Stop
+            $startToken = switch ([int]$registration.Start) {
+                2 {
+                    if ([int]$registration.DelayedAutoStart -eq 1) { 'delayed-auto' } else { 'auto' }
+                    break
+                }
+                3 { 'demand'; break }
+                4 { 'disabled'; break }
+                default { 'demand' }
+            }
+            $script:ZbOriginalRegistration = [pscustomobject]@{
+                BinPath = [string]$registration.ImagePath
+                Start = $startToken
+                Description = [string]$registration.Description
+            }
+        }
+
+        if ($script:ZbExistingServiceWasRunning) {
+            Stop-Service -Name $ServiceName -Force -ErrorAction Stop
+            $script:ZbStoppedExistingService = $true
+            $script:ZbExistingService.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(35))
+        }
+
+        # This is the only recursive reparse-point safety walk. It runs after
+        # an existing owned service is stopped and before any recursive ACL work.
+        Assert-ZbSafeServerRoot -Path $InstallRoot | Out-Null
+        New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
+        Set-ZbRestrictedAcl -Path $InstallRoot
+        Set-ZbUtf8File -Path (Join-Path $InstallRoot '.zeitboard-server-root') -Content "ZeitBoard server root v1`n"
+    }
+
+    Invoke-ZbStep -Name 'Validate effective server settings' -DryRun:$DryRun -ResumeHint $resume -Action {
         $effectiveListen = $ListenAddress
         $effectiveCert = $TlsCertPath
         $effectiveKey = $TlsKeyPath
@@ -178,27 +309,6 @@ try {
         }
     }
 
-    Invoke-ZbStep -Name 'Toolchain (Go)' -DryRun:$DryRun -ResumeHint $resume -Action { Assert-ZbGo -DryRun:$DryRun }
-
-    $exe = Join-Path $InstallRoot 'zeitboardd.exe'
-    $stageExe = Join-Path $InstallRoot ('.zeitboardd-' + [guid]::NewGuid().ToString('N') + '.exe')
-    $stageConfig = Join-Path $InstallRoot ('.config-' + [guid]::NewGuid().ToString('N') + '.json')
-    $serviceLog = Join-Path $InstallRoot 'logs\zeitboardd.log'
-    $previousDir = Join-Path $InstallRoot 'previous'
-    $previousExe = Join-Path $previousDir 'zeitboardd.exe'
-    $previousConfig = Join-Path $previousDir 'config.json'
-
-    Invoke-ZbStep -Name 'Prepare restricted install root' -DryRun:$DryRun -ResumeHint $resume -Action {
-        New-Item -ItemType Directory -Force -Path $InstallRoot | Out-Null
-        Set-ZbRestrictedAcl -Path $InstallRoot
-        Set-ZbUtf8File -Path (Join-Path $InstallRoot '.zeitboard-server-root') -Content "ZeitBoard server root v1`n"
-    }
-    Invoke-ZbStep -Name 'Build staged zeitboardd' -DryRun:$DryRun -ResumeHint $resume -Action {
-        Push-Location (Join-Path $paths.RepoRoot 'apps\server')
-        try { & go build -o $stageExe ./cmd/zeitboardd; if ($LASTEXITCODE -ne 0) { throw 'zeitboardd build failed.' } }
-        finally { Pop-Location }
-    }
-
     Invoke-ZbStep -Name 'Generate secrets' -DryRun:$DryRun -ResumeHint $resume -Action {
         New-ZbSecretFile -Path (Join-Path $InstallRoot 'secrets\data-key.txt')
         New-ZbSecretFile -Path (Join-Path $InstallRoot 'secrets\enrollment-secret.txt')
@@ -230,56 +340,42 @@ try {
             $serialized = $config | ConvertTo-Json -Depth 5
         }
         Set-ZbUtf8File -Path $stageConfig -Content "$serialized`n"
-        Set-ZbRestrictedAcl -Path $InstallRoot
     }
 
     Invoke-ZbStep -Name 'Validate staged server config' -DryRun:$DryRun -ResumeHint $resume -Action {
         & $stageExe -config $stageConfig -check-config
         if ($LASTEXITCODE -ne 0) {
-            throw 'zeitboardd rejected the staged configuration; the existing service was not changed.'
+            throw 'zeitboardd rejected the staged configuration before publication.'
         }
     }
 
     Invoke-ZbStep -Name 'Publish and start Windows service' -DryRun:$DryRun -ResumeHint $resume -Action {
         if (-not (Test-Path -LiteralPath $stageExe)) { throw "staged daemon missing: $stageExe" }
         if (-not (Test-Path -LiteralPath $stageConfig)) { throw "staged config missing: $stageConfig" }
-        $existing = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
-        $existingWasRunning = $existing -and $existing.Status -ne 'Stopped'
-        $originalRegistration = $null
-        if ($existing) {
+        $currentService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+        if ($script:ZbExistingService) {
+            if (-not $currentService) { throw "Service '$ServiceName' disappeared before publication; refusing to continue." }
             Assert-ZbServiceOwned -ServiceName $ServiceName -ExpectedExecutable $exe
-            $serviceKey = "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName"
-            $registration = Get-ItemProperty -LiteralPath $serviceKey -ErrorAction Stop
-            $startToken = switch ([int]$registration.Start) {
-                2 {
-                    if ([int]$registration.DelayedAutoStart -eq 1) { 'delayed-auto' } else { 'auto' }
-                    break
-                }
-                3 { 'demand'; break }
-                4 { 'disabled'; break }
-                default { 'demand' }
-            }
-            $originalRegistration = [pscustomobject]@{
-                BinPath = [string]$registration.ImagePath
-                Start = $startToken
-                Description = [string]$registration.Description
-            }
         }
+        elseif ($currentService) {
+            throw "Service '$ServiceName' appeared before publication; refusing to modify it."
+        }
+
+        $existing = $currentService
+        $existingWasRunning = $script:ZbExistingServiceWasRunning
+        $originalRegistration = $script:ZbOriginalRegistration
+        $serviceKey = $script:ZbServiceKey
         $hadExe = Test-Path -LiteralPath $exe
         $hadConfig = Test-Path -LiteralPath $configPath
         $exePublished = $false
         $configPublished = $false
         $created = $false
+        $script:ZbPublishStarted = $true
         try {
-            if ($existingWasRunning) {
-                Stop-Service -Name $ServiceName -Force -ErrorAction Stop
-                $existing.WaitForStatus('Stopped', [TimeSpan]::FromSeconds(35))
-            }
             Publish-ZbVerifiedFile -SourcePath $stageExe -DestinationPath $exe -BackupPath $previousExe | Out-Null
             $exePublished = $true
             Publish-ZbVerifiedFile -SourcePath $stageConfig -DestinationPath $configPath -BackupPath $previousConfig | Out-Null
             $configPublished = $true
-            Set-ZbRestrictedAcl -Path $InstallRoot
 
             $binPath = "`"$exe`" -config `"$configPath`" -service-name `"$ServiceName`" -log `"$serviceLog`""
             if ($existing) {
@@ -464,20 +560,34 @@ try {
     }
 }
 catch {
+    $operationError = $_
     Write-Host ''
     Write-ZbLog -Level fail -Message 'Server install did not complete.'
-    Write-ZbLog -Level fail -Message $_.Exception.Message
+    Write-ZbLog -Level fail -Message $operationError.Exception.Message
+    if ($script:ZbStoppedExistingService -and -not $script:ZbPublishStarted) {
+        try {
+            Assert-ZbServiceOwned -ServiceName $ServiceName -ExpectedExecutable $exe
+            Invoke-ZbSc -Arguments @('start', $ServiceName)
+            $restoredService = Get-Service -Name $ServiceName -ErrorAction Stop
+            $restoredService.WaitForStatus('Running', [TimeSpan]::FromSeconds(35))
+            $restoredService.Refresh()
+            if ($restoredService.Status -ne 'Running') { throw 'the original service did not remain running' }
+            $script:ZbStoppedExistingService = $false
+            Write-ZbLog -Level warn -Message 'pre-publication failure: restarted the unchanged original service'
+        }
+        catch {
+            Write-ZbLog -Level fail -Message "could not restart the unchanged original service: $($_.Exception.Message)"
+        }
+    }
     if ($script:ZbServiceCommitted) {
         Write-ZbLog -Level warn -Message 'The service publication committed before a later firewall step failed; the service remains installed. Re-run this command to reconcile the firewall choice.'
     }
     $exitCode = 1
 }
 finally {
-    if ($stageExe -and (Test-Path -LiteralPath $stageExe)) {
-        Remove-Item -LiteralPath $stageExe -Force -ErrorAction SilentlyContinue
-    }
-    if ($stageConfig -and (Test-Path -LiteralPath $stageConfig)) {
-        Remove-Item -LiteralPath $stageConfig -Force -ErrorAction SilentlyContinue
+    if ($stageRoot -and (Test-Path -LiteralPath $stageRoot)) {
+        try { Remove-ZbDirectoryUnderRoot -Root ([IO.Path]::GetTempPath()) -Path $stageRoot }
+        catch { Write-ZbLog -Level warn -Message "could not remove server staging directory '$stageRoot': $($_.Exception.Message)" }
     }
     Exit-ZbLifecycleLock -Mutex $lifecycleLock
 }

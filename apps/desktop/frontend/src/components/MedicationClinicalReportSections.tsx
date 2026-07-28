@@ -1,15 +1,36 @@
+import { lazy, Suspense } from "react";
+
 import {
   medicationReportExportConfirmation,
   type MedicationClinicalReport,
   type MedicationClinicalReportInput,
 } from "../data/medicationReport";
-import {
-  MedicationReportActogram,
-  MedicationReportAssociations,
-  MedicationReportDrift,
-  MedicationReportSummary,
-  MedicationReportTables,
-} from "./MedicationClinicalReportPreview";
+
+const MedicationReportActogram = lazy(() =>
+  import("./MedicationClinicalReportPreview").then((module) => ({
+    default: module.MedicationReportActogram,
+  })),
+);
+const MedicationReportAssociations = lazy(() =>
+  import("./MedicationClinicalReportPreview").then((module) => ({
+    default: module.MedicationReportAssociations,
+  })),
+);
+const MedicationReportDrift = lazy(() =>
+  import("./MedicationClinicalReportPreview").then((module) => ({
+    default: module.MedicationReportDrift,
+  })),
+);
+const MedicationReportSummary = lazy(() =>
+  import("./MedicationClinicalReportPreview").then((module) => ({
+    default: module.MedicationReportSummary,
+  })),
+);
+const MedicationReportTables = lazy(() =>
+  import("./MedicationClinicalReportPreview").then((module) => ({
+    default: module.MedicationReportTables,
+  })),
+);
 
 type UpdateReportInput = (next: Partial<MedicationClinicalReportInput>) => void;
 
@@ -226,16 +247,24 @@ export function MedicationReportPreviewBody({
 }) {
   return (
     <div className="medication-report-preview" aria-busy={loading || undefined}>
-      <MedicationReportSummary report={report} stale={stale} />
-      <div className="medication-report-visuals">
-        <MedicationReportActogram
-          key={`${report.generatedAt}-${report.range.fromDate}-${report.range.toDate}-${report.summary.calendarRows}-${report.summary.observedSleepSegments}-${report.summary.medicationEvents}`}
-          report={report}
-        />
-        <MedicationReportDrift report={report} />
-      </div>
-      <MedicationReportTables report={report} />
-      <MedicationReportAssociations report={report} />
+      <Suspense
+        fallback={
+          <div className="panel empty-state" role="status">
+            Loading report preview...
+          </div>
+        }
+      >
+        <MedicationReportSummary report={report} stale={stale} />
+        <div className="medication-report-visuals">
+          <MedicationReportActogram
+            key={`${report.generatedAt}-${report.range.fromDate}-${report.range.toDate}-${report.summary.calendarRows}-${report.summary.observedSleepSegments}-${report.summary.medicationEvents}`}
+            report={report}
+          />
+          <MedicationReportDrift report={report} />
+        </div>
+        <MedicationReportTables report={report} />
+        <MedicationReportAssociations report={report} />
+      </Suspense>
 
       <section className="medication-report-provenance" aria-labelledby="provenance-title">
         <h3 id="provenance-title">Provenance and limits</h3>

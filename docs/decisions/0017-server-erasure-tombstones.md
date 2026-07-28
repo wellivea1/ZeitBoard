@@ -31,6 +31,22 @@ transaction (`POST /v1/sync/erase`, authenticated, any enrolled device):
    `kind: "tombstone"`), whose payload carries **only the record id** — no
    health data. Every device that pulls it hard-deletes its local copy.
 
+**Routing-metadata amendment (2026-07-27).** V1 record identifiers overlap
+syntactically, so id-only tombstones cannot reliably distinguish a task
+revision from a sleep record. New tombstones therefore also carry the original
+`observation`, `correction`, or `task` kind when the erased row existed. This is
+non-sensitive routing metadata, not record content. Legacy id-only tombstones
+use local sync evidence; ambiguous legacy ids abort the atomic page transaction.
+
+**Logical-task erasure amendment (2026-07-27).** Immutable task revisions are
+transport records for one logical task, not independent user data. Erasing any
+known task revision therefore hard-deletes and tombstones every retained
+revision of that task in the same transaction. The server also registers the
+logical task id: all later revisions are silent no-ops even when their record
+ids did not exist when deletion was requested. Sleep observations and
+corrections remain record-scoped.
+
+
 **Desktop outbox.** Local hard-deletes (ADR-0014) enqueue the deleted record
 ids in `local_sleep_erasures` — but **only ids that were actually pushed**;
 never-synced records never left the device and need no tombstone. `SyncNow`
@@ -45,11 +61,15 @@ idempotent.
 - The append-only model survives: erasure appends a tombstone to the stream;
   the cursor semantics and idempotent push are unchanged; the server-side read
   model ignores tombstone envelopes (the erased record's data row is gone).
-- Tombstone payloads are metadata-only (record id). An observer of the
-  ciphertext stream learns that *something* was erased, not what it said.
+- Tombstone payloads are metadata-only (record id plus an optional three-value
+  original kind). An observer learns that *something* was erased and its broad
+  storage class, never what it said. Mixed pull pages and their cursors commit
+  atomically, followed by one secure compaction for all page tombstones.
 - **Residual:** a device that never syncs again keeps its local copy — erasure
   reaches devices only when they pull. The tombstone registry grows
   monotonically (ids only; negligible size). Both recorded in the threat model.
+  The logical-task tombstone registry is also monotonic and stores only task
+  ids.
 - Server-side proposals/audit entries are out of scope here: they contain no
   raw sleep records (redacted planning windows only) and follow their own
   retention (ADR-0010).

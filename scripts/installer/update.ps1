@@ -12,6 +12,7 @@
 
     -Rollback     restore previous\ and exit (no rebuild)
     -SkipTests    skip the Go + frontend suites (faster, less safe)
+    -ForceRebuild rebuild even when the verified installed release matches HEAD
     -WithServerMcp install/update the optional self-hosted/server MCP connector (-WithMcp remains an alias)
     -AllowDirty   proceed with an uncommitted working tree (prints the diff)
     -NonInteractive / -DryRun   as in install.ps1
@@ -23,6 +24,7 @@
 param(
     [switch]$Rollback,
     [switch]$SkipTests,
+    [switch]$ForceRebuild,
     [Alias('WithMcp')][switch]$WithServerMcp,
     [switch]$AllowDirty,
     [switch]$NonInteractive,
@@ -33,6 +35,7 @@ $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\_zb.common.ps1"
 
 $resume = "powershell -ExecutionPolicy Bypass -File `"$PSCommandPath`""
+if ($ForceRebuild) { $resume += ' -ForceRebuild' }
 Start-ZbLog -Name 'update' -DryRun:$DryRun | Out-Null
 Show-ZbBanner
 $paths = Get-ZbPaths
@@ -41,9 +44,84 @@ $previousExe = Join-Path $paths.InstallDir 'previous\ZeitBoard.exe'
 $installedMcp = Join-Path $paths.InstallDir 'zeitboard-mcp.exe'
 $installedLocalMcp = Join-Path $paths.InstallDir 'zeitboard-local-mcp.exe'
 $updateMcp = [bool]$WithServerMcp -or (Test-Path -LiteralPath $installedMcp)
+$publishComponents = @('desktop', 'local-mcp')
+if ($updateMcp) { $publishComponents += 'mcp' }
 $script:ZbPulled = $false
 $script:ZbDesktopPublished = $false
 $lifecycleLock = $null
+
+function Get-ZbInstalledReleaseMetadata {
+    param([Parameter(Mandatory)][string]$InstallDir)
+
+    $versionPath = Join-Path $InstallDir 'version.txt'
+    if (-not (Test-Path -LiteralPath $versionPath -PathType Leaf)) { return $null }
+    $lines = @(Get-Content -LiteralPath $versionPath)
+    $commitLines = @($lines | Where-Object { $_ -match '^commit=' })
+    $componentLines = @($lines | Where-Object { $_ -match '^components=' })
+    if ($commitLines.Count -ne 1 -or $componentLines.Count -ne 1) { return $null }
+
+    $commit = $commitLines[0].Substring(7).Trim()
+    $componentText = $componentLines[0].Substring(11).Trim()
+    if ([string]::IsNullOrWhiteSpace($commit) -or [string]::IsNullOrWhiteSpace($componentText)) {
+        return $null
+    }
+    $rawComponents = @($componentText -split ',')
+    $components = @($rawComponents | ForEach-Object { $_.Trim().ToLowerInvariant() } | Where-Object { $_ })
+    $uniqueComponents = @($components | Sort-Object -Unique)
+    if ($components.Count -eq 0 -or $components.Count -ne $rawComponents.Count -or
+        $uniqueComponents.Count -ne $components.Count) {
+        return $null
+    }
+    [pscustomobject]@{ Commit = $commit; Components = $components }
+}
+
+function Get-ZbUpdateDecision {
+    # Pure release comparison so no-op behavior can be tested without fetching
+    # a repository or invoking any dependency, test, build, or publish command.
+    param(
+        [Parameter(Mandatory)][bool]$InstalledBuildVerified,
+        [string]$InstalledCommit,
+        [string[]]$InstalledComponents = @(),
+        [Parameter(Mandatory)][AllowEmptyString()][string]$HeadCommit,
+        [string[]]$RequestedComponents = @(),
+        [Parameter(Mandatory)][bool]$RepositoryClean,
+        [switch]$ForceRebuild
+    )
+
+    if ($ForceRebuild) {
+        return [pscustomobject]@{ ShouldRebuild = $true; Reason = '-ForceRebuild was specified' }
+    }
+    if (-not $InstalledBuildVerified) {
+        return [pscustomobject]@{ ShouldRebuild = $true; Reason = 'the installed release is not verified' }
+    }
+    if (-not $RepositoryClean) {
+        return [pscustomobject]@{ ShouldRebuild = $true; Reason = 'the working tree contains allowed local changes' }
+    }
+    if ([string]::IsNullOrWhiteSpace($InstalledCommit)) {
+        return [pscustomobject]@{ ShouldRebuild = $true; Reason = 'the installed release has no resolvable commit metadata' }
+    }
+    if ([string]::IsNullOrWhiteSpace($HeadCommit)) {
+        return [pscustomobject]@{ ShouldRebuild = $true; Reason = 'HEAD could not be resolved after fetch' }
+    }
+    if (-not [string]::Equals($InstalledCommit.Trim(), $HeadCommit.Trim(), [StringComparison]::OrdinalIgnoreCase)) {
+        return [pscustomobject]@{ ShouldRebuild = $true; Reason = 'the installed commit differs from HEAD' }
+    }
+
+    $installed = @($InstalledComponents | ForEach-Object { "$_".Trim().ToLowerInvariant() } | Where-Object { $_ } | Sort-Object)
+    $requested = @($RequestedComponents | ForEach-Object { "$_".Trim().ToLowerInvariant() } | Where-Object { $_ } | Sort-Object)
+    if ($installed.Count -ne $requested.Count) {
+        return [pscustomobject]@{ ShouldRebuild = $true; Reason = 'the declared component set differs from the requested release' }
+    }
+    for ($i = 0; $i -lt $requested.Count; $i++) {
+        if (-not [string]::Equals($installed[$i], $requested[$i], [StringComparison]::Ordinal)) {
+            return [pscustomobject]@{ ShouldRebuild = $true; Reason = 'the declared component set differs from the requested release' }
+        }
+    }
+    if ($requested.Count -eq 0) {
+        return [pscustomobject]@{ ShouldRebuild = $true; Reason = 'the declared component set differs from the requested release' }
+    }
+    [pscustomobject]@{ ShouldRebuild = $false; Reason = 'the verified installed commit and declared components match HEAD' }
+}
 
 # --- Rollback path ---------------------------------------------------------
 if ($Rollback) {
@@ -122,11 +200,57 @@ try {
         $lifecycleLock = $null
         $restartArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath)
         if ($SkipTests) { $restartArgs += '-SkipTests' }
+        if ($ForceRebuild) { $restartArgs += '-ForceRebuild' }
         if ($AllowDirty) { $restartArgs += '-AllowDirty' }
         if ($WithServerMcp) { $restartArgs += '-WithServerMcp' }
         if ($NonInteractive) { $restartArgs += '-NonInteractive' }
         & powershell.exe @restartArgs
         exit $LASTEXITCODE
+    }
+
+    if ($DryRun) {
+        $dryRunDecision = if ($ForceRebuild) {
+            '-ForceRebuild would force the full rebuild pipeline.'
+        }
+        else {
+            'A live run would exit here only after fetch when the verified installed commit and exact component set match HEAD.'
+        }
+        Write-ZbLog -Level info -Message "[dry-run] $dryRunDecision"
+    }
+    else {
+        Push-Location $paths.RepoRoot
+        try {
+            $headCommit = (& git rev-parse --verify HEAD) 2>&1 | Out-String
+            if ($LASTEXITCODE -ne 0) { throw 'Could not resolve HEAD after fetch.' }
+            $headCommit = $headCommit.Trim()
+
+            $metadata = Get-ZbInstalledReleaseMetadata -InstallDir $paths.InstallDir
+            $resolvedInstalledCommit = ''
+            if ($metadata -and $metadata.Commit -match '^[0-9a-fA-F]{7,40}$') {
+                $resolved = (& git rev-parse --verify "$($metadata.Commit)^{commit}") 2>&1 | Out-String
+                if ($LASTEXITCODE -eq 0) { $resolvedInstalledCommit = $resolved.Trim() }
+            }
+            $status = (& git status --porcelain) 2>&1 | Out-String
+            if ($LASTEXITCODE -ne 0) { throw 'Could not inspect the repository after fetch.' }
+            $decision = Get-ZbUpdateDecision `
+                -InstalledBuildVerified (Test-ZbInstalledBuild -InstallDir $paths.InstallDir) `
+                -InstalledCommit $resolvedInstalledCommit `
+                -InstalledComponents $(if ($metadata) { $metadata.Components } else { @() }) `
+                -HeadCommit $headCommit `
+                -RequestedComponents $publishComponents `
+                -RepositoryClean ([string]::IsNullOrWhiteSpace($status)) `
+                -ForceRebuild:$ForceRebuild
+        }
+        finally { Pop-Location }
+
+        if (-not $decision.ShouldRebuild) {
+            Write-ZbLog -Level ok -Message "$($decision.Reason); skipping npm, tests, builds, backup, and publication"
+            Show-ZbFinale -Kind update
+            Write-Host "   Already current: $headCommit" -ForegroundColor Green
+            Write-Host '=================================================================' -ForegroundColor Cyan
+            exit 0
+        }
+        Write-ZbLog -Message "rebuild required: $($decision.Reason)"
     }
 
     # Dependencies may have moved with the new commit.
@@ -207,11 +331,8 @@ try {
         Backup-ZbData -Reason 'update' | Out-Null
     }
 
-    # Components this release must contain; the pending marker makes an
-    # interruption between artifacts detectable rather than silently leaving a
-    # new desktop binary beside a stale MCP bridge.
-    $publishComponents = @('desktop', 'local-mcp')
-    if ($updateMcp) { $publishComponents += 'mcp' }
+    # The pending marker makes an interruption between artifacts detectable
+    # rather than silently leaving a new desktop binary beside a stale bridge.
     $publishBackupDir = Join-Path $paths.InstallDir ('.publish-backup-' + [guid]::NewGuid().ToString('N'))
     try {
         Invoke-ZbStep -Name 'Begin publish transaction' -DryRun:$DryRun -ResumeHint $resume -Action {

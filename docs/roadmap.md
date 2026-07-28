@@ -15,6 +15,9 @@ boundaries are in [`frontend-architecture.md`](frontend-architecture.md).
 Architecture decisions are ADRs under [`decisions/`](decisions/); per-milestone
 detail lives there rather than being repeated here.
 
+The 2026-07-27 architecture and performance hardening review is tracked in
+[`architecture-performance-review-2026-07-27.md`](architecture-performance-review-2026-07-27.md).
+
 ---
 
 ## Where things stand (delivered)
@@ -84,6 +87,11 @@ detail lives there rather than being repeated here.
   window hit-rate, and 0.856 evaluable coverage. Blanket tightening was
   rejected: a 25% uncertainty reduction saved 1.40h of mean window width but
   lost 6 percentage points of hit-rate, with no point-error benefit.
+- The architecture/performance pass removed oversized-sync deadlock, mixed-log
+  replay, quadratic backtest and scheduling paths, non-atomic pull pages,
+  proposal N+1/unbounded reads, repeated snapshot/outbox scans, and session-only
+  Android evidence. Remaining structural work is explicitly dispositioned in
+  the review ledger rather than being presented as complete.
 
 ---
 
@@ -102,9 +110,12 @@ public availability portal) with a pasteable `/goal` prompt per phase is
    niceties (batch review, expiry surfacing) fold into later queue work.
 2. ~~**Server-side erasure (tombstones).**~~ ✅ Delivered (ADR-0017): an
    authenticated erase endpoint hard-deletes synced payloads; tombstones
-   (record-id only) flow through the pull stream so every device erases its
-   copy; a tombstone registry makes re-pushing an erased id a silent no-op;
+   carry the record id plus its non-sensitive original kind when known, so
+   every device erases the correct record without naming conventions. No
+   content is retained; the registry blocks resurrection by stale devices;
    the desktop enqueues erasures for pushed records at hard-delete time.
+   Task erasure also records the logical task id, preventing a later unseen
+   revision from resurrecting the deleted task.
    Threat model + privacy updated. Residual: never-syncing devices retain
    their copy until they pull.
 3. ~~**Validate the estimator on real history.**~~ ✅ Delivered. The owner's
@@ -229,9 +240,12 @@ M-E's separately reviewed local agent projection.
     use compact mobile actions; the phone appearance picker is a two-column
     selector and icon-only navigation retains explicit accessible names.
 
-**Small debts (fold into adjacent slices):** consolidate the correction-record
+**Small debts (fold into adjacent slices):** finish ordered local/server migrations; ~~
 → domain decoder (now duplicated across desktop storage, server readmodel, and
-the sync validator); prefer a CA-cert path over localhost skip-verify for the
+the sync validator);~~ establish one versioned assistant action registry; extract
+context-aware desktop feature services at behavior boundaries; add
+repository-backed long-history pages; prefer a CA-cert path over localhost
+skip-verify for the
 MCP client; medication tracking M-A..M-C is delivered and M-D..M-F remain specified
 ([`medication-feature-plan.md`](medication-feature-plan.md), slices M-A..M-F:
 benchmarked against Medisafe; fixed-clock regimens + wake-relative display,

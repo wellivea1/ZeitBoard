@@ -92,7 +92,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_local_sleep_observations_start
 			ON local_sleep_observations(start_at)`,
-		`DROP INDEX IF EXISTS idx_local_sleep_import_source_record`,
 		`CREATE TRIGGER IF NOT EXISTS trg_local_sleep_import_source_record
 			BEFORE INSERT ON local_sleep_observations
 			WHEN NEW.acquisition_method = 'file_import'
@@ -105,6 +104,9 @@ func (s *Store) Migrate(ctx context.Context) error {
 			BEGIN
 				SELECT RAISE(ABORT, 'duplicate imported source_record_id');
 			END`,
+		`CREATE INDEX IF NOT EXISTS idx_local_sleep_import_source_record
+			ON local_sleep_observations(source_record_id)
+			WHERE acquisition_method = 'file_import' AND source_record_id <> ''`,
 		`CREATE TABLE IF NOT EXISTS local_sleep_corrections (
 			correction_id TEXT PRIMARY KEY,
 			target_observation_id TEXT NOT NULL,
@@ -134,6 +136,7 @@ func (s *Store) Migrate(ctx context.Context) error {
 		`CREATE TABLE IF NOT EXISTS local_tasks (
 			task_id TEXT PRIMARY KEY,
 			status TEXT NOT NULL,
+			revision INTEGER NOT NULL DEFAULT 1 CHECK(revision >= 1),
 			created_at TEXT NOT NULL,
 			payload_json BLOB NOT NULL
 		)`,
@@ -325,10 +328,76 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return err
 		}
 	}
+	if err := s.applyMigration(ctx, 9, migrateLocalTaskRevision); err != nil {
+		return fmt.Errorf("migrate local task revisions: %w", err)
+	}
+	if err := s.applyMigration(ctx, 10, migrateSleepImportSourceIndex); err != nil {
+		return fmt.Errorf("migrate sleep import source index: %w", err)
+	}
 	return nil
 }
 
-func sqliteTableHasColumn(ctx context.Context, db *sql.DB, table, column string) (bool, error) {
+type sqliteQueryer interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+func (s *Store) applyMigration(ctx context.Context, version int, migrate func(context.Context, *sql.Tx) error) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var applied int
+	err = tx.QueryRowContext(ctx, `SELECT 1 FROM schema_migrations WHERE version = ?`, version).Scan(&applied)
+	switch {
+	case err == nil:
+		return nil
+	case !errors.Is(err, sql.ErrNoRows):
+		return err
+	}
+	if err := migrate(ctx, tx); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO schema_migrations(version, applied_at) VALUES(?, ?)`,
+		version, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func migrateLocalTaskRevision(ctx context.Context, tx *sql.Tx) error {
+	hasRevision, err := sqliteTableHasColumn(ctx, tx, "local_tasks", "revision")
+	if err != nil {
+		return err
+	}
+	if !hasRevision {
+		if _, err := tx.ExecContext(ctx,
+			`ALTER TABLE local_tasks ADD COLUMN revision INTEGER NOT NULL DEFAULT 1 CHECK(revision >= 1)`); err != nil {
+			return err
+		}
+	}
+	_, err = tx.ExecContext(ctx, `UPDATE local_tasks
+		SET revision = CASE
+			WHEN json_type(payload_json, '$.revision') = 'integer'
+				AND CAST(json_extract(payload_json, '$.revision') AS INTEGER) >= 1
+			THEN CAST(json_extract(payload_json, '$.revision') AS INTEGER)
+			ELSE 1
+		END`)
+	return err
+}
+
+func migrateSleepImportSourceIndex(ctx context.Context, tx *sql.Tx) error {
+	if _, err := tx.ExecContext(ctx, `DROP INDEX IF EXISTS idx_local_sleep_import_source_record`); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, `CREATE INDEX idx_local_sleep_import_source_record
+		ON local_sleep_observations(source_record_id)
+		WHERE acquisition_method = 'file_import' AND source_record_id <> ''`)
+	return err
+}
+
+func sqliteTableHasColumn(ctx context.Context, db sqliteQueryer, table, column string) (bool, error) {
 	rows, err := db.QueryContext(ctx, `SELECT name FROM pragma_table_info(?)`, table)
 	if err != nil {
 		return false, err
@@ -486,8 +555,8 @@ func (s *Store) readJSONRows(ctx context.Context, query string, visit func([]byt
 	return readJSONRows(ctx, s.db, query, visit)
 }
 
-func readJSONRows(ctx context.Context, queryer queryContext, query string, visit func([]byte) error) error {
-	rows, err := queryer.QueryContext(ctx, query)
+func readJSONRows(ctx context.Context, queryer queryContext, query string, visit func([]byte) error, args ...any) error {
+	rows, err := queryer.QueryContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}

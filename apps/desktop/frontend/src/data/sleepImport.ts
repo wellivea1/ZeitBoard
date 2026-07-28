@@ -33,6 +33,8 @@ export interface SleepImportReport {
   errors: string[];
   rows: SleepImportRow[];
   message: string;
+  importToken?: string;
+  canceled: boolean;
 }
 
 type UnknownRecord = Record<string, unknown>;
@@ -114,6 +116,8 @@ export function normalizeSleepImportReport(value: unknown): SleepImportReport | 
   const importedRows = nonNegativeInteger(value.importedRows);
   const errors = stringArray(value.errors);
   const message = stringValue(value.message);
+  const importToken = optionalString(value.importToken);
+  const canceled = value.canceled === undefined ? false : value.canceled;
   if (
     !fileName ||
     format === undefined ||
@@ -125,7 +129,8 @@ export function normalizeSleepImportReport(value: unknown): SleepImportReport | 
     importedRows === undefined ||
     typeof value.canImport !== "boolean" ||
     !errors ||
-    !message
+    !message ||
+    typeof canceled !== "boolean"
   ) {
     return undefined;
   }
@@ -143,7 +148,8 @@ export function normalizeSleepImportReport(value: unknown): SleepImportReport | 
     statusCounts.duplicate !== duplicateRows ||
     statusCounts.invalid !== invalidRows ||
     statusCounts.imported !== importedRows ||
-    (value.canImport && (!value.dryRun || readyRows === 0 || invalidRows > 0))
+    (value.canImport && (!value.dryRun || readyRows === 0 || invalidRows > 0)) ||
+    (canceled && (value.canImport || totalRows !== 0 || Boolean(importToken)))
   ) {
     return undefined;
   }
@@ -160,7 +166,41 @@ export function normalizeSleepImportReport(value: unknown): SleepImportReport | 
     errors,
     rows,
     message,
+    ...(importToken ? { importToken } : {}),
+    canceled,
   };
+}
+
+export function hasNativeSleepImport(
+  root: WailsRoot = globalThis as unknown as WailsRoot,
+): boolean {
+  return Boolean(
+    findWailsMethod(root, ["PreviewSleepImportFile"]) &&
+    findWailsMethod(root, ["ImportSleepDataFile"]),
+  );
+}
+
+export async function previewNativeSleepImport(
+  root: WailsRoot = globalThis as unknown as WailsRoot,
+): Promise<SleepImportReport> {
+  const method = findWailsMethod(root, ["PreviewSleepImportFile"]);
+  if (!method) throw new Error("Native sleep import is unavailable.");
+  const report = normalizeSleepImportReport(await method());
+  if (!report || (!report.canceled && !report.importToken)) {
+    throw new Error("Sleep import preview returned an invalid native selection.");
+  }
+  return report;
+}
+
+export async function importNativeSleepData(
+  importToken: string,
+  root: WailsRoot = globalThis as unknown as WailsRoot,
+): Promise<SleepImportReport> {
+  const method = findWailsMethod(root, ["ImportSleepDataFile"]);
+  if (!method) throw new Error("Native sleep import is unavailable.");
+  const report = normalizeSleepImportReport(await method({ importToken }));
+  if (!report || report.canceled) throw new Error("Sleep import returned an invalid report.");
+  return report;
 }
 
 export async function previewSleepImport(

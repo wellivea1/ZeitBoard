@@ -33,6 +33,11 @@ before.
    sleep records (opaque record ids; the backing table keeps its historical
    name). On pull, a tombstone for **any** revision of a task deletes the
    local task, idempotently, without re-enqueueing.
+   Server erasure treats those records as one logical task: it expands any
+   known revision to all retained revisions in the erase transaction and
+   registers the task id so a later, previously unseen revision is ignored.
+   This closes resurrection by a stale or concurrently offline device.
+
 4. **Server-side estimation ignores task records** (the readmodel replays
    only sleep kinds), and assistant/agent redaction is unchanged: titles now
    reside encrypted at rest on the user's own instance, but still never enter
@@ -51,7 +56,7 @@ before.
   clock is not warranted.
 - Residuals mirror ADR-0017: a device that never syncs again keeps its task
   copies until it pulls; a task re-created after deletion gets a fresh id and
-  revision history. A third-party client using non-`task_`-prefixed task ids
-  would have its tombstones routed as sleep erasures by the desktop (no data
-  loss; the local task simply isn't auto-deleted).
+  revision history. Explicit tombstone kinds make valid third-party task ids
+  independent of the desktop's `task_` naming convention. Legacy id-only
+  tombstones use local sync evidence and reject ambiguity.
 - Pre-revision local rows are treated as revision 1 on first sync.

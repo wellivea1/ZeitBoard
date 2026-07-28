@@ -20,10 +20,16 @@ export interface BackendProposal {
   decisionToken?: string;
 }
 
+export interface BackendProposalPagination {
+  nextCursor: string;
+  hasMore: boolean;
+}
+
 export interface BackendProposalsData {
   status: "off" | "ok" | "error";
   message?: string;
   proposals: BackendProposal[];
+  pagination: BackendProposalPagination;
 }
 
 type UnknownRecord = Record<string, unknown>;
@@ -46,6 +52,22 @@ function confidence(value: unknown): BackendProposal["confidence"] {
 function proposalStatus(value: unknown): BackendProposalStatus | undefined {
   if (value === "pending" || value === "approved" || value === "rejected") return value;
   return undefined;
+}
+
+function terminalPagination(): BackendProposalPagination {
+  return { nextCursor: "", hasMore: false };
+}
+
+function normalizePagination(
+  value: unknown,
+  required: boolean,
+): BackendProposalPagination | undefined {
+  if (value === undefined && !required) return terminalPagination();
+  if (!isRecord(value)) return undefined;
+  const { nextCursor, hasMore } = value;
+  if (typeof nextCursor !== "string" || typeof hasMore !== "boolean") return undefined;
+  if (hasMore !== nextCursor.length > 0) return undefined;
+  return { nextCursor, hasMore };
 }
 
 export function normalizeProposal(value: unknown): BackendProposal | undefined {
@@ -80,10 +102,15 @@ export function normalizeProposal(value: unknown): BackendProposal | undefined {
   };
 }
 
-export function normalizeBackendProposals(value: unknown): BackendProposalsData | undefined {
+function normalizeBackendProposalData(
+  value: unknown,
+  paginationRequired: boolean,
+): BackendProposalsData | undefined {
   if (!isRecord(value)) return undefined;
   const status = value.status;
   if (status !== "off" && status !== "ok" && status !== "error") return undefined;
+  const pagination = normalizePagination(value.pagination, paginationRequired);
+  if (!pagination) return undefined;
   const proposals: BackendProposal[] = [];
   if (Array.isArray(value.proposals)) {
     for (const item of value.proposals) {
@@ -93,10 +120,22 @@ export function normalizeBackendProposals(value: unknown): BackendProposalsData 
     }
   }
   const message = str(value.message);
-  return { status, ...(message ? { message } : {}), proposals };
+  return { status, ...(message ? { message } : {}), proposals, pagination };
 }
 
-const offline: BackendProposalsData = { status: "off", proposals: [] };
+export function normalizeBackendProposals(value: unknown): BackendProposalsData | undefined {
+  return normalizeBackendProposalData(value, false);
+}
+
+export function normalizeBackendProposalPage(value: unknown): BackendProposalsData | undefined {
+  return normalizeBackendProposalData(value, true);
+}
+
+const offline: BackendProposalsData = {
+  status: "off",
+  proposals: [],
+  pagination: terminalPagination(),
+};
 
 export async function loadBackendProposals(
   root: WailsRoot = globalThis as unknown as WailsRoot,
@@ -109,9 +148,35 @@ export async function loadBackendProposals(
   } catch {
     // Treat a failing bridge like an unreachable backend below.
   }
-  return { status: "error", message: "Could not reach the synced backend.", proposals: [] };
+  return {
+    status: "error",
+    message: "Could not reach the synced backend.",
+    proposals: [],
+    pagination: terminalPagination(),
+  };
 }
 
+export async function loadBackendProposalPage(
+  cursor: string,
+  root: WailsRoot = globalThis as unknown as WailsRoot,
+): Promise<BackendProposalsData> {
+  const unavailable: BackendProposalsData = {
+    status: "error",
+    message: "Could not load older synced proposals.",
+    proposals: [],
+    pagination: terminalPagination(),
+  };
+  if (cursor.length === 0) return unavailable;
+  const method = findWailsMethod(root, ["GetBackendProposalPage"]);
+  if (!method) return unavailable;
+  try {
+    const normalized = normalizeBackendProposalPage(await method({ cursor }));
+    if (normalized) return normalized;
+  } catch {
+    // Fall through to the non-destructive page error below.
+  }
+  return unavailable;
+}
 export async function decideBackendProposal(
   input: { proposalId: string; decision: "approved" | "rejected"; token: string },
   root: WailsRoot = globalThis as unknown as WailsRoot,
@@ -125,5 +190,10 @@ export async function decideBackendProposal(
     // Fall through to the error state; the one-use token stays valid until the
     // backend actually consumes it.
   }
-  return { status: "error", message: "The decision could not be recorded.", proposals: [] };
+  return {
+    status: "error",
+    message: "The decision could not be recorded.",
+    proposals: [],
+    pagination: terminalPagination(),
+  };
 }

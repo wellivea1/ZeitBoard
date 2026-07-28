@@ -72,11 +72,16 @@ not optional — the operator holds the keys.
 Deletion removes local derived data and source records according to the user's
 explicit request, subject to a clear confirmation flow. When backend sync is
 enabled, erasure propagates: the self-hosted instance hard-deletes its synced
-copy and mints a tombstone (record id only, no health data) so every other
+copy and mints a metadata-only tombstone (record id plus original kind when
+known, no health content) so every other
 enrolled device erases its copy on the next pull, and an erased record can
 never be re-pushed (ADR-0017). A device that never syncs again retains its
 local copy until it does. Export must be an intentional action and should
 identify whether it contains private data or only a minimized projection.
+Task deletion applies to the logical task: the instance erases every retained
+immutable revision and rejects all later revisions, including revisions that
+were not present when deletion was requested.
+
 
 Imported sleep observations use the same local table, export path, correction
 layer, sync path, and erasure controls as manual observations. Conversion tools

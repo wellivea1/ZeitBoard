@@ -4,6 +4,8 @@ import (
 	"context"
 	"sort"
 	"time"
+
+	storage "non24.app/core/storage/sqlite"
 )
 
 const (
@@ -214,8 +216,8 @@ func (a *App) agentStatusProjection() agentStatusDTO {
 	}
 }
 
-func (a *App) agentOverviewProjection() (agentOverviewDTO, error) {
-	overview, err := a.GetOverview()
+func (a *App) agentOverviewProjection(ctx context.Context) (agentOverviewDTO, error) {
+	overview, err := a.localOverview(ctx, a.currentTime().UTC().Truncate(time.Minute))
 	if err != nil {
 		return agentOverviewDTO{}, localAgentProjectionError("overview", err)
 	}
@@ -239,8 +241,8 @@ func (a *App) agentOverviewProjection() (agentOverviewDTO, error) {
 	return projection, nil
 }
 
-func (a *App) agentRhythmProjection() (agentRhythmDTO, error) {
-	rhythm, err := a.GetRhythm()
+func (a *App) agentRhythmProjection(ctx context.Context) (agentRhythmDTO, error) {
+	rhythm, err := a.localRhythm(ctx, a.currentTime().UTC().Truncate(time.Minute))
 	if err != nil {
 		return agentRhythmDTO{}, localAgentProjectionError("rhythm", err)
 	}
@@ -306,23 +308,51 @@ func (a *App) agentTaskProjection(ctx context.Context) (agentTasksDTO, error) {
 	return projection, nil
 }
 
-func (a *App) agentMedicationProjection() (agentMedicationTimingDTO, error) {
-	data, err := a.medicationsAt(a.currentTime().UTC().Truncate(time.Second))
+func (a *App) agentMedicationProjection(ctx context.Context) (agentMedicationTimingDTO, error) {
+	store, err := a.requireStore()
 	if err != nil {
 		return agentMedicationTimingDTO{}, localAgentProjectionError("medication timing", err)
 	}
+	now := a.currentTime().UTC().Truncate(time.Second)
+	records, err := store.ListMedications(ctx)
+	if err != nil {
+		return agentMedicationTimingDTO{}, localAgentProjectionError("medication timing", err)
+	}
+	events, err := store.EffectiveMedicationEvents(ctx)
+	if err != nil {
+		return agentMedicationTimingDTO{}, localAgentProjectionError("medication timing", err)
+	}
+	state, err := a.localEstimate(ctx, now)
+	if err != nil {
+		return agentMedicationTimingDTO{}, localAgentProjectionError("medication timing", err)
+	}
+	eventCounts := make(map[string]int, len(records))
+	for _, event := range events {
+		eventCounts[event.Event.MedicationID]++
+	}
+	medications := make([]MedicationDTO, 0, len(records))
+	for _, record := range records {
+		medication, err := medicationDTO(record, eventCounts[record.MedicationID], state, now)
+		if err != nil {
+			return agentMedicationTimingDTO{}, localAgentProjectionError("medication timing", err)
+		}
+		medications = append(medications, medication)
+	}
+	status := "ready"
+	if len(medications) == 0 {
+		status = "empty"
+	}
 	projection := agentMedicationTimingDTO{
-		SchemaVersion: "v1", Status: data.Status, EstimateStatus: data.EstimateStatus,
-		MedicationCount: len(data.Medications),
+		SchemaVersion: "v1", Status: status, EstimateStatus: state.Status,
+		MedicationCount: len(medications),
 		Medications:     []agentMedicationDTO{},
-		Disclaimer:      data.Disclaimer,
+		Disclaimer:      "Medication timing shown here is user-entered or derived context, not medical advice.",
 		PrivateFields:   "medication labels, form, strength, clinician text, notes, logged event rows, and exact logged timestamps are intentionally omitted",
 	}
-	medications := append([]MedicationDTO{}, data.Medications...)
 	sort.Slice(medications, func(i, j int) bool {
 		return medications[i].MedicationID < medications[j].MedicationID
 	})
-	summaries := medicationLogSummaries(data.Events)
+	summaries := medicationLogSummaries(events, state)
 	medicationLimit := len(medications)
 	if medicationLimit > maxAgentMedications {
 		medicationLimit = maxAgentMedications
@@ -380,44 +410,56 @@ func (a *App) agentMedicationProjection() (agentMedicationTimingDTO, error) {
 	return projection, nil
 }
 
-func medicationLogSummaries(events []MedicationLogDTO) map[string]agentMedicationLogSummaryDTO {
+func medicationLogSummaries(events []storage.EffectiveMedicationEvent, state localEstimateState) map[string]agentMedicationLogSummaryDTO {
 	summaries := make(map[string]agentMedicationLogSummaryDTO)
+	latest := make(map[string]storage.EffectiveMedicationEvent)
 	for _, event := range events {
-		summary := summaries[event.MedicationID]
-		if event.CorrectionCount > 0 {
+		medicationID := event.Event.MedicationID
+		summary := summaries[medicationID]
+		if len(event.Corrections) > 0 {
 			summary.CorrectedEventCount++
 		}
 		if event.Excluded {
 			summary.ExcludedCount++
-			summaries[event.MedicationID] = summary
+			summaries[medicationID] = summary
 			continue
 		}
-		switch event.Status {
+		switch event.Event.Status {
 		case "taken":
 			summary.TakenCount++
 		case "skipped":
 			summary.SkippedCount++
 		}
-		if event.Scheduled {
+		if event.Event.Scheduled {
 			summary.ScheduledCount++
 		} else {
 			summary.UnscheduledCount++
 		}
-		if summary.Latest == nil {
-			summary.Latest = &agentMedicationLatestFactDTO{
-				Status: event.Status, Scheduled: event.Scheduled,
-				WakeRelation: event.WakeRelation, SleepRelation: event.SleepRelation,
-				SleepRelationKind: event.SleepRelationKind, Confidence: event.Confidence,
-				Excluded: event.Excluded,
-			}
+		current, exists := latest[medicationID]
+		if !exists || event.Event.DoseAt.After(current.Event.DoseAt) ||
+			(event.Event.DoseAt.Equal(current.Event.DoseAt) && event.Event.EventID > current.Event.EventID) {
+			latest[medicationID] = event
 		}
-		summaries[event.MedicationID] = summary
+		summaries[medicationID] = summary
+	}
+	sleepIndex := newMedicationSleepIndex(state.Sessions)
+	anchors := medicationWakeAnchors(state.Sessions)
+	latestWake := latestMedicationWake(anchors)
+	for medicationID, event := range latest {
+		projected := medicationEventDTO(event, "", state, sleepIndex, anchors, latestWake)
+		summary := summaries[medicationID]
+		summary.Latest = &agentMedicationLatestFactDTO{
+			Status: projected.Status, Scheduled: projected.Scheduled,
+			WakeRelation: projected.WakeRelation, SleepRelation: projected.SleepRelation,
+			SleepRelationKind: projected.SleepRelationKind, Confidence: projected.Confidence,
+		}
+		summaries[medicationID] = summary
 	}
 	return summaries
 }
 
-func (a *App) agentMarkerProjection() (agentMarkersDTO, error) {
-	data, err := a.rhythmMarkersAt(a.currentTime().UTC().Truncate(time.Second))
+func (a *App) agentMarkerProjection(ctx context.Context) (agentMarkersDTO, error) {
+	data, err := a.rhythmMarkersAtContext(ctx, a.currentTime().UTC().Truncate(time.Second))
 	if err != nil {
 		return agentMarkersDTO{}, localAgentProjectionError("rhythm marker", err)
 	}

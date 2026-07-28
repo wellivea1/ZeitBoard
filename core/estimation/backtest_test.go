@@ -2,6 +2,8 @@ package estimation
 
 import (
 	"context"
+	"math"
+	"reflect"
 	"testing"
 	"time"
 
@@ -112,6 +114,169 @@ func TestBacktestPredictionUsesTheSameRecentFitAsEstimate(t *testing.T) {
 	if last.AbsErrorHours > 0.25 {
 		t.Fatalf("last prediction did not use the estimator's recent fit: %#v", last)
 	}
+}
+
+func TestBacktestMatchesPrefixReferenceImplementation(t *testing.T) {
+	zone := "UTC"
+	first := syntheticSessions(36, time.Date(2023, 1, 1, 5, 0, 0, 0, time.UTC), 25*time.Hour, 8*time.Hour, zone)
+	secondStart := first[len(first)-1].Intervals[0].Interval.Start.UTC.Add(36 * time.Hour)
+	second := syntheticSessions(34, secondStart, 24*time.Hour+45*time.Minute, 8*time.Hour, zone)
+	sessions := append(first, second...)
+
+	nap := syntheticSessions(1, time.Date(2023, 2, 1, 17, 0, 0, 0, time.UTC), 24*time.Hour, 90*time.Minute, zone)[0]
+	nap.ID = "nap"
+	nap.IsNap = true
+	suppressed := syntheticSessions(1, time.Date(2023, 2, 2, 4, 0, 0, 0, time.UTC), 24*time.Hour, 8*time.Hour, zone)[0]
+	suppressed.ID = "suppressed"
+	suppressed.Suppressed = true
+	short := syntheticSessions(1, time.Date(2023, 2, 3, 4, 0, 0, 0, time.UTC), 24*time.Hour, 2*time.Hour, zone)[0]
+	short.ID = "short"
+	sessions = append(sessions, nap, suppressed, short)
+	for left, right := 0, len(sessions)-1; left < right; left, right = left+1, right-1 {
+		sessions[left], sessions[right] = sessions[right], sessions[left]
+	}
+
+	estimator := RobustEstimator{}
+	got, err := estimator.Backtest(context.Background(), sessions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := prefixReferenceBacktest(context.Background(), estimator, sessions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("optimized backtest changed output semantics:\ngot:  %#v\nwant: %#v", got, want)
+	}
+}
+
+// prefixReferenceBacktest retains the previous growing-prefix composition for
+// regression comparison. Production intentionally avoids this quadratic path.
+func prefixReferenceBacktest(ctx context.Context, estimator RobustEstimator, sessions []domain.SleepSession) (BacktestReport, error) {
+	config := estimator.Config
+	if config.MinimumEpisodes == 0 {
+		config = DefaultConfig()
+	}
+	full, err := selectEpisodes(sessions, 0)
+	if err != nil {
+		return BacktestReport{}, err
+	}
+	if len(full) <= config.MinimumEpisodes {
+		return BacktestReport{}, &EstimationRefusal{
+			Code:    RefusalInsufficientData,
+			Message: "not enough principal sleep episodes to hold any out for validation",
+		}
+	}
+	report := BacktestReport{}
+	var absoluteErrors []float64
+	hits := 0
+	buckets := map[domain.ConfidenceLevel]*bucketAccumulator{}
+
+	for k := config.MinimumEpisodes; k < len(full); k++ {
+		select {
+		case <-ctx.Done():
+			return BacktestReport{}, ctx.Err()
+		default:
+		}
+		sub := full[:k]
+		asOf := full[k-1].Intervals[0].Interval.End.UTC
+		estimate, estimateErr := estimator.Estimate(ctx, sub, asOf)
+		if estimateErr != nil {
+			if appendBacktestRefusal(&report, k, full[k].Intervals[0].Interval.Start.UTC, estimateErr) {
+				continue
+			}
+			return BacktestReport{}, estimateErr
+		}
+		modelEpisodes, selectErr := selectEpisodes(sub, config.MaximumEpisodes)
+		if selectErr != nil {
+			if appendBacktestRefusal(&report, k, full[k].Intervals[0].Interval.Start.UTC, selectErr) {
+				continue
+			}
+			return BacktestReport{}, selectErr
+		}
+		fit, fitErr := fitOnsetTrend(modelEpisodes)
+		if fitErr != nil {
+			if appendBacktestRefusal(&report, k, full[k].Intervals[0].Interval.Start.UTC, fitErr) {
+				continue
+			}
+			return BacktestReport{}, fitErr
+		}
+
+		actual := full[k].Intervals[0].Interval.Start.UTC
+		lastModelOnset := modelEpisodes[len(modelEpisodes)-1].Intervals[0].Interval.Start.UTC
+		horizon, horizonErr := cycleStep(actual.Sub(lastModelOnset))
+		if horizonErr != nil {
+			if appendBacktestRefusal(&report, k, actual, horizonErr) {
+				continue
+			}
+			return BacktestReport{}, horizonErr
+		}
+		predicted := fit.onsetAt(fit.lastIndex + horizon)
+		absoluteError := math.Abs(predicted.Sub(actual).Hours())
+		within := false
+		var windowStart, windowEnd time.Time
+		var windowWidth float64
+		if horizon >= 1 && horizon <= len(estimate.PredictedSleepWindows) {
+			window := estimate.PredictedSleepWindows[horizon-1].Interval
+			within = window.Contains(actual)
+			windowStart = window.Start.UTC
+			windowEnd = window.End.UTC
+			windowWidth = window.Duration().Hours()
+		}
+		level := estimate.Confidence.Level
+
+		report.Points = append(report.Points, BacktestPoint{
+			EpisodesUsed:     k,
+			HorizonCycles:    horizon,
+			PredictedOnset:   predicted,
+			ActualOnset:      actual,
+			AbsErrorHours:    round2(absoluteError),
+			WithinWindow:     within,
+			WindowStart:      windowStart,
+			WindowEnd:        windowEnd,
+			WindowWidthHours: round2(windowWidth),
+			Confidence:       level,
+		})
+		absoluteErrors = append(absoluteErrors, absoluteError)
+		if within {
+			hits++
+		}
+		accumulator := buckets[level]
+		if accumulator == nil {
+			accumulator = &bucketAccumulator{}
+			buckets[level] = accumulator
+		}
+		accumulator.errors = append(accumulator.errors, absoluteError)
+		if within {
+			accumulator.hits++
+		}
+	}
+
+	report.Evaluations = len(absoluteErrors)
+	if report.Evaluations == 0 {
+		return BacktestReport{}, &EstimationRefusal{
+			Code:    RefusalInsufficientData,
+			Message: "no prefix produced an evaluable prediction",
+		}
+	}
+	report.MedianAbsErrorHours = round2(median(absoluteErrors))
+	report.MeanAbsErrorHours = round2(mean(absoluteErrors))
+	report.P90AbsErrorHours = round2(percentile(absoluteErrors, 90))
+	report.HitRate = round2(float64(hits) / float64(report.Evaluations))
+
+	for _, level := range []domain.ConfidenceLevel{domain.ConfidenceHigh, domain.ConfidenceMedium, domain.ConfidenceLow} {
+		accumulator := buckets[level]
+		if accumulator == nil || len(accumulator.errors) == 0 {
+			continue
+		}
+		report.Calibration = append(report.Calibration, CalibrationBucket{
+			Level:               level,
+			Count:               len(accumulator.errors),
+			HitRate:             round2(float64(accumulator.hits) / float64(len(accumulator.errors))),
+			MedianAbsErrorHours: round2(median(accumulator.errors)),
+		})
+	}
+	return report, nil
 }
 
 func shiftSession(session domain.SleepSession, by time.Duration, zone string) domain.SleepSession {

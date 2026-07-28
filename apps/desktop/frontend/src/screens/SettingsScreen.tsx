@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PageHeader } from "../components/AppShell";
 import {
   configureBackendSync,
@@ -9,13 +9,18 @@ import {
   type BackendSyncStatus,
 } from "../data/backendSync";
 import { loadLocalAgentStatus, type LocalAgentStatus } from "../data/localAgent";
-import { deleteConfirmationToken, downloadSleepDataExport } from "../data/sleepDataControl";
+import {
+  deleteConfirmationToken,
+  saveSleepDataExport,
+  type SleepDataExportSummary,
+} from "../data/sleepDataControl";
 import { notifySleepDataChanged } from "../data/sleepDataEvents";
-import { deleteAllSleepData, exportSleepData, type SleepDataExport } from "../data/sleepEntries";
+import { deleteAllSleepData } from "../data/sleepEntries";
 import { AppearanceSettings } from "./settings/AppearanceSettings";
 import { BackendSyncSettings } from "./settings/BackendSyncSettings";
 import { LocalAgentSettings } from "./settings/LocalAgentSettings";
 import { SleepDataSettings } from "./settings/SleepDataSettings";
+import { createCoalescedRefresh, type CoalescedRefresh } from "../utils/coalescedRefresh";
 
 const initialBackendSyncStatus: BackendSyncStatus = {
   enabled: false,
@@ -42,7 +47,7 @@ function initialBackendSyncForm(status = initialBackendSyncStatus): BackendSyncI
 }
 
 export function SettingsScreen() {
-  const [exportedSleepData, setExportedSleepData] = useState<SleepDataExport | null>(null);
+  const [exportedSleepData, setExportedSleepData] = useState<SleepDataExportSummary | null>(null);
   const [dataControlStatus, setDataControlStatus] = useState("");
   const [dataControlError, setDataControlError] = useState("");
   const [deleteAllConfirmation, setDeleteAllConfirmation] = useState("");
@@ -57,66 +62,62 @@ export function SettingsScreen() {
   const [backendSyncBusy, setBackendSyncBusy] = useState(false);
   const [localAgentStatus, setLocalAgentStatus] = useState<LocalAgentStatus | null>(null);
   const [localAgentError, setLocalAgentError] = useState("");
+  const localAgentRefreshRef = useRef<CoalescedRefresh | null>(null);
+  const backendSyncRefreshRef = useRef<CoalescedRefresh | null>(null);
 
-  const refreshLocalAgentStatus = useCallback(async () => {
-    try {
-      const status = await loadLocalAgentStatus();
-      setLocalAgentStatus(status);
-      setLocalAgentError("");
-    } catch (error) {
-      setLocalAgentError(
-        error instanceof Error ? error.message : "Could not read desktop-local agent status.",
-      );
-    }
-  }, []);
+  const refreshLocalAgentStatus = () => localAgentRefreshRef.current?.request();
 
-  // Polls through an explicit promise chain (like the backend-sync effect
-  // below) so state only ever settles after the await boundary, and never
-  // after unmount.
   useEffect(() => {
-    let current = true;
-    const refresh = () => {
-      void loadLocalAgentStatus()
-        .then((status) => {
-          if (!current) return;
-          setLocalAgentStatus(status);
-          setLocalAgentError("");
-        })
-        .catch((error: unknown) => {
-          if (!current) return;
-          setLocalAgentError(
-            error instanceof Error ? error.message : "Could not read desktop-local agent status.",
-          );
-        });
+    const refresh = createCoalescedRefresh(
+      loadLocalAgentStatus,
+      (status) => {
+        setLocalAgentStatus(status);
+        setLocalAgentError("");
+      },
+      (error) => {
+        setLocalAgentError(
+          error instanceof Error ? error.message : "Could not read desktop-local agent status.",
+        );
+      },
+    );
+    localAgentRefreshRef.current = refresh;
+    const requestIfVisible = () => {
+      if (document.visibilityState !== "hidden") refresh.request();
     };
-    refresh();
-    const interval = window.setInterval(refresh, 15_000);
+    const onVisibilityChange = () => requestIfVisible();
+    refresh.request();
+    const interval = window.setInterval(requestIfVisible, 15_000);
+    document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {
-      current = false;
       window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      if (localAgentRefreshRef.current === refresh) localAgentRefreshRef.current = null;
+      refresh.dispose();
     };
   }, []);
 
   useEffect(() => {
-    let current = true;
-    void loadBackendSyncStatus()
-      .then((status) => {
-        if (!current) return;
+    const refresh = createCoalescedRefresh(
+      loadBackendSyncStatus,
+      (status) => {
         setBackendSyncStatus(status);
         setBackendSyncForm((form) => ({
           ...form,
           backendUrl: status.backendUrl || form.backendUrl,
           insecureSkipVerify: status.insecureSkipVerify,
         }));
-      })
-      .catch((error: unknown) => {
-        if (!current) return;
+      },
+      (error) => {
         setBackendSyncError(
           error instanceof Error ? error.message : "Could not read backend sync status.",
         );
-      });
+      },
+    );
+    backendSyncRefreshRef.current = refresh;
+    refresh.request();
     return () => {
-      current = false;
+      if (backendSyncRefreshRef.current === refresh) backendSyncRefreshRef.current = null;
+      refresh.dispose();
     };
   }, []);
 
@@ -124,15 +125,18 @@ export function SettingsScreen() {
     setDataControlBusy(true);
     setDataControlError("");
     try {
-      const exported = await exportSleepData();
+      const exported = await saveSleepDataExport();
       setExportedSleepData(exported);
-      const downloaded = downloadSleepDataExport(exported);
+      if (exported.canceled) {
+        setDataControlStatus("Export canceled.");
+        return;
+      }
       setDataControlStatus(
-        `${downloaded ? "Downloaded" : "Prepared"} ${exported.observationCount} ${
+        `${exported.saved ? "Saved" : "Prepared"} ${exported.observationCount} ${
           exported.observationCount === 1 ? "observation" : "observations"
         } and ${exported.correctionCount} ${
           exported.correctionCount === 1 ? "correction" : "corrections"
-        } from ${exported.generatedLabel}.`,
+        }${exported.saved ? ` to ${exported.fileName}` : ` from ${exported.generatedLabel}`}.`,
       );
     } catch (error) {
       setDataControlError(error instanceof Error ? error.message : "Could not export sleep data.");
@@ -171,7 +175,8 @@ export function SettingsScreen() {
     try {
       const status = await action();
       setBackendSyncStatus(status);
-      await refreshLocalAgentStatus();
+      backendSyncRefreshRef.current?.supersede();
+      refreshLocalAgentStatus();
       setBackendSyncMessage(success(status));
     } catch (error) {
       setBackendSyncError(error instanceof Error ? error.message : "Backend sync action failed.");

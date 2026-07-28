@@ -26,6 +26,7 @@ import {
   type AppearanceClock,
   type NightRule,
 } from "./nightMode";
+import { createCoalescedRefresh } from "../utils/coalescedRefresh";
 import { sleepDataChangedEvent } from "../data/sleepDataEvents";
 
 export interface AppearanceState {
@@ -243,21 +244,23 @@ export function useAppearance(): AppearanceState {
   // slow tick so engagement happens without a reload.
   useEffect(() => {
     if (!nightRule.enabled) return;
-    let current = true;
-    const refresh = () =>
-      void loadAppearanceClock().then((loaded) => {
-        if (current) setClock(loaded);
-      });
-    refresh();
-    window.addEventListener(sleepDataChangedEvent, refresh);
-    const tick = window.setInterval(() => {
+    const refresh = createCoalescedRefresh(loadAppearanceClock, setClock);
+    const request = () => refresh.request();
+    const requestIfVisible = () => {
+      if (document.visibilityState === "hidden") return;
       setNow(new Date());
-      refresh();
-    }, 60_000);
+      request();
+    };
+    const onVisibilityChange = () => requestIfVisible();
+    request();
+    window.addEventListener(sleepDataChangedEvent, request);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    const tick = window.setInterval(requestIfVisible, 60_000);
     return () => {
-      current = false;
-      window.removeEventListener(sleepDataChangedEvent, refresh);
+      window.removeEventListener(sleepDataChangedEvent, request);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       window.clearInterval(tick);
+      refresh.dispose();
     };
   }, [nightRule.enabled]);
 

@@ -7,6 +7,7 @@ const backendTasks = {
   tasks: [
     {
       taskId: "task_abc123def456",
+      revision: 3,
       title: "File paperwork",
       durationMinutes: 45,
       durationLabel: "45 minutes",
@@ -58,9 +59,10 @@ describe("tasks", () => {
       },
     };
     await addTask({ title: "File paperwork", durationMinutes: 45 }, root);
-    await setTaskDone("task_abc123def456", true, root);
-    await deleteTask("task_abc123def456", root);
+    await setTaskDone("task_abc123def456", 3, true, root);
+    await deleteTask("task_abc123def456", 3, root);
     expect(calls.map(([name]) => name)).toEqual(["AddTask", "SetTaskDone", "DeleteTask"]);
-    expect(calls[1]?.[1]).toEqual({ taskId: "task_abc123def456", done: true });
+    expect(calls[1]?.[1]).toEqual({ taskId: "task_abc123def456", revision: 3, done: true });
+    expect(calls[2]?.[1]).toEqual({ taskId: "task_abc123def456", revision: 3 });
   });
 });

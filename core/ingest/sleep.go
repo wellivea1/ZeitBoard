@@ -51,6 +51,10 @@ func mergeSessions(left, right domain.SleepSession) (domain.SleepSession, error)
 	if err != nil {
 		return domain.SleepSession{}, err
 	}
+	classification := left.EffectiveClassification()
+	if classification != right.EffectiveClassification() {
+		classification = domain.SleepClassificationUnknown
+	}
 	merged := domain.SleepSession{
 		ID: domain.SleepSessionID(string(left.ID) + "+" + string(right.ID)),
 		Intervals: []domain.SleepInterval{{
@@ -58,8 +62,9 @@ func mergeSessions(left, right domain.SleepSession) (domain.SleepSession, error)
 			StartEvidence: mergeEvidence(leftInterval.StartEvidence, rightInterval.StartEvidence),
 			EndEvidence:   mergeEvidence(leftInterval.EndEvidence, rightInterval.EndEvidence),
 		}},
-		IsNap:     left.IsNap && right.IsNap,
-		CreatedAt: maxTime(left.CreatedAt, right.CreatedAt),
+		Classification: classification,
+		IsNap:          classification == domain.SleepClassificationNap,
+		CreatedAt:      maxTime(left.CreatedAt, right.CreatedAt),
 	}
 	return merged, nil
 }

@@ -7,7 +7,7 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.non24.planner.data.FixtureSleepRepository
-import org.non24.planner.data.InMemoryMedicationRepository
+import org.non24.planner.data.LocalMedicationRepository
 import org.non24.planner.data.fixtureEstimateRepository
 import org.non24.planner.domain.AcquisitionMethod
 import org.non24.planner.domain.EvidenceStatus
@@ -29,7 +29,7 @@ class FixtureAndMedicationRepositoryTest {
 
     @Test
     fun medicationEventsAreAppendedAndReturnedNewestFirst() = runTest {
-        val repository = InMemoryMedicationRepository()
+        val repository = LocalMedicationRepository()
         repository.append(event("first", "2026-06-15T10:00:00Z"))
         repository.append(event("second", "2026-06-15T11:00:00Z"))
 

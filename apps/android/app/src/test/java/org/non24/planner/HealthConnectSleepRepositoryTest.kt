@@ -1,13 +1,18 @@
 package org.non24.planner
 
 import java.time.Instant
+import java.time.ZoneOffset
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.non24.planner.data.HealthConnectClientAdapter
 import org.non24.planner.data.HealthConnectPermissions
 import org.non24.planner.data.HealthConnectSleepRepository
+import org.non24.planner.data.InMemoryLocalUserDataStore
+import org.non24.planner.data.LocalUserDataRepository
 import org.non24.planner.domain.AcquisitionMethod
 import org.non24.planner.domain.EvidenceStatus
 import org.non24.planner.domain.HealthConnectAvailability
@@ -52,11 +57,70 @@ class HealthConnectSleepRepositoryTest {
         assertEquals(0, adapter.readCount)
     }
 
+    @Test
+    fun failedRefreshRetainsLastGoodSnapshot() = runTest {
+        val adapter = FakeHealthConnectClientAdapter().apply {
+            granted = HealthConnectPermissions.required
+        }
+        val repository = HealthConnectSleepRepository(adapter)
+        repository.refresh()
+        val imported = repository.sourceEpisodes.value
+
+        adapter.readFailure = IllegalStateException("provider failed")
+        repository.refresh()
+
+        assertEquals(imported, repository.sourceEpisodes.value)
+        assertNotNull(repository.lastRefreshError.value)
+    }
+
+    @Test
+    fun successfulEmptyRefreshReplacesTheSnapshot() = runTest {
+        val adapter = FakeHealthConnectClientAdapter().apply {
+            granted = HealthConnectPermissions.required
+        }
+        val repository = HealthConnectSleepRepository(adapter)
+        repository.refresh()
+        assertTrue(repository.sourceEpisodes.value.isNotEmpty())
+
+        adapter.returnEmptySnapshot = true
+        repository.refresh()
+
+        assertTrue(repository.sourceEpisodes.value.isEmpty())
+        assertNull(repository.lastRefreshError.value)
+    }
+
+    @Test
+    fun newRepositoryHydratesSavedSnapshotWhenProviderIsUnavailable() = runTest {
+        val store = InMemoryLocalUserDataStore()
+        val firstProjection = LocalUserDataRepository(store)
+        val availableAdapter = FakeHealthConnectClientAdapter().apply {
+            granted = HealthConnectPermissions.required
+        }
+        val firstRepository = HealthConnectSleepRepository(availableAdapter, firstProjection)
+        firstRepository.refresh()
+
+        val restoredProjection = LocalUserDataRepository(store)
+        restoredProjection.initialize()
+        val restoredRepository = HealthConnectSleepRepository(
+            FakeHealthConnectClientAdapter(HealthConnectAvailability.UPDATE_REQUIRED),
+            restoredProjection,
+        )
+        restoredRepository.refreshPermissionState()
+
+        assertEquals(
+            firstRepository.sourceEpisodes.value,
+            restoredRepository.sourceEpisodes.value,
+        )
+        assertEquals(HealthPermissionState.UNAVAILABLE, restoredRepository.permissionState.value)
+    }
+
     private class FakeHealthConnectClientAdapter(
         private val availability: HealthConnectAvailability = HealthConnectAvailability.AVAILABLE,
     ) : HealthConnectClientAdapter {
         var granted: Set<String> = emptySet()
         var readCount: Int = 0
+        var returnEmptySnapshot: Boolean = false
+        var readFailure: Throwable? = null
 
         override fun availability(): HealthConnectAvailability = availability
 
@@ -64,12 +128,17 @@ class HealthConnectSleepRepositoryTest {
 
         override suspend fun readRecentSleep(): List<SleepEpisode> {
             readCount += 1
+            readFailure?.let { throw it }
+            if (returnEmptySnapshot) return emptyList()
             return listOf(
                 SleepEpisode(
                     id = "health-sleep-1",
+                    logicalSourceId = "health-source-1",
                     start = Instant.parse("2026-06-14T03:55:00Z"),
                     end = Instant.parse("2026-06-14T12:05:00Z"),
-                    timeZoneId = "America/New_York",
+                    ianaTimeZoneId = null,
+                    startZoneOffset = ZoneOffset.ofHours(-4),
+                    endZoneOffset = ZoneOffset.ofHours(-4),
                     provenance = Provenance(
                         acquisitionMethod = AcquisitionMethod.HEALTH_CONNECT,
                         evidenceStatus = EvidenceStatus.IMPORTED,

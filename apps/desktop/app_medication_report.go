@@ -207,14 +207,14 @@ type medicationReportRange struct {
 }
 
 func (a *App) GetMedicationClinicianReport(input MedicationClinicalReportInput) (MedicationClinicalReportDTO, error) {
-	return a.medicationClinicianReportAt(input, a.currentTime().UTC().Truncate(time.Second))
+	return a.medicationClinicianReportAt(a.applicationContext(), input, a.currentTime().UTC().Truncate(time.Second))
 }
 
 func (a *App) ExportMedicationClinicianReport(input MedicationClinicalReportExportInput) (MedicationClinicalReportExportDTO, error) {
 	if strings.TrimSpace(input.Confirmation) != medicationReportExportConfirmation {
 		return MedicationClinicalReportExportDTO{}, errors.New("type EXPORT to confirm creation of a clinician report file")
 	}
-	report, err := a.medicationClinicianReportAt(input.Report, a.currentTime().UTC().Truncate(time.Second))
+	report, err := a.medicationClinicianReportAt(a.applicationContext(), input.Report, a.currentTime().UTC().Truncate(time.Second))
 	if err != nil {
 		return MedicationClinicalReportExportDTO{}, err
 	}
@@ -233,12 +233,11 @@ func (a *App) ExportMedicationClinicianReport(input MedicationClinicalReportExpo
 	}, nil
 }
 
-func (a *App) medicationClinicianReportAt(input MedicationClinicalReportInput, now time.Time) (MedicationClinicalReportDTO, error) {
+func (a *App) medicationClinicianReportAt(ctx context.Context, input MedicationClinicalReportInput, now time.Time) (MedicationClinicalReportDTO, error) {
 	store, err := a.requireStore()
 	if err != nil {
 		return MedicationClinicalReportDTO{}, err
 	}
-	ctx := context.Background()
 	medications, err := store.ListMedications(ctx)
 	if err != nil {
 		return MedicationClinicalReportDTO{}, err
@@ -463,15 +462,13 @@ func addMedicationReportSleep(rows []MedicationClinicalActogramRowDTO, rowStarts
 		}
 		for _, interval := range session.Intervals {
 			kind := "sleep_observed"
-			if session.IsNap {
+			if session.IsNapSleep() {
 				kind = "sleep_nap"
-			} else if interval.StartEvidence.Status == domain.StatusInferred || interval.EndEvidence.Status == domain.StatusInferred {
+			} else if !session.IsPrincipalSleep() || interval.StartEvidence.Status == domain.StatusInferred || interval.EndEvidence.Status == domain.StatusInferred {
 				kind = "sleep_inferred"
 			}
-			for index := range rows {
-				if !interval.Interval.End.UTC.After(rowStarts[index]) || !interval.Interval.Start.UTC.Before(rowStarts[index+1]) {
-					continue
-				}
+			first, last := medicationReportOverlappingRows(rowStarts, interval.Interval.Start.UTC, interval.Interval.End.UTC)
+			for index := first; index < last; index++ {
 				start := interval.Interval.Start.UTC
 				if start.Before(rowStarts[index]) {
 					start = rowStarts[index]
@@ -513,10 +510,8 @@ func addMedicationReportSleep(rows []MedicationClinicalActogramRowDTO, rowStarts
 
 func addMedicationReportForecast(rows []MedicationClinicalActogramRowDTO, rowStarts []time.Time, reportRange medicationReportRange, estimate domain.PhaseEstimate, legend map[string]bool) {
 	for _, window := range estimate.PredictedSleepWindows {
-		for index := range rows {
-			if !window.Interval.End.UTC.After(rowStarts[index]) || !window.Interval.Start.UTC.Before(rowStarts[index+1]) {
-				continue
-			}
+		first, last := medicationReportOverlappingRows(rowStarts, window.Interval.Start.UTC, window.Interval.End.UTC)
+		for index := first; index < last; index++ {
 			start := window.Interval.Start.UTC
 			if start.Before(rowStarts[index]) {
 				start = rowStarts[index]
@@ -632,6 +627,7 @@ func medicationReportAdherence(events []storage.EffectiveMedicationEvent, medica
 	effective := append([]storage.EffectiveMedicationEvent(nil), events...)
 	sort.SliceStable(effective, func(i, j int) bool { return effective[i].Event.DoseAt.Before(effective[j].Event.DoseAt) })
 	anchors := medicationWakeAnchors(state.Sessions)
+	sleepIndex := newMedicationSleepIndex(state.Sessions)
 	latestWake := latestMedicationWake(anchors)
 	rows := make([]MedicationClinicalAdherenceEventDTO, 0, len(effective))
 	counts := medicationReportAdherenceCounts{}
@@ -665,7 +661,7 @@ func medicationReportAdherence(events []storage.EffectiveMedicationEvent, medica
 		} else {
 			entry.asNeeded++
 		}
-		projected := medicationEventDTO(item, aliases[item.Event.MedicationID], state, anchors, latestWake)
+		projected := medicationEventDTO(item, aliases[item.Event.MedicationID], state, sleepIndex, anchors, latestWake)
 		note := ""
 		if input.IncludeMedicationNotes {
 			note = item.Event.Note
@@ -889,6 +885,27 @@ func medicationReportRedactions(input MedicationClinicalReportInput) []string {
 		redactions = append(redactions, "Forecast bands omitted")
 	}
 	return redactions
+}
+
+// medicationReportOverlappingRows narrows an interval to the only rows it can
+// touch. rowStarts contains one extra boundary and remains ordered across DST.
+func medicationReportOverlappingRows(rowStarts []time.Time, start, end time.Time) (int, int) {
+	rowCount := len(rowStarts) - 1
+	if rowCount <= 0 {
+		return 0, 0
+	}
+	start = start.UTC()
+	end = end.UTC()
+	first := sort.Search(rowCount, func(index int) bool {
+		return rowStarts[index+1].UTC().After(start)
+	})
+	last := sort.Search(rowCount, func(index int) bool {
+		return !rowStarts[index].UTC().Before(end)
+	})
+	if first >= last {
+		return 0, 0
+	}
+	return first, last
 }
 
 func medicationReportLegend(kinds map[string]bool) []MedicationClinicalLegendDTO {

@@ -968,6 +968,11 @@ button {
 .source-conflicts-panel {
   grid-column: span 12;
 }
+.synced-proposals-panel {
+  grid-column: span 12;
+  padding: 24px 26px;
+  overflow: hidden;
+}
 .approval-history-panel {
   grid-column: span 12;
   overflow: hidden;
@@ -1023,6 +1028,29 @@ button {
 .decision-state[data-decision="rejected"] {
   color: var(--danger-text) !important;
   border-left-color: var(--danger-border);
+}
+.decision-state[data-decision="pending"] {
+  color: var(--muted) !important;
+  border-left-color: var(--line);
+}
+.synced-proposal-history {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--divider);
+}
+.synced-proposal-history .panel-heading {
+  margin-bottom: 0;
+}
+.synced-proposal-pagination {
+  margin-top: 18px;
+  padding-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  border-top: 1px solid var(--divider);
+  color: var(--muted);
+  font-size: 10px;
 }
 .rhythm-panel {
   grid-column: span 12;
@@ -2396,6 +2424,10 @@ button {
   .rhythm-tabs {
     flex-wrap: wrap;
     padding: 12px 16px;
+  }
+  .synced-proposal-pagination {
+    align-items: flex-start;
+    flex-direction: column;
   }
   .sort-filter {
     margin-left: 0;

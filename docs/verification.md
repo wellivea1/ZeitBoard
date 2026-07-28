@@ -283,6 +283,47 @@ Not verified here: the end-to-end voice path through a real MCP client, which
 needs a running desktop app and a GUI session. `scripts/smoke-local-mcp.ps1`
 covers it manually and was confirmed to fail closed when the bridge is absent.
 
+## Architecture and performance hardening
+
+Verified on Windows 11 on 2026-07-27 against the disposition ledger in
+[`architecture-performance-review-2026-07-27.md`](architecture-performance-review-2026-07-27.md):
+
+- `go test` and `go vet` pass for every core, server, and desktop package. The
+  isolated tools module also passes both commands. The desktop application,
+  local MCP companion, server MCP companion, and server daemon compile.
+- Contract validation passes, and fixture regeneration verifies the exact set
+  of 29 synthetic files from the shared manifest.
+- Desktop frontend: 38 files / 243 tests pass. Trusted-view prototype: 2 files /
+  6 tests pass. Both TypeScript checks, ESLint, the 19-screen UI architecture
+  guard, formatting, and production Vite builds pass. Bundle output contains
+  separate route, assistant, and clinician-report chunks.
+- Android JVM tests were forced to rerun. `lintDebug` and `assembleDebug` pass.
+  `connectedDebugAndroidTest --rerun-tasks` ran 4 tests successfully on the
+  requested `Pixel_10_Pro_XL_API_36_1` API 36 AVD.
+- The freshly installed APK was visually checked on Status, Correct sleep, and
+  Medication event after navigation transitions settled. The screens retain
+  the ruled desktop-aligned hierarchy, compact fields/actions, minimum touch
+  targets, and no generic bubble-panel treatment or clipping.
+- Installer policy, transaction, rollback, no-op update, ACL marker, and static
+  wiring coverage reports 45 passed and 0 failed. All modified PowerShell files
+  also pass the language parser.
+- Focused proposal store/API tests cover active-first stable pagination,
+  high-water exclusion of concurrent inserts, opaque snapshot cursor
+  round-trips/tamper rejection, joined one-use nonces, and cross-device
+  decisions.
+- One-iteration benchmarks on the Ryzen 5 6600U verify linearized backtesting:
+  100 episodes 1.6 ms, 1,000 episodes 42.6 ms, 10,000 episodes 164.3 ms, and
+  20,000 episodes 291.8 ms. These are local diagnostic measurements, not
+  release latency guarantees.
+- `git diff --check` is clean. `git fsck --full` reports no missing or corrupt
+  objects; its dangling blobs are ordinary unreachable edit objects from the
+  interrupted work session.
+
+The connected suite validates Android persistence and process-recreation
+behavior but does not seed real Health Connect provider records. Paging,
+source-offset, duplicate-revision, permission-loss, DST gap/overlap, and
+last-good-snapshot behavior are covered by adapter/repository tests.
+
 ## Environment limitations
 
 - Emulator semantics and screenshots were reviewed, but a full manual TalkBack

@@ -1,8 +1,7 @@
-import { deleteConfirmationToken } from "../../data/sleepDataControl";
-import type { SleepDataExport } from "../../data/sleepEntries";
+import { deleteConfirmationToken, type SleepDataExportSummary } from "../../data/sleepDataControl";
 
 interface SleepDataSettingsProps {
-  exported: SleepDataExport | null;
+  exported: SleepDataExportSummary | null;
   confirmation: string;
   busy: boolean;
   error: string;
@@ -45,13 +44,31 @@ export function SleepDataSettings({
             Export sleep data
           </button>
           {exported && (
-            <textarea
-              className="export-preview"
-              aria-label="Sleep data export JSON"
-              readOnly
-              rows={8}
-              value={exported.json}
-            />
+            <div className="export-summary">
+              <dl>
+                <div>
+                  <dt>File</dt>
+                  <dd>{exported.fileName}</dd>
+                </div>
+                <div>
+                  <dt>Generated</dt>
+                  <dd>{exported.generatedLabel}</dd>
+                </div>
+                <div>
+                  <dt>Contents</dt>
+                  <dd>
+                    {exported.observationCount}{" "}
+                    {exported.observationCount === 1 ? "observation" : "observations"},{" "}
+                    {exported.correctionCount}{" "}
+                    {exported.correctionCount === 1 ? "correction" : "corrections"}
+                  </dd>
+                </div>
+              </dl>
+              <pre className="export-preview" aria-label="Sleep data export JSON preview">
+                {exported.preview}
+              </pre>
+              {exported.previewTruncated && <small>Preview truncated after 512 characters.</small>}
+            </div>
           )}
         </section>
         <section className="data-control-card danger-zone" aria-labelledby="sleep-delete-title">

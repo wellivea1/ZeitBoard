@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/csv"
@@ -73,9 +74,9 @@ type sleepImportDocument struct {
 }
 
 type sleepImportJSONEnvelope struct {
-	SchemaVersion string            `json:"schema_version"`
-	GeneratedAt   time.Time         `json:"generated_at"`
-	Observations  []json.RawMessage `json:"observations"`
+	SchemaVersion *string            `json:"schema_version"`
+	GeneratedAt   *time.Time         `json:"generated_at"`
+	Observations  *[]json.RawMessage `json:"observations"`
 }
 
 type sleepImportJSONObservation struct {
@@ -173,47 +174,36 @@ func parseSleepImport(input SleepImportInput) sleepImportDocument {
 }
 
 func parseSleepImportJSON(contents string, document *sleepImportDocument) {
-	var rawTop map[string]json.RawMessage
-	if err := decodeSingleJSON([]byte(contents), &rawTop); err != nil {
+	var envelope sleepImportJSONEnvelope
+	if err := decodeSingleJSONString(contents, &envelope); err != nil {
 		document.errors = append(document.errors, "invalid JSON: "+err.Error())
 		return
 	}
-	for key := range rawTop {
-		if key != "schema_version" && key != "generated_at" && key != "observations" {
-			document.errors = append(document.errors, fmt.Sprintf("unknown top-level field %q", key))
-		}
+	if envelope.SchemaVersion == nil {
+		document.errors = append(document.errors, "missing top-level field \"schema_version\"")
 	}
-	for _, required := range []string{"schema_version", "generated_at", "observations"} {
-		if _, exists := rawTop[required]; !exists {
-			document.errors = append(document.errors, fmt.Sprintf("missing top-level field %q", required))
-		}
+	if envelope.GeneratedAt == nil {
+		document.errors = append(document.errors, "missing top-level field \"generated_at\"")
+	}
+	if envelope.Observations == nil {
+		document.errors = append(document.errors, "missing top-level field \"observations\"")
 	}
 	if len(document.errors) > 0 {
 		return
 	}
-
-	encoded, err := json.Marshal(rawTop)
-	if err != nil {
-		document.errors = append(document.errors, err.Error())
-		return
-	}
-	var envelope sleepImportJSONEnvelope
-	if err := decodeSingleJSON(encoded, &envelope); err != nil {
-		document.errors = append(document.errors, "invalid observation set: "+err.Error())
-		return
-	}
-	if envelope.SchemaVersion != "v1" {
+	if *envelope.SchemaVersion != "v1" {
 		document.errors = append(document.errors, "schema_version must be v1")
 	}
 	if envelope.GeneratedAt.IsZero() {
 		document.errors = append(document.errors, "generated_at must be an RFC 3339 timestamp")
 	}
-	if len(envelope.Observations) > MaxSleepImportRows {
+	observations := *envelope.Observations
+	if len(observations) > MaxSleepImportRows {
 		document.errors = append(document.errors, fmt.Sprintf("observation set exceeds the %d-row import limit", MaxSleepImportRows))
 		return
 	}
 
-	for index, raw := range envelope.Observations {
+	for index, raw := range observations {
 		row := SleepImportRow{RowNumber: index + 1, Status: SleepImportStatusReady, Errors: []string{}}
 		var value sleepImportJSONObservation
 		if err := decodeSingleJSON(raw, &value); err != nil {
@@ -404,7 +394,7 @@ func (s *Store) classifySleepImport(ctx context.Context, queryer sleepImportQuer
 		return report, nil
 	}
 
-	existingBySource, existingByObservation, err := loadExistingSleepImports(ctx, queryer)
+	existingBySource, existingByObservation, err := loadExistingSleepImports(ctx, queryer, report.Rows)
 	if err != nil {
 		return SleepImportReport{}, err
 	}
@@ -476,32 +466,143 @@ func (s *Store) classifySleepImport(ctx context.Context, queryer sleepImportQuer
 	return report, nil
 }
 
-func loadExistingSleepImports(ctx context.Context, queryer sleepImportQueryer) (map[string]SleepObservationRecord, map[string]SleepObservationRecord, error) {
-	rows, err := queryer.QueryContext(ctx, `SELECT payload_json FROM local_sleep_observations`)
-	if err != nil {
-		return nil, nil, err
+const sleepImportConflictQueryBatchSize = 400
+
+func loadExistingSleepImports(
+	ctx context.Context,
+	queryer sleepImportQueryer,
+	candidates []SleepImportRow,
+) (map[string]SleepObservationRecord, map[string]SleepObservationRecord, error) {
+	observationIDs := map[string]struct{}{}
+	sourceIDs := map[string]struct{}{}
+	for _, candidate := range candidates {
+		if candidate.Status == SleepImportStatusInvalid {
+			continue
+		}
+		observationIDs[candidate.Observation.ObservationID] = struct{}{}
+		sourceIDs[candidate.Observation.Provenance.SourceRecordID] = struct{}{}
 	}
-	defer rows.Close()
+
 	bySource := map[string]SleepObservationRecord{}
 	byObservation := map[string]SleepObservationRecord{}
-	for rows.Next() {
-		var encoded []byte
-		if err := rows.Scan(&encoded); err != nil {
-			return nil, nil, err
+	seenObservation := map[string]struct{}{}
+	visit := func(record SleepObservationRecord) error {
+		if _, seen := seenObservation[record.ObservationID]; seen {
+			return nil
 		}
-		var record SleepObservationRecord
-		if err := json.Unmarshal(encoded, &record); err != nil {
-			return nil, nil, err
-		}
+		seenObservation[record.ObservationID] = struct{}{}
 		byObservation[record.ObservationID] = record
-		if record.Provenance.AcquisitionMethod == ProvenanceAcquisitionFileImport && record.Provenance.SourceRecordID != "" {
-			if _, exists := bySource[record.Provenance.SourceRecordID]; exists {
-				return nil, nil, errors.New("local store contains repeated imported source_record_id values; suppress or erase the duplicate before importing")
-			}
-			bySource[record.Provenance.SourceRecordID] = record
+		if record.Provenance.AcquisitionMethod != ProvenanceAcquisitionFileImport || record.Provenance.SourceRecordID == "" {
+			return nil
+		}
+		if existing, exists := bySource[record.Provenance.SourceRecordID]; exists && existing.ObservationID != record.ObservationID {
+			return errors.New("local store contains repeated imported source_record_id values; suppress or erase the duplicate before importing")
+		}
+		bySource[record.Provenance.SourceRecordID] = record
+		return nil
+	}
+
+	if err := queryExistingSleepImportRows(ctx, queryer, "observation_id", sortedSleepImportKeys(observationIDs), visit); err != nil {
+		return nil, nil, err
+	}
+	if err := queryExistingSleepImportRows(ctx, queryer, "source_record_id", sortedSleepImportKeys(sourceIDs), visit); err != nil {
+		return nil, nil, err
+	}
+	return bySource, byObservation, nil
+}
+
+func sortedSleepImportKeys(values map[string]struct{}) []string {
+	result := make([]string, 0, len(values))
+	for value := range values {
+		if value != "" {
+			result = append(result, value)
 		}
 	}
-	return bySource, byObservation, rows.Err()
+	sort.Strings(result)
+	return result
+}
+
+func queryExistingSleepImportRows(
+	ctx context.Context,
+	queryer sleepImportQueryer,
+	field string,
+	values []string,
+	visit func(SleepObservationRecord) error,
+) error {
+	for offset := 0; offset < len(values); offset += sleepImportConflictQueryBatchSize {
+		end := offset + sleepImportConflictQueryBatchSize
+		if end > len(values) {
+			end = len(values)
+		}
+		batch := values[offset:end]
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(batch)), ",")
+		args := make([]any, 0, len(batch)+1)
+		var where string
+		switch field {
+		case "observation_id":
+			where = "observation_id IN (" + placeholders + ")"
+		case "source_record_id":
+			where = "acquisition_method = ? AND source_record_id IN (" + placeholders + ")"
+			args = append(args, ProvenanceAcquisitionFileImport)
+		default:
+			return fmt.Errorf("unsupported sleep import conflict field %q", field)
+		}
+		for _, value := range batch {
+			args = append(args, value)
+		}
+		rows, err := queryer.QueryContext(ctx, `SELECT
+			observation_id, kind, start_at, end_at, zone_id, classification,
+			acquisition_method, evidence_status, recorded_at, source_record_id
+			FROM local_sleep_observations
+			WHERE `+where+`
+			ORDER BY observation_id`, args...)
+		if err != nil {
+			return err
+		}
+		for rows.Next() {
+			record, scanErr := scanSleepImportConflictRow(rows)
+			if scanErr != nil {
+				_ = rows.Close()
+				return scanErr
+			}
+			if visitErr := visit(record); visitErr != nil {
+				_ = rows.Close()
+				return visitErr
+			}
+		}
+		rowErr := rows.Err()
+		closeErr := rows.Close()
+		if rowErr != nil {
+			return rowErr
+		}
+		if closeErr != nil {
+			return closeErr
+		}
+	}
+	return nil
+}
+
+func scanSleepImportConflictRow(rows *sql.Rows) (SleepObservationRecord, error) {
+	var record SleepObservationRecord
+	var startAt, endAt, recordedAt string
+	if err := rows.Scan(
+		&record.ObservationID, &record.Kind, &startAt, &endAt, &record.ZoneID,
+		&record.Sleep.Classification, &record.Provenance.AcquisitionMethod,
+		&record.Provenance.EvidenceStatus, &recordedAt, &record.Provenance.SourceRecordID,
+	); err != nil {
+		return SleepObservationRecord{}, err
+	}
+	var err error
+	if record.StartAt, err = time.Parse(time.RFC3339Nano, startAt); err != nil {
+		return SleepObservationRecord{}, fmt.Errorf("stored sleep start_at: %w", err)
+	}
+	if record.EndAt, err = time.Parse(time.RFC3339Nano, endAt); err != nil {
+		return SleepObservationRecord{}, fmt.Errorf("stored sleep end_at: %w", err)
+	}
+	if record.Provenance.RecordedAt, err = time.Parse(time.RFC3339Nano, recordedAt); err != nil {
+		return SleepObservationRecord{}, fmt.Errorf("stored sleep recorded_at: %w", err)
+	}
+	return record, nil
 }
 
 func appendImportedSleepObservation(ctx context.Context, tx *sql.Tx, record SleepObservationRecord) error {
@@ -527,8 +628,16 @@ func appendImportedSleepObservation(ctx context.Context, tx *sql.Tx, record Slee
 	return err
 }
 
+func decodeSingleJSONString(data string, target any) error {
+	return decodeSingleJSONReader(strings.NewReader(data), target)
+}
+
 func decodeSingleJSON(data []byte, target any) error {
-	decoder := json.NewDecoder(strings.NewReader(string(data)))
+	return decodeSingleJSONReader(bytes.NewReader(data), target)
+}
+
+func decodeSingleJSONReader(reader io.Reader, target any) error {
+	decoder := json.NewDecoder(reader)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
 		return err

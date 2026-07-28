@@ -25,7 +25,8 @@ const (
 	KindTask Kind = "task"
 	// KindTombstone marks an erased record in the pull stream. Tombstones are
 	// minted only by the server's erase endpoint — clients cannot push them —
-	// and their payload carries nothing but the erased record id.
+	// and their metadata-only payload carries the erased id plus its original
+	// non-sensitive kind when known.
 	KindTombstone Kind = "tombstone"
 )
 
@@ -63,7 +64,8 @@ type PullResponse struct {
 }
 
 type TombstonePayload struct {
-	RecordID string `json:"record_id"`
+	RecordID   string `json:"record_id"`
+	RecordKind Kind   `json:"record_kind,omitempty"`
 }
 
 type EraseRequest struct {

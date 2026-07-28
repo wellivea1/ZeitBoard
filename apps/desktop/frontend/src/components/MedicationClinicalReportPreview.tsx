@@ -9,6 +9,17 @@ import type {
 } from "../data/medicationReport";
 
 const rowsPerPage = 31;
+const driftVisualPointLimit = 180;
+const evidenceRowsPerPage = 100;
+
+function sampleIndexed<T>(items: T[], limit: number): Array<{ item: T; index: number }> {
+  if (items.length <= limit) return items.map((item, index) => ({ item, index }));
+  const lastIndex = items.length - 1;
+  return Array.from({ length: limit }, (_, sampleIndex) => {
+    const index = Math.round((sampleIndex * lastIndex) / (limit - 1));
+    return { item: items[index] as T, index };
+  });
+}
 
 function annotationSymbol(kind: MedicationClinicalAnnotationKind): string {
   switch (kind) {
@@ -204,21 +215,29 @@ function driftY(value: number, minimum: number, maximum: number): number {
 
 export function MedicationReportDrift({ report }: { report: MedicationClinicalReport }) {
   const points = report.drift.points;
+  const [pointPage, setPointPage] = useState(0);
+  const pointPageCount = Math.max(1, Math.ceil(points.length / evidenceRowsPerPage));
+  const safePointPage = Math.min(pointPage, pointPageCount - 1);
+  const firstPoint = safePointPage * evidenceRowsPerPage;
+  const visiblePoints = points.slice(firstPoint, firstPoint + evidenceRowsPerPage);
+  const visualPoints = useMemo(() => sampleIndexed(points, driftVisualPointLimit), [points]);
   const band = useMemo(() => {
-    if (points.length === 0) return "";
-    const upper = points.map(
-      (point, index) =>
+    if (visualPoints.length === 0) return "";
+    const upper = visualPoints.map(
+      ({ item: point, index }) =>
         `${driftX(index, points.length)},${driftY(point.bandHighHour, report.drift.yMinHour, report.drift.yMaxHour)}`,
     );
-    const lower = [...points].reverse().map((point, reverseIndex) => {
-      const index = points.length - 1 - reverseIndex;
-      return `${driftX(index, points.length)},${driftY(point.bandLowHour, report.drift.yMinHour, report.drift.yMaxHour)}`;
-    });
+    const lower = [...visualPoints]
+      .reverse()
+      .map(
+        ({ item: point, index }) =>
+          `${driftX(index, points.length)},${driftY(point.bandLowHour, report.drift.yMinHour, report.drift.yMaxHour)}`,
+      );
     return [...upper, ...lower].join(" ");
-  }, [points, report.drift.yMaxHour, report.drift.yMinHour]);
-  const fit = points
+  }, [points.length, report.drift.yMaxHour, report.drift.yMinHour, visualPoints]);
+  const fit = visualPoints
     .map(
-      (point, index) =>
+      ({ item: point, index }) =>
         `${driftX(index, points.length)},${driftY(point.fitHour, report.drift.yMinHour, report.drift.yMaxHour)}`,
     )
     .join(" ");
@@ -243,7 +262,7 @@ export function MedicationReportDrift({ report }: { report: MedicationClinicalRe
               className="clinical-drift-fit"
               vectorEffect="non-scaling-stroke"
             />
-            {points.map((point, index) => (
+            {visualPoints.map(({ item: point, index }) => (
               <circle
                 cx={driftX(index, points.length)}
                 cy={driftY(point.onsetHour, report.drift.yMinHour, report.drift.yMaxHour)}
@@ -262,8 +281,38 @@ export function MedicationReportDrift({ report }: { report: MedicationClinicalRe
       ) : (
         <p className="medication-report-empty">No usable drift points in this range.</p>
       )}
+      {pointPageCount > 1 && (
+        <nav className="medication-report-pagination" aria-label="Drift evidence pages">
+          <button
+            className="button ghost compact"
+            type="button"
+            disabled={safePointPage === 0}
+            onClick={() => setPointPage((page) => Math.max(0, page - 1))}
+          >
+            Previous drift points
+          </button>
+          <span>
+            Points {firstPoint + 1}-{Math.min(firstPoint + evidenceRowsPerPage, points.length)} of{" "}
+            {points.length}
+          </span>
+          <button
+            className="button ghost compact"
+            type="button"
+            disabled={safePointPage === pointPageCount - 1}
+            onClick={() => setPointPage((page) => Math.min(pointPageCount - 1, page + 1))}
+          >
+            Next drift points
+          </button>
+        </nav>
+      )}
       <table className="sr-table">
-        <caption>Observed sleep-onset drift points</caption>
+        <caption>
+          {visiblePoints.length === 0
+            ? "Observed sleep-onset drift points"
+            : `Observed sleep-onset drift points ${firstPoint + 1} through ${
+                firstPoint + visiblePoints.length
+              }`}
+        </caption>
         <thead>
           <tr>
             <th>Date</th>
@@ -273,7 +322,7 @@ export function MedicationReportDrift({ report }: { report: MedicationClinicalRe
           </tr>
         </thead>
         <tbody>
-          {points.map((point: MedicationClinicalDriftPoint) => (
+          {visiblePoints.map((point: MedicationClinicalDriftPoint) => (
             <tr key={point.id}>
               <td>{point.civilDate}</td>
               <td>{point.onsetLabel}</td>
@@ -288,6 +337,12 @@ export function MedicationReportDrift({ report }: { report: MedicationClinicalRe
 }
 
 export function MedicationReportTables({ report }: { report: MedicationClinicalReport }) {
+  const [eventPage, setEventPage] = useState(0);
+  const eventPageCount = Math.max(1, Math.ceil(report.events.length / evidenceRowsPerPage));
+  const safeEventPage = Math.min(eventPage, eventPageCount - 1);
+  const firstEvent = safeEventPage * evidenceRowsPerPage;
+  const visibleEvents = report.events.slice(firstEvent, firstEvent + evidenceRowsPerPage);
+
   return (
     <div className="medication-report-tables">
       <section aria-labelledby="adherence-summary-title">
@@ -340,33 +395,60 @@ export function MedicationReportTables({ report }: { report: MedicationClinicalR
           <span>{report.events.length} events</span>
         </header>
         {report.events.length > 0 ? (
-          <div className="medication-report-table-wrap">
-            <table className="medication-report-table">
-              <thead>
-                <tr>
-                  <th>Time</th>
-                  <th>Medication</th>
-                  <th>Status</th>
-                  <th>Schedule</th>
-                  <th>Rhythm context</th>
-                </tr>
-              </thead>
-              <tbody>
-                {report.events.map((event, index) => (
-                  <tr key={`${event.civilTime}-${event.medicationLabel}-${index}`}>
-                    <td>{event.civilTime}</td>
-                    <td>{event.medicationLabel}</td>
-                    <td>{event.status}</td>
-                    <td>{event.scheduleContext}</td>
-                    <td>
-                      {event.wakeContext}; {event.sleepContext} ({event.confidence})
-                      {event.note && <small>{event.note}</small>}
-                    </td>
+          <>
+            {eventPageCount > 1 && (
+              <nav className="medication-report-pagination" aria-label="Medication evidence pages">
+                <button
+                  className="button ghost compact"
+                  type="button"
+                  disabled={safeEventPage === 0}
+                  onClick={() => setEventPage((page) => Math.max(0, page - 1))}
+                >
+                  Previous medication events
+                </button>
+                <span>
+                  Events {firstEvent + 1}-
+                  {Math.min(firstEvent + evidenceRowsPerPage, report.events.length)} of{" "}
+                  {report.events.length}
+                </span>
+                <button
+                  className="button ghost compact"
+                  type="button"
+                  disabled={safeEventPage === eventPageCount - 1}
+                  onClick={() => setEventPage((page) => Math.min(eventPageCount - 1, page + 1))}
+                >
+                  Next medication events
+                </button>
+              </nav>
+            )}
+            <div className="medication-report-table-wrap">
+              <table className="medication-report-table">
+                <thead>
+                  <tr>
+                    <th>Time</th>
+                    <th>Medication</th>
+                    <th>Status</th>
+                    <th>Schedule</th>
+                    <th>Rhythm context</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {visibleEvents.map((event, index) => (
+                    <tr key={`${event.civilTime}-${event.medicationLabel}-${index}`}>
+                      <td>{event.civilTime}</td>
+                      <td>{event.medicationLabel}</td>
+                      <td>{event.status}</td>
+                      <td>{event.scheduleContext}</td>
+                      <td>
+                        {event.wakeContext}; {event.sleepContext} ({event.confidence})
+                        {event.note && <small>{event.note}</small>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         ) : (
           <p className="medication-report-empty">No included medication events.</p>
         )}

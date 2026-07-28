@@ -15,6 +15,11 @@ a schema explicitly says otherwise.
   IANA time-zone ID in private/local contracts.
 - Intervals are half-open: `[start_at, end_at)`.
 
+Generated contract examples are registered once in
+`tools/internal/fixtures`: the manifest owns each checked-in testdata path,
+contract version, and validating schema. Contract validation consumes that
+manifest directly so adding a fixture cannot omit its schema check.
+
 `trusted-view.schema.json` is a minimized projection contract. It is not a
 serialization of the private model and deliberately has no extension point for
 medication, diagnosis, raw activity, provenance, location, identifiers, or
