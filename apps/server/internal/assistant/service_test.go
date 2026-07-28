@@ -488,3 +488,56 @@ func validateScheduleProposalsPayload(t *testing.T, value scheduleProposalsPaylo
 		t.Fatalf("schedule proposal payload did not validate: %v\n%s", err, data)
 	}
 }
+
+// Regression: the post-provider guard used to be gated on the PROMPT looking
+// medical, which made it unreachable (medical prompts already returned before
+// the provider call). A benign-looking prompt whose answer smuggles a dosing
+// directive must now be refused on the way out.
+func TestAssistantScreensUnsolicitedDosingAdviceInModelAnswer(t *testing.T) {
+	st, device := testStoreAndDevice(t)
+	fake := &fakeProvider{responses: []provider.Response{{
+		Text: `{"schema_version":"v1","recommended_action":"answer_only","answer":"Your afternoon looks open. Also, start taking 5 mg an hour before bed."}`,
+	}}}
+	service := New(fake, fake.Status(), st)
+	service.now = fixedNow
+
+	resp, err := service.HandleMessage(context.Background(), device, MessageRequest{
+		SchemaVersion: SchemaVersion,
+		Message:       "when is my next good window?",
+		Context:       planningContext(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(fake.requests) != 1 {
+		t.Fatalf("expected the provider to be called for a non-medical prompt, got %d calls", len(fake.requests))
+	}
+	if resp.Result != ResultRefused || resp.Answer != agentpolicy.MedicalRefusal {
+		t.Fatalf("unsolicited dosing advice was not screened: %+v", resp)
+	}
+	if len(resp.Proposals) != 0 {
+		t.Fatalf("refused answer must create no proposal: %+v", resp.Proposals)
+	}
+}
+
+// The same screening must not fire on ordinary scheduling language.
+func TestAssistantAllowsOrdinarySchedulingAnswer(t *testing.T) {
+	st, device := testStoreAndDevice(t)
+	fake := &fakeProvider{responses: []provider.Response{{
+		Text: `{"schema_version":"v1","recommended_action":"answer_only","answer":"You should be awake from about 2 PM. Take the 3 PM slot; it is the best time before your predicted sleep."}`,
+	}}}
+	service := New(fake, fake.Status(), st)
+	service.now = fixedNow
+
+	resp, err := service.HandleMessage(context.Background(), device, MessageRequest{
+		SchemaVersion: SchemaVersion,
+		Message:       "when is my next good window?",
+		Context:       planningContext(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.Result == ResultRefused {
+		t.Fatalf("ordinary scheduling answer was falsely refused: %+v", resp)
+	}
+}

@@ -498,6 +498,44 @@ Test-Case 'Show-ZbBanner and Show-ZbFinale are ASCII-only' {
     Assert-Equal 0 $nonAscii.Count
 }
 
+Test-Case 'Publish transaction: pending marker makes a half-published install fail closed' {
+    $dir = Join-Path ([IO.Path]::GetTempPath()) ("zb-tx-" + [guid]::NewGuid().ToString('N'))
+    try {
+        Start-ZbPublishTransaction -InstallDir $dir -Components @('desktop', 'local-mcp') | Out-Null
+        Assert-True (Test-Path -LiteralPath (Get-ZbPendingMarkerPath -InstallDir $dir)) 'marker should exist'
+        # Desktop published, local-mcp not yet: still inside the transaction.
+        Set-Content -LiteralPath (Join-Path $dir 'ZeitBoard.exe') -Value 'x'
+        Assert-Equal $false (Test-ZbInstalledBuild -InstallDir $dir)
+        # Declared-but-missing component fails even ignoring the marker.
+        Set-Content -LiteralPath (Join-Path $dir 'version.txt') -Value "commit=abc`ndate=now`ncomponents=desktop,local-mcp"
+        Assert-Equal $false (Test-ZbInstalledBuild -InstallDir $dir -IgnorePendingMarker)
+    }
+    finally { Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+Test-Case 'Publish transaction: completing clears the marker once everything validates' {
+    $dir = Join-Path ([IO.Path]::GetTempPath()) ("zb-tx-" + [guid]::NewGuid().ToString('N'))
+    try {
+        Start-ZbPublishTransaction -InstallDir $dir -Components @('desktop') | Out-Null
+        $exe = Join-Path $dir 'ZeitBoard.exe'
+        Set-Content -LiteralPath $exe -Value 'x'
+        $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $exe).Hash.ToLowerInvariant()
+        Set-Content -LiteralPath (Join-Path $dir 'version.txt') -Value "commit=abc`ndate=now`ncomponents=desktop`nsha256=$hash"
+        Complete-ZbPublishTransaction -InstallDir $dir
+        Assert-True (-not (Test-Path -LiteralPath (Get-ZbPendingMarkerPath -InstallDir $dir))) 'marker should be cleared'
+        Assert-Equal $true (Test-ZbInstalledBuild -InstallDir $dir)
+    }
+    finally { Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+Test-Case 'Publish transaction is actually wired into install.ps1 and update.ps1' {
+    foreach ($script in @('install.ps1', 'update.ps1')) {
+        $text = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot $script)
+        Assert-True ($text -match 'Start-ZbPublishTransaction') "$script must open a publish transaction"
+        Assert-True ($text -match 'Complete-ZbPublishTransaction') "$script must complete the publish transaction"
+    }
+}
+
 Write-Host ''
 Write-Host "  $script:pass passed, $script:fail failed" -ForegroundColor $(if ($script:fail -eq 0) { 'Green' } else { 'Red' })
 if ($script:fail -gt 0) { exit 1 }

@@ -236,6 +236,13 @@ func writeDescriptor(path string, descriptor Descriptor) error {
 		_ = temp.Close()
 		return err
 	}
+	// On Windows the Chmod above only touches the read-only attribute, so the
+	// descriptor's real protection is an explicit owner-only DACL. Applied to
+	// the staged file so the token is never briefly readable at the final path.
+	if err := restrictToCurrentUser(tempPath); err != nil {
+		_ = temp.Close()
+		return err
+	}
 	if _, err := temp.Write(data); err != nil {
 		_ = temp.Close()
 		return err

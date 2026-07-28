@@ -663,8 +663,14 @@ function Assert-ZbSafeServerRoot {
 }
 
 function Get-ZbVersionText {
+    # Components are recorded so a later validation can demand them even if a
+    # publish was interrupted before their hash lines were written.
+    param([string[]]$Components = @())
     $stamp = Get-ZbVersionStamp
-    "commit=$($stamp.Commit)`ndate=$($stamp.Date)"
+    $text = "commit=$($stamp.Commit)`ndate=$($stamp.Date)"
+    $normalized = @($Components | ForEach-Object { "$_".Trim().ToLowerInvariant() } | Where-Object { $_ })
+    if ($normalized.Count -gt 0) { $text = "$text`ncomponents=$($normalized -join ',')" }
+    $text
 }
 
 function Publish-ZbVerifiedFile {

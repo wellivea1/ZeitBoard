@@ -252,6 +252,37 @@ Verified on Windows 11 on 2026-06-15 and 2026-06-16:
   `apps/android/app/build/outputs/apk/debug/app-debug.apk`.
 - Desktop overview and trusted-view browser screenshots in `docs/screenshots/`.
 
+## Desktop-local agent endpoint (ADR-0028)
+
+Verified on Windows 11 on 2026-07-26, after the Phase 4 review:
+
+- Full suites green: gofmt clean; `core` 10, `apps/desktop` 4, `apps/server` 7
+  package groups pass `go vet` and `go test`; 29 contract fixtures verified and
+  validated; 222 desktop frontend tests; TypeScript typecheck; ESLint plus the
+  UI-standards check; 33 installer library tests.
+- **Endpoint gates** (`internal/localagent`): non-loopback callers, absent or
+  invalid bearer tokens, and requests carrying an `Origin` header - including a
+  present-but-empty one - are refused. `Header.Get` cannot distinguish an empty
+  header from an absent one, so the check tests for presence.
+- **Descriptor ACL**: a Windows-only test asserts the published descriptor has
+  a *protected* DACL with exactly one entry, for the current user.
+  `os.Chmod(0600)` alone does not achieve this on Windows, which is why the
+  explicit DACL exists.
+- **Medical safety**: the post-provider screen is reachable. A benign prompt
+  whose model answer smuggles a dosing directive is refused, while an ordinary
+  scheduling answer using "you should"/"take the 3 PM slot" is not. Decision
+  questions about an unknown medication name ("how much Hetlioz should I
+  take?") refuse via the phrasing rule; ordinary planning ("when should I take
+  my lunch break?") does not.
+- **Publish transaction**: a half-published install (pending marker present, or
+  a declared component missing) fails validation closed; completing clears the
+  marker only after every declared artifact validates. A test asserts the
+  transaction is actually invoked by `install.ps1` and `update.ps1`.
+
+Not verified here: the end-to-end voice path through a real MCP client, which
+needs a running desktop app and a GUI session. `scripts/smoke-local-mcp.ps1`
+covers it manually and was confirmed to fail closed when the bridge is absent.
+
 ## Environment limitations
 
 - Emulator semantics and screenshots were reviewed, but a full manual TalkBack

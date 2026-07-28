@@ -67,7 +67,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
-	if r.Header.Get("Origin") != "" {
+	// Test for presence, not value: Header.Get returns "" both when the header
+	// is absent and when it is present but empty, so the value check alone let
+	// a request with a literal empty Origin through.
+	if _, hasOrigin := r.Header["Origin"]; hasOrigin {
 		http.Error(w, "browser origins are not accepted", http.StatusForbidden)
 		return
 	}

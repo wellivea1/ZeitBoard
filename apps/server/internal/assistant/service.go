@@ -95,8 +95,17 @@ func (s *Service) HandleMessage(ctx context.Context, device store.Device, req Me
 	if err != nil {
 		return s.answer(ResultUnknown, "answer_only", "I could not turn that into a safe schedule action. No proposal was created."), nil
 	}
-	if agentpolicy.ContainsMedicalSubject(req.Message) &&
-		(action.RecommendedAction != "answer_only" || agentpolicy.IsUnsafeMedicalAnswer(action.Answer)) {
+	// Screen the model's answer on the way out, keyed on what the ANSWER says
+	// rather than on what the prompt looked like. The previous form gated this
+	// on the prompt containing a medical subject, which made it unreachable:
+	// such prompts already returned above, so an unsolicited dosing
+	// recommendation from a harmless-looking prompt had nothing to catch it.
+	//
+	// A hard medication directive is refused unconditionally; softer decision
+	// language only counts when the answer is itself about medication or
+	// treatment, so ordinary scheduling replies are not falsely refused.
+	if agentpolicy.ContainsMedicationDirective(action.Answer) ||
+		(agentpolicy.ContainsMedicalSubject(action.Answer) && agentpolicy.IsUnsafeMedicalAnswer(action.Answer)) {
 		return s.answer(ResultRefused, "answer_only", agentpolicy.MedicalRefusal), nil
 	}
 	return s.resolveAction(ctx, device, req, action)

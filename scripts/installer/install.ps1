@@ -145,11 +145,20 @@ try {
         $orphanLocalMcpHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $orphanLocalMcpBackup).Hash.ToLowerInvariant()
     }
     $script:ZbInstallDesktopPublished = $false
+    # Components this release must contain. The pending marker makes an
+    # interruption between artifacts detectable, so a half-published install
+    # (new desktop binary, stale MCP bridge) can never look complete.
+    $publishComponents = @('desktop', 'local-mcp')
+    if ($installMcp) { $publishComponents += 'mcp' }
     try {
+        Invoke-ZbStep -Name 'Begin publish transaction' -DryRun:$DryRun -ResumeHint $resume -Action {
+            Start-ZbPublishTransaction -InstallDir $paths.InstallDir -Components $publishComponents | Out-Null
+        }
         Invoke-ZbStep -Name 'Publish desktop binary' -DryRun:$DryRun -ResumeHint $resume -Action {
             $built = Join-Path $paths.RepoRoot 'apps\desktop\build\bin\ZeitBoard.exe'
             $stamp = Get-ZbVersionStamp
-            Publish-ZbDesktopBuild -SourceExe $built -InstallDir $paths.InstallDir -VersionText "commit=$($stamp.Commit)`ndate=$($stamp.Date)"
+            $versionText = "commit=$($stamp.Commit)`ndate=$($stamp.Date)`ncomponents=$($publishComponents -join ',')"
+            Publish-ZbDesktopBuild -SourceExe $built -InstallDir $paths.InstallDir -VersionText $versionText
             $script:ZbInstallDesktopPublished = $true
             Write-ZbLog -Level ok -Message "installed $($stamp.Commit) to $installedExe"
         }
@@ -171,7 +180,10 @@ try {
             }
         }
         Invoke-ZbStep -Name 'Verify published artifacts' -DryRun:$DryRun -ResumeHint $resume -Action {
-            if (-not (Test-ZbInstalledBuild -InstallDir $paths.InstallDir)) { throw 'An installed artifact failed its SHA-256 verification.' }
+            # Verifies every declared component, then clears the pending
+            # marker: the install is only "complete" once the whole release
+            # validates together.
+            Complete-ZbPublishTransaction -InstallDir $paths.InstallDir
         }
     }
     catch {

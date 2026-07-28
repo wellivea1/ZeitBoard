@@ -20,6 +20,11 @@ func IsMedicalDecisionPrompt(message string) bool {
 	) {
 		return true
 	}
+	// A decision-shaped request about taking something is a medical decision
+	// even when the substance is a brand name no vocabulary list knows.
+	if hasMedicationDecisionShape(lower) {
+		return true
+	}
 	if !containsMedicalSubject(lower) {
 		return false
 	}
@@ -74,12 +79,40 @@ func IsUnsafeMedicalAnswer(answer string) bool {
 	if lower == "" {
 		return false
 	}
+	if containsMedicationDirective(lower) {
+		return true
+	}
 	return containsAny(lower,
 		"you should", "i recommend", "recommend that", "try taking", "take ",
 		"start taking", "stop taking", "continue taking", "avoid taking",
-		"increase ", "decrease ", "change your dose", "best time", "is safe",
-		"safe for you", "dosage", " milligram", " mg", " microgram", " mcg",
-		"light therapy at",
+		"increase ", "decrease ", "best time", "is safe",
+		"safe for you",
+	)
+}
+
+// ContainsMedicationDirective catches answer text that is unambiguously a
+// medication or treatment instruction regardless of what was asked. It is the
+// tier that can be screened unconditionally: these phrases do not occur in
+// ordinary scheduling answers, so applying them to every model answer costs no
+// false refusals while catching an unsolicited dosing recommendation.
+//
+// The softer decision language in IsUnsafeMedicalAnswer ("you should",
+// "take ", "best time") stays context-dependent, because it appears
+// constantly in legitimate schedule answers ("take the 2 PM slot").
+func ContainsMedicationDirective(answer string) bool {
+	return containsMedicationDirective(strings.ToLower(strings.TrimSpace(answer)))
+}
+
+func containsMedicationDirective(lower string) bool {
+	if lower == "" {
+		return false
+	}
+	return containsAny(lower,
+		"change your dose", "adjust your dose", "your dosage", "dosage",
+		" milligram", " mg ", " mg.", " mg,", " microgram", " mcg",
+		"start taking", "stop taking", "continue taking", "avoid taking",
+		"increase your", "decrease your", "double your", "skip your dose",
+		"light therapy at", "take it with", "take them with",
 	)
 }
 
@@ -91,8 +124,47 @@ func containsMedicalSubject(lower string) bool {
 
 func containsMedicationFactSubject(lower string) bool {
 	return containsAny(lower,
-		"medication", "medicine", "drug", "dose", "dosing", "melatonin",
-		"stimulant", "hypnotic",
+		"medication", "medicine", "med ", "meds", "drug", "dose", "dosing",
+		"dosage", "pill", "tablet", "capsule", "prescription", "rx",
+		"stimulant", "hypnotic", "sedative", "supplement",
+		// Substances and brands that come up in circadian-rhythm care. This
+		// list can never be exhaustive - a user's own medication name may be
+		// anything - which is why the phrasing rule below and the unconditional
+		// output screening in the assistant service are the real guardrails.
+		"melatonin", "tasimelteon", "hetlioz", "ramelteon", "rozerem",
+		"modafinil", "armodafinil", "provigil", "nuvigil", "zolpidem",
+		"ambien", "trazodone", "lithium", "agomelatine", "suvorexant",
+		"belsomra", "lemborexant", "dayvigo", "doxepin", "quetiapine",
+	)
+}
+
+// hasMedicationDecisionShape catches decision questions whose subject noun is a
+// medication name the vocabulary above cannot know - "how much Hetlioz should I
+// take?", "when should I take my 3 mg?". It keys on the *shape* of the request
+// (a quantity or timing decision paired with taking something) rather than on
+// recognising the substance, so an unknown brand name still fails closed.
+func hasMedicationDecisionShape(lower string) bool {
+	if !containsAny(lower, "take", "taking", "took") {
+		return false
+	}
+	if !containsAny(lower,
+		"how much", "how many", "what dose", "which dose", "how often",
+		"should i", "should we", "when should", "what time should",
+		"is it safe", "safe to", "can i", "ok to", "okay to",
+	) {
+		return false
+	}
+	// "Take" is overwhelmingly ordinary English about activities and time.
+	// This rule exists only as the fallback for substances the vocabulary
+	// cannot know, so it stands down when the thing being taken is plainly an
+	// activity. Prompts that name a known substance never reach here - they
+	// are caught by the medical-subject path, so "should I take my pill during
+	// my break?" still refuses.
+	return !containsAny(lower,
+		"break", "lunch", "dinner", "breakfast", "nap", "rest", "walk",
+		"shower", "day off", "days off", "time off", "vacation", "pto",
+		"holiday", "slot", "call", "meeting", "appointment", "how much time",
+		"how much longer", "notes", "shift off",
 	)
 }
 

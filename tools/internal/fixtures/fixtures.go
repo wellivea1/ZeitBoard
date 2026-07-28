@@ -333,6 +333,7 @@ type directProposalRequest struct {
 	SchemaVersion     string                `json:"schema_version"`
 	RecommendedAction string                `json:"recommended_action"`
 	Target            assistantActionTarget `json:"target"`
+	Answer            string                `json:"answer,omitempty"`
 	Context           directPlanningContext `json:"context"`
 }
 

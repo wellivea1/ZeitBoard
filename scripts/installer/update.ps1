@@ -207,9 +207,17 @@ try {
         Backup-ZbData -Reason 'update' | Out-Null
     }
 
+    # Components this release must contain; the pending marker makes an
+    # interruption between artifacts detectable rather than silently leaving a
+    # new desktop binary beside a stale MCP bridge.
+    $publishComponents = @('desktop', 'local-mcp')
+    if ($updateMcp) { $publishComponents += 'mcp' }
     try {
+        Invoke-ZbStep -Name 'Begin publish transaction' -DryRun:$DryRun -ResumeHint $resume -Action {
+            Start-ZbPublishTransaction -InstallDir $paths.InstallDir -Components $publishComponents | Out-Null
+        }
         Invoke-ZbStep -Name 'Publish desktop build' -DryRun:$DryRun -ResumeHint $resume -Action {
-            Publish-ZbDesktopBuild -SourceExe $built -InstallDir $paths.InstallDir -VersionText (Get-ZbVersionText)
+            Publish-ZbDesktopBuild -SourceExe $built -InstallDir $paths.InstallDir -VersionText (Get-ZbVersionText -Components $publishComponents)
             $script:ZbDesktopPublished = $true
         }
         Invoke-ZbStep -Name 'Publish desktop-local MCP bridge' -DryRun:$DryRun -ResumeHint $resume -Action {
@@ -223,7 +231,8 @@ try {
             }
         }
         Invoke-ZbStep -Name 'Verify installed build' -DryRun:$DryRun -ResumeHint $resume -Action {
-            if (-not (Test-ZbInstalledBuild -InstallDir $paths.InstallDir)) { throw 'An installed artifact failed its SHA-256 verification.' }
+            # Verify every declared component, then clear the pending marker.
+            Complete-ZbPublishTransaction -InstallDir $paths.InstallDir
         }
     }
     catch {

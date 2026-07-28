@@ -149,13 +149,36 @@ tokens. Rhythm markers are not a grantable field and the strict trusted-view
 schema rejects them. The phase-one trusted website is static, synthetic, and
 makes no network request.
 
-## Agent connector
+## Agent connectors
 
-The local MCP connector is a stateless adapter over the self-hosted backend API. It holds
-only the backend URL and a device token, exposes read projections and propose-only tools,
-and stores no health data. It has no approval/apply tool and cannot consume approval
-tokens; human approval remains in the backend's existing one-use decision endpoint. Missing
-or unreachable backend configuration exposes no tools.
+There are two, and neither can approve or apply anything.
+
+**Backend connector.** A stateless adapter over the self-hosted backend API. It holds only
+the backend URL and a device token, exposes read projections and propose-only tools, and
+stores no health data. It has no approval/apply tool and cannot consume approval tokens;
+human approval remains in the backend's existing one-use decision endpoint. Missing or
+unreachable backend configuration exposes no tools.
+
+**Desktop-local endpoint (ADR-0028).** The desktop app serves its own MCP endpoint on
+loopback while it runs, so an agent on the same machine can read state and change
+appearance without the backend. It exposes allowlisted read projections, one direct
+display action (`set_appearance`, reversible and non-health per ADR-0021), and
+propose-only scheduling tools that require an enrolled backend. It has no approve/apply
+tool either.
+
+What the local endpoint may return includes **medication timing facts and rhythm context
+markers** drawn from local records - for example how long after waking a dose was logged,
+or that a travel marker exists on a date. These are the same projections the local UI
+shows, never raw records: no clinician notes, no free-text medication notes, and no
+observation payloads. Medication *labels* are the user's own private text and stay on the
+device; they are not sent to any LLM provider by this path, because the endpoint answers
+from local records without calling one. Requests that ask for a medical decision return
+the standard refusal instead of an answer.
+
+Access to the endpoint requires a bearer token held in a descriptor file that is
+restricted to the current user (an explicit owner-only DACL on Windows, mode 0600
+elsewhere). Any process already running as the user can read that file; the endpoint is a
+user-level boundary, not a sandbox.
 
 ## Development data
 

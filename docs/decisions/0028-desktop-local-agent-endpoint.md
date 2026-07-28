@@ -29,10 +29,17 @@ ZeitBoard's state or drive it without the server.
    - a bearer token (≥32 chars, constant-time compare);
    - any request carrying an `Origin` header is rejected outright, so a
      browser page cannot reach the endpoint (DNS-rebinding defense);
-   - the endpoint URL + token live in a `0600` descriptor file under the
-     desktop config dir, whose shape is strictly validated on read, whose
-     removal is ownership-checked, and whose creation takes an exclusive
-     startup claim so a second instance cannot hijack the descriptor.
+   - the endpoint URL + token live in a descriptor file under the desktop
+     config dir that is restricted to the current user - an explicit
+     owner-only, inheritance-disabled DACL on Windows, mode `0600` elsewhere
+     - whose shape is strictly validated on read, whose removal is
+     ownership-checked, and whose creation takes an exclusive startup claim so
+     a second instance cannot hijack the descriptor.
+
+     The Windows DACL is set deliberately because `os.Chmod(0600)` does *not*
+     restrict access there: it only toggles the read-only attribute and leaves
+     the inherited ACL in place. A test asserts the published descriptor has a
+     protected DACL containing exactly one entry, for the current user.
 3. **The tool surface is allowlisted and read-heavy.** Reads: `get_status`,
    `get_overview`, `get_rhythm_summary`, `list_tasks`,
    `get_medication_timing`, `list_rhythm_markers`, `get_appearance`, and
@@ -65,11 +72,21 @@ ZeitBoard's state or drive it without the server.
   command and a Settings click cannot silently clobber each other.
 - **Residual (recorded honestly):** the endpoint runs whenever the app runs.
   It is not behind a user opt-in toggle, so its security rests entirely on
-  the four gates above. Any local process that can read the user's config
-  directory can read the token — the descriptor is `0600`, but this is a
-  user-level boundary, not a sandbox. A future opt-in switch and a per-client
-  approval prompt are the obvious hardening step if the threat model changes.
+  the four gates above. The descriptor's ACL keeps *other* users out, but any
+  process already running as this user can read the token and drive the
+  endpoint with the user's own authority — it is a user-level boundary, not a
+  sandbox. A future opt-in switch and a per-client approval prompt are the
+  obvious hardening step if the threat model changes.
 - The installer publishes and rolls back `zeitboard-local-mcp.exe` alongside
   the desktop binary, under the same SHA-256 verification and
   publish-transaction marker as every other artifact.
+- **Known limitation, inherited not introduced: `propose_reminder_shift` does
+  not shift a reminder.** The server has no reminder entity, so its resolver
+  ignores the reminder id and schedules the target task; the proposal is
+  labelled "Shift reminder" but carries a task placement. This predates the
+  local endpoint (the action is in the ADR-0010 registry and the backend MCP
+  exposes it too), and nothing auto-applies, so today the defect is a
+  mislabelled pending proposal rather than a wrong mutation. Real semantics
+  need a server-side reminder model - medication reminders are local-only per
+  ADR-0025 - and belong to that work, not to this ADR.
 - Cloud skill packaging remains out of scope and separately gated.

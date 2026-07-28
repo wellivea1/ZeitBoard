@@ -201,11 +201,14 @@ The desktop app serves its own loopback MCP endpoint while it runs (ADR-0028).
 Use this when you want voice control of *this machine's* ZeitBoard, including
 appearance and night mode, without depending on the server.
 
-1. Build the bridge: `go build ./cmd/zeitboard-local-mcp` (in `apps/desktop`), or
-   let `scripts\installer\install.ps1 -WithMcp` publish it for you.
+1. `scripts\installer\install.ps1` publishes the bridge next to the app as
+   `zeitboard-local-mcp.exe` - it is part of every install, not an option
+   (`-WithMcp` controls the separate *backend* connector in Option B). To build
+   it by hand instead: `go build ./cmd/zeitboard-local-mcp` in `apps/desktop`.
 2. Register that binary in Claude Desktop's MCP configuration as a stdio server.
-   It discovers the running app through a `0600` descriptor file in the desktop
-   config directory - there is no port or token to copy by hand.
+   It discovers the running app through a descriptor file in the desktop config
+   directory, restricted to your user account - there is no port or token to
+   copy by hand.
 3. Start ZeitBoard, then use the client's voice mode.
 
 The endpoint binds `127.0.0.1` on an ephemeral port, requires a bearer token,

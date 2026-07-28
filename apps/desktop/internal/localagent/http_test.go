@@ -66,6 +66,16 @@ func TestHandlerSecurityAndExactPath(t *testing.T) {
 		t.Fatalf("origin status = %d", response.Code)
 	}
 
+	// A present-but-empty Origin must be rejected too: Header.Get cannot tell
+	// it apart from an absent header, so the check tests for presence.
+	request = mcpRequest(http.MethodPost, "/mcp", initializeBody())
+	request.Header["Origin"] = []string{""}
+	response = httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("empty origin status = %d, want 403", response.Code)
+	}
+
 	request = mcpRequest(http.MethodPost, "/mcp", initializeBody())
 	request.RemoteAddr = "192.0.2.4:1234"
 	response = httptest.NewRecorder()
