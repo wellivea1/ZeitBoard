@@ -12,7 +12,7 @@
 
     -Rollback     restore previous\ and exit (no rebuild)
     -SkipTests    skip the Go + frontend suites (faster, less safe)
-    -WithMcp      install/update the MCP connector (existing installs update it)
+    -WithServerMcp install/update the optional self-hosted/server MCP connector (-WithMcp remains an alias)
     -AllowDirty   proceed with an uncommitted working tree (prints the diff)
     -NonInteractive / -DryRun   as in install.ps1
 
@@ -23,7 +23,7 @@
 param(
     [switch]$Rollback,
     [switch]$SkipTests,
-    [switch]$WithMcp,
+    [Alias('WithMcp')][switch]$WithServerMcp,
     [switch]$AllowDirty,
     [switch]$NonInteractive,
     [switch]$DryRun
@@ -40,7 +40,7 @@ $installedExe = Join-Path $paths.InstallDir 'ZeitBoard.exe'
 $previousExe = Join-Path $paths.InstallDir 'previous\ZeitBoard.exe'
 $installedMcp = Join-Path $paths.InstallDir 'zeitboard-mcp.exe'
 $installedLocalMcp = Join-Path $paths.InstallDir 'zeitboard-local-mcp.exe'
-$updateMcp = [bool]$WithMcp -or (Test-Path -LiteralPath $installedMcp)
+$updateMcp = [bool]$WithServerMcp -or (Test-Path -LiteralPath $installedMcp)
 $script:ZbPulled = $false
 $script:ZbDesktopPublished = $false
 $lifecycleLock = $null
@@ -123,7 +123,7 @@ try {
         $restartArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $PSCommandPath)
         if ($SkipTests) { $restartArgs += '-SkipTests' }
         if ($AllowDirty) { $restartArgs += '-AllowDirty' }
-        if ($WithMcp) { $restartArgs += '-WithMcp' }
+        if ($WithServerMcp) { $restartArgs += '-WithServerMcp' }
         if ($NonInteractive) { $restartArgs += '-NonInteractive' }
         & powershell.exe @restartArgs
         exit $LASTEXITCODE
@@ -184,7 +184,7 @@ try {
 
     $builtMcp = Join-Path $paths.RepoRoot 'apps\server\bin\zeitboard-mcp.exe'
     if ($updateMcp) {
-        Invoke-ZbStep -Name 'Build MCP connector' -DryRun:$DryRun -ResumeHint $resume -Action {
+        Invoke-ZbStep -Name 'Build optional self-hosted/server MCP connector' -DryRun:$DryRun -ResumeHint $resume -Action {
             $binDir = Split-Path -Parent $builtMcp
             New-Item -ItemType Directory -Force -Path $binDir | Out-Null
             Push-Location (Join-Path $paths.RepoRoot 'apps\server')
@@ -212,6 +212,7 @@ try {
     # new desktop binary beside a stale MCP bridge.
     $publishComponents = @('desktop', 'local-mcp')
     if ($updateMcp) { $publishComponents += 'mcp' }
+    $publishBackupDir = Join-Path $paths.InstallDir ('.publish-backup-' + [guid]::NewGuid().ToString('N'))
     try {
         Invoke-ZbStep -Name 'Begin publish transaction' -DryRun:$DryRun -ResumeHint $resume -Action {
             Start-ZbPublishTransaction -InstallDir $paths.InstallDir -Components $publishComponents | Out-Null
@@ -221,12 +222,12 @@ try {
             $script:ZbDesktopPublished = $true
         }
         Invoke-ZbStep -Name 'Publish desktop-local MCP bridge' -DryRun:$DryRun -ResumeHint $resume -Action {
-            $localMcpHash = Publish-ZbVerifiedFile -SourcePath $builtLocalMcp -DestinationPath $installedLocalMcp -BackupPath (Join-Path $paths.InstallDir 'previous\zeitboard-local-mcp.exe')
+            $localMcpHash = Publish-ZbVerifiedFile -SourcePath $builtLocalMcp -DestinationPath $installedLocalMcp -BackupPath (Join-Path $publishBackupDir 'zeitboard-local-mcp.exe')
             Set-ZbInstalledArtifactHash -InstallDir $paths.InstallDir -Key 'local-mcp-sha256' -Hash $localMcpHash
         }
         if ($updateMcp) {
-            Invoke-ZbStep -Name 'Publish MCP connector' -DryRun:$DryRun -ResumeHint $resume -Action {
-                $mcpHash = Publish-ZbVerifiedFile -SourcePath $builtMcp -DestinationPath $installedMcp -BackupPath (Join-Path $paths.InstallDir 'previous\zeitboard-mcp.exe')
+            Invoke-ZbStep -Name 'Publish optional self-hosted/server MCP connector' -DryRun:$DryRun -ResumeHint $resume -Action {
+                $mcpHash = Publish-ZbVerifiedFile -SourcePath $builtMcp -DestinationPath $installedMcp -BackupPath (Join-Path $publishBackupDir 'zeitboard-mcp.exe')
                 Set-ZbInstalledArtifactHash -InstallDir $paths.InstallDir -Key 'mcp-sha256' -Hash $mcpHash
             }
         }
@@ -255,7 +256,16 @@ try {
             Write-ZbLog -Level fail -Message "automatic restore also failed: $($restoreFailure.Exception.Message)"
             throw "Artifact publication failed ($($publishError.Exception.Message)); restoring the prior install also failed: $($restoreFailure.Exception.Message)"
         }
+        $pendingMarker = Get-ZbPendingMarkerPath -InstallDir $paths.InstallDir
+        if ((Test-ZbInstalledBuild -InstallDir $paths.InstallDir -IgnorePendingMarker -IgnorePendingComponents) -and (Test-Path -LiteralPath $pendingMarker)) {
+            Remove-Item -LiteralPath $pendingMarker -Force
+        }
         throw $publishError
+    }
+    finally {
+        if (Test-Path -LiteralPath $publishBackupDir) {
+            Remove-ZbDirectoryUnderRoot -Root $paths.InstallDir -Path $publishBackupDir
+        }
     }
 
     if ($DryRun) {

@@ -762,6 +762,200 @@ function Copy-ZbSnapshotFile {
     return $copyHash
 }
 
+function Assert-ZbChildPath {
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$Path
+    )
+    $rootFull = [IO.Path]::GetFullPath($Root).TrimEnd('\', '/')
+    $pathFull = [IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
+    $prefix = $rootFull + [IO.Path]::DirectorySeparatorChar
+    if (-not $pathFull.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Path must stay below its managed root: $pathFull (root $rootFull)"
+    }
+    return $pathFull
+}
+
+function Remove-ZbDirectoryUnderRoot {
+    param(
+        [Parameter(Mandatory)][string]$Root,
+        [Parameter(Mandatory)][string]$Path
+    )
+    $safePath = Assert-ZbChildPath -Root $Root -Path $Path
+    if (Test-Path -LiteralPath $safePath) {
+        Remove-Item -LiteralPath $safePath -Recurse -Force
+    }
+}
+
+function Invoke-ZbInstallerFault {
+    param([Parameter(Mandatory)][string]$Point)
+    if ($script:ZbInstallerFaultPoint -and $script:ZbInstallerFaultPoint -ceq $Point) {
+        throw "Injected installer fault at $Point."
+    }
+}
+
+function Copy-ZbReleaseSnapshot {
+    param(
+        [Parameter(Mandatory)][string]$SourceDir,
+        [Parameter(Mandatory)][string]$DestinationDir,
+        [switch]$AllowInvalid
+    )
+    if (Test-Path -LiteralPath $DestinationDir) {
+        throw "Snapshot destination already exists: $DestinationDir"
+    }
+    New-Item -ItemType Directory -Path $DestinationDir | Out-Null
+    foreach ($name in @('ZeitBoard.exe', 'zeitboard-local-mcp.exe', 'zeitboard-mcp.exe', 'version.txt')) {
+        $source = Join-Path $SourceDir $name
+        if (Test-Path -LiteralPath $source -PathType Leaf) {
+            Copy-ZbSnapshotFile -SourcePath $source -DestinationPath (Join-Path $DestinationDir $name) | Out-Null
+        }
+    }
+    if (-not (Test-Path -LiteralPath (Join-Path $DestinationDir 'ZeitBoard.exe') -PathType Leaf)) {
+        if (-not $AllowInvalid) { throw "Release snapshot has no desktop executable: $SourceDir" }
+        return
+    }
+    if (-not $AllowInvalid -and -not (Test-ZbInstalledBuild -InstallDir $DestinationDir)) {
+        throw "Release snapshot failed validation: $SourceDir"
+    }
+}
+
+function Test-ZbReleaseMatchesSnapshot {
+    param(
+        [Parameter(Mandatory)][string]$SnapshotDir,
+        [Parameter(Mandatory)][string]$InstallDir
+    )
+    foreach ($name in @('ZeitBoard.exe', 'zeitboard-local-mcp.exe', 'zeitboard-mcp.exe', 'version.txt')) {
+        $snapshot = Join-Path $SnapshotDir $name
+        $installed = Join-Path $InstallDir $name
+        $hasSnapshot = Test-Path -LiteralPath $snapshot -PathType Leaf
+        $hasInstalled = Test-Path -LiteralPath $installed -PathType Leaf
+        if ($hasSnapshot -ne $hasInstalled) { return $false }
+        if ($hasSnapshot) {
+            $snapshotHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $snapshot).Hash
+            $installedHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $installed).Hash
+            if ($snapshotHash -cne $installedHash) { return $false }
+        }
+    }
+    return $true
+}
+
+function Set-ZbCurrentReleaseFromSnapshot {
+    param(
+        [Parameter(Mandatory)][string]$SnapshotDir,
+        [Parameter(Mandatory)][string]$InstallDir,
+        [string]$FaultPrefix
+    )
+    $backupDir = Join-Path $InstallDir ('.release-backup-' + [guid]::NewGuid().ToString('N'))
+    try {
+        New-Item -ItemType Directory -Path $backupDir | Out-Null
+        foreach ($name in @('ZeitBoard.exe', 'zeitboard-local-mcp.exe', 'zeitboard-mcp.exe', 'version.txt')) {
+            $source = Join-Path $SnapshotDir $name
+            $destination = Join-Path $InstallDir $name
+            $backup = Join-Path $backupDir $name
+            if (Test-Path -LiteralPath $source -PathType Leaf) {
+                Publish-ZbVerifiedFile -SourcePath $source -DestinationPath $destination -BackupPath $backup | Out-Null
+            }
+            elseif (Test-Path -LiteralPath $destination -PathType Leaf) {
+                Move-Item -LiteralPath $destination -Destination $backup
+            }
+            if ($FaultPrefix) {
+                Invoke-ZbInstallerFault -Point "$FaultPrefix-$name"
+            }
+        }
+    }
+    finally {
+        if (Test-Path -LiteralPath $backupDir) {
+            Remove-ZbDirectoryUnderRoot -Root $InstallDir -Path $backupDir
+        }
+    }
+}
+
+function Repair-ZbPreviousReleaseSwitch {
+    param([Parameter(Mandatory)][string]$InstallDir)
+    $previousDir = Join-Path $InstallDir 'previous'
+    $staged = @(Get-ChildItem -LiteralPath $InstallDir -Directory -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -like '.previous-staging-*' })
+    $retired = @(Get-ChildItem -LiteralPath $InstallDir -Directory -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -like '.previous-retired-*' })
+
+    if (Test-Path -LiteralPath $previousDir) {
+        if (-not (Test-ZbInstalledBuild -InstallDir $previousDir)) {
+            throw "The rollback directory exists but is not a coherent release: $previousDir"
+        }
+    }
+    else {
+        $validStaged = @($staged | Where-Object { Test-ZbInstalledBuild -InstallDir $_.FullName })
+        $validRetired = @($retired | Where-Object { Test-ZbInstalledBuild -InstallDir $_.FullName })
+        if ($validStaged.Count -eq 1) {
+            Move-Item -LiteralPath $validStaged[0].FullName -Destination $previousDir
+        }
+        elseif ($validStaged.Count -gt 1) {
+            throw 'Multiple valid staged rollback snapshots exist; refusing to choose one automatically.'
+        }
+        elseif ($validRetired.Count -eq 1) {
+            Move-Item -LiteralPath $validRetired[0].FullName -Destination $previousDir
+        }
+        elseif ($validRetired.Count -gt 1) {
+            throw 'Multiple valid retired rollback snapshots exist; refusing to choose one automatically.'
+        }
+        elseif ($staged.Count -gt 0 -or $retired.Count -gt 0) {
+            throw 'Interrupted rollback snapshot switch has no valid recovery directory.'
+        }
+    }
+
+    if (Test-Path -LiteralPath $previousDir) {
+        foreach ($temporary in @($staged + $retired)) {
+            if (Test-Path -LiteralPath $temporary.FullName) {
+                Remove-ZbDirectoryUnderRoot -Root $InstallDir -Path $temporary.FullName
+            }
+        }
+    }
+}
+
+function Save-ZbPreviousRelease {
+    param([Parameter(Mandatory)][string]$InstallDir)
+    if (-not (Test-ZbInstalledBuild -InstallDir $InstallDir -IgnorePendingMarker -IgnorePendingComponents)) {
+        throw 'The currently installed release is not coherent enough to use as a rollback snapshot.'
+    }
+    $stageDir = Join-Path $InstallDir ('.previous-staging-' + [guid]::NewGuid().ToString('N'))
+    Repair-ZbPreviousReleaseSwitch -InstallDir $InstallDir
+    $previousDir = Join-Path $InstallDir 'previous'
+    $retiredDir = Join-Path $InstallDir ('.previous-retired-' + [guid]::NewGuid().ToString('N'))
+    $previousRetired = $false
+    try {
+        Copy-ZbReleaseSnapshot -SourceDir $InstallDir -DestinationDir $stageDir
+        Invoke-ZbInstallerFault -Point 'previous-after-stage'
+        if (Test-Path -LiteralPath $previousDir) {
+            Move-Item -LiteralPath $previousDir -Destination $retiredDir
+            $previousRetired = $true
+        }
+        Invoke-ZbInstallerFault -Point 'previous-after-retire'
+        Move-Item -LiteralPath $stageDir -Destination $previousDir
+        if (-not (Test-ZbInstalledBuild -InstallDir $previousDir)) {
+            throw 'The switched rollback snapshot failed validation.'
+        }
+        if ($previousRetired -and (Test-Path -LiteralPath $retiredDir)) {
+            Remove-ZbDirectoryUnderRoot -Root $InstallDir -Path $retiredDir
+            $previousRetired = $false
+        }
+    }
+    catch {
+        if (-not (Test-Path -LiteralPath $previousDir) -and $previousRetired -and (Test-Path -LiteralPath $retiredDir)) {
+            Move-Item -LiteralPath $retiredDir -Destination $previousDir
+            $previousRetired = $false
+        }
+        throw
+    }
+    finally {
+        if (Test-Path -LiteralPath $stageDir) {
+            Remove-ZbDirectoryUnderRoot -Root $InstallDir -Path $stageDir
+        }
+        if ((Test-Path -LiteralPath $retiredDir) -and
+            (Test-Path -LiteralPath $previousDir) -and
+            (Test-ZbInstalledBuild -InstallDir $previousDir)) {
+            Remove-ZbDirectoryUnderRoot -Root $InstallDir -Path $retiredDir
+        }
+    }
+}
+
 function Set-ZbInstalledArtifactHash {
     param(
         [Parameter(Mandatory)][string]$InstallDir,
@@ -804,12 +998,9 @@ function Publish-ZbDesktopBuild {
     if (Test-Path -LiteralPath $installedMcp) { Assert-ZbExecutableStopped -TargetPath $installedMcp }
     if (Test-Path -LiteralPath $installedLocalMcp) { Assert-ZbExecutableStopped -TargetPath $installedLocalMcp }
     $stageExe = Join-Path $stageDir 'ZeitBoard.exe'
-    $previousDir = Join-Path $InstallDir 'previous'
-    $previousExe = Join-Path $previousDir 'ZeitBoard.exe'
-    $previousMcp = Join-Path $previousDir 'zeitboard-mcp.exe'
-    $previousLocalMcp = Join-Path $previousDir 'zeitboard-local-mcp.exe'
     $versionFile = Join-Path $InstallDir 'version.txt'
     $hadInstalledExe = Test-Path -LiteralPath $installedExe
+    $failedCurrentExe = Join-Path $InstallDir ('.failed-current-' + [guid]::NewGuid().ToString('N') + '.exe')
     $desktopReplaced = $false
     try {
         New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
@@ -820,32 +1011,15 @@ function Publish-ZbDesktopBuild {
         Set-ZbUtf8File -Path (Join-Path $stageDir 'version.txt') -Content "$VersionText`nsha256=$stageHash`n"
 
         if ($hadInstalledExe) {
-            New-Item -ItemType Directory -Force -Path $previousDir | Out-Null
-            if (Test-Path -LiteralPath $installedMcp) {
-                Copy-Item -LiteralPath $installedMcp -Destination $previousMcp -Force
-            }
-            elseif (Test-Path -LiteralPath $previousMcp) {
-                Remove-Item -LiteralPath $previousMcp -Force
-            }
-            if (Test-Path -LiteralPath $installedLocalMcp) {
-                Copy-Item -LiteralPath $installedLocalMcp -Destination $previousLocalMcp -Force
-            }
-            elseif (Test-Path -LiteralPath $previousLocalMcp) {
-                Remove-Item -LiteralPath $previousLocalMcp -Force
-            }
-            if (Test-Path -LiteralPath $versionFile) {
-                Copy-Item -LiteralPath $versionFile -Destination (Join-Path $previousDir 'version.txt') -Force
-            }
-            elseif (Test-Path -LiteralPath (Join-Path $previousDir 'version.txt')) {
-                Remove-Item -LiteralPath (Join-Path $previousDir 'version.txt') -Force
-            }
-            [IO.File]::Replace($stageExe, $installedExe, $previousExe, $true)
+            Save-ZbPreviousRelease -InstallDir $InstallDir
+            [IO.File]::Replace($stageExe, $installedExe, $failedCurrentExe, $true)
             $desktopReplaced = $true
         }
         else {
             Move-Item -LiteralPath $stageExe -Destination $installedExe
             $desktopReplaced = $true
         }
+        Invoke-ZbInstallerFault -Point 'publish-after-desktop'
         Move-Item -LiteralPath (Join-Path $stageDir 'version.txt') -Destination $versionFile -Force
         $installedHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $installedExe).Hash.ToLowerInvariant()
         if ($installedHash -ne $stageHash) { throw 'Published desktop binary failed its SHA-256 verification.' }
@@ -854,7 +1028,7 @@ function Publish-ZbDesktopBuild {
     catch {
         $publishError = $_
         if ($desktopReplaced) {
-            if ($hadInstalledExe -and (Test-Path -LiteralPath $previousExe)) {
+            if ($hadInstalledExe -and (Test-Path -LiteralPath (Join-Path $InstallDir 'previous\ZeitBoard.exe'))) {
                 try {
                     Restore-ZbPreviousBuild -InstallDir $InstallDir
                 }
@@ -871,8 +1045,9 @@ function Publish-ZbDesktopBuild {
     }
     finally {
         if (Test-Path -LiteralPath $stageDir) {
-            Remove-Item -LiteralPath $stageDir -Recurse -Force -ErrorAction SilentlyContinue
+            Remove-ZbDirectoryUnderRoot -Root $InstallDir -Path $stageDir
         }
+        if (Test-Path -LiteralPath $failedCurrentExe) { Remove-Item -LiteralPath $failedCurrentExe -Force -ErrorAction SilentlyContinue }
     }
 }
 
@@ -880,61 +1055,72 @@ function Restore-ZbPreviousBuild {
     param([Parameter(Mandatory)][string]$InstallDir)
     $installedExe = Join-Path $InstallDir 'ZeitBoard.exe'
     $previousDir = Join-Path $InstallDir 'previous'
-    $previousExe = Join-Path $previousDir 'ZeitBoard.exe'
+    Repair-ZbPreviousReleaseSwitch -InstallDir $InstallDir
     $installedMcp = Join-Path $InstallDir 'zeitboard-mcp.exe'
-    $previousMcp = Join-Path $previousDir 'zeitboard-mcp.exe'
     $installedLocalMcp = Join-Path $InstallDir 'zeitboard-local-mcp.exe'
-    $previousLocalMcp = Join-Path $previousDir 'zeitboard-local-mcp.exe'
-    if (-not (Test-Path -LiteralPath $previousExe)) {
-        throw "No previous build to roll back to ($previousExe)."
+    if (-not (Test-ZbInstalledBuild -InstallDir $previousDir)) {
+        throw "No complete, verified previous build is available at $previousDir."
     }
     Assert-ZbAppStopped -TargetPath $installedExe
     if (Test-Path -LiteralPath $installedMcp) { Assert-ZbExecutableStopped -TargetPath $installedMcp }
     if (Test-Path -LiteralPath $installedLocalMcp) { Assert-ZbExecutableStopped -TargetPath $installedLocalMcp }
-    $stage = Join-Path $InstallDir ('.rollback-' + [guid]::NewGuid().ToString('N') + '.exe')
+    $stageDir = Join-Path $InstallDir ('.rollback-staging-' + [guid]::NewGuid().ToString('N'))
+    $currentDir = Join-Path $InstallDir ('.rollback-current-' + [guid]::NewGuid().ToString('N'))
+    $pendingMarker = Get-ZbPendingMarkerPath -InstallDir $InstallDir
+    $hadPendingMarker = Test-Path -LiteralPath $pendingMarker -PathType Leaf
+    $pendingMarkerContent = if ($hadPendingMarker) { Get-Content -Raw -LiteralPath $pendingMarker } else { $null }
+    $preserveCurrentSnapshot = $false
     try {
-        Copy-Item -LiteralPath $previousExe -Destination $stage
-        if (Test-Path -LiteralPath $installedExe) {
-            $failedExe = Join-Path $previousDir 'failed-current.exe'
-            if (Test-Path -LiteralPath $failedExe) { Remove-Item -LiteralPath $failedExe -Force }
-            [IO.File]::Replace($stage, $installedExe, $failedExe, $true)
+        Copy-ZbReleaseSnapshot -SourceDir $previousDir -DestinationDir $stageDir
+        Copy-ZbReleaseSnapshot -SourceDir $InstallDir -DestinationDir $currentDir -AllowInvalid
+        $components = Get-ZbDeclaredComponents -InstallDir $stageDir
+        if ($components.Count -eq 0) { $components = @('desktop') }
+        Start-ZbPublishTransaction -InstallDir $InstallDir -Components $components | Out-Null
+        try {
+            Set-ZbCurrentReleaseFromSnapshot -SnapshotDir $stageDir -InstallDir $InstallDir -FaultPrefix 'restore-after'
+            if (-not (Test-ZbInstalledBuild -InstallDir $InstallDir -IgnorePendingMarker)) {
+                throw 'The restored release failed post-publication validation.'
+            }
+            Complete-ZbPublishTransaction -InstallDir $InstallDir
         }
-        else {
-            Move-Item -LiteralPath $stage -Destination $installedExe
-        }
-        $previousVersion = Join-Path $previousDir 'version.txt'
-        $currentVersion = Join-Path $InstallDir 'version.txt'
-        if (Test-Path -LiteralPath $currentVersion) {
-            Copy-Item -LiteralPath $currentVersion -Destination (Join-Path $previousDir 'failed-current-version.txt') -Force
-        }
-        if (Test-Path -LiteralPath $previousMcp) {
-            Publish-ZbVerifiedFile -SourcePath $previousMcp -DestinationPath $installedMcp -BackupPath (Join-Path $previousDir 'failed-current-mcp.exe') | Out-Null
-        }
-        elseif (Test-Path -LiteralPath $installedMcp) {
-            $failedMcp = Join-Path $previousDir 'failed-current-mcp.exe'
-            if (Test-Path -LiteralPath $failedMcp) { Remove-Item -LiteralPath $failedMcp -Force }
-            Move-Item -LiteralPath $installedMcp -Destination $failedMcp
-        }
-
-        if (Test-Path -LiteralPath $previousLocalMcp) {
-            Publish-ZbVerifiedFile -SourcePath $previousLocalMcp -DestinationPath $installedLocalMcp -BackupPath (Join-Path $previousDir 'failed-current-local-mcp.exe') | Out-Null
-        }
-        elseif (Test-Path -LiteralPath $installedLocalMcp) {
-            $failedLocalMcp = Join-Path $previousDir 'failed-current-local-mcp.exe'
-            if (Test-Path -LiteralPath $failedLocalMcp) { Remove-Item -LiteralPath $failedLocalMcp -Force }
-            Move-Item -LiteralPath $installedLocalMcp -Destination $failedLocalMcp
-        }
-
-        if (Test-Path -LiteralPath $previousVersion) {
-            Copy-Item -LiteralPath $previousVersion -Destination $currentVersion -Force
-        }
-        elseif (Test-Path -LiteralPath $currentVersion) {
-            Remove-Item -LiteralPath $currentVersion -Force
+        catch {
+            $restoreError = $_
+            $savedFault = $script:ZbInstallerFaultPoint
+            $script:ZbInstallerFaultPoint = $null
+            try {
+                Set-ZbCurrentReleaseFromSnapshot -SnapshotDir $currentDir -InstallDir $InstallDir
+                if (-not (Test-ZbReleaseMatchesSnapshot -SnapshotDir $currentDir -InstallDir $InstallDir)) {
+                    throw 'The failed current release could not be restored byte-for-byte.'
+                }
+                if ($hadPendingMarker) {
+                    Set-ZbUtf8File -Path $pendingMarker -Content $pendingMarkerContent
+                }
+                elseif (Test-Path -LiteralPath $pendingMarker) {
+                    Remove-Item -LiteralPath $pendingMarker -Force
+                }
+            }
+            catch {
+                $preserveCurrentSnapshot = $true
+                throw "Rollback failed ($($restoreError.Exception.Message)); restoring the displaced current release also failed: $($_.Exception.Message)"
+            }
+            finally {
+                $script:ZbInstallerFaultPoint = $savedFault
+            }
+            throw $restoreError
         }
         Write-ZbLog -Level ok -Message 'restored the previous ZeitBoard build'
     }
     finally {
-        if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Force -ErrorAction SilentlyContinue }
+        if ($preserveCurrentSnapshot -and (Test-Path -LiteralPath $currentDir)) {
+            Write-ZbLog -Level fail -Message "preserved displaced current release for manual recovery at $currentDir"
+        }
+        $cleanupDirs = @($stageDir)
+        if (-not $preserveCurrentSnapshot) { $cleanupDirs += $currentDir }
+        foreach ($temporary in $cleanupDirs) {
+            if (Test-Path -LiteralPath $temporary) {
+                Remove-ZbDirectoryUnderRoot -Root $InstallDir -Path $temporary
+            }
+        }
     }
 }
 
@@ -975,8 +1161,13 @@ function Complete-ZbPublishTransaction {
 function Get-ZbDeclaredComponents {
     # Components a release claims to contain, from version.txt (authoritative
     # once written) or the in-flight pending marker.
-    param([Parameter(Mandatory)][string]$InstallDir)
-    foreach ($file in @((Join-Path $InstallDir 'version.txt'), (Get-ZbPendingMarkerPath -InstallDir $InstallDir))) {
+    param(
+        [Parameter(Mandatory)][string]$InstallDir,
+        [switch]$IgnorePendingMarker
+    )
+    $files = @((Join-Path $InstallDir 'version.txt'))
+    if (-not $IgnorePendingMarker) { $files += Get-ZbPendingMarkerPath -InstallDir $InstallDir }
+    foreach ($file in $files) {
         if (-not (Test-Path -LiteralPath $file)) { continue }
         $line = @(Get-Content -LiteralPath $file) | Where-Object { $_ -match '^components=' } | Select-Object -First 1
         if (-not $line) { continue }
@@ -990,7 +1181,8 @@ function Get-ZbDeclaredComponents {
 function Test-ZbInstalledBuild {
     param(
         [Parameter(Mandatory)][string]$InstallDir,
-        [switch]$IgnorePendingMarker
+        [switch]$IgnorePendingMarker,
+        [switch]$IgnorePendingComponents
     )
     $exe = Join-Path $InstallDir 'ZeitBoard.exe'
     $mcp = Join-Path $InstallDir 'zeitboard-mcp.exe'
@@ -1003,11 +1195,15 @@ function Test-ZbInstalledBuild {
     if (-not (Test-Path -LiteralPath $exe)) { return $false }
     # Declared components must be present even if their hash lines were never
     # reached, which is what makes a half-published release fail closed.
-    $declared = Get-ZbDeclaredComponents -InstallDir $InstallDir
+    $declared = Get-ZbDeclaredComponents -InstallDir $InstallDir -IgnorePendingMarker:$IgnorePendingComponents
     if ($declared -contains 'local-mcp' -and -not (Test-Path -LiteralPath $localMcp)) { return $false }
     if ($declared -contains 'mcp' -and -not (Test-Path -LiteralPath $mcp)) { return $false }
     if (-not (Test-Path -LiteralPath $version)) { return $true } # Legacy install.
     $lines = @(Get-Content -LiteralPath $version)
+    $componentLine = $lines | Where-Object { $_ -match '^components=' } | Select-Object -First 1
+    if ($componentLine -and ($declared -notcontains 'desktop' -or $declared -notcontains 'local-mcp')) {
+        return $false
+    }
     $hashLine = $lines | Where-Object { $_ -match '^sha256=' } | Select-Object -First 1
     if (-not $hashLine) {
         $contentLines = @($lines | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })

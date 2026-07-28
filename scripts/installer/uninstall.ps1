@@ -43,6 +43,18 @@ $exitCode = 0
 try {
     $lifecycleLock = Enter-ZbLifecycleLock
     Invoke-ZbStep -Name 'Preflight' -DryRun:$DryRun -ResumeHint $resume -Action {
+        $expectedInstallDir = Join-Path ([Environment]::GetFolderPath('LocalApplicationData')) 'Programs\ZeitBoard'
+        $expectedDataDir = Join-Path ([Environment]::GetFolderPath('ApplicationData')) 'ZeitBoard'
+        if (-not [IO.Path]::GetFullPath($paths.InstallDir).Equals(
+                [IO.Path]::GetFullPath($expectedInstallDir),
+                [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Refusing recursive removal of unexpected install path: $($paths.InstallDir)"
+        }
+        if (-not [IO.Path]::GetFullPath($paths.DataDir).Equals(
+                [IO.Path]::GetFullPath($expectedDataDir),
+                [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Refusing recursive removal of unexpected data path: $($paths.DataDir)"
+        }
         Assert-ZbAppStopped -TargetPath $installedExe
         if (Test-Path -LiteralPath $installedMcp) {
             Assert-ZbExecutableStopped -TargetPath $installedMcp
@@ -171,6 +183,7 @@ try {
             Write-ZbLog -Level ok -Message "removed $($paths.InstallDir)"
         }
         else { Write-ZbLog -Message 'no install directory found' }
+        Write-ZbLog -Level warn -Message 'MCP client registrations are external and were not changed. Remove entries that point to zeitboard-local-mcp.exe or zeitboard-mcp.exe from each client.'
     }
 
     if ($PurgeData) {
