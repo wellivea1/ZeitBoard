@@ -78,15 +78,18 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import java.time.Instant
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import org.non24.planner.domain.Confidence
+import org.non24.planner.data.DurableLocalDataState
 import org.non24.planner.domain.DataMode
 import org.non24.planner.domain.EffectiveSleepEpisode
 import org.non24.planner.domain.HealthConnectAvailability
 import org.non24.planner.domain.HealthPermissionState
 import org.non24.planner.domain.MedicationEvent
 import org.non24.planner.domain.TimeWindow
+import org.non24.planner.domain.resolveTemporalZone
 
 private enum class Destination(
     val route: String,
@@ -115,6 +118,7 @@ fun Non24App(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
+    val medicationSaveState by viewModel.medicationSaveState.collectAsStateWithLifecycle()
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route ?: Destination.STATUS.route
@@ -171,6 +175,7 @@ fun Non24App(
                 composable(Destination.STATUS.route) {
                     StatusScreen(
                         state = uiState,
+                        onRetryLocalData = viewModel::retryLocalData,
                         onUseHealthConnect = { viewModel.setDataMode(DataMode.HEALTH_CONNECT) },
                         onRequestPermission = { onRequestHealthPermissions(requiredHealthPermissions) },
                         onRefreshHealth = viewModel::refreshHealthConnect,
@@ -180,13 +185,17 @@ fun Non24App(
                 composable(Destination.CORRECT.route) {
                     CorrectionScreen(
                         state = uiState,
+                        onRetryLocalData = viewModel::retryLocalData,
                         onSave = viewModel::saveLatestSleepCorrection,
                     )
                 }
                 composable(Destination.MEDICATION.route) {
                     MedicationScreen(
                         state = uiState,
+                        saveState = medicationSaveState,
+                        onRetryLocalData = viewModel::retryLocalData,
                         onSave = viewModel::addMedicationEvent,
+                        onSaveResultConsumed = viewModel::consumeMedicationSaveResult,
                     )
                 }
                 composable(Destination.SETTINGS.route) {
@@ -204,6 +213,7 @@ fun Non24App(
 @Composable
 private fun StatusScreen(
     state: AppUiState,
+    onRetryLocalData: () -> Unit,
     onUseHealthConnect: () -> Unit,
     onRequestPermission: () -> Unit,
     onRefreshHealth: () -> Unit,
@@ -216,16 +226,32 @@ private fun StatusScreen(
             description = "Estimated sleep timing and the latest observation on this device.",
         )
 
-        if (state.estimate != null) {
-            StatusEstimatePanel(state)
-        } else {
-            EmptyEstimatePanel()
-        }
+        DurableLocalDataNotice(state.localDataState, onRetryLocalData)
 
-        LatestSleepPanel(
-            episode = state.latestSleepEpisode,
-            use24HourTime = state.settings.use24HourTime,
-        )
+        if (state.localDataState != DurableLocalDataState.Loading) {
+            if (state.estimate != null) {
+                StatusEstimatePanel(state)
+            } else if (state.localDataState == DurableLocalDataState.Ready) {
+                EmptyEstimatePanel()
+            }
+
+            if (
+                state.latestSleepEpisode != null ||
+                state.localDataState == DurableLocalDataState.Ready
+            ) {
+                LatestSleepPanel(
+                    episode = state.latestSleepEpisode,
+                    use24HourTime = state.settings.use24HourTime,
+                )
+                if (
+                    state.correctionReviews.any {
+                        it.currentEpisodeId == state.latestSleepEpisode?.source?.id
+                    }
+                ) {
+                    InfoStrip("A correction for an earlier source revision requires review.")
+                }
+            }
+        }
 
         SectionHeading("Health Connect")
         HealthConnectPanel(
@@ -402,6 +428,14 @@ private fun HealthConnectPanel(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
 
+        state.healthRefreshError?.let { error ->
+            Text(
+                error,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+
         when (state.healthAvailability) {
             HealthConnectAvailability.AVAILABLE -> {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -460,15 +494,28 @@ private fun HealthConnectPanel(
 @Composable
 private fun CorrectionScreen(
     state: AppUiState,
+    onRetryLocalData: () -> Unit,
     onSave: (String, String) -> Unit,
 ) {
+    val canDisplaySnapshot = state.localDataState != DurableLocalDataState.Loading
+    val canSave = state.localDataState == DurableLocalDataState.Ready
     val latest = state.latestSleepEpisode
-    val zone = zoneFor(latest?.timeZoneId)
-    var startText by remember(latest?.source?.id, latest?.start) {
-        mutableStateOf(latest?.start?.let { formatForInput(it, zone) }.orEmpty())
+    val startZone = resolveTemporalZone(latest?.ianaTimeZoneId, latest?.startZoneOffset)
+    val endZone = resolveTemporalZone(latest?.ianaTimeZoneId, latest?.endZoneOffset)
+    val usesDeviceZoneFallback = latest != null && latest.ianaTimeZoneId == null &&
+        (latest.startZoneOffset == null || latest.endZoneOffset == null)
+    val endpointZoneLabel = if (startZone == endZone) {
+        startZone.id
+    } else {
+        "${startZone.id} / ${endZone.id}"
     }
-    var endText by remember(latest?.source?.id, latest?.end) {
-        mutableStateOf(latest?.end?.let { formatForInput(it, zone) }.orEmpty())
+    val zoneLabel = endpointZoneLabel + if (usesDeviceZoneFallback) " / device fallback" else ""
+
+    var startText by remember(latest?.source?.id, latest?.start, startZone) {
+        mutableStateOf(latest?.start?.let { formatForInput(it, startZone) }.orEmpty())
+    }
+    var endText by remember(latest?.source?.id, latest?.end, endZone) {
+        mutableStateOf(latest?.end?.let { formatForInput(it, endZone) }.orEmpty())
     }
 
     ScreenColumn {
@@ -477,13 +524,14 @@ private fun CorrectionScreen(
             title = "Correct sleep",
             description = "Append a correction without changing the source observation.",
         )
+        DurableLocalDataNotice(state.localDataState, onRetryLocalData)
         InfoStrip("Imported observations stay unchanged. Corrections remain a separate history.")
 
-        if (latest == null) {
+        if (canDisplaySnapshot && latest == null && canSave) {
             RuledSection {
                 Text("No sleep episode is available.", style = MaterialTheme.typography.bodyMedium)
             }
-        } else {
+        } else if (canDisplaySnapshot && latest != null) {
             RuledSection {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -492,7 +540,7 @@ private fun CorrectionScreen(
                 ) {
                     Text("Latest principal sleep", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        zone.id,
+                        zoneLabel,
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -502,14 +550,14 @@ private fun CorrectionScreen(
                     value = startText,
                     onValueChange = { startText = it },
                     label = "Sleep time",
-                    helper = "yyyy-MM-dd HH:mm",
+                    helper = "yyyy-MM-dd HH:mm / add -04:00 or -05:00 when a time repeats",
                     imeAction = ImeAction.Next,
                 )
                 DenseTextField(
                     value = endText,
                     onValueChange = { endText = it },
                     label = "Wake time",
-                    helper = "yyyy-MM-dd HH:mm",
+                    helper = "yyyy-MM-dd HH:mm / add an offset only when needed",
                     imeAction = ImeAction.Done,
                 )
                 Row(
@@ -519,11 +567,60 @@ private fun CorrectionScreen(
                     PrimaryButton(
                         text = "Save correction",
                         onClick = { onSave(startText, endText) },
+                        enabled = canSave,
                         modifier = Modifier.widthIn(min = 150.dp),
                     )
                 }
                 latest.appliedCorrection?.let {
                     InlineStatus("A manual correction is active for this source episode.")
+                }
+            }
+        }
+
+        if (canDisplaySnapshot && state.correctionReviews.isNotEmpty()) {
+            SectionHeading("Corrections requiring review")
+            InfoStrip(
+                "A source record changed after correction. ZeitBoard did not apply the old " +
+                    "correction to the new revision.",
+            )
+            RuledSection {
+                state.correctionReviews.take(5).forEachIndexed { index, review ->
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            "Prior corrected interval",
+                            style = MaterialTheme.typography.titleSmall,
+                        )
+                        Text(
+                            formatDisplay(
+                                review.correction.correctedStart,
+                                review.correction.ianaTimeZoneId,
+                                review.correction.startZoneOffset,
+                                state.settings.use24HourTime,
+                            ) + " to " + formatDisplay(
+                                review.correction.correctedEnd,
+                                review.correction.ianaTimeZoneId,
+                                review.correction.endZoneOffset,
+                                state.settings.use24HourTime,
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                        Text(
+                            "Source revision changed. Review the current observation and save " +
+                                "a new correction only if it still applies.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (index < minOf(4, state.correctionReviews.lastIndex)) {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                }
+                if (state.correctionReviews.size > 5) {
+                    Text(
+                        "+${state.correctionReviews.size - 5} more corrections require review.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
@@ -533,11 +630,24 @@ private fun CorrectionScreen(
 @Composable
 private fun MedicationScreen(
     state: AppUiState,
+    saveState: MedicationSaveState,
+    onRetryLocalData: () -> Unit,
     onSave: (String, String) -> Unit,
+    onSaveResultConsumed: (Long) -> Unit,
 ) {
     val zone = ZoneId.systemDefault()
     var name by remember { mutableStateOf("") }
     var occurredAt by remember { mutableStateOf(formatForInput(Instant.now(), zone)) }
+    val savePending = saveState is MedicationSaveState.Saving
+    val canSave = state.localDataState == DurableLocalDataState.Ready && !savePending
+
+    LaunchedEffect(saveState) {
+        if (saveState is MedicationSaveState.Succeeded) {
+            name = ""
+            occurredAt = formatForInput(Instant.now(), zone)
+            onSaveResultConsumed(saveState.requestId)
+        }
+    }
 
     ScreenColumn {
         ScreenHeader(
@@ -545,6 +655,8 @@ private fun MedicationScreen(
             title = "Medication event",
             description = "Record what happened without medication or timing advice.",
         )
+        DurableLocalDataNotice(state.localDataState, onRetryLocalData)
+
         RuledSection {
             DenseTextField(
                 value = name,
@@ -557,7 +669,7 @@ private fun MedicationScreen(
                 value = occurredAt,
                 onValueChange = { occurredAt = it },
                 label = "Occurred at",
-                helper = "yyyy-MM-dd HH:mm / ${zone.id}",
+                helper = "yyyy-MM-dd HH:mm [offset] / ${zone.id}",
                 imeAction = ImeAction.Done,
             )
             Row(
@@ -565,17 +677,25 @@ private fun MedicationScreen(
                 horizontalArrangement = Arrangement.End,
             ) {
                 PrimaryButton(
-                    text = "Save event",
-                    onClick = {
-                        onSave(name, occurredAt)
-                        name = ""
-                    },
+                    text = if (savePending) "Saving..." else "Save event",
+                    onClick = { onSave(name, occurredAt) },
+                    enabled = canSave,
                     modifier = Modifier.widthIn(min = 132.dp),
                 )
             }
+            when (saveState) {
+                is MedicationSaveState.Failed -> InfoStrip(saveState.message)
+                is MedicationSaveState.Saving -> InlineStatus("Saving to local storage.")
+                MedicationSaveState.Idle,
+                is MedicationSaveState.Succeeded,
+                -> Unit
+            }
         }
 
-        if (state.medicationEvents.isNotEmpty()) {
+        if (
+            state.localDataState != DurableLocalDataState.Loading &&
+            state.medicationEvents.isNotEmpty()
+        ) {
             SectionHeading("Recent local events")
             RuledSection(verticalPadding = 0.dp, spacing = 0.dp) {
                 state.medicationEvents.take(5).forEachIndexed { index, event ->
@@ -647,6 +767,10 @@ private fun SettingsScreen(
         SectionHeading("Privacy")
         RuledSection {
             Text("Local-first companion", style = MaterialTheme.typography.titleMedium)
+            PrivacyLine(
+                "Imported sleep snapshots, corrections, and medication events are stored " +
+                    "in ZeitBoard's app-private database.",
+            )
             PrivacyLine("No analytics, telemetry, tracking SDKs, or health-data upload.")
             PrivacyLine("Medication labels and exact behavioral timestamps are never logged.")
         }
@@ -670,12 +794,32 @@ private fun LatestSleepPanel(
         } else {
             DataRow(
                 label = "Sleep",
-                value = formatDisplay(episode.start, episode.timeZoneId, use24HourTime),
+                value = formatDisplay(
+                    episode.start,
+                    episode.ianaTimeZoneId,
+                    episode.startZoneOffset,
+                    use24HourTime,
+                ),
             )
             DataRow(
                 label = "Wake",
-                value = formatDisplay(episode.end, episode.timeZoneId, use24HourTime),
+                value = formatDisplay(
+                    episode.end,
+                    episode.ianaTimeZoneId,
+                    episode.endZoneOffset,
+                    use24HourTime,
+                ),
             )
+            if (
+                episode.ianaTimeZoneId == null &&
+                (episode.startZoneOffset == null || episode.endZoneOffset == null)
+            ) {
+                Text(
+                    "Source offset unavailable; displayed in the device zone.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             InlineStatus(
                 if (episode.appliedCorrection == null) {
                     "Source observation"
@@ -741,7 +885,7 @@ private fun MedicationEventRow(event: MedicationEvent, use24HourTime: Boolean) {
             fontWeight = FontWeight.SemiBold,
         )
         Text(
-            formatDisplay(event.occurredAt, event.timeZoneId, use24HourTime),
+            formatDisplay(event.occurredAt, event.timeZoneId, null, use24HourTime),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -881,9 +1025,11 @@ private fun PrimaryButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
     Button(
         onClick = onClick,
+        enabled = enabled,
         modifier = modifier.heightIn(min = 48.dp),
         shape = MaterialTheme.shapes.small,
         colors = ButtonDefaults.buttonColors(
@@ -992,6 +1138,38 @@ private fun SectionHeading(text: String) {
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+}
+
+@Composable
+private fun DurableLocalDataNotice(
+    state: DurableLocalDataState,
+    onRetry: () -> Unit,
+) {
+    when (state) {
+        DurableLocalDataState.Loading ->
+            InfoStrip("Loading saved local data.")
+        DurableLocalDataState.Ready -> Unit
+        is DurableLocalDataState.Failed -> {
+            RuledSection {
+                Text(
+                    state.message,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                Text(
+                    "Any data shown is the last snapshot loaded successfully. New local writes " +
+                        "are disabled until storage recovers.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                SecondaryButton(
+                    text = "Retry local data",
+                    onClick = onRetry,
+                    modifier = Modifier.widthIn(min = 140.dp),
+                )
+            }
+        }
+    }
 }
 
 @Composable
@@ -1258,15 +1436,16 @@ private fun ScreenColumn(content: @Composable ColumnScope.() -> Unit) {
     }
 }
 
-private fun zoneFor(zoneId: String?): ZoneId =
-    runCatching { ZoneId.of(zoneId ?: ZoneId.systemDefault().id) }
-        .getOrDefault(ZoneId.systemDefault())
-
 private fun formatForInput(instant: Instant, zoneId: ZoneId): String =
     AppViewModel.INPUT_FORMATTER.format(instant.atZone(zoneId))
 
-private fun formatDisplay(instant: Instant, zoneId: String, use24HourTime: Boolean): String {
-    val zone = zoneFor(zoneId)
+private fun formatDisplay(
+    instant: Instant,
+    ianaTimeZoneId: String?,
+    offset: ZoneOffset?,
+    use24HourTime: Boolean,
+): String {
+    val zone = resolveTemporalZone(ianaTimeZoneId, offset)
     val pattern = if (use24HourTime) "EEE, MMM d HH:mm z" else "EEE, MMM d h:mm a z"
     return DateTimeFormatter.ofPattern(pattern, Locale.getDefault()).format(instant.atZone(zone))
 }

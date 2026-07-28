@@ -1,8 +1,11 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { Icon, type IconName } from "./Icon";
-import { AssistantRail } from "./AssistantRail";
-import { useApprovals } from "../state/approvals";
+import { usePendingApprovalsCount } from "../state/approvals";
 import type { ScreenId } from "../types";
+
+const AssistantRail = lazy(() =>
+  import("./AssistantRail").then((module) => ({ default: module.AssistantRail })),
+);
 
 interface NavItem {
   id: ScreenId;
@@ -65,8 +68,15 @@ function NavigationLink({ item, active }: { item: NavItem; active: boolean }) {
 }
 
 export function AppShell({ screen, children }: { screen: ScreenId; children: ReactNode }) {
-  const { pendingCount } = useApprovals();
+  const pendingCount = usePendingApprovalsCount();
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantLoaded, setAssistantLoaded] = useState(false);
+
+  const toggleAssistant = () => {
+    if (!assistantOpen) setAssistantLoaded(true);
+    setAssistantOpen((open) => !open);
+  };
+
   return (
     <div className="app-shell" data-assistant-open={assistantOpen || undefined}>
       <aside className="sidebar">
@@ -115,7 +125,7 @@ export function AppShell({ screen, children }: { screen: ScreenId; children: Rea
           type="button"
           data-active={assistantOpen || undefined}
           aria-pressed={assistantOpen}
-          onClick={() => setAssistantOpen((open) => !open)}
+          onClick={toggleAssistant}
         >
           <Icon name="sparkle" />
           <span>Assistant</span>
@@ -123,7 +133,19 @@ export function AppShell({ screen, children }: { screen: ScreenId; children: Rea
         {children}
       </main>
 
-      <AssistantRail open={assistantOpen} onClose={() => setAssistantOpen(false)} />
+      {assistantLoaded && (
+        <Suspense
+          fallback={
+            assistantOpen ? (
+              <div className="assistant-rail" role="status">
+                Loading assistant...
+              </div>
+            ) : null
+          }
+        >
+          <AssistantRail open={assistantOpen} onClose={() => setAssistantOpen(false)} />
+        </Suspense>
+      )}
     </div>
   );
 }

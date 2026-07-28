@@ -1,15 +1,31 @@
 package main
 
 import (
-	"context"
+	"crypto/sha256"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"time"
 
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 	storage "non24.app/core/storage/sqlite"
 )
+
+var openSleepDataDialog = runtime.OpenFileDialog
 
 type SleepImportInput struct {
 	FileName string `json:"fileName"`
 	Contents string `json:"contents"`
+}
+
+type SleepImportFileInput struct {
+	ImportToken string `json:"importToken"`
+}
+
+type pendingSleepImportFile struct {
+	path   string
+	digest [sha256.Size]byte
 }
 
 type SleepImportDTO struct {
@@ -25,6 +41,8 @@ type SleepImportDTO struct {
 	Errors        []string            `json:"errors"`
 	Rows          []SleepImportRowDTO `json:"rows"`
 	Message       string              `json:"message"`
+	ImportToken   string              `json:"importToken,omitempty"`
+	Canceled      bool                `json:"canceled"`
 }
 
 type SleepImportRowDTO struct {
@@ -45,7 +63,7 @@ func (a *App) PreviewSleepImport(input SleepImportInput) (SleepImportDTO, error)
 	if err != nil {
 		return SleepImportDTO{}, err
 	}
-	report, err := store.PreviewSleepImport(context.Background(), storage.SleepImportInput{
+	report, err := store.PreviewSleepImport(a.applicationContext(), storage.SleepImportInput{
 		FileName: input.FileName,
 		Contents: input.Contents,
 	})
@@ -60,7 +78,7 @@ func (a *App) ImportSleepData(input SleepImportInput) (SleepImportDTO, error) {
 	if err != nil {
 		return SleepImportDTO{}, err
 	}
-	report, err := store.ImportSleepObservations(context.Background(), storage.SleepImportInput{
+	report, err := store.ImportSleepObservations(a.applicationContext(), storage.SleepImportInput{
 		FileName: input.FileName,
 		Contents: input.Contents,
 	})
@@ -68,6 +86,131 @@ func (a *App) ImportSleepData(input SleepImportInput) (SleepImportDTO, error) {
 		return SleepImportDTO{}, err
 	}
 	return sleepImportDTO(report), nil
+}
+
+// PreviewSleepImportFile keeps the selected file contents on the Go side of
+// the Wails bridge. The returned token names one immutable preview selection.
+func (a *App) PreviewSleepImportFile() (SleepImportDTO, error) {
+	store, err := a.requireStore()
+	if err != nil {
+		return SleepImportDTO{}, err
+	}
+	a.clearPendingSleepImports()
+	path, err := openSleepDataDialog(a.applicationContext(), runtime.OpenDialogOptions{
+		Title: "Import sleep observations",
+		Filters: []runtime.FileFilter{
+			{DisplayName: "Sleep observation files (*.json;*.csv)", Pattern: "*.json;*.csv"},
+			{DisplayName: "JSON files (*.json)", Pattern: "*.json"},
+			{DisplayName: "CSV files (*.csv)", Pattern: "*.csv"},
+		},
+	})
+	if err != nil {
+		return SleepImportDTO{}, fmt.Errorf("select sleep import file: %w", err)
+	}
+	if path == "" {
+		return canceledSleepImportDTO(), nil
+	}
+
+	selected, digest, err := readSleepImportFile(path)
+	if err != nil {
+		return SleepImportDTO{}, err
+	}
+	report, err := store.PreviewSleepImport(a.applicationContext(), selected)
+	if err != nil {
+		return SleepImportDTO{}, err
+	}
+	token := newLocalID("sleep_import")
+	a.sleepImportMu.Lock()
+	a.sleepImportPending = map[string]pendingSleepImportFile{
+		token: {path: path, digest: digest},
+	}
+	a.sleepImportMu.Unlock()
+
+	result := sleepImportDTO(report)
+	result.ImportToken = token
+	return result, nil
+}
+
+// ImportSleepDataFile consumes a preview token and rejects a file that changed
+// after preview, so the committed bytes are exactly the bytes the owner saw.
+func (a *App) ImportSleepDataFile(input SleepImportFileInput) (SleepImportDTO, error) {
+	store, err := a.requireStore()
+	if err != nil {
+		return SleepImportDTO{}, err
+	}
+	pending, ok := a.consumePendingSleepImport(input.ImportToken)
+	if !ok {
+		return SleepImportDTO{}, fmt.Errorf("sleep import preview expired; choose the file again")
+	}
+	selected, digest, err := readSleepImportFile(pending.path)
+	if err != nil {
+		return SleepImportDTO{}, err
+	}
+	if digest != pending.digest {
+		return SleepImportDTO{}, fmt.Errorf("sleep import file changed after preview; choose it again")
+	}
+	report, err := store.ImportSleepObservations(a.applicationContext(), selected)
+	if err != nil {
+		return SleepImportDTO{}, err
+	}
+	return sleepImportDTO(report), nil
+}
+
+func readSleepImportFile(path string) (storage.SleepImportInput, [sha256.Size]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return storage.SleepImportInput{}, [sha256.Size]byte{}, fmt.Errorf("open sleep import: %w", err)
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil {
+		return storage.SleepImportInput{}, [sha256.Size]byte{}, fmt.Errorf("inspect sleep import: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return storage.SleepImportInput{}, [sha256.Size]byte{}, fmt.Errorf("sleep import must be a regular file")
+	}
+	if info.Size() > storage.MaxSleepImportBytes {
+		return storage.SleepImportInput{}, [sha256.Size]byte{}, fmt.Errorf("sleep import exceeds the 8 MiB limit")
+	}
+	contents, err := io.ReadAll(io.LimitReader(file, storage.MaxSleepImportBytes+1))
+	if err != nil {
+		return storage.SleepImportInput{}, [sha256.Size]byte{}, fmt.Errorf("read sleep import: %w", err)
+	}
+	if len(contents) > storage.MaxSleepImportBytes {
+		return storage.SleepImportInput{}, [sha256.Size]byte{}, fmt.Errorf("sleep import exceeds the 8 MiB limit")
+	}
+	return storage.SleepImportInput{
+		FileName: filepath.Base(path),
+		Contents: string(contents),
+	}, sha256.Sum256(contents), nil
+}
+
+func (a *App) consumePendingSleepImport(token string) (pendingSleepImportFile, bool) {
+	a.sleepImportMu.Lock()
+	defer a.sleepImportMu.Unlock()
+	pending, ok := a.sleepImportPending[token]
+	if ok {
+		delete(a.sleepImportPending, token)
+	}
+	return pending, ok
+}
+
+func (a *App) clearPendingSleepImports() {
+	a.sleepImportMu.Lock()
+	a.sleepImportPending = nil
+	a.sleepImportMu.Unlock()
+}
+
+func canceledSleepImportDTO() SleepImportDTO {
+	return SleepImportDTO{
+		FileName: "No file selected",
+		Format:   "",
+		DryRun:   true,
+		Errors:   []string{},
+		Rows:     []SleepImportRowDTO{},
+		Message:  "No file was selected.",
+		Canceled: true,
+	}
 }
 
 func sleepImportDTO(report storage.SleepImportReport) SleepImportDTO {

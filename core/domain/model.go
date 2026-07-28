@@ -114,13 +114,44 @@ type SleepInterval struct {
 	EndEvidence   Evidence  `json:"endEvidence"`
 }
 
+type SleepClassification string
+
+const (
+	SleepClassificationPrincipal SleepClassification = "principal"
+	SleepClassificationNap       SleepClassification = "nap"
+	SleepClassificationUnknown   SleepClassification = "unknown"
+)
+
 type SleepSession struct {
-	ID          SleepSessionID  `json:"id"`
-	Intervals   []SleepInterval `json:"intervals"`
-	IsNap       bool            `json:"isNap"`
-	Suppressed  bool            `json:"suppressed,omitempty"`
-	SourceLabel string          `json:"sourceLabel,omitempty"`
-	CreatedAt   time.Time       `json:"createdAt"`
+	ID             SleepSessionID      `json:"id"`
+	Intervals      []SleepInterval     `json:"intervals"`
+	Classification SleepClassification `json:"classification,omitempty"`
+	// IsNap is retained for legacy wire compatibility and is true only for naps.
+	// Use EffectiveClassification when the exact label matters.
+	IsNap       bool      `json:"isNap"`
+	Suppressed  bool      `json:"suppressed,omitempty"`
+	SourceLabel string    `json:"sourceLabel,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
+}
+
+// EffectiveClassification preserves compatibility with legacy sessions that
+// predate the explicit classification field.
+func (s SleepSession) EffectiveClassification() SleepClassification {
+	if s.Classification != "" {
+		return s.Classification
+	}
+	if s.IsNap {
+		return SleepClassificationNap
+	}
+	return SleepClassificationPrincipal
+}
+
+func (s SleepSession) IsPrincipalSleep() bool {
+	return !s.Suppressed && s.EffectiveClassification() == SleepClassificationPrincipal
+}
+
+func (s SleepSession) IsNapSleep() bool {
+	return !s.Suppressed && s.EffectiveClassification() == SleepClassificationNap
 }
 
 type CorrectionKind string

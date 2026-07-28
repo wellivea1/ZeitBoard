@@ -1,42 +1,53 @@
 package org.non24.planner.data
 
 import java.time.Instant
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
 import org.non24.planner.domain.EstimateSnapshot
 import org.non24.planner.domain.MedicationEvent
 import org.non24.planner.domain.SleepCorrection
 import org.non24.planner.domain.SleepCorrectionPolicy
-import org.non24.planner.domain.SleepEpisode
 
-abstract class CorrectableSleepRepository(
-    initialEpisodes: List<SleepEpisode> = emptyList(),
+internal abstract class CorrectableSleepRepository(
+    protected val localUserDataRepository: LocalUserDataRepository =
+        LocalUserDataRepository(InMemoryLocalUserDataStore()),
 ) : SleepRepository {
-    protected val mutableSourceEpisodes = MutableStateFlow(initialEpisodes)
-    private val mutableCorrections = MutableStateFlow<List<SleepCorrection>>(emptyList())
-
-    final override val sourceEpisodes: StateFlow<List<SleepEpisode>> = mutableSourceEpisodes.asStateFlow()
-    final override val corrections: StateFlow<List<SleepCorrection>> = mutableCorrections.asStateFlow()
+    final override val activeCorrections = localUserDataRepository.activeCorrections
+    final override val correctionReviews = localUserDataRepository.correctionReviews
 
     final override suspend fun appendCorrection(correction: SleepCorrection): Result<Unit> {
+        try {
+            localUserDataRepository.initialize()
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
+            return Result.failure(exception)
+        }
         val source = sourceEpisodes.value.firstOrNull { it.id == correction.targetEpisodeId }
             ?: return Result.failure(IllegalArgumentException("The selected sleep episode no longer exists."))
-        return SleepCorrectionPolicy.validate(source, correction).onSuccess {
-            mutableCorrections.update { it + correction }
+        val validation = SleepCorrectionPolicy.validate(source, correction)
+        if (validation.isFailure) return validation
+        return try {
+            localUserDataRepository.appendSleepCorrection(correction)
+            Result.success(Unit)
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
+            Result.failure(exception)
         }
     }
 }
 
-class InMemoryMedicationRepository : MedicationRepository {
-    private val mutableEvents = MutableStateFlow<List<MedicationEvent>>(emptyList())
-    override val events: StateFlow<List<MedicationEvent>> = mutableEvents.asStateFlow()
+internal class LocalMedicationRepository(
+    private val localUserDataRepository: LocalUserDataRepository =
+        LocalUserDataRepository(InMemoryLocalUserDataStore()),
+) : MedicationRepository {
+    override val events: StateFlow<List<MedicationEvent>> = localUserDataRepository.medicationEvents
 
     override suspend fun append(event: MedicationEvent) {
-        mutableEvents.update { current ->
-            (current + event).sortedByDescending { it.occurredAt }
-        }
+        localUserDataRepository.appendMedicationEvent(event)
     }
 }
 

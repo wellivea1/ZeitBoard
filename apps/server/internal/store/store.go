@@ -53,6 +53,9 @@ const (
 	ProposalPending  ProposalStatus = "pending"
 	ProposalApproved ProposalStatus = "approved"
 	ProposalRejected ProposalStatus = "rejected"
+
+	DefaultProposalPageLimit = 50
+	MaxProposalPageLimit     = 100
 )
 
 type ProposalInput struct {
@@ -75,6 +78,19 @@ type ProposalRecord struct {
 	ExpiresAt     time.Time       `json:"expiresAt"`
 	Payload       json.RawMessage `json:"payload"`
 	DecisionToken string          `json:"decisionToken,omitempty"`
+}
+
+type ProposalPageCursor struct {
+	AfterRowID   int64
+	ThroughRowID int64
+	Active       bool
+	AsOf         time.Time
+}
+
+type ProposalPage struct {
+	Records    []ProposalRecord
+	NextCursor ProposalPageCursor
+	HasMore    bool
 }
 
 type approvalClaims struct {
@@ -151,8 +167,15 @@ func (s *Store) Migrate(ctx context.Context) error {
 			ciphertext BLOB NOT NULL,
 			payload_hash BLOB NOT NULL
 		)`,
+		`CREATE INDEX IF NOT EXISTS idx_sync_records_kind_seq
+			ON sync_records(kind, seq)`,
 		`CREATE TABLE IF NOT EXISTS sync_tombstones (
 			record_id TEXT PRIMARY KEY,
+			device_id TEXT NOT NULL,
+			erased_at TEXT NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS sync_task_tombstones (
+			task_id TEXT PRIMARY KEY,
 			device_id TEXT NOT NULL,
 			erased_at TEXT NOT NULL
 		)`,
@@ -173,6 +196,9 @@ func (s *Store) Migrate(ctx context.Context) error {
 			expires_at TEXT NOT NULL,
 			used_at TEXT NOT NULL DEFAULT ''
 		)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_approval_nonces_proposal_unused
+			ON approval_nonces(proposal_id)
+			WHERE used_at = ''`,
 		`CREATE TABLE IF NOT EXISTS audit_events (
 			seq INTEGER PRIMARY KEY AUTOINCREMENT,
 			event_type TEXT NOT NULL,
@@ -330,6 +356,20 @@ func (s *Store) Append(ctx context.Context, deviceID string, records []syncmodel
 		if !errors.Is(err, sql.ErrNoRows) {
 			return 0, 0, err
 		}
+		if record.Kind == syncmodel.KindTask {
+			taskID, ok := taskIDFromRevisionRecordID(record.RecordID)
+			if ok {
+				err = tx.QueryRowContext(ctx,
+					`SELECT 1 FROM sync_task_tombstones WHERE task_id = ?`, taskID,
+				).Scan(&tombstoned)
+				if err == nil {
+					continue
+				}
+				if !errors.Is(err, sql.ErrNoRows) {
+					return 0, 0, err
+				}
+			}
+		}
 
 		sum := sha256.Sum256(record.Payload)
 		payloadHash := sum[:]
@@ -382,7 +422,8 @@ func (s *Store) Append(ctx context.Context, deviceID string, records []syncmodel
 // mints one tombstone per id: a registry row (which blocks any future push of
 // that id) plus a tombstone envelope in the pull stream so every device learns
 // to erase its local copy. Tombstone payloads carry only the record id — no
-// health data. Erasing an id that was never synced still mints a tombstone;
+// record content. Its optional original kind prevents identifier-based routing.
+// Erasing an id that was never synced still mints a kindless tombstone;
 // erasing an already-tombstoned id is a no-op.
 func (s *Store) EraseSyncRecords(ctx context.Context, deviceID string, recordIDs []string, erasedAt time.Time) (int, int, int64, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -399,7 +440,20 @@ func (s *Store) EraseSyncRecords(ctx context.Context, deviceID string, recordIDs
 	erased := 0
 	tombstones := 0
 	erasedAtText := erasedAt.UTC().Format(time.RFC3339Nano)
+	recordIDs, err = expandTaskErasureTargets(ctx, tx, deviceID, recordIDs, erasedAtText)
+	if err != nil {
+		return 0, 0, 0, err
+	}
 	for _, recordID := range recordIDs {
+		var erasedKind string
+		err := tx.QueryRowContext(ctx,
+			`SELECT kind FROM sync_records WHERE record_id = ? AND kind != ?`,
+			recordID, string(syncmodel.KindTombstone),
+		).Scan(&erasedKind)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return 0, 0, 0, err
+		}
+
 		// Never delete a tombstone envelope: repeat erasures must leave the
 		// durable erase signal in the pull stream intact.
 		result, err := tx.ExecContext(ctx,
@@ -431,7 +485,9 @@ func (s *Store) EraseSyncRecords(ctx context.Context, deviceID string, recordIDs
 		}
 		tombstones++
 
-		payload, err := json.Marshal(syncmodel.TombstonePayload{RecordID: recordID})
+		payload, err := json.Marshal(syncmodel.TombstonePayload{
+			RecordID: recordID, RecordKind: syncmodel.Kind(erasedKind),
+		})
 		if err != nil {
 			return 0, 0, 0, err
 		}
@@ -459,6 +515,103 @@ func (s *Store) EraseSyncRecords(ctx context.Context, deviceID string, recordIDs
 	}
 	committed = true
 	return erased, tombstones, cursor, nil
+}
+
+// expandTaskErasureTargets turns one known task revision into a logical task
+// deletion. All retained revisions are erased now, and the task-level registry
+// prevents an offline device from introducing a later revision after deletion.
+func expandTaskErasureTargets(
+	ctx context.Context,
+	tx *sql.Tx,
+	deviceID string,
+	recordIDs []string,
+	erasedAt string,
+) ([]string, error) {
+	result := make([]string, 0, len(recordIDs))
+	seen := make(map[string]struct{}, len(recordIDs))
+	appendID := func(recordID string) {
+		if _, exists := seen[recordID]; exists {
+			return
+		}
+		seen[recordID] = struct{}{}
+		result = append(result, recordID)
+	}
+
+	for _, recordID := range recordIDs {
+		appendID(recordID)
+		var kind string
+		err := tx.QueryRowContext(ctx,
+			`SELECT kind FROM sync_records WHERE record_id = ? AND kind != ?`,
+			recordID, string(syncmodel.KindTombstone),
+		).Scan(&kind)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		if syncmodel.Kind(kind) != syncmodel.KindTask {
+			continue
+		}
+		taskID, ok := taskIDFromRevisionRecordID(recordID)
+		if !ok {
+			return nil, fmt.Errorf("stored task record %q has an invalid revision id", recordID)
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT OR IGNORE INTO sync_task_tombstones(task_id, device_id, erased_at) VALUES(?, ?, ?)`,
+			taskID, deviceID, erasedAt,
+		); err != nil {
+			return nil, err
+		}
+		revisions, err := taskRevisionRecordIDsTx(ctx, tx, taskID)
+		if err != nil {
+			return nil, err
+		}
+		for _, revisionID := range revisions {
+			appendID(revisionID)
+		}
+	}
+	return result, nil
+}
+
+func taskRevisionRecordIDsTx(ctx context.Context, tx *sql.Tx, taskID string) ([]string, error) {
+	pattern := escapeSQLLike(taskID) + `\_r%`
+	rows, err := tx.QueryContext(ctx, `SELECT record_id FROM sync_records
+		WHERE kind = ? AND record_id LIKE ? ESCAPE '\'
+		ORDER BY seq`, string(syncmodel.KindTask), pattern)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var result []string
+	for rows.Next() {
+		var recordID string
+		if err := rows.Scan(&recordID); err != nil {
+			return nil, err
+		}
+		parsedTaskID, ok := taskIDFromRevisionRecordID(recordID)
+		if ok && parsedTaskID == taskID {
+			result = append(result, recordID)
+		}
+	}
+	return result, rows.Err()
+}
+
+func taskIDFromRevisionRecordID(recordID string) (string, bool) {
+	marker := strings.LastIndex(recordID, "_r")
+	if marker < 1 || marker+2 == len(recordID) {
+		return "", false
+	}
+	for _, char := range recordID[marker+2:] {
+		if char < '0' || char > '9' {
+			return "", false
+		}
+	}
+	return recordID[:marker], true
+}
+
+func escapeSQLLike(value string) string {
+	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(value)
 }
 
 func (s *Store) CreateProposal(ctx context.Context, input ProposalInput) (ProposalRecord, error) {
@@ -540,62 +693,124 @@ func (s *Store) CreateProposal(ctx context.Context, input ProposalInput) (Propos
 	}, nil
 }
 
-func (s *Store) ListProposals(ctx context.Context) ([]ProposalRecord, error) {
-	rows, err := s.db.QueryContext(ctx,
-		`SELECT id, action_id, device_id, status, created_at, updated_at, expires_at, nonce, ciphertext
-		 FROM proposals ORDER BY created_at DESC`,
-	)
+// ListProposalPage returns active proposals before bounded newest-first history. A high-water row and snapshot time keep continuation pages stable.
+func (s *Store) ListProposalPage(ctx context.Context, cursor ProposalPageCursor, limit int, now time.Time) (ProposalPage, error) {
+	if limit <= 0 || limit > MaxProposalPageLimit {
+		return ProposalPage{}, errors.New("proposal page limit is out of range")
+	}
+	if now.IsZero() {
+		return ProposalPage{}, errors.New("proposal page time is required")
+	}
+
+	requestTime := now.UTC()
+	if cursor.AfterRowID < 0 || cursor.ThroughRowID < 0 {
+		return ProposalPage{}, errors.New("proposal cursor must not be negative")
+	}
+	if cursor.AfterRowID == 0 {
+		if cursor.ThroughRowID != 0 || cursor.Active || !cursor.AsOf.IsZero() {
+			return ProposalPage{}, errors.New("initial proposal cursor must be empty")
+		}
+		if err := s.db.QueryRowContext(ctx, `SELECT COALESCE(MAX(rowid), 0) FROM proposals`).Scan(&cursor.ThroughRowID); err != nil {
+			return ProposalPage{}, err
+		}
+		cursor.AsOf = requestTime
+	} else if cursor.ThroughRowID < cursor.AfterRowID || cursor.AsOf.IsZero() || cursor.AsOf.After(requestTime) {
+		return ProposalPage{}, errors.New("proposal continuation cursor is invalid")
+	}
+	if cursor.ThroughRowID == 0 {
+		return ProposalPage{Records: []ProposalRecord{}}, nil
+	}
+
+	requestTimeText := requestTime.Format(time.RFC3339Nano)
+	snapshotTime := cursor.AsOf.UTC()
+	snapshotTimeText := snapshotTime.Format(time.RFC3339Nano)
+	query := `SELECT p.rowid, p.id, p.action_id, p.device_id, p.status,
+			p.created_at, p.updated_at, p.expires_at, p.nonce, p.ciphertext,
+			approval.nonce
+		 FROM proposals AS p
+		 LEFT JOIN approval_nonces AS approval
+		   ON approval.proposal_id = p.id
+		  AND approval.used_at = ''
+		  AND approval.expires_at > ?
+		  AND p.status = ?
+		  AND p.expires_at > ?
+		 WHERE p.rowid <= ?`
+	args := []any{requestTimeText, string(ProposalPending), requestTimeText, cursor.ThroughRowID}
+	if cursor.AfterRowID > 0 {
+		if cursor.Active {
+			query += ` AND (
+				(p.status = ? AND p.expires_at > ? AND p.rowid < ?)
+				OR NOT (p.status = ? AND p.expires_at > ?)
+			)`
+			args = append(args,
+				string(ProposalPending), snapshotTimeText, cursor.AfterRowID,
+				string(ProposalPending), snapshotTimeText,
+			)
+		} else {
+			query += ` AND NOT (p.status = ? AND p.expires_at > ?)
+				AND p.rowid < ?`
+			args = append(args, string(ProposalPending), snapshotTimeText, cursor.AfterRowID)
+		}
+	}
+	query += ` ORDER BY
+			CASE WHEN p.status = ? AND p.expires_at > ? THEN 0 ELSE 1 END,
+			p.rowid DESC
+		LIMIT ?`
+	args = append(args, string(ProposalPending), snapshotTimeText, limit+1)
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return ProposalPage{}, err
 	}
 	defer rows.Close()
-	var records []ProposalRecord
+
+	listed := make([]proposalPageRow, 0, limit+1)
 	for rows.Next() {
-		record, err := s.scanProposal(rows)
+		row, err := s.scanProposalPageRow(rows)
 		if err != nil {
-			return nil, err
+			return ProposalPage{}, err
 		}
-		records = append(records, record)
+		listed = append(listed, row)
 	}
-	return records, rows.Err()
+	if err := rows.Err(); err != nil {
+		return ProposalPage{}, err
+	}
+
+	page := ProposalPage{Records: make([]ProposalRecord, 0, min(len(listed), limit))}
+	if len(listed) > limit {
+		page.HasMore = true
+		listed = listed[:limit]
+		last := listed[len(listed)-1]
+		page.NextCursor = ProposalPageCursor{
+			AfterRowID:   last.rowID,
+			ThroughRowID: cursor.ThroughRowID,
+			Active:       proposalIsActiveAt(last.record, snapshotTime),
+			AsOf:         snapshotTime,
+		}
+	}
+	for _, row := range listed {
+		record := row.record
+		if proposalIsActiveAt(record, requestTime) && row.decisionNonce.Valid {
+			token, err := s.signApprovalClaims(approvalClaims{
+				ProposalID: record.ID,
+				ActionID:   record.ActionID,
+				DeviceID:   record.DeviceID,
+				TargetHash: payloadHash(record.Payload),
+				Nonce:      row.decisionNonce.String,
+				ExpiresAt:  record.ExpiresAt.UTC().Unix(),
+			})
+			if err != nil {
+				return ProposalPage{}, err
+			}
+			record.DecisionToken = token
+		}
+		page.Records = append(page.Records, record)
+	}
+	return page, nil
 }
 
-// AttachDecisionTokens re-mints the one-use decision token for each pending,
-// unexpired proposal so any of the user's enrolled devices can decide it (not
-// only the creating device). The token is deterministic over the stored claims
-// and the proposal's single unused nonce, so re-minting never widens the
-// one-use guarantee: the first decision consumes the nonce for every copy.
-func (s *Store) AttachDecisionTokens(ctx context.Context, records []ProposalRecord, now time.Time) ([]ProposalRecord, error) {
-	for i := range records {
-		record := &records[i]
-		if record.Status != ProposalPending || !record.ExpiresAt.After(now.UTC()) {
-			continue
-		}
-		var nonce string
-		err := s.db.QueryRowContext(ctx,
-			`SELECT nonce FROM approval_nonces WHERE proposal_id = ? AND used_at = ''`,
-			record.ID,
-		).Scan(&nonce)
-		if errors.Is(err, sql.ErrNoRows) {
-			continue
-		}
-		if err != nil {
-			return nil, err
-		}
-		token, err := s.signApprovalClaims(approvalClaims{
-			ProposalID: record.ID,
-			ActionID:   record.ActionID,
-			DeviceID:   record.DeviceID,
-			TargetHash: payloadHash(record.Payload),
-			Nonce:      nonce,
-			ExpiresAt:  record.ExpiresAt.UTC().Unix(),
-		})
-		if err != nil {
-			return nil, err
-		}
-		record.DecisionToken = token
-	}
-	return records, nil
+func proposalIsActiveAt(record ProposalRecord, at time.Time) bool {
+	return record.Status == ProposalPending && record.ExpiresAt.After(at.UTC())
 }
 
 func (s *Store) DecideProposal(ctx context.Context, proposalID, deviceID string, decision ProposalStatus, token string, decidedAt time.Time, audit json.RawMessage) (ProposalRecord, error) {
@@ -691,6 +906,39 @@ type proposalScanner interface {
 	Scan(dest ...any) error
 }
 
+type proposalPageRow struct {
+	rowID         int64
+	record        ProposalRecord
+	decisionNonce sql.NullString
+}
+
+func (s *Store) scanProposalPageRow(row proposalScanner) (proposalPageRow, error) {
+	var result proposalPageRow
+	var status, createdAt, updatedAt, expiresAt string
+	var nonce, ciphertext []byte
+	if err := row.Scan(
+		&result.rowID,
+		&result.record.ID,
+		&result.record.ActionID,
+		&result.record.DeviceID,
+		&status,
+		&createdAt,
+		&updatedAt,
+		&expiresAt,
+		&nonce,
+		&ciphertext,
+		&result.decisionNonce,
+	); err != nil {
+		return proposalPageRow{}, err
+	}
+	record, err := s.decodeProposal(result.record, status, createdAt, updatedAt, expiresAt, nonce, ciphertext)
+	if err != nil {
+		return proposalPageRow{}, err
+	}
+	result.record = record
+	return result, nil
+}
+
 func (s *Store) scanProposal(row proposalScanner) (ProposalRecord, error) {
 	var record ProposalRecord
 	var status, createdAt, updatedAt, expiresAt string
@@ -698,6 +946,10 @@ func (s *Store) scanProposal(row proposalScanner) (ProposalRecord, error) {
 	if err := row.Scan(&record.ID, &record.ActionID, &record.DeviceID, &status, &createdAt, &updatedAt, &expiresAt, &nonce, &ciphertext); err != nil {
 		return ProposalRecord{}, err
 	}
+	return s.decodeProposal(record, status, createdAt, updatedAt, expiresAt, nonce, ciphertext)
+}
+
+func (s *Store) decodeProposal(record ProposalRecord, status, createdAt, updatedAt, expiresAt string, nonce, ciphertext []byte) (ProposalRecord, error) {
 	created, err := time.Parse(time.RFC3339Nano, createdAt)
 	if err != nil {
 		return ProposalRecord{}, err
@@ -759,28 +1011,53 @@ func (s *Store) CountProposals(ctx context.Context) (int, error) {
 	return count, nil
 }
 
-func (s *Store) Pull(ctx context.Context, since int64, limit int) ([]syncmodel.Envelope, int64, error) {
-	if since < 0 {
-		return nil, 0, errors.New("cursor must not be negative")
+// RecordHighWater captures a stable upper cursor for a multi-page read. Callers
+// can continue serving a coherent snapshot while newer records are appended.
+func (s *Store) RecordHighWater(ctx context.Context) (int64, error) {
+	var cursor sql.NullInt64
+	if err := s.db.QueryRowContext(ctx, `SELECT MAX(seq) FROM sync_records`).Scan(&cursor); err != nil {
+		return 0, err
+	}
+	if !cursor.Valid {
+		return 0, nil
+	}
+	return cursor.Int64, nil
+}
+
+// PullKindThrough returns one encrypted-log kind without decrypting unrelated
+// records. The through cursor must come from RecordHighWater when callers page.
+func (s *Store) PullKindThrough(ctx context.Context, kind syncmodel.Kind, since, through int64, limit int) ([]syncmodel.Envelope, int64, error) {
+	if since < 0 || through < 0 {
+		return nil, 0, errors.New("cursors must not be negative")
+	}
+	switch kind {
+	case syncmodel.KindObservation, syncmodel.KindCorrection, syncmodel.KindTask:
+	default:
+		return nil, 0, errors.New("stored record kind is not supported")
 	}
 	if limit <= 0 || limit > syncmodel.MaxPullRecords {
 		limit = syncmodel.MaxPullRecords
 	}
+	if since >= through {
+		return []syncmodel.Envelope{}, since, nil
+	}
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT seq, record_id, kind, device_id, created_at, nonce, ciphertext
 		 FROM sync_records
-		 WHERE seq > ?
+		 WHERE kind = ? AND seq > ? AND seq <= ?
 		 ORDER BY seq
 		 LIMIT ?`,
-		since, limit,
+		string(kind), since, through, limit,
 	)
 	if err != nil {
 		return nil, 0, err
 	}
 	defer rows.Close()
+	return s.scanSyncRows(rows, since)
+}
 
-	cursor := since
-	var records []syncmodel.Envelope
+func (s *Store) scanSyncRows(rows *sql.Rows, cursor int64) ([]syncmodel.Envelope, int64, error) {
+	records := make([]syncmodel.Envelope, 0)
 	for rows.Next() {
 		var record syncmodel.Envelope
 		var kind, createdAt string
@@ -806,6 +1083,29 @@ func (s *Store) Pull(ctx context.Context, since int64, limit int) ([]syncmodel.E
 		return nil, 0, err
 	}
 	return records, cursor, nil
+}
+
+func (s *Store) Pull(ctx context.Context, since int64, limit int) ([]syncmodel.Envelope, int64, error) {
+	if since < 0 {
+		return nil, 0, errors.New("cursor must not be negative")
+	}
+	if limit <= 0 || limit > syncmodel.MaxPullRecords {
+		limit = syncmodel.MaxPullRecords
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT seq, record_id, kind, device_id, created_at, nonce, ciphertext
+		 FROM sync_records
+		 WHERE seq > ?
+		 ORDER BY seq
+		 LIMIT ?`,
+		since, limit,
+	)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	return s.scanSyncRows(rows, since)
 }
 
 func (s *Store) CountRecords(ctx context.Context) (int, error) {

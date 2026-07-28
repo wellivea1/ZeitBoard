@@ -435,3 +435,48 @@ func (fake *medicationReminderTestTray) snapshot() []string {
 	defer fake.mu.Unlock()
 	return append([]string(nil), fake.notifications...)
 }
+
+func TestMedicationSleepIndexUsesPrincipalHalfOpenIntervals(t *testing.T) {
+	firstStart := time.Date(2026, 7, 20, 4, 0, 0, 0, time.UTC)
+	secondStart := firstStart.Add(25 * time.Hour)
+	interval := func(start time.Time) domain.SleepInterval {
+		return domain.SleepInterval{Interval: domain.TimeRange{
+			Start: domain.MustZonedInstant(start, "UTC"),
+			End:   domain.MustZonedInstant(start.Add(8*time.Hour), "UTC"),
+		}}
+	}
+	sessions := []domain.SleepSession{
+		{
+			ID: "principal_later", Classification: domain.SleepClassificationPrincipal,
+			Intervals: []domain.SleepInterval{interval(secondStart)},
+		},
+		{
+			ID: "unknown_overlap", Classification: domain.SleepClassificationUnknown,
+			Intervals: []domain.SleepInterval{interval(firstStart.Add(time.Hour))},
+		},
+		{
+			ID: "principal_first", Classification: domain.SleepClassificationPrincipal,
+			Intervals: []domain.SleepInterval{interval(firstStart)},
+		},
+		{
+			ID: "suppressed", Classification: domain.SleepClassificationPrincipal, Suppressed: true,
+			Intervals: []domain.SleepInterval{interval(firstStart.Add(10 * time.Hour))},
+		},
+	}
+
+	index := newMedicationSleepIndex(sessions)
+	if len(index.intervals) != 2 {
+		t.Fatalf("principal interval count = %d, want 2", len(index.intervals))
+	}
+	inside, ok := index.containing(firstStart.Add(time.Hour))
+	if !ok || !inside.Interval.Start.UTC.Equal(firstStart) {
+		t.Fatalf("containing interval = %#v ok=%v", inside, ok)
+	}
+	if _, ok := index.containing(firstStart.Add(8 * time.Hour)); ok {
+		t.Fatal("sleep end was treated as inside a half-open interval")
+	}
+	next, ok := index.next(firstStart.Add(8 * time.Hour))
+	if !ok || !next.Interval.Start.UTC.Equal(secondStart) {
+		t.Fatalf("next interval = %#v ok=%v", next, ok)
+	}
+}

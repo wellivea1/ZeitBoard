@@ -5,6 +5,49 @@ import {
   type MedicationLog,
 } from "../data/medications";
 
+const medicationEventsPerPage = 50;
+
+function MedicationHistoryPagination({
+  eventCount,
+  firstEvent,
+  page,
+  pageCount,
+  onPageChange,
+}: {
+  eventCount: number;
+  firstEvent: number;
+  page: number;
+  pageCount: number;
+  onPageChange: (page: number) => void;
+}) {
+  if (pageCount <= 1) return null;
+
+  return (
+    <nav className="medication-history-pagination" aria-label="Medication event pages">
+      <span>
+        Events {firstEvent + 1}-{Math.min(firstEvent + medicationEventsPerPage, eventCount)} of{" "}
+        {eventCount}
+      </span>
+      <button
+        className="button ghost compact"
+        type="button"
+        disabled={page === 0}
+        onClick={() => onPageChange(Math.max(0, page - 1))}
+      >
+        Previous events
+      </button>
+      <button
+        className="button ghost compact"
+        type="button"
+        disabled={page === pageCount - 1}
+        onClick={() => onPageChange(Math.min(pageCount - 1, page + 1))}
+      >
+        Next events
+      </button>
+    </nav>
+  );
+}
+
 export function MedicationHistory({
   events,
   busy,
@@ -19,6 +62,11 @@ export function MedicationHistory({
   const [editing, setEditing] = useState<MedicationLog | null>(null);
   const [erasing, setErasing] = useState<MedicationLog | null>(null);
   const [confirmation, setConfirmation] = useState("");
+  const [page, setPage] = useState(0);
+  const pageCount = Math.max(1, Math.ceil(events.length / medicationEventsPerPage));
+  const safePage = Math.min(page, pageCount - 1);
+  const firstEvent = safePage * medicationEventsPerPage;
+  const visibleEvents = events.slice(firstEvent, firstEvent + medicationEventsPerPage);
 
   const save = (event: FormEvent) => {
     event.preventDefault();
@@ -54,79 +102,88 @@ export function MedicationHistory({
           </p>
         </div>
       ) : (
-        <div className="medication-ledger">
-          <div className="medication-ledger-header" aria-hidden="true">
-            <span>Status</span>
-            <span>Medication and civil time</span>
-            <span>Rhythm context</span>
-            <span>Record controls</span>
+        <>
+          <MedicationHistoryPagination
+            eventCount={events.length}
+            firstEvent={firstEvent}
+            page={safePage}
+            pageCount={pageCount}
+            onPageChange={setPage}
+          />
+          <div className="medication-ledger">
+            <div className="medication-ledger-header" aria-hidden="true">
+              <span>Status</span>
+              <span>Medication and civil time</span>
+              <span>Rhythm context</span>
+              <span>Record controls</span>
+            </div>
+            {visibleEvents.map((item) => (
+              <article
+                data-status={item.status}
+                data-relation={item.sleepRelationKind}
+                data-excluded={item.excluded || undefined}
+                key={item.eventId}
+              >
+                <div className="medication-ledger-status">
+                  <strong>{item.status}</strong>
+                  {item.excluded && <span>Excluded</span>}
+                  {item.scheduled && <small>Scheduled elsewhere</small>}
+                </div>
+                <div className="medication-ledger-identity">
+                  <strong>{item.medicationLabel}</strong>
+                  <time>{item.civilTime}</time>
+                  {item.note && <p>{item.note}</p>}
+                  <small>{item.recordedLabel}</small>
+                </div>
+                <dl className="medication-rhythm-facts">
+                  <div>
+                    <dt>Wake</dt>
+                    <dd>{item.wakeRelation}</dd>
+                  </div>
+                  <div>
+                    <dt>{item.sleepRelationKind === "predicted" ? "Forecast" : "Sleep"}</dt>
+                    <dd>{item.sleepRelation}</dd>
+                  </div>
+                  <div>
+                    <dt>Confidence</dt>
+                    <dd>{item.confidence}</dd>
+                  </div>
+                </dl>
+                <div className="medication-ledger-actions">
+                  {item.correctionCount > 0 && (
+                    <small>
+                      {item.correctionCount}{" "}
+                      {item.correctionCount === 1 ? "correction" : "corrections"}
+                    </small>
+                  )}
+                  <button
+                    className="text-button"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      setEditing({ ...item });
+                      setErasing(null);
+                    }}
+                  >
+                    Correct
+                  </button>
+                  <button
+                    className="text-button danger"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      setErasing(item);
+                      setEditing(null);
+                      setConfirmation("");
+                    }}
+                  >
+                    Erase
+                  </button>
+                </div>
+              </article>
+            ))}
           </div>
-          {events.map((item) => (
-            <article
-              data-status={item.status}
-              data-relation={item.sleepRelationKind}
-              data-excluded={item.excluded || undefined}
-              key={item.eventId}
-            >
-              <div className="medication-ledger-status">
-                <strong>{item.status}</strong>
-                {item.excluded && <span>Excluded</span>}
-                {item.scheduled && <small>Scheduled elsewhere</small>}
-              </div>
-              <div className="medication-ledger-identity">
-                <strong>{item.medicationLabel}</strong>
-                <time>{item.civilTime}</time>
-                {item.note && <p>{item.note}</p>}
-                <small>{item.recordedLabel}</small>
-              </div>
-              <dl className="medication-rhythm-facts">
-                <div>
-                  <dt>Wake</dt>
-                  <dd>{item.wakeRelation}</dd>
-                </div>
-                <div>
-                  <dt>{item.sleepRelationKind === "predicted" ? "Forecast" : "Sleep"}</dt>
-                  <dd>{item.sleepRelation}</dd>
-                </div>
-                <div>
-                  <dt>Confidence</dt>
-                  <dd>{item.confidence}</dd>
-                </div>
-              </dl>
-              <div className="medication-ledger-actions">
-                {item.correctionCount > 0 && (
-                  <small>
-                    {item.correctionCount}{" "}
-                    {item.correctionCount === 1 ? "correction" : "corrections"}
-                  </small>
-                )}
-                <button
-                  className="text-button"
-                  type="button"
-                  disabled={busy}
-                  onClick={() => {
-                    setEditing({ ...item });
-                    setErasing(null);
-                  }}
-                >
-                  Correct
-                </button>
-                <button
-                  className="text-button danger"
-                  type="button"
-                  disabled={busy}
-                  onClick={() => {
-                    setErasing(item);
-                    setEditing(null);
-                    setConfirmation("");
-                  }}
-                >
-                  Erase
-                </button>
-              </div>
-            </article>
-          ))}
-        </div>
+        </>
       )}
 
       {editing && (

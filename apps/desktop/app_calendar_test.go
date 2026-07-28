@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 const desktopCalendarFixture = "BEGIN:VCALENDAR\r\n" +
@@ -179,6 +180,33 @@ func TestCalDAVRejectsCredentialURLsAndUnboundedResponses(t *testing.T) {
 		ZoneID:   defaultZoneID,
 	}); err == nil || !strings.Contains(err.Error(), "exceeds") {
 		t.Fatalf("oversized response error = %v", err)
+	}
+}
+
+func TestCalendarOverlappingDayIndexesClipToVisibleRange(t *testing.T) {
+	base := time.Date(2026, 7, 22, 0, 0, 0, 0, time.UTC)
+	starts := []time.Time{base, base.AddDate(0, 0, 1), base.AddDate(0, 0, 2), base.AddDate(0, 0, 3)}
+	tests := []struct {
+		name                string
+		start, end          time.Time
+		point               bool
+		wantFirst, wantLast int
+	}{
+		{name: "interval clipped at start", start: base.Add(-6 * time.Hour), end: base.Add(6 * time.Hour), wantFirst: 0, wantLast: 1},
+		{name: "interval spans visible range", start: base.Add(-time.Hour), end: base.AddDate(0, 0, 4), wantFirst: 0, wantLast: 3},
+		{name: "interval before range", start: base.Add(-2 * time.Hour), end: base.Add(-time.Hour)},
+		{name: "interval after range", start: base.AddDate(0, 0, 3), end: base.AddDate(0, 0, 3).Add(time.Hour)},
+		{name: "interval ending at boundary", start: base.Add(time.Hour), end: base.AddDate(0, 0, 1), wantFirst: 0, wantLast: 1},
+		{name: "point on boundary", start: base.AddDate(0, 0, 1), end: base.AddDate(0, 0, 1), point: true, wantFirst: 1, wantLast: 2},
+		{name: "point before range", start: base.Add(-time.Hour), end: base.Add(-time.Hour), point: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			first, last := calendarOverlappingDayIndexes(starts, test.start, test.end, test.point)
+			if first != test.wantFirst || last != test.wantLast {
+				t.Fatalf("indexes = [%d,%d), want [%d,%d)", first, last, test.wantFirst, test.wantLast)
+			}
+		})
 	}
 }
 

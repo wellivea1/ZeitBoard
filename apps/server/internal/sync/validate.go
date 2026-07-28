@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"non24.app/core/domain"
+	"non24.app/core/sleepv1"
 )
 
 var identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{2,63}$`)
@@ -199,6 +200,16 @@ func validateObservation(recordID string, payload json.RawMessage) error {
 	if err := validateIdentifier(obs.ObservationID, "observation_id"); err != nil {
 		return err
 	}
+	if obs.Kind == sleepv1.KindEpisode {
+		observation, err := sleepv1.DecodeObservation(payload)
+		if err != nil {
+			return err
+		}
+		if observation.ObservationID != recordID {
+			return errors.New("recordId must match observation_id")
+		}
+		return nil
+	}
 	if obs.StartAt.IsZero() || obs.EndAt.IsZero() {
 		return errors.New("observation start_at and end_at are required")
 	}
@@ -214,13 +225,6 @@ func validateObservation(recordID string, payload json.RawMessage) error {
 		return fmt.Errorf("observation interval: %w", err)
 	}
 	switch obs.Kind {
-	case "sleep_episode":
-		if obs.Sleep == nil || obs.Activity != nil {
-			return errors.New("sleep_episode requires sleep and forbids activity")
-		}
-		if !oneOf(obs.Sleep.Classification, "principal", "nap", "unknown") {
-			return errors.New("invalid sleep classification")
-		}
 	case "activity_interval":
 		if obs.Activity == nil || obs.Sleep != nil {
 			return errors.New("activity_interval requires activity and forbids sleep")
@@ -246,58 +250,13 @@ func validateObservation(recordID string, payload json.RawMessage) error {
 	return nil
 }
 
-type correctionPayload struct {
-	CorrectionID           string            `json:"correction_id"`
-	TargetObservationID    string            `json:"target_observation_id"`
-	SupersedesCorrectionID string            `json:"supersedes_correction_id,omitempty"`
-	CreatedAt              time.Time         `json:"created_at"`
-	Reason                 string            `json:"reason"`
-	Changes                correctionChanges `json:"changes"`
-}
-
-type correctionChanges struct {
-	StartAt             *time.Time `json:"start_at,omitempty"`
-	EndAt               *time.Time `json:"end_at,omitempty"`
-	SleepClassification *string    `json:"sleep_classification,omitempty"`
-	Excluded            *bool      `json:"excluded,omitempty"`
-}
-
 func validateCorrection(recordID string, payload json.RawMessage) error {
-	var correction correctionPayload
-	if err := decodeStrict(payload, &correction); err != nil {
-		return errors.New("invalid correction payload")
+	correction, err := sleepv1.DecodeCorrection(payload)
+	if err != nil {
+		return err
 	}
 	if correction.CorrectionID != recordID {
 		return errors.New("recordId must match correction_id")
-	}
-	if err := validateIdentifier(correction.CorrectionID, "correction_id"); err != nil {
-		return err
-	}
-	if err := validateIdentifier(correction.TargetObservationID, "target_observation_id"); err != nil {
-		return err
-	}
-	if correction.SupersedesCorrectionID != "" {
-		if err := validateIdentifier(correction.SupersedesCorrectionID, "supersedes_correction_id"); err != nil {
-			return err
-		}
-	}
-	if correction.CreatedAt.IsZero() {
-		return errors.New("created_at is required")
-	}
-	if !oneOf(correction.Reason, "user_edit", "duplicate", "invalid_range", "source_conflict") {
-		return errors.New("invalid correction reason")
-	}
-	if correction.Changes.StartAt == nil && correction.Changes.EndAt == nil &&
-		correction.Changes.SleepClassification == nil && correction.Changes.Excluded == nil {
-		return errors.New("correction changes must not be empty")
-	}
-	if correction.Changes.SleepClassification != nil &&
-		!oneOf(*correction.Changes.SleepClassification, "principal", "nap", "unknown") {
-		return errors.New("invalid sleep classification")
-	}
-	if correction.Changes.StartAt != nil && correction.Changes.EndAt != nil &&
-		!correction.Changes.EndAt.After(*correction.Changes.StartAt) {
-		return errors.New("correction end_at must be after start_at")
 	}
 	return nil
 }

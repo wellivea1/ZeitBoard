@@ -38,7 +38,14 @@ type TaskRecord struct {
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
 }
 
-var ErrTaskNotFound = errors.New("task does not exist")
+var (
+	ErrTaskNotFound         = errors.New("task does not exist")
+	ErrTaskRevisionConflict = errors.New("task revision conflict")
+)
+
+type taskRowQueryer interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}
 
 func (s *Store) AddTask(ctx context.Context, record TaskRecord) error {
 	record.Revision = 1
@@ -53,39 +60,107 @@ func (s *Store) AddTask(ctx context.Context, record TaskRecord) error {
 		return err
 	}
 	_, err = s.db.ExecContext(ctx,
-		`INSERT INTO local_tasks(task_id, status, created_at, payload_json) VALUES(?, ?, ?, ?)`,
-		record.TaskID, record.Status, formatSQLiteTime(record.CreatedAt), encoded,
+		`INSERT INTO local_tasks(task_id, status, revision, created_at, payload_json) VALUES(?, ?, ?, ?, ?)`,
+		record.TaskID, record.Status, record.Revision, formatSQLiteTime(record.CreatedAt), encoded,
 	)
 	return err
 }
 
 func (s *Store) ListTasks(ctx context.Context) ([]TaskRecord, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT revision, payload_json FROM local_tasks
+		ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, created_at, task_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
 	var records []TaskRecord
-	err := s.readJSONRows(ctx,
-		`SELECT payload_json FROM local_tasks
-		 ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, created_at, task_id`,
-		func(value []byte) error {
-			var record TaskRecord
-			if err := json.Unmarshal(value, &record); err != nil {
-				return err
-			}
-			records = append(records, record)
-			return nil
-		})
-	return records, err
+	for rows.Next() {
+		var revision int
+		var payload []byte
+		if err := rows.Scan(&revision, &payload); err != nil {
+			return nil, err
+		}
+		var record TaskRecord
+		if err := json.Unmarshal(payload, &record); err != nil {
+			return nil, err
+		}
+		record.Revision = revision
+		if record.UpdatedAt.IsZero() {
+			record.UpdatedAt = record.CreatedAt
+		}
+		records = append(records, record)
+	}
+	return records, rows.Err()
 }
 
 // UpdateTask replaces the stored task (same id) with the given record and
-// bumps its sync revision.
-func (s *Store) UpdateTask(ctx context.Context, record TaskRecord) error {
-	existing, err := s.taskByID(ctx, record.TaskID)
+// bumps its sync revision if the caller still holds the current revision.
+func (s *Store) UpdateTask(ctx context.Context, record TaskRecord, expectedRevision int) error {
+	if expectedRevision < 1 || record.Revision != expectedRevision+1 {
+		return errors.New("updated task revision must increment the expected revision")
+	}
+	if err := validateTask(record); err != nil {
+		return err
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	record.Revision = effectiveRevision(existing) + 1
-	if record.UpdatedAt.IsZero() {
-		record.UpdatedAt = time.Now().UTC()
+	defer tx.Rollback()
+	existing, err := taskByIDFrom(ctx, tx, record.TaskID)
+	if err != nil {
+		return err
 	}
+	if effectiveRevision(existing) != expectedRevision {
+		return ErrTaskRevisionConflict
+	}
+	if !record.CreatedAt.Equal(existing.CreatedAt) {
+		return errors.New("task created_at is immutable")
+	}
+	encoded, err := json.Marshal(normalizeTaskTimes(record))
+	if err != nil {
+		return err
+	}
+	result, err := tx.ExecContext(ctx,
+		`UPDATE local_tasks SET status = ?, revision = ?, payload_json = ?
+		 WHERE task_id = ? AND revision = ?`,
+		record.Status, record.Revision, encoded, record.TaskID, expectedRevision,
+	)
+	if err != nil {
+		return err
+	}
+	changed, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if changed != 1 {
+		return ErrTaskRevisionConflict
+	}
+	return tx.Commit()
+}
+
+func (s *Store) SetTaskStatus(ctx context.Context, taskID, status string, expectedRevision int) error {
+	if status != TaskStatusOpen && status != TaskStatusDone {
+		return errors.New("task status must be open or done")
+	}
+	if expectedRevision < 1 {
+		return errors.New("expected task revision must be at least 1")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	record, err := taskByIDFrom(ctx, tx, taskID)
+	if err != nil {
+		return err
+	}
+	if effectiveRevision(record) != expectedRevision {
+		return ErrTaskRevisionConflict
+	}
+	record.Status = status
+	record.Revision = expectedRevision + 1
+	record.UpdatedAt = time.Now().UTC()
 	if err := validateTask(record); err != nil {
 		return err
 	}
@@ -93,35 +168,45 @@ func (s *Store) UpdateTask(ctx context.Context, record TaskRecord) error {
 	if err != nil {
 		return err
 	}
-	result, err := s.db.ExecContext(ctx,
-		`UPDATE local_tasks SET status = ?, payload_json = ? WHERE task_id = ?`,
-		record.Status, encoded, record.TaskID,
-	)
+	result, err := tx.ExecContext(ctx,
+		`UPDATE local_tasks SET status = ?, revision = ?, payload_json = ?
+		 WHERE task_id = ? AND revision = ?`,
+		record.Status, record.Revision, encoded, taskID, expectedRevision)
 	if err != nil {
 		return err
 	}
-	return requireTaskAffected(result)
-}
-
-func (s *Store) SetTaskStatus(ctx context.Context, taskID, status string) error {
-	if status != TaskStatusOpen && status != TaskStatusDone {
-		return errors.New("task status must be open or done")
-	}
-	record, err := s.taskByID(ctx, taskID)
+	changed, err := result.RowsAffected()
 	if err != nil {
 		return err
 	}
-	record.Status = status
-	return s.UpdateTask(ctx, record)
+	if changed != 1 {
+		return ErrTaskRevisionConflict
+	}
+	return tx.Commit()
 }
 
-func (s *Store) DeleteTask(ctx context.Context, taskID string) error {
+func (s *Store) DeleteTask(ctx context.Context, taskID string, expectedRevision int) error {
 	if !contractIdentifier.MatchString(taskID) {
 		return errors.New("task_id must match the v1 identifier format")
+	}
+	if expectedRevision < 1 {
+		return errors.New("expected task revision must be at least 1")
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
+	}
+	defer tx.Rollback()
+	var currentRevision int
+	err = tx.QueryRowContext(ctx, `SELECT revision FROM local_tasks WHERE task_id = ?`, taskID).Scan(&currentRevision)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("%w: %s", ErrTaskNotFound, taskID)
+	}
+	if err != nil {
+		return err
+	}
+	if currentRevision != expectedRevision {
+		return ErrTaskRevisionConflict
 	}
 	// Revisions that already reached the synced backend need server-side
 	// erasure too (ADR-0017): enqueue every pushed revision before its
@@ -136,7 +221,8 @@ func (s *Store) DeleteTask(ctx context.Context, taskID string) error {
 		_ = tx.Rollback()
 		return err
 	}
-	result, err := tx.ExecContext(ctx, `DELETE FROM local_tasks WHERE task_id = ?`, taskID)
+	result, err := tx.ExecContext(ctx,
+		`DELETE FROM local_tasks WHERE task_id = ? AND revision = ?`, taskID, expectedRevision)
 	if err != nil {
 		_ = tx.Rollback()
 		return err
@@ -149,8 +235,17 @@ func (s *Store) DeleteTask(ctx context.Context, taskID string) error {
 }
 
 func (s *Store) taskByID(ctx context.Context, taskID string) (TaskRecord, error) {
+	return taskByIDFrom(ctx, s.db, taskID)
+}
+
+func (s *Store) GetTask(ctx context.Context, taskID string) (TaskRecord, error) {
+	return s.taskByID(ctx, taskID)
+}
+
+func taskByIDFrom(ctx context.Context, queryer taskRowQueryer, taskID string) (TaskRecord, error) {
+	var revision int
 	var payload []byte
-	err := s.db.QueryRowContext(ctx, `SELECT payload_json FROM local_tasks WHERE task_id = ?`, taskID).Scan(&payload)
+	err := queryer.QueryRowContext(ctx, `SELECT revision, payload_json FROM local_tasks WHERE task_id = ?`, taskID).Scan(&revision, &payload)
 	if errors.Is(err, sql.ErrNoRows) {
 		return TaskRecord{}, fmt.Errorf("%w: %s", ErrTaskNotFound, taskID)
 	}
@@ -160,6 +255,10 @@ func (s *Store) taskByID(ctx context.Context, taskID string) (TaskRecord, error)
 	var record TaskRecord
 	if err := json.Unmarshal(payload, &record); err != nil {
 		return TaskRecord{}, err
+	}
+	record.Revision = revision
+	if record.UpdatedAt.IsZero() {
+		record.UpdatedAt = record.CreatedAt
 	}
 	return record, nil
 }

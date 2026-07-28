@@ -1,14 +1,44 @@
 package main
 
 import (
+	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"non24.app/core/scheduling"
 	storage "non24.app/core/storage/sqlite"
 )
+
+func TestWritePrivateFileAtomicReplacesDestinationAndCleansStage(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sleep-export.json")
+	if err := os.WriteFile(path, []byte("stale"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := writePrivateFileAtomic(path, []byte("complete export")); err != nil {
+		t.Fatal(err)
+	}
+	written, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(written) != "complete export" {
+		t.Fatalf("published bytes = %q", written)
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".zeitboard-export-") {
+			t.Fatalf("staged export was not cleaned up: %s", entry.Name())
+		}
+	}
+}
 
 func TestEmptyLocalStoreReturnsHonestStates(t *testing.T) {
 	app := newTestApp(t)
@@ -171,7 +201,10 @@ func TestTaskBindingsCRUDAndPlannerIntegration(t *testing.T) {
 	}
 
 	// Update title + duration.
-	list, err = app.UpdateTask(TaskInput{TaskID: id, Title: "Call before noon (rescoped)", DurationMinutes: 20})
+	list, err = app.UpdateTask(TaskInput{
+		TaskID: id, Revision: list.Tasks[0].Revision,
+		Title: "Call before noon (rescoped)", DurationMinutes: 20,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +213,8 @@ func TestTaskBindingsCRUDAndPlannerIntegration(t *testing.T) {
 	}
 
 	// Done tasks are not planned.
-	if _, err := app.SetTaskDone(TaskActionInput{TaskID: id, Done: true}); err != nil {
+	list, err = app.SetTaskDone(TaskActionInput{TaskID: id, Revision: list.Tasks[0].Revision, Done: true})
+	if err != nil {
 		t.Fatal(err)
 	}
 	seedSleepEntries(t, app, 12)
@@ -193,7 +227,8 @@ func TestTaskBindingsCRUDAndPlannerIntegration(t *testing.T) {
 	}
 
 	// Reopen: the real scheduler now plans it.
-	if _, err := app.SetTaskDone(TaskActionInput{TaskID: id, Done: false}); err != nil {
+	list, err = app.SetTaskDone(TaskActionInput{TaskID: id, Revision: list.Tasks[0].Revision, Done: false})
+	if err != nil {
 		t.Fatal(err)
 	}
 	proposals, err = app.GetProposals()
@@ -208,7 +243,7 @@ func TestTaskBindingsCRUDAndPlannerIntegration(t *testing.T) {
 	}
 
 	// Delete removes it from planning entirely.
-	list, err = app.DeleteTask(TaskActionInput{TaskID: id})
+	list, err = app.DeleteTask(TaskActionInput{TaskID: id, Revision: list.Tasks[0].Revision})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -294,6 +329,32 @@ func TestSleepExportAndDeleteRequireExplicitErasure(t *testing.T) {
 	if !strings.Contains(exported.JSON, `"observation_set"`) || !strings.Contains(exported.JSON, added.ObservationID) {
 		t.Fatalf("export is not the contract-shaped sleep data: %s", exported.JSON)
 	}
+	savedPath := filepath.Join(t.TempDir(), "selected-sleep-export.json")
+	previousDialog := saveSleepDataDialog
+	saveSleepDataDialog = func(_ context.Context, options runtime.SaveDialogOptions) (string, error) {
+		if options.DefaultFilename == "" || len(options.Filters) != 1 || options.Filters[0].Pattern != "*.json" {
+			t.Fatalf("unexpected save dialog options: %#v", options)
+		}
+		return savedPath, nil
+	}
+	t.Cleanup(func() { saveSleepDataDialog = previousDialog })
+	saved, err := app.SaveSleepDataExport()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !saved.Saved || saved.Canceled || saved.FileName != filepath.Base(savedPath) || saved.ObservationCount != 1 || saved.CorrectionCount != 1 {
+		t.Fatalf("native export summary = %#v", saved)
+	}
+	if len([]rune(saved.Preview)) > 512 {
+		t.Fatalf("native export preview is not bounded: %d runes", len([]rune(saved.Preview)))
+	}
+	written, err := os.ReadFile(savedPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(written), `"observation_set"`) || !strings.Contains(string(written), added.ObservationID) {
+		t.Fatalf("native export file is not the contract-shaped sleep data: %s", written)
+	}
 
 	if _, err := app.DeleteSleepObservation(SleepDeleteInput{ObservationID: added.ObservationID, Confirmation: "suppress"}); err == nil {
 		t.Fatal("delete should require the exact erasure confirmation")
@@ -338,6 +399,7 @@ func newTestApp(t *testing.T) *App {
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	app := newAppWithStore(store, nil)
+	t.Cleanup(app.closeBackendHTTPClients)
 	app.configDir = filepath.Join(t.TempDir(), "config")
 	return app
 }

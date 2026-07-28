@@ -186,6 +186,7 @@ describe("MedicationsScreen", () => {
       }),
     );
     expect(await screen.findByText("No events recorded")).toBeInTheDocument();
+    expect(getMedications).toHaveBeenCalledTimes(1);
   });
 
   it("saves an explicit schedule and renders a dense neutral forecast", async () => {

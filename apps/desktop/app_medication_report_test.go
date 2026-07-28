@@ -259,6 +259,34 @@ func TestMedicationClinicianReportCivilRowsHonorDSTLength(t *testing.T) {
 	}
 }
 
+func TestMedicationReportOverlappingRowsUseDSTBoundaries(t *testing.T) {
+	starts := []time.Time{
+		time.Date(2026, 3, 7, 23, 0, 0, 0, time.UTC),
+		time.Date(2026, 3, 8, 22, 0, 0, 0, time.UTC),
+		time.Date(2026, 3, 9, 22, 0, 0, 0, time.UTC),
+		time.Date(2026, 3, 10, 22, 0, 0, 0, time.UTC),
+	}
+	tests := []struct {
+		name                string
+		start, end          time.Time
+		wantFirst, wantLast int
+	}{
+		{name: "clipped at report start", start: starts[0].Add(-time.Hour), end: starts[0].Add(time.Hour), wantFirst: 0, wantLast: 1},
+		{name: "crosses short DST row", start: starts[0].Add(22 * time.Hour), end: starts[1].Add(time.Hour), wantFirst: 0, wantLast: 2},
+		{name: "ends at row boundary", start: starts[0].Add(time.Hour), end: starts[1], wantFirst: 0, wantLast: 1},
+		{name: "outside before report", start: starts[0].Add(-2 * time.Hour), end: starts[0].Add(-time.Hour)},
+		{name: "outside after report", start: starts[3], end: starts[3].Add(time.Hour)},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			first, last := medicationReportOverlappingRows(starts, test.start, test.end)
+			if first != test.wantFirst || last != test.wantLast {
+				t.Fatalf("indexes = [%d,%d), want [%d,%d)", first, last, test.wantFirst, test.wantLast)
+			}
+		})
+	}
+}
+
 func seedAssociationSleep(t *testing.T, app *App, startedAt time.Time) {
 	t.Helper()
 	beforeStart := startedAt.Add(-6 * (24*time.Hour + 50*time.Minute))

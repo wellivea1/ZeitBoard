@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { PageHeader } from "../components/AppShell";
 import { MedicationHistory } from "../components/MedicationHistory";
 import { MedicationFeasibility } from "../components/MedicationFeasibility";
@@ -26,6 +26,7 @@ import {
   type MedicationsData,
   type MedicationUpdateInput,
 } from "../data/medications";
+import { createCoalescedRefresh, type CoalescedRefresh } from "../utils/coalescedRefresh";
 
 function medicationError(reason: unknown, fallback: string) {
   return reason instanceof Error ? reason.message : fallback;
@@ -48,35 +49,38 @@ function useMedicationWorkspace() {
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState("");
   const [announcement, setAnnouncement] = useState("");
-  const [revision, setRevision] = useState(0);
-
-  const refresh = useCallback(() => setRevision((current) => current + 1), []);
-
-  useEffect(() => {
-    const changed = () => refresh();
-    window.addEventListener(medicationDataChangedEvent, changed);
-    return () => window.removeEventListener(medicationDataChangedEvent, changed);
-  }, [refresh]);
+  const refreshQueueRef = useRef<CoalescedRefresh | null>(null);
+  const ignoreNextMedicationChange = useRef(false);
 
   useEffect(() => {
-    let current = true;
-    void loadMedications().then(
+    const refresh = createCoalescedRefresh(
+      loadMedications,
       (result) => {
-        if (!current) return;
         setData(result);
         setLoading(false);
         setError("");
       },
-      (reason: unknown) => {
-        if (!current) return;
+      (reason) => {
         setLoading(false);
         setError(medicationError(reason, "Medication data could not be loaded."));
       },
     );
-    return () => {
-      current = false;
+    refreshQueueRef.current = refresh;
+    const changed = () => {
+      if (ignoreNextMedicationChange.current) {
+        ignoreNextMedicationChange.current = false;
+        return;
+      }
+      refresh.request();
     };
-  }, [revision]);
+    refresh.request();
+    window.addEventListener(medicationDataChangedEvent, changed);
+    return () => {
+      window.removeEventListener(medicationDataChangedEvent, changed);
+      if (refreshQueueRef.current === refresh) refreshQueueRef.current = null;
+      refresh.dispose();
+    };
+  }, []);
 
   const mutate = async (
     operation: () => Promise<MedicationsData>,
@@ -87,9 +91,13 @@ function useMedicationWorkspace() {
     setError("");
     try {
       const result = await operation();
+      refreshQueueRef.current?.supersede();
+      setLoading(false);
       setData(result);
       setAnnouncement(successMessage);
+      ignoreNextMedicationChange.current = true;
       notifyMedicationDataChanged();
+      ignoreNextMedicationChange.current = false;
     } catch (reason) {
       setError(medicationError(reason, "Medication operation failed."));
       throw reason;

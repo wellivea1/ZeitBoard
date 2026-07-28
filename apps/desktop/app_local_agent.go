@@ -177,12 +177,12 @@ func (c desktopLocalCapability) CallTool(ctx context.Context, name string, argum
 	case "get_overview":
 		err = requireEmptyToolArguments(arguments)
 		if err == nil {
-			value, err = c.app.agentOverviewProjection()
+			value, err = c.app.agentOverviewProjection(ctx)
 		}
 	case "get_rhythm_summary":
 		err = requireEmptyToolArguments(arguments)
 		if err == nil {
-			value, err = c.app.agentRhythmProjection()
+			value, err = c.app.agentRhythmProjection(ctx)
 		}
 	case "list_tasks":
 		err = requireEmptyToolArguments(arguments)
@@ -192,12 +192,12 @@ func (c desktopLocalCapability) CallTool(ctx context.Context, name string, argum
 	case "get_medication_timing":
 		err = requireEmptyToolArguments(arguments)
 		if err == nil {
-			value, err = c.app.agentMedicationProjection()
+			value, err = c.app.agentMedicationProjection(ctx)
 		}
 	case "list_rhythm_markers":
 		err = requireEmptyToolArguments(arguments)
 		if err == nil {
-			value, err = c.app.agentMarkerProjection()
+			value, err = c.app.agentMarkerProjection(ctx)
 		}
 	case "get_appearance":
 		err = requireEmptyToolArguments(arguments)
@@ -254,14 +254,14 @@ func (a *App) answerLocalFacts(ctx context.Context, arguments json.RawMessage) (
 	lower := strings.ToLower(message)
 	facts := make(map[string]any)
 	if agentpolicy.ContainsMedicationFactSubject(message) {
-		projection, err := a.agentMedicationProjection()
+		projection, err := a.agentMedicationProjection(ctx)
 		if err != nil {
 			return localAgentFactsResult{}, err
 		}
 		facts["medication_timing"] = projection
 	}
 	if agentpolicy.ContainsMarkerSubject(message) {
-		projection, err := a.agentMarkerProjection()
+		projection, err := a.agentMarkerProjection(ctx)
 		if err != nil {
 			return localAgentFactsResult{}, err
 		}
@@ -278,11 +278,11 @@ func (a *App) answerLocalFacts(ctx context.Context, arguments json.RawMessage) (
 		facts["appearance"] = projectAgentAppearance(a.currentAppearance())
 	}
 	if containsAny(lower, "rhythm", "sleep", "wake", "drift", "confidence") {
-		overview, err := a.agentOverviewProjection()
+		overview, err := a.agentOverviewProjection(ctx)
 		if err != nil {
 			return localAgentFactsResult{}, err
 		}
-		rhythm, err := a.agentRhythmProjection()
+		rhythm, err := a.agentRhythmProjection(ctx)
 		if err != nil {
 			return localAgentFactsResult{}, err
 		}
@@ -290,7 +290,7 @@ func (a *App) answerLocalFacts(ctx context.Context, arguments json.RawMessage) (
 		facts["rhythm"] = rhythm
 	}
 	if len(facts) == 0 {
-		overview, err := a.agentOverviewProjection()
+		overview, err := a.agentOverviewProjection(ctx)
 		if err != nil {
 			return localAgentFactsResult{}, err
 		}
@@ -336,7 +336,7 @@ func (a *App) createLocalAgentProposal(ctx context.Context, action string, argum
 		Context           assistantContextPayload  `json:"context"`
 	}{"v1", action, input.Target, planning}
 	var response assistantMessageResponse
-	if err := newDesktopBackendClient(cfg, token).postJSON(ctx, "/v1/proposals", request, &response); err != nil {
+	if err := a.newDesktopBackendClient(cfg, token).postJSON(ctx, "/v1/proposals", request, &response); err != nil {
 		a.recordBackendSyncError(cfg, err)
 		return localAgentProposalResult{}, errors.New("create backend proposal")
 	}

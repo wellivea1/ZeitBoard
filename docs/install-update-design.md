@@ -31,8 +31,9 @@ never fail":
    installed bytes. Replacement paths retain one prior release for rollback.
 4. A publication failure attempts to restore the previous coherent release and
    reports recovery failure separately from the original error.
-5. Re-running is supported, but it is not promised to be a no-op. Dependencies
-   and build outputs are revalidated, and selected behavior is reconciled.
+5. Re-running install reconciles selected behavior. Update exits early only when
+   the installed hashes verify and its commit and declared component set exactly
+   match fetched `HEAD`; `-ForceRebuild` explicitly bypasses that no-op.
 6. `%APPDATA%\ZeitBoard` is never modified by install or update. Uninstall
    preserves it unless `-PurgeData` is selected and `DELETE` is typed.
 7. `-PurgeData` creates a raw recovery ZIP first. That ZIP can contain database
@@ -131,18 +132,26 @@ itself with elevation midway through a transaction.
 1. Verify the current installed hashes and repository state.
 2. Fetch the tracked upstream and pull only with `--ff-only` after consent.
 3. Restart under newly pulled installer code when a pull occurred.
-4. Resolve toolchains and run `npm ci`.
-5. Run frontend and Go tests unless `-SkipTests` was selected.
-6. Build desktop and any installed/requested MCP connector while the current app
+4. Resolve the installed commit to the fetched repository, compare the exact
+   declared component set, and exit when the verified release is already
+   current unless `-ForceRebuild` was selected. Dirty trees allowed with
+   `-AllowDirty` rebuild because commit metadata cannot describe local changes.
+5. Resolve toolchains and run `npm ci`.
+6. Run frontend and Go tests unless `-SkipTests` was selected.
+7. Build desktop and any installed/requested MCP connector while the current app
    remains available.
-7. Require the desktop and MCP processes to be stopped, then create a quiesced
+8. Require the desktop and MCP processes to be stopped, then create a quiesced
    raw data backup.
-8. Publish and verify the new artifacts, restoring and verifying the previous
+9. Publish and verify the new artifacts, restoring and verifying the previous
    coherent install if publication fails.
 
 A test or build failure happens before publication, so there is nothing to roll
 back in that case. `update.ps1 -Rollback` restores `previous\` and verifies it.
 Application data is never rolled back automatically.
+
+Dry-run does not fetch or claim that a cached upstream ref is current. It prints
+the conditional no-op decision and the full plan that would run if fetched
+`HEAD` or the requested component set requires rebuilding.
 
 `-AllowDirty` prints `git status --porcelain` and proceeds with those local
 changes in place. It does not discard, reset, or stash them. Git may still
@@ -165,12 +174,20 @@ exactly one authorized device is attached.
 `install-server.ps1` requires an elevated PowerShell process and defaults to the
 canonical `%PROGRAMDATA%\ZeitBoard` root. It:
 
-- rejects personal-file subtrees, reparse points, unsafe roots, and unrelated
-  non-empty roots before recursive ACL changes;
-- marks the managed root and restricts it to SYSTEM and Administrators;
+- stages the daemon build in a per-run temporary directory before service
+  downtime;
+- verifies ownership and stops an existing service before one fail-closed walk
+  that rejects personal-file subtrees, reparse points, unsafe roots, or
+  unrelated non-empty roots;
+- marks the managed root with a protected inheritable SYSTEM/Administrators
+  policy and writes a versioned completion marker only after existing
+  descendants are reset to inherit it; recursive `icacls` is skipped only when
+  both the exact root policy and marker are current, so a root-only match cannot
+  preserve stale explicit child permissions;
 - generates 32-byte data and enrollment secrets only when absent;
 - preserves an existing config except for explicitly supplied listen/TLS values;
-- validates the staged config with the staged daemon before service mutation;
+- validates the staged config with the staged daemon before publication or
+  service-registration changes;
 - normalizes explicitly supplied TLS paths to absolute paths and resolves paths
   already stored in config relative to the config file directory;
 - atomically publishes daemon and config files;
@@ -186,7 +203,9 @@ Reruns refuse to modify a same-named service pointing to another executable.
 Service failure recovery restores prior registration, description, start mode,
 running/stopped state, daemon, and config. A failed first install removes newly
 published daemon/config files but deliberately retains generated secrets and the
-managed root so a rerun can recover safely.
+managed root so a rerun can recover safely. A failure after stopping an existing
+service but before publication revalidates ownership and restarts the unchanged
+service.
 
 Firewall reconciliation is a post-service commit step. If that later step
 fails, the script exits unsuccessfully but leaves the verified running service

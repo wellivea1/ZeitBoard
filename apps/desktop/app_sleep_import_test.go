@@ -1,8 +1,13 @@
 package main
 
 import (
+	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 func TestSleepImportBindingPreviewsThenCommitsContractData(t *testing.T) {
@@ -73,5 +78,99 @@ func TestSleepImportBindingReturnsRowErrorsWithoutWriting(t *testing.T) {
 	}
 	if len(entries.Entries) != 0 {
 		t.Fatalf("invalid binding import wrote data: %#v", entries)
+	}
+}
+
+func TestNativeSleepImportUsesOneUsePreviewToken(t *testing.T) {
+	app := newTestApp(t)
+	path := filepath.Join(t.TempDir(), "owner-history.csv")
+	contents := strings.Join([]string{
+		"observation_id,kind,start_at,end_at,zone_id,sleep_classification,acquisition_method,evidence_status,recorded_at,source_record_id",
+		"obs_native_001,sleep_episode,2023-01-01T05:00:00Z,2023-01-01T13:00:00Z,America/New_York,principal,file_import,directly_observed,2023-01-01T13:00:00Z,native-owner-001",
+		"",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	previousDialog := openSleepDataDialog
+	openSleepDataDialog = func(_ context.Context, options runtime.OpenDialogOptions) (string, error) {
+		if options.Title == "" || len(options.Filters) != 3 {
+			t.Fatalf("unexpected open dialog options: %#v", options)
+		}
+		return path, nil
+	}
+	t.Cleanup(func() { openSleepDataDialog = previousDialog })
+
+	preview, err := app.PreviewSleepImportFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.ImportToken == "" || preview.Canceled || !preview.CanImport || preview.ReadyRows != 1 {
+		t.Fatalf("unexpected native preview: %#v", preview)
+	}
+	committed, err := app.ImportSleepDataFile(SleepImportFileInput{ImportToken: preview.ImportToken})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if committed.ImportedRows != 1 || committed.ImportToken != "" {
+		t.Fatalf("unexpected native commit: %#v", committed)
+	}
+	if _, err := app.ImportSleepDataFile(SleepImportFileInput{ImportToken: preview.ImportToken}); err == nil || !strings.Contains(err.Error(), "expired") {
+		t.Fatalf("expected consumed token rejection, got %v", err)
+	}
+}
+
+func TestNativeSleepImportRejectsFileChangedAfterPreview(t *testing.T) {
+	app := newTestApp(t)
+	path := filepath.Join(t.TempDir(), "owner-history.csv")
+	original := strings.Join([]string{
+		"observation_id,kind,start_at,end_at,zone_id,sleep_classification,acquisition_method,evidence_status,recorded_at,source_record_id",
+		"obs_native_002,sleep_episode,2023-01-01T05:00:00Z,2023-01-01T13:00:00Z,America/New_York,principal,file_import,directly_observed,2023-01-01T13:00:00Z,native-owner-002",
+		"",
+	}, "\n")
+	if err := os.WriteFile(path, []byte(original), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	previousDialog := openSleepDataDialog
+	openSleepDataDialog = func(context.Context, runtime.OpenDialogOptions) (string, error) {
+		return path, nil
+	}
+	t.Cleanup(func() { openSleepDataDialog = previousDialog })
+
+	preview, err := app.PreviewSleepImportFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(original+"# changed\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.ImportSleepDataFile(SleepImportFileInput{ImportToken: preview.ImportToken}); err == nil || !strings.Contains(err.Error(), "changed after preview") {
+		t.Fatalf("expected changed-file rejection, got %v", err)
+	}
+	if _, err := app.ImportSleepDataFile(SleepImportFileInput{ImportToken: preview.ImportToken}); err == nil || !strings.Contains(err.Error(), "expired") {
+		t.Fatalf("changed-file token should be consumed, got %v", err)
+	}
+}
+
+func TestNativeSleepImportCancelDoesNotCreateToken(t *testing.T) {
+	app := newTestApp(t)
+	previousDialog := openSleepDataDialog
+	openSleepDataDialog = func(context.Context, runtime.OpenDialogOptions) (string, error) {
+		return "", nil
+	}
+	app.sleepImportMu.Lock()
+	app.sleepImportPending = map[string]pendingSleepImportFile{"stale-token": {}}
+	app.sleepImportMu.Unlock()
+	t.Cleanup(func() { openSleepDataDialog = previousDialog })
+
+	report, err := app.PreviewSleepImportFile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.Canceled || report.ImportToken != "" || report.CanImport || report.Rows == nil || report.Errors == nil {
+		t.Fatalf("unexpected cancel response: %#v", report)
+	}
+	if _, ok := app.consumePendingSleepImport("stale-token"); ok {
+		t.Fatal("canceling a new selection left the previous import token valid")
 	}
 }

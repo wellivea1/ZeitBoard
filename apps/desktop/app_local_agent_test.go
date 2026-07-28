@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 
 	"non24.app/core/agentpolicy"
 	calendarcore "non24.app/core/calendar"
+	"non24.app/core/domain"
 	storage "non24.app/core/storage/sqlite"
 	"non24.app/desktop/internal/localagent"
 )
@@ -146,16 +148,23 @@ func TestLocalAgentMedicalRefusalIsExactAndFactsRemainAvailable(t *testing.T) {
 }
 
 func TestMedicationLogSummaryExcludesSuppressedEvidence(t *testing.T) {
-	summaries := medicationLogSummaries([]MedicationLogDTO{
+	now := time.Date(2026, 7, 27, 12, 0, 0, 0, time.UTC)
+	summaries := medicationLogSummaries([]storage.EffectiveMedicationEvent{
 		{
-			MedicationID: "med_test", Status: storage.MedicationEventSkipped,
-			Scheduled: true, Excluded: true, CorrectionCount: 1,
+			Event: storage.MedicationEventRecord{
+				EventID: "dose_excluded", MedicationID: "med_test", DoseAt: now,
+				ZoneID: "UTC", Status: storage.MedicationEventSkipped, Scheduled: true,
+			},
+			Excluded:    true,
+			Corrections: []storage.MedicationEventCorrectionRecord{{CorrectionID: "medcorr_test"}},
 		},
 		{
-			MedicationID: "med_test", Status: storage.MedicationEventTaken,
-			Scheduled: true, WakeRelation: "after wake", SleepRelation: "before sleep",
+			Event: storage.MedicationEventRecord{
+				EventID: "dose_included", MedicationID: "med_test", DoseAt: now.Add(-time.Hour),
+				ZoneID: "UTC", Status: storage.MedicationEventTaken, Scheduled: true,
+			},
 		},
-	})
+	}, localEstimateState{Status: "empty", Sessions: []domain.SleepSession{}})
 	summary := summaries["med_test"]
 	if summary.TakenCount != 1 || summary.SkippedCount != 0 || summary.ScheduledCount != 1 {
 		t.Fatalf("suppressed evidence changed included aggregates: %#v", summary)
@@ -163,7 +172,8 @@ func TestMedicationLogSummaryExcludesSuppressedEvidence(t *testing.T) {
 	if summary.ExcludedCount != 1 || summary.CorrectedEventCount != 1 {
 		t.Fatalf("suppression audit counts were lost: %#v", summary)
 	}
-	if summary.Latest == nil || summary.Latest.Status != storage.MedicationEventTaken || summary.Latest.Excluded {
+	if summary.Latest == nil || summary.Latest.Status != storage.MedicationEventTaken ||
+		summary.Latest.SleepRelationKind != "unavailable" {
 		t.Fatalf("suppressed newest record became the latest fact: %#v", summary.Latest)
 	}
 }
@@ -279,6 +289,47 @@ func TestLocalMCPWorksWithBackendOffAndChangesAppearance(t *testing.T) {
 	}
 	if app.currentAppearance().Theme != "black" {
 		t.Fatalf("appearance command did not reach app: %#v", app.currentAppearance())
+	}
+}
+
+func TestLocalAgentOverviewDoesNotWaitForBackendAndHonorsCancellation(t *testing.T) {
+	app := newTestApp(t)
+	now := time.Date(2026, 7, 27, 12, 0, 0, 0, time.UTC)
+	app.nowFn = func() time.Time { return now }
+	seedSleepEntries(t, app, 12)
+
+	requests := 0
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/devices":
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(registerDeviceResponse{
+				SchemaVersion: "v1", DeviceID: "device_desktop", Token: "local-only-token",
+			})
+		default:
+			requests++
+			http.Error(w, "backend projection should not be called", http.StatusServiceUnavailable)
+		}
+	}))
+	defer server.Close()
+	configureBackendForTest(t, app, server.URL)
+
+	data, err := desktopLocalCapability{app: app}.CallTool(context.Background(), "get_overview", json.RawMessage(`{}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if requests != 0 {
+		t.Fatalf("desktop-local overview made %d backend requests", requests)
+	}
+	if !strings.Contains(string(data), `"estimate_source":"local"`) {
+		t.Fatalf("desktop-local overview did not identify local estimate: %s", data)
+	}
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err = desktopLocalCapability{app: app}.CallTool(canceled, "list_tasks", json.RawMessage(`{}`))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled tool call error = %v, want context canceled", err)
 	}
 }
 

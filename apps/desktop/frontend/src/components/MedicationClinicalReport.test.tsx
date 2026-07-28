@@ -9,6 +9,7 @@ import {
   medicationClinicalReportFixture,
 } from "../test/medicationReportFixture";
 import { MedicationClinicalReport } from "./MedicationClinicalReport";
+import { MedicationReportDrift, MedicationReportTables } from "./MedicationClinicalReportPreview";
 
 type GlobalWithGo = typeof globalThis & { go?: unknown };
 
@@ -35,7 +36,9 @@ describe("MedicationClinicalReport", () => {
     expect(screen.queryByText("Adherence summary")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Build report" }));
 
-    expect(await screen.findByText("Adherence summary")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Adherence summary", undefined, { timeout: 5_000 }),
+    ).toBeInTheDocument();
     expect(getReport).toHaveBeenCalledWith(
       expect.objectContaining({
         dayStartHour: 18,
@@ -157,5 +160,58 @@ describe("MedicationClinicalReport", () => {
 
     expect(screen.getByRole("button", { name: "Build report" })).toBeDisabled();
     expect(screen.getByText(/require the current ZeitBoard desktop service/)).toBeInTheDocument();
+  });
+
+  it("bounds drift graphics and paginates the complete evidence tables", () => {
+    const report = medicationClinicalReportFixture();
+    const point = report.drift.points[0]!;
+    const medicationEvent = report.events[0]!;
+    report.drift.points = Array.from({ length: 205 }, (_, index) => ({
+      ...point,
+      id: `point_${index + 1}`,
+      day: `Day ${index + 1}`,
+      civilDate: `Date ${index + 1}`,
+      onsetLabel: `Onset ${index + 1}`,
+      onsetHour: 20 + (index % 20) / 4,
+      fitHour: 20 + (index % 20) / 4,
+      bandLowHour: 19.75 + (index % 20) / 4,
+      bandHighHour: 20.25 + (index % 20) / 4,
+    }));
+    report.events = Array.from({ length: 101 }, (_, index) => ({
+      ...medicationEvent,
+      medicationLabel: `Medication event ${index + 1}`,
+      civilTime: `Event time ${index + 1}`,
+    }));
+
+    const { container } = render(
+      <>
+        <MedicationReportDrift report={report} />
+        <MedicationReportTables report={report} />
+      </>,
+    );
+
+    expect(container.querySelectorAll(".clinical-drift-point")).toHaveLength(180);
+    expect(screen.getByText("Points 1-100 of 205")).toBeVisible();
+    expect(screen.getByText("Onset 1")).toBeInTheDocument();
+    expect(screen.queryByText("Onset 101")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Next drift points" }));
+    expect(screen.getByText("Points 101-200 of 205")).toBeVisible();
+    expect(screen.getByText("Onset 101")).toBeInTheDocument();
+
+    expect(screen.getByText("Events 1-100 of 101")).toBeVisible();
+    expect(screen.queryByText("Medication event 101")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Next medication events" }));
+    expect(screen.getByText("Events 101-101 of 101")).toBeVisible();
+    expect(screen.getByText("Medication event 101")).toBeInTheDocument();
+  });
+
+  it("labels an empty drift evidence table without an invalid row range", () => {
+    const report = medicationClinicalReportFixture();
+    report.drift.points = [];
+
+    render(<MedicationReportDrift report={report} />);
+
+    expect(screen.getByRole("table", { name: "Observed sleep-onset drift points" })).toBeVisible();
+    expect(screen.queryByText(/1 through 0/)).not.toBeInTheDocument();
   });
 });

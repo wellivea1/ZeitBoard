@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"non24.app/core/domain"
 	"non24.app/server/internal/auth"
 	"non24.app/server/internal/store"
 	syncmodel "non24.app/server/internal/sync"
@@ -63,6 +64,63 @@ func TestEffectiveSleepSessionsAppliesSupersedingCorrections(t *testing.T) {
 	}
 }
 
+func TestEffectiveSleepSessionsMatchesSharedZoneClassificationAndSuppressionSemantics(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.Open(filepath.Join(t.TempDir(), "zeitboardd.db"), bytes.Repeat([]byte{8}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if err := st.RegisterDevice(ctx, "dev_parity", "desktop", auth.HashToken("token"), time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Date(2026, 3, 1, 5, 0, 0, 0, time.UTC)
+	firstStart := start.Add(15 * time.Minute)
+	finalStart := start.Add(30 * time.Minute)
+	req := syncmodel.PushRequest{
+		SchemaVersion: syncmodel.SchemaVersion,
+		Records: []syncmodel.PushRecord{
+			testPushRecord("obs_sleep_parity", syncmodel.KindObservation, testSleepObservationPayload("obs_sleep_parity", start, start.Add(8*time.Hour))),
+			testPushRecord("cor_sleep_parity_1", syncmodel.KindCorrection, testSleepCorrectionPayload("cor_sleep_parity_1", "obs_sleep_parity", "", firstStart, false)),
+			testPushRecord("cor_sleep_parity_2", syncmodel.KindCorrection, testSleepCorrectionPayload("cor_sleep_parity_2", "obs_sleep_parity", "cor_sleep_parity_1", finalStart, true)),
+		},
+	}
+	if err := syncmodel.ValidatePushRequest(&req); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := st.Append(ctx, "dev_parity", req.Records); err != nil {
+		t.Fatal(err)
+	}
+
+	sessions, err := (SleepReader{Store: st}).EffectiveSleepSessions(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sessions) != 1 {
+		t.Fatalf("effective session count = %d, want 1", len(sessions))
+	}
+	got := sessions[0]
+	if got.Classification != domain.SleepClassificationUnknown || got.IsNap || got.IsPrincipalSleep() {
+		t.Fatalf("classification = %q isNap=%v principal=%v, want distinct unknown", got.Classification, got.IsNap, got.IsPrincipalSleep())
+	}
+	if !got.Suppressed {
+		t.Fatal("active suppression was lost")
+	}
+	instant := got.Intervals[0].Interval.Start
+	location, err := time.LoadLocation(instant.ZoneID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	local := instant.UTC.In(location)
+	if instant.ZoneID != "America/New_York" || local.Hour() != 0 || local.Minute() != 30 {
+		t.Fatalf("corrected start = %#v (%s), want 00:30 America/New_York", instant, local)
+	}
+	corrections := got.Intervals[0].StartEvidence.CorrectionIDs
+	if len(corrections) != 1 || string(corrections[0]) != "cor_sleep_parity_2" {
+		t.Fatalf("active correction ids = %v, want cor_sleep_parity_2", corrections)
+	}
+}
+
 func testPushRecord(id string, kind syncmodel.Kind, payload json.RawMessage) syncmodel.PushRecord {
 	return syncmodel.PushRecord{
 		RecordID:  id,
@@ -93,5 +151,24 @@ func testSleepStartCorrectionPayload(id, targetID, supersedesID string, start ti
 		supersedes,
 		start.Add(10*time.Minute).UTC().Format(time.RFC3339),
 		start.UTC().Format(time.RFC3339),
+	))
+}
+
+func testSleepCorrectionPayload(id, targetID, supersedesID string, start time.Time, final bool) json.RawMessage {
+	supersedes := ""
+	if supersedesID != "" {
+		supersedes = fmt.Sprintf(`,"supersedes_correction_id":%q`, supersedesID)
+	}
+	changes := fmt.Sprintf(`"start_at":%q`, start.UTC().Format(time.RFC3339))
+	if final {
+		changes += `,"sleep_classification":"unknown","excluded":true`
+	}
+	return json.RawMessage(fmt.Sprintf(
+		`{"correction_id":%q,"target_observation_id":%q%s,"created_at":%q,"reason":"user_edit","changes":{%s}}`,
+		id,
+		targetID,
+		supersedes,
+		start.Add(10*time.Minute).UTC().Format(time.RFC3339),
+		changes,
 	))
 }

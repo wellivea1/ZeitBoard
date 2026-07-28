@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  hasNativeSleepImport,
+  importNativeSleepData,
   importSleepData,
   normalizeSleepImportReport,
+  previewNativeSleepImport,
   previewSleepImport,
   transcriptionTemplateCSV,
 } from "./sleepImport";
@@ -92,6 +95,46 @@ describe("sleep import adapter", () => {
     await expect(importSleepData(input, root)).resolves.toMatchObject({ importedRows: 1 });
     expect(previewMethod).toHaveBeenCalledWith(input);
     expect(importMethod).toHaveBeenCalledWith(input);
+  });
+
+  it("normalizes and commits a native tokenized selection", async () => {
+    const nativePreview = vi.fn(async () => ({
+      ...preview,
+      importToken: "sleep_import_token",
+      canceled: false,
+    }));
+    const nativeCommit = vi.fn(async () => ({
+      ...preview,
+      dryRun: false,
+      readyRows: 0,
+      invalidRows: 0,
+      importedRows: 1,
+      totalRows: 2,
+      duplicateRows: 1,
+      canImport: false,
+      message: "Imported 1 observation; 1 duplicate was already present.",
+      rows: [
+        { ...preview.rows[0], status: "imported", statusDetail: "Imported" },
+        { ...preview.rows[1], status: "duplicate", errors: [], statusDetail: "Already imported" },
+      ],
+    }));
+    const root = {
+      go: {
+        main: {
+          App: { PreviewSleepImportFile: nativePreview, ImportSleepDataFile: nativeCommit },
+        },
+      },
+    };
+
+    expect(hasNativeSleepImport(root)).toBe(true);
+    await expect(previewNativeSleepImport(root)).resolves.toMatchObject({
+      importToken: "sleep_import_token",
+      canceled: false,
+    });
+    await expect(importNativeSleepData("sleep_import_token", root)).resolves.toMatchObject({
+      importedRows: 1,
+    });
+    expect(nativeCommit).toHaveBeenCalledWith({ importToken: "sleep_import_token" });
   });
 
   it("ships a header-only owner transcription template", () => {

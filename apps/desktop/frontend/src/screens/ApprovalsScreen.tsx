@@ -2,13 +2,9 @@ import { useEffect, useState } from "react";
 import { PageHeader, PlaceholderNotice } from "../components/AppShell";
 import { ProposalCard, ConfidenceDots } from "../components/ProposalCard";
 import { useApprovals } from "../state/approvals";
+import { useBackendProposals } from "../state/backendProposals";
 import type { ProposalOrigin } from "../data/phaseTwo";
-import {
-  decideBackendProposal,
-  loadBackendProposals,
-  type BackendProposal,
-  type BackendProposalsData,
-} from "../data/backendProposals";
+import type { BackendProposal } from "../data/backendProposals";
 
 function SyncedProposalCard({
   proposal,
@@ -68,36 +64,35 @@ function SyncedProposalCard({
 }
 
 function SyncedProposalsPanel() {
-  const [data, setData] = useState<BackendProposalsData>({ status: "off", proposals: [] });
-  const [busy, setBusy] = useState(false);
+  const {
+    data,
+    loading,
+    loadingOlder,
+    loadOlderError,
+    busyProposalId,
+    refresh,
+    loadOlder,
+    decide,
+  } = useBackendProposals();
   const [announcement, setAnnouncement] = useState("");
 
   useEffect(() => {
-    let current = true;
-    void loadBackendProposals().then((result) => {
-      if (current) setData(result);
-    });
-    return () => {
-      current = false;
-    };
-  }, []);
+    refresh();
+  }, [refresh]);
 
   // Omit, don't disable: with sync off this surface simply is not there.
   if (data.status === "off") return null;
 
-  const pending = data.proposals.filter((proposal) => proposal.status === "pending");
-  const decided = data.proposals.length - pending.length;
+  const pending = data.proposals.filter(
+    (proposal) => proposal.status === "pending" && proposal.decisionToken,
+  );
+  const history = data.proposals.filter(
+    (proposal) => proposal.status !== "pending" || !proposal.decisionToken,
+  );
 
   const onDecide = (proposal: BackendProposal, decision: "approved" | "rejected") => {
     if (!proposal.decisionToken) return;
-    setBusy(true);
-    void decideBackendProposal({
-      proposalId: proposal.proposalId,
-      decision,
-      token: proposal.decisionToken,
-    }).then((result) => {
-      setBusy(false);
-      setData(result);
+    void decide(proposal, decision).then((result) => {
       setAnnouncement(
         result.status === "ok"
           ? `${decision === "approved" ? "Approved" : "Rejected"} ${proposal.title}.`
@@ -126,7 +121,7 @@ function SyncedProposalsPanel() {
           {pending.map((proposal) => (
             <SyncedProposalCard
               proposal={proposal}
-              busy={busy}
+              busy={busyProposalId !== null}
               onDecide={onDecide}
               key={proposal.proposalId}
             />
@@ -134,15 +129,60 @@ function SyncedProposalsPanel() {
         </div>
       ) : (
         data.status === "ok" && (
-          <p className="phase-two-copy">
-            No synced proposals are waiting.{" "}
-            {decided > 0 &&
-              `${decided} earlier ${decided === 1 ? "decision is" : "decisions are"} recorded on the backend.`}
-          </p>
+          <p className="phase-two-copy">No actionable synced proposals are waiting.</p>
         )
       )}
+      {history.length > 0 && (
+        <div className="synced-proposal-history" aria-labelledby="synced-proposal-history-title">
+          <div className="panel-heading">
+            <div>
+              <p className="section-kicker">Synced decision record</p>
+              <h3 id="synced-proposal-history-title">Recent backend history</h3>
+            </div>
+            <span>{history.length} loaded</span>
+          </div>
+          <div className="approval-decision-list">
+            {history.map((proposal) => (
+              <div key={proposal.proposalId}>
+                <span className="decision-state" data-decision={proposal.status}>
+                  {proposal.status === "pending" ? "not actionable" : proposal.status}
+                </span>
+                <div>
+                  <strong>{proposal.title}</strong>
+                  <span>{proposal.window}</span>
+                  <small>
+                    {proposal.createdLabel} - {proposal.expiresLabel}
+                  </small>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {loadOlderError && (
+        <p className="diff-note" role="alert">
+          {loadOlderError}
+        </p>
+      )}
+      {data.pagination.hasMore && (
+        <div className="synced-proposal-pagination">
+          <button
+            className="button ghost compact"
+            type="button"
+            disabled={loading || loadingOlder || busyProposalId !== null}
+            onClick={() => void loadOlder()}
+          >
+            {loadingOlder ? "Loading older proposals..." : "Load older synced proposals"}
+          </button>
+          <span>{data.proposals.length} synced proposals loaded</span>
+        </div>
+      )}
       <p role="status" aria-live="polite" className="sr-only">
-        {announcement}
+        {loading
+          ? "Refreshing synced proposals."
+          : loadingOlder
+            ? "Loading older synced proposals."
+            : announcement}
       </p>
     </section>
   );

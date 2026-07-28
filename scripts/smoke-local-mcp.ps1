@@ -4,9 +4,8 @@
 
 .DESCRIPTION
   Start ZeitBoard first. This script initializes one stdio MCP session, reads
-  local status and appearance, writes the same theme back as a reversible
-  no-op, and verifies the canonical medical-decision refusal. It never calls a
-  proposal tool and does not require the self-hosted backend.
+  local status and appearance, and verifies the canonical medical-decision
+  refusal. It is read-only and does not require the self-hosted backend.
 #>
 [CmdletBinding()]
 param(
@@ -34,6 +33,7 @@ $process.StartInfo = $startInfo
 if (-not $process.Start()) {
     throw "Could not start desktop-local MCP bridge: $BridgePath"
 }
+$stderrRead = $process.StandardError.ReadToEndAsync()
 
 function Send-McpMessage {
     param([Parameter(Mandatory)][hashtable]$Message)
@@ -60,6 +60,9 @@ function Invoke-McpRequest {
     return $response
 }
 
+$primaryError = $null
+$cleanupError = $null
+$stderrText = ''
 try {
     $initialize = Invoke-McpRequest -Message @{
         jsonrpc = '2.0'
@@ -93,16 +96,9 @@ try {
         throw 'Appearance projection did not include a theme.'
     }
 
-    $setAppearance = Invoke-McpRequest -Message @{
-        jsonrpc = '2.0'; id = 4; method = 'tools/call'
-        params = @{ name = 'set_appearance'; arguments = @{ theme = $theme } }
-    }
-    if ($setAppearance.result.isError -eq $true -or $setAppearance.result.structuredContent.theme -ne $theme) {
-        throw 'Reversible appearance write did not round-trip.'
-    }
 
     $refusal = Invoke-McpRequest -Message @{
-        jsonrpc = '2.0'; id = 5; method = 'tools/call'
+        jsonrpc = '2.0'; id = 4; method = 'tools/call'
         params = @{ name = 'ask_zeitboard_facts'; arguments = @{ message = 'When should I take melatonin?' } }
     }
     if ($refusal.result.isError -eq $true -or $refusal.result.structuredContent.answer -cne $expectedRefusal) {
@@ -110,13 +106,46 @@ try {
     }
 
     $backend = $status.result.structuredContent.backend_proposals_available
-    Write-Host "Local MCP smoke passed (theme=$theme, backend-proposals=$backend)."
+    Write-Host "Local MCP read-only smoke passed (theme=$theme, backend-proposals=$backend)."
+}
+catch {
+    $primaryError = $_
 }
 finally {
-    try { $process.StandardInput.Close() } catch {}
-    if (-not $process.WaitForExit(3000)) {
-        $process.Kill()
-        $process.WaitForExit()
+    try { $process.StandardInput.Close() }
+    catch { $cleanupError = $_ }
+    try {
+        if (-not $process.WaitForExit(3000)) {
+            try {
+                if (-not $process.HasExited) { $process.Kill() }
+            }
+            catch {
+                if (-not $process.HasExited) { throw }
+            }
+            if (-not $process.WaitForExit(3000)) { throw 'The MCP bridge did not exit after it was killed.' }
+        }
     }
+    catch { if (-not $cleanupError) { $cleanupError = $_ } }
+    try {
+        if ($stderrRead.Wait([TimeSpan]::FromSeconds(3))) {
+            $stderrText = ([string]$stderrRead.Result).Trim()
+        }
+        elseif (-not $cleanupError) {
+            $cleanupError = [Runtime.Exception]::new('Timed out draining MCP bridge stderr.')
+        }
+    }
+    catch { if (-not $cleanupError) { $cleanupError = $_ } }
     $process.Dispose()
+}
+
+if ($primaryError) {
+    $message = $primaryError.Exception.Message
+    if ($stderrText) { $message += "`nMCP bridge stderr:`n$stderrText" }
+    if ($cleanupError) { $message += "`nMCP bridge cleanup: $($cleanupError.Exception.Message)" }
+    throw $message
+}
+if ($cleanupError) {
+    $message = "MCP bridge cleanup failed: $($cleanupError.Exception.Message)"
+    if ($stderrText) { $message += "`nMCP bridge stderr:`n$stderrText" }
+    throw $message
 }

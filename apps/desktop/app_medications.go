@@ -471,11 +471,17 @@ func (a *App) ExportMedicationData() (MedicationExportDTO, error) {
 }
 
 func (a *App) medicationsAt(now time.Time) (MedicationsDTO, error) {
+	return a.medicationsAtContext(a.applicationContext(), now)
+}
+
+func (a *App) medicationsAtContext(ctx context.Context, now time.Time) (MedicationsDTO, error) {
 	store, err := a.requireStore()
 	if err != nil {
 		return MedicationsDTO{}, err
 	}
-	ctx := context.Background()
+	if ctx == nil {
+		ctx = a.applicationContext()
+	}
 	medications, err := store.ListMedications(ctx)
 	if err != nil {
 		return MedicationsDTO{}, err
@@ -512,6 +518,7 @@ func (a *App) medicationsAt(now time.Time) (MedicationsDTO, error) {
 	})
 	eventDTOs := make([]MedicationLogDTO, 0, len(effective))
 	anchors := medicationWakeAnchors(state.Sessions)
+	sleepIndex := newMedicationSleepIndex(state.Sessions)
 	latestWake := latestMedicationWake(anchors)
 	for index := len(effective) - 1; index >= 0; index-- {
 		item := effective[index]
@@ -519,7 +526,7 @@ func (a *App) medicationsAt(now time.Time) (MedicationsDTO, error) {
 		if !exists {
 			return MedicationsDTO{}, fmt.Errorf("medication event %s has no definition", item.Event.EventID)
 		}
-		eventDTOs = append(eventDTOs, medicationEventDTO(item, medication.Label, state, anchors, latestWake))
+		eventDTOs = append(eventDTOs, medicationEventDTO(item, medication.Label, state, sleepIndex, anchors, latestWake))
 	}
 	estimateMessage := state.Message
 	if state.Status == "estimated" {
@@ -774,7 +781,14 @@ func medicationGapCivilLabel(gap medicationcore.ScheduleGap, zoneID string) stri
 	return date.Format("Mon Jan 2") + ", " + gap.CivilTime + " " + zoneID
 }
 
-func medicationEventDTO(item storage.EffectiveMedicationEvent, label string, state localEstimateState, anchors []domain.WakeAnchor, latestWake *domain.WakeAnchor) MedicationLogDTO {
+func medicationEventDTO(
+	item storage.EffectiveMedicationEvent,
+	label string,
+	state localEstimateState,
+	sleepIndex medicationSleepIndex,
+	anchors []domain.WakeAnchor,
+	latestWake *domain.WakeAnchor,
+) MedicationLogDTO {
 	event := item.Event
 	instant := domain.MustZonedInstant(event.DoseAt, event.ZoneID)
 	var estimate *domain.PhaseEstimate
@@ -789,7 +803,7 @@ func medicationEventDTO(item storage.EffectiveMedicationEvent, label string, sta
 	if confidence == "Low" && relative.Confidence.Level == domain.ConfidenceUnknown {
 		confidence = "Unknown"
 	}
-	if interval, found := containingMedicationSleep(state.Sessions, event.DoseAt); found {
+	if interval, found := sleepIndex.containing(event.DoseAt); found {
 		wakeRelation = "Inside a recorded sleep interval"
 		sleepRelation = "Inside a recorded sleep interval"
 		sleepRelationKind = "observed"
@@ -798,7 +812,7 @@ func medicationEventDTO(item storage.EffectiveMedicationEvent, label string, sta
 		if relative.TimeSinceWake != nil {
 			wakeRelation = compactMedicationDuration(*relative.TimeSinceWake) + " after recorded wake"
 		}
-		if nextSleep, found := nextObservedMedicationSleep(state.Sessions, event.DoseAt); found {
+		if nextSleep, found := sleepIndex.next(event.DoseAt); found {
 			sleepRelation = compactMedicationDuration(nextSleep.Interval.Start.UTC.Sub(event.DoseAt)) + " before next recorded sleep"
 			sleepRelationKind = "observed"
 			confidence = confidenceTitle(medicationEvidenceConfidence(nextSleep.StartEvidence).Level)
@@ -868,7 +882,7 @@ func medicationEventValues(doseLocal, rawZoneID, rawStatus, rawNote string, now 
 func medicationWakeAnchors(sessions []domain.SleepSession) []domain.WakeAnchor {
 	anchors := make([]domain.WakeAnchor, 0, len(sessions))
 	for _, session := range sessions {
-		if session.IsNap || session.Suppressed {
+		if !isPrincipalMedicationSleep(session) {
 			continue
 		}
 		for index, interval := range session.Intervals {
@@ -904,41 +918,60 @@ func medicationEvidenceConfidence(evidence domain.Evidence) domain.InferenceConf
 	return domain.InferenceConfidence{Level: level, Reasons: []string{"derived from recorded sleep evidence"}}
 }
 
-func containingMedicationSleep(sessions []domain.SleepSession, at time.Time) (domain.SleepInterval, bool) {
+func isPrincipalMedicationSleep(session domain.SleepSession) bool {
+	return session.IsPrincipalSleep()
+}
+
+type medicationSleepIndex struct {
+	intervals []domain.SleepInterval
+}
+
+func newMedicationSleepIndex(sessions []domain.SleepSession) medicationSleepIndex {
+	intervals := make([]domain.SleepInterval, 0, len(sessions))
 	for _, session := range sessions {
-		if session.IsNap || session.Suppressed {
+		if !isPrincipalMedicationSleep(session) {
 			continue
 		}
 		for _, interval := range session.Intervals {
-			if interval.Interval.Contains(at) {
-				return interval, true
-			}
+			intervals = append(intervals, interval)
 		}
 	}
-	return domain.SleepInterval{}, false
+	sort.SliceStable(intervals, func(i, j int) bool {
+		left := intervals[i].Interval.Start.UTC
+		right := intervals[j].Interval.Start.UTC
+		if left.Equal(right) {
+			return intervals[i].Interval.End.UTC.Before(intervals[j].Interval.End.UTC)
+		}
+		return left.Before(right)
+	})
+	return medicationSleepIndex{intervals: intervals}
 }
 
-func nextObservedMedicationSleep(sessions []domain.SleepSession, at time.Time) (domain.SleepInterval, bool) {
-	var next *domain.SleepInterval
-	for _, session := range sessions {
-		if session.IsNap || session.Suppressed {
-			continue
-		}
-		for index := range session.Intervals {
-			interval := &session.Intervals[index]
-			if !interval.Interval.Start.UTC.After(at) {
-				continue
-			}
-			if next == nil || interval.Interval.Start.UTC.Before(next.Interval.Start.UTC) {
-				copy := *interval
-				next = &copy
-			}
-		}
-	}
-	if next == nil {
+func (index medicationSleepIndex) insertionPoint(at time.Time) int {
+	at = at.UTC()
+	return sort.Search(len(index.intervals), func(i int) bool {
+		return index.intervals[i].Interval.Start.UTC.After(at)
+	})
+}
+
+func (index medicationSleepIndex) containing(at time.Time) (domain.SleepInterval, bool) {
+	position := index.insertionPoint(at)
+	if position == 0 {
 		return domain.SleepInterval{}, false
 	}
-	return *next, true
+	candidate := index.intervals[position-1]
+	if !candidate.Interval.Contains(at) {
+		return domain.SleepInterval{}, false
+	}
+	return candidate, true
+}
+
+func (index medicationSleepIndex) next(at time.Time) (domain.SleepInterval, bool) {
+	position := index.insertionPoint(at)
+	if position >= len(index.intervals) {
+		return domain.SleepInterval{}, false
+	}
+	return index.intervals[position], true
 }
 
 func predictedSleepContains(estimate domain.PhaseEstimate, at time.Time) bool {

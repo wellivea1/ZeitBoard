@@ -20,6 +20,8 @@ import {
 } from "../data/sleepEntries";
 
 const fallbackSleepZone = "America/New_York";
+const sleepEntriesPerPage = 50;
+const correctionHistoryPerPage = 50;
 
 function browserZone() {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || fallbackSleepZone;
@@ -144,11 +146,17 @@ function SleepEntryCard({
   onDeleteConfirmationChange: (value: string) => void;
   onDelete: () => void;
 }) {
+  const [historyPage, setHistoryPage] = useState(0);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const corrected =
     entry.startLocal !== entry.effectiveStartLocal ||
     entry.endLocal !== entry.effectiveEndLocal ||
     entry.classification !== entry.effectiveClassification;
   const deleteInputID = `delete-confirm-${entry.observationId}`;
+  const historyPageCount = Math.max(1, Math.ceil(entry.history.length / correctionHistoryPerPage));
+  const safeHistoryPage = Math.min(historyPage, historyPageCount - 1);
+  const historyStart = safeHistoryPage * correctionHistoryPerPage;
+  const visibleHistory = entry.history.slice(historyStart, historyStart + correctionHistoryPerPage);
 
   return (
     <article className="sleep-entry-card" data-suppressed={entry.suppressed || undefined}>
@@ -258,15 +266,49 @@ function SleepEntryCard({
       )}
 
       {entry.history.length > 0 && (
-        <details className="sleep-entry-history">
+        <details
+          className="sleep-entry-history"
+          onToggle={(event) => setHistoryOpen(event.currentTarget.open)}
+        >
           <summary>Correction history ({entry.history.length})</summary>
-          <ul>
-            {entry.history.map((item) => (
-              <li key={item.correctionId}>
-                <strong>{item.createdLabel}</strong> - {item.summary}
-              </li>
-            ))}
-          </ul>
+          {historyOpen && (
+            <>
+              <ul>
+                {visibleHistory.map((item) => (
+                  <li key={item.correctionId}>
+                    <strong>{item.createdLabel}</strong> - {item.summary}
+                  </li>
+                ))}
+              </ul>
+              {historyPageCount > 1 && (
+                <nav className="sleep-history-pagination" aria-label="Correction history pages">
+                  <span>
+                    Corrections {historyStart + 1}-
+                    {Math.min(historyStart + correctionHistoryPerPage, entry.history.length)} of{" "}
+                    {entry.history.length}
+                  </span>
+                  <button
+                    className="button secondary compact"
+                    type="button"
+                    disabled={safeHistoryPage === 0}
+                    onClick={() => setHistoryPage((page) => Math.max(0, page - 1))}
+                  >
+                    Previous corrections
+                  </button>
+                  <button
+                    className="button secondary compact"
+                    type="button"
+                    disabled={safeHistoryPage === historyPageCount - 1}
+                    onClick={() =>
+                      setHistoryPage((page) => Math.min(historyPageCount - 1, page + 1))
+                    }
+                  >
+                    Next corrections
+                  </button>
+                </nav>
+              )}
+            </>
+          )}
         </details>
       )}
     </article>
@@ -290,6 +332,7 @@ export function DataSourcesScreen() {
   const [statusMessage, setStatusMessage] = useState("");
   const [syncStatus, setSyncStatus] = useState<BackendSyncStatus | undefined>(undefined);
 
+  const [entryPage, setEntryPage] = useState(0);
   const refreshEntries = async () => {
     const loaded = await loadSleepEntries();
     setEntriesData(loaded);
@@ -421,6 +464,11 @@ export function DataSourcesScreen() {
     }
   };
 
+  const entryPageCount = Math.max(1, Math.ceil(entriesData.entries.length / sleepEntriesPerPage));
+  const safeEntryPage = Math.min(entryPage, entryPageCount - 1);
+  const entryStart = safeEntryPage * sleepEntriesPerPage;
+  const visibleEntries = entriesData.entries.slice(entryStart, entryStart + sleepEntriesPerPage);
+
   return (
     <>
       <PageHeader
@@ -483,31 +531,60 @@ export function DataSourcesScreen() {
               </p>
             </div>
           ) : (
-            <div className="sleep-entry-list">
-              {entriesData.entries.map((entry) => (
-                <SleepEntryCard
-                  key={entry.observationId}
-                  entry={entry}
-                  editing={editingId === entry.observationId}
-                  editForm={editForm}
-                  busy={busy}
-                  deleteConfirming={deletingId === entry.observationId}
-                  deleteConfirmation={deletingId === entry.observationId ? deleteConfirmation : ""}
-                  onBeginEdit={() => beginEdit(entry)}
-                  onCancelEdit={() => setEditingId(null)}
-                  onEditChange={setEditForm}
-                  onSaveEdit={saveEdit}
-                  onSuppress={() => void suppressEntry(entry)}
-                  onBeginDelete={() => beginDelete(entry)}
-                  onCancelDelete={() => {
-                    setDeletingId(null);
-                    setDeleteConfirmation("");
-                  }}
-                  onDeleteConfirmationChange={setDeleteConfirmation}
-                  onDelete={() => void deleteEntry(entry)}
-                />
-              ))}
-            </div>
+            <>
+              {entryPageCount > 1 && (
+                <nav className="sleep-log-pagination" aria-label="Sleep log pages">
+                  <span>
+                    Entries {entryStart + 1}-
+                    {Math.min(entryStart + sleepEntriesPerPage, entriesData.entries.length)} of{" "}
+                    {entriesData.entries.length}
+                  </span>
+                  <button
+                    className="button secondary compact"
+                    type="button"
+                    disabled={safeEntryPage === 0}
+                    onClick={() => setEntryPage((page) => Math.max(0, page - 1))}
+                  >
+                    Previous entries
+                  </button>
+                  <button
+                    className="button secondary compact"
+                    type="button"
+                    disabled={safeEntryPage === entryPageCount - 1}
+                    onClick={() => setEntryPage((page) => Math.min(entryPageCount - 1, page + 1))}
+                  >
+                    Next entries
+                  </button>
+                </nav>
+              )}
+              <div className="sleep-entry-list">
+                {visibleEntries.map((entry) => (
+                  <SleepEntryCard
+                    key={entry.observationId}
+                    entry={entry}
+                    editing={editingId === entry.observationId}
+                    editForm={editForm}
+                    busy={busy}
+                    deleteConfirming={deletingId === entry.observationId}
+                    deleteConfirmation={
+                      deletingId === entry.observationId ? deleteConfirmation : ""
+                    }
+                    onBeginEdit={() => beginEdit(entry)}
+                    onCancelEdit={() => setEditingId(null)}
+                    onEditChange={setEditForm}
+                    onSaveEdit={saveEdit}
+                    onSuppress={() => void suppressEntry(entry)}
+                    onBeginDelete={() => beginDelete(entry)}
+                    onCancelDelete={() => {
+                      setDeletingId(null);
+                      setDeleteConfirmation("");
+                    }}
+                    onDeleteConfirmationChange={setDeleteConfirmation}
+                    onDelete={() => void deleteEntry(entry)}
+                  />
+                ))}
+              </div>
+            </>
           )}
         </section>
       </section>

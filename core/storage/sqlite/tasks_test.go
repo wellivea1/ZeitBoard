@@ -71,10 +71,12 @@ func TestTaskCRUDAndOpenDomainMapping(t *testing.T) {
 	// Update, status toggle, delete.
 	task.Title = "File the paperwork (updated)"
 	task.DurationMinutes = 45
-	if err := store.UpdateTask(ctx, task); err != nil {
+	task.Revision = 2
+	task.UpdatedAt = created.Add(time.Minute)
+	if err := store.UpdateTask(ctx, task, 1); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.SetTaskStatus(ctx, task.TaskID, TaskStatusDone); err != nil {
+	if err := store.SetTaskStatus(ctx, task.TaskID, TaskStatusDone, 2); err != nil {
 		t.Fatal(err)
 	}
 	domainTasks, _, err = store.OpenDomainTasks(ctx, "UTC")
@@ -84,10 +86,10 @@ func TestTaskCRUDAndOpenDomainMapping(t *testing.T) {
 	if len(domainTasks) != 0 {
 		t.Fatalf("done tasks must not be planned: %+v", domainTasks)
 	}
-	if err := store.DeleteTask(ctx, task.TaskID); err != nil {
+	if err := store.DeleteTask(ctx, task.TaskID, 3); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.DeleteTask(ctx, task.TaskID); !errors.Is(err, ErrTaskNotFound) {
+	if err := store.DeleteTask(ctx, task.TaskID, 3); !errors.Is(err, ErrTaskNotFound) {
 		t.Fatalf("second delete error = %v, want ErrTaskNotFound", err)
 	}
 }

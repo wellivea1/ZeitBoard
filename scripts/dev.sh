@@ -9,6 +9,7 @@ LOCAL_NODE="$ROOT/.tools/node-v24.16.0-linux-x64/bin"
 if [[ -x "$LOCAL_NODE/node" ]]; then
   export PATH="$LOCAL_NODE:$PATH"
 fi
+WEB_CHECK_RAN=0
 
 case "$ACTION" in
   check|test|build|dev|fixtures) ;;
@@ -98,8 +99,14 @@ run_web() {
     echo "Skipping $label: package.json is not present at $path."
     return
   fi
+  if [[ "$ACTION" == check ]]; then
+    if [[ "$WEB_CHECK_RAN" == 0 ]]; then
+      (cd "$ROOT" && npm run check:web)
+      WEB_CHECK_RAN=1
+    fi
+    return
+  fi
   local script="$ACTION"
-  [[ "$ACTION" == check ]] && script=build
   if ! has_npm_script "$path" "$script"; then
     if [[ "$script" == test ]]; then
       echo "Skipping $label tests: no test script is defined."

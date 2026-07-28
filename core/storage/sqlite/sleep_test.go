@@ -399,15 +399,48 @@ func TestLocalSleepSyncTrackingCursorAndErasure(t *testing.T) {
 	if len(unpushed) != 2 {
 		t.Fatalf("unpushed records = %d, want 2", len(unpushed))
 	}
-	if err := store.MarkSleepSyncRecordsPushed(ctx, records, end.Add(2*time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	unpushed, err = store.UnpushedSleepSyncRecords(ctx)
+	count, err := store.PendingSleepSyncRecordCount(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(unpushed) != 0 {
-		t.Fatalf("pushed records still pending: %#v", unpushed)
+	if count != 2 {
+		t.Fatalf("pending count = %d, want 2", count)
+	}
+	page, err := store.PendingSleepSyncRecords(ctx, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page) != 1 || page[0].RecordID != obs.ObservationID {
+		t.Fatalf("first pending page = %#v", page)
+	}
+	if _, err := store.PendingSleepSyncRecords(ctx, 0); err == nil {
+		t.Fatal("zero page limit should be rejected")
+	}
+	if _, err := store.PendingSleepSyncRecords(ctx, MaxSleepSyncPageSize+1); err == nil {
+		t.Fatal("oversized page limit should be rejected")
+	}
+	if err := store.MarkSleepSyncRecordsPushed(ctx, page, end.Add(2*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	count, err = store.PendingSleepSyncRecordCount(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("pending count after first page = %d, want 1", count)
+	}
+	page, err = store.PendingSleepSyncRecords(ctx, MaxSleepSyncPageSize)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page) != 1 || page[0].RecordID != correction.CorrectionID {
+		t.Fatalf("second pending page = %#v", page)
+	}
+	if err := store.MarkSleepSyncRecordsPushed(ctx, page, end.Add(3*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if unpushed, err = store.UnpushedSleepSyncRecords(ctx); err != nil || len(unpushed) != 0 {
+		t.Fatalf("pushed records still pending: %#v (%v)", unpushed, err)
 	}
 	if err := store.SaveSleepSyncCursor(ctx, 42); err != nil {
 		t.Fatal(err)
@@ -633,6 +666,147 @@ func TestInsertSyncedSleepRecordsDedupesByContractID(t *testing.T) {
 	}
 	if len(observations) != 1 || len(corrections) != 1 {
 		t.Fatalf("deduped records = %d observations, %d corrections", len(observations), len(corrections))
+	}
+}
+
+func TestSleepSnapshotsDeriveConsistentFullAndPointViews(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "non24.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	start := time.Date(2026, 2, 1, 5, 0, 0, 0, time.UTC)
+	observation := testSleepObservation("obs_sleep_snapshot", start, start.Add(8*time.Hour))
+	if err := store.AppendSleepObservation(ctx, observation); err != nil {
+		t.Fatal(err)
+	}
+	correctedStart := start.Add(45 * time.Minute)
+	correction := SleepCorrectionRecord{
+		CorrectionID:        "corr_sleep_snapshot",
+		TargetObservationID: observation.ObservationID,
+		CreatedAt:           start.Add(9 * time.Hour),
+		Reason:              CorrectionReasonUserEdit,
+		Changes:             SleepCorrectionChanges{StartAt: &correctedStart},
+	}
+	if err := store.AppendSleepCorrection(ctx, correction); err != nil {
+		t.Fatal(err)
+	}
+
+	snapshot, err := store.ReadSleepSnapshot(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(snapshot.Observations) != 1 || len(snapshot.Corrections) != 1 ||
+		len(snapshot.RawSessions) != 1 || len(snapshot.CorrectedSessions) != 1 ||
+		len(snapshot.EffectiveSessions) != 1 {
+		t.Fatalf("incomplete snapshot: %#v", snapshot)
+	}
+	if got := snapshot.RawSessions[0].Intervals[0].Interval.Start.UTC; !got.Equal(start) {
+		t.Fatalf("raw start = %s, want %s", got, start)
+	}
+	if got := snapshot.CorrectedSessions[0].Intervals[0].Interval.Start.UTC; !got.Equal(correctedStart) {
+		t.Fatalf("corrected start = %s, want %s", got, correctedStart)
+	}
+	if got := snapshot.EffectiveSessions[0].Intervals[0].Interval.Start.UTC; !got.Equal(correctedStart) {
+		t.Fatalf("effective start = %s, want %s", got, correctedStart)
+	}
+
+	point, err := store.ReadSleepObservationSnapshot(ctx, observation.ObservationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if point.Observation.ObservationID != observation.ObservationID || len(point.Corrections) != 1 {
+		t.Fatalf("incomplete point snapshot: %#v", point)
+	}
+	if got := point.RawSession.Intervals[0].Interval.Start.UTC; !got.Equal(start) {
+		t.Fatalf("point raw start = %s, want %s", got, start)
+	}
+	if got := point.CorrectedSession.Intervals[0].Interval.Start.UTC; !got.Equal(correctedStart) {
+		t.Fatalf("point corrected start = %s, want %s", got, correctedStart)
+	}
+
+	_, err = store.ReadSleepObservationSnapshot(ctx, "obs_sleep_missing")
+	if !errors.Is(err, ErrSleepObservationMissing) {
+		t.Fatalf("missing point error = %v, want ErrSleepObservationMissing", err)
+	}
+}
+
+func TestLocalReplayMatchesSharedZoneClassificationAndSuppressionSemantics(t *testing.T) {
+	store, err := Open(filepath.Join(t.TempDir(), "non24.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	start := time.Date(2026, 3, 1, 5, 0, 0, 0, time.UTC)
+	observation := testSleepObservation("obs_sleep_parity", start, start.Add(8*time.Hour))
+	if err := store.AppendSleepObservation(ctx, observation); err != nil {
+		t.Fatal(err)
+	}
+	firstStart := start.Add(15 * time.Minute)
+	first := SleepCorrectionRecord{
+		CorrectionID:        "corr_sleep_parity_1",
+		TargetObservationID: observation.ObservationID,
+		CreatedAt:           start.Add(9 * time.Hour),
+		Reason:              CorrectionReasonUserEdit,
+		Changes:             SleepCorrectionChanges{StartAt: &firstStart},
+	}
+	if err := store.AppendSleepCorrection(ctx, first); err != nil {
+		t.Fatal(err)
+	}
+	finalStart := start.Add(30 * time.Minute)
+	unknown := SleepClassificationUnknown
+	excluded := true
+	second := SleepCorrectionRecord{
+		CorrectionID:           "corr_sleep_parity_2",
+		TargetObservationID:    observation.ObservationID,
+		SupersedesCorrectionID: first.CorrectionID,
+		CreatedAt:              start.Add(10 * time.Hour),
+		Reason:                 CorrectionReasonUserEdit,
+		Changes: SleepCorrectionChanges{
+			StartAt:             &finalStart,
+			SleepClassification: &unknown,
+			Excluded:            &excluded,
+		},
+	}
+	if err := store.AppendSleepCorrection(ctx, second); err != nil {
+		t.Fatal(err)
+	}
+
+	corrected, err := store.CorrectedSleepSessions(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(corrected) != 1 {
+		t.Fatalf("corrected sessions = %d, want 1", len(corrected))
+	}
+	got := corrected[0]
+	if string(got.Classification) != SleepClassificationUnknown || got.IsNap || got.IsPrincipalSleep() {
+		t.Fatalf("classification = %q isNap=%v principal=%v, want distinct unknown", got.Classification, got.IsNap, got.IsPrincipalSleep())
+	}
+	if !got.Suppressed {
+		t.Fatal("active suppression was lost")
+	}
+	instant := got.Intervals[0].Interval.Start
+	location, err := time.LoadLocation(instant.ZoneID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	local := instant.UTC.In(location)
+	if instant.ZoneID != observation.ZoneID || local.Hour() != 0 || local.Minute() != 30 {
+		t.Fatalf("corrected start = %#v (%s), want 00:30 %s", instant, local, observation.ZoneID)
+	}
+	ids := got.Intervals[0].StartEvidence.CorrectionIDs
+	if len(ids) != 1 || string(ids[0]) != second.CorrectionID {
+		t.Fatalf("active correction ids = %v, want only %s", ids, second.CorrectionID)
+	}
+	effective, err := store.EffectiveSleepSessions(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(effective) != 1 || !effective[0].Suppressed || string(effective[0].Classification) != SleepClassificationUnknown {
+		t.Fatalf("effective replay lost classification or suppression: %#v", effective)
 	}
 }
 

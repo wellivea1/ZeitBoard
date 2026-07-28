@@ -62,11 +62,11 @@ describe("desktop navigation", () => {
     expect(container.querySelector(".metric-card")).toBeNull();
   });
 
-  it("renders approval proposals with explicit actions", () => {
+  it("renders approval proposals with explicit actions", async () => {
     window.location.hash = "#/approvals";
     const { container } = render(<App />);
 
-    expect(screen.getByRole("heading", { name: "Approvals" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Approvals" })).toBeVisible();
     expect(screen.getByText("Email Dr. Okafor")).toBeVisible();
     expect(screen.getAllByRole("button", { name: "Accept proposal" })).toHaveLength(2);
     expect(screen.getAllByRole("button", { name: "Reject proposal" })).toHaveLength(2);
@@ -76,21 +76,22 @@ describe("desktop navigation", () => {
     expect(container.querySelector(".proposal-stack > .panel")).toBeNull();
   });
 
-  it("keeps task proposals and no-safe-window context in one approval surface", () => {
+  it("keeps task proposals and no-safe-window context in one approval surface", async () => {
     window.location.hash = "#/tasks";
     const { container } = render(<App />);
 
+    await screen.findByRole("heading", { level: 3, name: "Call service provider" });
     expect(container.querySelector(".approval-summary > .proposal-card")).not.toBeNull();
     expect(container.querySelector(".approval-summary > .unplaced-row")).not.toBeNull();
     expect(container.querySelector(".screen-grid > .unplaced-panel")).toBeNull();
     expect(screen.getByRole("heading", { level: 3, name: "Call service provider" })).toBeVisible();
   });
 
-  it("approves a proposal, updates the queue and badge, and supports undo", () => {
+  it("approves a proposal, updates the queue and badge, and supports undo", async () => {
     window.location.hash = "#/approvals";
     render(<App />);
 
-    expect(screen.getByLabelText("2 pending")).toBeVisible();
+    expect(await screen.findByLabelText("2 pending")).toBeVisible();
     fireEvent.click(screen.getAllByRole("button", { name: "Accept proposal" })[0] as HTMLElement);
 
     expect(screen.getByText("Email Dr. Okafor")).toBeVisible();
@@ -103,10 +104,11 @@ describe("desktop navigation", () => {
     expect(screen.getAllByRole("button", { name: "Accept proposal" })).toHaveLength(2);
   });
 
-  it("shows the empty state once every proposal is decided", () => {
+  it("shows the empty state once every proposal is decided", async () => {
     window.location.hash = "#/approvals";
     render(<App />);
 
+    await screen.findByRole("heading", { name: "Approvals" });
     fireEvent.click(screen.getAllByRole("button", { name: "Accept proposal" })[0] as HTMLElement);
     fireEvent.click(screen.getAllByRole("button", { name: "Reject proposal" })[0] as HTMLElement);
 
@@ -114,11 +116,11 @@ describe("desktop navigation", () => {
     expect(screen.queryByRole("button", { name: "Accept proposal" })).toBeNull();
   });
 
-  it("switches rhythm tabs between actogram and source review", () => {
+  it("switches rhythm tabs between actogram and source review", async () => {
     window.location.hash = "#/rhythm";
     render(<App />);
 
-    expect(screen.getByRole("heading", { name: "Rhythm" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Rhythm" })).toBeVisible();
     // Actogram is the default tab; correction/source review lives under Sources.
     expect(screen.getByRole("heading", { name: "Double-plot actogram" })).toBeVisible();
     expect(
@@ -202,7 +204,7 @@ describe("desktop navigation", () => {
       },
     };
     render(<App />);
-    fireEvent.click(screen.getByRole("tab", { name: "Context" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Context" }));
     expect(await screen.findByText("No markers recorded")).toBeVisible();
 
     fireEvent.change(screen.getByLabelText("Started"), {
@@ -329,11 +331,11 @@ describe("desktop navigation", () => {
     ).toBeVisible();
   });
 
-  it("renders the rhythm drift visualizer instead of a placeholder", () => {
+  it("renders the rhythm drift visualizer instead of a placeholder", async () => {
     window.location.hash = "#/rhythm";
     render(<App />);
 
-    fireEvent.click(screen.getByRole("tab", { name: "Drift" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Drift" }));
 
     expect(screen.getByRole("heading", { name: "Sleep-onset drift" })).toBeVisible();
     expect(screen.getAllByText("+48 min per cycle").length).toBeGreaterThan(0);
@@ -348,14 +350,14 @@ describe("desktop navigation", () => {
     ).toBeNull();
   });
 
-  it("keeps the legacy timeline route usable as Rhythm", () => {
+  it("keeps the legacy timeline route usable as Rhythm", async () => {
     window.location.hash = "#/timeline";
     render(<App />);
 
-    expect(screen.getByRole("heading", { name: "Rhythm" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Rhythm" })).toBeVisible();
   });
 
-  it("validates manual sleep entry civil ranges", () => {
+  it("validates manual sleep entry civil ranges", async () => {
     window.location.hash = "#/data-sources";
     (globalThis as { go?: unknown }).go = {
       main: {
@@ -371,7 +373,7 @@ describe("desktop navigation", () => {
     };
     render(<App />);
 
-    fireEvent.change(screen.getByLabelText("Sleep start"), {
+    fireEvent.change(await screen.findByLabelText("Sleep start"), {
       target: { value: "2026-03-02T08:00" },
     });
     fireEvent.change(screen.getByLabelText("Wake time"), {
@@ -594,7 +596,7 @@ describe("desktop navigation", () => {
     );
   });
 
-  it("applies Settings appearance controls through the visible UI", () => {
+  it("applies Settings appearance controls through the visible UI", async () => {
     window.location.hash = "#/settings";
     render(
       <AppearanceProvider>
@@ -602,7 +604,7 @@ describe("desktop navigation", () => {
       </AppearanceProvider>,
     );
 
-    const auto = screen.getByRole("radio", { name: /Auto/ });
+    const auto = await screen.findByRole("radio", { name: /Auto/ });
     const dark = screen.getByRole("radio", { name: /Dark/ });
     const paper = screen.getByRole("radio", { name: /Paper/ });
     const reduced = screen.getByRole("checkbox", { name: /Reduced stimulation/ });
@@ -744,12 +746,15 @@ describe("desktop navigation", () => {
       </AppearanceProvider>,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Export sleep data" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Export sleep data" }));
 
     expect(await screen.findByText(/1 observation and 1 correction/)).toBeVisible();
-    expect(screen.getByLabelText("Sleep data export JSON")).toHaveValue(
+    expect(screen.getByLabelText("Sleep data export JSON preview")).toHaveTextContent(
       '{"schema_version":"v1","observation_set":{"observations":[]},"correction_set":{"corrections":[]}}',
     );
+    expect(screen.getByText("zeitboard-sleep-export-20260302-060000.json")).toBeVisible();
+    expect(screen.getByText("Mar 2, 2026, 6:00 AM")).toBeVisible();
+    expect(screen.getByText("1 observation, 1 correction")).toBeVisible();
     const eraseAll = screen.getByRole("button", { name: "Erase all sleep data" });
     expect(eraseAll).toBeDisabled();
 

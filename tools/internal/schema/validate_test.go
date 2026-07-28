@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"non24.app/tools/internal/fixtures"
 	"non24.app/tools/internal/repo"
 )
 
@@ -26,6 +27,32 @@ func TestValidateAll(t *testing.T) {
 	_, root := testSet(t)
 	if err := ValidateAll(root); err != nil {
 		t.Fatalf("contract validation failed: %v", err)
+	}
+}
+
+func TestClinicalChartRequestFixtureIsManifestedAndValidated(t *testing.T) {
+	set, root := testSet(t)
+	var matches []fixtures.ManifestEntry
+	for _, entry := range fixtures.Manifest() {
+		if entry.Name == "clinical-chart-request.json" {
+			matches = append(matches, entry)
+		}
+	}
+	if len(matches) != 1 {
+		t.Fatalf("clinical chart request has %d manifest entries; want 1", len(matches))
+	}
+	entry := matches[0]
+	if entry.Version != "v1" || entry.Schema != "clinical-chart-request.schema.json" {
+		t.Fatalf("unexpected clinical chart manifest mapping: %+v", entry)
+	}
+	fixturePath := filepath.Join(root, filepath.FromSlash(entry.GeneratedPath()))
+	if err := set.ValidateFile(entry.Schema, fixturePath); err != nil {
+		t.Fatalf("clinical chart request fixture does not validate: %v", err)
+	}
+
+	bad := []byte(`{"schema_version":"v1","range":{"mode":"custom"}}`)
+	if err := set.ValidateBytes(entry.Schema, bad); err == nil {
+		t.Fatal("incomplete clinical chart request was accepted")
 	}
 }
 

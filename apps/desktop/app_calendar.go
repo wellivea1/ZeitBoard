@@ -258,6 +258,10 @@ func (a *App) ExportOwnedCalendar() (CalendarExportDTO, error) {
 }
 
 func (a *App) GetCalendar(input CalendarQueryInput) (CalendarDTO, error) {
+	return a.getCalendar(a.applicationContext(), input)
+}
+
+func (a *App) getCalendar(ctx context.Context, input CalendarQueryInput) (CalendarDTO, error) {
 	store, err := a.requireStore()
 	if err != nil {
 		return CalendarDTO{}, err
@@ -283,28 +287,27 @@ func (a *App) GetCalendar(input CalendarQueryInput) (CalendarDTO, error) {
 		return CalendarDTO{}, err
 	}
 	end := start.AddDate(0, 0, days)
-	events, err := store.CalendarEvents(context.Background(), start.UTC(), end.UTC())
+	events, err := store.CalendarEvents(ctx, start.UTC(), end.UTC())
 	if err != nil {
 		return CalendarDTO{}, err
 	}
-	sources, err := store.ListCalendarSources(context.Background())
+	sources, err := store.ListCalendarSources(ctx)
 	if err != nil {
 		return CalendarDTO{}, err
 	}
-	estimate, err := a.localEstimate(context.Background(), now)
+	estimate, err := a.localEstimate(ctx, now)
 	if err != nil {
 		return CalendarDTO{}, err
 	}
 
 	sourceByID := make(map[string]CalendarSourceDTO, len(sources))
 	warnings := make([]string, 0)
+	visibleBySource := make(map[string]int, len(sources))
+	for _, event := range events {
+		visibleBySource[event.SourceID]++
+	}
 	for _, source := range sources {
-		visible := 0
-		for _, event := range events {
-			if event.SourceID == source.SourceID {
-				visible++
-			}
-		}
+		visible := visibleBySource[source.SourceID]
 		coverageStart := source.CoverageStartAt.In(location)
 		coverageEnd := source.CoverageEndAt.In(location)
 		dto := CalendarSourceDTO{
@@ -325,44 +328,53 @@ func (a *App) GetCalendar(input CalendarQueryInput) (CalendarDTO, error) {
 	}
 
 	today := now.In(location).Format("2006-01-02")
-	dayDTOs := make([]CalendarDayDTO, 0, days)
+	dayDTOs := make([]CalendarDayDTO, days)
+	dayStarts := make([]time.Time, days+1)
 	for index := 0; index < days; index++ {
 		dayStart := start.AddDate(0, 0, index)
-		dayEnd := dayStart.AddDate(0, 0, 1)
-		day := CalendarDayDTO{
+		dayStarts[index] = dayStart
+		dayDTOs[index] = CalendarDayDTO{
 			CivilDate:   dayStart.Format("2006-01-02"),
 			Label:       dayStart.Format("Mon, Jan 2"),
 			IsToday:     dayStart.Format("2006-01-02") == today,
 			Events:      []CalendarEventSegmentDTO{},
 			Predictions: []CalendarBandSegmentDTO{},
 		}
-		for _, event := range events {
-			if segment, include := calendarEventSegment(event, sourceByID[event.SourceID], dayStart, dayEnd, location); include {
-				day.Events = append(day.Events, segment)
+	}
+	dayStarts[days] = end
+
+	for _, event := range events {
+		first, last := calendarOverlappingDayIndexes(dayStarts, event.StartAt, event.EndAt, event.StartAt.Equal(event.EndAt))
+		for index := first; index < last; index++ {
+			if segment, include := calendarEventSegment(event, sourceByID[event.SourceID], dayStarts[index], dayStarts[index+1], location); include {
+				dayDTOs[index].Events = append(dayDTOs[index].Events, segment)
 			}
 		}
-		if estimate.Status == "estimated" {
-			for _, window := range estimate.Estimate.PredictedSleepWindows {
-				if segment, include := calendarBandSegment(window, "predicted_sleep", "Predicted sleep window", dayStart, dayEnd, location); include {
-					day.Predictions = append(day.Predictions, segment)
-				}
-			}
-			for _, window := range estimate.Estimate.PredictedWakingWindows {
-				if segment, include := calendarBandSegment(window, "predicted_wake", "Predicted waking window", dayStart, dayEnd, location); include {
-					day.Predictions = append(day.Predictions, segment)
+	}
+	if estimate.Status == "estimated" {
+		appendWindows := func(windows []domain.AvailabilityWindow, kind, title string) {
+			for _, window := range windows {
+				first, last := calendarOverlappingDayIndexes(dayStarts, window.Interval.Start.UTC, window.Interval.End.UTC, false)
+				for index := first; index < last; index++ {
+					if segment, include := calendarBandSegment(window, kind, title, dayStarts[index], dayStarts[index+1], location); include {
+						dayDTOs[index].Predictions = append(dayDTOs[index].Predictions, segment)
+					}
 				}
 			}
 		}
-		sort.Slice(day.Events, func(i, j int) bool {
-			if day.Events[i].AllDay != day.Events[j].AllDay {
-				return day.Events[i].AllDay
+		appendWindows(estimate.Estimate.PredictedSleepWindows, "predicted_sleep", "Predicted sleep window")
+		appendWindows(estimate.Estimate.PredictedWakingWindows, "predicted_wake", "Predicted waking window")
+	}
+	for index := range dayDTOs {
+		sort.Slice(dayDTOs[index].Events, func(i, j int) bool {
+			if dayDTOs[index].Events[i].AllDay != dayDTOs[index].Events[j].AllDay {
+				return dayDTOs[index].Events[i].AllDay
 			}
-			if day.Events[i].StartMinute == day.Events[j].StartMinute {
-				return day.Events[i].EventID < day.Events[j].EventID
+			if dayDTOs[index].Events[i].StartMinute == dayDTOs[index].Events[j].StartMinute {
+				return dayDTOs[index].Events[i].EventID < dayDTOs[index].Events[j].EventID
 			}
-			return day.Events[i].StartMinute < day.Events[j].StartMinute
+			return dayDTOs[index].Events[i].StartMinute < dayDTOs[index].Events[j].StartMinute
 		})
-		dayDTOs = append(dayDTOs, day)
 	}
 
 	sourceDTOs := make([]CalendarSourceDTO, 0, len(sources))
@@ -407,6 +419,37 @@ func parseCalendarFile(input CalendarFileInput, importedAt time.Time) (calendarc
 		CoverageEnd:   coverageEnd,
 		DefaultZoneID: zoneID,
 	})
+}
+
+// calendarOverlappingDayIndexes returns the smallest output range that can
+// overlap an interval. Work then scales with emitted day segments rather than
+// every stored event multiplied by every visible day.
+func calendarOverlappingDayIndexes(dayStarts []time.Time, start, end time.Time, point bool) (int, int) {
+	dayCount := len(dayStarts) - 1
+	if dayCount <= 0 {
+		return 0, 0
+	}
+	start = start.UTC()
+	end = end.UTC()
+	first := sort.Search(dayCount, func(index int) bool {
+		return dayStarts[index+1].UTC().After(start)
+	})
+	if first == dayCount {
+		return 0, 0
+	}
+	if point {
+		if start.Before(dayStarts[first].UTC()) {
+			return 0, 0
+		}
+		return first, first + 1
+	}
+	last := sort.Search(dayCount, func(index int) bool {
+		return !dayStarts[index].UTC().Before(end)
+	})
+	if first >= last {
+		return 0, 0
+	}
+	return first, last
 }
 
 func (a *App) fetchCalDAVCalendar(ctx context.Context, input CalDAVInput, importedAt time.Time) (calendarcore.EventSet, string, error) {

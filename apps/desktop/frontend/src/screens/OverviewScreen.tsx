@@ -6,8 +6,9 @@ import { loadOverview } from "../data/backend";
 import { overviewFixture } from "../data/fixture";
 import { loadRhythm, rhythmFixture, type RhythmSource } from "../data/rhythm";
 import { sleepDataChangedEvent } from "../data/sleepDataEvents";
-import { useApprovals } from "../state/approvals";
+import { usePendingApprovalsCount } from "../state/approvals";
 import type { ConfidenceLevel, OverviewSource } from "../data/overview";
+import { createCoalescedRefresh } from "../utils/coalescedRefresh";
 
 function ConfidenceBadge({ value }: { value: ConfidenceLevel }) {
   return <span className={`confidence-badge confidence-${value.toLowerCase()}`}>{value}</span>;
@@ -77,23 +78,24 @@ export function OverviewScreen() {
   const [mode, setMode] = useState<OverviewSource>("fixture");
   const [rhythm, setRhythm] = useState(rhythmFixture);
   const [rhythmMode, setRhythmMode] = useState<RhythmSource>("fixture");
-  const { pendingCount } = useApprovals();
+  const pendingCount = usePendingApprovalsCount();
 
   useEffect(() => {
-    let current = true;
-    const refresh = () =>
-      void Promise.all([loadOverview(), loadRhythm()]).then(([overviewResult, rhythmResult]) => {
-        if (!current) return;
+    const refresh = createCoalescedRefresh(
+      () => Promise.all([loadOverview(), loadRhythm()]),
+      ([overviewResult, rhythmResult]) => {
         setOverview(overviewResult.data);
         setMode(overviewResult.source);
         setRhythm(rhythmResult.data);
         setRhythmMode(rhythmResult.source);
-      });
-    refresh();
-    window.addEventListener(sleepDataChangedEvent, refresh);
+      },
+    );
+    const request = () => refresh.request();
+    request();
+    window.addEventListener(sleepDataChangedEvent, request);
     return () => {
-      current = false;
-      window.removeEventListener(sleepDataChangedEvent, refresh);
+      window.removeEventListener(sleepDataChangedEvent, request);
+      refresh.dispose();
     };
   }, []);
 

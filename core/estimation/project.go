@@ -238,8 +238,11 @@ func observedBand(episode domain.SleepSession) RhythmBand {
 // episodeKind classifies a sleep episode for the actogram legend and the band
 // confidence, from its recorded evidence (not from invented styling).
 func episodeKind(episode domain.SleepSession) (kind string, confidence string) {
-	if episode.IsNap {
+	if episode.IsNapSleep() {
 		return "nap", "Low"
+	}
+	if !episode.IsPrincipalSleep() {
+		return "inferred", "Low"
 	}
 	start := episode.Intervals[0].StartEvidence
 	end := episode.Intervals[0].EndEvidence

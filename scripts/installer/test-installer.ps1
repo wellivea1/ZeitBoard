@@ -25,6 +25,71 @@ function Assert-True { param($Value, $Message = 'expected true') if (-not $Value
 function Assert-Equal { param($Expected, $Actual) if ($Expected -ne $Actual) { throw "expected [$Expected], got [$Actual]" } }
 function Assert-Throws { param([scriptblock]$Body, $Message = 'expected an exception') $threw = $false; try { & $Body } catch { $threw = $true }; if (-not $threw) { throw $Message } }
 
+function Get-InstallerFunctionDefinition {
+    param(
+        [Parameter(Mandatory)][string]$ScriptName,
+        [Parameter(Mandatory)][string]$FunctionName
+    )
+    $scriptPath = Join-Path $PSScriptRoot $ScriptName
+    $tokens = $null
+    $parseErrors = $null
+    $ast = [Management.Automation.Language.Parser]::ParseFile($scriptPath, [ref]$tokens, [ref]$parseErrors)
+    if ($parseErrors.Count -gt 0) {
+        throw "Cannot import $FunctionName from ${ScriptName}: $($parseErrors[0].Message)"
+    }
+    $definition = $ast.Find({
+        param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+            $node.Name -eq $FunctionName
+    }, $true)
+    if (-not $definition) { throw "Function $FunctionName was not found in $ScriptName" }
+    [scriptblock]::Create($definition.Extent.Text)
+}
+
+# Import only pure helper definitions; do not execute either installer script.
+. (Get-InstallerFunctionDefinition -ScriptName 'update.ps1' -FunctionName 'Get-ZbInstalledReleaseMetadata')
+. (Get-InstallerFunctionDefinition -ScriptName 'update.ps1' -FunctionName 'Get-ZbUpdateDecision')
+. (Get-InstallerFunctionDefinition -ScriptName 'install-server.ps1' -FunctionName 'Test-ZbRestrictedAclPolicy')
+. (Get-InstallerFunctionDefinition -ScriptName 'install-server.ps1' -FunctionName 'Test-ZbAclPolicyMarker')
+
+function Remove-TestTree {
+    param([Parameter(Mandatory)][string]$Path)
+    $tempRoot = [IO.Path]::GetTempPath()
+    $safePath = Assert-ZbChildPath -Root $tempRoot -Path $Path
+    if (Test-Path -LiteralPath $safePath) {
+        Remove-Item -LiteralPath $safePath -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Publish-TestRelease {
+    param(
+        [Parameter(Mandatory)][string]$InstallDir,
+        [Parameter(Mandatory)][string]$DesktopSource,
+        [Parameter(Mandatory)][string]$LocalMcpSource,
+        [string]$ServerMcpSource,
+        [Parameter(Mandatory)][string]$Commit
+    )
+    $components = @('desktop', 'local-mcp')
+    if ($ServerMcpSource) { $components += 'mcp' }
+    $backupDir = Join-Path $InstallDir ('.test-publish-backup-' + [guid]::NewGuid().ToString('N'))
+    try {
+        Start-ZbPublishTransaction -InstallDir $InstallDir -Components $components | Out-Null
+        Publish-ZbDesktopBuild -SourceExe $DesktopSource -InstallDir $InstallDir -VersionText "commit=$Commit`ndate=test`ncomponents=$($components -join ',')"
+        $localHash = Publish-ZbVerifiedFile -SourcePath $LocalMcpSource -DestinationPath (Join-Path $InstallDir 'zeitboard-local-mcp.exe') -BackupPath (Join-Path $backupDir 'zeitboard-local-mcp.exe')
+        Set-ZbInstalledArtifactHash -InstallDir $InstallDir -Key 'local-mcp-sha256' -Hash $localHash
+        if ($ServerMcpSource) {
+            $serverHash = Publish-ZbVerifiedFile -SourcePath $ServerMcpSource -DestinationPath (Join-Path $InstallDir 'zeitboard-mcp.exe') -BackupPath (Join-Path $backupDir 'zeitboard-mcp.exe')
+            Set-ZbInstalledArtifactHash -InstallDir $InstallDir -Key 'mcp-sha256' -Hash $serverHash
+        }
+        Complete-ZbPublishTransaction -InstallDir $InstallDir
+    }
+    finally {
+        if (Test-Path -LiteralPath $backupDir) {
+            Remove-ZbDirectoryUnderRoot -Root $InstallDir -Path $backupDir
+        }
+    }
+}
+
 Write-Host 'ZeitBoard installer library tests' -ForegroundColor Cyan
 
 Test-Case 'Get-ZbPaths resolves the repo root to the working tree' {
@@ -32,6 +97,147 @@ Test-Case 'Get-ZbPaths resolves the repo root to the working tree' {
     Assert-True (Test-Path (Join-Path $p.RepoRoot 'go.work')) 'repo root should contain go.work'
     Assert-True ($p.InstallDir -like '*Programs\ZeitBoard') 'install dir under Programs'
     Assert-True ($p.DataDir -like '*ZeitBoard') 'data dir named ZeitBoard'
+}
+
+Test-Case 'update no-op requires an exact verified release and ForceRebuild overrides it' {
+    $head = 'a' * 40
+    $exact = Get-ZbUpdateDecision `
+        -InstalledBuildVerified $true `
+        -InstalledCommit $head `
+        -InstalledComponents @('LOCAL-MCP', 'desktop') `
+        -HeadCommit $head `
+        -RequestedComponents @('desktop', 'local-mcp') `
+        -RepositoryClean $true
+    Assert-True (-not $exact.ShouldRebuild) 'an exact verified release should be the only no-op case'
+
+    $cases = @(
+        (Get-ZbUpdateDecision -InstalledBuildVerified $false -InstalledCommit $head -InstalledComponents @('desktop', 'local-mcp') -HeadCommit $head -RequestedComponents @('desktop', 'local-mcp') -RepositoryClean $true),
+        (Get-ZbUpdateDecision -InstalledBuildVerified $true -InstalledCommit ('b' * 40) -InstalledComponents @('desktop', 'local-mcp') -HeadCommit $head -RequestedComponents @('desktop', 'local-mcp') -RepositoryClean $true),
+        (Get-ZbUpdateDecision -InstalledBuildVerified $true -InstalledCommit '' -InstalledComponents @('desktop', 'local-mcp') -HeadCommit $head -RequestedComponents @('desktop', 'local-mcp') -RepositoryClean $true),
+        (Get-ZbUpdateDecision -InstalledBuildVerified $true -InstalledCommit $head -InstalledComponents @('desktop', 'local-mcp') -HeadCommit '' -RequestedComponents @('desktop', 'local-mcp') -RepositoryClean $true),
+        (Get-ZbUpdateDecision -InstalledBuildVerified $true -InstalledCommit $head -InstalledComponents @('desktop') -HeadCommit $head -RequestedComponents @('desktop', 'local-mcp') -RepositoryClean $true),
+        (Get-ZbUpdateDecision -InstalledBuildVerified $true -InstalledCommit $head -InstalledComponents @('desktop', 'local-mcp', 'local-mcp') -HeadCommit $head -RequestedComponents @('desktop', 'local-mcp') -RepositoryClean $true),
+        (Get-ZbUpdateDecision -InstalledBuildVerified $true -InstalledCommit $head -InstalledComponents @('desktop', 'local-mcp') -HeadCommit $head -RequestedComponents @('desktop', 'local-mcp') -RepositoryClean $false),
+        (Get-ZbUpdateDecision -InstalledBuildVerified $true -InstalledCommit $head -InstalledComponents @('desktop', 'local-mcp') -HeadCommit $head -RequestedComponents @('desktop', 'local-mcp') -RepositoryClean $true -ForceRebuild)
+    )
+    foreach ($decision in $cases) {
+        Assert-True $decision.ShouldRebuild 'any verification, commit, component, cleanliness, or force difference must rebuild'
+    }
+}
+
+Test-Case 'installed release metadata rejects missing, blank, and duplicate declarations' {
+    $root = Join-Path ([IO.Path]::GetTempPath()) ('zb-release-metadata-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $root -Force | Out-Null
+    try {
+        $version = Join-Path $root 'version.txt'
+        Set-ZbUtf8File -Path $version -Content "commit=abcdef1`ncomponents=desktop,local-mcp`n"
+        $metadata = Get-ZbInstalledReleaseMetadata -InstallDir $root
+        Assert-Equal 'abcdef1' $metadata.Commit
+        Assert-Equal 'desktop,local-mcp' ($metadata.Components -join ',')
+
+        Set-ZbUtf8File -Path $version -Content "commit=abcdef1`ncomponents=desktop,,local-mcp`n"
+        Assert-True ($null -eq (Get-ZbInstalledReleaseMetadata -InstallDir $root)) 'blank component entries must not qualify for no-op'
+        Set-ZbUtf8File -Path $version -Content "commit=abcdef1`ncomponents=desktop,local-mcp,local-mcp`n"
+        Assert-True ($null -eq (Get-ZbInstalledReleaseMetadata -InstallDir $root)) 'duplicate component entries must not qualify for no-op'
+        Set-ZbUtf8File -Path $version -Content "commit=abcdef1`ncommit=abcdef2`ncomponents=desktop,local-mcp`n"
+        Assert-True ($null -eq (Get-ZbInstalledReleaseMetadata -InstallDir $root)) 'duplicate commit declarations must not qualify for no-op'
+        Set-ZbUtf8File -Path $version -Content "commit=abcdef1`n"
+        Assert-True ($null -eq (Get-ZbInstalledReleaseMetadata -InstallDir $root)) 'missing component metadata must rebuild'
+    }
+    finally { Remove-TestTree -Path $root }
+}
+
+Test-Case 'server ACL policy is protected, exact, and inheritable for new descendants' {
+    function New-TestServerAcl {
+        param([switch]$Unprotected, [switch]$ExtraPrincipal, [switch]$MissingInheritance)
+        $acl = [Security.AccessControl.DirectorySecurity]::new()
+        $acl.SetAccessRuleProtection((-not $Unprotected), $false)
+        $inheritance = if ($MissingInheritance) {
+            [Security.AccessControl.InheritanceFlags]::None
+        }
+        else {
+            [Security.AccessControl.InheritanceFlags]::ContainerInherit -bor
+                [Security.AccessControl.InheritanceFlags]::ObjectInherit
+        }
+        foreach ($sidText in @('S-1-5-18', 'S-1-5-32-544')) {
+            $sid = [Security.Principal.SecurityIdentifier]::new($sidText)
+            $rule = [Security.AccessControl.FileSystemAccessRule]::new(
+                $sid,
+                [Security.AccessControl.FileSystemRights]::FullControl,
+                $inheritance,
+                [Security.AccessControl.PropagationFlags]::None,
+                [Security.AccessControl.AccessControlType]::Allow
+            )
+            [void]$acl.AddAccessRule($rule)
+        }
+        if ($ExtraPrincipal) {
+            $extraRule = [Security.AccessControl.FileSystemAccessRule]::new(
+                [Security.Principal.SecurityIdentifier]::new('S-1-5-11'),
+                [Security.AccessControl.FileSystemRights]::ReadAndExecute,
+                $inheritance,
+                [Security.AccessControl.PropagationFlags]::None,
+                [Security.AccessControl.AccessControlType]::Allow
+            )
+            [void]$acl.AddAccessRule($extraRule)
+        }
+        $acl
+    }
+
+    Assert-True (Test-ZbRestrictedAclPolicy -Acl (New-TestServerAcl)) 'exact protected OI/CI policy should be reusable without a recursive rewrite'
+    Assert-True (-not (Test-ZbRestrictedAclPolicy -Acl (New-TestServerAcl -Unprotected))) 'inherited root ACLs are not restricted enough'
+    Assert-True (-not (Test-ZbRestrictedAclPolicy -Acl (New-TestServerAcl -ExtraPrincipal))) 'extra principals must fail closed'
+    Assert-True (-not (Test-ZbRestrictedAclPolicy -Acl (New-TestServerAcl -MissingInheritance))) 'new descendants must inherit the restricted policy'
+}
+
+Test-Case 'server ACL skip marker proves the descendant reset completed' {
+    $root = Join-Path ([IO.Path]::GetTempPath()) ('zb-acl-marker-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $root -Force | Out-Null
+    try {
+        $marker = Join-Path $root '.zeitboard-acl-policy-v2'
+        Assert-True (-not (Test-ZbAclPolicyMarker -Path $marker)) 'a missing marker must force reconciliation'
+        Set-ZbUtf8File -Path $marker -Content "ZeitBoard server ACL policy v1`n"
+        Assert-True (-not (Test-ZbAclPolicyMarker -Path $marker)) 'an old marker must force reconciliation'
+        Set-ZbUtf8File -Path $marker -Content "ZeitBoard server ACL policy v2`n"
+        Assert-True (Test-ZbAclPolicyMarker -Path $marker) 'the current post-reset marker may skip reconciliation'
+    }
+    finally {
+        Remove-TestTree -Path $root
+    }
+}
+
+Test-Case 'server installer performs one post-stop safety walk and one ACL reconciliation' {
+    $text = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'install-server.ps1')
+    $stopOffset = $text.IndexOf('Stop-Service -Name $ServiceName -Force')
+    $walkOffset = $text.IndexOf('Assert-ZbSafeServerRoot -Path $InstallRoot | Out-Null')
+    $aclOffset = $text.IndexOf('Set-ZbRestrictedAcl -Path $InstallRoot')
+    $buildOffset = $text.IndexOf("Invoke-ZbStep -Name 'Build staged zeitboardd'")
+    $resetOffset = $text.IndexOf('& icacls.exe')
+    $markerOffset = $text.IndexOf('Set-ZbUtf8File -Path $policyMarker')
+    Assert-True ($buildOffset -ge 0 -and $buildOffset -lt $stopOffset) 'expensive build work should finish before service downtime'
+    Assert-True ($stopOffset -ge 0 -and $stopOffset -lt $walkOffset) 'an owned running service must stop before the safety walk'
+    Assert-True ($walkOffset -lt $aclOffset) 'the fail-closed safety walk must precede recursive ACL work'
+    Assert-Equal 1 ([regex]::Matches($text, '(?m)^\s*Assert-ZbSafeServerRoot -Path \$InstallRoot \| Out-Null\s*$').Count)
+    Assert-Equal 1 ([regex]::Matches($text, '(?m)^\s*Set-ZbRestrictedAcl -Path \$InstallRoot\s*$').Count)
+	Assert-Equal 1 ([regex]::Matches($text, '(?m)^\s*& icacls\.exe .*''/reset''.*''/T''').Count)
+	Assert-True ($text -match 'DirectorySecurity\]::new') 'reconciliation must replace the root DACL rather than preserve unknown explicit principals'
+	Assert-True ($text -notmatch "'/grant:r'") 'grant:r cannot remove unrelated explicit principals'
+    Assert-True ($text -match 'Test-ZbRestrictedAclPolicy -Acl \(Get-Acl') 'the root ACL policy must be checked before a skip'
+    Assert-True ($text -match '\$rootPolicyCurrent -and \(Test-ZbAclPolicyMarker') 'a root-only match must not skip descendant reconciliation'
+    Assert-True ($resetOffset -ge 0 -and $resetOffset -lt $markerOffset) 'the marker must be written only after descendant reset succeeds'
+}
+
+Test-Case 'update decision runs before all expensive or mutating phases' {
+    $text = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot 'update.ps1')
+    $decisionOffset = $text.IndexOf('$decision = Get-ZbUpdateDecision')
+    Assert-True ($decisionOffset -ge 0 -and $decisionOffset -lt $text.IndexOf('& npm ci')) 'decision must precede npm'
+    Assert-True ($decisionOffset -lt $text.IndexOf("Invoke-ZbStep -Name 'Run test suites")) 'decision must precede tests'
+    Assert-True ($decisionOffset -lt $text.IndexOf("Invoke-ZbStep -Name 'Build desktop'")) 'decision must precede builds'
+    Assert-True ($decisionOffset -lt $text.IndexOf("Backup-ZbData -Reason 'update'")) 'decision must precede backup'
+    Assert-True ($decisionOffset -lt $text.IndexOf('Start-ZbPublishTransaction')) 'decision must precede publication'
+    Assert-True ($text -match "restartArgs \+= '-ForceRebuild'") 'ForceRebuild must survive the post-pull restart'
+    Assert-True ($text.Contains("`$resume += ' -ForceRebuild'")) 'ForceRebuild must survive a failure resume hint'
+    Assert-True ($text -match '\[dry-run\]') 'dry-run must label the release-decision explanation'
+    Assert-True ($text -match 'live run would exit here only after fetch') 'dry-run must explain the conditional no-op without fetching'
 }
 
 Test-Case 'pins.psd1 is structurally valid (https + one integrity source each)' {
@@ -113,7 +319,7 @@ Test-Case 'lifecycle lock rejects a concurrent PowerShell process' {
     finally {
         Stop-Job -Job $job -ErrorAction SilentlyContinue
         Remove-Job -Job $job -Force -ErrorAction SilentlyContinue
-        Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-TestTree -Path $root
     }
 }
 
@@ -138,7 +344,7 @@ Test-Case 'Move-ZbExtractedArchive removes a same-named top-level wrapper' {
         Assert-True (Test-Path -LiteralPath (Join-Path $target 'tool.exe')) 'probe should be directly under the target'
         Assert-True (-not (Test-Path -LiteralPath (Join-Path $target 'tool-v1\tool.exe'))) 'wrapper must not be nested twice'
     }
-    finally { Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue }
+    finally { Remove-TestTree -Path $root }
 }
 
 Test-Case 'Move-ZbExtractedArchive validates the probe before publication' {
@@ -153,7 +359,7 @@ Test-Case 'Move-ZbExtractedArchive validates the probe before publication' {
         Assert-True (-not (Test-Path -LiteralPath $target)) 'invalid payload must not reach the target path'
         Assert-True (Test-Path -LiteralPath $wrapper) 'invalid payload should remain staged for caller cleanup'
     }
-    finally { Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue }
+    finally { Remove-TestTree -Path $root }
 }
 
 Test-Case 'Get-ZbCommandExecutable parses managed service command lines' {
@@ -203,7 +409,7 @@ Test-Case 'Assert-ZbSafeServerRoot accepts owned roots and rejects unrelated dir
             Assert-Throws { Assert-ZbSafeServerRoot -Path $personalRoot } 'a server root inside personal documents must be rejected'
         }
     }
-    finally { Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue }
+    finally { Remove-TestTree -Path $root }
 }
 
 Test-Case 'Assert-ZbSafeServerRoot rejects root and nested reparse points' {
@@ -228,7 +434,7 @@ Test-Case 'Assert-ZbSafeServerRoot rejects root and nested reparse points' {
                 [IO.Directory]::Delete($junction)
             }
         }
-        Remove-Item -LiteralPath $base -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-TestTree -Path $base
     }
 }
 
@@ -246,7 +452,7 @@ Test-Case 'Assert-ZbSafeServerRoot recognizes only a complete legacy server conf
         Assert-Equal $root.TrimEnd('\') (Assert-ZbSafeServerRoot -Path $root)
     }
     finally {
-        Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-TestTree -Path $root
     }
 }
 
@@ -264,7 +470,7 @@ Test-Case 'Set-ZbUtf8File writes UTF-8 without a BOM' {
         $hasBom = $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF
         Assert-True (-not $hasBom) 'UTF-8 BOM must not be present'
     }
-    finally { Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue }
+    finally { Remove-TestTree -Path $root }
 }
 
 Test-Case 'installed-build verification distinguishes legacy from truncated metadata' {
@@ -282,7 +488,7 @@ Test-Case 'installed-build verification distinguishes legacy from truncated meta
         Assert-True (-not (Test-ZbInstalledBuild -InstallDir $root)) 'empty metadata must fail closed'
     }
     finally {
-        Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-TestTree -Path $root
     }
 }
 
@@ -306,7 +512,7 @@ Test-Case 'Backup-ZbData supports an empty data directory' {
         try { Assert-Equal 0 $archive.Entries.Count }
         finally { $archive.Dispose() }
     }
-    finally { Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue }
+    finally { Remove-TestTree -Path $root }
 }
 
 Test-Case 'desktop and MCP companions publish, verify, and roll back coherently' {
@@ -327,18 +533,10 @@ Test-Case 'desktop and MCP companions publish, verify, and roll back coherently'
         Set-ZbUtf8File -Path $firstLocalMcp -Content 'first-local-mcp-build'
         Set-ZbUtf8File -Path $secondLocalMcp -Content 'second-local-mcp-build'
 
-        Publish-ZbDesktopBuild -SourceExe $first -InstallDir $install -VersionText "commit=one`ndate=one"
-        $firstMcpHash = Publish-ZbVerifiedFile -SourcePath $firstMcp -DestinationPath (Join-Path $install 'zeitboard-mcp.exe') -BackupPath (Join-Path $install 'previous\zeitboard-mcp.exe')
-        Set-ZbInstalledArtifactHash -InstallDir $install -Key 'mcp-sha256' -Hash $firstMcpHash
-        $firstLocalMcpHash = Publish-ZbVerifiedFile -SourcePath $firstLocalMcp -DestinationPath (Join-Path $install 'zeitboard-local-mcp.exe') -BackupPath (Join-Path $install 'previous\zeitboard-local-mcp.exe')
-        Set-ZbInstalledArtifactHash -InstallDir $install -Key 'local-mcp-sha256' -Hash $firstLocalMcpHash
+        Publish-TestRelease -InstallDir $install -DesktopSource $first -LocalMcpSource $firstLocalMcp -ServerMcpSource $firstMcp -Commit 'one'
         Assert-True (Test-ZbInstalledBuild -InstallDir $install) 'first release should verify'
 
-        Publish-ZbDesktopBuild -SourceExe $second -InstallDir $install -VersionText "commit=two`ndate=two"
-        $secondMcpHash = Publish-ZbVerifiedFile -SourcePath $secondMcp -DestinationPath (Join-Path $install 'zeitboard-mcp.exe') -BackupPath (Join-Path $install 'previous\zeitboard-mcp.exe')
-        Set-ZbInstalledArtifactHash -InstallDir $install -Key 'mcp-sha256' -Hash $secondMcpHash
-        $secondLocalMcpHash = Publish-ZbVerifiedFile -SourcePath $secondLocalMcp -DestinationPath (Join-Path $install 'zeitboard-local-mcp.exe') -BackupPath (Join-Path $install 'previous\zeitboard-local-mcp.exe')
-        Set-ZbInstalledArtifactHash -InstallDir $install -Key 'local-mcp-sha256' -Hash $secondLocalMcpHash
+        Publish-TestRelease -InstallDir $install -DesktopSource $second -LocalMcpSource $secondLocalMcp -ServerMcpSource $secondMcp -Commit 'two'
         Assert-True (Test-ZbInstalledBuild -InstallDir $install) 'second release should verify'
         Assert-Equal 'first-build' (Get-Content -Raw -LiteralPath (Join-Path $install 'previous\ZeitBoard.exe'))
         Assert-Equal 'first-mcp-build' (Get-Content -Raw -LiteralPath (Join-Path $install 'previous\zeitboard-mcp.exe'))
@@ -366,7 +564,7 @@ Test-Case 'desktop and MCP companions publish, verify, and roll back coherently'
         Assert-True ($version -match 'mcp-sha256=') 'rollback metadata should include the previous MCP hash'
         Assert-True ($version -match 'local-mcp-sha256=') 'rollback metadata should include the previous local MCP hash'
     }
-    finally { Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue }
+    finally { Remove-TestTree -Path $root }
 }
 
 Test-Case 'Publish-ZbVerifiedFile restores the prior destination after a post-publication failure' {
@@ -392,7 +590,7 @@ Test-Case 'Publish-ZbVerifiedFile restores the prior destination after a post-pu
     }
     finally {
         $script:ZbLogFile = $priorLogFile
-        Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-TestTree -Path $root
     }
 }
 
@@ -412,7 +610,7 @@ Test-Case 'rollback to a legacy install removes current hash metadata' {
         Assert-True (-not (Test-Path -LiteralPath (Join-Path $install 'version.txt'))) 'legacy rollback must remove new metadata'
         Assert-True (Test-ZbInstalledBuild -InstallDir $install) 'legacy rollback should remain a valid legacy install'
     }
-    finally { Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue }
+    finally { Remove-TestTree -Path $root }
 }
 
 Test-Case 'New-ZbShortcut preserves a same-named shortcut it does not own' {
@@ -444,7 +642,7 @@ Test-Case 'New-ZbShortcut preserves a same-named shortcut it does not own' {
     finally {
         if ($shortcut) { [Runtime.InteropServices.Marshal]::ReleaseComObject($shortcut) | Out-Null }
         if ($shell) { [Runtime.InteropServices.Marshal]::ReleaseComObject($shell) | Out-Null }
-        Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-TestTree -Path $root
     }
 }
 
@@ -498,6 +696,25 @@ Test-Case 'Show-ZbBanner and Show-ZbFinale are ASCII-only' {
     Assert-Equal 0 $nonAscii.Count
 }
 
+Test-Case 'pending component requirements do not invalidate the old release snapshot' {
+    $root = Join-Path ([IO.Path]::GetTempPath()) ('zb-upgrade-manifest-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $root | Out-Null
+    try {
+        $exe = Join-Path $root 'ZeitBoard.exe'
+        Set-ZbUtf8File -Path $exe -Content 'old-structured-desktop'
+        $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $exe).Hash.ToLowerInvariant()
+        Set-ZbUtf8File -Path (Join-Path $root 'version.txt') -Content "commit=old`ndate=old`nsha256=$hash`n"
+        Start-ZbPublishTransaction -InstallDir $root -Components @('desktop', 'local-mcp') | Out-Null
+
+        Assert-True (-not (Test-ZbInstalledBuild -InstallDir $root)) 'the pending release must not be reported complete'
+        Assert-True (Test-ZbInstalledBuild -InstallDir $root -IgnorePendingMarker -IgnorePendingComponents) 'old release validation must ignore in-flight component declarations'
+        Assert-Throws { Complete-ZbPublishTransaction -InstallDir $root } 'completion must still enforce pending component requirements'
+        Save-ZbPreviousRelease -InstallDir $root
+        Assert-True (Test-ZbInstalledBuild -InstallDir (Join-Path $root 'previous')) 'the old structured release must remain snapshot-compatible'
+    }
+    finally { Remove-TestTree -Path $root }
+}
+
 Test-Case 'Publish transaction: pending marker makes a half-published install fail closed' {
     $dir = Join-Path ([IO.Path]::GetTempPath()) ("zb-tx-" + [guid]::NewGuid().ToString('N'))
     try {
@@ -510,22 +727,158 @@ Test-Case 'Publish transaction: pending marker makes a half-published install fa
         Set-Content -LiteralPath (Join-Path $dir 'version.txt') -Value "commit=abc`ndate=now`ncomponents=desktop,local-mcp"
         Assert-Equal $false (Test-ZbInstalledBuild -InstallDir $dir -IgnorePendingMarker)
     }
-    finally { Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue }
+    finally { Remove-TestTree -Path $dir }
 }
 
 Test-Case 'Publish transaction: completing clears the marker once everything validates' {
     $dir = Join-Path ([IO.Path]::GetTempPath()) ("zb-tx-" + [guid]::NewGuid().ToString('N'))
     try {
-        Start-ZbPublishTransaction -InstallDir $dir -Components @('desktop') | Out-Null
+        Start-ZbPublishTransaction -InstallDir $dir -Components @('desktop', 'local-mcp') | Out-Null
         $exe = Join-Path $dir 'ZeitBoard.exe'
+        $localMcp = Join-Path $dir 'zeitboard-local-mcp.exe'
         Set-Content -LiteralPath $exe -Value 'x'
+        Set-Content -LiteralPath $localMcp -Value 'bridge'
         $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $exe).Hash.ToLowerInvariant()
-        Set-Content -LiteralPath (Join-Path $dir 'version.txt') -Value "commit=abc`ndate=now`ncomponents=desktop`nsha256=$hash"
+        $localMcpHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $localMcp).Hash.ToLowerInvariant()
+        Set-Content -LiteralPath (Join-Path $dir 'version.txt') -Value "commit=abc`ndate=now`ncomponents=desktop,local-mcp`nsha256=$hash`nlocal-mcp-sha256=$localMcpHash"
         Complete-ZbPublishTransaction -InstallDir $dir
         Assert-True (-not (Test-Path -LiteralPath (Get-ZbPendingMarkerPath -InstallDir $dir))) 'marker should be cleared'
         Assert-Equal $true (Test-ZbInstalledBuild -InstallDir $dir)
     }
-    finally { Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue }
+    finally { Remove-TestTree -Path $dir }
+}
+
+Test-Case 'new component manifests require the always-installed local bridge and hash' {
+    $root = Join-Path ([IO.Path]::GetTempPath()) ('zb-components-' + [guid]::NewGuid().ToString('N'))
+    New-Item -ItemType Directory -Path $root | Out-Null
+    try {
+        $exe = Join-Path $root 'ZeitBoard.exe'
+        $localMcp = Join-Path $root 'zeitboard-local-mcp.exe'
+        Set-ZbUtf8File -Path $exe -Content 'desktop'
+        $desktopHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $exe).Hash.ToLowerInvariant()
+        Set-ZbUtf8File -Path (Join-Path $root 'version.txt') -Content "commit=x`ndate=x`ncomponents=desktop`nsha256=$desktopHash`n"
+        Assert-True (-not (Test-ZbInstalledBuild -InstallDir $root)) 'a component manifest may not omit the required local bridge'
+
+        Set-ZbUtf8File -Path $localMcp -Content 'bridge'
+        Set-ZbUtf8File -Path (Join-Path $root 'version.txt') -Content "commit=x`ndate=x`ncomponents=desktop,local-mcp`nsha256=$desktopHash`n"
+        Assert-True (-not (Test-ZbInstalledBuild -InstallDir $root)) 'a declared local bridge without a hash must fail closed'
+
+        $localHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $localMcp).Hash.ToLowerInvariant()
+        Set-ZbInstalledArtifactHash -InstallDir $root -Key 'local-mcp-sha256' -Hash $localHash
+        Assert-True (Test-ZbInstalledBuild -InstallDir $root) 'a complete component manifest should validate'
+    }
+    finally { Remove-TestTree -Path $root }
+}
+
+Test-Case 'snapshot switching and rollback faults preserve coherent releases' {
+    $root = Join-Path ([IO.Path]::GetTempPath()) ('zb-fault-' + [guid]::NewGuid().ToString('N'))
+    $install = Join-Path $root 'install'
+    New-Item -ItemType Directory -Path $root | Out-Null
+    $sources = @{}
+    foreach ($release in @('one', 'two', 'three')) {
+        $desktop = Join-Path $root "$release-desktop.exe"
+        $localMcp = Join-Path $root "$release-local-mcp.exe"
+        $serverMcp = Join-Path $root "$release-server-mcp.exe"
+        Set-ZbUtf8File -Path $desktop -Content "$release-desktop"
+        Set-ZbUtf8File -Path $localMcp -Content "$release-local"
+        Set-ZbUtf8File -Path $serverMcp -Content "$release-server"
+        $sources[$release] = @{ Desktop = $desktop; Local = $localMcp; Server = $serverMcp }
+    }
+    try {
+        Publish-TestRelease -InstallDir $install -DesktopSource $sources.one.Desktop -LocalMcpSource $sources.one.Local -ServerMcpSource $sources.one.Server -Commit 'one'
+        Publish-TestRelease -InstallDir $install -DesktopSource $sources.two.Desktop -LocalMcpSource $sources.two.Local -ServerMcpSource $sources.two.Server -Commit 'two'
+        Assert-True (Test-ZbInstalledBuild -InstallDir $install) 'current release should begin coherent'
+        Assert-True (Test-ZbInstalledBuild -InstallDir (Join-Path $install 'previous')) 'previous release should begin coherent'
+
+        $script:ZbInstallerFaultPoint = 'previous-after-retire'
+        Assert-Throws {
+            Publish-ZbDesktopBuild -SourceExe $sources.three.Desktop -InstallDir $install -VersionText "commit=three`ndate=test`ncomponents=desktop,local-mcp,mcp"
+        } 'an interrupted previous-directory switch must fail'
+        $script:ZbInstallerFaultPoint = $null
+        Assert-Equal 'two-desktop' (Get-Content -Raw -LiteralPath (Join-Path $install 'ZeitBoard.exe'))
+        Assert-Equal 'one-desktop' (Get-Content -Raw -LiteralPath (Join-Path $install 'previous\ZeitBoard.exe'))
+        Assert-True (Test-ZbInstalledBuild -InstallDir $install) 'snapshot-switch failure must leave current coherent'
+        Assert-True (Test-ZbInstalledBuild -InstallDir (Join-Path $install 'previous')) 'snapshot-switch failure must restore previous coherently'
+
+        $script:ZbInstallerFaultPoint = 'restore-after-ZeitBoard.exe'
+        Assert-Throws { Restore-ZbPreviousBuild -InstallDir $install } 'a mid-rollback fault must fail'
+        $script:ZbInstallerFaultPoint = $null
+        Assert-Equal 'two-desktop' (Get-Content -Raw -LiteralPath (Join-Path $install 'ZeitBoard.exe'))
+        Assert-Equal 'two-local' (Get-Content -Raw -LiteralPath (Join-Path $install 'zeitboard-local-mcp.exe'))
+        Assert-Equal 'two-server' (Get-Content -Raw -LiteralPath (Join-Path $install 'zeitboard-mcp.exe'))
+        Assert-True (Test-ZbInstalledBuild -InstallDir $install) 'failed rollback must restore every current artifact and metadata'
+
+        Set-ZbUtf8File -Path (Join-Path $install 'previous\zeitboard-local-mcp.exe') -Content 'corrupt'
+        Assert-Throws { Restore-ZbPreviousBuild -InstallDir $install } 'a corrupt previous release must fail prevalidation'
+        Assert-True (Test-ZbInstalledBuild -InstallDir $install) 'prevalidation failure must not touch the current release'
+        $transactionTemps = @(Get-ChildItem -LiteralPath $install -Force | Where-Object { $_.Name -match '^\.(previous-|rollback-|release-backup-)' })
+        Assert-Equal 0 $transactionTemps.Count
+    }
+    finally {
+        $script:ZbInstallerFaultPoint = $null
+        Remove-TestTree -Path $root
+    }
+}
+
+Test-Case 'an interrupted previous-directory switch repairs from the staged release' {
+    $root = Join-Path ([IO.Path]::GetTempPath()) ('zb-switch-repair-' + [guid]::NewGuid().ToString('N'))
+    $install = Join-Path $root 'install'
+    $firstDesktop = Join-Path $root 'first.exe'
+    $firstLocal = Join-Path $root 'first-local.exe'
+    $secondDesktop = Join-Path $root 'second.exe'
+    $secondLocal = Join-Path $root 'second-local.exe'
+    New-Item -ItemType Directory -Path $root | Out-Null
+    try {
+        Set-ZbUtf8File -Path $firstDesktop -Content 'first'
+        Set-ZbUtf8File -Path $firstLocal -Content 'first-local'
+        Set-ZbUtf8File -Path $secondDesktop -Content 'second'
+        Set-ZbUtf8File -Path $secondLocal -Content 'second-local'
+        Publish-TestRelease -InstallDir $install -DesktopSource $firstDesktop -LocalMcpSource $firstLocal -Commit 'one'
+        Publish-TestRelease -InstallDir $install -DesktopSource $secondDesktop -LocalMcpSource $secondLocal -Commit 'two'
+
+        $staged = Join-Path $install '.previous-staging-interrupted'
+        $retired = Join-Path $install '.previous-retired-interrupted'
+        Copy-ZbReleaseSnapshot -SourceDir $install -DestinationDir $staged
+        Move-Item -LiteralPath (Join-Path $install 'previous') -Destination $retired
+        Assert-True (-not (Test-Path -LiteralPath (Join-Path $install 'previous'))) 'test must model the directory-switch interruption window'
+
+        Repair-ZbPreviousReleaseSwitch -InstallDir $install
+        Assert-Equal 'second' (Get-Content -Raw -LiteralPath (Join-Path $install 'previous\ZeitBoard.exe'))
+        Assert-True (Test-ZbInstalledBuild -InstallDir (Join-Path $install 'previous')) 'recovered previous directory must validate'
+        Assert-True (-not (Test-Path -LiteralPath $staged)) 'staged directory should be consumed'
+        Assert-True (-not (Test-Path -LiteralPath $retired)) 'retired directory should be safely cleaned'
+    }
+    finally { Remove-TestTree -Path $root }
+}
+
+Test-Case 'rollback restores a valid previous release when the active desktop is missing' {
+    $root = Join-Path ([IO.Path]::GetTempPath()) ('zb-missing-current-' + [guid]::NewGuid().ToString('N'))
+    $install = Join-Path $root 'install'
+    $firstDesktop = Join-Path $root 'first.exe'
+    $firstLocal = Join-Path $root 'first-local.exe'
+    $secondDesktop = Join-Path $root 'second.exe'
+    $secondLocal = Join-Path $root 'second-local.exe'
+    New-Item -ItemType Directory -Path $root | Out-Null
+    try {
+        Set-ZbUtf8File -Path $firstDesktop -Content 'first'
+        Set-ZbUtf8File -Path $firstLocal -Content 'first-local'
+        Set-ZbUtf8File -Path $secondDesktop -Content 'second'
+        Set-ZbUtf8File -Path $secondLocal -Content 'second-local'
+        Publish-TestRelease -InstallDir $install -DesktopSource $firstDesktop -LocalMcpSource $firstLocal -Commit 'one'
+        Publish-TestRelease -InstallDir $install -DesktopSource $secondDesktop -LocalMcpSource $secondLocal -Commit 'two'
+        Remove-Item -LiteralPath (Join-Path $install 'ZeitBoard.exe') -Force
+        Restore-ZbPreviousBuild -InstallDir $install
+        Assert-Equal 'first' (Get-Content -Raw -LiteralPath (Join-Path $install 'ZeitBoard.exe'))
+        Assert-True (Test-ZbInstalledBuild -InstallDir $install) 'rollback should recover a complete verified release'
+    }
+    finally { Remove-TestTree -Path $root }
+}
+
+Test-Case 'local MCP smoke remains read-only and drains stderr asynchronously' {
+    $text = Get-Content -Raw -LiteralPath (Join-Path $PSScriptRoot '..\smoke-local-mcp.ps1')
+    Assert-True ($text -notmatch "name\s*=\s*'set_appearance'") 'installed-profile smoke must not mutate appearance'
+    Assert-True ($text -match 'StandardError\.ReadToEndAsync\(\)') 'stderr must be drained as soon as the bridge starts'
+    Assert-True ($text -match 'MCP bridge stderr:') 'failure diagnostics must include captured stderr'
 }
 
 Test-Case 'Publish transaction is actually wired into install.ps1 and update.ps1' {

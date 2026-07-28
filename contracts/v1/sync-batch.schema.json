@@ -139,6 +139,10 @@
       "properties": {
         "record_id": {
           "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "record_kind": {
+          "type": "string",
+          "enum": ["observation", "correction", "task"]
         }
       }
     },

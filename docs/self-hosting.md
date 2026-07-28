@@ -139,16 +139,21 @@ From the repository root, use an elevated Windows PowerShell prompt:
 .\scripts\installer\install-server.ps1
 ```
 
-The installer defaults to `%PROGRAMDATA%\ZeitBoard`, generates secrets only
-when absent, restricts the managed root to SYSTEM and Administrators, validates
-the staged config before changing service registration, and starts a delayed
-automatic service named `ZeitBoardServer`. The daemon uses the native Windows
-SCM lifecycle: it reports Running only after its listener is established and
-performs a bounded graceful shutdown on Stop or system shutdown.
+The installer defaults to `%PROGRAMDATA%\ZeitBoard`, stages the build before
+service downtime, generates secrets only when absent, restricts the managed root
+to SYSTEM and Administrators, validates the staged config before publication or
+registration changes, and starts a delayed automatic service named
+`ZeitBoardServer`. The daemon uses the native Windows SCM lifecycle: it reports
+Running only after its listener is established and performs a bounded graceful
+shutdown on Stop or system shutdown.
 
 A custom `-InstallRoot` must be a dedicated service directory outside Desktop,
 Documents, and Downloads, and it must not contain junctions or symbolic links;
-the installer replaces ACL inheritance recursively and fails closed otherwise.
+the installer stops an owned existing service before its single reparse-point
+safety walk. The protected SYSTEM/Administrators root DACL is inheritable by
+new files and directories. Recursive ACL replacement is skipped only when the
+root policy and the versioned marker proving an earlier descendant reset are
+both current; an unsafe, unrelated, or reparse-containing root fails closed.
 
 Loopback is the default. A non-loopback `-ListenAddress` requires both
 `-TlsCertPath` and `-TlsKeyPath`. `-Firewall` creates a Private-profile inbound

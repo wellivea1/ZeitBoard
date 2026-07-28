@@ -23,6 +23,7 @@ if (-not $env:ANDROID_HOME -and (Test-Path $UserAndroidSdk)) {
     $env:ANDROID_HOME = $UserAndroidSdk
     $env:ANDROID_SDK_ROOT = $UserAndroidSdk
 }
+$script:WebCheckRan = $false
 
 function Invoke-Contracts {
     # tools is an isolated module (not in go.work); GOWORK=off builds it standalone.
@@ -159,8 +160,20 @@ function Invoke-Web {
         Write-Host "Skipping ${Label}: package.json is not present at $Path."
         return
     }
+    if ($Action -eq "check") {
+        if (-not $script:WebCheckRan) {
+            Push-Location $Root
+            try {
+                npm run check:web
+                if ($LASTEXITCODE -ne 0) { throw "Canonical web checks failed." }
+                $script:WebCheckRan = $true
+            }
+            finally { Pop-Location }
+        }
+        return
+    }
     $package = Get-Content -Raw $packageFile | ConvertFrom-Json
-    $script = if ($Action -eq "check") { "build" } else { $Action }
+    $script = $Action
     if (-not $package.scripts.$script) {
         if ($script -eq "test") {
             Write-Host "Skipping ${Label} tests: no test script is defined."

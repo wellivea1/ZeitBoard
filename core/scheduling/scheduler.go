@@ -69,6 +69,7 @@ func (Scheduler) Propose(request Request) (Proposal, error) {
 		return Proposal{}, errors.New("task duration must be positive")
 	}
 	constraint := request.Task.Constraint
+	busyIntervals := mergeEventIntervals(request.Events)
 	var candidates []candidate
 	for _, availability := range request.Availability {
 		if availability.Kind != domain.AvailabilityPredictedWake && availability.Kind != domain.AvailabilityFunctional && availability.Kind != domain.AvailabilityFree {
@@ -82,7 +83,7 @@ func (Scheduler) Propose(request Request) (Proposal, error) {
 		if constraint.BusinessHours {
 			ranges = intersectBusinessHours(ranges, constraint)
 		}
-		ranges = subtractEvents(ranges, request.Events)
+		ranges = subtractBusyIntervals(ranges, busyIntervals)
 		for _, interval := range ranges {
 			if interval.Duration() >= request.Task.EstimatedDuration {
 				candidates = append(candidates, candidate{interval: interval, availability: availability})
@@ -232,24 +233,79 @@ func intersectBusinessHours(ranges []domain.TimeRange, constraint domain.TaskCon
 }
 
 func subtractEvents(ranges []domain.TimeRange, events []domain.CalendarEvent) []domain.TimeRange {
-	result := append([]domain.TimeRange(nil), ranges...)
+	return subtractBusyIntervals(ranges, mergeEventIntervals(events))
+}
+
+type busyInterval struct {
+	start time.Time
+	end   time.Time
+}
+
+func mergeEventIntervals(events []domain.CalendarEvent) []busyInterval {
+	intervals := make([]busyInterval, 0, len(events))
 	for _, event := range events {
-		var next []domain.TimeRange
-		for _, interval := range result {
-			if !interval.Overlaps(event.Interval) {
-				next = append(next, interval)
+		start := event.Interval.Start.UTC
+		end := event.Interval.End.UTC
+		if !end.After(start) {
+			continue
+		}
+		intervals = append(intervals, busyInterval{start: start, end: end})
+	}
+	sort.Slice(intervals, func(i, j int) bool {
+		if intervals[i].start.Equal(intervals[j].start) {
+			return intervals[i].end.Before(intervals[j].end)
+		}
+		return intervals[i].start.Before(intervals[j].start)
+	})
+
+	merged := intervals[:0]
+	for _, interval := range intervals {
+		if len(merged) == 0 || interval.start.After(merged[len(merged)-1].end) {
+			merged = append(merged, interval)
+			continue
+		}
+		if interval.end.After(merged[len(merged)-1].end) {
+			merged[len(merged)-1].end = interval.end
+		}
+	}
+	return merged
+}
+
+func subtractBusyIntervals(ranges []domain.TimeRange, busy []busyInterval) []domain.TimeRange {
+	if len(ranges) == 0 {
+		return nil
+	}
+	if len(busy) == 0 {
+		return append([]domain.TimeRange(nil), ranges...)
+	}
+
+	result := make([]domain.TimeRange, 0, len(ranges)+len(busy))
+	for _, interval := range ranges {
+		rangeStart := interval.Start.UTC
+		rangeEnd := interval.End.UTC
+		cursor := rangeStart
+		segmentStart := interval.Start
+
+		first := sort.Search(len(busy), func(i int) bool {
+			return busy[i].end.After(rangeStart)
+		})
+		for i := first; i < len(busy) && busy[i].start.Before(rangeEnd); i++ {
+			if !busy[i].end.After(cursor) {
 				continue
 			}
-			if event.Interval.Start.UTC.After(interval.Start.UTC) {
-				end, _ := domain.NewZonedInstant(event.Interval.Start.UTC, interval.Start.ZoneID)
-				next = append(next, domain.TimeRange{Start: interval.Start, End: end})
+			if busy[i].start.After(cursor) {
+				segmentEnd, _ := domain.NewZonedInstant(busy[i].start, interval.Start.ZoneID)
+				result = append(result, domain.TimeRange{Start: segmentStart, End: segmentEnd})
 			}
-			if event.Interval.End.UTC.Before(interval.End.UTC) {
-				start, _ := domain.NewZonedInstant(event.Interval.End.UTC, interval.Start.ZoneID)
-				next = append(next, domain.TimeRange{Start: start, End: interval.End})
+			cursor = busy[i].end
+			if !cursor.Before(rangeEnd) {
+				break
 			}
+			segmentStart, _ = domain.NewZonedInstant(cursor, interval.Start.ZoneID)
 		}
-		result = next
+		if cursor.Before(rangeEnd) {
+			result = append(result, domain.TimeRange{Start: segmentStart, End: interval.End})
+		}
 	}
 	return result
 }

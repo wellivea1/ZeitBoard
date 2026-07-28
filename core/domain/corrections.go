@@ -52,6 +52,11 @@ func ApplySleepCorrections(source []SleepSession, corrections []ManualCorrection
 				return nil, fmt.Errorf("correction %s requires boolValue", correction.ID)
 			}
 			session.IsNap = *correction.BoolValue
+			if session.IsNap {
+				session.Classification = SleepClassificationNap
+			} else {
+				session.Classification = SleepClassificationPrincipal
+			}
 		case CorrectionAwakeInactive:
 			if correction.IntervalValue == nil {
 				return nil, fmt.Errorf("correction %s requires intervalValue", correction.ID)

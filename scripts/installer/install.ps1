@@ -16,7 +16,7 @@
     -Startup               launch ZeitBoard at Windows startup (default: no)
     -NoLaunch              do not launch when finished (default: launch)
     -WithServer            also install the self-hosted server (service)
-    -WithMcp               install the MCP connector (existing installs update it)
+    -WithServerMcp         install the optional self-hosted/server MCP connector (-WithMcp remains an alias)
     -WithAndroid           also build the Android APK
 
 .EXAMPLE
@@ -35,7 +35,7 @@ param(
     [switch]$Startup,
     [switch]$NoLaunch,
     [switch]$WithServer,
-    [switch]$WithMcp,
+    [Alias('WithMcp')][switch]$WithServerMcp,
     [switch]$WithAndroid,
     [switch]$AcceptAndroidLicenses,
     [switch]$AllowDirty
@@ -58,7 +58,7 @@ $startupOverride = $null; if ($PSBoundParameters.ContainsKey('Startup')) { $star
 $androidLicensesSupplied = $PSBoundParameters.ContainsKey('AcceptAndroidLicenses')
 $installedMcp = Join-Path $paths.InstallDir 'zeitboard-mcp.exe'
 $installedLocalMcp = Join-Path $paths.InstallDir 'zeitboard-local-mcp.exe'
-$installMcp = [bool]$WithMcp -or (Test-Path -LiteralPath $installedMcp)
+$installMcp = [bool]$WithServerMcp -or (Test-Path -LiteralPath $installedMcp)
 $lifecycleLock = $null
 $exitCode = 0
 try {
@@ -115,7 +115,7 @@ try {
         finally { Pop-Location }
     }
     if ($installMcp) {
-        Invoke-ZbStep -Name 'Build MCP connector (go build)' -DryRun:$DryRun -ResumeHint $resume -Action {
+        Invoke-ZbStep -Name 'Build optional self-hosted/server MCP connector (go build)' -DryRun:$DryRun -ResumeHint $resume -Action {
             Push-Location (Join-Path $paths.RepoRoot 'apps\server')
             try {
                 New-Item -ItemType Directory -Force -Path (Join-Path $paths.RepoRoot 'apps\server\bin') | Out-Null
@@ -134,6 +134,7 @@ try {
     $orphanMcpHash = $null
     $orphanLocalMcpBackup = $null
     $orphanLocalMcpHash = $null
+    $publishBackupDir = Join-Path $paths.InstallDir ('.publish-backup-' + [guid]::NewGuid().ToString('N'))
     if (-not $DryRun -and -not $hadInstalledExe -and $hadInstalledMcp) {
         $orphanMcpBackup = Join-Path $paths.InstallDir ('.install-rollback-mcp-' + [guid]::NewGuid().ToString('N') + '.exe')
         Copy-Item -LiteralPath $installedMcp -Destination $orphanMcpBackup
@@ -164,19 +165,19 @@ try {
         }
         Invoke-ZbStep -Name 'Install desktop-local MCP bridge' -DryRun:$DryRun -ResumeHint $resume -Action {
             $localMcpSource = Join-Path $paths.RepoRoot 'apps\desktop\build\bin\zeitboard-local-mcp.exe'
-            $localMcpBackup = Join-Path $paths.InstallDir 'previous\zeitboard-local-mcp.exe'
+            $localMcpBackup = Join-Path $publishBackupDir 'zeitboard-local-mcp.exe'
             $localMcpHash = Publish-ZbVerifiedFile -SourcePath $localMcpSource -DestinationPath $installedLocalMcp -BackupPath $localMcpBackup
             Set-ZbInstalledArtifactHash -InstallDir $paths.InstallDir -Key 'local-mcp-sha256' -Hash $localMcpHash
             Write-ZbLog -Level ok -Message "desktop-local MCP bridge at $installedLocalMcp"
         }
         if ($installMcp) {
-            Invoke-ZbStep -Name 'Install MCP connector' -DryRun:$DryRun -ResumeHint $resume -Action {
+            Invoke-ZbStep -Name 'Install optional self-hosted/server MCP connector' -DryRun:$DryRun -ResumeHint $resume -Action {
                 $mcpSource = Join-Path $paths.RepoRoot 'apps\server\bin\zeitboard-mcp.exe'
-                $mcpBackup = Join-Path $paths.InstallDir 'previous\zeitboard-mcp.exe'
+                $mcpBackup = Join-Path $publishBackupDir 'zeitboard-mcp.exe'
                 $mcpHash = Publish-ZbVerifiedFile -SourcePath $mcpSource -DestinationPath $installedMcp -BackupPath $mcpBackup
                 Set-ZbInstalledArtifactHash -InstallDir $paths.InstallDir -Key 'mcp-sha256' -Hash $mcpHash
-                Write-ZbLog -Level ok -Message "MCP at $installedMcp"
-                Write-ZbLog -Message 'Register it in Claude Desktop per docs/self-hosting.md (Voice Via An MCP Client).'
+                Write-ZbLog -Level ok -Message "self-hosted/server MCP connector at $installedMcp"
+                Write-ZbLog -Message 'Register the optional server connector per docs/self-hosting.md; the desktop-local bridge is installed separately.'
             }
         }
         Invoke-ZbStep -Name 'Verify published artifacts' -DryRun:$DryRun -ResumeHint $resume -Action {
@@ -209,7 +210,7 @@ try {
                         if (-not $orphanLocalMcpBackup -or -not (Test-Path -LiteralPath $orphanLocalMcpBackup)) {
                             throw 'The pre-existing desktop-local MCP rollback copy is missing.'
                         }
-                        Publish-ZbVerifiedFile -SourcePath $orphanLocalMcpBackup -DestinationPath $installedLocalMcp -BackupPath (Join-Path $paths.InstallDir 'previous\failed-current-local-mcp.exe') | Out-Null
+                        Publish-ZbVerifiedFile -SourcePath $orphanLocalMcpBackup -DestinationPath $installedLocalMcp -BackupPath (Join-Path $publishBackupDir 'failed-current-local-mcp.exe') | Out-Null
                         $restoredLocalMcpHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $installedLocalMcp).Hash.ToLowerInvariant()
                         if ($restoredLocalMcpHash -ne $orphanLocalMcpHash) { throw 'The restored desktop-local MCP bridge failed its SHA-256 verification.' }
                     }
@@ -223,7 +224,7 @@ try {
                         if (-not $orphanMcpBackup -or -not (Test-Path -LiteralPath $orphanMcpBackup)) {
                             throw 'The pre-existing MCP rollback copy is missing.'
                         }
-                        Publish-ZbVerifiedFile -SourcePath $orphanMcpBackup -DestinationPath $installedMcp -BackupPath (Join-Path $paths.InstallDir 'previous\failed-current-mcp.exe') | Out-Null
+                        Publish-ZbVerifiedFile -SourcePath $orphanMcpBackup -DestinationPath $installedMcp -BackupPath (Join-Path $publishBackupDir 'failed-current-mcp.exe') | Out-Null
                         $restoredMcpHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $installedMcp).Hash.ToLowerInvariant()
                         if ($restoredMcpHash -ne $orphanMcpHash) { throw 'The restored MCP connector failed its SHA-256 verification.' }
                     }
@@ -238,9 +239,19 @@ try {
             Write-ZbLog -Level fail -Message "automatic restore also failed: $($restoreFailure.Exception.Message)"
             throw "Artifact publication failed ($($publishError.Exception.Message)); restoring the prior install also failed: $($restoreFailure.Exception.Message)"
         }
+        $pendingMarker = Get-ZbPendingMarkerPath -InstallDir $paths.InstallDir
+        $priorStateRecovered = if ($hadInstalledExe) {
+            Test-ZbInstalledBuild -InstallDir $paths.InstallDir -IgnorePendingMarker -IgnorePendingComponents
+        } else { $true }
+        if ($priorStateRecovered -and (Test-Path -LiteralPath $pendingMarker)) {
+            Remove-Item -LiteralPath $pendingMarker -Force
+        }
         throw $publishError
     }
     finally {
+        if (Test-Path -LiteralPath $publishBackupDir) {
+            Remove-ZbDirectoryUnderRoot -Root $paths.InstallDir -Path $publishBackupDir
+        }
         if ($orphanMcpBackup -and (Test-Path -LiteralPath $orphanMcpBackup)) {
             Remove-Item -LiteralPath $orphanMcpBackup -Force -ErrorAction SilentlyContinue
         }

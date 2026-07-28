@@ -1,4 +1,4 @@
-import { useEffect, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Icon } from "../components/Icon";
 import { PageHeader } from "../components/AppShell";
 import { ActogramPanel, DriftPanel } from "../components/RhythmVisuals";
@@ -28,6 +28,7 @@ import {
   unavailableRhythmMarkers,
   type RhythmMarkerInput,
 } from "../data/rhythmMarkers";
+import { createCoalescedRefresh, type CoalescedRefresh } from "../utils/coalescedRefresh";
 
 function SourceConflictList({
   conflicts,
@@ -100,16 +101,13 @@ function LocalSourcesPanel({ rhythm }: { rhythm: RhythmData }) {
   });
 
   useEffect(() => {
-    let current = true;
-    const refresh = () =>
-      void loadSleepEntries().then((loaded) => {
-        if (current) setEntriesData(loaded);
-      });
-    refresh();
-    window.addEventListener(sleepDataChangedEvent, refresh);
+    const refresh = createCoalescedRefresh(loadSleepEntries, setEntriesData);
+    const request = () => refresh.request();
+    request();
+    window.addEventListener(sleepDataChangedEvent, request);
     return () => {
-      current = false;
-      window.removeEventListener(sleepDataChangedEvent, refresh);
+      window.removeEventListener(sleepDataChangedEvent, request);
+      refresh.dispose();
     };
   }, []);
 
@@ -254,45 +252,56 @@ export function RhythmScreen() {
   const [markerExporting, setMarkerExporting] = useState(false);
   const [markerError, setMarkerError] = useState("");
   const [markerAnnouncement, setMarkerAnnouncement] = useState("");
+  const markerRefreshRef = useRef<CoalescedRefresh | null>(null);
+  const ignoreNextMarkerChange = useRef(false);
+
+  const publishMarkerChange = () => {
+    ignoreNextMarkerChange.current = true;
+    notifyRhythmMarkersChanged();
+    ignoreNextMarkerChange.current = false;
+  };
 
   useEffect(() => {
-    let current = true;
-    const refresh = () =>
-      void loadRhythm().then((result) => {
-        if (current) {
-          setRhythm(result.data);
-          setMode(result.source);
-        }
-      });
-    refresh();
-    window.addEventListener(sleepDataChangedEvent, refresh);
+    const refresh = createCoalescedRefresh(loadRhythm, (result) => {
+      setRhythm(result.data);
+      setMode(result.source);
+    });
+    const request = () => refresh.request();
+    request();
+    window.addEventListener(sleepDataChangedEvent, request);
     return () => {
-      current = false;
-      window.removeEventListener(sleepDataChangedEvent, refresh);
+      window.removeEventListener(sleepDataChangedEvent, request);
+      refresh.dispose();
     };
   }, []);
 
   useEffect(() => {
-    let current = true;
-    const refresh = () =>
-      void loadRhythmMarkers().then(
-        (result) => {
-          if (!current) return;
-          setMarkers(result);
-          setMarkerError("");
-        },
-        (reason: unknown) => {
-          if (!current) return;
-          setMarkerError(
-            reason instanceof Error ? reason.message : "Rhythm markers could not be loaded.",
-          );
-        },
-      );
-    refresh();
-    window.addEventListener(rhythmMarkersChangedEvent, refresh);
+    const refresh = createCoalescedRefresh(
+      loadRhythmMarkers,
+      (result) => {
+        setMarkers(result);
+        setMarkerError("");
+      },
+      (reason) => {
+        setMarkerError(
+          reason instanceof Error ? reason.message : "Rhythm markers could not be loaded.",
+        );
+      },
+    );
+    markerRefreshRef.current = refresh;
+    const request = () => {
+      if (ignoreNextMarkerChange.current) {
+        ignoreNextMarkerChange.current = false;
+        return;
+      }
+      refresh.request();
+    };
+    request();
+    window.addEventListener(rhythmMarkersChangedEvent, request);
     return () => {
-      current = false;
-      window.removeEventListener(rhythmMarkersChangedEvent, refresh);
+      window.removeEventListener(rhythmMarkersChangedEvent, request);
+      if (markerRefreshRef.current === refresh) markerRefreshRef.current = null;
+      refresh.dispose();
     };
   }, []);
 
@@ -304,7 +313,8 @@ export function RhythmScreen() {
       const result = await addRhythmMarker(input);
       setMarkers(result);
       setMarkerAnnouncement("Context marker appended.");
-      notifyRhythmMarkersChanged();
+      markerRefreshRef.current?.supersede();
+      publishMarkerChange();
     } catch (reason) {
       setMarkerError(
         reason instanceof Error ? reason.message : "Context marker could not be saved.",
@@ -323,7 +333,8 @@ export function RhythmScreen() {
       const result = await deleteRhythmMarker(markerId, confirmation);
       setMarkers(result);
       setMarkerAnnouncement("Context marker permanently erased.");
-      notifyRhythmMarkersChanged();
+      publishMarkerChange();
+      markerRefreshRef.current?.supersede();
     } catch (reason) {
       setMarkerError(
         reason instanceof Error ? reason.message : "Context marker could not be erased.",

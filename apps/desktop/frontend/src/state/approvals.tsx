@@ -52,6 +52,7 @@ interface ApprovalsContextValue {
 }
 
 const ApprovalsContext = createContext<ApprovalsContextValue | null>(null);
+const PendingApprovalsCountContext = createContext<number | null>(null);
 
 function withStatus(proposal: ProposalRecord): DecidedProposal {
   return { ...proposal, status: proposal.decision };
@@ -96,10 +97,6 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
   }, [applyResult]);
 
   useEffect(() => {
-    busyRef.current = busyProposalId;
-  }, [busyProposalId]);
-
-  useEffect(() => {
     mounted.current = true;
     void Promise.resolve().then(refresh);
     const onSleepChanged = () => {
@@ -114,7 +111,7 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
 
   const decide = (id: string, decision: ProposalDecision) => {
     const target = proposals.find((proposal) => proposal.id === id);
-    if (!ready || !target || target.status !== "pending" || busyProposalId) return;
+    if (!ready || !target || target.status !== "pending" || busyRef.current) return;
     if (source === "fixture") {
       setProposals((current) =>
         current.map((proposal) =>
@@ -127,17 +124,20 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    busyRef.current = id;
     setBusyProposalId(id);
     setError("");
     void decideLocalProposal(id, decision).then(
       async () => {
         if (decision === "approved") notifyCalendarDataChanged();
         await refresh();
+        busyRef.current = null;
         if (!mounted.current) return;
         setBusyProposalId(null);
         setLastDecision({ id, title: target.title, decision });
       },
       (reason: unknown) => {
+        busyRef.current = null;
         if (!mounted.current) return;
         setBusyProposalId(null);
         setError(reason instanceof Error ? reason.message : "Proposal decision failed.");
@@ -148,7 +148,7 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
 
   const undo = (id: string) => {
     const target = proposals.find((proposal) => proposal.id === id);
-    if (!ready || !target || target.status === "pending" || busyProposalId) return;
+    if (!ready || !target || target.status === "pending" || busyRef.current) return;
     if (source === "fixture") {
       setProposals((current) =>
         current.map((proposal) =>
@@ -161,17 +161,20 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    busyRef.current = id;
     setBusyProposalId(id);
     setError("");
     void undoLocalProposalDecision(id).then(
       async () => {
         notifyCalendarDataChanged();
         await refresh();
+        busyRef.current = null;
         if (!mounted.current) return;
         setBusyProposalId(null);
         setLastDecision(null);
       },
       (reason: unknown) => {
+        busyRef.current = null;
         if (!mounted.current) return;
         setBusyProposalId(null);
         setError(reason instanceof Error ? reason.message : "Proposal undo failed.");
@@ -206,18 +209,20 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <ApprovalsContext.Provider value={value}>
-      {children}
-      {lastDecision && (
-        <ApprovalUndoToast
-          key={`${lastDecision.id}-${lastDecision.decision}`}
-          decision={lastDecision}
-          busy={busyProposalId === lastDecision.id}
-          onUndo={undoLast}
-          onDismiss={dismiss}
-        />
-      )}
-    </ApprovalsContext.Provider>
+    <PendingApprovalsCountContext.Provider value={pending.length}>
+      <ApprovalsContext.Provider value={value}>
+        {children}
+        {lastDecision && (
+          <ApprovalUndoToast
+            key={`${lastDecision.id}-${lastDecision.decision}`}
+            decision={lastDecision}
+            busy={busyProposalId === lastDecision.id}
+            onUndo={undoLast}
+            onDismiss={dismiss}
+          />
+        )}
+      </ApprovalsContext.Provider>
+    </PendingApprovalsCountContext.Provider>
   );
 }
 
@@ -255,6 +260,15 @@ export function useApprovals(): ApprovalsContextValue {
   const context = useContext(ApprovalsContext);
   if (!context) {
     throw new Error("useApprovals must be used within ApprovalsProvider");
+  }
+  return context;
+}
+
+// eslint-disable-next-line react-refresh/only-export-components
+export function usePendingApprovalsCount(): number {
+  const context = useContext(PendingApprovalsCountContext);
+  if (context === null) {
+    throw new Error("usePendingApprovalsCount must be used within ApprovalsProvider");
   }
   return context;
 }
