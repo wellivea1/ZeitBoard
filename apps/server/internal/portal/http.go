@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -272,17 +273,5 @@ func retryAfterSeconds(value time.Duration) string {
 	if seconds < 1 {
 		seconds = 1
 	}
-	return itoa(seconds)
-}
-
-func itoa(value int) string {
-	if value == 0 {
-		return "0"
-	}
-	digits := make([]byte, 0, 12)
-	for value > 0 {
-		digits = append([]byte{byte('0' + value%10)}, digits...)
-		value /= 10
-	}
-	return string(digits)
+	return strconv.Itoa(seconds)
 }

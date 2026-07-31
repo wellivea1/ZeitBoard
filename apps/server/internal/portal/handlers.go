@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"embed"
 	"encoding/json"
+	"errors"
 	"html/template"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -49,8 +51,14 @@ func (h *Handler) handlePage(w http.ResponseWriter, r *http.Request) {
 
 	snapshot, err := h.store.ReadSnapshot(ctx, profile.ID)
 	if err != nil {
-		// A missing snapshot is a legitimate state, not an error: the link
-		// exists but nothing has been materialized for it yet.
+		// A missing snapshot is a legitimate state: the link exists but
+		// nothing has been materialized for it yet. Anything else — a decrypt
+		// failure, a corrupt row — renders the same empty page to the visitor
+		// but must not vanish silently, because only the operator can act on
+		// it. The profile id is opaque; the link token is never logged.
+		if !errors.Is(err, ErrNoSnapshot) {
+			log.Printf("portal: snapshot unreadable for profile %s: %v", profile.ID, err)
+		}
 		snapshot = Snapshot{}
 	}
 	view := BuildView(snapshot, h.now())
@@ -129,12 +137,15 @@ func (h *Handler) handleSession(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = h.store.RecordAccess(ctx, profile.ID, EventPasscodeAccepted, sourceID, h.now())
 
+	// MaxAge is derived from the handler's clock, not time.Now: mixing an
+	// injected clock with the wall clock can produce a negative MaxAge, which
+	// browsers read as "delete this cookie immediately".
 	http.SetCookie(w, &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    token.Session,
 		Path:     "/",
 		Expires:  token.ExpiresAt,
-		MaxAge:   int(time.Until(token.ExpiresAt).Seconds()),
+		MaxAge:   int(token.ExpiresAt.Sub(h.now()).Seconds()),
 		Secure:   true,
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
@@ -166,6 +177,9 @@ func (h *Handler) handleAvailability(w http.ResponseWriter, r *http.Request) {
 
 	snapshot, err := h.store.ReadSnapshot(ctx, profile.ID)
 	if err != nil {
+		if !errors.Is(err, ErrNoSnapshot) {
+			log.Printf("portal: snapshot unreadable for profile %s: %v", profile.ID, err)
+		}
 		writeJSON(w, http.StatusOK, availabilityDTO{
 			Windows: []windowDTO{},
 			Status:  StatusInsufficientData,
