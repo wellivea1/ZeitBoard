@@ -1,0 +1,255 @@
+/* Availability portal stylesheet.
+   Served from the portal's own origin so the page needs no inline style and
+   the CSP can stay at style-src 'self'. No fonts, images, or other assets are
+   fetched from anywhere. */
+
+:root {
+  color-scheme: light dark;
+
+  --ink: #24302d;
+  --muted: #5b655f;
+  --line: #dedfd8;
+  --paper: #fffefa;
+  --canvas: #f5f3ee;
+  --divider: #ecece7;
+
+  --awake: #55766b;
+  --awake-glow: #e4ece7;
+  --not-awake: #4a5e7a;
+  --not-awake-glow: #e3e8ef;
+  --uncertain: #9a6b16;
+  --uncertain-glow: #f5ecda;
+
+  --button-text: #fff;
+  --button-bg: #3e5f55;
+  --button-hover: #304e45;
+  --focus: #3e5f55;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #e6e8e4;
+    --muted: #a3aca6;
+    --line: #333a37;
+    --paper: #1c211f;
+    --canvas: #141817;
+    --divider: #2a302d;
+
+    --awake: #8fb3a5;
+    --awake-glow: #21302b;
+    --not-awake: #91a8c4;
+    --not-awake-glow: #1f2833;
+    --uncertain: #d9ac5c;
+    --uncertain-glow: #322818;
+
+    --button-text: #14201c;
+    --button-bg: #8fb3a5;
+    --button-hover: #a6c6b9;
+    --focus: #8fb3a5;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 2rem 1.25rem 3rem;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  line-height: 1.5;
+}
+
+main {
+  max-width: 34rem;
+  margin: 0 auto;
+}
+
+.card {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 1.5rem;
+}
+
+.card + .card {
+  margin-top: 1rem;
+}
+
+.state {
+  border-left: 4px solid var(--muted);
+  padding-left: 1rem;
+}
+
+/* These set background-image rather than the background shorthand: the
+   shorthand would reset the card's paper background-color to transparent and
+   let the page canvas show through the fade. */
+.state.is-awake {
+  border-left-color: var(--awake);
+  background-image: linear-gradient(90deg, var(--awake-glow), transparent 60%);
+}
+
+.state.is-not-awake {
+  border-left-color: var(--not-awake);
+  background-image: linear-gradient(90deg, var(--not-awake-glow), transparent 60%);
+}
+
+.state.is-unavailable,
+.state.is-stale {
+  border-left-color: var(--uncertain);
+  background-image: linear-gradient(90deg, var(--uncertain-glow), transparent 60%);
+}
+
+h1 {
+  margin: 0 0 0.35rem;
+  font-size: 1.45rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  margin: 0 0 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+}
+
+p {
+  margin: 0 0 0.75rem;
+}
+
+p:last-child {
+  margin-bottom: 0;
+}
+
+.detail {
+  color: var(--muted);
+}
+
+.freshness {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.freshness.is-stale {
+  color: var(--uncertain);
+  font-weight: 600;
+}
+
+.windows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.windows li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  justify-content: space-between;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--divider);
+}
+
+.windows li:last-child {
+  border-bottom: 0;
+}
+
+.windows .day {
+  font-weight: 600;
+}
+
+.windows .range {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The badge is real markup rather than generated content so assistive
+   technology announces it along with the day. */
+.windows .badge {
+  margin-left: 0.35rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: var(--awake-glow);
+  color: var(--awake);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  vertical-align: 0.1em;
+}
+
+.zone {
+  margin-top: 0.75rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.fineprint {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.fineprint strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-weight: 600;
+}
+
+input[type="password"] {
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--canvas);
+  color: var(--ink);
+  font: inherit;
+}
+
+button {
+  margin-top: 0.9rem;
+  padding: 0.6rem 1.1rem;
+  border: 0;
+  border-radius: 8px;
+  background: var(--button-bg);
+  color: var(--button-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--button-hover);
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.error {
+  margin-bottom: 0.9rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 8px;
+  background: var(--uncertain-glow);
+  color: var(--uncertain);
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .card {
+    transition: border-color 120ms ease;
+  }
+}

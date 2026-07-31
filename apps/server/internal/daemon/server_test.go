@@ -70,6 +70,8 @@ func writeDaemonTestConfig(t *testing.T) string {
 		config.EnvLLMAPIKey,
 		config.EnvLLMAPIKeyFile,
 		config.EnvLLMEndpoint,
+		config.EnvPortalEnabled,
+		config.EnvPortalOrigin,
 	} {
 		t.Setenv(name, "")
 	}

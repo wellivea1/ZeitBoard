@@ -58,8 +58,16 @@ through `ask_zeitboard_facts`, and the medical refusal now lives in shared
 `core/agentpolicy` so chat, backend MCP, and the local endpoint cannot drift
 apart. Cloud skill packaging remains separately gated.
 
-**Gap 5 — the portal does not exist, and it is the largest threat-model
-change in the project's history.** Today's trusted-web prototype is static
+**Gap 5 — partially closed 2026-07-31.** ADR-0029 delivers P5-a: the split
+store, the projection firewall, the security middleware, and a read-only
+availability page, all behind a default-false `portal.enabled`. What remains is
+the interactive half — visitor time requests reaching the proposal queue
+(P5-b), threads (P5-c), and the live layer (P5-d) — plus the exposure gate,
+which no amount of implementation satisfies on its own because item 6 requires
+an independent review. The original framing below still describes why this is
+the largest threat-model change in the project's history.
+
+**Gap 5 (original framing).** Today's trusted-web prototype is static
 synthetic HTML; `future-relay-design.md` was written for exactly this
 successor. New requirements beyond the old design: *interactive* ask
 ("when will they be awake?"), *time requests* that land in the approval
@@ -195,6 +203,15 @@ as stated.
 > redaction tests extended to the new surface.
 
 ### `/goal phase-5-availability-portal`
+
+Status: **P5-a delivered 2026-07-31 via [ADR-0029](decisions/0029-availability-portal-foundation.md)**
+— separate portal store with an import-enforced boundary, allowlisted
+materializer, security middleware, passcode gate, read-only availability page,
+and owner link CRUD, with the portal disabled by default. P5-b (visitor
+requests via the transactional outbox into the ADR-0016 queue), P5-c
+(messaging), and P5-d (SSE/live layer, audit UI, red-team pass) remain. The
+acceptance line "a request round-trips to an in-app decision" belongs to P5-b
+and is not yet met.
 
 Implementation-ready design: [`portal-design.md`](portal-design.md)
 (projection firewall, hashed link tokens with uniform 410s, origin-

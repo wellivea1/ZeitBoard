@@ -32,6 +32,10 @@ variables override file values.
     "model": "",
     "apiKeyFile": "",
     "endpoint": ""
+  },
+  "portal": {
+    "enabled": false,
+    "publicOrigin": ""
   }
 }
 ```
@@ -53,6 +57,8 @@ Keys:
 | `assistant.apiKeyFile` | `ZEITBOARD_LLM_API_KEY_FILE` | Required when provider key env is absent | File containing the provider API key. |
 | n/a | `ZEITBOARD_LLM_API_KEY` | Required when a provider is enabled and no key file is set | Provider API key; never returned by status APIs. |
 | `assistant.endpoint` | `ZEITBOARD_LLM_ENDPOINT` | Required for `opencode_zen`, optional override otherwise | Plain HTTPS endpoint for the provider transport. |
+| `portal.enabled` | `ZEITBOARD_PORTAL_ENABLED` | No | Defaults to `false`. Read the availability-portal section below before changing it. |
+| `portal.publicOrigin` | `ZEITBOARD_PORTAL_ORIGIN` | Required when the portal is enabled | Exact `scheme://host[:port]` visitors reach, e.g. `https://share.example.com`. Scheme and host only. |
 
 Relative file and directory paths in a JSON config resolve from the directory
 containing that config file. Relative paths supplied through environment
@@ -188,6 +194,48 @@ network calls. When the operator configures OpenAI, Anthropic, OpenRouter, or Op
 Zen, the daemon sends only the assistant's minimized redacted context to that provider
 using the operator's key. Provider credentials are not returned by `/v1/status`, are not
 placed in model context, and are not written to fixtures.
+
+## Availability Portal
+
+**Do not enable this yet.** `portal.enabled` defaults to `false`, and public
+exposure is prohibited until every item in section 12 of
+[`portal-design.md`](portal-design.md) passes — including an independent
+security review, which has not happened. This section documents what exists so
+an operator can evaluate it, not a green light to publish.
+
+What slice P5-a implements ([ADR-0029](decisions/0029-availability-portal-foundation.md)):
+share links that show broad likely-awake windows to someone holding the link
+and its passcode. Visitor time requests, messaging, and the live-updating
+dashboard are not implemented.
+
+When the portal is disabled the daemon never opens the portal database, never
+constructs a public handler, and never registers the owner's sharing routes.
+There is no `/p/` path to probe.
+
+When enabled:
+
+- A second database, `zeitboard-portal.db`, appears in the data directory. It
+  holds hashed link tokens, hashed passcodes, the materialized windows,
+  sessions, rate buckets, and a coarse access log — no health data. **Back it
+  up with the same care as the main database**, and note it is encrypted with a
+  key derived from the same `dataKeyFile`: losing that key loses both.
+- `publicOrigin` must be the exact origin visitors reach. It is compared
+  byte-for-byte against browser attestation on every state-changing request, so
+  a mismatch between it and the reverse proxy's public URL breaks logins.
+  Outside loopback it must be `https`.
+- Terminate TLS at the edge and set HSTS there. The daemon serves the portal on
+  the same listener as the device API.
+- **Disable raw request-URI logging for `/p/`** in the reverse proxy. Link
+  tokens live in the path; a proxy access log is otherwise a file full of
+  working share links. The daemon itself does not log request paths.
+- Public responses set `Cache-Control: no-store`. Do not add caching for `/p/`
+  in the proxy.
+
+Links are created from the app, not from a config file. Each one requires a
+passcode of at least six characters, expires within 90 days, is displayed
+exactly once, and can be revoked at any time. Revocation is immediate: existing
+sessions stop working and the shared windows are deleted from the portal
+database.
 
 ## Network And Telemetry
 

@@ -16,8 +16,10 @@ import (
 	"io"
 	"math/big"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -39,6 +41,8 @@ const (
 	EnvLLMAPIKey            = "ZEITBOARD_LLM_API_KEY"
 	EnvLLMAPIKeyFile        = "ZEITBOARD_LLM_API_KEY_FILE"
 	EnvLLMEndpoint          = "ZEITBOARD_LLM_ENDPOINT"
+	EnvPortalEnabled        = "ZEITBOARD_PORTAL_ENABLED"
+	EnvPortalOrigin         = "ZEITBOARD_PORTAL_ORIGIN"
 )
 
 type Config struct {
@@ -51,7 +55,21 @@ type Config struct {
 	DataKey               []byte          `json:"-"`
 	EnrollmentSecret      string          `json:"-"`
 	Assistant             AssistantConfig `json:"assistant"`
+	Portal                PortalConfig    `json:"portal"`
 	UsesSelfSignedDevCert bool            `json:"-"`
+}
+
+// PortalConfig gates the public availability portal. Enabled defaults to false
+// and must stay that way until the exposure gate in docs/portal-design.md
+// section 12 passes: when it is false the daemon never constructs a portal
+// handler, so no /p/ route exists to be probed.
+type PortalConfig struct {
+	Enabled bool `json:"enabled"`
+
+	// PublicOrigin is the exact scheme://host[:port] visitors reach. It is
+	// required when the portal is enabled because mutating requests are
+	// accepted only with an exactly matching Origin header.
+	PublicOrigin string `json:"publicOrigin"`
 }
 
 type AssistantConfig struct {
@@ -92,6 +110,10 @@ func Load(path string) (Config, error) {
 	overrideString(&cfg.Assistant.Model, EnvLLMModel)
 	overrideString(&cfg.Assistant.APIKeyFile, EnvLLMAPIKeyFile)
 	overrideString(&cfg.Assistant.Endpoint, EnvLLMEndpoint)
+	overrideString(&cfg.Portal.PublicOrigin, EnvPortalOrigin)
+	if err := overrideBool(&cfg.Portal.Enabled, EnvPortalEnabled); err != nil {
+		return Config{}, err
+	}
 
 	dataKey, err := loadDataKey(cfg.DataKeyFile)
 	if err != nil {
@@ -131,7 +153,65 @@ func Load(path string) (Config, error) {
 		}
 		cfg.UsesSelfSignedDevCert = true
 	}
+	if err := validatePortal(&cfg.Portal); err != nil {
+		return Config{}, err
+	}
 	return cfg, nil
+}
+
+// validatePortal refuses a half-configured public surface. An enabled portal
+// without an exact origin could not enforce its CSRF check, so it must fail to
+// start rather than serve with the check disabled.
+func validatePortal(portal *PortalConfig) error {
+	portal.PublicOrigin = strings.TrimSuffix(strings.TrimSpace(portal.PublicOrigin), "/")
+	if !portal.Enabled {
+		return nil
+	}
+	if portal.PublicOrigin == "" {
+		return errors.New("portal publicOrigin is required when the portal is enabled")
+	}
+	parsed, err := url.Parse(portal.PublicOrigin)
+	if err != nil || parsed.Host == "" {
+		return errors.New("portal publicOrigin must be an absolute scheme://host origin")
+	}
+	if parsed.Path != "" || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.User != nil {
+		return errors.New("portal publicOrigin must contain only a scheme and host")
+	}
+	switch parsed.Scheme {
+	case "https":
+	case "http":
+		// Plain HTTP is tolerated only for loopback development, because the
+		// session cookie carries the __Host- prefix and Secure attribute,
+		// which browsers accept over http only for trustworthy origins.
+		if !isLocalHostname(parsed.Hostname()) {
+			return errors.New("portal publicOrigin must use https outside loopback")
+		}
+	default:
+		return errors.New("portal publicOrigin must use http or https")
+	}
+	return nil
+}
+
+func isLocalHostname(host string) bool {
+	switch strings.ToLower(host) {
+	case "localhost", "127.0.0.1", "::1":
+		return true
+	default:
+		return false
+	}
+}
+
+func overrideBool(target *bool, envName string) error {
+	raw := strings.TrimSpace(os.Getenv(envName))
+	if raw == "" {
+		return nil
+	}
+	value, err := strconv.ParseBool(raw)
+	if err != nil {
+		return fmt.Errorf("%s must be a boolean", envName)
+	}
+	*target = value
+	return nil
 }
 
 func (c Config) TLSConfig() (*tls.Config, error) {

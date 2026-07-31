@@ -208,6 +208,15 @@ func (s *Store) Migrate(ctx context.Context) error {
 			nonce BLOB NOT NULL,
 			ciphertext BLOB NOT NULL
 		)`,
+		// Share-link labels live here, in the private database, and never in
+		// the portal database. The portal only needs an opaque profile id;
+		// "Mum", "work", or a clinician's name is owner data.
+		`CREATE TABLE IF NOT EXISTS portal_profile_labels (
+			profile_id TEXT PRIMARY KEY,
+			created_at TEXT NOT NULL,
+			nonce BLOB NOT NULL,
+			ciphertext BLOB NOT NULL
+		)`,
 	}
 	for _, statement := range statements {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {

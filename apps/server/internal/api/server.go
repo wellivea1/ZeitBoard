@@ -32,6 +32,7 @@ type Server struct {
 	store            *store.Store
 	enrollmentSecret string
 	assistant        *assistant.Service
+	portal           *portalAdmin
 	now              func() time.Time
 }
 
@@ -75,6 +76,15 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /v1/sync/push", s.requireDevice(http.HandlerFunc(s.handlePush)))
 	mux.Handle("GET /v1/sync/pull", s.requireDevice(http.HandlerFunc(s.handlePull)))
 	mux.Handle("POST /v1/sync/erase", s.requireDevice(http.HandlerFunc(s.handleErase)))
+	if s.portal != nil {
+		// Registered only when the portal is configured. With the portal off
+		// there is no sharing route to probe, on the owner surface or the
+		// public one.
+		mux.Handle("GET /v1/portal/profiles", s.requireDevice(http.HandlerFunc(s.handleListPortalProfiles)))
+		mux.Handle("POST /v1/portal/profiles", s.requireDevice(http.HandlerFunc(s.handleCreatePortalProfile)))
+		mux.Handle("POST /v1/portal/profiles/{id}/revoke", s.requireDevice(http.HandlerFunc(s.handleRevokePortalProfile)))
+		mux.Handle("POST /v1/portal/profiles/{id}/erase", s.requireDevice(http.HandlerFunc(s.handleErasePortalProfile)))
+	}
 	return mux
 }
 
@@ -435,6 +445,9 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "sync push failed")
 		return
 	}
+	// An accepted push can change sleep inputs, so the shared projection is
+	// republished before the response returns (design section 5).
+	s.refreshPortal(r)
 	writeJSON(w, http.StatusOK, syncmodel.PushResponse{
 		SchemaVersion: syncmodel.SchemaVersion,
 		Cursor:        cursor,
@@ -461,6 +474,9 @@ func (s *Server) handleErase(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "sync erase failed")
 		return
 	}
+	// Erasure must reach the shared projection too: a window derived from a
+	// record the user just deleted may not keep being published.
+	s.refreshPortal(r)
 	writeJSON(w, http.StatusOK, syncmodel.EraseResponse{
 		SchemaVersion: syncmodel.SchemaVersion,
 		Erased:        erased,

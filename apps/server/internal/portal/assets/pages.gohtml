@@ -1,0 +1,73 @@
+{{define "head"}}<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="referrer" content="no-referrer">
+{{if .Refresh}}<meta http-equiv="refresh" content="300">{{end}}
+<title>{{.Title}}</title>
+<link rel="stylesheet" href="/p/assets/portal.css">
+</head>
+<body>
+<main>
+{{end}}
+
+{{define "foot"}}</main>
+</body>
+</html>
+{{end}}
+
+{{define "dashboard"}}{{template "head" .}}
+{{with .View}}
+<section class="card state {{if .Unavailable}}is-unavailable{{else if .Stale}}is-stale{{else if .LikelyAwake}}is-awake{{else}}is-not-awake{{end}}">
+  <h1>{{.Headline}}</h1>
+  <p class="detail">{{.Detail}}</p>
+  <p class="freshness{{if .Stale}} is-stale{{end}}">{{.Freshness}}</p>
+</section>
+
+{{if .Windows}}
+<section class="card">
+  <h2>Likely waking windows</h2>
+  <ul class="windows">
+    {{range .Windows}}
+    <li{{if .Current}} class="is-current"{{end}}>
+      <span class="day">{{.DayLabel}}{{if .Current}} <span class="badge">now</span>{{end}}</span>
+      <span class="range">{{.RangeLabel}}</span>
+    </li>
+    {{end}}
+  </ul>
+  <p class="zone">Times shown in {{.ZoneLabel}}.</p>
+</section>
+{{end}}
+
+<section class="card fineprint">
+  <p><strong>How accurate is this?</strong> {{.Qualifier}}</p>
+  <p>{{.Notice}}</p>
+</section>
+{{end}}
+{{template "foot" .}}{{end}}
+
+{{define "passcode"}}{{template "head" .}}
+<section class="card">
+  <h1>This availability link needs a passcode</h1>
+  <p class="detail">Enter the passcode you were given along with this link.</p>
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+  <form method="post" action="{{.FormAction}}">
+    <label for="passcode">Passcode</label>
+    <input id="passcode" name="passcode" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+    <button type="submit">Continue</button>
+  </form>
+</section>
+
+<section class="card fineprint">
+  <p>{{.View.Notice}}</p>
+</section>
+{{template "foot" .}}{{end}}
+
+{{define "generic"}}{{template "head" .}}
+<section class="card">
+  <h1>{{.Title}}</h1>
+  <p class="detail">{{.Error}}</p>
+</section>
+{{template "foot" .}}{{end}}
