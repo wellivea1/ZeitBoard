@@ -77,9 +77,15 @@ func serve(configPath string, stop <-chan struct{}, ready chan<- struct{}) error
 			Profiles: portalStore,
 			Sink:     portalStore,
 		}
+		requestBridge := &portalbridge.RequestBridge{Portal: portalStore, Private: st}
 		portalHandler, handlerErr := portal.NewHandler(portal.HandlerConfig{
 			Store:        portalStore,
 			PublicOrigin: cfg.Portal.PublicOrigin,
+			NotifyRequestCreated: func() {
+				if err := requestBridge.Pump(context.Background()); err != nil {
+					log.Printf("portal: request bridge pump failed: %v", err)
+				}
+			},
 		})
 		if handlerErr != nil {
 			return fmt.Errorf("configure portal: %w", handlerErr)
@@ -93,13 +99,13 @@ func serve(configPath string, stop <-chan struct{}, ready chan<- struct{}) error
 		// nil, and this defer must run before the store closes (LIFO) so the
 		// worker never touches a closed database.
 		maintenanceStop := make(chan struct{})
-		maintenanceDone := startPortalMaintenance(portalStore, maintenanceStop)
+		maintenanceDone := startPortalMaintenance(portalStore, requestBridge, maintenanceStop)
 		defer func() {
 			close(maintenanceStop)
 			<-maintenanceDone
 		}()
 
-		options = append(options, api.WithPortal(portalStore, cfg.Portal.PublicOrigin, materializer))
+		options = append(options, api.WithPortal(portalStore, cfg.Portal.PublicOrigin, materializer, requestBridge))
 		publicHandler = portalHandler.Routes()
 		log.Printf("zeitboardd portal enabled at %s/p/", cfg.Portal.PublicOrigin)
 	}
@@ -154,24 +160,53 @@ func serve(configPath string, stop <-chan struct{}, ready chan<- struct{}) error
 	}
 }
 
-const portalMaintenanceInterval = time.Hour
+const (
+	portalMaintenanceInterval = time.Hour
 
-// startPortalMaintenance expires sessions and rate buckets and enforces the
-// access-audit retention window. Retention that nothing enforces is not
-// retention, so this runs on a timer rather than being left to an operator.
-// The returned channel closes once the worker has stopped.
-func startPortalMaintenance(store *portal.Store, stop <-chan struct{}) <-chan struct{} {
+	// portalBridgeInterval is the recovery path, not the happy path: a
+	// request is pumped as soon as it is created and a decision as soon as it
+	// is made. This timer exists so a request that arrived while the bridge
+	// was failing still reaches the owner without anyone intervening.
+	portalBridgeInterval = time.Minute
+)
+
+// startPortalMaintenance expires sessions and rate buckets, enforces the
+// access-audit retention window, and drains the request outbox in both
+// directions. Retention that nothing enforces is not retention, and an outbox
+// nothing drains is a queue that silently stops. The returned channel closes
+// once the worker has stopped.
+func startPortalMaintenance(store *portal.Store, bridge *portalbridge.RequestBridge, stop <-chan struct{}) <-chan struct{} {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		ticker := time.NewTicker(portalMaintenanceInterval)
-		defer ticker.Stop()
-		for {
+		sweep := time.NewTicker(portalMaintenanceInterval)
+		defer sweep.Stop()
+		pump := time.NewTicker(portalBridgeInterval)
+		defer pump.Stop()
+
+		drain := func() {
+			if bridge == nil {
+				return
+			}
+			if err := bridge.Pump(context.Background()); err != nil {
+				// A failure here leaves requests in their honest `queued`
+				// state; the next tick retries.
+				log.Printf("portal: request bridge pump failed: %v", err)
+			}
+		}
+		purge := func() {
 			if err := store.PurgeExpired(context.Background(), time.Now().UTC()); err != nil {
 				log.Printf("portal: maintenance sweep failed: %v", err)
 			}
+		}
+		purge()
+		drain()
+		for {
 			select {
-			case <-ticker.C:
+			case <-sweep.C:
+				purge()
+			case <-pump.C:
+				drain()
 			case <-stop:
 				return
 			}

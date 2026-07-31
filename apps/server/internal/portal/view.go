@@ -35,6 +35,11 @@ type AvailabilityView struct {
 	Stale       bool
 	Unavailable bool
 	ZoneLabel   string
+
+	// ZoneIDInput is the raw IANA zone the request form submits, so a
+	// visitor's chosen times are interpreted in the same zone the windows are
+	// displayed in rather than silently in UTC.
+	ZoneIDInput string
 }
 
 type WindowView struct {
@@ -48,8 +53,12 @@ type WindowView struct {
 // later live layer cannot drift apart.
 func BuildView(snapshot Snapshot, now time.Time) AvailabilityView {
 	view := AvailabilityView{
-		Qualifier: Qualifier,
-		Notice:    NoticeNotMedical,
+		Qualifier:   Qualifier,
+		Notice:      NoticeNotMedical,
+		ZoneIDInput: "UTC",
+	}
+	if len(snapshot.Windows) > 0 && snapshot.Windows[0].ZoneID != "" {
+		view.ZoneIDInput = snapshot.Windows[0].ZoneID
 	}
 	now = now.UTC()
 

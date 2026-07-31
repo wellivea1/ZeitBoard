@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -54,6 +55,10 @@ func newPortalHarness(t *testing.T) (*testHarness, *portal.Store) {
 			Profiles: portalStore,
 			Sink:     portalStore,
 			Now:      func() time.Time { return portalTestNow },
+		}, &portalbridge.RequestBridge{
+			Portal:  portalStore,
+			Private: s.store,
+			Now:     func() time.Time { return portalTestNow },
 		})(s)
 	})
 	return harness, portalStore
@@ -185,5 +190,137 @@ func TestSharingRequiresDeviceAuth(t *testing.T) {
 	status, _ := h.request(t, http.MethodGet, "/v1/portal/profiles", "", "")
 	if status != http.StatusUnauthorized {
 		t.Errorf("status = %d, want 401 without a device token", status)
+	}
+}
+
+// visitorRequestFixture creates a link that accepts requests, submits one
+// directly through the portal store, and pumps it into the owner's queue.
+func visitorRequestFixture(t *testing.T, h *testHarness, portalStore *portal.Store) visitorRequestDTO {
+	t.Helper()
+	ctx := t.Context()
+	profileID, _ := portal.NewProfileID()
+	linkToken, _ := portal.NewLinkToken()
+	if err := portalStore.CreateProfile(ctx, portal.CreateProfileInput{
+		ProfileID: profileID,
+		Token:     linkToken,
+		Passcode:  "long-enough-passcode",
+		Grants:    portal.Grants{WakingWindows: true, AllowRequests: true},
+		CreatedAt: portalTestNow,
+		ExpiresAt: portalTestNow.Add(30 * 24 * time.Hour),
+	}); err != nil {
+		t.Fatalf("create profile: %v", err)
+	}
+	profile, err := portalStore.ResolveLink(ctx, linkToken, portalTestNow)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	session, err := portalStore.CreateSession(ctx, profile, portalTestNow)
+	if err != nil {
+		t.Fatalf("session: %v", err)
+	}
+	if _, err := portalStore.CreateRequest(ctx, profile, session.Session, portal.RequestInput{
+		WindowStart:     portalTestNow.Add(30 * time.Hour),
+		WindowEnd:       portalTestNow.Add(34 * time.Hour),
+		ZoneID:          "UTC",
+		DurationMinutes: 60,
+		Handle:          "Sam",
+		Message:         "coffee?",
+	}, false, portalTestNow); err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+
+	// The device must exist before the pump: a visitor has no device of their
+	// own, so the proposal is filed against an enrolled one.
+	token := h.registerDevice(t, "desktop")
+	bridge := portalbridge.RequestBridge{Portal: portalStore, Private: h.st, Now: func() time.Time { return portalTestNow }}
+	if err := bridge.Pump(ctx); err != nil {
+		t.Fatalf("pump: %v", err)
+	}
+
+	status, data := h.request(t, http.MethodGet, "/v1/portal/requests", token, "")
+	if status != http.StatusOK {
+		t.Fatalf("list status = %d body = %s", status, data)
+	}
+	var listed visitorRequestListResponse
+	if err := json.Unmarshal(data, &listed); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(listed.Requests) != 1 {
+		t.Fatalf("visitor request count = %d, want 1", len(listed.Requests))
+	}
+	return listed.Requests[0]
+}
+
+func TestVisitorRequestListCarriesOwnerContextAndDisclosure(t *testing.T) {
+	h, portalStore := newPortalHarness(t)
+	entry := visitorRequestFixture(t, h, portalStore)
+
+	if entry.Handle != "Sam" || entry.Message != "coffee?" {
+		t.Errorf("the owner cannot see what was asked: %+v", entry)
+	}
+	if entry.DecisionToken == "" {
+		t.Error("no one-use decision token was issued")
+	}
+	// The owner must be told what approving reveals before choosing.
+	for _, phrase := range []string{"exact time", "never why"} {
+		if !strings.Contains(entry.Disclosure, phrase) {
+			t.Errorf("disclosure does not mention %q: %q", phrase, entry.Disclosure)
+		}
+	}
+}
+
+func TestVisitorRequestCannotBeDecidedByTheGenericRoute(t *testing.T) {
+	h, portalStore := newPortalHarness(t)
+	entry := visitorRequestFixture(t, h, portalStore)
+	token := h.registerDevice(t, "desktop2")
+
+	body := fmt.Sprintf(`{"decision":"approved","token":%q}`, entry.DecisionToken)
+	status, data := h.request(t, http.MethodPost, "/v1/proposals/"+entry.ProposalID+"/decision", token, body)
+	if status != http.StatusConflict {
+		t.Fatalf("status = %d body = %s, want 409 so the slot rules cannot be skipped", status, data)
+	}
+}
+
+func TestVisitorRequestApprovalRoundTrip(t *testing.T) {
+	h, portalStore := newPortalHarness(t)
+	entry := visitorRequestFixture(t, h, portalStore)
+	token := h.registerDevice(t, "desktop2")
+
+	outside := fmt.Sprintf(`{"decision":"approved","token":%q,"startAt":%q,"endAt":%q}`,
+		entry.DecisionToken,
+		portalTestNow.Add(40*time.Hour).Format(time.RFC3339),
+		portalTestNow.Add(41*time.Hour).Format(time.RFC3339))
+	if status, _ := h.request(t, http.MethodPost, "/v1/portal/requests/"+entry.ProposalID+"/decision", token, outside); status != http.StatusBadRequest {
+		t.Errorf("a slot outside the window returned %d, want 400", status)
+	}
+
+	inside := fmt.Sprintf(`{"decision":"approved","token":%q,"startAt":%q,"endAt":%q}`,
+		entry.DecisionToken,
+		portalTestNow.Add(31*time.Hour).Format(time.RFC3339),
+		portalTestNow.Add(32*time.Hour).Format(time.RFC3339))
+	status, data := h.request(t, http.MethodPost, "/v1/portal/requests/"+entry.ProposalID+"/decision", token, inside)
+	if status != http.StatusOK {
+		t.Fatalf("approval status = %d body = %s", status, data)
+	}
+
+	// The decision must already have reached the visitor's view.
+	ids, err := portalStore.ListRequestsForProfile(t.Context(), entry.ProfileID)
+	if err != nil || len(ids) != 1 {
+		t.Fatalf("list requests: %v", err)
+	}
+	request, err := portalStore.ReadRequest(t.Context(), entry.ProfileID, ids[0])
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if request.Status != portal.RequestApproved {
+		t.Errorf("visitor-visible status = %q, want approved", request.Status)
+	}
+	if !request.DecidedStart.Equal(portalTestNow.Add(31 * time.Hour).UTC()) {
+		t.Errorf("the visitor was told %v, not the chosen block", request.DecidedStart)
+	}
+
+	// The token is one-use, on this route too.
+	if status, _ := h.request(t, http.MethodPost, "/v1/portal/requests/"+entry.ProposalID+"/decision", token, inside); status != http.StatusConflict {
+		t.Errorf("replayed decision returned %d, want 409", status)
 	}
 }

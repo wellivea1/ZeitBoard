@@ -216,9 +216,16 @@ M-E's separately reviewed local agent projection.
     that withholds a day-old estimate rather than showing it, and owner
     create/list/revoke/erase. Confidence labels are withheld because ADR-0022
     measured the buckets inverted. `portal.enabled` defaults false and no
-    `/p/` route exists when it is off. **Next:** P5-b visitor time requests
-    through the transactional outbox into the existing proposal queue, then
-    P5-c threads and P5-d the live layer. Public exposure stays prohibited
+    `/p/` route exists when it is off. *P5-b delivered (ADR-0030):* visitor
+    time requests reach the owner's queue through a transactional outbox with
+    a stable idempotency key, become proposals with origin `visitor` decided
+    by the same one-use tokens, and approval must name an exact block inside
+    the requested window; the decision returns to a visitor-visible status.
+    A request stays honestly `queued` until the owner's queue confirms it, a
+    decline carries no reason, and the requester secret travels only in a URL
+    fragment. **Next:** P5-c threads, P5-d the live layer and audit UI, and
+    the desktop dialog for choosing a block — today the owner decides through
+    the API. Public exposure stays prohibited
     until the [`portal-design.md`](portal-design.md) §12 gate passes,
     including an independent review.
 10. **UI refactor + theme manager** (tracked in

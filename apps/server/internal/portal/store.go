@@ -14,6 +14,7 @@ import (
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -112,8 +113,9 @@ type Snapshot struct {
 }
 
 type Store struct {
-	db   *sql.DB
-	aead cipher.AEAD
+	db      *sql.DB
+	aead    cipher.AEAD
+	csrfKey []byte
 }
 
 // Open creates or opens the portal database. rootKey is the daemon data key;
@@ -145,7 +147,8 @@ func Open(path string, rootKey []byte) (*Store, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	store := &Store{db: db, aead: aead}
+	csrfKey := sha256.Sum256(append([]byte("zeitboard-portal-csrf\x00"), derived[:]...))
+	store := &Store{db: db, aead: aead, csrfKey: csrfKey[:]}
 	if err := store.migrate(context.Background()); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -190,7 +193,6 @@ func (s *Store) migrate(ctx context.Context) error {
 		`CREATE TABLE IF NOT EXISTS portal_sessions (
 			session_hash BLOB PRIMARY KEY,
 			profile_id TEXT NOT NULL REFERENCES portal_profiles(profile_id) ON DELETE CASCADE,
-			csrf_hash BLOB NOT NULL,
 			created_at TEXT NOT NULL,
 			expires_at TEXT NOT NULL
 		)`,
@@ -216,6 +218,48 @@ func (s *Store) migrate(ctx context.Context) error {
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			key BLOB NOT NULL,
 			created_at TEXT NOT NULL
+		)`,
+		// Visitor requests. handle and message are private visitor text and
+		// live only inside the encrypted blob; no column holds them in the
+		// clear, so an index or a SELECT * cannot expose them by accident.
+		`CREATE TABLE IF NOT EXISTS portal_requests (
+			request_id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL REFERENCES portal_profiles(profile_id) ON DELETE CASCADE,
+			session_hash BLOB NOT NULL,
+			secret_hash BLOB NOT NULL,
+			window_start TEXT NOT NULL,
+			window_end TEXT NOT NULL,
+			zone_id TEXT NOT NULL,
+			duration_minutes INTEGER NOT NULL DEFAULT 0,
+			beyond_horizon INTEGER NOT NULL DEFAULT 0,
+			status TEXT NOT NULL,
+			decided_start TEXT NOT NULL DEFAULT '',
+			decided_end TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			nonce BLOB NOT NULL,
+			ciphertext BLOB NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_portal_requests_profile_status
+			ON portal_requests(profile_id, status)`,
+		`CREATE INDEX IF NOT EXISTS idx_portal_requests_session
+			ON portal_requests(session_hash, created_at)`,
+		// The transactional outbox. A row here means "durably accepted from
+		// the visitor, not yet confirmed by the owner's queue".
+		`CREATE TABLE IF NOT EXISTS portal_outbox (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			kind TEXT NOT NULL,
+			request_id TEXT NOT NULL,
+			idempotency_key TEXT NOT NULL UNIQUE,
+			created_at TEXT NOT NULL,
+			attempts INTEGER NOT NULL DEFAULT 0,
+			last_error TEXT NOT NULL DEFAULT ''
+		)`,
+		`CREATE TABLE IF NOT EXISTS portal_request_sessions (
+			session_hash BLOB PRIMARY KEY,
+			request_id TEXT NOT NULL REFERENCES portal_requests(request_id) ON DELETE CASCADE,
+			profile_id TEXT NOT NULL,
+			expires_at TEXT NOT NULL
 		)`,
 	}
 	for _, statement := range statements {
@@ -459,6 +503,18 @@ func (s *Store) RevokeProfile(ctx context.Context, profileID string, now time.Ti
 	if _, err := tx.ExecContext(ctx, `DELETE FROM portal_snapshots WHERE profile_id = ?`, profileID); err != nil {
 		return err
 	}
+	// Open requests are closed rather than deleted: the owner may still have a
+	// pending proposal referencing one, and a request that silently vanished
+	// would leave the visitor watching a status that never moves.
+	if _, err := tx.ExecContext(ctx,
+		`UPDATE portal_requests SET status = ?, updated_at = ? WHERE profile_id = ? AND status IN (?, ?)`,
+		RequestClosed, formatTime(now), profileID, RequestQueued, RequestPending); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM portal_request_sessions WHERE profile_id = ?`, profileID); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 
@@ -604,28 +660,45 @@ func (s *Store) CreateSession(ctx context.Context, profile Profile, now time.Tim
 	if err != nil {
 		return SessionToken{}, err
 	}
-	csrfValue, err := randomToken()
-	if err != nil {
-		return SessionToken{}, err
-	}
 	expiresAt := now.Add(SessionLifetime)
 	if profile.ExpiresAt.Before(expiresAt) {
 		expiresAt = profile.ExpiresAt
 	}
 	sessionHash := hashToken(sessionValue)
-	csrfHash := hashToken(csrfValue)
 	if _, err := s.db.ExecContext(ctx, `INSERT INTO portal_sessions
-		(session_hash, profile_id, csrf_hash, created_at, expires_at) VALUES (?, ?, ?, ?, ?)`,
-		sessionHash[:], profile.ID, csrfHash[:], formatTime(now), formatTime(expiresAt)); err != nil {
+		(session_hash, profile_id, created_at, expires_at) VALUES (?, ?, ?, ?)`,
+		sessionHash[:], profile.ID, formatTime(now), formatTime(expiresAt)); err != nil {
 		return SessionToken{}, fmt.Errorf("create portal session: %w", err)
 	}
-	return SessionToken{Session: sessionValue, CSRF: csrfValue, ExpiresAt: expiresAt}, nil
+	return SessionToken{Session: sessionValue, CSRF: s.CSRFToken(sessionValue), ExpiresAt: expiresAt}, nil
+}
+
+// CSRFToken derives the synchronizer token for a session rather than storing
+// it. A server-rendered form has to embed the token on every page render, so
+// the plaintext must be recoverable from the session cookie; storing only a
+// hash would make it unrecoverable and the mechanism unusable. Deriving it
+// under a key held by the server keeps it unguessable without persisting a
+// second secret.
+func (s *Store) CSRFToken(sessionValue string) string {
+	if sessionValue == "" {
+		return ""
+	}
+	mac := hmac.New(sha256.New, s.csrfKey)
+	_, _ = mac.Write([]byte(sessionValue))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
+// MatchesCSRF compares a presented synchronizer token in constant time.
+func (s *Store) MatchesCSRF(sessionValue, presented string) bool {
+	if sessionValue == "" || presented == "" {
+		return false
+	}
+	return constantTimeEqual([]byte(s.CSRFToken(sessionValue)), []byte(presented))
 }
 
 // Session is a resolved, unexpired portal session.
 type Session struct {
 	ProfileID string
-	CSRFHash  []byte
 	ExpiresAt time.Time
 }
 
@@ -635,12 +708,12 @@ func (s *Store) ResolveSession(ctx context.Context, sessionValue string, now tim
 	}
 	sessionHash := hashToken(sessionValue)
 	row := s.db.QueryRowContext(ctx,
-		`SELECT profile_id, csrf_hash, expires_at FROM portal_sessions WHERE session_hash = ?`, sessionHash[:])
+		`SELECT profile_id, expires_at FROM portal_sessions WHERE session_hash = ?`, sessionHash[:])
 	var (
 		session      Session
 		expiresAtRaw string
 	)
-	if err := row.Scan(&session.ProfileID, &session.CSRFHash, &expiresAtRaw); err != nil {
+	if err := row.Scan(&session.ProfileID, &expiresAtRaw); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Session{}, ErrSessionInvalid
 		}
@@ -657,13 +730,8 @@ func (s *Store) ResolveSession(ctx context.Context, sessionValue string, now tim
 	return session, nil
 }
 
-// MatchesCSRF compares a presented synchronizer token against the session.
-func (session Session) MatchesCSRF(value string) bool {
-	if value == "" {
-		return false
-	}
-	presented := hashToken(value)
-	return subtle.ConstantTimeCompare(presented[:], session.CSRFHash) == 1
+func constantTimeEqual(left, right []byte) bool {
+	return subtle.ConstantTimeCompare(left, right) == 1
 }
 
 func (s *Store) DeleteSession(ctx context.Context, sessionValue string) error {

@@ -57,6 +57,14 @@ availability.
     to the portal database, owned by `portalbridge`, narrowing an estimate to
     windows, a generation time, a horizon, and a status. Confidence labels are
     withheld because ADR-0022 measured them inverted.
+15. Visitor request → **owner proposal queue**, the first boundary in the
+    system an outsider may write across (ADR-0030). It is crossed only by a
+    transactional outbox with a stable idempotency key, never by a direct call:
+    the portal stores a request durably and a bridge files exactly one pending
+    proposal, which is decided with the same one-use token as every other
+    proposal. Approval must name an exact block inside the requested window.
+    `place_visitor_request` is absent from the agent action registry, so an
+    agent cannot forge a proposal that appears to come from a real person.
 
 ## Adversaries
 
@@ -189,6 +197,16 @@ independently. No independent review has run against this surface, so exposure r
 prohibited: `portal.enabled` is false by default and the section 12 exposure gate in
 `portal-design.md` is not yet satisfied.
 
+Visitor requests add their own accepted residuals. A visitor may send unwanted text
+within the caps; the owner sees it, which is the point, and per-link disabling and
+revocation are the remedies. Approval discloses the chosen time to whoever holds the
+requester cookie or the one-time code, including anyone the visitor passed it to.
+Request limits are per portal session and per profile, so a visitor with several
+sessions is bounded by the per-profile pending cap rather than the per-session daily
+one. A visitor proposal is filed against an enrolled device because proposals are keyed
+to a creating device and a visitor has none; with no enrolled device the request stays
+visibly queued.
+
 ## Security verification
 
 - Sync: assert authentication is required, transport is TLS, and replayed messages are
@@ -215,7 +233,13 @@ prohibited: `portal.enabled` is false by default and the section 12 exposure gat
   `Origin` is refused; assert the read limit and the per profile-and-source passcode
   backoff persist; assert the portal package does not import the private store, read
   model, estimator, or domain packages; assert no `/p/` route and no owner sharing route
-  exists when the portal is disabled.
+  exists when the portal is disabled; assert a visitor request round-trips to a decision
+  and back to a visitor-visible status, that a failing bridge leaves it queued rather
+  than claiming delivery, that repeated pumps create exactly one proposal, that approval
+  outside the requested window or of the wrong duration is refused, that the generic
+  decision route refuses visitor proposals, that a decision token is one-use, that a
+  visitor holding the link but not the requester secret cannot read another's request,
+  and that a decline discloses no reason.
 - Import: unit-test size/shape limits, row accounting, duplicate/conflict
   handling, transaction atomicity, DST ambiguity, recurrence work caps,
   CalDAV redirect/credential boundaries, ownership-preserving calendar export,

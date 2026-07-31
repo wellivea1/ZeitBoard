@@ -203,10 +203,14 @@ exposure is prohibited until every item in section 12 of
 security review, which has not happened. This section documents what exists so
 an operator can evaluate it, not a green light to publish.
 
-What slice P5-a implements ([ADR-0029](decisions/0029-availability-portal-foundation.md)):
-share links that show broad likely-awake windows to someone holding the link
-and its passcode. Visitor time requests, messaging, and the live-updating
-dashboard are not implemented.
+What is implemented ([ADR-0029](decisions/0029-availability-portal-foundation.md)
+and [ADR-0030](decisions/0030-visitor-time-requests.md)): share links that show
+broad likely-awake windows to someone holding the link and its passcode, and —
+when the link grants it — visitor requests for a specific time that land in the
+owner's approval queue and return a decision to the requester. Messaging
+threads and the live-updating dashboard are not implemented, and neither is the
+desktop dialog for choosing a block: an owner currently decides visitor
+requests through `/v1/portal/requests/{id}/decision`.
 
 When the portal is disabled the daemon never opens the portal database, never
 constructs a public handler, and never registers the owner's sharing routes.
@@ -234,8 +238,15 @@ When enabled:
 Links are created from the app, not from a config file. Each one requires a
 passcode of at least six characters, expires within 90 days, is displayed
 exactly once, and can be revoked at any time. Revocation is immediate: existing
-sessions stop working and the shared windows are deleted from the portal
-database.
+sessions stop working, the shared windows are deleted from the portal database,
+and open requests are closed rather than left waiting.
+
+A visitor request is stored durably before it reaches the owner's queue and is
+shown as "on its way" until the queue confirms it. If the daemon has no
+enrolled device, requests accumulate in that honest queued state and are
+delivered once one exists — nothing is lost and nobody is told otherwise. The
+daemon retries delivery every minute in addition to pumping on each request and
+decision.
 
 ## Network And Telemetry
 

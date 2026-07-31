@@ -729,10 +729,10 @@ func TestPurgeExpiredEnforcesRetention(t *testing.T) {
 	}
 }
 
-// TestSessionCSRFTokenRoundTrips guards the synchronizer token minted with
-// every session. P5-a has no session-authenticated mutation to spend it on, so
-// this keeps it from silently rotting before P5-b needs it.
-func TestSessionCSRFTokenRoundTrips(t *testing.T) {
+// TestSessionCSRFTokenIsDerivable is the property a server-rendered form
+// needs: the token must be recoverable from the session cookie on every page
+// render, and must still be unguessable and session-specific.
+func TestSessionCSRFTokenIsDerivable(t *testing.T) {
 	h := newHarness(t)
 	ctx := context.Background()
 	now := h.clock.Now()
@@ -744,15 +744,21 @@ func TestSessionCSRFTokenRoundTrips(t *testing.T) {
 	if issued.CSRF == "" || issued.CSRF == issued.Session {
 		t.Fatal("session and CSRF tokens must both exist and differ")
 	}
-	resolved, err := h.store.ResolveSession(ctx, issued.Session, now)
-	if err != nil {
-		t.Fatalf("resolve: %v", err)
+	// Recomputed later, without having kept the plaintext anywhere.
+	if got := h.store.CSRFToken(issued.Session); got != issued.CSRF {
+		t.Errorf("CSRF token is not derivable from the session: %q vs %q", got, issued.CSRF)
 	}
-	if !resolved.MatchesCSRF(issued.CSRF) {
-		t.Error("the issued CSRF token does not match its session")
+	if !h.store.MatchesCSRF(issued.Session, issued.CSRF) {
+		t.Error("the issued CSRF token does not verify")
 	}
-	if resolved.MatchesCSRF("") || resolved.MatchesCSRF(issued.Session) {
-		t.Error("CSRF comparison accepted a wrong value")
+	for name, presented := range map[string]string{
+		"empty":         "",
+		"session value": issued.Session,
+		"other token":   h.store.CSRFToken("some-other-session"),
+	} {
+		if h.store.MatchesCSRF(issued.Session, presented) {
+			t.Errorf("CSRF comparison accepted the %s", name)
+		}
 	}
 }
 

@@ -217,6 +217,26 @@ func (s *Store) Migrate(ctx context.Context) error {
 			nonce BLOB NOT NULL,
 			ciphertext BLOB NOT NULL
 		)`,
+		// The unique portal_request_id is what makes bridge submission
+		// idempotent: a retry after a lost acknowledgement finds the existing
+		// proposal instead of creating a second one.
+		`CREATE TABLE IF NOT EXISTS portal_request_proposals (
+			portal_request_id TEXT PRIMARY KEY,
+			proposal_id TEXT NOT NULL UNIQUE REFERENCES proposals(id),
+			profile_id TEXT NOT NULL,
+			created_at TEXT NOT NULL
+		)`,
+		// Decisions bound for the portal store. Written inside the same
+		// transaction as the decision itself, so a decision the visitor never
+		// learns about cannot happen without losing the decision too.
+		`CREATE TABLE IF NOT EXISTS portal_status_outbox (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			portal_request_id TEXT NOT NULL,
+			status TEXT NOT NULL,
+			decided_start TEXT NOT NULL DEFAULT '',
+			decided_end TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL
+		)`,
 	}
 	for _, statement := range statements {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {
@@ -822,7 +842,17 @@ func proposalIsActiveAt(record ProposalRecord, at time.Time) bool {
 	return record.Status == ProposalPending && record.ExpiresAt.After(at.UTC())
 }
 
+// decideHook runs inside the decision transaction, after the proposal row is
+// updated and the one-use nonce consumed but before commit. It exists so a
+// caller can bind extra state to the same atomic decision — the portal binds
+// the visitor-status handoff — without reimplementing the token checks.
+type decideHook func(ctx context.Context, tx *sql.Tx, record ProposalRecord, decision ProposalStatus, decidedAt time.Time) error
+
 func (s *Store) DecideProposal(ctx context.Context, proposalID, deviceID string, decision ProposalStatus, token string, decidedAt time.Time, audit json.RawMessage) (ProposalRecord, error) {
+	return s.decideProposal(ctx, proposalID, deviceID, decision, token, decidedAt, audit, nil)
+}
+
+func (s *Store) decideProposal(ctx context.Context, proposalID, deviceID string, decision ProposalStatus, token string, decidedAt time.Time, audit json.RawMessage, hook decideHook) (ProposalRecord, error) {
 	if decision != ProposalApproved && decision != ProposalRejected {
 		return ProposalRecord{}, errors.New("unsupported proposal decision")
 	}
@@ -901,6 +931,11 @@ func (s *Store) DecideProposal(ctx context.Context, proposalID, deviceID string,
 	}
 	if err := s.appendAuditTx(ctx, tx, "proposal."+string(decision), proposalID, deviceID, decidedAt, audit); err != nil {
 		return ProposalRecord{}, err
+	}
+	if hook != nil {
+		if err := hook(ctx, tx, record, decision, decidedAt); err != nil {
+			return ProposalRecord{}, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return ProposalRecord{}, err
@@ -981,6 +1016,19 @@ func (s *Store) decodeProposal(record ProposalRecord, status, createdAt, updated
 	record.ExpiresAt = expires.UTC()
 	record.Payload = append(json.RawMessage(nil), payload...)
 	return record, nil
+}
+
+// ProposalByID reads one proposal. The returned record carries the decrypted
+// payload but no decision token: minting a token is a separate, listed action.
+func (s *Store) ProposalByID(ctx context.Context, id string) (ProposalRecord, error) {
+	record, err := s.scanProposal(s.db.QueryRowContext(ctx,
+		`SELECT id, action_id, device_id, status, created_at, updated_at, expires_at, nonce, ciphertext FROM proposals WHERE id = ?`,
+		id,
+	))
+	if errors.Is(err, sql.ErrNoRows) {
+		return ProposalRecord{}, ErrProposalNotFound
+	}
+	return record, err
 }
 
 func (s *Store) proposalByIDTx(ctx context.Context, tx *sql.Tx, id string) (ProposalRecord, error) {
