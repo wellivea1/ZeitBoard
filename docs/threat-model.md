@@ -47,6 +47,16 @@ availability.
     same-machine boundary crossed with a bearer token, guarded by a loopback
     bind and per-request check, rejection of any request carrying an `Origin`
     header, and an owner-restricted descriptor (ADR-0028).
+13. Link recipient ↔ **availability portal** on the self-hosted instance: the
+    only boundary in the system crossed by someone the user has not enrolled.
+    Its defining property is a *split store* — public handlers are constructed
+    with a separate portal database and the portal package cannot import the
+    private store, so the boundary is enforced by the dependency graph rather
+    than by output filtering (ADR-0029). Off by default; not exposed.
+14. Private read model → **allowlisted portal snapshot**: the one inbound path
+    to the portal database, owned by `portalbridge`, narrowing an estimate to
+    windows, a generation time, a horizon, and a status. Confidence labels are
+    withheld because ADR-0022 measured them inverted.
 
 ## Adversaries
 
@@ -167,6 +177,18 @@ such a process could obtain is the allowlisted projection surface (including med
 timing facts and context markers) plus reversible appearance changes; it still cannot
 approve or apply a schedule change, because no tool on any surface can.
 
+The availability portal adds residuals of its own, all of them accepted rather than
+solved. A recipient can screenshot or simply remember a window, which revocation cannot
+reach; the create-link response states this. Sharing a live projection is inherently
+observable — someone watching the link over time sees the user's rhythm shift, which is a
+consequence of the feature and not a defect. The timing floor on link resolution bounds
+enumeration signal without eliminating it. Source identifiers are pseudonymous, not
+anonymous. The portal database is encrypted with a key derived one-way from the daemon
+data key, so reading it never yields the private key, but the two cannot be rotated
+independently. No independent review has run against this surface, so exposure remains
+prohibited: `portal.enabled` is false by default and the section 12 exposure gate in
+`portal-design.md` is not yet satisfied.
+
 ## Security verification
 
 - Sync: assert authentication is required, transport is TLS, and replayed messages are
@@ -182,6 +204,18 @@ approve or apply a schedule change, because no tool on any surface can.
 - LLM context: assert outbound context is minimized and redacted (no forbidden fields).
 - Projection: test output against a forbidden-field list across all permission
   combinations; revoked and expired profiles return no view.
+- Availability portal: plant canary values in private device labels, observation IDs,
+  source record IDs, task titles, correction IDs, and the share label, then assert none
+  appears in any public response body, any response header, or the portal database file
+  bytes including its write-ahead log; assert the availability JSON carries exactly the
+  five allowlisted keys; assert unknown, expired, and revoked links produce byte-identical
+  responses; assert an already-authenticated session dies the moment its link is revoked;
+  assert a session for one link grants nothing on another; assert mutations require
+  same-origin attestation and that a request with neither `Sec-Fetch-Site` nor a matching
+  `Origin` is refused; assert the read limit and the per profile-and-source passcode
+  backoff persist; assert the portal package does not import the private store, read
+  model, estimator, or domain packages; assert no `/p/` route and no owner sharing route
+  exists when the portal is disabled.
 - Import: unit-test size/shape limits, row accounting, duplicate/conflict
   handling, transaction atomicity, DST ambiguity, recurrence work caps,
   CalDAV redirect/credential boundaries, ownership-preserving calendar export,

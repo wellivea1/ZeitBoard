@@ -324,6 +324,114 @@ behavior but does not seed real Health Connect provider records. Paging,
 source-offset, duplicate-revision, permission-loss, DST gap/overlap, and
 last-good-snapshot behavior are covered by adapter/repository tests.
 
+## Availability portal foundation (ADR-0029)
+
+Verified 2026-07-31 for slice P5-a. The portal is not exposed: every check
+below runs against a loopback test server or an in-process handler.
+
+**Projection firewall.** The canary suite plants distinctive values in six
+private fields — device label, observation ID, source record ID, task title,
+correction ID, and the owner's private share label — then drives the portal
+with real materialized data derived from twelve principal sleep episodes. No
+canary appears in any public response body, in any response header, or in the
+portal database file bytes, including the write-ahead log. The database check
+reads raw file bytes rather than querying, so an unexpected column would still
+fail it. The materializer's output is asserted separately: it carries no canary
+and no `confidence`, `explanation`, or `estimateId` field.
+
+**Structural boundary.** A test parses the `portal` package's own imports and
+fails if it ever imports `store`, `readmodel`, `assistant`, `api`,
+`portalbridge`, `provider`, `estimation`, or `domain`. The boundary is
+therefore enforced by the dependency graph, not by review.
+
+**Public DTO.** The availability response carries exactly `version`, `windows`,
+`generatedAt`, `horizonEnd`, `status`, and each window exactly `startAt`,
+`endAt`, `zoneId`. Both the presence of every required key and the absence of
+any other are asserted.
+
+**Honesty budget.** Every rendered state — empty, refused, insufficient,
+available, and stale — carries the measured uncertainty qualifier and the
+not-medical notice. A refusal's rendered text is asserted free of "sleep",
+"episode", "record", "refus", "ambiguous", "cycle", and "estimator", so a typed
+estimator refusal never reaches a visitor as a reason. Windows render in civil
+time with the zone stated, and no RFC3339 instant appears in a visible label.
+The freshness ladder is exercised at 30 minutes (fresh), 7 hours (stale, shown
+with a caution), and 25 hours (withheld, no current-state claim, no windows).
+The JSON path applies the same 24-hour cut, so a JSON consumer cannot present
+an "awake now" the page would have withheld.
+
+**Enumeration and revocation.** Unknown, expired, and revoked links produce
+byte-identical 410 responses. Revoking a profile ends existing sessions
+immediately and deletes the materialized snapshot. A session issued for one
+link returns 401 on another.
+
+**Passcode and CSRF.** A wrong passcode returns 401 and arms an exponential
+per profile-and-source backoff; the immediately following attempt is throttled
+with `Retry-After` even when the passcode is correct, and succeeds once the
+backoff elapses. There is no global lockout. The Fetch-Metadata matrix covers
+nine cases: `Sec-Fetch-Site: same-origin` succeeds with no Origin, with a
+matching Origin, and with `Origin: null` — the shape a real browser sends under
+`Referrer-Policy: no-referrer`; `cross-site`, `same-site`, and `none` are
+refused even with a spoofed matching Origin; a matching Origin alone succeeds
+as the pre-Fetch-Metadata fallback; and neither header, or a mismatched Origin
+alongside same-origin metadata, is refused.
+
+**Headers and page content.** Every response — page, availability, stylesheet,
+and generic failure — carries `default-src 'none'`, `frame-ancestors 'none'`,
+`style-src 'self'`, `script-src 'self'`, `connect-src 'self'`, `img-src 'self'`,
+`Cache-Control: no-store, max-age=0`, `Referrer-Policy: no-referrer`,
+`nosniff`, and a noindex robots tag. The rendered page is asserted to contain
+no `<script`, no `<style`, no inline `style="` attribute, and no absolute URL,
+so nothing in it can reach a third party or violate its own CSP. The session
+cookie is asserted `Secure`, `HttpOnly`, `SameSite=Strict`, `Path=/`, with no
+Domain attribute, and its expiry never outlives link expiry.
+
+**Maintenance.** The hourly sweep the daemon runs is exercised directly: a live
+session survives it, an expired one does not, and access rows older than the
+30-day retention window are deleted while recent rows remain. The synchronizer
+CSRF token minted with every session round-trips and rejects wrong values; P5-a
+has no session-authenticated mutation to spend it on, and the test exists so it
+does not rot before P5-b needs it.
+
+**Limits and audit.** The read limit admits 120 requests per source per hour,
+refuses the 121st with `Retry-After`, and restores the budget when the window
+rolls over. `RecordAccess` rejects any event outside the closed enum. Audit-key
+rotation changes the identifier for the same address and deletes rows past the
+retention window. IPv6 addresses inside one /64 collapse to a single identifier
+while a different /64 does not, so per-source limits cannot be evaded by
+address rotation within a prefix.
+
+**Off by default.** With the portal disabled, `mountPortal` leaves `/p/`
+entirely to the private handler — there is no portal route to probe — and the
+owner's four sharing routes return 404. A config that never mentions the portal
+loads with it disabled; an enabled portal without `publicOrigin` fails to load;
+non-loopback `http` origins, origins carrying a path, query, fragment, or
+credentials, and non-http schemes are all rejected.
+
+**Owner surface.** Create, list, revoke, and erase round-trip. The issued link
+resolves once and stops resolving after revocation. The private label is
+readable through the owner API, is absent from the portal store's own profile
+listing, and is gone after erase. Weak passcodes and lifetimes past the 90-day
+cap are refused. All four routes require device authentication.
+
+**Browser verification.** The rendered page was driven in a real browser across
+five states (awake now, not awake, stale, out of date, refused). Two defects
+were found and fixed that the Go suite could not see: an `Origin`-only CSRF
+gate refused every genuine login, because `Referrer-Policy: no-referrer` makes
+browsers send `Origin: null` on same-origin form posts; and the state card's
+`background` shorthand reset the card's own background colour, letting the page
+canvas show through. A CSS-generated "now" badge was also replaced with real
+markup so assistive technology announces it.
+
+Measured suite results: `internal/portal` and `internal/portalbridge` pass, as
+do `api`, `config`, `daemon`, `store`, `readmodel`, `sync`, `assistant`, and
+`mcp`. `gofmt` and `go vet` are clean across the server module.
+
+Not yet verified, and gating exposure: an independent security review
+(exposure-gate item 6), acceptance suites run on a Linux server build, and the
+operator TLS/reverse-proxy runbook with log-token redaction (item 3). Requests,
+messaging, and the live SSE layer are P5-b through P5-d and do not exist.
+
 ## Environment limitations
 
 - Emulator semantics and screenshots were reviewed, but a full manual TalkBack

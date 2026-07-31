@@ -211,7 +211,11 @@ Firewall reconciliation is a post-service commit step. If that later step
 fails, the script exits unsuccessfully but leaves the verified running service
 in place and tells the operator to rerun the same command.
 
-No public availability portal route is implemented or enabled by this tooling.
+The tooling never enables the availability portal. `portal.enabled` defaults to
+false, the installer writes no portal keys into the generated config, and a
+daemon started by this tooling therefore serves no `/p/` route. Enabling it is
+a deliberate operator edit, gated by the exposure checklist in
+`docs/portal-design.md` section 12.
 
 ## 8. Uninstall and erasure
 

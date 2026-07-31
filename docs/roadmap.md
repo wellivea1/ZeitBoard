@@ -197,7 +197,8 @@ M-E's separately reviewed local agent projection.
    path is documented in the self-hosting runbook. Cloud skill packaging and
    any reviewer-gated auto-apply stay future and separately gated.
    *Desktop-local agent endpoint delivered (ADR-0028):* the app serves its own
-   loopback MCP (token + `Origin` rejection + `0600` descriptor), exposing
+   loopback MCP (token + `Origin` rejection + an owner-only, inheritance-
+   disabled descriptor ACL), exposing
    allowlisted read projections, `set_appearance` as the ADR-0021 direct
    display action, and propose-only mutations with **no approve/apply tool**,
    so a voice client works with the backend off. The medical refusal moved to
@@ -206,6 +207,20 @@ M-E's separately reviewed local agent projection.
 9. **Android companion sync.** The Health Connect skeleton exists but the
    companion has no sync client; bring it onto the same enrollment + push/pull
    path (its ADR should reuse ADR-0015's model).
+9b. **Availability portal.** *P5-a delivered (ADR-0029):* a separate portal
+    database that the public package cannot reach by import, an owner-side
+    materializer narrowing the estimate to windows plus freshness, the public
+    security middleware (CSP, per-source throttling, indistinguishable link
+    failures, argon2id passcodes with per profile-and-source backoff,
+    `Sec-Fetch-Site` mutation attestation), a no-JavaScript availability page
+    that withholds a day-old estimate rather than showing it, and owner
+    create/list/revoke/erase. Confidence labels are withheld because ADR-0022
+    measured the buckets inverted. `portal.enabled` defaults false and no
+    `/p/` route exists when it is off. **Next:** P5-b visitor time requests
+    through the transactional outbox into the existing proposal queue, then
+    P5-c threads and P5-d the live layer. Public exposure stays prohibited
+    until the [`portal-design.md`](portal-design.md) §12 gate passes,
+    including an independent review.
 10. **UI refactor + theme manager** (tracked in
     [`ui-refactor-plan.md`](ui-refactor-plan.md)). *U-A..U-C delivered:*
     the structural follow-up replaced Overview's metric-card grid with one

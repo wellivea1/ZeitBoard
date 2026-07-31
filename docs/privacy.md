@@ -154,6 +154,48 @@ tokens. Rhythm markers are not a grantable field and the strict trusted-view
 schema rejects them. The phase-one trusted website is static, synthetic, and
 makes no network request.
 
+### Availability portal (implemented, off by default, not exposed)
+
+The portal is off by default and is not exposed. When an operator turns it on
+and the user creates a link, this is what a recipient can and cannot see.
+
+A recipient with the link **and** its passcode sees broad windows when the user
+is likely awake, when that estimate was last refreshed, and how far ahead it
+runs. They see nothing else: no sleep record, no medication, no task, no
+calendar text, no note, no marker, and no confidence label. Confidence is
+withheld on purpose — ADR-0022 measured the buckets inverted on real history,
+so a published label would mislead. Every view carries the measured uncertainty
+in plain language, and an estimate more than a day old is withheld rather than
+shown.
+
+Windows are rendered in the user's own time zone, which the page states. That
+discloses the user's zone to anyone holding the link; it is unavoidable if the
+times are to mean anything.
+
+Sharing a live projection is observable over time: a recipient who checks
+repeatedly can watch the user's rhythm drift. That is inherent to the feature,
+is disclosed when a link is created, and is a reason to share deliberately.
+
+The portal keeps its own database. It holds hashed link tokens, hashed
+passcodes, the materialized windows, sessions, rate-limit counters, and a
+coarse access log. It holds no health data, and public request handlers have no
+route to the private database at all. The user's own name for a link — "Mum", a
+clinician — is stored encrypted in the *private* database and never reaches the
+portal.
+
+Abuse limits need to tell visitors apart, so the portal stores a keyed hash of
+a normalized network address and discards the address itself. This is
+pseudonymous, not anonymous: several people behind one router share an
+identifier, and one person moving between networks gets several. Rotating the
+key makes old identifiers unlinkable and deletes access rows past the retention
+window. The Sharing screen shows counts and a last-access time, not a browsing
+trail.
+
+Links expire (90 days at most), can be revoked at any moment, and revocation is
+immediate: existing sessions stop working and the shared windows are deleted
+from the portal database. What a recipient already saw, screenshotted, or
+remembers cannot be recalled.
+
 ## Agent connectors
 
 There are two, and neither can approve or apply anything.

@@ -13,7 +13,10 @@ import (
 
 	"non24.app/server/internal/api"
 	"non24.app/server/internal/config"
+	"non24.app/server/internal/portal"
+	"non24.app/server/internal/portalbridge"
 	"non24.app/server/internal/provider"
+	"non24.app/server/internal/readmodel"
 	"non24.app/server/internal/store"
 )
 
@@ -59,7 +62,49 @@ func serve(configPath string, stop <-chan struct{}, ready chan<- struct{}) error
 		return fmt.Errorf("open store: %w", err)
 	}
 	defer st.Close()
-	handler := api.New(st, cfg.EnrollmentSecret, api.WithProvider(llm, providerStatus)).Handler()
+
+	options := []api.Option{api.WithProvider(llm, providerStatus)}
+	var publicHandler http.Handler
+	if cfg.Portal.Enabled {
+		portalStore, portalErr := portal.Open(filepath.Join(cfg.DataDir, "zeitboard-portal.db"), cfg.DataKey)
+		if portalErr != nil {
+			return fmt.Errorf("open portal store: %w", portalErr)
+		}
+		defer portalStore.Close()
+
+		materializer := portalbridge.Materializer{
+			Sleep:    readmodel.SleepReader{Store: st},
+			Profiles: portalStore,
+			Sink:     portalStore,
+		}
+		portalHandler, handlerErr := portal.NewHandler(portal.HandlerConfig{
+			Store:        portalStore,
+			PublicOrigin: cfg.Portal.PublicOrigin,
+		})
+		if handlerErr != nil {
+			return fmt.Errorf("configure portal: %w", handlerErr)
+		}
+		// Refresh once at startup so a link opened before the first sync of
+		// the day still shows current freshness rather than yesterday's.
+		if err := materializer.MaterializeAll(context.Background()); err != nil {
+			log.Printf("portal: initial snapshot refresh failed: %v", err)
+		}
+		// A dedicated stop channel rather than the caller's: `stop` may be
+		// nil, and this defer must run before the store closes (LIFO) so the
+		// worker never touches a closed database.
+		maintenanceStop := make(chan struct{})
+		maintenanceDone := startPortalMaintenance(portalStore, maintenanceStop)
+		defer func() {
+			close(maintenanceStop)
+			<-maintenanceDone
+		}()
+
+		options = append(options, api.WithPortal(portalStore, cfg.Portal.PublicOrigin, materializer))
+		publicHandler = portalHandler.Routes()
+		log.Printf("zeitboardd portal enabled at %s/p/", cfg.Portal.PublicOrigin)
+	}
+
+	handler := mountPortal(api.New(st, cfg.EnrollmentSecret, options...).Handler(), publicHandler)
 	server := &http.Server{
 		Addr:              cfg.ListenAddress,
 		Handler:           handler,
@@ -107,6 +152,45 @@ func serve(configPath string, stop <-chan struct{}, ready chan<- struct{}) error
 		serveErrValue := <-serveErr
 		return normalizeServeError(serveErrValue)
 	}
+}
+
+const portalMaintenanceInterval = time.Hour
+
+// startPortalMaintenance expires sessions and rate buckets and enforces the
+// access-audit retention window. Retention that nothing enforces is not
+// retention, so this runs on a timer rather than being left to an operator.
+// The returned channel closes once the worker has stopped.
+func startPortalMaintenance(store *portal.Store, stop <-chan struct{}) <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(portalMaintenanceInterval)
+		defer ticker.Stop()
+		for {
+			if err := store.PurgeExpired(context.Background(), time.Now().UTC()); err != nil {
+				log.Printf("portal: maintenance sweep failed: %v", err)
+			}
+			select {
+			case <-ticker.C:
+			case <-stop:
+				return
+			}
+		}
+	}()
+	return done
+}
+
+// mountPortal routes /p/ to the public handler and everything else to the
+// device API. When the portal is disabled publicHandler is nil and the private
+// handler is returned unchanged, so no /p/ path exists at all.
+func mountPortal(private http.Handler, publicHandler http.Handler) http.Handler {
+	if publicHandler == nil {
+		return private
+	}
+	mux := http.NewServeMux()
+	mux.Handle("/", private)
+	mux.Handle("/p/", publicHandler)
+	return mux
 }
 
 func normalizeServeError(err error) error {

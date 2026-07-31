@@ -1,9 +1,10 @@
 # Availability portal design (phase 5)
 
-> Security and product contract for a future public-facing portal. Nothing in
-> this document is implemented or exposed yet. `portal.enabled` must default to
-> false, and the exposure gate in section 12 must pass before any public bind.
-> The portal is scheduling support, not medical advice, and never names a
+> Security and product contract for the public-facing portal. Slice P5-a is
+> implemented as of 2026-07-31 ([ADR-0029](decisions/0029-availability-portal-foundation.md));
+> P5-b through P5-d are not. Nothing here is exposed: `portal.enabled` defaults
+> to false, and the exposure gate in section 12 must pass before any public
+> bind. The portal is scheduling support, not medical advice, and never names a
 > disorder, medication, sleep observation, or treatment.
 
 ## 1. Honest public claims
@@ -110,11 +111,25 @@ the daemon's normal 30-second response write timeout must not silently kill the
 stream. Each event contains only projection version and freshness, prompting a
 normal authenticated DTO refresh.
 
-Mutation requests require an exact allowed `Origin` plus a synchronizer CSRF
-token. The authenticated cookie is named `__Host-zb_portal`, is opaque and
-random, and has `Secure`, `HttpOnly`, `SameSite=Strict`, `Path=/`, and no Domain
-attribute. It expires at the earlier of 24 hours or link expiry and rotates
-after passcode authentication.
+Mutation requests must be attested by the browser as same-origin, and once a
+session exists they additionally carry a synchronizer CSRF token.
+
+The attestation is primarily `Sec-Fetch-Site: same-origin`, not `Origin`.
+Because these responses set `Referrer-Policy: no-referrer`, the Fetch standard
+requires a browser to send `Origin: null` on a same-origin form submission, so
+an Origin-only gate refuses every real passcode POST. This was found by driving
+the page in a browser; unit tests that set the header themselves cannot see it.
+Relaxing the referrer policy to recover `Origin` is rejected, because it would
+put link tokens into `Referer` headers that section 9 specifically avoids.
+`Sec-Fetch-Site` is unaffected by referrer policy and cannot be set by page
+script. An exact `Origin` match remains the fallback for clients predating
+Fetch Metadata; a request carrying neither header is refused, and a present but
+mismatched `Origin` is refused regardless of what `Sec-Fetch-Site` claims.
+
+The authenticated cookie is named `__Host-zb_portal`, is opaque and random, and
+has `Secure`, `HttpOnly`, `SameSite=Strict`, `Path=/`, and no Domain attribute.
+It expires at the earlier of 24 hours or link expiry and rotates after passcode
+authentication.
 
 ## 4. Share profiles and links
 
@@ -236,7 +251,12 @@ audit does not retain message bodies.
 
 ## 8. Abuse resistance and privacy-preserving audit
 
-Persisted limits survive restarts:
+Persisted limits survive restarts. P5-a implements the read limit, the passcode
+backoff, and the body cap; the SSE, request-creation, and message limits arrive
+with the slices that introduce those operations. The delivered read limit is
+keyed on source alone — a per-session limit adds little while the only
+unauthenticated surface is enumeration, and it is added in P5-b when sessions
+begin carrying write authority.
 
 - page/availability reads: 120 per hour per authenticated session and source;
 - SSE: 2 streams per session, 20 per profile, with excess clients polling;
@@ -295,7 +315,7 @@ only one can commit.
 
 | Slice | Scope | Acceptance spine |
 |---|---|---|
-| P5-a | Separate portal store, security middleware, profile/link CRUD, allowlisted materializer, read-only public page | Canary leak test; exact DTO schema; stale/unavailable behavior; uniform generic failures; portal disabled by default |
+| P5-a **(delivered 2026-07-31, ADR-0029)** | Separate portal store, security middleware, profile/link CRUD, allowlisted materializer, read-only public page | Canary leak test; exact DTO schema; stale/unavailable behavior; uniform generic failures; portal disabled by default |
 | P5-b | Request validation, requester-secret exchange, outbox bridge, visitor proposals, exact-slot approval | Queued/pending behavior under bridge failure; idempotent retry; one-use decision race; approved slot is inside request; no private-store reads from public package |
 | P5-c | Encrypted threads, owner replies, caps, close and hard-delete jobs | Cross-request authorization tests; content never reaches projection/logs; 14-day deletion with clock-controlled tests |
 | P5-d | SSE/polling, rate persistence, audit UI, threat/privacy/runbook integration, reverse-proxy profile | Connection bounds; CSRF/header suite; log-token redaction; restart persistence; external red-team pass |
@@ -303,6 +323,11 @@ only one can commit.
 Phase 6 consumes only internal `request_created`, `request_decided`, and
 `message_added` events. Notification transports do not receive portal-store or
 health-store access.
+
+P5-a deliberately leaves the store one-directional: nothing flows from the
+portal database back into the private one. The transactional outbox in section
+2 is required by P5-b, when a visitor request first needs to reach the owner's
+proposal queue, and is not implemented yet.
 
 ## 12. Exposure gate
 
