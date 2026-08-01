@@ -3,6 +3,7 @@ import { PageHeader, PlaceholderNotice } from "../components/AppShell";
 import { ProposalCard, ConfidenceDots } from "../components/ProposalCard";
 import { useApprovals } from "../state/approvals";
 import { useBackendProposals } from "../state/backendProposals";
+import { VisitorRequestsPanel } from "../components/VisitorRequestsPanel";
 import type { ProposalOrigin } from "../data/phaseTwo";
 import type { BackendProposal } from "../data/backendProposals";
 
@@ -298,6 +299,8 @@ export function ApprovalsScreen() {
             </div>
           </section>
         )}
+
+        <VisitorRequestsPanel />
 
         <SyncedProposalsPanel />
 

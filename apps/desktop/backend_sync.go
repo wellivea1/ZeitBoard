@@ -734,6 +734,13 @@ func (a *App) fetchBackendProposals(ctx context.Context, cfg backendSyncConfig, 
 	}
 	proposals := make([]BackendProposalDTO, 0, len(response.Proposals))
 	for _, record := range response.Proposals {
+		if record.ActionID == visitorRequestActionID {
+			// Visitor requests have their own surface. The generic decision
+			// route refuses them on purpose — approving one means choosing an
+			// exact block — so listing them here would offer a control that
+			// cannot work.
+			continue
+		}
 		proposals = append(proposals, backendProposalDTO(record))
 	}
 	return BackendProposalsDTO{

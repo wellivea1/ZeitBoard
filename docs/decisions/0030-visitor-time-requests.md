@@ -117,9 +117,32 @@ visitor asks for a *range*; the owner needs to answer with a *time*. Approving
 - CSRF tokens are now derived from the session under a server key rather than
   stored as a hash. ADR-0029 stored only a hash, which a server-rendered form
   can never embed; that mechanism could not have worked.
-- The owner's decision surface exists as an API. The desktop dialog that picks
-  a block on the calendar is not built, so today an owner decides through the
-  API rather than the UI.
+- The owner decides in the desktop's Approvals screen, on a surface separate
+  from synced assistant proposals. That separation is forced rather than
+  stylistic: the generic proposal card offers approve/reject, which cannot
+  express "choose a block inside this window", and the generic decision route
+  refuses visitor proposals for the same reason. Visitor proposals are
+  therefore filtered out of the generic synced list; leaving them there would
+  have shown an Approve button that returns 409.
+- The desktop duplicates the `place_visitor_request` action id because it
+  cannot import the server module. A test pins the constant so a rename has to
+  be deliberate rather than silently stopping the filter from matching.
+
+## Owner surface
+
+The Approvals screen shows each request with the link it came from, the window
+in civil time, the visitor's name and note when they gave them, an
+infeasibility note when the date is past the forecast, and two
+`datetime-local` inputs bounded to the requested window. The disclosure —
+approving reveals the exact time; declining reveals only that it did not work
+— sits above the buttons rather than in fine print, because the owner must
+read it before choosing.
+
+The block is chosen in the desktop's own zone and normalized to UTC before it
+leaves. A local time that does not exist on that date is refused here for the
+same reason it is refused on the public form. The backend re-checks the block
+against the window regardless, so the picker's bounds are a convenience, not
+the enforcement.
 
 ## Residual risk
 

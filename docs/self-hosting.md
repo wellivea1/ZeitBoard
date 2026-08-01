@@ -167,7 +167,9 @@ rule tied to the managed daemon executable; the installer preserves same-named
 rules that point elsewhere. Service logs rotate at 10 MiB with one `.1` backup.
 TLS paths passed on the command line are normalized to absolute paths; relative
 paths already stored in `config.json` resolve from that file's directory.
-The public availability portal is not implemented or exposed by this command.
+This command never enables the public availability portal. The portal exists in
+the daemon but `portal.enabled` defaults to false, so a service installed this
+way serves no `/p/` route until an operator changes that deliberately.
 
 Rerunning the command upgrades an owned service and restores its prior files,
 registration, and running/stopped state if publication or startup fails. It
@@ -208,9 +210,9 @@ and [ADR-0030](decisions/0030-visitor-time-requests.md)): share links that show
 broad likely-awake windows to someone holding the link and its passcode, and —
 when the link grants it — visitor requests for a specific time that land in the
 owner's approval queue and return a decision to the requester. Messaging
-threads and the live-updating dashboard are not implemented, and neither is the
-desktop dialog for choosing a block: an owner currently decides visitor
-requests through `/v1/portal/requests/{id}/decision`.
+threads and the live-updating dashboard are not implemented. The owner decides
+requests in the desktop app's Approvals screen, which shows the window asked
+for and a block picker bounded to it.
 
 When the portal is disabled the daemon never opens the portal database, never
 constructs a public handler, and never registers the owner's sharing routes.
