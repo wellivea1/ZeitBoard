@@ -2756,3 +2756,56 @@ button {
   grid-column: 1 / -1;
   margin: 0;
 }
+
+/* Visitor time requests (ADR-0030). A request is not a yes/no proposal: the
+   owner narrows a window to a block, so the card carries its own controls. */
+.visitor-requests-panel .proposal-card[data-origin="visitor"] {
+  border-left: 3px solid var(--assistant);
+}
+
+.visitor-message {
+  margin: 0 0 0.6rem;
+  padding: 0.5rem 0.7rem;
+  border-left: 2px solid var(--line);
+  color: var(--muted);
+  font-style: italic;
+}
+
+.visitor-slot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 0.6rem;
+}
+
+.visitor-slot-field {
+  display: flex;
+  flex: 1 1 12rem;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.visitor-slot-field label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.visitor-slot-field input {
+  min-height: 2.25rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The disclosure is not fine print: it states what approving reveals, and the
+   owner must read it before choosing rather than after. */
+.proposal-disclosure {
+  margin: 0 0 0.7rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}

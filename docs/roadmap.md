@@ -223,9 +223,10 @@ M-E's separately reviewed local agent projection.
     the requested window; the decision returns to a visitor-visible status.
     A request stays honestly `queued` until the owner's queue confirms it, a
     decline carries no reason, and the requester secret travels only in a URL
-    fragment. **Next:** P5-c threads, P5-d the live layer and audit UI, and
-    the desktop dialog for choosing a block — today the owner decides through
-    the API. Public exposure stays prohibited
+    fragment. The owner decides in the desktop's Approvals screen on a
+    surface separate from synced proposals, with a block picker bounded to
+    the requested window and the approval disclosure above the buttons.
+    **Next:** P5-c threads, P5-d the live layer and audit UI. Public exposure stays prohibited
     until the [`portal-design.md`](portal-design.md) §12 gate passes,
     including an independent review.
 10. **UI refactor + theme manager** (tracked in

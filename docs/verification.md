@@ -506,10 +506,24 @@ Measured suite results: `portal`, `portalbridge`, `api`, `config`, `daemon`,
 `store`, `readmodel`, `sync`, `assistant`, and `mcp` pass; `gofmt` and
 `go vet` are clean; Linux and Windows server builds succeed.
 
-Not implemented, and therefore not verified: messaging threads (P5-c), the SSE
-live layer and audit UI (P5-d), and the desktop dialog for choosing a block on
-the calendar — an owner decides through the API today. The exposure gate is
-unchanged and unmet.
+**Owner surface.** The desktop lists open visitor requests, renders the link
+label, window, visitor text, beyond-horizon note, and approval disclosure, and
+sends a chosen block only when approving — a decline carries none, because
+there is nothing to reveal. `parseVisitorSlot` refuses an empty, unparsable,
+inverted, or zero-length block and normalizes to UTC before the value leaves
+the desktop. Normalization refuses a record missing the approval disclosure or
+the picker bounds rather than rendering a silently incomplete card, and one
+malformed request rejects the whole payload.
+
+**A regression this slice caught.** P5-b's 409 guard on the generic decision
+route meant a visitor request appearing in the desktop's synced-proposals list
+would have rendered an Approve button that could not work. Visitor proposals
+are now filtered out of that list, with a test asserting it, and the
+duplicated action id is pinned by a test because the desktop cannot import the
+server module.
+
+Not implemented, and therefore not verified: messaging threads (P5-c) and the
+SSE live layer and audit UI (P5-d). The exposure gate is unchanged and unmet.
 
 ## Environment limitations
 
