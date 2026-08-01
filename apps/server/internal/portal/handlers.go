@@ -27,6 +27,18 @@ type pageData struct {
 	Error      string
 	FormAction string
 	View       AvailabilityView
+
+	// Request fields. Handle and Message inside RequestView are the visitor's
+	// own words being shown back to them; they never appear on the
+	// availability page, in a projection DTO, or in an audit row.
+	Request       RequestView
+	CSRFToken     string
+	RecoveryCode  string
+	ContinueURL   string
+	LinkTokenPath string
+	MinLocal      string
+	CanRequest    bool
+	RequestsPath  string
 }
 
 func (h *Handler) handleStylesheet(w http.ResponseWriter, r *http.Request) {
@@ -63,9 +75,11 @@ func (h *Handler) handlePage(w http.ResponseWriter, r *http.Request) {
 	}
 	view := BuildView(snapshot, h.now())
 	h.renderPage(w, r, http.StatusOK, "dashboard", pageData{
-		Title:   "Availability",
-		Refresh: true,
-		View:    view,
+		Title:        "Availability",
+		Refresh:      true,
+		View:         view,
+		CanRequest:   profile.Grants.AllowRequests,
+		RequestsPath: requestsPath(r.PathValue("linkToken")),
 	})
 }
 

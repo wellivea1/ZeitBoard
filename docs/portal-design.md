@@ -1,8 +1,10 @@
 # Availability portal design (phase 5)
 
-> Security and product contract for the public-facing portal. Slice P5-a is
-> implemented as of 2026-07-31 ([ADR-0029](decisions/0029-availability-portal-foundation.md));
-> P5-b through P5-d are not. Nothing here is exposed: `portal.enabled` defaults
+> Security and product contract for the public-facing portal. Slices P5-a and
+> P5-b are implemented as of 2026-07-31
+> ([ADR-0029](decisions/0029-availability-portal-foundation.md),
+> [ADR-0030](decisions/0030-visitor-time-requests.md)); P5-c and P5-d are not.
+> Nothing here is exposed: `portal.enabled` defaults
 > to false, and the exposure gate in section 12 must pass before any public
 > bind. The portal is scheduling support, not medical advice, and never names a
 > disorder, medication, sleep observation, or treatment.
@@ -82,11 +84,16 @@ GET  /p/{linkToken}                         passcode or dashboard HTML
 POST /p/{linkToken}/session                 verify passcode, issue session
 GET  /p/{linkToken}/availability            allowlisted projection JSON
 GET  /p/{linkToken}/events                  authenticated SSE
+GET  /p/{linkToken}/requests                request form
 POST /p/{linkToken}/requests                create request
-POST /p/{linkToken}/request-session         exchange requester secret
-GET  /p/{linkToken}/requests/{publicID}      status/thread DTO
+GET  /p/{linkToken}/requests/{publicID}      status DTO or recovery-code form
+POST /p/{linkToken}/requests/{publicID}/session   exchange requester secret
 POST /p/{linkToken}/requests/{publicID}/messages
 ```
+
+The delivered requester exchange is nested under its request rather than the
+flat `/request-session` in the original sketch, so the route itself names the
+request the secret belongs to. `/events` and `/messages` are P5-d and P5-c.
 
 Middleware order is request-size cap, security headers, source throttling, link
 resolution, passcode-session gate, CSRF/origin gate for mutation, then handler.
@@ -316,7 +323,7 @@ only one can commit.
 | Slice | Scope | Acceptance spine |
 |---|---|---|
 | P5-a **(delivered 2026-07-31, ADR-0029)** | Separate portal store, security middleware, profile/link CRUD, allowlisted materializer, read-only public page | Canary leak test; exact DTO schema; stale/unavailable behavior; uniform generic failures; portal disabled by default |
-| P5-b | Request validation, requester-secret exchange, outbox bridge, visitor proposals, exact-slot approval | Queued/pending behavior under bridge failure; idempotent retry; one-use decision race; approved slot is inside request; no private-store reads from public package |
+| P5-b **(delivered 2026-07-31, ADR-0030)** | Request validation, requester-secret exchange, outbox bridge, visitor proposals, exact-slot approval | Queued/pending behavior under bridge failure; idempotent retry; one-use decision race; approved slot is inside request; no private-store reads from public package |
 | P5-c | Encrypted threads, owner replies, caps, close and hard-delete jobs | Cross-request authorization tests; content never reaches projection/logs; 14-day deletion with clock-controlled tests |
 | P5-d | SSE/polling, rate persistence, audit UI, threat/privacy/runbook integration, reverse-proxy profile | Connection bounds; CSRF/header suite; log-token redaction; restart persistence; external red-team pass |
 
@@ -324,10 +331,9 @@ Phase 6 consumes only internal `request_created`, `request_decided`, and
 `message_added` events. Notification transports do not receive portal-store or
 health-store access.
 
-P5-a deliberately leaves the store one-directional: nothing flows from the
-portal database back into the private one. The transactional outbox in section
-2 is required by P5-b, when a visitor request first needs to reach the owner's
-proposal queue, and is not implemented yet.
+The transactional outbox in section 2 is implemented in both directions as of
+P5-b. Section 7's messaging threads and the second requester exchange remain
+P5-c; SSE and the audit UI remain P5-d.
 
 ## 12. Exposure gate
 

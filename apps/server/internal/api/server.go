@@ -84,6 +84,8 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle("POST /v1/portal/profiles", s.requireDevice(http.HandlerFunc(s.handleCreatePortalProfile)))
 		mux.Handle("POST /v1/portal/profiles/{id}/revoke", s.requireDevice(http.HandlerFunc(s.handleRevokePortalProfile)))
 		mux.Handle("POST /v1/portal/profiles/{id}/erase", s.requireDevice(http.HandlerFunc(s.handleErasePortalProfile)))
+		mux.Handle("GET /v1/portal/requests", s.requireDevice(http.HandlerFunc(s.handleListVisitorRequests)))
+		mux.Handle("POST /v1/portal/requests/{id}/decision", s.requireDevice(http.HandlerFunc(s.handleDecideVisitorRequest)))
 	}
 	return mux
 }
@@ -283,6 +285,16 @@ func (s *Server) handleProposalDecision(w http.ResponseWriter, r *http.Request) 
 		writeDecodeError(w, err)
 		return
 	}
+	// A visitor request carries an extra obligation the generic route cannot
+	// discharge: approval must name an exact block inside the requested
+	// window, and the visitor must be told. Deciding one here would skip both,
+	// so it is refused rather than silently mishandled.
+	if existing, lookupErr := s.store.ProposalByID(r.Context(), id); lookupErr == nil &&
+		existing.ActionID == store.ActionVisitorRequest {
+		writeError(w, http.StatusConflict, "visitor requests are decided through the sharing endpoint")
+		return
+	}
+
 	status := store.ProposalStatus(req.Decision)
 	record, err := s.store.DecideProposal(r.Context(), id, device.ID, status, req.Token, s.now(), json.RawMessage(`{"source":"api"}`))
 	switch {

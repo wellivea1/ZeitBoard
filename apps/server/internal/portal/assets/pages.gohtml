@@ -46,6 +46,100 @@
   <p>{{.Notice}}</p>
 </section>
 {{end}}
+{{if .CanRequest}}
+<section class="card">
+  <h2>Need a specific time?</h2>
+  <p class="detail">You can ask for a window that suits you. They decide, and you will see the answer.</p>
+  <p><a class="button-link" href="{{.RequestsPath}}">Ask for a time</a></p>
+</section>
+{{end}}
+{{template "foot" .}}{{end}}
+
+{{define "request-form"}}{{template "head" .}}
+<section class="card">
+  <h1>Ask for a time</h1>
+  <p class="detail">Give the earliest and latest you could meet. They will pick a time inside that window, or decline.</p>
+  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
+  <form method="post" action="{{.FormAction}}">
+    <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+    <input type="hidden" name="zone_id" value="{{.View.ZoneIDInput}}">
+    <label for="window_start">Earliest</label>
+    <input id="window_start" name="window_start" type="datetime-local" min="{{.MinLocal}}" required>
+    <label for="window_end">Latest</label>
+    <input id="window_end" name="window_end" type="datetime-local" min="{{.MinLocal}}" required>
+    <label for="duration_minutes">How long, in minutes (optional)</label>
+    <input id="duration_minutes" name="duration_minutes" type="number" min="15" max="480" step="5">
+    <label for="handle">Your name (optional)</label>
+    <input id="handle" name="handle" type="text" maxlength="40" autocomplete="off">
+    <label for="message">Anything they should know (optional)</label>
+    <textarea id="message" name="message" maxlength="500" rows="3"></textarea>
+    <button type="submit">Send request</button>
+  </form>
+</section>
+
+<section class="card fineprint">
+  <p><strong>How accurate is this?</strong> {{.View.Qualifier}}</p>
+  <p>You can ask for any date. Times far ahead cannot be checked against an estimate, and you will be told when that is the case.</p>
+  <p>{{.View.Notice}}</p>
+</section>
+{{template "foot" .}}{{end}}
+
+{{define "request-created"}}{{template "head" .}}
+<section class="card state is-not-awake">
+  <h1>Request sent</h1>
+  <p class="detail">{{.Request.StatusDetail}}</p>
+  {{if .Request.Warning}}<p class="error">{{.Request.Warning}}</p>{{end}}
+</section>
+
+<section class="card">
+  <h2>What you asked for</h2>
+  <p>{{.Request.WindowLabel}}</p>
+  {{if .Request.DurationLabel}}<p class="detail">For {{.Request.DurationLabel}}.</p>{{end}}
+</section>
+
+<section class="card">
+  <h2>Keep this code</h2>
+  <p class="detail">It is the only way to check this request from another browser. It is shown once.</p>
+  <p class="code">{{.RecoveryCode}}</p>
+  <p><a class="button-link" href="{{.ContinueURL}}">Check this request</a></p>
+</section>
+{{template "foot" .}}{{end}}
+
+{{define "request-status"}}{{template "head" .}}
+<section class="card state {{if .Request.Open}}is-not-awake{{else}}is-awake{{end}}">
+  <h1>{{.Request.StatusLabel}}</h1>
+  <p class="detail">{{.Request.StatusDetail}}</p>
+  {{if .Request.DecidedLabel}}<p><strong>{{.Request.DecidedLabel}}</strong></p>{{end}}
+  {{if .Request.Warning}}<p class="error">{{.Request.Warning}}</p>{{end}}
+</section>
+
+<section class="card">
+  <h2>What you asked for</h2>
+  <p>{{.Request.WindowLabel}}</p>
+  {{if .Request.DurationLabel}}<p class="detail">For {{.Request.DurationLabel}}.</p>{{end}}
+  {{if .Request.Handle}}<p class="detail">Sent as {{.Request.Handle}}.</p>{{end}}
+  {{if .Request.Message}}<p class="detail">&ldquo;{{.Request.Message}}&rdquo;</p>{{end}}
+</section>
+
+<section class="card fineprint">
+  <p>{{.View.Notice}}</p>
+</section>
+{{template "foot" .}}{{end}}
+
+{{define "request-claim"}}{{template "head" .}}
+<section class="card">
+  <h1>Check a request</h1>
+  <p class="detail">Enter the code you were shown when you sent it.</p>
+  <form method="post" action="{{.FormAction}}">
+    <label for="secret">Request code</label>
+    <input id="secret" name="secret" type="text" autocomplete="off" spellcheck="false" required>
+    <button type="submit">Check</button>
+  </form>
+</section>
+
+<section class="card fineprint">
+  <p>{{.View.Notice}}</p>
+</section>
 {{template "foot" .}}{{end}}
 
 {{define "passcode"}}{{template "head" .}}

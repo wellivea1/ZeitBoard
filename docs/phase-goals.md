@@ -58,11 +58,14 @@ through `ask_zeitboard_facts`, and the medical refusal now lives in shared
 `core/agentpolicy` so chat, backend MCP, and the local endpoint cannot drift
 apart. Cloud skill packaging remains separately gated.
 
-**Gap 5 — partially closed 2026-07-31.** ADR-0029 delivers P5-a: the split
+**Gap 5 — largely closed 2026-07-31.** ADR-0029 delivers P5-a: the split
 store, the projection firewall, the security middleware, and a read-only
-availability page, all behind a default-false `portal.enabled`. What remains is
-the interactive half — visitor time requests reaching the proposal queue
-(P5-b), threads (P5-c), and the live layer (P5-d) — plus the exposure gate,
+availability page, all behind a default-false `portal.enabled`. ADR-0030
+delivers P5-b: visitor time requests reaching the owner's proposal queue
+through a transactional outbox, decided with the same one-use tokens as every
+other proposal, with approval naming an exact block inside the requested
+window. What remains is threads (P5-c), the live layer (P5-d), the desktop
+dialog for choosing a block, and the exposure gate,
 which no amount of implementation satisfies on its own because item 6 requires
 an independent review. The original framing below still describes why this is
 the largest threat-model change in the project's history.
@@ -204,14 +207,16 @@ as stated.
 
 ### `/goal phase-5-availability-portal`
 
-Status: **P5-a delivered 2026-07-31 via [ADR-0029](decisions/0029-availability-portal-foundation.md)**
-— separate portal store with an import-enforced boundary, allowlisted
-materializer, security middleware, passcode gate, read-only availability page,
-and owner link CRUD, with the portal disabled by default. P5-b (visitor
-requests via the transactional outbox into the ADR-0016 queue), P5-c
-(messaging), and P5-d (SSE/live layer, audit UI, red-team pass) remain. The
-acceptance line "a request round-trips to an in-app decision" belongs to P5-b
-and is not yet met.
+Status: **P5-a and P5-b delivered 2026-07-31** via
+[ADR-0029](decisions/0029-availability-portal-foundation.md) and
+[ADR-0030](decisions/0030-visitor-time-requests.md) — separate portal store
+with an import-enforced boundary, allowlisted materializer, security
+middleware, passcode gate, read-only availability page, owner link CRUD, and
+visitor time requests that round-trip through a transactional outbox into the
+ADR-0016 queue and back to a visitor-visible status. P5-c (messaging threads)
+and P5-d (SSE/live layer, audit UI, red-team pass) remain, as does the desktop
+dialog for choosing a block; today the owner decides through the API. The
+portal stays disabled by default and unexposed.
 
 Implementation-ready design: [`portal-design.md`](portal-design.md)
 (projection firewall, hashed link tokens with uniform 410s, origin-

@@ -9,6 +9,7 @@ import (
 
 	"non24.app/server/internal/portal"
 	"non24.app/server/internal/portalbridge"
+	"non24.app/server/internal/store"
 	syncmodel "non24.app/server/internal/sync"
 )
 
@@ -19,17 +20,19 @@ type portalAdmin struct {
 	store        *portal.Store
 	origin       string
 	materializer portalbridge.Materializer
+	requests     *portalbridge.RequestBridge
 }
 
 // WithPortal enables the share-link administration routes and wires
 // materialization. The public /p/ mux is mounted separately by the daemon;
 // this option governs only the owner surface.
-func WithPortal(portalStore *portal.Store, publicOrigin string, materializer portalbridge.Materializer) Option {
+func WithPortal(portalStore *portal.Store, publicOrigin string, materializer portalbridge.Materializer, requests *portalbridge.RequestBridge) Option {
 	return func(s *Server) {
 		s.portal = &portalAdmin{
 			store:        portalStore,
 			origin:       strings.TrimSuffix(publicOrigin, "/"),
 			materializer: materializer,
+			requests:     requests,
 		}
 	}
 }
@@ -235,6 +238,155 @@ func (s *Server) handleErasePortalProfile(w http.ResponseWriter, r *http.Request
 		"schema_version": syncmodel.SchemaVersion,
 		"status":         "erased",
 	})
+}
+
+type visitorRequestDTO struct {
+	ProposalID      string    `json:"proposalId"`
+	ProfileID       string    `json:"profileId"`
+	Label           string    `json:"label"`
+	Status          string    `json:"status"`
+	WindowStartAt   time.Time `json:"windowStartAt"`
+	WindowEndAt     time.Time `json:"windowEndAt"`
+	ZoneID          string    `json:"zoneId"`
+	DurationMinutes int       `json:"durationMinutes,omitempty"`
+	BeyondHorizon   bool      `json:"beyondHorizon"`
+	Handle          string    `json:"handle,omitempty"`
+	Message         string    `json:"message,omitempty"`
+	CreatedAt       time.Time `json:"createdAt"`
+	ExpiresAt       time.Time `json:"expiresAt"`
+	DecisionToken   string    `json:"decisionToken,omitempty"`
+	Disclosure      string    `json:"disclosure"`
+}
+
+// approvalDisclosure is required by design section 6: approving reveals the
+// exact block to the visitor. That is necessary coordination information, and
+// the owner must be told it before choosing, not after.
+const approvalDisclosure = "Approving tells them the exact time you pick. Declining tells them only that the time did not work — never why."
+
+type visitorRequestListResponse struct {
+	SchemaVersion string              `json:"schema_version"`
+	Requests      []visitorRequestDTO `json:"requests"`
+}
+
+// handleListVisitorRequests returns open visitor requests with the private
+// handle and message the owner needs to judge them. This is an owner-side,
+// device-authenticated route; none of this text is public.
+func (s *Server) handleListVisitorRequests(w http.ResponseWriter, r *http.Request) {
+	now := s.now()
+	page, err := s.store.ListProposalPage(r.Context(), store.ProposalPageCursor{}, store.MaxProposalPageLimit, now)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "visitor request list failed")
+		return
+	}
+	labels, err := s.store.PortalLabels(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "visitor request list failed")
+		return
+	}
+
+	requests := make([]visitorRequestDTO, 0)
+	for _, record := range page.Records {
+		if record.ActionID != store.ActionVisitorRequest {
+			continue
+		}
+		payload, decodeErr := store.VisitorProposalPayloadOf(record)
+		if decodeErr != nil {
+			writeError(w, http.StatusInternalServerError, "visitor request list failed")
+			return
+		}
+		requests = append(requests, visitorRequestDTO{
+			ProposalID:      record.ID,
+			ProfileID:       payload.ProfileID,
+			Label:           labels[payload.ProfileID],
+			Status:          string(record.Status),
+			WindowStartAt:   payload.WindowStart,
+			WindowEndAt:     payload.WindowEnd,
+			ZoneID:          payload.ZoneID,
+			DurationMinutes: payload.DurationMinutes,
+			BeyondHorizon:   payload.BeyondHorizon,
+			Handle:          payload.Handle,
+			Message:         payload.Message,
+			CreatedAt:       record.CreatedAt,
+			ExpiresAt:       record.ExpiresAt,
+			DecisionToken:   record.DecisionToken,
+			Disclosure:      approvalDisclosure,
+		})
+	}
+	writeJSON(w, http.StatusOK, visitorRequestListResponse{
+		SchemaVersion: syncmodel.SchemaVersion,
+		Requests:      requests,
+	})
+}
+
+type visitorDecisionRequest struct {
+	Decision string     `json:"decision"`
+	Token    string     `json:"token"`
+	StartAt  *time.Time `json:"startAt,omitempty"`
+	EndAt    *time.Time `json:"endAt,omitempty"`
+}
+
+func (s *Server) handleDecideVisitorRequest(w http.ResponseWriter, r *http.Request) {
+	device := deviceFromContext(r.Context())
+	proposalID := strings.TrimSpace(r.PathValue("id"))
+	var req visitorDecisionRequest
+	if err := decodeBody(w, r, maxDeviceBodyBytes, &req); err != nil {
+		writeDecodeError(w, err)
+		return
+	}
+	slot := store.VisitorSlot{}
+	if req.StartAt != nil {
+		slot.StartAt = *req.StartAt
+	}
+	if req.EndAt != nil {
+		slot.EndAt = *req.EndAt
+	}
+
+	record, err := s.store.DecideVisitorProposal(r.Context(), proposalID, device.ID,
+		store.ProposalStatus(req.Decision), req.Token, slot, s.now())
+	switch {
+	case errors.Is(err, store.ErrVisitorSlotOutOfWindow):
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	case errors.Is(err, store.ErrNotVisitorProposal):
+		writeError(w, http.StatusConflict, "that proposal is not a visitor request")
+		return
+	case errors.Is(err, store.ErrExpiredApprovalToken):
+		writeError(w, http.StatusGone, "approval token expired")
+		return
+	case errors.Is(err, store.ErrUsedApprovalToken), errors.Is(err, store.ErrProposalNotPending):
+		writeError(w, http.StatusConflict, "request already decided")
+		return
+	case errors.Is(err, store.ErrInvalidApprovalToken):
+		writeError(w, http.StatusUnauthorized, "invalid approval token")
+		return
+	case errors.Is(err, store.ErrProposalNotFound):
+		writeError(w, http.StatusNotFound, "request not found")
+		return
+	case err != nil:
+		writeError(w, http.StatusBadRequest, "request decision failed")
+		return
+	}
+
+	// Deliver the answer immediately so the visitor is not left waiting on the
+	// next timer tick. The decision is already durable either way.
+	s.pumpPortalBridge(r)
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"schema_version": syncmodel.SchemaVersion,
+		"proposal":       record,
+	})
+}
+
+// pumpPortalBridge runs one bridge cycle. Failures are logged rather than
+// returned: the decision is committed, and the outbox guarantees delivery on a
+// later pass.
+func (s *Server) pumpPortalBridge(r *http.Request) {
+	if s.portal == nil || s.portal.requests == nil {
+		return
+	}
+	if err := s.portal.requests.Pump(r.Context()); err != nil {
+		log.Printf("portal: bridge pump failed: %v", err)
+	}
 }
 
 // refreshPortal republishes availability after private data changed. Failures

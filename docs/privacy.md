@@ -193,8 +193,33 @@ trail.
 
 Links expire (90 days at most), can be revoked at any moment, and revocation is
 immediate: existing sessions stop working and the shared windows are deleted
-from the portal database. What a recipient already saw, screenshotted, or
-remembers cannot be recalled.
+from the portal database. Open requests are closed rather than deleted, so
+nobody is left watching a status that never moves. What a recipient already
+saw, screenshotted, or remembers cannot be recalled.
+
+### Asking for a time
+
+When a link allows it, a recipient can ask for a window that suits them and
+optionally give a name and a short note. That text is theirs, and it is
+private: encrypted in the portal database, encrypted again inside the owner's
+copy, shown to the owner because judging a request requires it, and never
+placed in the availability page, the shared projection, an access-log row, or
+a notification title. The product does not claim it never accepts names — it
+accepts them and protects them.
+
+Until the request has actually reached the owner's queue it is shown as
+"saved and on its way", never as sent. Claiming delivery the visitor cannot
+verify would be a small lie with real consequences for someone waiting.
+
+Approving a request tells the requester the exact time chosen. That is
+necessary to meet, and the owner is told so before choosing. Declining tells
+them only that the time did not work — never a reason, because any reason
+would disclose sleep, calendar, or health.
+
+Anyone who creates a request receives a one-time code proving they wrote it.
+Holding the shared link and its passcode is not enough to read someone else's
+request: several people can hold the same link and still cannot see each
+other's asks.
 
 ## Agent connectors
 

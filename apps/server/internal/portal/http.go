@@ -34,6 +34,7 @@ type Handler struct {
 	now             func() time.Time
 	publicOrigin    string
 	resolutionFloor time.Duration
+	notifyCreated   func()
 }
 
 type HandlerConfig struct {
@@ -48,6 +49,13 @@ type HandlerConfig struct {
 	// below zero use the package default, so a caller cannot disable the
 	// floor by leaving the field unset; tests shorten it explicitly.
 	ResolutionFloor time.Duration
+
+	// NotifyRequestCreated is called after a visitor request is durably
+	// stored. It is a bare signal, not a callback into the private store:
+	// the portal says "there is something to deliver" and the owner side
+	// decides what that means. Keeping it signal-shaped is what lets the
+	// portal package stay unable to reach private data.
+	NotifyRequestCreated func()
 }
 
 func NewHandler(cfg HandlerConfig) (*Handler, error) {
@@ -66,7 +74,13 @@ func NewHandler(cfg HandlerConfig) (*Handler, error) {
 	if floor <= 0 {
 		floor = resolutionFloor
 	}
-	return &Handler{store: cfg.Store, now: now, publicOrigin: origin, resolutionFloor: floor}, nil
+	return &Handler{
+		store:           cfg.Store,
+		now:             now,
+		publicOrigin:    origin,
+		resolutionFloor: floor,
+		notifyCreated:   cfg.NotifyRequestCreated,
+	}, nil
 }
 
 // Routes returns the public mux. It is mounted only when the portal is
@@ -77,6 +91,10 @@ func (h *Handler) Routes() http.Handler {
 	mux.Handle("GET /p/{linkToken}", h.linkChain(http.HandlerFunc(h.handlePage)))
 	mux.Handle("POST /p/{linkToken}/session", h.linkChain(h.requireOrigin(http.HandlerFunc(h.handleSession))))
 	mux.Handle("GET /p/{linkToken}/availability", h.linkChain(h.requireSession(http.HandlerFunc(h.handleAvailability))))
+	mux.Handle("GET /p/{linkToken}/requests", h.linkChain(h.requireSession(http.HandlerFunc(h.handleRequestForm))))
+	mux.Handle("POST /p/{linkToken}/requests", h.linkChain(h.requireOrigin(h.requireSession(http.HandlerFunc(h.handleCreateRequest)))))
+	mux.Handle("GET /p/{linkToken}/requests/{requestID}", h.linkChain(h.requireSession(http.HandlerFunc(h.handleRequestStatus))))
+	mux.Handle("POST /p/{linkToken}/requests/{requestID}/session", h.linkChain(h.requireOrigin(h.requireSession(http.HandlerFunc(h.handleRequestSession)))))
 	return mux
 }
 

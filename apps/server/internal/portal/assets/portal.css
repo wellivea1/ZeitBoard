@@ -208,7 +208,11 @@ label {
   font-weight: 600;
 }
 
-input[type="password"] {
+input[type="password"],
+input[type="text"],
+input[type="number"],
+input[type="datetime-local"],
+textarea {
   width: 100%;
   padding: 0.6rem 0.7rem;
   border: 1px solid var(--line);
@@ -216,6 +220,44 @@ input[type="password"] {
   background: var(--canvas);
   color: var(--ink);
   font: inherit;
+}
+
+textarea {
+  resize: vertical;
+}
+
+label + input,
+label + textarea {
+  margin-bottom: 0.85rem;
+}
+
+/* The one-time request code. It must be selectable and unambiguous, so it
+   uses a monospace face and never wraps mid-token in a way that hides a
+   hyphen. */
+.code {
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--canvas);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.button-link {
+  display: inline-block;
+  margin-top: 0.35rem;
+  padding: 0.6rem 1.1rem;
+  border-radius: 8px;
+  background: var(--button-bg);
+  color: var(--button-text);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.button-link:hover {
+  background: var(--button-hover);
 }
 
 button {

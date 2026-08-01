@@ -432,6 +432,85 @@ Not yet verified, and gating exposure: an independent security review
 operator TLS/reverse-proxy runbook with log-token redaction (item 3). Requests,
 messaging, and the live SSE layer are P5-b through P5-d and do not exist.
 
+## Visitor time requests (ADR-0030)
+
+Verified 2026-07-31 for slice P5-b, all against loopback servers and
+in-process handlers. The portal remains unexposed.
+
+**Round trip.** A request submitted through the public form is stored, reaches
+the owner's queue as a proposal with origin `visitor`, is decided with a
+one-use token, and the decision appears on the visitor's status page with the
+exact block the owner chose. The proposal payload carries the visitor's handle
+and message, because judging a request requires them.
+
+**Honest queued state.** With the bridge unable to file the request — no
+enrolled device — the pump reports failure, the request stays `queued`, and
+the visitor is shown "saved and on its way", never "sent". Once a device
+exists the same request goes through without resubmission.
+
+**Idempotency.** Four consecutive pumps over one request produce exactly one
+proposal, which is the failure that actually occurs: the private commit
+succeeds and the acknowledgement is lost. `ApplyDecision` is idempotent in the
+other direction too — three replays of the same approval are a no-op, and a
+later contradicting decision does not overwrite a settled one.
+
+**Exact-slot rule.** Approval is refused with a typed error for a block before
+the window, after it, straddling its end, of the wrong duration when one was
+requested, empty, or inverted; a block inside the window with the exact
+requested length is accepted. Over the API the same cases are 400, and the
+approved block reaches the visitor unchanged.
+
+**One-use tokens and route guards.** A replayed decision token is refused on
+the visitor route. The generic `/v1/proposals/{id}/decision` returns 409 for a
+visitor proposal, so the slot and delivery obligations cannot be skipped by
+choosing the other endpoint. `DecideVisitorProposal` refuses a non-visitor
+proposal. `place_visitor_request` is absent from the assistant action
+registry, so an agent cannot mint a proposal that appears to come from an
+outside person.
+
+**Requester isolation.** A visitor holding the shared link and passcode but no
+requester cookie sees the recovery-code form, not another visitor's request,
+and none of that request's text appears in the response. A wrong secret and an
+unknown request id produce identical status and body. Exchanging the correct
+secret yields a request-scoped cookie that renders the author's own request.
+
+**Validation.** Rejected with typed errors: end before start, a window already
+started, a window over eight hours, durations below 15 or above 480 minutes,
+a duration longer than its window, an unknown zone, and handle or message past
+their rune caps. Control characters are stripped and newlines and tabs folded
+without mangling the text. A window past the forecast horizon is accepted,
+flagged, and rendered with the explicit infeasibility warning — owner decision
+3, no product cap on how far ahead someone may ask.
+
+**Caps and revocation.** The per-session daily cap admits five requests and
+explains the sixth refusal. Revoking a link closes its open requests rather
+than deleting them, so a visitor is not left watching a status that never
+moves. A declined request's rendered text is asserted free of "asleep",
+"sleep", "busy", "calendar", "conflict", "medication", and "because".
+
+**Browser verification.** The whole visitor path was driven in a real browser:
+passcode gate, dashboard, request form, submission, the one-time recovery
+code, and the status page. The requester secret appears only after the `#` in
+the continue link, never in the path or query. The "now" badge, moved from a
+CSS pseudo-element into markup during P5-a, is confirmed present in the
+accessibility tree.
+
+**A P5-a defect this slice exposed.** ADR-0029 stored only a hash of the
+synchronizer token, which a server-rendered form can never embed — the
+mechanism could not have worked. CSRF tokens are now derived from the session
+value under a server-held key, so the plaintext is recoverable on every render
+while staying unguessable. The test asserts derivability, verification, and
+rejection of the session value itself.
+
+Measured suite results: `portal`, `portalbridge`, `api`, `config`, `daemon`,
+`store`, `readmodel`, `sync`, `assistant`, and `mcp` pass; `gofmt` and
+`go vet` are clean; Linux and Windows server builds succeed.
+
+Not implemented, and therefore not verified: messaging threads (P5-c), the SSE
+live layer and audit UI (P5-d), and the desktop dialog for choosing a block on
+the calendar — an owner decides through the API today. The exposure gate is
+unchanged and unmet.
+
 ## Environment limitations
 
 - Emulator semantics and screenshots were reviewed, but a full manual TalkBack
