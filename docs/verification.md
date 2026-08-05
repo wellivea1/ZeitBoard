@@ -572,6 +572,77 @@ persistence of candidates, the correction prompt, Android sync, the recompute
 orchestrator, and the 48–72 hour operational view. ADR-0031 lists these
 explicitly rather than leaving them implied.
 
+## Shadow inference validation gate (ADR-0031)
+
+Measured 2026-08-04 on the seeded synthetic suite. ADR-0031 requires a
+documented positive validation decision before an inferred episode may reach
+production planning. This is that measurement, and the decision is **no**.
+
+Ten scenarios, each a generated rhythm plus generated desktop activity around
+it. Candidates are matched to truth by greatest overlap; bias is the signed
+median, which distinguishes a correctable offset from noise.
+
+| Scenario | Truth | Cand | Cover | Onset med | Onset P90 | Wake med | Wake P90 | Onset bias | Wake bias | False |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| stable rhythm | 21 | 21 | 1.00 | 44m | 57m | 30m | 51m | −44m | +30m | 0 |
+| free-running tau 24.8 | 18 | 18 | 1.00 | 43m | 1h02m | 23m | 41m | −49m | +23m | 0 |
+| forced wake | 18 | 16 | 0.89 | 37m | 1h05m | 29m | 44m | −38m | +29m | 0 |
+| fragmented sleep | 18 | 18 | 1.00 | 36m | 59m | 23m | 38m | −38m | +23m | 0 |
+| naps | 18 | 18 | 1.00 | 33m | 55m | 24m | 42m | −35m | +24m | 0 |
+| quiet wake | 18 | 18 | 1.00 | 43m | 1h02m | **1h58m** | **2h16m** | −49m | **+1h58m** | 0 |
+| long wind-down | 18 | 18 | 1.00 | **2h03m** | **2h22m** | 23m | 41m | **−2h09m** | +23m | 0 |
+| machine used mid-sleep | 18 | 20 | 1.00 | 49m | 1h03m | 23m | 45m | −43m | +18m | 0 |
+| machine off some nights | 18 | 15 | 0.83 | 49m | 1h02m | 18m | 41m | −49m | +18m | 0 |
+| suspend instead of idle | 18 | 18 | 1.00 | 43m | 1h02m | 23m | 41m | −49m | +23m | 0 |
+
+Against the pilot targets (onset median ≤45 m, wake median ≤30 m, boundary P90
+≤90 m, coverage ≥0.85, zero false positives): **5 of 10 scenarios pass.**
+
+**Decision: inferred episodes do not enter production estimation.** They remain
+shadow-only.
+
+**What the numbers say.** Three results matter more than the pass count.
+
+*The error is systematic, not noisy.* Onset bias is −33 to −49 minutes and wake
+bias +18 to +30 minutes across every well-behaved scenario. Desktop inactivity
+brackets sleep by construction: someone stops using the machine before falling
+asleep and touches it again after waking. That is a correctable offset rather
+than an accuracy ceiling, which is a much better position than an unbiased error
+of the same size.
+
+*Behaviour dominates the algorithm.* The two scenarios that fail badly fail on
+the user's habits, not on the inference rules. A two-hour gap before touching
+the machine after waking produces a 1h58m wake error; a two-hour wind-down
+produces a 2h03m onset error. No refinement of the interval logic recovers
+information the machine never had. This is the strongest argument for Android
+sync: a wearable observes sleep directly and does not depend on whether someone
+opened a laptop.
+
+*Nothing was invented, but one episode can be reported as two.* Zero false
+positives in every scenario, including the ones with missing evidence, and
+coverage degrades honestly — 0.83 with four nights of no data, 0.89 under forced
+wake. The mid-sleep-use scenario is subtler: it does **not** lose coverage, it
+produces 20 candidates for 18 episodes. Splitting an eight-hour sleep leaves two
+four-hour halves, both above the three-hour minimum, so each becomes a candidate
+and one real night is counted twice. For a drift estimator that indexes by cycle
+this is worse than a miss — a missing night widens uncertainty, an extra episode
+shifts the fit. Merging adjacent candidates separated by a short waking gap is
+the obvious remedy and is deliberately not written against synthetic data.
+
+**The calibration trap, stated so it is not walked into.** The measured bias is
+close to the `StopUsingBefore` and `ResumeUsingAfter` values used to generate
+the activity. Shifting candidate boundaries by that bias would improve every
+number here and would be measuring the generator's own parameters back. Bias
+correction must be fitted on live data where the user's real habits are unknown,
+against user-confirmed boundaries, and it must be re-measured before it changes
+anything a person sees.
+
+**What would change the decision.** Boundary correction fitted on live pilot
+data; a second independent source, most plausibly Health Connect sleep via
+Android sync; and a correction prompt that lets the user resolve the conflicts
+the candidates already record. Until then the pilot's Stage 1 — shadow
+collection with no planning effect — is exactly the right posture.
+
 ## What this record does not measure
 
 Added 2026-08-04 after an applicability/utility/automaticity review

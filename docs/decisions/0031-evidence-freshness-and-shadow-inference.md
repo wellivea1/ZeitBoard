@@ -133,6 +133,25 @@ package called `activity`.
   the record, which `FromActivity` does not report. It is left undone rather
   than approximated.
 
+## Validation gate outcome (2026-08-04)
+
+The gate decision 8 requires has now been measured, and it is **negative**:
+inferred episodes stay shadow-only. Five of ten synthetic scenarios meet the
+pilot targets. The full table is in `verification.md`.
+
+The result is more useful than the pass count. The error is systematic — desktop
+inactivity brackets sleep by 33–49 minutes before onset and 18–30 minutes after
+wake — rather than noisy, so it is a correctable offset. The scenarios that fail
+badly fail on user behaviour rather than on the rules: a two-hour wind-down or a
+two-hour delay before touching the machine after waking destroys a boundary no
+interval logic can recover. And nothing was invented: zero false positives
+throughout, with coverage degrading honestly when evidence is missing.
+
+Correcting the bias against these numbers is explicitly refused. The measured
+offset is close to the generator's own behaviour parameters, so fitting to it
+would measure an assumption back. Calibration must come from live data against
+user-confirmed boundaries.
+
 ## Verification
 
 `core/freshness` and `core/inference` carry their own suites, including the
