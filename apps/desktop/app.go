@@ -19,6 +19,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 	"non24.app/core/domain"
 	"non24.app/core/estimation"
+	"non24.app/core/freshness"
 	"non24.app/core/ingest"
 	"non24.app/core/platform/activity"
 	"non24.app/core/scheduling"
@@ -86,6 +87,22 @@ type OverviewDTO struct {
 	FixtureMode              bool                 `json:"fixtureMode"`
 	Disclaimer               string               `json:"disclaimer"`
 	UpdatedLabel             string               `json:"updatedLabel"`
+
+	// Freshness carries the shared policy's verdict on whether the
+	// current-state claim above may be trusted. The desktop previously had no
+	// such concept: "Likely awake" was the default whenever the newest stored
+	// sleep interval did not contain now, so it survived indefinitely.
+	Freshness FreshnessDTO `json:"freshness"`
+}
+
+// FreshnessDTO mirrors core/freshness for the UI. It is the same verdict the
+// server projection and the availability portal use.
+type FreshnessDTO struct {
+	State       string `json:"state"`
+	Reason      string `json:"reason,omitempty"`
+	Explanation string `json:"explanation"`
+	AgeLabel    string `json:"ageLabel,omitempty"`
+	Trusted     bool   `json:"trusted"`
 }
 
 type MedicationEventDTO struct {
@@ -595,6 +612,14 @@ func (a *App) localOverview(ctx context.Context, now time.Time) (OverviewDTO, er
 	}
 	interval := latest.Intervals[0].Interval
 	lastWake := interval.End
+	nextSleep := state.Estimate.PredictedSleepWindows[0].Interval
+
+	// Decide whether a current-state claim is permitted at all before
+	// composing one. The shared policy keys on the age of the evidence, not on
+	// when this function last ran — the desktop recomputes on every screen
+	// load, so analysis age is always zero and says nothing.
+	assessment := freshness.Default().Assess(desktopFreshnessInputs(state, latest, nextSleep, now))
+
 	currentState := "Likely awake"
 	timeSinceWake := "Not available"
 	if interval.Contains(now) {
@@ -603,7 +628,9 @@ func (a *App) localOverview(ctx context.Context, now time.Time) (OverviewDTO, er
 	} else if now.After(lastWake.UTC) {
 		timeSinceWake = formatDuration(now.Sub(lastWake.UTC))
 	}
-	nextSleep := state.Estimate.PredictedSleepWindows[0].Interval
+	if !assessment.MayClaimCurrentState() {
+		currentState = "Unknown"
+	}
 	currentAvailability := domain.AvailabilityWindow{
 		ID:         "current-functional-window",
 		Kind:       domain.AvailabilityFunctional,
@@ -656,8 +683,60 @@ func (a *App) localOverview(ctx context.Context, now time.Time) (OverviewDTO, er
 		MedicationEvents:         []MedicationEventDTO{},
 		FixtureMode:              false,
 		Disclaimer:               disclaimer,
-		UpdatedLabel:             "Updated from local sleep entries just now",
+		// The old label said "just now" on every screen load, which described
+		// the recomputation rather than the data. The freshness block below
+		// reports the age of the evidence, which is the useful fact.
+		UpdatedLabel: "Computed from local sleep entries",
+		Freshness:    freshnessDTO(assessment),
 	}, nil
+}
+
+// desktopFreshnessInputs gathers what the shared policy needs. The newest
+// evidence is the recorded-at of the newest sleep interval, not its clock time:
+// a record entered today about last week is fresh evidence, and the reverse is
+// not.
+func desktopFreshnessInputs(
+	state localEstimateState,
+	latest domain.SleepSession,
+	nextSleep domain.TimeRange,
+	now time.Time,
+) freshness.Inputs {
+	in := freshness.Inputs{Now: now, ExpectedSleepOnset: nextSleep.Start.UTC}
+	for _, session := range state.Sessions {
+		for _, interval := range session.Intervals {
+			end := interval.Interval.End.UTC
+			if end.After(in.LatestSleepEnd) {
+				in.LatestSleepEnd = end
+			}
+			recorded := interval.EndEvidence.RecordedAt
+			if session.CreatedAt.After(recorded) {
+				recorded = session.CreatedAt
+			}
+			if recorded.IsZero() {
+				recorded = end
+			}
+			if recorded.After(in.NewestEvidence) {
+				in.NewestEvidence = recorded
+			}
+		}
+	}
+	if in.NewestEvidence.IsZero() && len(latest.Intervals) > 0 {
+		in.NewestEvidence = latest.Intervals[0].Interval.End.UTC
+	}
+	return in
+}
+
+func freshnessDTO(assessment freshness.Assessment) FreshnessDTO {
+	dto := FreshnessDTO{
+		State:       string(assessment.State),
+		Reason:      string(assessment.Reason),
+		Explanation: assessment.Explanation,
+		Trusted:     assessment.State == freshness.StateCurrent,
+	}
+	if assessment.HasEvidence {
+		dto.AgeLabel = "Newest record " + formatDuration(assessment.EvidenceAge) + " ago"
+	}
+	return dto
 }
 
 func (a *App) GetRhythm() (estimation.RhythmProjection, error) {

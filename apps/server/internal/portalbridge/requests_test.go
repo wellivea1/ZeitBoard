@@ -3,7 +3,9 @@ package portalbridge_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -12,7 +14,9 @@ import (
 	"non24.app/server/internal/auth"
 	"non24.app/server/internal/portal"
 	"non24.app/server/internal/portalbridge"
+	"non24.app/server/internal/readmodel"
 	"non24.app/server/internal/store"
+	syncmodel "non24.app/server/internal/sync"
 )
 
 type bridgeFixture struct {
@@ -387,4 +391,67 @@ type emptySleep struct{}
 
 func (emptySleep) EffectiveSleepSessions(context.Context) ([]domain.SleepSession, error) {
 	return nil, nil
+}
+
+// TestStaleSleepEvidenceIsNotPublishedAsAvailability closes a defect in the
+// P5-a materializer: GeneratedAt is the time the snapshot row was written, and
+// MaterializeAll runs after *any* accepted sync push. Pushing a task therefore
+// refreshed the portal's freshness signal while the sleep evidence underneath
+// was days old, and the page read "updated just now".
+func TestStaleSleepEvidenceIsNotPublishedAsAvailability(t *testing.T) {
+	f := newBridgeFixture(t)
+	ctx := context.Background()
+
+	// Sleep history that fits, but whose newest episode ended three days ago.
+	if err := f.private.RegisterDevice(ctx, "dev_stale", "desktop",
+		auth.HashToken("tok2"), f.now.Add(-30*24*time.Hour)); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	cycle := 24*time.Hour + 50*time.Minute
+	lastStart := f.now.Add(-3 * 24 * time.Hour)
+	records := make([]syncmodel.PushRecord, 0, 12)
+	for i := 0; i < 12; i++ {
+		start := lastStart.Add(-time.Duration(11-i) * cycle)
+		end := start.Add(8 * time.Hour)
+		records = append(records, syncmodel.PushRecord{
+			RecordID:  fmt.Sprintf("stale-obs-%02d", i),
+			Kind:      syncmodel.KindObservation,
+			CreatedAt: end,
+			Payload: json.RawMessage(fmt.Sprintf(
+				`{"observation_id":%q,"kind":"sleep_episode","start_at":%q,"end_at":%q,"zone_id":"UTC","sleep":{"classification":"principal"},"provenance":{"acquisition_method":"synthetic","evidence_status":"directly_observed","recorded_at":%q,"source_record_id":"stale-src"}}`,
+				fmt.Sprintf("stale-obs-%02d", i),
+				start.UTC().Format(time.RFC3339),
+				end.UTC().Format(time.RFC3339),
+				end.UTC().Format(time.RFC3339))),
+		})
+	}
+	request := syncmodel.PushRequest{SchemaVersion: syncmodel.SchemaVersion, Records: records}
+	if err := syncmodel.ValidatePushRequest(&request); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if _, _, err := f.private.Append(ctx, "dev_stale", request.Records); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+
+	materializer := portalbridge.Materializer{
+		Sleep:    readmodel.SleepReader{Store: f.private},
+		Profiles: f.portal,
+		Sink:     f.portal,
+		Now:      func() time.Time { return f.now },
+	}
+	snapshot, err := materializer.Snapshot(ctx)
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	if snapshot.Status == portal.StatusAvailable {
+		t.Error("three-day-old sleep evidence was published as current availability")
+	}
+	if len(snapshot.Windows) != 0 {
+		t.Errorf("stale evidence produced %d windows", len(snapshot.Windows))
+	}
+	// The snapshot is still written, and its generation time is still honest:
+	// it says when the row was made, not that the rhythm is current.
+	if snapshot.GeneratedAt.IsZero() {
+		t.Error("the snapshot lost its generation time")
+	}
 }
