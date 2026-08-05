@@ -2809,3 +2809,55 @@ button {
   font-size: 0.82rem;
   color: var(--muted);
 }
+
+/* Freshness (ADR-0031, UI guideline 5.3). Quiet by default and escalating only
+   when the claim is qualified or withheld: a permanent warning teaches people
+   to ignore warnings. */
+.overview-freshness {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.6rem;
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.overview-freshness[data-state="stale"],
+.overview-freshness[data-state="withheld"] {
+  color: var(--state-uncertain);
+  font-weight: 600;
+}
+
+.overview-evidence-line {
+  margin: 0 0 0.2rem;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.overview-evidence-line[data-state="stale"],
+.overview-evidence-line[data-state="withheld"] {
+  color: var(--state-uncertain);
+}
+
+/* The categorical confidence label sits behind a disclosure because ADR-0022
+   measured the buckets inverted. It is kept, not deleted: the reasons behind
+   it remain useful once the reader knows not to rank by it. */
+.overview-model-detail {
+  margin: 0.5rem 0;
+  font-size: 0.85rem;
+}
+
+.overview-model-detail summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.overview-model-detail > *:not(summary) {
+  margin-top: 0.5rem;
+}
+
+.overview-calibration-note {
+  color: var(--muted);
+  max-width: 62ch;
+}

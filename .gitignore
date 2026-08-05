@@ -27,3 +27,6 @@ local.properties
 captures/
 *.jks
 *.keystore
+
+# TypeScript incremental build metadata (a local artifact of tsc -b).
+*.tsbuildinfo

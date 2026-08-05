@@ -1535,3 +1535,32 @@ Use the repo's synthetic fixtures verbatim; they already cover the core cases:
 *End of specification. This document should evolve with the v1 contracts; if a screen needs a
 field the contract doesn't expose, raise a contract change (and ADR) rather than inventing UI
 data.*
+
+---
+
+## Estimate quality and freshness (2026-08-04)
+
+Two content rules now hold across every surface that reports the user's current
+state. Both come from measurement rather than taste, and both are enforced in
+code rather than left to review.
+
+**Lead with evidence, not with a confidence bucket.** ADR-0022 measured the
+categorical `High / Medium / Low` labels inverted on real history: episodes
+marked High were not more accurate than those marked Medium. A surface must not
+present the label as the answer to "how good is this estimate". The answer is
+how recent the supporting records are, from the shared `core/freshness` policy.
+The categorical label may still be shown behind a disclosure, with the
+calibration result stated plainly; it must not be the headline. This holds until
+calibration is fixed and reverified.
+
+**Every current-state claim carries its freshness, and a withheld claim reads as
+withheld.** The line is quiet by default and escalates only when the estimate is
+stale or the claim is being withheld — a permanent warning teaches people to
+ignore warnings. When the policy withholds, the surface says the state is not
+being claimed and why, rather than showing an old claim with a caveat attached.
+"Unknown" is a complete, correct answer.
+
+See [`ui-guideline-review-2026-08-04.md`](ui-guideline-review-2026-08-04.md) for
+the full disposition and
+[ADR-0031](decisions/0031-evidence-freshness-and-shadow-inference.md) for the
+policy itself.
