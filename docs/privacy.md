@@ -61,6 +61,26 @@ calendar, activity, location, or text.
 Activity collection, when enabled, records only the minimum coarse state needed
 by the product boundary. It must not retain application names or content.
 
+Concretely, the desktop collector records a closed set of eight behavioural
+states — startup, active, idle, locked, unlocked, suspended, resumed, shutdown
+— each with a time and how long the previous state lasted. That is the whole
+recorded shape; there is no field for an application, a window title, a
+document, a URL, or a keystroke, and a test asserts the encoded payload
+carries no key suggesting one. It answers "was this machine in use", never
+"what was it used for".
+
+It reads that state through two narrow system calls: time since last input,
+which cannot expose what the input was, and whether the interactive desktop is
+locked. It does not hook input, capture the screen, read the foreground window,
+or sample at a rate that could reconstruct activity within a session — an
+ordinary hour of work produces no records at all. Suspend and resume are
+*inferred* from wall-clock gaps rather than observed, and the collector does
+not claim a power-event capability it does not have.
+
+This evidence is one input to sleep inference and is not a sleep record on its
+own. Inferred sleep is marked as such, never overwrites a raw observation, and
+does not reach planning until a documented validation decision allows it.
+
 ## Local storage
 
 Private data lives in the local SQLite database and syncs to the user's
