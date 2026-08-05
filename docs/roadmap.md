@@ -98,10 +98,19 @@ The 2026-07-27 architecture and performance hardening review is tracked in
 ## Next slices (priority order)
 
 The actionable near-term plan. Each slice is self-contained and lands with an
-ADR when it changes architecture. The phase-level direction (through the
-public availability portal) with a pasteable `/goal` prompt per phase is
-[`phase-goals.md`](phase-goals.md); the portal itself is designed in
-[`portal-design.md`](portal-design.md); slices below map onto its phases 1-3.
+ADR when it changes architecture. The phase-level direction with a pasteable
+`/goal` prompt per phase is [`phase-goals.md`](phase-goals.md); the portal
+itself is designed in [`portal-design.md`](portal-design.md).
+
+> **Priority correction, 2026-08-04.** An applicability/utility/automaticity
+> review found the project had moved into platform maturity ahead of the loop
+> it exists to close: fresh evidence still mostly arrives because the user
+> typed it. Its verified findings and dispositions are in
+> [`automaticity-review-2026-08-04.md`](automaticity-review-2026-08-04.md).
+> **The next work is slice 9 (Android sync) and slice 11 (a real activity
+> collector), not more portal or agent breadth.** Portal P5-c/P5-d and new
+> assistant actions are paused — maintained and tested, not extended. Three
+> claim-accuracy defects it surfaced are tracked as slice 12.
 
 1. ~~**Close the control loop — approvals unification + sync robustness.**~~
    ✅ Delivered (ADR-0016): cross-device decisions via listed one-use tokens, a
@@ -204,9 +213,13 @@ M-E's separately reviewed local agent projection.
    so a voice client works with the backend off. The medical refusal moved to
    shared `core/agentpolicy` and is byte-identical across chat, backend MCP,
    and the local endpoint.
-9. **Android companion sync.** The Health Connect skeleton exists but the
-   companion has no sync client; bring it onto the same enrollment + push/pull
-   path (its ADR should reuse ADR-0015's model).
+9. **Android companion sync. — NOW THE TOP PRIORITY.** The Health Connect
+   skeleton reads real sleep and stores it durably, but the companion has no
+   sync client, so the device most likely to hold fresh wearable sleep cannot
+   reach the estimator. Bring it onto the same enrollment + push/pull path
+   (its ADR should reuse ADR-0015's model, ADR-0020's revision records, and
+   ADR-0017's tombstones). This is the single highest-value change in the
+   project: it connects the best existing passive source to the existing core.
 9b. **Availability portal.** *P5-a delivered (ADR-0029):* a separate portal
     database that the public package cannot reach by import, an owner-side
     materializer narrowing the estimate to windows plus freshness, the public
@@ -262,6 +275,30 @@ M-E's separately reviewed local agent projection.
     as text plus pattern, keep no-safe-window context in the same workflow, and
     use compact mobile actions; the phone appearance picker is a two-column
     selector and icon-only navigation retains explicit accessible names.
+
+11. **A real Windows activity collector. — SECOND PRIORITY.**
+    `core/platform/activity/collector.go` emits one `"state": "startup"`
+    observation and nothing else; `SafeCollector` reads as far more capability
+    than exists. Replace it with bounded privacy-minimized transitions:
+    startup/shutdown, session lock/unlock, active/idle thresholds,
+    suspend/resume, and display state, behind platform interfaces and build
+    tags so a Linux adapter stays possible. `privacy.md`'s existing commitment
+    holds and is not relaxed: no keystrokes, typed content, screenshots,
+    browser history, **application names**, or high-frequency input streams.
+    Record desktop CPU/memory/startup baselines before it lands so its cost
+    can be stated rather than guessed.
+12. **Claim-accuracy defects (small, and worth doing before more breadth).**
+    (a) The Sharing screen still says "Link creation and recipient access are
+    not connected in this build" — true for the user, but P5-a shipped the
+    owner-side profile CRUD on the backend and nothing was wired to it.
+    (b) The desktop Overview renders a categorical Confidence badge while
+    ADR-0022 measured those buckets inverted and the portal withholds them for
+    that reason; the owner's surface is currently less honest than the public
+    one. (c) The Overview has no freshness or staleness handling at all, while
+    the portal withholds an estimate past 6 h and 24 h — the stricter policy
+    was written for strangers and never applied to the person who depends on
+    it. One shared policy should serve desktop, server, local agent, and
+    portal.
 
 **Small debts (fold into adjacent slices):** finish ordered local/server migrations; ~~
 → domain decoder (now duplicated across desktop storage, server readmodel, and

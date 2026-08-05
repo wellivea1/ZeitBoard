@@ -331,6 +331,16 @@ Phase 6 consumes only internal `request_created`, `request_decided`, and
 `message_added` events. Notification transports do not receive portal-store or
 health-store access.
 
+**P5-c and P5-d are paused as of 2026-08-04**, by the priority correction in
+[`automaticity-review-2026-08-04.md`](automaticity-review-2026-08-04.md):
+messaging and a live layer are downstream of source freshness, and the portal
+cannot honestly publish a live status while the owner's own current-state claim
+has no freshness policy. Paused means maintained and tested, not cancelled —
+this design stands, and the delivered P5-a/P5-b surfaces stay green. When the
+phase resumes, the sequence is: wire the desktop Sharing screen, centralize
+freshness, complete the independent review, ship read-only availability, then
+requests, and only then evaluate whether messaging is needed at all.
+
 The transactional outbox in section 2 is implemented in both directions as of
 P5-b. Section 7's messaging threads and the second requester exchange remain
 P5-c; SSE and the audit UI remain P5-d.
