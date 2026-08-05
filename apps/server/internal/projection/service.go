@@ -8,6 +8,7 @@ import (
 
 	"non24.app/core/domain"
 	"non24.app/core/estimation"
+	"non24.app/core/freshness"
 )
 
 const SchemaVersion = "v1"
@@ -141,10 +142,26 @@ func (s Service) Overview(ctx context.Context, sessions []domain.SleepSession) (
 		return OverviewResponse{}, errors.New("estimate has no predicted sleep windows")
 	}
 	nextSleep := estimate.PredictedSleepWindows[0].Interval
+	// The same shared policy the desktop and the portal use. Without it this
+	// projection reports a current state from whatever was last stored, however
+	// old, because it recomputes on every request and so always looks current.
+	//
+	// Only the state string changes. A structured freshness block would be a
+	// new field on a strict v1 response, and the desktop's own backend client
+	// decodes with DisallowUnknownFields — precisely the "existing strict
+	// consumers would reject the payload" case that contracts/README.md
+	// reserves for a new contract version. The correction that matters (no
+	// confident claim on stale evidence) does not need the new field; carrying
+	// the reason to a synced client does, and waits for v2.
+	assessment := freshness.Default().Assess(freshnessInputs(sessions, nextSleep, now))
+	currentState := estimatedState(now, lastWake, nextSleep)
+	if !assessment.MayClaimCurrentState() {
+		currentState = "Unknown"
+	}
 	return OverviewResponse{
 		SchemaVersion:            SchemaVersion,
 		Status:                   "estimated",
-		CurrentEstimatedState:    estimatedState(now, lastWake, nextSleep),
+		CurrentEstimatedState:    currentState,
 		TimeSinceWake:            formatDuration(now.Sub(lastWake.UTC)),
 		PredictedNextSleepWindow: formatRange(nextSleep),
 		DriftEstimate:            fmt.Sprintf("%+.0f minutes per observed sleep cycle", estimate.ObservedDriftPerCycle.Minutes()),
@@ -337,4 +354,29 @@ func rhythmBandDTO(row estimation.RhythmBand) RhythmBandDTO {
 		Source:        row.Source,
 		Confidence:    row.Confidence,
 	}
+}
+
+// freshnessInputs derives the shared policy's inputs. The newest evidence is
+// when a record was recorded, not when the sleep it describes occurred.
+func freshnessInputs(sessions []domain.SleepSession, nextSleep domain.TimeRange, now time.Time) freshness.Inputs {
+	in := freshness.Inputs{Now: now, ExpectedSleepOnset: nextSleep.Start.UTC}
+	for _, session := range sessions {
+		for _, interval := range session.Intervals {
+			end := interval.Interval.End.UTC
+			if end.After(in.LatestSleepEnd) {
+				in.LatestSleepEnd = end
+			}
+			recorded := interval.EndEvidence.RecordedAt
+			if session.CreatedAt.After(recorded) {
+				recorded = session.CreatedAt
+			}
+			if recorded.IsZero() {
+				recorded = end
+			}
+			if recorded.After(in.NewestEvidence) {
+				in.NewestEvidence = recorded
+			}
+		}
+	}
+	return in
 }

@@ -68,11 +68,16 @@ func newLeakFixture(t *testing.T) *leakFixture {
 	}
 
 	// A rhythm the estimator can actually fit: twelve principal episodes
-	// drifting about 50 minutes per cycle.
+	// drifting about 50 minutes per cycle, built backwards from now so the
+	// newest one ended three hours ago. Anchoring them in the past instead
+	// would make the fixture describe someone who has not slept in days,
+	// which the shared freshness policy correctly refuses to publish.
 	records := make([]syncmodel.PushRecord, 0, 14)
-	base := now.Add(-14 * 24 * time.Hour)
+	cycle := 24*time.Hour + 50*time.Minute
+	lastStart := now.Add(-11 * time.Hour)
+	base := lastStart.Add(-11 * cycle)
 	for i := 0; i < 12; i++ {
-		start := base.Add(time.Duration(i) * (24*time.Hour + 50*time.Minute))
+		start := base.Add(time.Duration(i) * cycle)
 		id := fmt.Sprintf("obs-%02d", i)
 		if i == 0 {
 			id = canaries["observation id"]
@@ -174,11 +179,14 @@ func newLeakFixture(t *testing.T) *leakFixture {
 	}
 }
 
+// sleepObservationPayload records each episode as observed when it ended, so
+// the fixture's evidence age is realistic for the freshness policy.
 func sleepObservationPayload(id string, start, end time.Time) json.RawMessage {
 	return json.RawMessage(fmt.Sprintf(
-		`{"observation_id":%q,"kind":"sleep_episode","start_at":%q,"end_at":%q,"zone_id":"America/New_York","sleep":{"classification":"principal"},"provenance":{"acquisition_method":"synthetic","evidence_status":"directly_observed","recorded_at":"2026-03-01T12:00:00Z","source_record_id":%q}}`,
+		`{"observation_id":%q,"kind":"sleep_episode","start_at":%q,"end_at":%q,"zone_id":"America/New_York","sleep":{"classification":"principal"},"provenance":{"acquisition_method":"synthetic","evidence_status":"directly_observed","recorded_at":%q,"source_record_id":%q}}`,
 		id,
 		start.UTC().Format(time.RFC3339),
+		end.UTC().Format(time.RFC3339),
 		end.UTC().Format(time.RFC3339),
 		canaries["source record id"],
 	))

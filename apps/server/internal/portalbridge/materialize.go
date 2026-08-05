@@ -15,6 +15,7 @@ import (
 
 	"non24.app/core/domain"
 	"non24.app/core/estimation"
+	"non24.app/core/freshness"
 	"non24.app/server/internal/portal"
 )
 
@@ -86,6 +87,17 @@ func (m Materializer) Snapshot(ctx context.Context) (portal.Snapshot, error) {
 		return portal.Snapshot{}, fmt.Errorf("estimate availability: %w", err)
 	}
 
+	// The withholding decision is made here, on the age of the evidence,
+	// rather than downstream on the age of this snapshot. `GeneratedAt` is
+	// when the row was written, and MaterializeAll runs after *any* accepted
+	// sync push — including a task push that says nothing about sleep. Left to
+	// the reader, a stale rhythm would keep reading "updated just now".
+	assessment := freshness.Default().Assess(freshnessInputs(estimate, sessions, now))
+	if !assessment.MayClaimCurrentState() {
+		snapshot.Status = portal.StatusInsufficientData
+		return snapshot, nil
+	}
+
 	windows := wakingWindows(estimate, now)
 	if len(windows) == 0 {
 		snapshot.Status = portal.StatusInsufficientData
@@ -95,6 +107,39 @@ func (m Materializer) Snapshot(ctx context.Context) (portal.Snapshot, error) {
 	snapshot.Windows = windows
 	snapshot.HorizonEnd = windows[len(windows)-1].EndAt
 	return snapshot, nil
+}
+
+// freshnessInputs derives the shared policy's inputs from an estimate and the
+// sessions behind it. The freshness reason itself never crosses to the portal;
+// a visitor learns only that no availability is shown.
+func freshnessInputs(estimate domain.PhaseEstimate, sessions []domain.SleepSession, now time.Time) freshness.Inputs {
+	in := freshness.Inputs{Now: now}
+	for _, session := range sessions {
+		for _, interval := range session.Intervals {
+			end := interval.Interval.End.UTC
+			if end.After(in.LatestSleepEnd) {
+				in.LatestSleepEnd = end
+			}
+			// Prefer when the evidence was recorded over when the sleep
+			// occurred: a record entered today about last week's sleep is
+			// fresh evidence, and a week-old record of last night's sleep is
+			// not. Fall back to the interval itself when provenance is absent.
+			recorded := interval.EndEvidence.RecordedAt
+			if session.CreatedAt.After(recorded) {
+				recorded = session.CreatedAt
+			}
+			if recorded.IsZero() {
+				recorded = end
+			}
+			if recorded.After(in.NewestEvidence) {
+				in.NewestEvidence = recorded
+			}
+		}
+	}
+	if len(estimate.PredictedSleepWindows) > 0 {
+		in.ExpectedSleepOnset = estimate.PredictedSleepWindows[0].Interval.Start.UTC
+	}
+	return in
 }
 
 // wakingWindows narrows predicted waking availability to instants and a zone.

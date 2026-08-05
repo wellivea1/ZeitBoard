@@ -525,6 +525,53 @@ server module.
 Not implemented, and therefore not verified: messaging threads (P5-c) and the
 SSE live layer and audit UI (P5-d). The exposure gate is unchanged and unmet.
 
+## Evidence freshness, activity, and shadow inference (ADR-0031)
+
+Verified 2026-08-04 for the first P7 slices.
+
+**Freshness.** `core/freshness` covers fresh, aging, and withheld bands; no
+evidence distinguished from old evidence; the unrecorded-expected-sleep case
+that a pure age threshold cannot catch; a two-hour-late onset *not* withholding,
+which checks the grace period against ADR-0022's measured 5.41 h P90 error;
+configured-but-silent sources withholding while no configured source does not;
+clock-skew evidence clamped rather than producing a negative age; an
+unconfigured policy falling back to the defaults; and every explanation asserted
+free of medication, dose, task, calendar, and diagnosis vocabulary so the same
+strings stay safe on the public surface.
+
+**The two defects it closes.** A desktop test seeds a fittable rhythm whose
+newest record is four days old and asserts the current state is withheld rather
+than "Likely awake", with a counterpart at two hours asserting a plain claim
+still appears. A portalbridge test seeds a rhythm whose newest episode ended
+three days ago and asserts the snapshot is not published as available — the case
+where `generatedAt` was refreshed by an unrelated task push while the sleep
+evidence was stale.
+
+**Activity.** The state machine covers startup; an hour of ordinary work
+producing no records at all; idle backdated to when input stopped rather than to
+the poll that noticed; the return to use carrying the full idle duration; a clock
+jump becoming suspend/resume; an ordinary 90-second poll gap *not* becoming one;
+lock taking precedence over idle; a source asserting nothing moving nothing;
+shutdown recorded once; and the encoded payload asserted against a four-key
+allowlist with no key suggesting content capture. An unknown state fails to
+encode.
+
+**Inference.** Quiet desktop time becoming a candidate with non-zero boundary
+uncertainty; an evening and a weekend away both refused with a typed code; no
+evidence refused distinctly; wearable agreement tightening the boundaries;
+disagreement recorded rather than discarded; the correction prompt naming the
+disagreement without exposing internal source ids; a shutdown not opening a
+quiet interval; and suspend counting as quiet.
+
+Measured: `gofmt` and `go vet` clean across core, desktop, and server including a
+Windows-target vet of core; all Go suites pass; Linux and Windows server builds
+succeed; 29 contract fixtures verify; `npm run check:web` passes.
+
+Not verified because not built: background collection across a hidden window,
+persistence of candidates, the correction prompt, Android sync, the recompute
+orchestrator, and the 48–72 hour operational view. ADR-0031 lists these
+explicitly rather than leaving them implied.
+
 ## What this record does not measure
 
 Added 2026-08-04 after an applicability/utility/automaticity review
