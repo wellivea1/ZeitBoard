@@ -85,7 +85,17 @@ style alerts need a push path that works self-hosted (web push with
 operator VAPID keys; the Android companion as a second receiver). The
 companion still has no sync client (slice 9).
 
-**Sequencing logic.** Trust before reach: P1's estimator gate, P2's local
+**Sequencing correction (2026-08-04).** An applicability/utility/automaticity
+review found that the project moved sideways into platform maturity before
+closing the loop the product exists for: fresh evidence still mostly arrives
+because the user typed it. Its findings were verified against the code and
+dispositioned in
+[`automaticity-review-2026-08-04.md`](automaticity-review-2026-08-04.md). The
+next phase is therefore **P7, the automatic daily loop**, not P5-c/P5-d or P6.
+Portal messaging and the live layer are paused — maintained and tested, not
+extended. The order below is superseded by that ledger's sequence.
+
+**Original sequencing logic.** Trust before reach: P1's estimator gate, P2's local
 calendar gate, and P3's local disease-management substance through M-C are
 closed. P4's local assistant gate is
 closed as well. The next primary dependency is opening the portal (P5), then
@@ -270,6 +280,65 @@ approve/decline that also materializes the ADR-0023 block.
 > raises a push on an enrolled device; notification bodies contain no
 > restricted fields (tested); the companion syncs sleep + tasks
 > round-trip.
+
+### `/goal phase-7-automatic-daily-loop`
+
+**Next phase as of 2026-08-04.** Rationale and verified findings are in
+[`automaticity-review-2026-08-04.md`](automaticity-review-2026-08-04.md).
+
+> **Goal: close the automatic daily loop. Bring fresh sleep/wake evidence from
+> Android Health Connect and privacy-minimized Windows activity into the shared
+> Go analysis path, and refresh the user's near-term planning state without
+> manual transcription and without an open UI screen.**
+> Context: `core/platform/activity/collector.go` (startup-only today),
+> `apps/android/.../HealthConnectSleepRepository.kt` (ingests but does not
+> sync), ADR-0015/0017/0020 (enrollment, tombstones, revision sync),
+> ADR-0022 (the measured-delta gate), ADR-0029 (the freshness policy the
+> portal already has and the desktop does not).
+> **Slices.** (1) An ADR covering Android sleep-record sync, Windows activity
+> evidence, inference provenance, background recomputation, freshness
+> semantics, and per-source opt-out and erasure — plus recorded desktop
+> CPU/memory/startup and Android battery baselines *before* the collector
+> lands, so its cost can be stated rather than guessed. (2) Android
+> enrollment and push/pull over the existing model: immutable source
+> revisions, idempotent dedupe, endpoint offsets preserved without inventing
+> an IANA zone, corrections synced separately, tombstones propagated, a
+> durable outbox with explicit queued/syncing/synced/error state, last-good
+> UI on failure, and local-only mode still supported. Android still runs no
+> estimator of its own. (3) A real Windows collector: startup/shutdown,
+> lock/unlock, active/idle transitions, suspend/resume, display state —
+> compact intervals and transitions, never keystrokes, typed content,
+> screenshots, browser history, application names, or a high-frequency input
+> stream. Platform interfaces and build tags so a Linux adapter stays
+> possible. (4) A multi-source candidate builder emitting `inferred` episodes
+> with start/end uncertainty, supporting and conflicting source ids, and an
+> algorithm version — **shadow-only**, never merging away raw evidence, with
+> corrections remaining a separate append-only layer. (5) A validation gate:
+> extend the seeded generator with quiet wake, a shared desktop, wearable
+> false sleep, missingness, forced-appointment wake, fragmentation, delayed
+> cross-device sync, and revision/correction conflict; add replay tooling;
+> an inferred episode reaches production planning only after a documented
+> positive measured decision. (6) A durable, idempotent recompute
+> orchestrator that coalesces bursts, records an input fingerprint, runs no
+> LLM, needs no open screen, and cannot emit duplicate proposals.
+> (7) **One** freshness policy shared by desktop, server, local agent, and
+> portal, exposing newest observation time, analysis time, source
+> completeness, and the reason for any withholding — and fixing any path that
+> can show "Likely awake" indefinitely after expected sleep. (8) A 48–72 hour
+> operational view: next sleep/wake range, fixed-event and office-hours
+> overlap, task opportunities, freshness, and explicit refusal.
+> **Invariants.** No DLMO or exact phase claim; no medication recommendation;
+> no cognitive-fitness or driving-safety claim; no portal exposure, messaging,
+> or live layer; no new assistant action; no automatic external calendar
+> write; no silent application of an uncertain change. Relaxed approval, when
+> it arrives, covers only the user's own reversible internal operations under
+> an explicit opt-in with undo — never an agent, visitor, or external surface.
+> **Acceptance:** a Health Connect sleep session reaches the core without
+> manual export; the collector records real privacy-minimized evidence;
+> inference runs in shadow with explainable support and conflict; analysis
+> refreshes in the background; stale current-state claims are withheld
+> consistently; and a private pilot report states measured accuracy, manual
+> burden, and resource use.
 
 ---
 

@@ -525,6 +525,38 @@ server module.
 Not implemented, and therefore not verified: messaging threads (P5-c) and the
 SSE live layer and audit UI (P5-d). The exposure gate is unchanged and unmet.
 
+## What this record does not measure
+
+Added 2026-08-04 after an applicability/utility/automaticity review
+([`automaticity-review-2026-08-04.md`](automaticity-review-2026-08-04.md)).
+
+Everything above establishes that the software does what it claims. None of it
+establishes that the user does less work or decides better, and the distinction
+matters for a product whose premise is reducing burden. Three gaps are recorded
+here so they are not mistaken for passing checks:
+
+- **Passive coverage is unmeasured because it is near zero.** The desktop
+  activity collector emits one startup observation, and the Android companion
+  cannot sync, so principal sleep episodes still reach the estimator mainly by
+  manual entry or import. No test asserts otherwise, and none should until
+  those paths exist.
+- **No current-state freshness assertion exists outside the portal.** The
+  portal's stale-at-6-hours and withheld-at-24-hours behaviour is verified
+  above. The desktop Overview has no equivalent policy to verify. Until one
+  shared policy exists, "the freshness rules are tested" is true only of the
+  public surface.
+- **Confidence calibration is measured and unresolved.** ADR-0022 recorded the
+  buckets inverted (High 0.61 against Medium 0.81). The portal withholds the
+  label on that evidence; the desktop still renders it. That is a known,
+  measured inconsistency, not an untested area.
+
+The pilot metric framework — passive coverage, boundary error, forecast utility
+by horizon, task and calendar utility, and resource cost — is defined in the
+review ledger. It belongs in a dated pilot report rather than in CI, because it
+measures a person's experience over weeks and cannot be asserted by a test run.
+Resource baselines should be captured **before** the collector and recompute
+orchestrator land, or their cost can only be guessed afterwards.
+
 ## Environment limitations
 
 - Emulator semantics and screenshots were reviewed, but a full manual TalkBack
