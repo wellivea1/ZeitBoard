@@ -78,6 +78,26 @@ revised from measured live data. The evaluation says this itself, and it is
 worth repeating: a target must never become a reason to publish a more
 confident output than the evidence supports.
 
+## Progress against this ledger
+
+Findings 1, 3, and part of 7 are addressed by
+[ADR-0031](decisions/0031-evidence-freshness-and-shadow-inference.md):
+
+- **Finding 1 (startup-only collector) — addressed.** The collector now records
+  eight behavioural states through two narrow system calls, with the judgement
+  in a pure, tested state machine. Its remaining half is reliable background
+  execution while the window is hidden.
+- **Finding 3 (no shared freshness policy) — addressed.** `core/freshness`
+  decides on evidence age, and the desktop, server projection, and portal
+  materializer all defer to it. The work also uncovered that the portal's own
+  policy measured the wrong thing, which is now fixed.
+- **Finding 7 (event-insensitive analysis) — partly addressed.** Shadow
+  inference exists and can turn activity into candidates. The durable recompute
+  orchestrator does not.
+
+Findings 2 (Android sync), 4 (confidence labels), 5 (the Sharing screen), 6
+(approval granularity), and 9 (benefit metrics) are open.
+
 ## Resulting sequence
 
 The next phase is the automatic loop. `phase-goals.md` carries the pasteable
