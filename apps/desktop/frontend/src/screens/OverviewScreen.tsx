@@ -128,7 +128,7 @@ export function OverviewScreen() {
       <section className="overview-surface" aria-labelledby="phase-title">
         <header className="overview-status" data-state={stateTone(overview.state)}>
           <div className="overview-status-primary">
-            <p className="section-kicker">Estimated sleep-wake phase</p>
+            <p className="section-kicker">Estimated sleep-wake timing</p>
             <h2 id="phase-title" aria-live="polite">
               <span
                 className="phase-state-dot"
@@ -142,13 +142,19 @@ export function OverviewScreen() {
                 <strong>{overview.timeSinceWake}</strong> since wake
               </p>
             )}
+            <p className="overview-freshness" data-state={overview.freshness.state}>
+              {overview.freshness.ageLabel && <span>{overview.freshness.ageLabel}</span>}
+              <span>{overview.freshness.explanation}</span>
+            </p>
           </div>
           <div className="overview-status-context">
             <strong>{overview.stateDetail}</strong>
             <p>
-              {hasEstimate
-                ? "Estimated from recent sleep-wake observations, not an exact circadian phase measurement."
-                : (overview.refusal?.message ?? overview.confidence.reason)}
+              {!hasEstimate
+                ? (overview.refusal?.message ?? overview.confidence.reason)
+                : overview.freshness.trusted
+                  ? "Estimated from recent sleep-wake observations, not an exact circadian phase measurement."
+                  : "The current state is not being claimed, because the records behind it are not recent enough to support one."}
             </p>
           </div>
         </header>
@@ -193,16 +199,29 @@ export function OverviewScreen() {
               />
             </dl>
 
-            <section className="overview-quality" aria-labelledby="confidence-title">
+            <section className="overview-quality" aria-labelledby="evidence-title">
               <div>
                 <span className="overview-row-label">Estimate quality</span>
-                <h3 id="confidence-title">Confidence</h3>
+                <h3 id="evidence-title">Evidence</h3>
               </div>
-              <div className="overview-confidence-value">
-                <ConfidenceMeter value={overview.confidence.level} />
-                <ConfidenceBadge value={overview.confidence.level} />
-              </div>
-              <p>{overview.confidence.reason}</p>
+              <p className="overview-evidence-line" data-state={overview.freshness.state}>
+                {overview.freshness.ageLabel || "No records yet"}
+              </p>
+              <p>{overview.freshness.explanation}</p>
+              <details className="overview-model-detail">
+                <summary>Model confidence</summary>
+                <div className="overview-confidence-value">
+                  <ConfidenceMeter value={overview.confidence.level} />
+                  <ConfidenceBadge value={overview.confidence.level} />
+                </div>
+                <p>{overview.confidence.reason}</p>
+                <p className="overview-calibration-note">
+                  This label describes how well the model fits recent records. Measured against real
+                  history it did not rank reliably &mdash; episodes marked High were not more
+                  accurate than those marked Medium &mdash; so use the predicted range and the
+                  evidence age above to decide, not this label.
+                </p>
+              </details>
               <a href="#/rhythm">Why this estimate?</a>
             </section>
 

@@ -1,15 +1,33 @@
-# Accessibility — visual-first, accessible wherever it doesn't cost the visuals
+# Accessibility — visual-first, with equivalent function for everyone
 
 ZeitBoard is **visual-first**. Its primary audience is people with **sighted**
 Non-24-hour sleep-wake disorder, and the visual feedback — the actogram, the drift
-chart, the calendar overlays — is the heart of the product. **Visual feedback is
-never sacrificed for accessibility.**
+chart, the calendar overlays — is the heart of the product. That stays true: this
+document does not ask for a flattened, lowest-common-denominator interface.
 
 At the same time, blindness is a leading *cause* of Non-24 (when little or no light
 reaches the circadian clock the rhythm free-runs), so blind and low-vision users are
-real and worth supporting. The rule is simple: **every element that can reasonably be
-made accessible should be — wherever doing so does not compromise aesthetics or
-functionality.** Accessibility is a strong default, not a veto over the visual design.
+real and worth supporting.
+
+The standard is **equivalent function, not identical presentation**:
+
+> Preserve the strength of the visual experience while providing equivalent access
+> and equivalent control through semantics, keyboard support, structured tables, text
+> alternatives, and agent-accessible functions.
+
+This replaces an earlier framing that read "visual feedback is never sacrificed for
+accessibility". That sentence was written to protect the visuals and it does, but as
+a rule it says only what accessibility may not do. The standard above says what it
+must achieve, which is both clearer and harder to satisfy by accident. Two practical
+consequences:
+
+- A chart does not have to *look* different to be accessible. A screen-reader table
+  carrying the same information is equivalent function at no visual cost, and that
+  remains the preferred pattern.
+- **Core tasks must be completable without sight, without a mouse, and without the
+  assistant.** This is a slightly higher floor than "wherever it doesn't cost
+  aesthetics", and it is adopted deliberately: a core task that is visually elegant
+  and unreachable by keyboard is a defect, not a trade-off.
 
 The detailed spec is [`ui-ux-design.md` §18 and §3.6](ui-ux-design.md); the binding
 repository rules are in [`../AGENTS.md`](../AGENTS.md).

@@ -130,3 +130,73 @@ describe("loadOverview", () => {
     expect(result.source).toBe("fixture");
   });
 });
+
+describe("overview freshness", () => {
+  const base = {
+    estimateSource: "local",
+    status: "estimated",
+    currentEstimatedState: "Likely awake",
+    timeSinceWake: "3 hours 10 minutes",
+    predictedNextSleepWindow: "Tue 6:40 AM to 8:20 AM",
+    driftEstimate: "+48 minutes per observed sleep cycle",
+    confidence: "high",
+    confidenceReasons: ["Recent episodes are consistent."],
+    nextUsefulTaskWindow: "Now to 4:00 PM",
+    sharingStatus: "No active trusted view; local data only",
+    medicationEvents: [],
+    fixtureMode: false,
+    disclaimer: "Not medical advice.",
+    updatedLabel: "Computed from local sleep entries",
+  };
+
+  it("carries the service verdict through", async () => {
+    const root = {
+      go: {
+        main: {
+          App: {
+            GetOverview: async () => ({
+              ...base,
+              freshness: {
+                state: "stale",
+                reason: "evidence_aging",
+                explanation: "The newest sleep record is about 8 hours old.",
+                ageLabel: "Newest record 8 hours ago",
+                trusted: false,
+              },
+            }),
+          },
+        },
+      },
+    };
+    const { data } = await loadOverview(root);
+    expect(data.freshness.state).toBe("stale");
+    expect(data.freshness.trusted).toBe(false);
+    expect(data.freshness.ageLabel).toContain("8 hours");
+  });
+
+  // A build whose service predates the freshness policy must not read as
+  // "evidence is current". Absence of a verdict is not a positive verdict.
+  it("defaults to withheld rather than trusted when the verdict is absent", async () => {
+    const root = { go: { main: { App: { GetOverview: async () => base } } } };
+    const { data } = await loadOverview(root);
+    expect(data.freshness.state).toBe("withheld");
+    expect(data.freshness.trusted).toBe(false);
+  });
+
+  it("refuses a malformed verdict rather than trusting it", async () => {
+    const root = {
+      go: {
+        main: {
+          App: {
+            GetOverview: async () => ({
+              ...base,
+              freshness: { state: "totally-fine", trusted: true },
+            }),
+          },
+        },
+      },
+    };
+    const { data } = await loadOverview(root);
+    expect(data.freshness.trusted).toBe(false);
+  });
+});

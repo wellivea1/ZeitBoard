@@ -125,6 +125,7 @@ function normalizeWailsOverview(value: unknown): OverviewData | undefined {
       level: confidenceLevel,
       reason: confidenceReasons.join(" ") || "Confidence supplied by the local estimation service",
     },
+    freshness: normalizeFreshness(value.freshness),
     usefulTaskWindow: {
       label: usefulTaskWindow,
       detail: "Proposal from current task constraints and estimated availability",
@@ -135,6 +136,30 @@ function normalizeWailsOverview(value: unknown): OverviewData | undefined {
       detail: "Trusted views contain only explicitly allowlisted fields",
     },
     updatedLabel: asString(value.updatedLabel) ?? "Updated from the local service just now",
+  };
+}
+
+// normalizeFreshness defaults to a withheld verdict rather than a trusting one.
+// A build whose service predates the freshness policy must not be read as
+// "evidence is current"; absence of a verdict is not a positive verdict.
+function normalizeFreshness(value: unknown): OverviewData["freshness"] {
+  const fallback: OverviewData["freshness"] = {
+    state: "withheld",
+    reason: "no_evidence",
+    explanation: "This build cannot confirm how recent the underlying records are.",
+    ageLabel: "",
+    trusted: false,
+  };
+  if (typeof value !== "object" || value === null) return fallback;
+  const record = value as Record<string, unknown>;
+  const state = record.state;
+  if (state !== "current" && state !== "stale" && state !== "withheld") return fallback;
+  return {
+    state,
+    reason: asString(record.reason) ?? "",
+    explanation: asString(record.explanation) ?? fallback.explanation,
+    ageLabel: asString(record.ageLabel) ?? "",
+    trusted: record.trusted === true,
   };
 }
 

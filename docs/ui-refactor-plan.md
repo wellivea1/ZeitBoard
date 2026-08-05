@@ -350,3 +350,29 @@ Approvals rows measured 220px and 217px at 390x844, and the same rows measured
 overflow. The named Pixel 10 Pro XL emulator was rebuilt and rechecked across
 all four portrait routes plus large-width Settings; this slice changes no
 Android source.
+
+## U-H — navigation consolidation (planned)
+
+From the 2026-08-04 UI guideline review
+([disposition](ui-guideline-review-2026-08-04.md), finding 6). The desktop
+exposes eight equal-weight primary destinations plus Settings and the assistant
+rail. That is too much undifferentiated navigation for someone operating under
+fatigue, which is the condition the product is for.
+
+Target shape: **Home, Plan, Rhythm, Log, Sharing**, with Data Sources, Reports,
+Settings, Assistant, and Help in a utility group.
+
+- **Plan** absorbs Calendar, Tasks, and Approvals as tabs. Approvals keeps a
+  pending badge rather than a permanent destination — it is empty most of the
+  time, and a destination that is usually empty trains people to skip it.
+- **Log** absorbs sleep/wake, medication, context markers, and corrections.
+- **Rhythm** keeps actogram, drift, and sources as tabs, with statistics behind
+  a details disclosure.
+
+Sequencing note: this is deliberately *not* bundled with a correctness change.
+It touches every screen module, the UI-standards lint, and most of the frontend
+suite, and mixing it with a behavioural fix would make both harder to review.
+
+Not in scope: full user rearrangement of navigation, which the guideline also
+advises against, and the pinnable secondary destination, which is declined until
+this slice settles the shape.

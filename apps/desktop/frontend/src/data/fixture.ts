@@ -15,6 +15,13 @@ export const overviewFixture: OverviewData = {
     label: "+48 min per cycle",
     direction: "Later than the previous cycle",
   },
+  freshness: {
+    state: "current",
+    reason: "",
+    explanation: "Based on recent records.",
+    ageLabel: "Newest record 41 minutes ago",
+    trusted: true,
+  },
   confidence: {
     level: "Medium",
     reason: "Based on 9 recent principal sleep episodes with variable timing",
