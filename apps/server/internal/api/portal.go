@@ -1,38 +1,68 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"log"
 	"net/http"
 	"strings"
 	"time"
 
+	"non24.app/core/recompute"
 	"non24.app/server/internal/portal"
 	"non24.app/server/internal/portalbridge"
 	"non24.app/server/internal/store"
 	syncmodel "non24.app/server/internal/sync"
 )
 
+// Recomputer is the analysis loop, narrowed to the two things an HTTP handler
+// may ask of it. There is deliberately no "materialize now and tell me what
+// changed": a request handler's job is to say that something changed, not to
+// decide when the consequences are computed.
+type Recomputer interface {
+	// Request notes that inputs changed. It must not block and must not fail:
+	// the work is derivable from the inputs, so a dropped request is recovered
+	// by the next run rather than lost.
+	Request(reason recompute.Reason)
+
+	// RunNow recomputes and waits. It is for the handlers that must not return
+	// until the result exists.
+	RunNow(ctx context.Context, reason recompute.Reason) error
+}
+
+// PortalConfig is everything the owner-facing sharing surface needs.
+type PortalConfig struct {
+	Store        *portal.Store
+	PublicOrigin string
+	Materializer portalbridge.Materializer
+	Requests     *portalbridge.RequestBridge
+
+	// Recompute is required. Publishing the projection from two places would
+	// mean two different ideas of when it was last updated, and the older stamp
+	// would lose to the newer one regardless of which was true.
+	Recompute Recomputer
+}
+
 // portalAdmin is the owner-authenticated half of sharing. It is registered
 // only when the portal is configured, so a daemon with the portal off has no
 // sharing routes at all.
 type portalAdmin struct {
-	store        *portal.Store
-	origin       string
-	materializer portalbridge.Materializer
-	requests     *portalbridge.RequestBridge
+	store     *portal.Store
+	origin    string
+	requests  *portalbridge.RequestBridge
+	recompute Recomputer
 }
 
-// WithPortal enables the share-link administration routes and wires
-// materialization. The public /p/ mux is mounted separately by the daemon;
-// this option governs only the owner surface.
-func WithPortal(portalStore *portal.Store, publicOrigin string, materializer portalbridge.Materializer, requests *portalbridge.RequestBridge) Option {
+// WithPortal enables the share-link administration routes. The public /p/ mux
+// is mounted separately by the daemon; this option governs only the owner
+// surface.
+func WithPortal(cfg PortalConfig) Option {
 	return func(s *Server) {
 		s.portal = &portalAdmin{
-			store:        portalStore,
-			origin:       strings.TrimSuffix(publicOrigin, "/"),
-			materializer: materializer,
-			requests:     requests,
+			store:     cfg.Store,
+			origin:    strings.TrimSuffix(cfg.PublicOrigin, "/"),
+			requests:  cfg.Requests,
+			recompute: cfg.Recompute,
 		}
 	}
 }
@@ -121,8 +151,10 @@ func (s *Server) handleCreatePortalProfile(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusInternalServerError, "share profile creation failed")
 		return
 	}
-	// Materialize immediately so the recipient does not open a blank page.
-	if err := s.portal.materializer.MaterializeAll(r.Context()); err != nil {
+	// Recompute before returning the link, so the recipient does not open a
+	// blank page. This is the one sharing path that waits: every other
+	// consequence of a change is scheduled.
+	if err := s.portal.recompute.RunNow(r.Context(), recompute.ReasonSharing); err != nil {
 		writeError(w, http.StatusInternalServerError, "share profile creation failed")
 		return
 	}
@@ -207,6 +239,10 @@ func (s *Server) handleRevokePortalProfile(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusInternalServerError, "share profile revoke failed")
 		return
 	}
+	// Revocation takes effect immediately at the link, which is what matters.
+	// The recompute is bookkeeping: the revoked profile leaves the consumer set,
+	// so the next run stops publishing to it.
+	s.requestRecompute(recompute.ReasonSharing)
 	writeJSON(w, http.StatusOK, map[string]string{
 		"schema_version": syncmodel.SchemaVersion,
 		"status":         "revoked",
@@ -234,6 +270,7 @@ func (s *Server) handleErasePortalProfile(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusInternalServerError, "share profile erase failed")
 		return
 	}
+	s.requestRecompute(recompute.ReasonSharing)
 	writeJSON(w, http.StatusOK, map[string]string{
 		"schema_version": syncmodel.SchemaVersion,
 		"status":         "erased",
@@ -389,15 +426,18 @@ func (s *Server) pumpPortalBridge(r *http.Request) {
 	}
 }
 
-// refreshPortal republishes availability after private data changed. Failures
-// are reported to the caller's log path rather than failing the sync request:
-// a stale portal snapshot is a visible, honest state, but a rejected push
-// would lose the device's data.
-func (s *Server) refreshPortal(r *http.Request) {
-	if s.portal == nil {
+// requestRecompute reports that analysis inputs changed.
+//
+// It used to republish the projection inline, inside the request. That bound
+// the work to the caller's context, so a device that hung up mid-push cancelled
+// the recomputation its own data had just made necessary, and it charged every
+// push for a computation that a burst of pushes only needs once. Handing the
+// reason to the scheduler fixes both, and costs the guarantee that the
+// projection is current the instant the response returns — which was never a
+// guarantee worth having, since nothing was reading it that fast.
+func (s *Server) requestRecompute(reason recompute.Reason) {
+	if s.portal == nil || s.portal.recompute == nil {
 		return
 	}
-	if err := s.portal.materializer.MaterializeAll(r.Context()); err != nil {
-		log.Printf("portal: snapshot refresh failed: %v", err)
-	}
+	s.portal.recompute.Request(reason)
 }

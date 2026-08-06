@@ -369,9 +369,7 @@ func TestVisitorTextNeverReachesTheAvailabilityProjection(t *testing.T) {
 		Sink:     f.portal,
 		Now:      func() time.Time { return f.now },
 	}
-	if err := materializer.MaterializeAll(ctx); err != nil {
-		t.Fatalf("materialize: %v", err)
-	}
+	materializeAll(ctx, t, materializer, f.now)
 	snapshot, err := f.portal.ReadSnapshot(ctx, f.profile.ID)
 	if err != nil {
 		t.Fatalf("read snapshot: %v", err)

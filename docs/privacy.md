@@ -103,6 +103,15 @@ immutable revision and rejects all later revisions, including revisions that
 were not present when deletion was requested.
 
 
+The instance also keeps a small operational record of when analysis last ran
+(ADR-0033). Each entry holds a digest of the inputs and of what was published,
+plus times, a reason from a closed set, and any failure message. The digests are
+encrypted with everything else in that database: they are one-way, but a digest
+still answers "did they sleep at 04:12 on Tuesday?" for anyone willing to guess,
+and the reason the file is encrypted at rest is that a copy of it answers
+nothing. The table is capped at 200 entries and is not an audit trail; it holds
+no observation payload, no window, and no share-link label.
+
 Imported sleep observations use the same local table, export path, correction
 layer, sync path, and erasure controls as manual observations. Conversion tools
 request mode `0600`, require explicit overwrite, and still rely on an

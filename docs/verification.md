@@ -687,6 +687,89 @@ value is refused.
 Not covered: a physical device, a real wearable writing to Health Connect,
 background/periodic sync scheduling, and pull — this slice pushes only.
 
+## The recompute orchestrator (ADR-0033)
+
+Verified 2026-08-06.
+
+**Decision logic** (`core/recompute`, `core/freshness`): a burst of fifty
+requests collapses to one run; a steady one-per-second trickle still runs rather
+than postponing itself indefinitely; the minimum interval floors the rate a
+chatty device can impose; failures back off geometrically to a ceiling and keep
+the work pending; an expiry fires with nobody asking; and the next-wake instant
+is exactly the next deadline and never in the past.
+
+The input fingerprint is order-independent and does not move on its own, changes
+when an episode's recorded-at changes (which is what the freshness policy reads),
+changes when a session is suppressed, changes when a consumer is added, and
+cannot collide across entry boundaries — entries are length-prefixed, without
+which `["ab","c"]` and `["a","bc"]` hash identically.
+
+`freshness.NextChange` is checked by walking the clock forward a minute at a time
+across four input shapes and asserting the state never changes before the
+predicted instant. The guarantee is deliberately one-sided: early is a wasted
+recomputation, late is a stale claim left standing. One further test runs at
+nanosecond resolution, because the unrecorded-sleep rule is a strict comparison
+and a wake scheduled for the exact deadline would have found nothing changed.
+
+**Orchestration**: an unchanged projection keeps its original stamp; changed
+content takes a new one; inputs reverting from A to B and back to A still
+republish, which a naive "skip if this fingerprint has been seen" would not; a
+failed apply is recorded as failed and does not become the last completed run; a
+run left open by a dead process is closed out and its work redone. An import test
+asserts the package reaches no provider, assistant, network, or subprocess.
+
+**Journal** (`apps/server/internal/store`): runs round-trip with both
+fingerprints and their times; a begun run is not a completed one; a failure keeps
+its fingerprints through the re-seal that stores the message; the interrupted
+sweep is idempotent; the table stays bounded at 200 rows and pruning never
+removes the row the orchestrator reads. Fingerprints do not appear in the
+database file, the WAL, or the shared-memory file.
+
+**End to end**, against a live `zeitboardd` with the portal enabled:
+
+| Step | Result |
+| --- | --- |
+| Twelve single-record pushes | One recomputation — `absorbed 11 further request(s)` |
+| Availability with no request driving it | Published, seven windows, `status: available` |
+| Unrelated task push (accepted, cursor 13) | `generatedAt` **unmoved** |
+| Daemon restart | Reconciled to the same content, no restamp |
+| Erasing all twelve records | `status: refused`, zero windows |
+
+The first two rows and the third were re-run against a rebuilt daemon after the
+scheduling fix below, with the twelve pushes issued in parallel rather than in
+sequence. The recomputation landed 30 seconds after the burst rather than 3,
+which is the minimum interval measuring from the link-creation run — the floor
+working, not a delay.
+
+The third row is the ADR-0031 defect finally closed. That ADR found that pushing
+a task refreshed the portal's freshness signal while the sleep evidence
+underneath was days old; it corrected the *status* and left the stamp moving.
+The page's 6-hour and 24-hour age rules now measure the evidence.
+
+Not covered by the live run: the freshness-expiry wake, because observing it in a
+real daemon means waiting hours for a real threshold. It is covered by the
+quiet-day walk in `apps/server/internal/analysis` — which withholds availability
+with nothing pushed, nothing opened and nobody asking — and by a worker test that
+runs the real goroutine and timer against a result that expires in 60 ms.
+
+Also not covered: the desktop, which recomputes on screen load and is unchanged.
+The background guarantee lives in the daemon.
+
+**A defect only the running worker could find.** Forty requests fired against a
+live worker while its startup run was still finishing, and every one was lost:
+the completion cleared the pending flag, including requests that arrived after
+the run had already read its inputs. The unit tests passed throughout, because
+they drove the schedule one call at a time and never overlapped a run with a
+request. The flag is now cleared when a run *begins*, and two tests pin it — one
+for the mid-run request, one asserting that asking again during a *failed* run
+does not pull the retry forward through the backoff.
+
+The worker's locking is reviewed rather than race-detected: this toolchain has
+CGO disabled, so `go test -race` cannot run (see environment limitations). The
+mitigation is structural — all scheduling state is a plain struct with no timer
+and no goroutine of its own, touched only under one mutex, and every decision it
+makes is tested by calling it directly rather than by waiting.
+
 ## What this record does not measure
 
 Added 2026-08-04 after an applicability/utility/automaticity review

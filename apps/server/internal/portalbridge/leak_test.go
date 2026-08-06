@@ -27,6 +27,23 @@ const (
 	testPasscode = "open-sesame-please"
 )
 
+// materializeAll computes and publishes in one step at a fixed instant.
+//
+// Production does not have this shortcut: it publishes through the recompute
+// orchestrator (ADR-0033), which stamps the snapshot by content rather than by
+// clock so an unchanged projection cannot present itself as a fresh one. These
+// tests care about the value that crosses the boundary, not about the stamp.
+func materializeAll(ctx context.Context, t *testing.T, m portalbridge.Materializer, now time.Time) {
+	t.Helper()
+	prep, err := m.Prepare(ctx, now)
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	if err := m.Publish(ctx, prep); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+}
+
 // canaries are distinctive values planted in every private field that could
 // plausibly be carried along by a projection bug. Any appearance of one on the
 // public surface, or anywhere in the portal database, is a leak.
@@ -148,9 +165,7 @@ func newLeakFixture(t *testing.T) *leakFixture {
 		Sink:     portalStore,
 		Now:      func() time.Time { return now },
 	}
-	if err := materializer.MaterializeAll(ctx); err != nil {
-		t.Fatalf("materialize: %v", err)
-	}
+	materializeAll(ctx, t, materializer, now)
 	snapshot, err := portalStore.ReadSnapshot(ctx, profileID)
 	if err != nil {
 		t.Fatalf("read snapshot: %v", err)
@@ -371,9 +386,7 @@ func TestGrantWithoutWindowsPublishesNothing(t *testing.T) {
 		Sink:     fixture.portal,
 		Now:      func() time.Time { return fixture.now },
 	}
-	if err := materializer.MaterializeAll(ctx); err != nil {
-		t.Fatalf("materialize: %v", err)
-	}
+	materializeAll(ctx, t, materializer, fixture.now)
 	snapshot, err := fixture.portal.ReadSnapshot(ctx, profileID)
 	if err != nil {
 		t.Fatalf("read: %v", err)

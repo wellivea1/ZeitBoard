@@ -227,8 +227,14 @@ func toAvailabilityDTO(snapshot Snapshot, now time.Time) availabilityDTO {
 		if !window.EndAt.After(now) {
 			continue
 		}
+		// Same clip the rendered page applies, for the same reason: a JSON
+		// consumer must not receive a start time the HTML would have hidden.
+		startAt := window.StartAt
+		if startAt.Before(now) {
+			startAt = now
+		}
 		dto.Windows = append(dto.Windows, windowDTO{
-			StartAt: formatTime(window.StartAt),
+			StartAt: formatTime(startAt),
 			EndAt:   formatTime(window.EndAt),
 			ZoneID:  window.ZoneID,
 		})

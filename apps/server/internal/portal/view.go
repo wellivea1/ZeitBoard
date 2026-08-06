@@ -104,9 +104,17 @@ func BuildView(snapshot Snapshot, now time.Time) AvailabilityView {
 		if current {
 			view.LikelyAwake = true
 		}
+		// A window already in progress is shown from now, so the page never
+		// implies knowledge about a past the visitor cannot use. This runs at
+		// render rather than at materialization, where it was only correct for
+		// the instant the snapshot happened to be written.
+		displayStart := window.StartAt
+		if displayStart.Before(now) {
+			displayStart = now
+		}
 		upcoming = append(upcoming, WindowView{
-			DayLabel:   describeDay(window.StartAt, now, location),
-			RangeLabel: describeRange(window.StartAt, window.EndAt, location),
+			DayLabel:   describeDay(displayStart, now, location),
+			RangeLabel: describeRange(displayStart, window.EndAt, location),
 			Current:    current,
 		})
 	}

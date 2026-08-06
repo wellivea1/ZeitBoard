@@ -56,7 +56,12 @@ availability.
 14. Private read model → **allowlisted portal snapshot**: the one inbound path
     to the portal database, owned by `portalbridge`, narrowing an estimate to
     windows, a generation time, a horizon, and a status. Confidence labels are
-    withheld because ADR-0022 measured them inverted.
+    withheld because ADR-0022 measured them inverted. Since ADR-0033 the stored
+    windows are unfiltered and unclipped, with both rules applied at render, so
+    the snapshot holds a few already-elapsed windows for the same profile that
+    was already granted them. The generation time now means when the content
+    last changed, so a visitor's staleness warning tracks the evidence rather
+    than the last unrelated sync.
 15. Visitor request → **owner proposal queue**, the first boundary in the
     system an outsider may write across (ADR-0030). It is crossed only by a
     transactional outbox with a stable idempotency key, never by a direct call:
