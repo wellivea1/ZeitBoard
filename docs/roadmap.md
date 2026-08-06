@@ -213,7 +213,15 @@ M-E's separately reviewed local agent projection.
    so a voice client works with the backend off. The medical refusal moved to
    shared `core/agentpolicy` and is byte-identical across chat, backend MCP,
    and the local endpoint.
-9. **Android companion sync. — NOW THE TOP PRIORITY.** The Health Connect
+9. ~~**Android companion sync.**~~ ✅ Delivered (ADR-0032): Health Connect
+   sleep reaches the estimator without manual transcription. A revised source
+   record supersedes through the append-only correction chain rather than
+   arriving as a second episode; an episode whose offset contradicts the home
+   zone is held and counted rather than labelled with a zone it disagrees with;
+   the outbox is durable and idempotent at the source; and sync states stay
+   distinguishable so an unreachable backend cannot hide behind a spinner.
+   Verified end to end against a real daemon on an emulator. Travel records and
+   pull remain follow-ups. *Original entry:* The Health Connect
    skeleton reads real sleep and stores it durably, but the companion has no
    sync client, so the device most likely to hold fresh wearable sleep cannot
    reach the estimator. Bring it onto the same enrollment + push/pull path

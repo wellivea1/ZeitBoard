@@ -23,7 +23,13 @@ import org.junit.runner.Description
 import org.non24.planner.data.DurableLocalDataState
 import org.non24.planner.data.EstimateRepository
 import org.non24.planner.data.HealthConnectRepository
+import org.non24.planner.data.BackendSyncClient
+import org.non24.planner.data.BackendSyncRepository
 import org.non24.planner.data.MedicationRepository
+import org.non24.planner.data.OutboxRecord
+import org.non24.planner.data.SyncConfig
+import org.non24.planner.data.SyncConfigStore
+import org.non24.planner.data.SyncOutboxStore
 import org.non24.planner.data.SettingsRepository
 import org.non24.planner.data.SleepRepository
 import org.non24.planner.domain.AppSettings
@@ -148,11 +154,52 @@ class AppViewModelMedicationTest {
         val health = EmptyHealthConnectRepository()
         override val healthConnectRepository: HealthConnectRepository = health
         override val localDataState = MutableStateFlow<DurableLocalDataState>(DurableLocalDataState.Ready)
+
+        // Sync is off in this fixture: these tests are about medication, and a
+        // repository with no configured server is the local-only mode.
+        override val backendSyncRepository = BackendSyncRepository(
+            outbox = NoOutbox(),
+            configStore = NoSyncConfig(),
+            client = NoSyncClient(),
+        )
+        override val syncStatus = backendSyncRepository.status
         var initializeCalls = 0
 
         override suspend fun initializeLocalUserData() {
             initializeCalls += 1
         }
+    }
+
+    private class NoOutbox : SyncOutboxStore {
+        override fun pending(limit: Int): List<OutboxRecord> = emptyList()
+
+        override fun enqueue(records: List<OutboxRecord>) = Unit
+
+        override fun markSynced(recordIds: List<String>, at: Instant) = Unit
+
+        override fun syncedRevisions(): Map<String, Instant> = emptyMap()
+
+        override fun pendingCount(): Int = 0
+
+        override fun lastSyncedAt(): Instant? = null
+
+        override fun clear() = Unit
+    }
+
+    private class NoSyncConfig : SyncConfigStore {
+        override fun load(): SyncConfig? = null
+
+        override fun save(config: SyncConfig) = Unit
+
+        override fun clear() = Unit
+    }
+
+    private class NoSyncClient : BackendSyncClient {
+        override suspend fun enroll(baseUrl: String, enrollmentSecret: String, label: String) =
+            Result.failure<String>(IllegalStateException("Sync is not configured in this test."))
+
+        override suspend fun push(baseUrl: String, token: String, records: List<OutboxRecord>) =
+            Result.failure<List<String>>(IllegalStateException("Sync is not configured in this test."))
     }
 
     private class FakeSettingsRepository : SettingsRepository {
