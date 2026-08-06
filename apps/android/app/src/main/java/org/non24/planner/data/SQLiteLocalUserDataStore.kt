@@ -34,6 +34,8 @@ internal class SQLiteLocalUserDataStore(
         db.execSQL(CORRECTIONS_TARGET_INDEX)
         db.execSQL(CORRECTIONS_LOGICAL_SOURCE_INDEX)
         db.execSQL(MEDICATION_OCCURRED_INDEX)
+        db.execSQL(SQLiteSyncOutboxStore.CREATE_OUTBOX_TABLE)
+        db.execSQL(SQLiteSyncOutboxStore.CREATE_OUTBOX_PENDING_INDEX)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -54,6 +56,15 @@ internal class SQLiteLocalUserDataStore(
             db.execSQL(CORRECTIONS_TARGET_INDEX)
             db.execSQL(CORRECTIONS_LOGICAL_SOURCE_INDEX)
             version = 2
+        }
+        if (version == 2 && newVersion >= 3) {
+            // The sync outbox arrives empty. Nothing is backfilled: a record
+            // that was never queued was never owed to the server, and
+            // inventing queue entries from existing episodes would push a
+            // year of history the moment the user enrols.
+            db.execSQL(SQLiteSyncOutboxStore.CREATE_OUTBOX_TABLE)
+            db.execSQL(SQLiteSyncOutboxStore.CREATE_OUTBOX_PENDING_INDEX)
+            version = 3
         }
         check(version == newVersion) {
             "No ZeitBoard Android database migration exists from $oldVersion to $newVersion."
@@ -327,7 +338,7 @@ internal class SQLiteLocalUserDataStore(
 
     private companion object {
         const val DATABASE_NAME = "zeitboard_local.db"
-        const val DATABASE_VERSION = 2
+        const val DATABASE_VERSION = 3
         const val SQL_KEY_CHUNK_SIZE = 800
         const val HEALTH_EPISODES_TABLE = "health_sleep_episodes"
         const val HEALTH_SNAPSHOT_TABLE = "health_sleep_snapshot"

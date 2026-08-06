@@ -643,6 +643,50 @@ Android sync; and a correction prompt that lets the user resolve the conflicts
 the candidates already record. Until then the pilot's Stage 1 — shadow
 collection with no planning effect — is exactly the right posture.
 
+## Android sleep synchronisation (ADR-0032)
+
+Verified 2026-08-06.
+
+**Unit tests** (60 Android tests pass, plus lint and a debug APK): the mapping
+produces one observation on first sight and nothing on an unchanged second
+pass; a revised source record becomes a correction targeting the original with
+a superseding chain, not a second observation; ids satisfy the server's
+identifier rule even for a source name full of characters the rule forbids, and
+the source name does not appear in the id; an episode whose offset disagrees
+with the home zone is held with a typed reason rather than guessed; the offset
+check follows daylight saving, so the same zone in January and August are
+treated differently; a missing revision falls back to the episode end; and
+quoting holds for a hostile source record id, which is the one caller-controlled
+string reaching the wire verbatim.
+
+**Repository tests**: local-only is a supported state rather than an error; a
+failed push keeps the queue, reports it, preserves the previous success time,
+and recovers without the user resubmitting; repeated enqueues of unchanged
+episodes add nothing; pushes batch within the wire limit; changing server clears
+the queue; disabling forgets the queue and the token; travelling episodes are
+counted as held; and a fresh repository over the same durable outbox reports the
+queued work, as after a process death.
+
+**End to end**, against a real `zeitboardd` with the app installed on a Pixel
+emulator: enrollment issued a device token; a push of Android-shaped records was
+accepted (2 of 2); an identical replay was accepted with **0** new records,
+confirming idempotency at the server as well as the source; and a twelve-episode
+history produced `status: estimated` with a drift of **+50 minutes per observed
+sleep cycle** — the rhythm that was generated. Health Connect sleep can now
+reach the estimator with no manual transcription, which is the P7 acceptance
+line for this slice.
+
+**A defect only that run could find.** The Kotlin sent
+`acquisition_method: "device_sensor"`, outside the server's closed enum, and the
+first push was rejected as an invalid batch. Both sides' unit tests passed
+throughout: the Kotlin asserted its own output and the Go asserted its own
+input, and nothing compared them. `android_contract_test.go` now pins the exact
+Android payload as a Go-side fixture, including a case asserting the bad enum
+value is refused.
+
+Not covered: a physical device, a real wearable writing to Health Connect,
+background/periodic sync scheduling, and pull — this slice pushes only.
+
 ## What this record does not measure
 
 Added 2026-08-04 after an applicability/utility/automaticity review

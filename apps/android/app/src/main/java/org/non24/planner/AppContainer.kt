@@ -3,6 +3,11 @@ package org.non24.planner
 import android.content.Context
 import kotlinx.coroutines.flow.StateFlow
 import org.non24.planner.data.AndroidHealthConnectClientAdapter
+import org.non24.planner.data.BackendSyncRepository
+import org.non24.planner.data.HttpBackendSyncClient
+import org.non24.planner.data.SQLiteSyncOutboxStore
+import org.non24.planner.data.SharedPreferencesSyncConfigStore
+import org.non24.planner.data.SyncStatus
 import org.non24.planner.data.DurableLocalDataState
 import org.non24.planner.data.EstimateRepository
 import org.non24.planner.data.FixtureSleepRepository
@@ -26,14 +31,20 @@ interface AppDependencies {
     val medicationRepository: MedicationRepository
     val localDataState: StateFlow<DurableLocalDataState>
 
+    /** Off unless the user enrols; local-only remains a supported mode. */
+    val syncStatus: StateFlow<SyncStatus>
+
+    val backendSyncRepository: BackendSyncRepository
+
     suspend fun initializeLocalUserData()
 }
 
 class AppContainer(context: Context) : AppDependencies {
     private val applicationContext = context.applicationContext
     private val fixtureEpisodes = fixtureSleepEpisodes()
+    private val localDataStore = SQLiteLocalUserDataStore(applicationContext)
     private val localUserDataRepository = LocalUserDataRepository(
-        SQLiteLocalUserDataStore(applicationContext),
+        localDataStore,
         staticSleepEpisodes = fixtureEpisodes,
     )
 
@@ -48,7 +59,20 @@ class AppContainer(context: Context) : AppDependencies {
     override val medicationRepository: MedicationRepository = LocalMedicationRepository(localUserDataRepository)
     override val localDataState: StateFlow<DurableLocalDataState> = localUserDataRepository.state
 
+    // The outbox shares the app database so an erasure removes a queued record
+    // and the episode it came from together.
+    override val backendSyncRepository = BackendSyncRepository(
+        outbox = SQLiteSyncOutboxStore(
+            readable = { localDataStore.readableDatabase },
+            writable = { localDataStore.writableDatabase },
+        ),
+        configStore = SharedPreferencesSyncConfigStore(applicationContext),
+        client = HttpBackendSyncClient(),
+    )
+    override val syncStatus: StateFlow<SyncStatus> = backendSyncRepository.status
+
     override suspend fun initializeLocalUserData() {
         localUserDataRepository.initialize()
+        backendSyncRepository.initialise()
     }
 }
