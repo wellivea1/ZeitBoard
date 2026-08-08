@@ -4,18 +4,23 @@
  * strip means the same thing here as the actogram does on Rhythm and follows
  * every theme, including amber and high contrast, without a second palette. */
 
+/* The same content column as every other block on the Home surface. Without
+   the inline padding this section hung 24px to the left of the facts above it
+   and the evidence row below, so the page had two left edges. */
 .outlook {
   display: grid;
-  gap: var(--space-4);
-  padding-block: var(--space-5) 0;
-  border-top: 1px solid var(--line);
+  gap: var(--space-5);
+  padding: var(--space-6) var(--space-6) var(--space-5);
 }
 
 .outlook-head {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-3);
-  align-items: baseline;
+  /* Not baseline: the left block is two lines and the right is two lines of a
+     different size, so a shared baseline floated the right one above the
+     heading it belongs beside. */
+  align-items: flex-start;
   justify-content: space-between;
 }
 
@@ -102,9 +107,17 @@
   border-left: 1px solid var(--paper);
 }
 
-.outlook-day-mark small {
+/* The labels sit outside the track: inside it the overflow that keeps the
+   bands square-cut clipped them away entirely, so the strip had tick marks and
+   nothing saying which day each one began. */
+.outlook-axis {
+  position: relative;
+  height: var(--space-4);
+}
+
+.outlook-axis small {
   position: absolute;
-  inset-block-start: 100%;
+  inset-block-start: 0;
   padding-inline-start: var(--space-1);
   color: var(--muted);
   font-size: var(--type-label);
@@ -114,9 +127,9 @@
 .outlook-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-3);
+  gap: var(--space-1) var(--space-4);
   align-items: center;
-  margin-block-start: var(--space-4);
+  margin-block-start: var(--space-3);
   color: var(--muted);
   font-size: var(--type-label);
 }
@@ -153,14 +166,15 @@
 }
 
 .outlook-legend small {
-  margin-inline-start: auto;
+  flex-basis: 100%;
 }
 
+/* Stacked, like every other section heading in the app. As a baseline row the
+   kicker, the heading and the description ran together into one 15px line:
+   "REACHING PEOPLE Office hours Typical office hours, Monday to Friday...". */
 .outlook-section-head {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  align-items: baseline;
+  display: grid;
+  gap: 2px;
 }
 
 .outlook-section-head h4 {
@@ -176,7 +190,7 @@
 .outlook ul {
   display: grid;
   gap: 0;
-  margin: var(--space-2) 0 0;
+  margin: var(--space-3) 0 0;
   padding: 0;
   list-style: none;
 }
@@ -185,8 +199,13 @@
   display: flex;
   gap: var(--space-3);
   align-items: start;
-  padding-block: var(--space-2);
+  padding-block: var(--space-3);
   border-top: 1px solid var(--line);
+}
+
+/* The section heading already separates the list from what precedes it. */
+.outlook li:first-child {
+  border-top: 0;
 }
 
 .outlook li > span {
@@ -220,11 +239,12 @@
   color: var(--muted);
 }
 
-.outlook-office li[data-status="reachable"] svg {
+.outlook-office li[data-status="reachable"] strong {
   color: var(--state-awake);
 }
 
-.outlook-office li[data-status="partial"] svg {
+.outlook-office li[data-status="partial"] strong,
+.outlook-office li[data-status="partial"] small {
   color: var(--state-uncertain);
 }
 
@@ -276,6 +296,14 @@
   flex: none;
   margin-inline-start: auto;
   align-self: center;
+}
+
+@media (max-width: 700px) {
+  /* The rest of the Home surface narrows to space-5 here; the outlook has to
+     narrow with it or the page grows a second left edge again. */
+  .outlook {
+    padding-inline: var(--space-5);
+  }
 }
 
 @media (max-width: 720px) {

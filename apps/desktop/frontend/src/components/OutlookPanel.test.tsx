@@ -96,6 +96,27 @@ describe("OutlookPanel", () => {
     expect(container.querySelector('.outlook-band[data-presence="asleep"]')).not.toBeNull();
   });
 
+  // The day labels used to live inside .outlook-track, which clips its
+  // overflow, so the strip had tick marks and nothing saying which day each one
+  // began. They render in a sibling that is not clipped.
+  it("puts the day labels outside the clipped track", () => {
+    const { container } = render(<OutlookPanel data={base} />);
+    const axis = container.querySelector(".outlook-axis");
+    expect(axis).not.toBeNull();
+    expect(axis?.closest(".outlook-track")).toBeNull();
+    expect(axis?.textContent).toContain("Thu, Aug 6");
+    expect(container.querySelector(".outlook-track")?.textContent).toBe("");
+  });
+
+  // Three lists that read as siblings must start their text at one left edge.
+  // The office list carried a status icon and the other two did not.
+  it("gives every list the same leading column", () => {
+    const { container } = render(<OutlookPanel data={base} />);
+    for (const list of [".outlook-office", ".outlook-commitments", ".outlook-opportunities"]) {
+      expect(container.querySelector(`${list} li svg`)).toBeNull();
+    }
+  });
+
   // The strip is a drawing; the same facts have to be readable without it, and
   // that costs the drawing nothing.
   it("states every stretch in words as well as in colour", () => {

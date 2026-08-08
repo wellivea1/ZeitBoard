@@ -1,5 +1,5 @@
 import { Icon } from "./Icon";
-import type { OutlookData, OutlookOfficeWindow, OutlookSegment, Presence } from "../data/outlook";
+import type { OutlookData, OutlookSegment, Presence } from "../data/outlook";
 
 // The 48-72 hour operational view (ADR-0034).
 //
@@ -42,9 +42,18 @@ function OutlookTimeline({ data }: { data: OutlookData }) {
             key={day.label}
             className="outlook-day-mark"
             style={{ left: percent(day.offsetHours, data.horizonHours) }}
-          >
-            <small>{day.label}</small>
-          </span>
+          />
+        ))}
+      </div>
+
+      {/* The day labels live outside the track. Inside it they were clipped by
+          the overflow that keeps the bands' rounded corners, so the strip had
+          tick marks and nothing saying which day each one began. */}
+      <div className="outlook-axis" aria-hidden="true">
+        {data.days.map((day) => (
+          <small key={day.label} style={{ left: percent(day.offsetHours, data.horizonHours) }}>
+            {day.label}
+          </small>
         ))}
       </div>
 
@@ -72,12 +81,6 @@ function OutlookTimeline({ data }: { data: OutlookData }) {
   );
 }
 
-function officeIcon(status: OutlookOfficeWindow["status"]) {
-  if (status === "reachable") return "focus" as const;
-  if (status === "partial") return "clock" as const;
-  return "moon" as const;
-}
-
 function OfficeList({ data }: { data: OutlookData }) {
   if (data.officeWindows.length === 0) return null;
   return (
@@ -90,7 +93,6 @@ function OfficeList({ data }: { data: OutlookData }) {
       <ul>
         {data.officeWindows.map((window) => (
           <li key={`${window.dayLabel}-${window.offsetHours}`} data-status={window.status}>
-            <Icon name={officeIcon(window.status)} />
             <span>
               <strong>{window.dayLabel}</strong>
               <em>{window.hoursLabel}</em>

@@ -6,7 +6,7 @@
 }
 
 .overview-status {
-  padding: var(--space-6) var(--space-7);
+  padding: var(--space-6);
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.8fr);
   align-items: end;
@@ -58,7 +58,7 @@
 
 .cycle-strip {
   margin: 0;
-  padding: var(--space-5) var(--space-7) var(--space-6);
+  padding: var(--space-5) var(--space-6) var(--space-6);
   border-bottom: 1px solid var(--divider);
 }
 
@@ -190,7 +190,7 @@
 
 .cycle-strip-unavailable {
   min-height: 150px;
-  padding: var(--space-7);
+  padding: var(--space-6);
   display: grid;
   align-content: center;
   gap: var(--space-2);
@@ -208,10 +208,14 @@
   font-weight: 750;
 }
 
+/* Sized to the facts present, not to a fixed three. The outlook took over the
+   "useful task window" tile and left a hard three-column grid holding two,
+   so a third of the row was blank and the divider between them stopped
+   two-thirds of the way across. */
 .overview-facts {
   margin: 0;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
   border-bottom: 1px solid var(--divider);
 }
 
@@ -276,7 +280,7 @@
   min-height: 78px;
   padding: var(--space-3) var(--space-6);
   display: grid;
-  grid-template-columns: 120px 150px minmax(220px, 1fr) auto;
+  grid-template-columns: minmax(140px, auto) minmax(150px, auto) minmax(180px, 1fr) auto auto;
   align-items: center;
   gap: var(--space-4);
   border-bottom: 1px solid var(--divider);
@@ -354,7 +358,7 @@
 
 .overview-learning {
   min-height: 300px;
-  padding: var(--space-8) var(--space-7);
+  padding: var(--space-8) var(--space-6);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -442,7 +446,8 @@
 @media (max-width: 700px) {
   .overview-status,
   .cycle-strip,
-  .overview-learning {
+  .overview-learning,
+  .overview-fact {
     padding-inline: var(--space-5);
   }
 

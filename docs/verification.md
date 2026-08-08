@@ -855,6 +855,39 @@ on any narrow window. Fixed by keeping the footer and laying the group out
 horizontally — both links reachable at 375px with 44×44 targets — and pinned by
 a lint rule that was checked to fail before it was checked to pass.
 
+## Home surface spacing (2026-08-08)
+
+A measured pass over the Home screen after the operational view and the
+navigation consolidation landed. Eight defects, all found by reading geometry
+out of the running app rather than by looking at it; the table is in
+[`ui-refactor-plan.md`](ui-refactor-plan.md) §11.
+
+The headline: **the page had two left edges**. Every section on the surface
+carries a full-bleed rule, so the rules aligned and the content did not — the
+outlook's content sat 1px from the surface edge against 25px for everything
+else, and above it the status header and cycle strip sat at 29px against the
+facts' 25px. The surface is now one content column at every width: `--space-6`
+wide, `--space-5` narrow, measured as a single distinct left edge across all
+seven sections at both 1120px and 375px.
+
+Also measured and fixed: a third of the facts row was blank (359px of 1076px)
+because the outlook had taken over the third tile and left a hard three-column
+grid; the timeline's day labels never rendered at all, clipped by the track's
+own overflow; three-part section headings collapsed onto one 15px line; the
+legend's summary sentence sat 608px from the swatches it describes; two adjacent
+rules in different greys met between the facts and the outlook; and the evidence
+row wrapped to 124px because five children were in a four-column grid.
+
+**Guard**: `scripts/lint-ui-standards.mjs` fails if a Home surface stylesheet
+insets a section by `--space-7` — the exact shape of the two-left-edges defect.
+Checked to fail before it was checked to pass. Two DOM assertions cover the
+markup fixes: the day labels render outside the clipped track, and no list in
+the outlook carries a leading icon the others lack.
+
+Not covered: nothing here is a layout *test*. jsdom does not lay out, so the
+geometry above was measured in a real browser and the durable guards are the
+lint rule and the two structural assertions.
+
 ## What this record does not measure
 
 Added 2026-08-04 after an applicability/utility/automaticity review

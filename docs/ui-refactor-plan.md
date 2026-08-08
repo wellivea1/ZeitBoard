@@ -440,3 +440,32 @@ be the opposite of this slice.
 
 **Statistics behind a details disclosure on Rhythm** is not done; the Sources
 tab is unchanged apart from losing its neighbour.
+
+---
+
+## 11. Home surface spacing pass (2026-08-08)
+
+A review of the delivered Home screen found eight spacing defects, all measured
+in the running app rather than eyeballed. Six were introduced by the operational
+view (§ADR-0034) or exposed by it; two predated both.
+
+| # | Defect | Measured | Fix |
+|---:|---|---|---|
+| 1 | **Two left edges down the page.** Every section carries a full-bleed rule, so the rules lined up and the content did not. | The outlook's content sat 1px from the surface edge; everything else 25px | One content column: `--space-6` wide, `--space-5` narrow, everywhere |
+| 2 | **A 4px stagger above it.** The status header and cycle strip were inset `--space-7`, the facts and evidence row `--space-6` | 29px vs 25px | Same content column; `--space-7` no longer appears in a Home padding |
+| 3 | **A third of the facts row was blank.** The outlook took over the "useful task window" tile and left a hard three-column grid holding two, with the divider stopping two-thirds across | 359px of 1076px empty | `repeat(auto-fit, minmax(min(240px, 100%), 1fr))` |
+| 4 | **The timeline's day labels never rendered.** They were positioned below the track, inside the `overflow: hidden` that keeps the bands square-cut | Label top == track bottom, clipped | Labels moved to an unclipped sibling axis |
+| 5 | **Section headings ran together.** A baseline flex row put kicker, heading and description on one line: "REACHING PEOPLE Office hours Typical office hours, Monday to Friday…" | 15px tall for a three-part heading | Stacked, like every other section heading |
+| 6 | **The legend summary was flung to the far end of the row** by `margin-inline-start: auto` | 608px between the swatches and the sentence about them | Its own line under the keys |
+| 7 | **A double rule and a doubled list rule.** `.overview-facts` border-bottom met `.outlook` border-top in a different grey; the first `li` of each list added another under its heading | Two adjacent 1px lines, `rgb(37,45,42)` then `rgb(59,69,65)` | One rule each |
+| 8 | **The evidence row wrapped.** Five children in a four-column grid put "Why this estimate?" on a row of its own | 124px for a 78px row | A fifth column |
+
+Two related tidies came with them: the office list's status icon was the only
+one of the three lists to have one, so three sibling lists started their text at
+two different left edges — the status now colours the day label instead; and
+`.overview-quality`'s 120px first column could not hold the words "Estimate
+quality".
+
+**Guard.** `scripts/lint-ui-standards.mjs` now fails if a Home surface
+stylesheet insets a section by `--space-7`, which is the exact shape of defects
+1 and 2. It was checked to fail before it was checked to pass.

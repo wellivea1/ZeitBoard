@@ -159,6 +159,25 @@ if (/\.sidebar-footer,?[^{]*\{[^}]*display:\s*none/.test(narrow)) {
   );
 }
 
+// One content column on the Home surface. Every section there carries a
+// full-bleed rule, so the rules line up and any difference in inline padding
+// shows as content that does not — the status header and cycle strip sat at
+// space-7 while everything below them sat at space-6, and 4px of stagger down
+// a page reads as sloppiness rather than as hierarchy.
+for (const name of ["overview.css", "outlook.css"]) {
+  const path = join(frontend, "styles", name);
+  readFileSync(path, "utf8")
+    .split(/\r?\n/)
+    .forEach((line, index) => {
+      if (/padding[^:]*:[^;]*--space-7/.test(line)) {
+        fail(
+          path,
+          `line ${index + 1} insets a Home surface section by a different step; the surface is one content column.`,
+        );
+      }
+    });
+}
+
 const componentStyles = filesUnder(join(frontend, "styles"), ".css");
 for (const path of componentStyles) {
   const source = readFileSync(path, "utf8");
