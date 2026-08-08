@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"non24.app/core/recompute"
+	"non24.app/server/internal/analysis"
 	"non24.app/server/internal/api"
 	"non24.app/server/internal/config"
 	"non24.app/server/internal/portal"
@@ -90,14 +92,28 @@ func serve(configPath string, stop <-chan struct{}, ready chan<- struct{}) error
 		if handlerErr != nil {
 			return fmt.Errorf("configure portal: %w", handlerErr)
 		}
-		// Refresh once at startup so a link opened before the first sync of
-		// the day still shows current freshness rather than yesterday's.
-		if err := materializer.MaterializeAll(context.Background()); err != nil {
-			log.Printf("portal: initial snapshot refresh failed: %v", err)
+		// The analysis loop (ADR-0033). It reconciles at startup — so a link
+		// opened before the first sync of the day shows today's freshness — and
+		// then recomputes both when evidence changes and when the freshness
+		// verdict is due to change on its own, which is the case no amount of
+		// request-driven materialization ever reached.
+		//
+		// A dedicated stop channel rather than the caller's: `stop` may be nil,
+		// and these defers must run before the store closes (LIFO) so no worker
+		// touches a closed database.
+		recomputeWorker := &analysis.Worker{
+			Orchestrator: recompute.Orchestrator{
+				Analysis: analysis.Portal{Materializer: materializer},
+				Journal:  store.RecomputeJournal{Store: st},
+			},
 		}
-		// A dedicated stop channel rather than the caller's: `stop` may be
-		// nil, and this defer must run before the store closes (LIFO) so the
-		// worker never touches a closed database.
+		analysisStop := make(chan struct{})
+		analysisDone := recomputeWorker.Start(analysisStop)
+		defer func() {
+			close(analysisStop)
+			<-analysisDone
+		}()
+
 		maintenanceStop := make(chan struct{})
 		maintenanceDone := startPortalMaintenance(portalStore, requestBridge, maintenanceStop)
 		defer func() {
@@ -105,7 +121,13 @@ func serve(configPath string, stop <-chan struct{}, ready chan<- struct{}) error
 			<-maintenanceDone
 		}()
 
-		options = append(options, api.WithPortal(portalStore, cfg.Portal.PublicOrigin, materializer, requestBridge))
+		options = append(options, api.WithPortal(api.PortalConfig{
+			Store:        portalStore,
+			PublicOrigin: cfg.Portal.PublicOrigin,
+			Materializer: materializer,
+			Requests:     requestBridge,
+			Recompute:    recomputeWorker,
+		}))
 		publicHandler = portalHandler.Routes()
 		log.Printf("zeitboardd portal enabled at %s/p/", cfg.Portal.PublicOrigin)
 	}

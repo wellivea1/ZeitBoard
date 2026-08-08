@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"non24.app/core/domain"
+	"non24.app/core/recompute"
 	"non24.app/server/internal/assistant"
 	"non24.app/server/internal/auth"
 	"non24.app/server/internal/projection"
@@ -457,9 +458,10 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "sync push failed")
 		return
 	}
-	// An accepted push can change sleep inputs, so the shared projection is
-	// republished before the response returns (design section 5).
-	s.refreshPortal(r)
+	// An accepted push can change sleep inputs, so the analysis loop is told.
+	// A device sync arrives as a burst of pushes and the scheduler collapses
+	// them into one recomputation (ADR-0033).
+	s.requestRecompute(recompute.ReasonEvidence)
 	writeJSON(w, http.StatusOK, syncmodel.PushResponse{
 		SchemaVersion: syncmodel.SchemaVersion,
 		Cursor:        cursor,
@@ -488,7 +490,7 @@ func (s *Server) handleErase(w http.ResponseWriter, r *http.Request) {
 	}
 	// Erasure must reach the shared projection too: a window derived from a
 	// record the user just deleted may not keep being published.
-	s.refreshPortal(r)
+	s.requestRecompute(recompute.ReasonErasure)
 	writeJSON(w, http.StatusOK, syncmodel.EraseResponse{
 		SchemaVersion: syncmodel.SchemaVersion,
 		Erased:        erased,

@@ -195,6 +195,29 @@ accepted sync push that changes sleep inputs, an estimate-affecting edit or hard
 erasure, and estimator version changes. It publishes by transaction and then
 notifies open streams.
 
+Since [ADR-0033](decisions/0033-recompute-orchestrator.md), materialization is
+scheduled rather than performed inside the request that caused it, and two
+properties of the block above changed with it.
+
+`generatedAt` is **when the published content last changed**, not when the row
+was last rewritten. A recompute that finds the same answer republishes it under
+the same stamp. That is what makes the page's own 6-hour and 24-hour age rules
+mean something: their clock now starts at the evidence, so an unrelated task
+sync can no longer reset the visitor's staleness warning.
+
+`windows` are the estimate as computed, unfiltered and unclipped. Dropping past
+windows and clipping a window already in progress are **render-time** rules,
+applied identically by `BuildView` and by the availability DTO. They used to run
+at materialization, where they were only correct for the instant the snapshot
+happened to be written — a snapshot four hours old showed a start four hours in
+the past anyway. Keeping the stored value free of "now" also lets two
+materializations be compared, which is what the stamp rule above needs.
+
+A run additionally reports when its own answer expires, and the daemon schedules
+a recompute for that instant. Without it the freshness policy would be evaluated
+only when something else happened to trigger a materialization, so a user who
+recorded nothing would keep a stale claim published indefinitely.
+
 A response-shape test recursively rejects every key outside this allowlist. A
 fixture seeded with distinctive canary values in every private table verifies
 that no canary appears in HTML, JSON, SSE, errors, logs, or access audit.

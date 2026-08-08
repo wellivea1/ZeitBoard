@@ -111,6 +111,10 @@ itself is designed in [`portal-design.md`](portal-design.md).
 > collector), not more portal or agent breadth.** Portal P5-c/P5-d and new
 > assistant actions are paused — maintained and tested, not extended. Three
 > claim-accuracy defects it surfaced are tracked as slice 12.
+>
+> *Progress, 2026-08-06.* Slice 9 is delivered (ADR-0032) and slice 11's
+> collector exists (ADR-0031) but is not yet in a background service. Slice 13
+> below adds the loop that makes any of it arrive without a screen open.
 
 1. ~~**Close the control loop — approvals unification + sync robustness.**~~
    ✅ Delivered (ADR-0016): cross-device decisions via listed one-use tokens, a
@@ -307,6 +311,21 @@ M-E's separately reviewed local agent projection.
     was written for strangers and never applied to the person who depends on
     it. One shared policy should serve desktop, server, local agent, and
     portal.
+
+13. ~~**The recompute orchestrator.**~~ ✅ Delivered (ADR-0033): analysis is
+    scheduled rather than performed inside whichever HTTP request happened to
+    arrive. A burst of pushes coalesces into one run; a result reports when its
+    own answer expires and the loop wakes for that instant; durability is by
+    reconciliation against an input fingerprint rather than by a queue that can
+    drop work; and an unchanged projection keeps the time it last changed, so a
+    page's staleness warning finally measures the evidence rather than the
+    housekeeping. This is what makes ADR-0031's freshness policy take effect: it
+    decided withholding at materialization, and nothing was causing a
+    materialization when the user recorded nothing — which is exactly when the
+    rule applies. Verified live: twelve pushes → one run, an unrelated task push
+    leaving the stamp unmoved, and erasure withdrawing the projection with
+    nobody refreshing anything. The desktop is unchanged and still recomputes on
+    screen load.
 
 **Small debts (fold into adjacent slices):** finish ordered local/server migrations; ~~
 → domain decoder (now duplicated across desktop storage, server readmodel, and

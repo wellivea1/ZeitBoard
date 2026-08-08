@@ -10,9 +10,12 @@ import (
 	"testing"
 	"time"
 
+	"non24.app/core/recompute"
+	"non24.app/server/internal/analysis"
 	"non24.app/server/internal/portal"
 	"non24.app/server/internal/portalbridge"
 	"non24.app/server/internal/readmodel"
+	"non24.app/server/internal/store"
 )
 
 var portalTestNow = time.Date(2026, 3, 5, 12, 0, 0, 0, time.UTC)
@@ -50,15 +53,32 @@ func newPortalHarness(t *testing.T) (*testHarness, *portal.Store) {
 	t.Cleanup(func() { _ = portalStore.Close() })
 
 	harness := newTestHarness(t, func(s *Server) {
-		WithPortal(portalStore, "https://share.example.test", portalbridge.Materializer{
+		materializer := portalbridge.Materializer{
 			Sleep:    readmodel.SleepReader{Store: s.store},
 			Profiles: portalStore,
 			Sink:     portalStore,
 			Now:      func() time.Time { return portalTestNow },
-		}, &portalbridge.RequestBridge{
-			Portal:  portalStore,
-			Private: s.store,
-			Now:     func() time.Time { return portalTestNow },
+		}
+		// A real orchestrator on a fixed clock rather than a stub: publishing
+		// goes through exactly one path in production, and a test that skipped
+		// it would not exercise the one that ships. The worker's loop is not
+		// started, so every run here is the synchronous one the handler makes.
+		WithPortal(PortalConfig{
+			Store:        portalStore,
+			PublicOrigin: "https://share.example.test",
+			Materializer: materializer,
+			Requests: &portalbridge.RequestBridge{
+				Portal:  portalStore,
+				Private: s.store,
+				Now:     func() time.Time { return portalTestNow },
+			},
+			Recompute: &analysis.Worker{
+				Orchestrator: recompute.Orchestrator{
+					Analysis: analysis.Portal{Materializer: materializer},
+					Journal:  store.RecomputeJournal{Store: s.store},
+				},
+				Now: func() time.Time { return portalTestNow },
+			},
 		})(s)
 	})
 	return harness, portalStore

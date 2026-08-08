@@ -237,6 +237,26 @@ func (s *Store) Migrate(ctx context.Context) error {
 			decided_end TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL
 		)`,
+		// The analysis loop's durable memory (ADR-0033). There is no queue of
+		// pending recomputes here on purpose: a recompute is a pure function of
+		// the inputs, so what is worth remembering is which inputs have already
+		// been processed, not who asked. A restart compares fingerprints and
+		// re-derives the need, which cannot lose work the way a dropped queue
+		// message can. The fingerprints are encrypted because a digest still
+		// answers a guess about when someone slept.
+		`CREATE TABLE IF NOT EXISTS recompute_runs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			reason TEXT NOT NULL,
+			state TEXT NOT NULL,
+			started_at TEXT NOT NULL,
+			completed_at TEXT NOT NULL DEFAULT '',
+			content_changed_at TEXT NOT NULL DEFAULT '',
+			valid_until TEXT NOT NULL DEFAULT '',
+			nonce BLOB NOT NULL,
+			ciphertext BLOB NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_recompute_runs_state_id
+			ON recompute_runs(state, id)`,
 	}
 	for _, statement := range statements {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {

@@ -124,8 +124,13 @@ package called `activity`.
   and asking the user about conflicts are separate slices.
 - **Android still cannot sync**, which remains the single highest-value gap.
   Health Connect sleep still cannot reach the estimator.
-- **No recompute orchestrator exists.** Analysis still runs on screen loads and
-  local mutations rather than reacting to a source change.
+- ~~**No recompute orchestrator exists.**~~ Closed 2026-08-06 by
+  [ADR-0033](0033-recompute-orchestrator.md), which also finishes decision 3:
+  withholding at materialization only takes effect if something causes a
+  materialization, and a user who records nothing causes nothing — which is
+  precisely the case this policy was written for. The daemon now recomputes when
+  the verdict is due to change, not only when someone pushes. The desktop still
+  recomputes on screen load, which is correct for a foreground application.
 - **Desktop confidence labels are still rendered** despite ADR-0022's measured
   inversion. The freshness work makes the *state* honest; the confidence badge
   is a separate correction.

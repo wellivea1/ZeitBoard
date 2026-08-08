@@ -286,6 +286,16 @@ approve/decline that also materializes the ADR-0023 block.
 **Next phase as of 2026-08-04.** Rationale and verified findings are in
 [`automaticity-review-2026-08-04.md`](automaticity-review-2026-08-04.md).
 
+**Slice status, 2026-08-06.** Delivered: (1)/(3)/(4) via
+[ADR-0031](decisions/0031-evidence-freshness-and-shadow-inference.md), (5) via
+its validation gate — measured and **negative**, so inferred episodes stay
+shadow-only — (7) via `core/freshness`, (2) via
+[ADR-0032](decisions/0032-android-sleep-synchronisation.md), and (6) via
+[ADR-0033](decisions/0033-recompute-orchestrator.md). Remaining: **(8)**, the
+48–72 hour operational view. Two residuals carry forward rather than blocking
+it: the activity collector still runs only while the desktop app runs, and
+Android pushes without a background schedule or a pull.
+
 > **Goal: close the automatic daily loop. Bring fresh sleep/wake evidence from
 > Android Health Connect and privacy-minimized Windows activity into the shared
 > Go analysis path, and refresh the user's near-term planning state without
