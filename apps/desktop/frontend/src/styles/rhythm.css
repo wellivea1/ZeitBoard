@@ -95,9 +95,11 @@
 }
 
 .actogram-panel {
-  min-height: 540px;
   contain: paint;
-  overflow-x: hidden;
+  /* Not `overflow-x: hidden`: with a visible overflow-y the used value of
+     overflow-y becomes `auto`, which turned this panel into a scroll container
+     and drew a scrollbar over the confidence label at the end of every row. */
+  overflow-x: clip;
 }
 
 .actogram-chart {

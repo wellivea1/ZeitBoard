@@ -108,6 +108,28 @@ describe.each([
   });
 });
 
+// Section rules are the only thing separating the blocks on the Home surface,
+// which is one continuous surface rather than a stack of cards. They were
+// shipping at 1.09-1.17:1 against that surface in every everyday theme, which
+// is not a quiet hairline, it is an invisible one, and the sections ran
+// together. 1.4:1 is the floor at which a 1px rule reads as deliberate without
+// turning the page into a grid.
+describe.each([
+  ["light", light],
+  ["dark", dark],
+  ["black", black],
+  ["amber", amber],
+  ["contrast", contrast],
+])("section rules stay visible (%s theme)", (_theme, map) => {
+  it.each([
+    ["divider", "paper"],
+    ["divider", "canvas"],
+    ["line", "paper"],
+  ])("--%s reads against --%s", (rule, surface) => {
+    expect(ratio(resolve(map, rule), resolve(map, surface))).toBeGreaterThanOrEqual(1.4);
+  });
+});
+
 // --- Amber glasses mode (ui-refactor-plan.md §3) ---
 // Conservative display-compatibility simulation for a dark-amber filter.
 // This is a UI regression heuristic, not lens spectroscopy or clinical proof.

@@ -888,6 +888,37 @@ Not covered: nothing here is a layout *test*. jsdom does not lay out, so the
 geometry above was measured in a real browser and the durable guards are the
 lint rule and the two structural assertions.
 
+## Reported UI defects (2026-08-08)
+
+Four reports from the built app, each reproduced and measured before it was
+changed; the detail is in [`ui-refactor-plan.md`](ui-refactor-plan.md) §12.
+
+- **Section rules were invisible.** Measured at 1.09–1.17:1 against the surface
+  in every theme but High contrast. `--divider` and `--line` are now ≥1.4:1
+  against both `paper` and `canvas` in all five presets, asserted by
+  `contrast.test.ts` (89 assertions, up from 74).
+- **The actogram panel reserved 540px and 560px** — two numbers in two files —
+  for 419px of content, leaving empty surface that read as a solid block.
+  Both reservations removed; measured empty space below the content is now 0.
+- **`overflow-x: hidden` had made the panel a scroll container**, because with a
+  visible `overflow-y` the used value becomes `auto`. A 15px scrollbar was
+  painting over the confidence label of every row. `clip` fixes it; the existing
+  lint rule now pins `clip` rather than `hidden`. No scroll containers remain on
+  the Rhythm route.
+- **The assistant toggle overlapped page headers** by 16px vertically in the
+  same horizontal band. The header reserves the corner; a lint rule requires it.
+
+**Overlap sweep.** A pairwise detector over every visible leaf text node, across
+ten routes, at 760 / 885 / 1045 / 1120px and root font sizes 16 / 20 / 24px.
+One real defect: the Sharing relationship table declared a 524px minimum inside
+a 439px column and painted 61px over the list beside it between ~980 and 1100px.
+Fixed. All sweeps are now clean.
+
+The detector's first run reported six overlaps on Home that were phantoms: a
+closed `<details>` still returns a non-zero client rect in Chrome even though
+its content is not painted. It filters on `checkVisibility()` now. Recorded
+because the first result looked like a defect and was not one.
+
 ## What this record does not measure
 
 Added 2026-08-04 after an applicability/utility/automaticity review

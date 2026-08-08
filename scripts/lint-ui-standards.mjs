@@ -178,6 +178,15 @@ for (const name of ["overview.css", "outlook.css"]) {
     });
 }
 
+// The assistant toggle is absolutely positioned over the top-right of the
+// content pane, which is where every page header puts its status and controls.
+if (!/\.page-header\s*\{[^}]*padding-inline-end/s.test(shellStyles)) {
+  fail(
+    join(frontend, "styles.css"),
+    "The page header must reserve room for the floating assistant toggle.",
+  );
+}
+
 const componentStyles = filesUnder(join(frontend, "styles"), ".css");
 for (const path of componentStyles) {
   const source = readFileSync(path, "utf8");
@@ -215,12 +224,17 @@ if (!/\.rhythm-screen\s*\{[^}]*overflow-x:\s*clip;/s.test(rhythmStyles)) {
     "The Rhythm screen must clip nested visualization overflow at the page boundary.",
   );
 }
+// `clip`, not `hidden`: with a visible overflow-y, an `overflow-x: hidden`
+// makes the used overflow-y `auto` (CSS Overflow 3 §3.3), which turned this
+// panel into a scroll container and drew a scrollbar straight over the
+// confidence label at the end of every actogram row. `clip` contains the same
+// nested chart overflow without that side effect.
 if (
-  !/\.actogram-panel\s*\{(?=[^}]*contain:\s*paint;)[^}]*overflow-x:\s*hidden;/s.test(rhythmStyles)
+  !/\.actogram-panel\s*\{(?=[^}]*contain:\s*paint;)[^}]*overflow-x:\s*clip;/s.test(rhythmStyles)
 ) {
   fail(
     rhythmStylesPath,
-    "The actogram panel must paint-contain nested chart overflow on narrow screens.",
+    "The actogram panel must clip nested chart overflow with `overflow-x: clip`.",
   );
 }
 if (!/\.actogram-chart\s*\{[^}]*overflow-x:\s*auto;/s.test(tokenSource)) {

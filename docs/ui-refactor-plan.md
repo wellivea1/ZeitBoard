@@ -469,3 +469,57 @@ quality".
 **Guard.** `scripts/lint-ui-standards.mjs` now fails if a Home surface
 stylesheet insets a section by `--space-7`, which is the exact shape of defects
 1 and 2. It was checked to fail before it was checked to pass.
+
+---
+
+## 12. Reported-defect pass (2026-08-08)
+
+Four reports from using the built app, each reproduced and measured before it
+was touched.
+
+**Sections ran together.** Not a Home problem — a token problem. The section
+rules were shipping at **1.09–1.17:1** against the surface they divide, in
+*every* everyday theme; only the High-contrast preset had a visible rule. The
+Home screen is one continuous surface split by those rules, so it showed there
+first. `--divider` and `--line` are now ≥1.4:1 against both `paper` and
+`canvas` in all five presets, and `contrast.test.ts` asserts that floor so a
+future palette edit cannot make them vanish again.
+
+**The Rhythm page was sometimes a block of solid colour.** The actogram panel
+reserved `min-height: 540px` in `rhythm.css` and `560px` in `styles.css` — two
+different numbers for one panel, in two files — while its content is 419px. The
+remainder was empty surface. Both reservations are gone; the panel is as tall as
+what is in it.
+
+**The actogram had a scrollbar over its own labels.** `overflow-x: hidden` with
+a visible `overflow-y` makes the used `overflow-y` **auto** (CSS Overflow 3
+§3.3), so the panel had quietly become a scroll container and painted a 15px
+scrollbar across the confidence label at the end of every row. `overflow-x:
+clip` contains the same nested chart overflow with no such side effect. The
+existing lint rule that pinned `hidden` now pins `clip`.
+
+The chart also scrolled sideways: its row grid declared `min-width: 760px` while
+its own columns needed `64 + 620 + 76 + 2×12 = 784px`, inside a 748px pane. The
+declared minimum was never the real one. Columns reduced; both scrollbars gone.
+
+**The assistant toggle sat on top of page content.** It is absolutely positioned
+at the top-right of the content pane with no `z-index`, spanning y 22–54px,
+which is exactly where every page header puts its status cluster and controls —
+those start at 38px. The header now reserves the corner, and the lint requires
+it to keep doing so.
+
+### One report that did not reproduce
+
+"Text overlaps at certain scales" was checked with a pairwise overlap detector
+over every visible leaf text node, across all ten routes, at 760 / 885 / 1045 /
+1120px and at root font sizes of 16 / 20 / 24px. **One** real overlap turned up:
+the Sharing relationship table declared a 524px minimum inside a 439px column
+and painted 61px over the guardrail list beside it, between roughly 980 and
+1100px. Fixed by lowering the row minimums so the long cell wraps, and by
+raising the stacking breakpoint to 1100px.
+
+An earlier run of the same detector reported six overlaps on Home. They were
+phantoms: a closed `<details>` still returns a non-zero `getBoundingClientRect()`
+in Chrome even though `::details-content` is not painted. The detector now
+filters on `checkVisibility()`. Worth recording because the first result looked
+like a bug and was not one.
