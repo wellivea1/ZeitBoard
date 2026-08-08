@@ -770,6 +770,54 @@ mitigation is structural — all scheduling state is a plain struct with no time
 and no goroutine of its own, touched only under one mutex, and every decision it
 makes is tested by calling it directly rather than by waiting.
 
+## The 48–72 hour operational view (ADR-0034)
+
+Verified 2026-08-08.
+
+**Arithmetic** (`core/outlook`): the timeline covers the horizon with no gaps and
+no unmerged neighbours; every predicted boundary carries an uncertain stretch and
+those stretches widen with forecast distance; the current period reads awake
+rather than unknown and ends at the earliest plausible onset; a recorded episode
+overrides the forecast and is marked observed; office windows keep reachable and
+possible separate and never claim more than their own span; Saturday and Sunday
+are skipped; a commitment inside predicted sleep is named as such; tasks are
+placed only in confidently awake segments; an unplaceable task reports a reason
+instead of vanishing; stale evidence withholds the entire view; a refusal keeps
+the estimator's own typed code; the horizon clamps to 48–96 hours; and the sweep
+survives a daylight-saving transition — absolute instants for the timeline, civil
+clock for the office day.
+
+The core view carries event **ids** and no text. A test plants "Oncology
+follow-up", "Ward 4" and "referral letter" in an event and asserts none of them
+reaches the outlook; the desktop joins titles back locally.
+
+**The product claim, checked.** A seeded 40-day generator is walked through a
+fortnight of drift, building the view once per day. Office hours come out
+reachable on some days and unreachable on others. Both assertions matter: a view
+that reported no reachable time all fortnight would be broken, and one that
+reported the same answer every day would not be tracking the drift the whole
+product is about.
+
+**Desktop binding**, against a real store: an available view with layout offsets
+that tile the horizon exactly; all three presence states present; withholding on
+four-day-old evidence with a reason; refusal with no history; office windows
+labelled reachable / partial / unreachable with "partial" never advertising a
+time to ring; day marks 24 hours apart; and no estimator internals
+(`algorithmVersion`, `inputSessionIds`, `characteristicSleepStart`) in the DTO.
+
+**Rendered panel**, checked in the running app: thirteen contiguous bands across
+a 72-hour strip, day marks at 24-hour intervals, legend swatches matching the
+band fills including the hatch, office icons coloured by status, no console
+errors, no horizontal page overflow. Adjacent band luminance contrast is
+1.14–1.37, which is why the uncertain band is hatched rather than solid: the
+three state colours are separated by hue, not by lightness, and three solid
+blocks would be hard to tell apart in greyscale, in the amber-glasses theme, or
+for a reader with a colour vision deficiency.
+
+Not measured: whether the view changes what the user does. Every check above
+establishes that the software does what it claims. Whether more calls get made
+inside office hours is the pilot question below.
+
 ## What this record does not measure
 
 Added 2026-08-04 after an applicability/utility/automaticity review

@@ -30,3 +30,6 @@ captures/
 
 # TypeScript incremental build metadata (a local artifact of tsc -b).
 *.tsbuildinfo
+
+# Local agent-harness scratch (preview launch config is developer-local).
+.claude/
