@@ -309,18 +309,26 @@ M-E's separately reviewed local agent projection.
     browser history, **application names**, or high-frequency input streams.
     Record desktop CPU/memory/startup baselines before it lands so its cost
     can be stated rather than guessed.
-12. **Claim-accuracy defects (small, and worth doing before more breadth).**
-    (a) The Sharing screen still says "Link creation and recipient access are
-    not connected in this build" — true for the user, but P5-a shipped the
-    owner-side profile CRUD on the backend and nothing was wired to it.
-    (b) The desktop Overview renders a categorical Confidence badge while
-    ADR-0022 measured those buckets inverted and the portal withholds them for
-    that reason; the owner's surface is currently less honest than the public
-    one. (c) The Overview has no freshness or staleness handling at all, while
-    the portal withholds an estimate past 6 h and 24 h — the stricter policy
-    was written for strangers and never applied to the person who depends on
-    it. One shared policy should serve desktop, server, local agent, and
-    portal.
+12. ~~**Claim-accuracy defects.**~~ ✅ Delivered. *(b) and (c)* landed with the
+    freshness policy and the honest-confidence pass: Home leads estimate quality
+    with evidence age, the categorical badge sits behind a disclosure that says
+    the buckets did not rank, and the shared `core/freshness` policy serves
+    desktop, server, local agent and portal. *(a) delivered 2026-08-08:* the
+    Sharing screen no longer claims link creation is unbuilt. It lists the
+    owner's real links, creates them with a required passcode and expiry, and
+    revokes or erases them, all against the owner's own instance. `off` (sync
+    is not configured) and `unavailable` (the instance's portal is switched
+    off) are now distinct answers rather than one shrug.
+
+    Two defects surfaced while wiring it, both found by a live round trip and
+    invisible to either side's unit tests. The desktop's shared HTTP client
+    decodes with `DisallowUnknownFields`, and the response structs omitted
+    `schema_version`, so **every** create and list failed as "invalid JSON".
+    And the server's erase route revoked the link, cleared its audit and dropped
+    its private label but left the profile row, so an "erased" link stayed in
+    the owner's list, revoked and nameless — the handler's own comment claimed
+    otherwise. `portal.Store.DeleteProfile` now removes it, and every dependent
+    row cascades because the schema already declared it.
 
 13. ~~**The recompute orchestrator.**~~ ✅ Delivered (ADR-0033): analysis is
     scheduled rather than performed inside whichever HTTP request happened to

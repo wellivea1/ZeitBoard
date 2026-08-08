@@ -266,6 +266,13 @@ func (s *Server) handleErasePortalProfile(w http.ResponseWriter, r *http.Request
 		writeError(w, http.StatusInternalServerError, "share profile erase failed")
 		return
 	}
+	// And the profile row itself. Without this the "erased" link stayed in the
+	// owner's list, revoked and nameless, which is not what erasing a record
+	// means and not what this handler said it did.
+	if err := s.portal.store.DeleteProfile(r.Context(), profileID); err != nil {
+		writeError(w, http.StatusInternalServerError, "share profile erase failed")
+		return
+	}
 	if err := s.store.DeletePortalLabel(r.Context(), profileID); err != nil {
 		writeError(w, http.StatusInternalServerError, "share profile erase failed")
 		return

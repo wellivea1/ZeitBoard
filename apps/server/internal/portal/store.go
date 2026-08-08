@@ -470,6 +470,23 @@ func (s *Store) listProfileStates(ctx context.Context, now time.Time) ([]Profile
 // already-authenticated visitor cannot keep reading through an open session,
 // and it deletes the materialized snapshot so no availability data survives in
 // the portal database.
+// DeleteProfile removes the profile row itself, and with it every dependent
+// row: the snapshot, sessions, requests and their sessions all declare
+// ON DELETE CASCADE on this key, and foreign keys are enforced.
+//
+// It exists because the owner-side erase route revoked the link, cleared its
+// audit and dropped its private label but left the profile row behind, so a
+// link the owner had "erased" was still listed — revoked and nameless. The
+// handler's own comment said it erased the record that the link existed; this
+// is what makes that true.
+func (s *Store) DeleteProfile(ctx context.Context, profileID string) error {
+	if profileID == "" {
+		return errors.New("portal profile id is required")
+	}
+	_, err := s.db.ExecContext(ctx, `DELETE FROM portal_profiles WHERE profile_id = ?`, profileID)
+	return err
+}
+
 func (s *Store) RevokeProfile(ctx context.Context, profileID string, now time.Time) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
