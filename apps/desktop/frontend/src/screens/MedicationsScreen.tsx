@@ -230,7 +230,7 @@ function MedicationWorkspaceView({
   );
 }
 
-export function MedicationsScreen() {
+export function MedicationsScreen({ embedded }: { embedded?: boolean } = {}) {
   const {
     data,
     loading,
@@ -271,6 +271,7 @@ export function MedicationsScreen() {
             </button>
           </div>
         }
+        level={embedded ? "panel" : "page"}
       />
 
       <section className="medication-boundary" aria-label="Medication safety boundary">

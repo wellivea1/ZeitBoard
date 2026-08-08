@@ -590,3 +590,16 @@
     width: 100%;
   }
 }
+
+/* Data Sources kept the sources when the log moved to Log (slice U-H); this
+ * says where the records themselves went, once, rather than leaving somebody
+ * hunting for the entry they just made. */
+.data-source-log-pointer {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-body);
+}
+
+.sleep-log-workspace {
+  padding-top: 0;
+}

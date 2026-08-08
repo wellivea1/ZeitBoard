@@ -75,7 +75,7 @@ function sourceLabel(source: OverviewSource, hasEstimate: boolean) {
   return "Sample data";
 }
 
-export function OverviewScreen() {
+export function HomeScreen() {
   const [overview, setOverview] = useState(overviewFixture);
   const [mode, setMode] = useState<OverviewSource>("fixture");
   const [rhythm, setRhythm] = useState(rhythmFixture);
@@ -123,7 +123,7 @@ export function OverviewScreen() {
     <>
       <PageHeader
         eyebrow={todayLabel}
-        title="Overview"
+        title="Home"
         description="What is true now, what is uncertain, and the next useful window."
         actions={
           <div className="status-cluster">
@@ -250,7 +250,7 @@ export function OverviewScreen() {
                 times before the app draws a forecast.
               </p>
             </div>
-            <a className="button primary" href="#/data-sources">
+            <a className="button primary" href="#/log/sleep">
               Add sleep entry
             </a>
           </section>
@@ -270,7 +270,7 @@ export function OverviewScreen() {
           </div>
           <div>
             {hasEstimate && (
-              <a className="button secondary" href="#/approvals">
+              <a className="button secondary" href="#/plan/approvals">
                 Review proposals
               </a>
             )}

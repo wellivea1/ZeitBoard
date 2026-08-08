@@ -51,18 +51,60 @@ if (existsSync(secondaryScreens)) {
   fail(secondaryScreens, "The legacy multi-screen module must not be recreated.");
 }
 
-const overviewPath = join(frontend, "screens", "OverviewScreen.tsx");
-const overview = readFileSync(overviewPath, "utf8");
-for (const required of ["CycleStrip", "overview-surface", "overview-facts"]) {
-  if (!overview.includes(required)) fail(overviewPath, `Overview must retain ${required}.`);
+const homePath = join(frontend, "screens", "HomeScreen.tsx");
+const home = readFileSync(homePath, "utf8");
+for (const required of ["CycleStrip", "OutlookPanel", "overview-surface", "overview-facts"]) {
+  if (!home.includes(required)) fail(homePath, `Home must retain ${required}.`);
 }
-if (/metric-card/.test(overview) || hasStaticClass(overview, "panel")) {
-  fail(overviewPath, "Overview is one surface; generic panels and metric cards are forbidden.");
+if (/metric-card/.test(home) || hasStaticClass(home, "panel")) {
+  fail(homePath, "Home is one surface; generic panels and metric cards are forbidden.");
+}
+
+// Slice U-H: five primary destinations, then a utility group. The count is the
+// point — eight equal-weight entries was too much undifferentiated navigation
+// for someone operating under fatigue, and nothing stops it creeping back
+// except a check.
+const shellPath = join(frontend, "components", "AppShell.tsx");
+const shell = readFileSync(shellPath, "utf8");
+const primaryBlock = shell.match(/const primaryNavigation: NavItem\[\] = \[(.*?)\];/s)?.[1] ?? "";
+const primaryCount = [...primaryBlock.matchAll(/\{\s*id:/g)].length;
+if (primaryCount !== 5) {
+  fail(shellPath, `Primary navigation must hold exactly five destinations; found ${primaryCount}.`);
+}
+if (!shell.includes("utilityNavigation") || !shell.includes('className="utility-nav"')) {
+  fail(shellPath, "The utility group must stay separate from the primary destinations.");
+}
+
+// Legacy hashes stay routable. They are written down in the runbook, in this
+// app's own links, and in whatever the user bookmarked; a dead link is a worse
+// answer than a redirect.
+const legacyStart = shell.indexOf("const legacyRoutes");
+const legacyBlock =
+  legacyStart < 0 ? "" : shell.slice(legacyStart, shell.indexOf("};", legacyStart));
+for (const legacy of ["overview", "calendar", "tasks", "approvals", "medications", "timeline"]) {
+  if (!legacyBlock.includes(`${legacy}: { screen:`)) {
+    fail(shellPath, `The legacy #/${legacy} route must keep redirecting.`);
+  }
+}
+
+// Plan and Log are tab hosts, not new monoliths: they compose the screens they
+// absorbed rather than copying them.
+for (const [name, required] of [
+  ["PlanScreen.tsx", ["CalendarScreen", "TasksScreen", "ApprovalsScreen", "ScreenTabs"]],
+  ["LogScreen.tsx", ["SleepLogPanel", "MedicationsScreen", "RhythmMarkersPanel", "ScreenTabs"]],
+]) {
+  const path = join(frontend, "screens", name);
+  const source = readFileSync(path, "utf8");
+  for (const symbol of required) {
+    if (!source.includes(symbol)) fail(path, `${name} must compose ${symbol}.`);
+  }
 }
 
 for (const [name, requiredClass] of [
   ["DataSourcesScreen.tsx", "data-source-workspace"],
   ["SharingScreen.tsx", "sharing-workspace"],
+  ["PlanScreen.tsx", "screen-tabbed"],
+  ["LogScreen.tsx", "screen-tabbed"],
 ]) {
   const path = join(frontend, "screens", name);
   const source = readFileSync(path, "utf8");
@@ -105,6 +147,46 @@ if (
   );
 }
 
+// Hiding the sidebar footer on a narrow window used to be harmless because
+// Data Sources was a primary destination. After slice U-H it lives in the
+// utility group, and hiding the footer would strand it and Settings with it.
+const shellStyles = readFileSync(join(frontend, "styles.css"), "utf8");
+const narrow = shellStyles.slice(shellStyles.indexOf("@media (max-width: 700px)"));
+if (/\.sidebar-footer,?[^{]*\{[^}]*display:\s*none/.test(narrow)) {
+  fail(
+    join(frontend, "styles.css"),
+    "The utility group must stay reachable on a narrow window; do not hide .sidebar-footer.",
+  );
+}
+
+// One content column on the Home surface. Every section there carries a
+// full-bleed rule, so the rules line up and any difference in inline padding
+// shows as content that does not — the status header and cycle strip sat at
+// space-7 while everything below them sat at space-6, and 4px of stagger down
+// a page reads as sloppiness rather than as hierarchy.
+for (const name of ["overview.css", "outlook.css"]) {
+  const path = join(frontend, "styles", name);
+  readFileSync(path, "utf8")
+    .split(/\r?\n/)
+    .forEach((line, index) => {
+      if (/padding[^:]*:[^;]*--space-7/.test(line)) {
+        fail(
+          path,
+          `line ${index + 1} insets a Home surface section by a different step; the surface is one content column.`,
+        );
+      }
+    });
+}
+
+// The assistant toggle is absolutely positioned over the top-right of the
+// content pane, which is where every page header puts its status and controls.
+if (!/\.page-header\s*\{[^}]*padding-inline-end/s.test(shellStyles)) {
+  fail(
+    join(frontend, "styles.css"),
+    "The page header must reserve room for the floating assistant toggle.",
+  );
+}
+
 const componentStyles = filesUnder(join(frontend, "styles"), ".css");
 for (const path of componentStyles) {
   const source = readFileSync(path, "utf8");
@@ -142,12 +224,17 @@ if (!/\.rhythm-screen\s*\{[^}]*overflow-x:\s*clip;/s.test(rhythmStyles)) {
     "The Rhythm screen must clip nested visualization overflow at the page boundary.",
   );
 }
+// `clip`, not `hidden`: with a visible overflow-y, an `overflow-x: hidden`
+// makes the used overflow-y `auto` (CSS Overflow 3 §3.3), which turned this
+// panel into a scroll container and drew a scrollbar straight over the
+// confidence label at the end of every actogram row. `clip` contains the same
+// nested chart overflow without that side effect.
 if (
-  !/\.actogram-panel\s*\{(?=[^}]*contain:\s*paint;)[^}]*overflow-x:\s*hidden;/s.test(rhythmStyles)
+  !/\.actogram-panel\s*\{(?=[^}]*contain:\s*paint;)[^}]*overflow-x:\s*clip;/s.test(rhythmStyles)
 ) {
   fail(
     rhythmStylesPath,
-    "The actogram panel must paint-contain nested chart overflow on narrow screens.",
+    "The actogram panel must clip nested chart overflow with `overflow-x: clip`.",
   );
 }
 if (!/\.actogram-chart\s*\{[^}]*overflow-x:\s*auto;/s.test(tokenSource)) {

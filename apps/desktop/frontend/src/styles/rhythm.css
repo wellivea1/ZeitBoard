@@ -12,7 +12,9 @@
   overflow-x: clip;
 }
 
-.rhythm-tabs {
+/* Shared by Plan, Log and Rhythm since slice U-H. One tablist, one look; three
+ * copies would have drifted apart the first time one of them was adjusted. */
+.screen-tabs {
   min-height: 52px;
   padding: 0;
   display: flex;
@@ -24,20 +26,60 @@
   border-radius: 0;
 }
 
-.rhythm-tabs .filter {
+.screen-tabs .filter {
   min-height: 44px;
   border-bottom: 2px solid transparent;
   border-radius: 0;
 }
 
-.rhythm-tabs .filter.active {
+.screen-tabs .filter.active {
   color: var(--ink);
   background: transparent;
   border-bottom-color: var(--state-asleep);
 }
 
-.rhythm-panel {
+.screen-tab-panel {
   margin-top: var(--space-2);
+}
+
+/* A tabbed screen is one surface, like .rhythm-screen: the tabs change what is
+ * inside it, not which page you are on. */
+.screen-tabbed {
+  min-width: 0;
+  overflow-x: clip;
+}
+
+/* The count on the Plan tab. Absent when nothing is pending — a badge that is
+ * always there is a badge nobody reads. */
+.screen-tab-badge {
+  min-width: 18px;
+  margin-inline-start: var(--space-2);
+  padding: 0 var(--space-1);
+  display: inline-block;
+  color: var(--paper);
+  background: var(--state-uncertain);
+  border-radius: var(--radius-control);
+  font-size: var(--type-label);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+/* A screen rendered inside a tab keeps its description and its controls and
+ * gives up its heading: the tab already names it. */
+.panel-header {
+  margin-bottom: var(--space-4);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-6);
+}
+
+.panel-header p {
+  max-width: 690px;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-body);
+  line-height: 1.5;
 }
 
 .rhythm-visual-surface {
@@ -53,9 +95,11 @@
 }
 
 .actogram-panel {
-  min-height: 540px;
   contain: paint;
-  overflow-x: hidden;
+  /* Not `overflow-x: hidden`: with a visible overflow-y the used value of
+     overflow-y becomes `auto`, which turned this panel into a scroll container
+     and drew a scrollbar over the confidence label at the end of every row. */
+  overflow-x: clip;
 }
 
 .actogram-chart {
@@ -95,7 +139,7 @@
 }
 
 @media (max-width: 700px) {
-  .rhythm-tabs {
+  .screen-tabs {
     overflow-x: auto;
   }
 

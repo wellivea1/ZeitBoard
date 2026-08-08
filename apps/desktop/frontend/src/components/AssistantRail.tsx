@@ -69,7 +69,7 @@ function ActionCard({
         </div>
       )}
       <footer>
-        <a href="#/approvals">View in Approvals</a>
+        <a href="#/plan/approvals">View in Approvals</a>
         {decidable ? (
           <>
             <button
@@ -197,7 +197,7 @@ export function AssistantRail({ open, onClose }: { open: boolean; onClose: () =>
         <span className="assistant-backend" data-mode={backend.mode}>
           <i aria-hidden="true" /> {backend.text}
         </span>
-        <a className="assistant-queue-link" href="#/approvals">
+        <a className="assistant-queue-link" href="#/plan/approvals">
           Approvals{pendingQueue.length > 0 && ` ${pendingQueue.length}`}
         </a>
         <button

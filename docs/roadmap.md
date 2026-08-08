@@ -287,6 +287,16 @@ M-E's separately reviewed local agent projection.
     as text plus pattern, keep no-safe-window context in the same workflow, and
     use compact mobile actions; the phone appearance picker is a two-column
     selector and icon-only navigation retains explicit accessible names.
+    *U-H delivered:* eight equal-weight destinations became five — `Home ·
+    Plan · Rhythm · Log · Sharing` — with Data Sources and Settings in a
+    separate utility group. Plan hosts Calendar, Tasks and Approvals as tabs
+    and carries the pending count, so the queue is no longer a permanent
+    destination that is empty most of the time; Log hosts sleep, medications
+    and context markers. One shared tablist replaced what would have been
+    three, every legacy hash still redirects to the right screen *and* tab,
+    and the lint enforces the count so a ninth destination cannot arrive one
+    merge at a time. **This closes `ui-refactor-plan.md`**: U-A through U-H
+    are all delivered.
 
 11. **A real Windows activity collector. — SECOND PRIORITY.**
     `core/platform/activity/collector.go` emits one `"state": "startup"`

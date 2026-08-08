@@ -351,7 +351,7 @@ overflow. The named Pixel 10 Pro XL emulator was rebuilt and rechecked across
 all four portrait routes plus large-width Settings; this slice changes no
 Android source.
 
-## U-H — navigation consolidation (planned)
+## 10. Slice U-H (delivered 2026-08-08): navigation consolidation
 
 From the 2026-08-04 UI guideline review
 ([disposition](ui-guideline-review-2026-08-04.md), finding 6). The desktop
@@ -383,3 +383,143 @@ suite, and mixing it with a behavioural fix would make both harder to review.
 Not in scope: full user rearrangement of navigation, which the guideline also
 advises against, and the pinnable secondary destination, which is declined until
 this slice settles the shape.
+
+### What shipped
+
+**Five primary destinations, one utility group.** `Home · Plan · Rhythm · Log ·
+Sharing` in the primary rail; `Data Sources · Settings` in a ruled utility group
+in the sidebar footer; the assistant stays the existing toggle. The count is
+enforced by the UI-standards lint, because nothing else stops a ninth
+destination arriving one merge at a time.
+
+**Plan** hosts Calendar, Tasks and Approvals as tabs, and carries the pending
+count on the destination itself so it is visible from anywhere. Approvals is no
+longer a permanent destination that is empty most of the time.
+
+**Log** hosts Sleep, Medications and Context. The sleep log — entry form,
+correction history, suppression, erasure — moved out of Data Sources into
+`components/SleepLogPanel.tsx`, which also took a 593-line screen down to 68.
+Context markers moved off Rhythm; their state moved to
+`state/rhythmMarkers.ts`, so Rhythm can still *read* them for the actogram
+overlay without owning the editing.
+
+**Rhythm** kept Actogram, Drift and Sources and lost Context.
+
+**One tablist, not three.** `components/ScreenTabs.tsx` carries the roving
+tabindex and the arrow/Home/End handling that three hand-rolled copies would
+have drifted on. Tabs are part of the address (`#/plan/tasks`, `#/log/markers`),
+so a reload or a bookmark lands where it did.
+
+**Every old hash still works.** `#/overview`, `#/calendar`, `#/tasks`,
+`#/approvals`, `#/medications` and `#/timeline` redirect to their new home and
+tab. They are written down in this app's own links, in the runbook, and in
+whatever the user bookmarked; a dead link is a worse answer than six lines of
+redirect. The lint requires them to stay.
+
+**A screen inside a tab gives up its heading and keeps its controls.**
+`PageHeader` gained a `panel` level: the tab already names the view and labels
+the panel, so an `<h2>` repeating it is noise — but Calendar's date controls and
+Medications' status cluster are not noise, and dropping the header outright
+would have taken them.
+
+### One defect this found
+
+Hiding `.sidebar-footer` at the narrow breakpoint had always been harmless
+because Data Sources was a primary destination. Moving it into the utility group
+stranded it and Settings on any window under 700px. Caught in the running app
+rather than by any test, fixed by keeping the footer and laying the utility
+group out horizontally, and pinned by a lint rule that was checked to fail
+before it was checked to pass.
+
+### Not done
+
+**Reports and Help are not in the utility group**, because neither exists as a
+destination: the clinician report is a panel inside Medications, and there is no
+help content to link to. Adding empty destinations to match a target list would
+be the opposite of this slice.
+
+**Statistics behind a details disclosure on Rhythm** is not done; the Sources
+tab is unchanged apart from losing its neighbour.
+
+---
+
+## 11. Home surface spacing pass (2026-08-08)
+
+A review of the delivered Home screen found eight spacing defects, all measured
+in the running app rather than eyeballed. Six were introduced by the operational
+view (§ADR-0034) or exposed by it; two predated both.
+
+| # | Defect | Measured | Fix |
+|---:|---|---|---|
+| 1 | **Two left edges down the page.** Every section carries a full-bleed rule, so the rules lined up and the content did not. | The outlook's content sat 1px from the surface edge; everything else 25px | One content column: `--space-6` wide, `--space-5` narrow, everywhere |
+| 2 | **A 4px stagger above it.** The status header and cycle strip were inset `--space-7`, the facts and evidence row `--space-6` | 29px vs 25px | Same content column; `--space-7` no longer appears in a Home padding |
+| 3 | **A third of the facts row was blank.** The outlook took over the "useful task window" tile and left a hard three-column grid holding two, with the divider stopping two-thirds across | 359px of 1076px empty | `repeat(auto-fit, minmax(min(240px, 100%), 1fr))` |
+| 4 | **The timeline's day labels never rendered.** They were positioned below the track, inside the `overflow: hidden` that keeps the bands square-cut | Label top == track bottom, clipped | Labels moved to an unclipped sibling axis |
+| 5 | **Section headings ran together.** A baseline flex row put kicker, heading and description on one line: "REACHING PEOPLE Office hours Typical office hours, Monday to Friday…" | 15px tall for a three-part heading | Stacked, like every other section heading |
+| 6 | **The legend summary was flung to the far end of the row** by `margin-inline-start: auto` | 608px between the swatches and the sentence about them | Its own line under the keys |
+| 7 | **A double rule and a doubled list rule.** `.overview-facts` border-bottom met `.outlook` border-top in a different grey; the first `li` of each list added another under its heading | Two adjacent 1px lines, `rgb(37,45,42)` then `rgb(59,69,65)` | One rule each |
+| 8 | **The evidence row wrapped.** Five children in a four-column grid put "Why this estimate?" on a row of its own | 124px for a 78px row | A fifth column |
+
+Two related tidies came with them: the office list's status icon was the only
+one of the three lists to have one, so three sibling lists started their text at
+two different left edges — the status now colours the day label instead; and
+`.overview-quality`'s 120px first column could not hold the words "Estimate
+quality".
+
+**Guard.** `scripts/lint-ui-standards.mjs` now fails if a Home surface
+stylesheet insets a section by `--space-7`, which is the exact shape of defects
+1 and 2. It was checked to fail before it was checked to pass.
+
+---
+
+## 12. Reported-defect pass (2026-08-08)
+
+Four reports from using the built app, each reproduced and measured before it
+was touched.
+
+**Sections ran together.** Not a Home problem — a token problem. The section
+rules were shipping at **1.09–1.17:1** against the surface they divide, in
+*every* everyday theme; only the High-contrast preset had a visible rule. The
+Home screen is one continuous surface split by those rules, so it showed there
+first. `--divider` and `--line` are now ≥1.4:1 against both `paper` and
+`canvas` in all five presets, and `contrast.test.ts` asserts that floor so a
+future palette edit cannot make them vanish again.
+
+**The Rhythm page was sometimes a block of solid colour.** The actogram panel
+reserved `min-height: 540px` in `rhythm.css` and `560px` in `styles.css` — two
+different numbers for one panel, in two files — while its content is 419px. The
+remainder was empty surface. Both reservations are gone; the panel is as tall as
+what is in it.
+
+**The actogram had a scrollbar over its own labels.** `overflow-x: hidden` with
+a visible `overflow-y` makes the used `overflow-y` **auto** (CSS Overflow 3
+§3.3), so the panel had quietly become a scroll container and painted a 15px
+scrollbar across the confidence label at the end of every row. `overflow-x:
+clip` contains the same nested chart overflow with no such side effect. The
+existing lint rule that pinned `hidden` now pins `clip`.
+
+The chart also scrolled sideways: its row grid declared `min-width: 760px` while
+its own columns needed `64 + 620 + 76 + 2×12 = 784px`, inside a 748px pane. The
+declared minimum was never the real one. Columns reduced; both scrollbars gone.
+
+**The assistant toggle sat on top of page content.** It is absolutely positioned
+at the top-right of the content pane with no `z-index`, spanning y 22–54px,
+which is exactly where every page header puts its status cluster and controls —
+those start at 38px. The header now reserves the corner, and the lint requires
+it to keep doing so.
+
+### One report that did not reproduce
+
+"Text overlaps at certain scales" was checked with a pairwise overlap detector
+over every visible leaf text node, across all ten routes, at 760 / 885 / 1045 /
+1120px and at root font sizes of 16 / 20 / 24px. **One** real overlap turned up:
+the Sharing relationship table declared a 524px minimum inside a 439px column
+and painted 61px over the guardrail list beside it, between roughly 980 and
+1100px. Fixed by lowering the row minimums so the long cell wraps, and by
+raising the stacking breakpoint to 1100px.
+
+An earlier run of the same detector reported six overlaps on Home. They were
+phantoms: a closed `<details>` still returns a non-zero `getBoundingClientRect()`
+in Chrome even though `::details-content` is not painted. The detector now
+filters on `checkVisibility()`. Worth recording because the first result looked
+like a bug and was not one.

@@ -2,19 +2,16 @@ import { lazy, Suspense, type ReactNode } from "react";
 import { AppShell, useScreenNavigation } from "./components/AppShell";
 import { ApprovalsProvider } from "./state/approvals";
 import { BackendProposalsProvider } from "./state/backendProposals";
-import { OverviewScreen } from "./screens/OverviewScreen";
+import { HomeScreen } from "./screens/HomeScreen";
 
-const CalendarScreen = lazy(() =>
-  import("./screens/CalendarScreen").then((module) => ({ default: module.CalendarScreen })),
+const PlanScreen = lazy(() =>
+  import("./screens/PlanScreen").then((module) => ({ default: module.PlanScreen })),
+);
+const LogScreen = lazy(() =>
+  import("./screens/LogScreen").then((module) => ({ default: module.LogScreen })),
 );
 const DataSourcesScreen = lazy(() =>
   import("./screens/DataSourcesScreen").then((module) => ({ default: module.DataSourcesScreen })),
-);
-const MedicationsScreen = lazy(() =>
-  import("./screens/MedicationsScreen").then((module) => ({ default: module.MedicationsScreen })),
-);
-const ApprovalsScreen = lazy(() =>
-  import("./screens/ApprovalsScreen").then((module) => ({ default: module.ApprovalsScreen })),
 );
 const RhythmScreen = lazy(() =>
   import("./screens/RhythmScreen").then((module) => ({ default: module.RhythmScreen })),
@@ -24,9 +21,6 @@ const SettingsScreen = lazy(() =>
 );
 const SharingScreen = lazy(() =>
   import("./screens/SharingScreen").then((module) => ({ default: module.SharingScreen })),
-);
-const TasksScreen = lazy(() =>
-  import("./screens/TasksScreen").then((module) => ({ default: module.TasksScreen })),
 );
 
 function ScreenLoading() {
@@ -38,19 +32,17 @@ function ScreenLoading() {
 }
 
 export default function App() {
-  const screen = useScreenNavigation();
+  const { route, selectPlanTab, selectLogTab } = useScreenNavigation();
 
   const content: ReactNode = {
-    overview: <OverviewScreen />,
-    calendar: <CalendarScreen />,
-    tasks: <TasksScreen />,
-    approvals: <ApprovalsScreen />,
+    home: <HomeScreen />,
+    plan: <PlanScreen tab={route.planTab} onSelect={selectPlanTab} />,
     rhythm: <RhythmScreen />,
-    medications: <MedicationsScreen />,
+    log: <LogScreen tab={route.logTab} onSelect={selectLogTab} />,
     sharing: <SharingScreen />,
     "data-sources": <DataSourcesScreen />,
     settings: <SettingsScreen />,
-  }[screen];
+  }[route.screen];
 
   return (
     <ApprovalsProvider>
@@ -58,7 +50,7 @@ export default function App() {
         <a className="skip-link" href="#main-content">
           Skip to content
         </a>
-        <AppShell screen={screen}>
+        <AppShell screen={route.screen}>
           <Suspense fallback={<ScreenLoading />}>{content}</Suspense>
         </AppShell>
       </BackendProposalsProvider>

@@ -17,11 +17,11 @@
   --ink: #24302d;
   --muted: #5b655f;
   --subtle: #666f6a;
-  --line: #dedfd8;
+  --line: #c8c9c2;
   --paper: #fffefa;
   --canvas: #f5f3ee;
   --panel-alt: #faf9f5;
-  --divider: #ecece7;
+  --divider: #c8c9c1;
   --chrome: #ebeae4;
   --chrome-border: #d7d8d2;
   --chrome-hover: rgba(255, 255, 255, 0.48);
@@ -158,7 +158,7 @@
   --paper: #1e2522;
   --canvas: #161b19;
   --panel-alt: #222a26;
-  --divider: #252d2a;
+  --divider: #38423e;
   --chrome: #1f2623;
   --chrome-border: #323b37;
   --chrome-hover: rgba(255, 255, 255, 0.08);
@@ -228,11 +228,11 @@
   --ink: #d6d9d5;
   --muted: #a2a8a2;
   --subtle: #8f958f;
-  --line: #1f1f1f;
+  --line: #303030;
   --paper: #0a0a0a;
   --canvas: #000000;
   --panel-alt: #0f0f0f;
-  --divider: #161616;
+  --divider: #303030;
   --chrome: #050505;
   --chrome-border: #1a1a1a;
   --chrome-hover: rgba(255, 255, 255, 0.06);
@@ -298,11 +298,11 @@
   --ink: #ffc61a;
   --muted: #d19200;
   --subtle: #a87400;
-  --line: #2b1f04;
+  --line: #392d12;
   --paper: #0a0700;
   --canvas: #000000;
   --panel-alt: #120c02;
-  --divider: #1c1503;
+  --divider: #3e2c05;
   --chrome: #0a0700;
   --chrome-border: #241a04;
   --chrome-hover: rgba(255, 176, 0, 0.08);
@@ -653,6 +653,14 @@ button {
 .sidebar-footer {
   margin-top: auto;
 }
+/* The utility group (slice U-H): reachable, and visibly not one of the five
+   things you came here to do. */
+.utility-nav {
+  padding-top: 10px;
+  display: grid;
+  gap: 2px;
+  border-top: 1px solid var(--chrome-border);
+}
 .privacy-note {
   margin: 15px 8px 0;
   padding: 14px 6px 3px;
@@ -690,6 +698,10 @@ button {
 .page-header {
   min-height: 0;
   margin-bottom: 18px;
+  /* Room for the floating assistant toggle, which is absolutely positioned
+     over this corner. Without it the toggle sat on top of whatever the page
+     put in its action slot. */
+  padding-inline-end: 124px;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -1435,9 +1447,7 @@ button {
   background: var(--actogram-observed);
   border-radius: 3px;
 }
-.actogram-panel {
-  min-height: 560px;
-}
+
 .actogram-heading {
   align-items: center;
 }
@@ -1464,9 +1474,9 @@ button {
 }
 .actogram-visual-axis,
 .actogram-visual-row {
-  min-width: 760px;
+  min-width: 0;
   display: grid;
-  grid-template-columns: 64px minmax(620px, 1fr) 76px;
+  grid-template-columns: 56px minmax(360px, 1fr) 64px;
   gap: 12px;
 }
 .actogram-visual-axis {
@@ -2358,17 +2368,28 @@ button {
     border-bottom: 1px solid var(--chrome-border);
   }
   .brand,
-  .sidebar-footer,
   .privacy-note {
     display: none;
   }
-  .primary-nav {
+  /* The utility group must stay reachable on a narrow window. Hiding the whole
+     footer here used to be harmless because Data Sources was a primary
+     destination; after slice U-H it is not, and hiding it would strand it. */
+  .sidebar-footer {
+    margin-top: 0;
+  }
+  .primary-nav,
+  .utility-nav {
     display: flex;
     gap: 2px;
     overflow-x: auto;
     scrollbar-width: none;
   }
-  .primary-nav::-webkit-scrollbar {
+  .utility-nav {
+    margin-top: 2px;
+    padding-top: 2px;
+  }
+  .primary-nav::-webkit-scrollbar,
+  .utility-nav::-webkit-scrollbar {
     display: none;
   }
   .nav-link {
@@ -2480,6 +2501,7 @@ button {
 }
 .assistant-toggle {
   position: absolute;
+  z-index: var(--z-strip);
   top: 22px;
   right: clamp(28px, 4vw, 64px);
   height: 32px;

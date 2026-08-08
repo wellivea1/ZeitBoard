@@ -818,6 +818,107 @@ Not measured: whether the view changes what the user does. Every check above
 establishes that the software does what it claims. Whether more calls get made
 inside office hours is the pilot question below.
 
+## Navigation consolidation (UI slice U-H)
+
+Verified 2026-08-08.
+
+**Structure**: five primary destinations (`Home · Plan · Rhythm · Log ·
+Sharing`) and a separate utility group (`Data Sources · Settings`). The counts
+and the separation are enforced by `scripts/lint-ui-standards.mjs`, along with
+Plan and Log composing the screens they absorbed rather than copying them, and
+every legacy hash still redirecting.
+
+**Routing** (`readRouteFromHash`): unknown paths fall back to Home; a screen and
+its tab are read from the address; an unrecognised second segment falls back to
+the first tab; `#/overview`, `#/timeline`, `#/calendar`, `#/tasks`,
+`#/approvals` and `#/medications` all land on the right screen *and* the right
+tab; the utility destinations stay addressable.
+
+**Tabs** (`ScreenTabs`): one tab stop for the whole group; arrow keys move and
+wrap; Home and End jump to the ends; other keys are ignored; the pending count
+renders only when non-zero.
+
+**Behaviour that moved kept its tests.** The sleep-log paging test followed the
+panel out of Data Sources; the marker-ownership test — that an authoritative
+mutation result is not immediately re-fetched — followed the markers from Rhythm
+to Log. 295 frontend tests pass.
+
+**In the running app**: all five destinations and both utilities render; every
+legacy hash resolves to the expected `<h1>` and selected tab; the pending count
+appears on Plan and on the Approvals tab; a tabbed screen has exactly one
+`<h1>`; and there is no horizontal page overflow.
+
+**A defect the running app found and no test did.** Hiding `.sidebar-footer` at
+the 700px breakpoint had always been harmless because Data Sources was a primary
+destination. Moving it to the utility group stranded it, and Settings with it,
+on any narrow window. Fixed by keeping the footer and laying the group out
+horizontally — both links reachable at 375px with 44×44 targets — and pinned by
+a lint rule that was checked to fail before it was checked to pass.
+
+## Home surface spacing (2026-08-08)
+
+A measured pass over the Home screen after the operational view and the
+navigation consolidation landed. Eight defects, all found by reading geometry
+out of the running app rather than by looking at it; the table is in
+[`ui-refactor-plan.md`](ui-refactor-plan.md) §11.
+
+The headline: **the page had two left edges**. Every section on the surface
+carries a full-bleed rule, so the rules aligned and the content did not — the
+outlook's content sat 1px from the surface edge against 25px for everything
+else, and above it the status header and cycle strip sat at 29px against the
+facts' 25px. The surface is now one content column at every width: `--space-6`
+wide, `--space-5` narrow, measured as a single distinct left edge across all
+seven sections at both 1120px and 375px.
+
+Also measured and fixed: a third of the facts row was blank (359px of 1076px)
+because the outlook had taken over the third tile and left a hard three-column
+grid; the timeline's day labels never rendered at all, clipped by the track's
+own overflow; three-part section headings collapsed onto one 15px line; the
+legend's summary sentence sat 608px from the swatches it describes; two adjacent
+rules in different greys met between the facts and the outlook; and the evidence
+row wrapped to 124px because five children were in a four-column grid.
+
+**Guard**: `scripts/lint-ui-standards.mjs` fails if a Home surface stylesheet
+insets a section by `--space-7` — the exact shape of the two-left-edges defect.
+Checked to fail before it was checked to pass. Two DOM assertions cover the
+markup fixes: the day labels render outside the clipped track, and no list in
+the outlook carries a leading icon the others lack.
+
+Not covered: nothing here is a layout *test*. jsdom does not lay out, so the
+geometry above was measured in a real browser and the durable guards are the
+lint rule and the two structural assertions.
+
+## Reported UI defects (2026-08-08)
+
+Four reports from the built app, each reproduced and measured before it was
+changed; the detail is in [`ui-refactor-plan.md`](ui-refactor-plan.md) §12.
+
+- **Section rules were invisible.** Measured at 1.09–1.17:1 against the surface
+  in every theme but High contrast. `--divider` and `--line` are now ≥1.4:1
+  against both `paper` and `canvas` in all five presets, asserted by
+  `contrast.test.ts` (89 assertions, up from 74).
+- **The actogram panel reserved 540px and 560px** — two numbers in two files —
+  for 419px of content, leaving empty surface that read as a solid block.
+  Both reservations removed; measured empty space below the content is now 0.
+- **`overflow-x: hidden` had made the panel a scroll container**, because with a
+  visible `overflow-y` the used value becomes `auto`. A 15px scrollbar was
+  painting over the confidence label of every row. `clip` fixes it; the existing
+  lint rule now pins `clip` rather than `hidden`. No scroll containers remain on
+  the Rhythm route.
+- **The assistant toggle overlapped page headers** by 16px vertically in the
+  same horizontal band. The header reserves the corner; a lint rule requires it.
+
+**Overlap sweep.** A pairwise detector over every visible leaf text node, across
+ten routes, at 760 / 885 / 1045 / 1120px and root font sizes 16 / 20 / 24px.
+One real defect: the Sharing relationship table declared a 524px minimum inside
+a 439px column and painted 61px over the list beside it between ~980 and 1100px.
+Fixed. All sweeps are now clean.
+
+The detector's first run reported six overlaps on Home that were phantoms: a
+closed `<details>` still returns a non-zero client rect in Chrome even though
+its content is not painted. It filters on `checkVisibility()` now. Recorded
+because the first result looked like a defect and was not one.
+
 ## What this record does not measure
 
 Added 2026-08-04 after an applicability/utility/automaticity review

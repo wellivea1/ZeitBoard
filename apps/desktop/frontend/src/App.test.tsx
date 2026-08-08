@@ -1,10 +1,10 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { AppearanceProvider } from "./theme/AppearanceProvider";
 
 beforeEach(() => {
-  window.location.hash = "#/overview";
+  window.location.hash = "#/home";
   localStorage.clear();
   document.documentElement.removeAttribute("data-theme");
   document.documentElement.removeAttribute("data-reduced");
@@ -17,36 +17,51 @@ beforeEach(() => {
 });
 
 describe("desktop navigation", () => {
-  it("exposes every requested screen", () => {
+  // Slice U-H: five primary destinations and a separate utility group. Eight
+  // equal-weight entries was too much undifferentiated navigation for someone
+  // operating under fatigue, and the count is the whole point of the change.
+  it("offers five primary destinations and keeps utilities apart", () => {
     render(<App />);
     const navigation = screen.getByRole("navigation", { name: "Primary navigation" });
 
-    for (const label of [
-      "Overview",
-      "Calendar",
-      "Tasks",
-      "Approvals",
-      "Rhythm",
-      "Medications",
-      "Sharing",
-      "Data Sources",
-    ]) {
+    expect(within(navigation).getAllByRole("link")).toHaveLength(5);
+    for (const label of ["Home", "Plan", "Rhythm", "Log", "Sharing"]) {
       expect(navigation).toHaveTextContent(label);
     }
-    for (const name of [
-      "Overview",
-      "Calendar",
-      "Tasks",
-      "Approvals, 2 pending",
-      "Rhythm",
-      "Medications",
-      "Sharing",
-      "Data Sources",
-    ]) {
-      expect(screen.getByRole("link", { name })).toBeVisible();
+    // The pending count rides on Plan rather than on a destination that is
+    // empty most of the time.
+    expect(screen.getByRole("link", { name: "Plan, 2 pending" })).toBeVisible();
+
+    const utilities = screen.getByRole("navigation", { name: "Settings and sources" });
+    for (const label of ["Data Sources", "Settings"]) {
+      expect(utilities).toHaveTextContent(label);
     }
-    expect(screen.getByRole("link", { name: "Settings" })).toBeVisible();
     expect(screen.getByText("Sample data")).toBeVisible();
+  });
+
+  // Old hashes are written down in this app's own links, in the runbook, and in
+  // whatever the user bookmarked. A dead link is a worse answer than a redirect.
+  it.each([
+    ["#/overview", "Home"],
+    ["#/calendar", "Plan"],
+    ["#/tasks", "Plan"],
+    ["#/approvals", "Plan"],
+    ["#/medications", "Log"],
+    ["#/timeline", "Rhythm"],
+  ])("redirects the legacy route %s", async (hash, heading) => {
+    window.location.hash = hash;
+    render(<App />);
+    expect(await screen.findByRole("heading", { level: 1, name: heading })).toBeVisible();
+  });
+
+  it("opens the tab named in the address", async () => {
+    window.location.hash = "#/log/medications";
+    render(<App />);
+    expect(await screen.findByRole("heading", { level: 1, name: "Log" })).toBeVisible();
+    expect(screen.getByRole("tab", { name: /Medications/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
   });
 
   it("renders Overview as one rhythm-first surface instead of metric cards", () => {
@@ -63,10 +78,13 @@ describe("desktop navigation", () => {
   });
 
   it("renders approval proposals with explicit actions", async () => {
-    window.location.hash = "#/approvals";
+    window.location.hash = "#/plan/approvals";
     const { container } = render(<App />);
 
-    expect(await screen.findByRole("heading", { name: "Approvals" })).toBeVisible();
+    expect(await screen.findByRole("tab", { name: /Approvals/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     expect(screen.getByText("Email Dr. Okafor")).toBeVisible();
     expect(screen.getAllByRole("button", { name: "Accept proposal" })).toHaveLength(2);
     expect(screen.getAllByRole("button", { name: "Reject proposal" })).toHaveLength(2);
@@ -77,7 +95,7 @@ describe("desktop navigation", () => {
   });
 
   it("keeps task proposals and no-safe-window context in one approval surface", async () => {
-    window.location.hash = "#/tasks";
+    window.location.hash = "#/plan/tasks";
     const { container } = render(<App />);
 
     await screen.findByRole("heading", { level: 3, name: "Call service provider" });
@@ -88,16 +106,22 @@ describe("desktop navigation", () => {
   });
 
   it("approves a proposal, updates the queue and badge, and supports undo", async () => {
-    window.location.hash = "#/approvals";
+    window.location.hash = "#/plan/approvals";
     render(<App />);
 
-    expect(await screen.findByLabelText("2 pending")).toBeVisible();
-    fireEvent.click(screen.getAllByRole("button", { name: "Accept proposal" })[0] as HTMLElement);
+    // The count now appears twice on purpose: on the Plan destination, so it is
+    // visible from anywhere, and on the Approvals tab once you are here.
+    const navigation = () => screen.getByRole("navigation", { name: "Primary navigation" });
+    const accepts = await screen.findAllByRole("button", { name: "Accept proposal" });
+    expect(accepts).toHaveLength(2);
+    expect(within(navigation()).getByLabelText("2 pending")).toBeVisible();
+
+    fireEvent.click(accepts[0] as HTMLElement);
 
     expect(screen.getByText("Email Dr. Okafor")).toBeVisible();
     expect(screen.getByText("approved")).toBeVisible();
     expect(screen.getAllByRole("button", { name: "Accept proposal" })).toHaveLength(1);
-    expect(screen.getByLabelText("1 pending")).toBeVisible();
+    expect(within(navigation()).getByLabelText("1 pending")).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Undo" }));
     expect(screen.getByText("Email Dr. Okafor")).toBeVisible();
@@ -105,11 +129,12 @@ describe("desktop navigation", () => {
   });
 
   it("shows the empty state once every proposal is decided", async () => {
-    window.location.hash = "#/approvals";
+    window.location.hash = "#/plan/approvals";
     render(<App />);
 
-    await screen.findByRole("heading", { name: "Approvals" });
-    fireEvent.click(screen.getAllByRole("button", { name: "Accept proposal" })[0] as HTMLElement);
+    fireEvent.click(
+      (await screen.findAllByRole("button", { name: "Accept proposal" }))[0] as HTMLElement,
+    );
     fireEvent.click(screen.getAllByRole("button", { name: "Reject proposal" })[0] as HTMLElement);
 
     expect(screen.getByRole("heading", { name: "Nothing waiting for approval" })).toBeVisible();
@@ -141,10 +166,6 @@ describe("desktop navigation", () => {
       }),
     ).toBeVisible();
     expect(screen.queryByRole("heading", { name: "Correction inspector" })).toBeNull();
-
-    fireEvent.click(screen.getByRole("tab", { name: "Context" }));
-    expect(screen.getByRole("heading", { name: "Rhythm markers" })).toBeVisible();
-    expect(screen.getByText("This browser preview does not invent health context.")).toBeVisible();
 
     fireEvent.click(screen.getByRole("tab", { name: "Sources" }));
 
@@ -203,8 +224,8 @@ describe("desktop navigation", () => {
         },
       },
     };
+    window.location.hash = "#/log/markers";
     render(<App />);
-    fireEvent.click(await screen.findByRole("tab", { name: "Context" }));
     expect(await screen.findByText("No markers recorded")).toBeVisible();
 
     fireEvent.change(screen.getByLabelText("Started"), {
@@ -358,7 +379,7 @@ describe("desktop navigation", () => {
   });
 
   it("validates manual sleep entry civil ranges", async () => {
-    window.location.hash = "#/data-sources";
+    window.location.hash = "#/log/sleep";
     (globalThis as { go?: unknown }).go = {
       main: {
         App: {
@@ -385,7 +406,7 @@ describe("desktop navigation", () => {
   });
 
   it("submits a manual sleep entry through Wails and reloads the local log", async () => {
-    window.location.hash = "#/data-sources";
+    window.location.hash = "#/log/sleep";
     const entry = {
       observationId: "obs_sleep_01",
       startLocal: "2026-03-01T22:00",
@@ -494,12 +515,13 @@ describe("desktop navigation", () => {
     });
     expect(screen.getByText(/Sun Mar 1, 10:00 PM EST to Mon Mar 2, 6:00 AM EST/)).toBeVisible();
 
-    fireEvent.click(screen.getByRole("link", { name: /Approvals/ }));
+    fireEvent.click(screen.getByRole("link", { name: /^Plan/ }));
+    fireEvent.click(await screen.findByRole("tab", { name: /Approvals/ }));
     expect(await screen.findByText("Local sleep data follow-up")).toBeVisible();
   });
 
-  it("hard-deletes a sleep entry through the Data Sources confirmation flow", async () => {
-    window.location.hash = "#/data-sources";
+  it("hard-deletes a sleep entry through the sleep log confirmation flow", async () => {
+    window.location.hash = "#/log/sleep";
     const entry = {
       observationId: "obs_sleep_01",
       startLocal: "2026-03-01T22:00",
@@ -570,7 +592,7 @@ describe("desktop navigation", () => {
   });
 
   it("preserves task form input when saving fails", async () => {
-    window.location.hash = "#/tasks";
+    window.location.hash = "#/plan/tasks";
     const addTask = vi.fn(async () => {
       throw new Error("Task storage is unavailable.");
     });

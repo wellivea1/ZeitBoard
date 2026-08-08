@@ -20,15 +20,15 @@ commitment is better or the recommendation does not fit this product.
 | 3 | §15 — a withheld claim must not read like a normal one | When the policy withholds, the supporting line no longer says the state was "estimated from recent observations". It says the state is not being claimed and why. |
 | 4 | §2.2 — "phase" is not what this estimates | The Overview kicker said "Estimated sleep-wake phase". It now says "Estimated sleep-wake **timing**", which is what the estimator produces and what §2.2's allowed vocabulary uses. |
 | 5 | §3.9 — replace the "visuals win" framing | `accessibility.md` led with "visual feedback is never sacrificed for accessibility". That sentence protects the visuals, which remains the intent, but as a rule it only says what accessibility may *not* do. It now states the standard positively as **equivalent function, not identical presentation**, with visual-first retained explicitly. See the note below: this raises the floor slightly, on purpose. |
+| 6 | §4.1 — five primary destinations instead of eight | **Delivered 2026-08-08** as slice U-H. `Home · Plan · Rhythm · Log · Sharing`, with Data Sources and Settings in a separate utility group. Plan hosts Calendar, Tasks and Approvals as tabs and carries the pending count, so a queue that is empty most of the time is no longer a permanent destination. Log hosts sleep, medications and context markers. Every old hash still redirects, the count is enforced by the UI-standards lint, and one tablist component replaced what would have been three. Full record in [`ui-refactor-plan.md`](ui-refactor-plan.md) §10. |
 
 ## Agreed, planned
 
 | # | Finding | Why not now |
 |---:|---|---|
-| 6 | §4.1 — five primary destinations instead of eight | The count is right and the reasoning is right: eight equal-weight destinations is too much for someone operating under fatigue. It is also a navigation rewrite touching every screen module, the UI-standards lint, and the whole frontend test suite. Bundling it with a correctness change would make both harder to review. Tracked in [`ui-refactor-plan.md`](ui-refactor-plan.md) as slice U-H. |
 | 7 | §5.1/§5.4 — Home as a quiet instrument with three quick actions | Depends on the one-tap "I woke up" / "I am going to sleep" actions, which do not exist. Those are the highest-value usability item in the automaticity review too, and belong with the P7 loop work rather than a visual pass. |
 | 8 | §6.2 — richer task capture (business hours, demand, movement permission) | The scheduler core already enforces more than the form exposes. Widening the form is real work with its own contract implications. |
-| 9 | §8.2 — correction preview showing the downstream forecast change | Requires the recompute path P7 has not built. Promising "this changes the next predicted sleep range by about 40 minutes" before that exists would be a guess. |
+| 9 | §8.2 — correction preview showing the downstream forecast change | **Unblocked but not built.** The blocker named here — "requires the recompute path P7 has not built" — was removed by ADR-0033. What remains is the preview itself: computing the delta a pending correction would make, before it is applied. |
 | 10 | §10.2 — `Ctrl+K` command entry | Agreed as the right shape for the assistant: a command surface, not a permanent panel competing with the current state. |
 
 ## Already true
