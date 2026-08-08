@@ -1,8 +1,10 @@
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useState } from "react";
 import { Icon } from "../components/Icon";
 import { PageHeader } from "../components/AppShell";
+import { ScreenTabPanel, ScreenTabs, type ScreenTab } from "../components/ScreenTabs";
+import { useRhythmMarkers } from "../state/rhythmMarkers";
+import type { RhythmTab } from "../types";
 import { ActogramPanel, DriftPanel } from "../components/RhythmVisuals";
-import { RhythmMarkersPanel } from "../components/RhythmMarkersPanel";
 import {
   correctionPreviewFixture,
   refusalFixture,
@@ -17,18 +19,7 @@ import {
   type SleepEntriesData,
 } from "../data/sleepEntries";
 import { sleepDataChangedEvent } from "../data/sleepDataEvents";
-import {
-  addRhythmMarker,
-  deleteRhythmMarker,
-  downloadRhythmMarkerExport,
-  exportRhythmMarkers,
-  loadRhythmMarkers,
-  notifyRhythmMarkersChanged,
-  rhythmMarkersChangedEvent,
-  unavailableRhythmMarkers,
-  type RhythmMarkerInput,
-} from "../data/rhythmMarkers";
-import { createCoalescedRefresh, type CoalescedRefresh } from "../utils/coalescedRefresh";
+import { createCoalescedRefresh } from "../utils/coalescedRefresh";
 
 function SourceConflictList({
   conflicts,
@@ -80,12 +71,11 @@ function CorrectionInspector() {
   );
 }
 
-type RhythmTab = "actogram" | "drift" | "context" | "sources";
-
-const rhythmTabs: { id: RhythmTab; label: string }[] = [
+// Context markers moved to Log in slice U-H. Recording that you travelled or
+// were ill is logging; this screen is for reading what the records imply.
+const rhythmTabs: ScreenTab<RhythmTab>[] = [
   { id: "actogram", label: "Actogram" },
   { id: "drift", label: "Drift" },
-  { id: "context", label: "Context" },
   { id: "sources", label: "Sources" },
 ];
 
@@ -126,7 +116,7 @@ function LocalSourcesPanel({ rhythm }: { rhythm: RhythmData }) {
           <h2 id="refusal-title">The estimator is refusing, not guessing</h2>
           <p>{rhythm.refusal.message}</p>
           <div className="proposal-reasons" aria-label="Refusal actions">
-            <a className="task-chip" href="#/data-sources">
+            <a className="task-chip" href="#/log/sleep">
               Add sleep entries
             </a>
           </div>
@@ -143,7 +133,7 @@ function LocalSourcesPanel({ rhythm }: { rhythm: RhythmData }) {
                 : "No corrections yet"}
             </h2>
           </div>
-          <a href="#/data-sources">
+          <a href="#/log/sleep">
             Edit in Data Sources <Icon name="chevron" />
           </a>
         </div>
@@ -236,7 +226,7 @@ function RhythmUnavailablePanel({ rhythm }: { rhythm: RhythmData }) {
           rhythm.refusal?.message ??
           "The local estimator has no chart to show yet."}
       </p>
-      <a className="button primary" href="#/data-sources">
+      <a className="button primary" href="#/log/sleep">
         Add sleep entry
       </a>
     </section>
@@ -247,20 +237,10 @@ export function RhythmScreen() {
   const [tab, setTab] = useState<RhythmTab>("actogram");
   const [rhythm, setRhythm] = useState(rhythmFixture);
   const [mode, setMode] = useState<RhythmSource>("fixture");
-  const [markers, setMarkers] = useState(unavailableRhythmMarkers);
-  const [markerBusy, setMarkerBusy] = useState(false);
-  const [markerExporting, setMarkerExporting] = useState(false);
-  const [markerError, setMarkerError] = useState("");
-  const [markerAnnouncement, setMarkerAnnouncement] = useState("");
-  const markerRefreshRef = useRef<CoalescedRefresh | null>(null);
-  const ignoreNextMarkerChange = useRef(false);
-
-  const publishMarkerChange = () => {
-    ignoreNextMarkerChange.current = true;
-    notifyRhythmMarkersChanged();
-    ignoreNextMarkerChange.current = false;
-  };
-
+  // Markers are recorded in Log and *read* here: they are the context that
+  // explains a jump in the actogram, so the chart would be misleading without
+  // them even though nothing on this screen edits them.
+  const markers = useRhythmMarkers();
   useEffect(() => {
     const refresh = createCoalescedRefresh(loadRhythm, (result) => {
       setRhythm(result.data);
@@ -275,97 +255,6 @@ export function RhythmScreen() {
     };
   }, []);
 
-  useEffect(() => {
-    const refresh = createCoalescedRefresh(
-      loadRhythmMarkers,
-      (result) => {
-        setMarkers(result);
-        setMarkerError("");
-      },
-      (reason) => {
-        setMarkerError(
-          reason instanceof Error ? reason.message : "Rhythm markers could not be loaded.",
-        );
-      },
-    );
-    markerRefreshRef.current = refresh;
-    const request = () => {
-      if (ignoreNextMarkerChange.current) {
-        ignoreNextMarkerChange.current = false;
-        return;
-      }
-      refresh.request();
-    };
-    request();
-    window.addEventListener(rhythmMarkersChangedEvent, request);
-    return () => {
-      window.removeEventListener(rhythmMarkersChangedEvent, request);
-      if (markerRefreshRef.current === refresh) markerRefreshRef.current = null;
-      refresh.dispose();
-    };
-  }, []);
-
-  const appendMarker = async (input: RhythmMarkerInput) => {
-    if (markerBusy) return;
-    setMarkerBusy(true);
-    setMarkerError("");
-    try {
-      const result = await addRhythmMarker(input);
-      setMarkers(result);
-      setMarkerAnnouncement("Context marker appended.");
-      markerRefreshRef.current?.supersede();
-      publishMarkerChange();
-    } catch (reason) {
-      setMarkerError(
-        reason instanceof Error ? reason.message : "Context marker could not be saved.",
-      );
-      throw reason;
-    } finally {
-      setMarkerBusy(false);
-    }
-  };
-
-  const eraseMarker = async (markerId: string, confirmation: string) => {
-    if (markerBusy) return;
-    setMarkerBusy(true);
-    setMarkerError("");
-    try {
-      const result = await deleteRhythmMarker(markerId, confirmation);
-      setMarkers(result);
-      setMarkerAnnouncement("Context marker permanently erased.");
-      publishMarkerChange();
-      markerRefreshRef.current?.supersede();
-    } catch (reason) {
-      setMarkerError(
-        reason instanceof Error ? reason.message : "Context marker could not be erased.",
-      );
-      throw reason;
-    } finally {
-      setMarkerBusy(false);
-    }
-  };
-
-  const exportMarkers = () => {
-    if (markerExporting || markers.status === "unavailable") return;
-    setMarkerExporting(true);
-    setMarkerError("");
-    void exportRhythmMarkers().then(
-      (result) => {
-        setMarkerExporting(false);
-        const downloaded = downloadRhythmMarkerExport(result);
-        setMarkerAnnouncement(
-          `${result.markerCount} context ${result.markerCount === 1 ? "marker" : "markers"} exported${downloaded ? ` to ${result.fileName}` : "."}`,
-        );
-      },
-      (reason: unknown) => {
-        setMarkerExporting(false);
-        setMarkerError(
-          reason instanceof Error ? reason.message : "Context markers could not be exported.",
-        );
-      },
-    );
-  };
-
   const hasRhythm = rhythm.status === "estimated";
   const sourceLabel =
     mode === "synced"
@@ -377,20 +266,6 @@ export function RhythmScreen() {
           ? "Local estimate"
           : "Local data"
         : "Sample data";
-
-  const onTabKey = (event: KeyboardEvent<HTMLDivElement>) => {
-    const index = rhythmTabs.findIndex((item) => item.id === tab);
-    let nextIndex: number;
-    if (event.key === "ArrowRight") nextIndex = (index + 1) % rhythmTabs.length;
-    else if (event.key === "ArrowLeft")
-      nextIndex = (index - 1 + rhythmTabs.length) % rhythmTabs.length;
-    else if (event.key === "Home") nextIndex = 0;
-    else if (event.key === "End") nextIndex = rhythmTabs.length - 1;
-    else return;
-    event.preventDefault();
-    const next = rhythmTabs[nextIndex];
-    if (next) setTab(next.id);
-  };
 
   return (
     <>
@@ -416,84 +291,35 @@ export function RhythmScreen() {
                 : "This read-only preview distinguishes imported, estimated, corrected, and incomplete observations."}
       </p>
       <section className="rhythm-screen" aria-label="Rhythm review">
-        <div className="rhythm-tabs" role="tablist" aria-label="Rhythm views" onKeyDown={onTabKey}>
-          {rhythmTabs.map((item) => (
-            <button
-              key={item.id}
-              className={`filter${tab === item.id ? " active" : ""}`}
-              type="button"
-              role="tab"
-              id={`rhythm-tab-${item.id}`}
-              aria-selected={tab === item.id}
-              aria-controls={`rhythm-panel-${item.id}`}
-              tabIndex={tab === item.id ? 0 : -1}
-              onClick={() => setTab(item.id)}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
+        <ScreenTabs
+          name="rhythm"
+          label="Rhythm views"
+          tabs={rhythmTabs}
+          active={tab}
+          onSelect={setTab}
+        />
 
-        {tab === "actogram" && (
-          <div
-            className="rhythm-panel"
-            role="tabpanel"
-            id="rhythm-panel-actogram"
-            aria-labelledby="rhythm-tab-actogram"
-          >
-            {hasRhythm ? (
-              <ActogramPanel
-                actogram={rhythm.actogram}
-                markers={mode === "fixture" ? [] : markers.markers}
-              />
-            ) : (
-              <RhythmUnavailablePanel rhythm={rhythm} />
-            )}
-          </div>
-        )}
-
-        {tab === "drift" && (
-          <div
-            className="rhythm-panel"
-            role="tabpanel"
-            id="rhythm-panel-drift"
-            aria-labelledby="rhythm-tab-drift"
-          >
-            {hasRhythm ? (
-              <DriftPanel drift={rhythm.drift} />
-            ) : (
-              <RhythmUnavailablePanel rhythm={rhythm} />
-            )}
-          </div>
-        )}
-
-        {tab === "context" && (
-          <div
-            className="rhythm-panel"
-            role="tabpanel"
-            id="rhythm-panel-context"
-            aria-labelledby="rhythm-tab-context"
-          >
-            <RhythmMarkersPanel
-              data={markers}
-              busy={markerBusy}
-              exporting={markerExporting}
-              error={markerError}
-              announcement={markerAnnouncement}
-              onAdd={appendMarker}
-              onDelete={eraseMarker}
-              onExport={exportMarkers}
+        <ScreenTabPanel name="rhythm" id="actogram" active={tab}>
+          {hasRhythm ? (
+            <ActogramPanel
+              actogram={rhythm.actogram}
+              markers={mode === "fixture" ? [] : markers.data.markers}
             />
-          </div>
-        )}
+          ) : (
+            <RhythmUnavailablePanel rhythm={rhythm} />
+          )}
+        </ScreenTabPanel>
 
-        {tab === "sources" && (
-          <div
-            className="rhythm-panel"
-            role="tabpanel"
-            id="rhythm-panel-sources"
-            aria-labelledby="rhythm-tab-sources"
-          >
+        <ScreenTabPanel name="rhythm" id="drift" active={tab}>
+          {hasRhythm ? (
+            <DriftPanel drift={rhythm.drift} />
+          ) : (
+            <RhythmUnavailablePanel rhythm={rhythm} />
+          )}
+        </ScreenTabPanel>
+
+        <ScreenTabPanel name="rhythm" id="sources" active={tab}>
+          <>
             {mode === "fixture" ? (
               <>
                 <CorrectionInspector />
@@ -530,8 +356,8 @@ export function RhythmScreen() {
             ) : (
               <LocalSourcesPanel rhythm={rhythm} />
             )}
-          </div>
-        )}
+          </>
+        </ScreenTabPanel>
       </section>
     </>
   );

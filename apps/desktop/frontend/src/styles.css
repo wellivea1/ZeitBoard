@@ -653,6 +653,14 @@ button {
 .sidebar-footer {
   margin-top: auto;
 }
+/* The utility group (slice U-H): reachable, and visibly not one of the five
+   things you came here to do. */
+.utility-nav {
+  padding-top: 10px;
+  display: grid;
+  gap: 2px;
+  border-top: 1px solid var(--chrome-border);
+}
 .privacy-note {
   margin: 15px 8px 0;
   padding: 14px 6px 3px;
@@ -2358,17 +2366,28 @@ button {
     border-bottom: 1px solid var(--chrome-border);
   }
   .brand,
-  .sidebar-footer,
   .privacy-note {
     display: none;
   }
-  .primary-nav {
+  /* The utility group must stay reachable on a narrow window. Hiding the whole
+     footer here used to be harmless because Data Sources was a primary
+     destination; after slice U-H it is not, and hiding it would strand it. */
+  .sidebar-footer {
+    margin-top: 0;
+  }
+  .primary-nav,
+  .utility-nav {
     display: flex;
     gap: 2px;
     overflow-x: auto;
     scrollbar-width: none;
   }
-  .primary-nav::-webkit-scrollbar {
+  .utility-nav {
+    margin-top: 2px;
+    padding-top: 2px;
+  }
+  .primary-nav::-webkit-scrollbar,
+  .utility-nav::-webkit-scrollbar {
     display: none;
   }
   .nav-link {

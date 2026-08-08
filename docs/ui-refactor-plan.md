@@ -351,7 +351,7 @@ overflow. The named Pixel 10 Pro XL emulator was rebuilt and rechecked across
 all four portrait routes plus large-width Settings; this slice changes no
 Android source.
 
-## U-H — navigation consolidation (planned)
+## 10. Slice U-H (delivered 2026-08-08): navigation consolidation
 
 From the 2026-08-04 UI guideline review
 ([disposition](ui-guideline-review-2026-08-04.md), finding 6). The desktop
@@ -383,3 +383,60 @@ suite, and mixing it with a behavioural fix would make both harder to review.
 Not in scope: full user rearrangement of navigation, which the guideline also
 advises against, and the pinnable secondary destination, which is declined until
 this slice settles the shape.
+
+### What shipped
+
+**Five primary destinations, one utility group.** `Home · Plan · Rhythm · Log ·
+Sharing` in the primary rail; `Data Sources · Settings` in a ruled utility group
+in the sidebar footer; the assistant stays the existing toggle. The count is
+enforced by the UI-standards lint, because nothing else stops a ninth
+destination arriving one merge at a time.
+
+**Plan** hosts Calendar, Tasks and Approvals as tabs, and carries the pending
+count on the destination itself so it is visible from anywhere. Approvals is no
+longer a permanent destination that is empty most of the time.
+
+**Log** hosts Sleep, Medications and Context. The sleep log — entry form,
+correction history, suppression, erasure — moved out of Data Sources into
+`components/SleepLogPanel.tsx`, which also took a 593-line screen down to 68.
+Context markers moved off Rhythm; their state moved to
+`state/rhythmMarkers.ts`, so Rhythm can still *read* them for the actogram
+overlay without owning the editing.
+
+**Rhythm** kept Actogram, Drift and Sources and lost Context.
+
+**One tablist, not three.** `components/ScreenTabs.tsx` carries the roving
+tabindex and the arrow/Home/End handling that three hand-rolled copies would
+have drifted on. Tabs are part of the address (`#/plan/tasks`, `#/log/markers`),
+so a reload or a bookmark lands where it did.
+
+**Every old hash still works.** `#/overview`, `#/calendar`, `#/tasks`,
+`#/approvals`, `#/medications` and `#/timeline` redirect to their new home and
+tab. They are written down in this app's own links, in the runbook, and in
+whatever the user bookmarked; a dead link is a worse answer than six lines of
+redirect. The lint requires them to stay.
+
+**A screen inside a tab gives up its heading and keeps its controls.**
+`PageHeader` gained a `panel` level: the tab already names the view and labels
+the panel, so an `<h2>` repeating it is noise — but Calendar's date controls and
+Medications' status cluster are not noise, and dropping the header outright
+would have taken them.
+
+### One defect this found
+
+Hiding `.sidebar-footer` at the narrow breakpoint had always been harmless
+because Data Sources was a primary destination. Moving it into the utility group
+stranded it and Settings on any window under 700px. Caught in the running app
+rather than by any test, fixed by keeping the footer and laying the utility
+group out horizontally, and pinned by a lint rule that was checked to fail
+before it was checked to pass.
+
+### Not done
+
+**Reports and Help are not in the utility group**, because neither exists as a
+destination: the clinician report is a panel inside Medications, and there is no
+help content to link to. Adding empty destinations to match a target list would
+be the opposite of this slice.
+
+**Statistics behind a details disclosure on Rhythm** is not done; the Sources
+tab is unchanged apart from losing its neighbour.

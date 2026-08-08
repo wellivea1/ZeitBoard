@@ -177,7 +177,7 @@ function OutlookNotice({ data }: { data: OutlookData }) {
           </small>
         )}
       </span>
-      <a className="button secondary" href="#/data-sources">
+      <a className="button secondary" href="#/log/sleep">
         Add sleep entry
       </a>
     </div>

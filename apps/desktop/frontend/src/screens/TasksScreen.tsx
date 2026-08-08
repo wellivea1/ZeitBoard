@@ -56,7 +56,7 @@ function TaskRow({
   );
 }
 
-export function TasksScreen() {
+export function TasksScreen({ embedded }: { embedded?: boolean } = {}) {
   const { pending, pendingCount, unplaced } = useApprovals();
   const firstUnplaced = unplaced[0];
   const [data, setData] = useState<TasksData>({ status: "unavailable", tasks: [] });
@@ -127,6 +127,7 @@ export function TasksScreen() {
       <PageHeader
         title="Tasks"
         description="Describe flexibility and effort; the planner returns proposals, not calendar changes."
+        level={embedded ? "panel" : "page"}
       />
       {!available && (
         <PlaceholderNotice>
@@ -144,7 +145,7 @@ export function TasksScreen() {
               <p className="section-kicker">Proposal review</p>
               <h2 id="approval-title">Approval queue</h2>
             </div>
-            <a href="#/approvals">
+            <a href="#/plan/approvals">
               Open all <Icon name="chevron" />
             </a>
           </div>

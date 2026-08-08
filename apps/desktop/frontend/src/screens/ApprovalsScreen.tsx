@@ -189,7 +189,7 @@ function SyncedProposalsPanel() {
   );
 }
 
-export function ApprovalsScreen() {
+export function ApprovalsScreen({ embedded }: { embedded?: boolean } = {}) {
   const {
     pending,
     decided,
@@ -223,6 +223,7 @@ export function ApprovalsScreen() {
             </span>
           </div>
         }
+        level={embedded ? "panel" : "page"}
       />
       <PlaceholderNotice>
         Approval writes a ZeitBoard-owned block to the local calendar. Imported events remain

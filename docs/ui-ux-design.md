@@ -257,6 +257,17 @@ Settings      "Make it usable for me."              (themes, reduced-stimulation
 
 ## 5. Desktop navigation
 
+> **Superseded in part by slice U-H (2026-08-08).** The nine-area rail below was
+> the original design and it was too much: eight equal-weight destinations
+> shipped, and a UI guideline review found that undifferentiated navigation is a
+> poor fit for someone operating under fatigue, which is the condition this
+> product is for. The shipped shape is now **Home, Plan, Rhythm, Log, Sharing**
+> with Data Sources and Settings in a utility group. The areas below survive as
+> *tabs* inside those five — Plan holds Calendar, Tasks and Approvals; Log holds
+> sleep, medications and context markers — so the feature areas in §4.3 are
+> intact and only the top-level count changed. See
+> [`ui-refactor-plan.md`](ui-refactor-plan.md) §10.
+
 Wails shell, system-tray resident. Left rail (collapsible to icons), persistent top status
 strip, content pane.
 
@@ -287,7 +298,9 @@ strip, content pane.
   the one status line — the tray is glanceable, not a leak surface.)
 - **Critique of the brief's 9-area desktop list:** keep all nine, but **Reports and Export
   are one area** (export is a verb inside Reports), and **Data Sources owns conflict
-  resolution** rather than spawning a tenth area. Confirmed.
+  resolution** rather than spawning a tenth area. Confirmed as *areas*; U-H
+  later demoted most of them from destinations to tabs, which is a different
+  question from whether the areas are right.
 
 ---
 

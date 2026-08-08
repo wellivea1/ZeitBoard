@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { RhythmScreen } from "./RhythmScreen";
+import { LogScreen } from "./LogScreen";
 
 const marker = {
   markerId: "marker_screen_01",
@@ -32,7 +32,11 @@ afterEach(() => {
   delete (globalThis as { go?: unknown }).go;
 });
 
-describe("RhythmScreen marker ownership", () => {
+// Context markers moved from Rhythm to Log in slice U-H: recording that you
+// travelled or were ill is logging, and it belongs beside the sleep and dose
+// records rather than beside the charts that interpret them. The ownership rule
+// came with them.
+describe("LogScreen marker ownership", () => {
   it("keeps an authoritative mutation result without immediately loading all markers again", async () => {
     const getMarkers = vi.fn(async () => structuredClone(markerResponse));
     const addMarker = vi.fn(async () => structuredClone(markerResponse));
@@ -40,8 +44,7 @@ describe("RhythmScreen marker ownership", () => {
       main: { App: { GetRhythmMarkers: getMarkers, AddRhythmMarker: addMarker } },
     };
 
-    render(<RhythmScreen />);
-    fireEvent.click(screen.getByRole("tab", { name: "Context" }));
+    render(<LogScreen tab="markers" onSelect={() => {}} />);
     expect(await screen.findByText("Private travel context")).toBeVisible();
     expect(getMarkers).toHaveBeenCalledTimes(1);
 

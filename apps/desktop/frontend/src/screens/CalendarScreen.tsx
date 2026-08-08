@@ -18,7 +18,7 @@ import {
 const calendarZone = "America/New_York";
 const visibleDays = 5;
 
-export function CalendarScreen() {
+export function CalendarScreen({ embedded }: { embedded?: boolean } = {}) {
   const localServicePresent = hasLocalCalendarService();
   const [startDate, setStartDate] = useState(() => todayCivilDate(calendarZone));
   const [data, setData] = useState<CalendarData | null>(null);
@@ -140,6 +140,7 @@ export function CalendarScreen() {
             </button>
           </div>
         }
+        level={embedded ? "panel" : "page"}
       />
 
       {source === "fixture" && (

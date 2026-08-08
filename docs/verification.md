@@ -818,6 +818,43 @@ Not measured: whether the view changes what the user does. Every check above
 establishes that the software does what it claims. Whether more calls get made
 inside office hours is the pilot question below.
 
+## Navigation consolidation (UI slice U-H)
+
+Verified 2026-08-08.
+
+**Structure**: five primary destinations (`Home · Plan · Rhythm · Log ·
+Sharing`) and a separate utility group (`Data Sources · Settings`). The counts
+and the separation are enforced by `scripts/lint-ui-standards.mjs`, along with
+Plan and Log composing the screens they absorbed rather than copying them, and
+every legacy hash still redirecting.
+
+**Routing** (`readRouteFromHash`): unknown paths fall back to Home; a screen and
+its tab are read from the address; an unrecognised second segment falls back to
+the first tab; `#/overview`, `#/timeline`, `#/calendar`, `#/tasks`,
+`#/approvals` and `#/medications` all land on the right screen *and* the right
+tab; the utility destinations stay addressable.
+
+**Tabs** (`ScreenTabs`): one tab stop for the whole group; arrow keys move and
+wrap; Home and End jump to the ends; other keys are ignored; the pending count
+renders only when non-zero.
+
+**Behaviour that moved kept its tests.** The sleep-log paging test followed the
+panel out of Data Sources; the marker-ownership test — that an authoritative
+mutation result is not immediately re-fetched — followed the markers from Rhythm
+to Log. 295 frontend tests pass.
+
+**In the running app**: all five destinations and both utilities render; every
+legacy hash resolves to the expected `<h1>` and selected tab; the pending count
+appears on Plan and on the Approvals tab; a tabbed screen has exactly one
+`<h1>`; and there is no horizontal page overflow.
+
+**A defect the running app found and no test did.** Hiding `.sidebar-footer` at
+the 700px breakpoint had always been harmless because Data Sources was a primary
+destination. Moving it to the utility group stranded it, and Settings with it,
+on any narrow window. Fixed by keeping the footer and laying the group out
+horizontally — both links reachable at 375px with 44×44 targets — and pinned by
+a lint rule that was checked to fail before it was checked to pass.
+
 ## What this record does not measure
 
 Added 2026-08-04 after an applicability/utility/automaticity review

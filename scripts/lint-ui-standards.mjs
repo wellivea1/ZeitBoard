@@ -51,18 +51,60 @@ if (existsSync(secondaryScreens)) {
   fail(secondaryScreens, "The legacy multi-screen module must not be recreated.");
 }
 
-const overviewPath = join(frontend, "screens", "OverviewScreen.tsx");
-const overview = readFileSync(overviewPath, "utf8");
-for (const required of ["CycleStrip", "overview-surface", "overview-facts"]) {
-  if (!overview.includes(required)) fail(overviewPath, `Overview must retain ${required}.`);
+const homePath = join(frontend, "screens", "HomeScreen.tsx");
+const home = readFileSync(homePath, "utf8");
+for (const required of ["CycleStrip", "OutlookPanel", "overview-surface", "overview-facts"]) {
+  if (!home.includes(required)) fail(homePath, `Home must retain ${required}.`);
 }
-if (/metric-card/.test(overview) || hasStaticClass(overview, "panel")) {
-  fail(overviewPath, "Overview is one surface; generic panels and metric cards are forbidden.");
+if (/metric-card/.test(home) || hasStaticClass(home, "panel")) {
+  fail(homePath, "Home is one surface; generic panels and metric cards are forbidden.");
+}
+
+// Slice U-H: five primary destinations, then a utility group. The count is the
+// point — eight equal-weight entries was too much undifferentiated navigation
+// for someone operating under fatigue, and nothing stops it creeping back
+// except a check.
+const shellPath = join(frontend, "components", "AppShell.tsx");
+const shell = readFileSync(shellPath, "utf8");
+const primaryBlock = shell.match(/const primaryNavigation: NavItem\[\] = \[(.*?)\];/s)?.[1] ?? "";
+const primaryCount = [...primaryBlock.matchAll(/\{\s*id:/g)].length;
+if (primaryCount !== 5) {
+  fail(shellPath, `Primary navigation must hold exactly five destinations; found ${primaryCount}.`);
+}
+if (!shell.includes("utilityNavigation") || !shell.includes('className="utility-nav"')) {
+  fail(shellPath, "The utility group must stay separate from the primary destinations.");
+}
+
+// Legacy hashes stay routable. They are written down in the runbook, in this
+// app's own links, and in whatever the user bookmarked; a dead link is a worse
+// answer than a redirect.
+const legacyStart = shell.indexOf("const legacyRoutes");
+const legacyBlock =
+  legacyStart < 0 ? "" : shell.slice(legacyStart, shell.indexOf("};", legacyStart));
+for (const legacy of ["overview", "calendar", "tasks", "approvals", "medications", "timeline"]) {
+  if (!legacyBlock.includes(`${legacy}: { screen:`)) {
+    fail(shellPath, `The legacy #/${legacy} route must keep redirecting.`);
+  }
+}
+
+// Plan and Log are tab hosts, not new monoliths: they compose the screens they
+// absorbed rather than copying them.
+for (const [name, required] of [
+  ["PlanScreen.tsx", ["CalendarScreen", "TasksScreen", "ApprovalsScreen", "ScreenTabs"]],
+  ["LogScreen.tsx", ["SleepLogPanel", "MedicationsScreen", "RhythmMarkersPanel", "ScreenTabs"]],
+]) {
+  const path = join(frontend, "screens", name);
+  const source = readFileSync(path, "utf8");
+  for (const symbol of required) {
+    if (!source.includes(symbol)) fail(path, `${name} must compose ${symbol}.`);
+  }
 }
 
 for (const [name, requiredClass] of [
   ["DataSourcesScreen.tsx", "data-source-workspace"],
   ["SharingScreen.tsx", "sharing-workspace"],
+  ["PlanScreen.tsx", "screen-tabbed"],
+  ["LogScreen.tsx", "screen-tabbed"],
 ]) {
   const path = join(frontend, "screens", name);
   const source = readFileSync(path, "utf8");
@@ -102,6 +144,18 @@ if (
   fail(
     androidAppPath,
     "Android sections must use the ruled composition instead of a generic Panel wrapper.",
+  );
+}
+
+// Hiding the sidebar footer on a narrow window used to be harmless because
+// Data Sources was a primary destination. After slice U-H it lives in the
+// utility group, and hiding the footer would strand it and Settings with it.
+const shellStyles = readFileSync(join(frontend, "styles.css"), "utf8");
+const narrow = shellStyles.slice(shellStyles.indexOf("@media (max-width: 700px)"));
+if (/\.sidebar-footer,?[^{]*\{[^}]*display:\s*none/.test(narrow)) {
+  fail(
+    join(frontend, "styles.css"),
+    "The utility group must stay reachable on a narrow window; do not hide .sidebar-footer.",
   );
 }
 
