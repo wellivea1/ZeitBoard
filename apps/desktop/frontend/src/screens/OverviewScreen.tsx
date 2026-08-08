@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { Icon, type IconName } from "../components/Icon";
 import { PageHeader } from "../components/AppShell";
+import { OutlookPanel } from "../components/OutlookPanel";
 import { CycleStrip } from "../components/RhythmVisuals";
 import { loadOverview } from "../data/backend";
-import { overviewFixture } from "../data/fixture";
+import { loadOutlook } from "../data/outlook";
+import { outlookFixture, overviewFixture } from "../data/fixture";
 import { loadRhythm, rhythmFixture, type RhythmSource } from "../data/rhythm";
 import { sleepDataChangedEvent } from "../data/sleepDataEvents";
 import { usePendingApprovalsCount } from "../state/approvals";
@@ -78,16 +80,23 @@ export function OverviewScreen() {
   const [mode, setMode] = useState<OverviewSource>("fixture");
   const [rhythm, setRhythm] = useState(rhythmFixture);
   const [rhythmMode, setRhythmMode] = useState<RhythmSource>("fixture");
+  const [outlook, setOutlook] = useState(outlookFixture);
   const pendingCount = usePendingApprovalsCount();
 
   useEffect(() => {
     const refresh = createCoalescedRefresh(
-      () => Promise.all([loadOverview(), loadRhythm()]),
-      ([overviewResult, rhythmResult]) => {
+      () =>
+        Promise.all([
+          loadOverview(),
+          loadRhythm(),
+          loadOutlook(globalThis as never, outlookFixture),
+        ]),
+      ([overviewResult, rhythmResult, outlookResult]) => {
         setOverview(overviewResult.data);
         setMode(overviewResult.source);
         setRhythm(rhythmResult.data);
         setRhythmMode(rhythmResult.source);
+        setOutlook(outlookResult);
       },
     );
     const request = () => refresh.request();
@@ -184,13 +193,6 @@ export function OverviewScreen() {
                 tone="sleep"
               />
               <OverviewFact
-                icon="focus"
-                label="Useful task window"
-                value={overview.usefulTaskWindow.label}
-                detail={overview.usefulTaskWindow.detail}
-                tone="awake"
-              />
-              <OverviewFact
                 icon="trend"
                 label="Recent drift"
                 value={overview.drift.label}
@@ -198,6 +200,8 @@ export function OverviewScreen() {
                 tone="neutral"
               />
             </dl>
+
+            <OutlookPanel data={outlook} />
 
             <section className="overview-quality" aria-labelledby="evidence-title">
               <div>

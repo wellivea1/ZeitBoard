@@ -1,0 +1,293 @@
+/* The 48-72 hour operational view (ADR-0034).
+ *
+ * The three presence states reuse the existing semantic state tokens, so the
+ * strip means the same thing here as the actogram does on Rhythm and follows
+ * every theme, including amber and high contrast, without a second palette. */
+
+.outlook {
+  display: grid;
+  gap: var(--space-4);
+  padding-block: var(--space-5) 0;
+  border-top: 1px solid var(--line);
+}
+
+.outlook-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.outlook-head h3 {
+  margin: 0;
+  font-size: var(--type-body-strong);
+}
+
+.outlook-next {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  margin: 0;
+  color: var(--muted);
+}
+
+.outlook-next span {
+  display: grid;
+}
+
+.outlook-next strong {
+  color: var(--ink);
+  font-size: var(--type-label);
+}
+
+.outlook-timeline {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.outlook-track {
+  position: relative;
+  height: var(--space-7);
+  overflow: hidden;
+  border-radius: var(--radius-control);
+  background: var(--panel-alt);
+}
+
+/* The uncertain band is hatched rather than solid, and that is the point
+ * rather than decoration. Awake, uncertain and asleep are separated by hue in
+ * this palette but sit close in luminance, so three solid blocks are hard to
+ * tell apart in greyscale, in the amber-glasses theme, or for a reader with a
+ * colour vision deficiency. Stripes read as "not solid knowledge" against two
+ * filled neighbours in any theme, which is exactly what the band means: the
+ * model declines to say which side of the boundary this is. The actogram uses
+ * the same repeating-gradient language for forecast rows. */
+.outlook-band {
+  position: absolute;
+  inset-block: 0;
+  background-color: transparent;
+  background-image: repeating-linear-gradient(
+    135deg,
+    var(--state-uncertain) 0 5px,
+    transparent 5px 10px
+  );
+}
+
+.outlook-band[data-presence="awake"] {
+  background-color: var(--state-awake);
+  background-image: none;
+}
+
+.outlook-band[data-presence="asleep"] {
+  background-color: var(--state-asleep);
+  background-image: none;
+}
+
+.outlook-band[data-presence="unknown"] {
+  background-color: var(--meter-muted);
+  background-image: none;
+}
+
+/* A recorded episode is evidence, not a forecast, and reads as solid against
+ * the hatched prediction rather than as a different colour. */
+.outlook-band[data-observed] {
+  box-shadow: inset 0 0 0 2px var(--ink);
+}
+
+.outlook-day-mark {
+  position: absolute;
+  inset-block: 0;
+  display: block;
+  border-left: 1px solid var(--paper);
+}
+
+.outlook-day-mark small {
+  position: absolute;
+  inset-block-start: 100%;
+  padding-inline-start: var(--space-1);
+  color: var(--muted);
+  font-size: var(--type-label);
+  white-space: nowrap;
+}
+
+.outlook-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  margin-block-start: var(--space-4);
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.outlook-legend span {
+  display: inline-flex;
+  gap: var(--space-1);
+  align-items: center;
+}
+
+/* The legend swatches carry the same fill as the bands, hatching included, so
+ * the key and the strip cannot drift apart. */
+.outlook-legend span::before {
+  width: var(--space-3);
+  height: var(--space-2);
+  border-radius: var(--radius-control);
+  background-color: var(--panel-alt);
+  background-image: repeating-linear-gradient(
+    135deg,
+    var(--state-uncertain) 0 3px,
+    transparent 3px 6px
+  );
+  content: "";
+}
+
+.outlook-legend span[data-presence="awake"]::before {
+  background-color: var(--state-awake);
+  background-image: none;
+}
+
+.outlook-legend span[data-presence="asleep"]::before {
+  background-color: var(--state-asleep);
+  background-image: none;
+}
+
+.outlook-legend small {
+  margin-inline-start: auto;
+}
+
+.outlook-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: baseline;
+}
+
+.outlook-section-head h4 {
+  margin: 0;
+  font-size: var(--type-label);
+}
+
+.outlook-section-head small {
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.outlook ul {
+  display: grid;
+  gap: 0;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.outlook li {
+  display: flex;
+  gap: var(--space-3);
+  align-items: start;
+  padding-block: var(--space-2);
+  border-top: 1px solid var(--line);
+}
+
+.outlook li > span {
+  display: grid;
+  gap: 2px;
+}
+
+.outlook li strong {
+  font-size: var(--type-body);
+}
+
+.outlook li em {
+  color: var(--muted);
+  font-style: normal;
+  font-size: var(--type-label);
+}
+
+.outlook li b {
+  color: var(--state-awake);
+  font-size: var(--type-label);
+}
+
+.outlook li small {
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.outlook li svg {
+  flex: none;
+  margin-block-start: 2px;
+  color: var(--muted);
+}
+
+.outlook-office li[data-status="reachable"] svg {
+  color: var(--state-awake);
+}
+
+.outlook-office li[data-status="partial"] svg {
+  color: var(--state-uncertain);
+}
+
+.outlook-office li[data-status="unreachable"] {
+  opacity: 0.72;
+}
+
+.outlook-commitments li[data-conflict="inside_predicted_sleep"] strong,
+.outlook-commitments li[data-conflict="overlaps_predicted_sleep"] strong {
+  color: var(--state-uncertain);
+}
+
+.outlook-commitments li[data-conflict="inside_predicted_sleep"] small,
+.outlook-commitments li[data-conflict="overlaps_predicted_sleep"] small,
+.outlook-commitments li[data-conflict="near_uncertain_boundary"] small {
+  color: var(--state-uncertain);
+}
+
+.outlook-opportunities li[data-placed="no"] {
+  opacity: 0.72;
+}
+
+.outlook-notice {
+  display: flex;
+  gap: var(--space-3);
+  align-items: start;
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--panel-alt);
+}
+
+.outlook-notice > span {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.outlook-notice small {
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.outlook-notice svg {
+  flex: none;
+  margin-block-start: 2px;
+  color: var(--state-uncertain);
+}
+
+.outlook-notice .button {
+  flex: none;
+  margin-inline-start: auto;
+  align-self: center;
+}
+
+@media (max-width: 720px) {
+  .outlook-notice {
+    flex-wrap: wrap;
+  }
+
+  .outlook-notice .button {
+    margin-inline-start: 0;
+  }
+
+  .outlook-legend small {
+    margin-inline-start: 0;
+  }
+}

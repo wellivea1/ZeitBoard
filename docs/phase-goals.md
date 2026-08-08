@@ -286,15 +286,27 @@ approve/decline that also materializes the ADR-0023 block.
 **Next phase as of 2026-08-04.** Rationale and verified findings are in
 [`automaticity-review-2026-08-04.md`](automaticity-review-2026-08-04.md).
 
-**Slice status, 2026-08-06.** Delivered: (1)/(3)/(4) via
+**All eight slices delivered as of 2026-08-08.** (1)/(3)/(4) via
 [ADR-0031](decisions/0031-evidence-freshness-and-shadow-inference.md), (5) via
 its validation gate — measured and **negative**, so inferred episodes stay
 shadow-only — (7) via `core/freshness`, (2) via
-[ADR-0032](decisions/0032-android-sleep-synchronisation.md), and (6) via
-[ADR-0033](decisions/0033-recompute-orchestrator.md). Remaining: **(8)**, the
-48–72 hour operational view. Two residuals carry forward rather than blocking
-it: the activity collector still runs only while the desktop app runs, and
-Android pushes without a background schedule or a pull.
+[ADR-0032](decisions/0032-android-sleep-synchronisation.md), (6) via
+[ADR-0033](decisions/0033-recompute-orchestrator.md), and (8) via
+[ADR-0034](decisions/0034-operational-outlook.md).
+
+**The phase's acceptance is not fully met, and the gap is measurement.** Six of
+its seven acceptance clauses hold: Health Connect sleep reaches the core without
+manual export, the collector records real privacy-minimized evidence, inference
+runs in shadow with explainable support and conflict, analysis refreshes in the
+background, stale current-state claims are withheld consistently, and the
+operational view exists. The seventh — *a private pilot report stating measured
+accuracy, manual burden, and resource use* — has not been produced, and cannot
+be produced from synthetic data. It needs the owner running the built app on
+real days.
+
+Three residuals carry forward: the activity collector still runs only while the
+desktop app runs; Android pushes without a background schedule or a pull; and
+office hours in the operational view are not user-configurable.
 
 > **Goal: close the automatic daily loop. Bring fresh sleep/wake evidence from
 > Android Health Connect and privacy-minimized Windows activity into the shared

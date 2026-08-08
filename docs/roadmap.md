@@ -327,6 +327,19 @@ M-E's separately reviewed local agent projection.
     nobody refreshing anything. The desktop is unchanged and still recomputes on
     screen load.
 
+14. ~~**The 48-72 hour operational view.**~~ ✅ Delivered (ADR-0034): the
+    question the product exists for, answered on the screen a person opens.
+    A three-state timeline — awake, asleep, and *uncertain*, because the
+    estimator's envelopes overlap and a crisp boundary would be hours wrong
+    several times a month; office-hours overlap reported as reachable time and
+    merely possible time, never added together; fixed events flagged when they
+    fall inside predicted sleep; task placements confined to confidently awake
+    stretches; and the whole view withheld rather than anchored to nothing when
+    the evidence is stale. It replaces Overview's single "useful task window"
+    tile rather than adding a ninth destination. Office hours are not yet
+    configurable: Monday to Friday 09:00-17:00, matching the scheduler's own
+    default, which is simply wrong for a shift worker.
+
 **Small debts (fold into adjacent slices):** finish ordered local/server migrations; ~~
 → domain decoder (now duplicated across desktop storage, server readmodel, and
 the sync validator);~~ establish one versioned assistant action registry; extract

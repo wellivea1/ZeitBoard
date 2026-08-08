@@ -1,3 +1,4 @@
+import type { OutlookData } from "./outlook";
 import type { OverviewData } from "./overview";
 
 export const overviewFixture: OverviewData = {
@@ -36,4 +37,203 @@ export const overviewFixture: OverviewData = {
     detail: "Predicted windows and confidence only",
   },
   updatedLabel: "Updated from synthetic observations 12 min ago",
+};
+
+// The browser preview shows sample data everywhere else on Overview, so the
+// outlook does too rather than telling the reader to open a desktop app they
+// may already have open. Every string here is invented; `status` stays
+// "available" so the preview exercises the real timeline rather than the
+// notice, and the shape matches what the Go core emits.
+export const outlookFixture: OutlookData = {
+  status: "available",
+  freshness: {
+    state: "current",
+    explanation: "Based on recent records.",
+    ageLabel: "Newest record 41 minutes ago",
+    trusted: true,
+  },
+  horizonLabel: "Next 72 hours",
+  horizonHours: 72,
+  days: [
+    { label: "Sample day 2", offsetHours: 6 },
+    { label: "Sample day 3", offsetHours: 30 },
+    { label: "Sample day 4", offsetHours: 54 },
+  ],
+  segments: [
+    {
+      presence: "awake",
+      observed: false,
+      rangeLabel: "Now to 10:15 PM",
+      dayLabel: "Day 1",
+      durationLabel: "4 hours 15 minutes",
+      offsetHours: 0,
+      durationHours: 4.25,
+    },
+    {
+      presence: "uncertain",
+      observed: false,
+      rangeLabel: "10:15 PM to 1:27 AM",
+      dayLabel: "Day 1",
+      durationLabel: "3 hours 12 minutes",
+      offsetHours: 4.25,
+      durationHours: 3.2,
+    },
+    {
+      presence: "asleep",
+      observed: false,
+      rangeLabel: "1:27 AM to 8:05 AM",
+      dayLabel: "Day 2",
+      durationLabel: "6 hours 38 minutes",
+      offsetHours: 7.45,
+      durationHours: 6.63,
+    },
+    {
+      presence: "uncertain",
+      observed: false,
+      rangeLabel: "8:05 AM to 11:40 AM",
+      dayLabel: "Day 2",
+      durationLabel: "3 hours 35 minutes",
+      offsetHours: 14.08,
+      durationHours: 3.59,
+    },
+    {
+      presence: "awake",
+      observed: false,
+      rangeLabel: "11:40 AM to 11:05 PM",
+      dayLabel: "Day 2",
+      durationLabel: "11 hours 25 minutes",
+      offsetHours: 17.67,
+      durationHours: 11.42,
+    },
+    {
+      presence: "uncertain",
+      observed: false,
+      rangeLabel: "11:05 PM to 2:50 AM",
+      dayLabel: "Day 2",
+      durationLabel: "3 hours 45 minutes",
+      offsetHours: 29.09,
+      durationHours: 3.75,
+    },
+    {
+      presence: "asleep",
+      observed: false,
+      rangeLabel: "2:50 AM to 9:10 AM",
+      dayLabel: "Day 3",
+      durationLabel: "6 hours 20 minutes",
+      offsetHours: 32.84,
+      durationHours: 6.33,
+    },
+    {
+      presence: "uncertain",
+      observed: false,
+      rangeLabel: "9:10 AM to 1:25 PM",
+      dayLabel: "Day 3",
+      durationLabel: "4 hours 15 minutes",
+      offsetHours: 39.17,
+      durationHours: 4.25,
+    },
+    {
+      presence: "awake",
+      observed: false,
+      rangeLabel: "1:25 PM to 11:55 PM",
+      dayLabel: "Day 3",
+      durationLabel: "10 hours 30 minutes",
+      offsetHours: 43.42,
+      durationHours: 10.5,
+    },
+    {
+      presence: "uncertain",
+      observed: false,
+      rangeLabel: "11:55 PM to 4:35 AM",
+      dayLabel: "Day 3",
+      durationLabel: "4 hours 40 minutes",
+      offsetHours: 53.92,
+      durationHours: 4.67,
+    },
+    {
+      presence: "asleep",
+      observed: false,
+      rangeLabel: "4:35 AM to 11:00 AM",
+      dayLabel: "Day 4",
+      durationLabel: "6 hours 25 minutes",
+      offsetHours: 58.59,
+      durationHours: 6.41,
+    },
+    {
+      presence: "uncertain",
+      observed: false,
+      rangeLabel: "11:00 AM to 3:40 PM",
+      dayLabel: "Day 4",
+      durationLabel: "4 hours 40 minutes",
+      offsetHours: 65,
+      durationHours: 4.67,
+    },
+    {
+      presence: "awake",
+      observed: false,
+      rangeLabel: "3:40 PM to 6:00 PM",
+      dayLabel: "Day 4",
+      durationLabel: "2 hours 20 minutes",
+      offsetHours: 69.67,
+      durationHours: 2.33,
+    },
+  ],
+  nextSleepLabel: "Sample day 1, 10:15 PM to 8:05 AM",
+  nextWakeLabel: "Sample day 2, 8:05 AM to 11:05 PM",
+  officeHoursLabel: "Typical office hours, Monday to Friday 9:00 AM to 5:00 PM",
+  officeWindows: [
+    {
+      dayLabel: "Sample day 2",
+      hoursLabel: "9:00 AM to 5:00 PM",
+      status: "reachable",
+      reachableLabel: "11:40 AM to 5:00 PM",
+      detail: "Predicted awake for 5 hours 20 minutes of this window.",
+      offsetHours: 15,
+      durationHours: 8,
+    },
+    {
+      dayLabel: "Sample day 3",
+      hoursLabel: "9:00 AM to 5:00 PM",
+      status: "reachable",
+      reachableLabel: "1:25 PM to 5:00 PM",
+      detail: "Predicted awake for 3 hours 35 minutes of this window.",
+      offsetHours: 39,
+      durationHours: 8,
+    },
+    {
+      dayLabel: "Sample day 4",
+      hoursLabel: "9:00 AM to 5:00 PM",
+      status: "partial",
+      detail:
+        "Possibly awake for up to 2 hours 0 minutes, but this falls where the sleep boundary is uncertain.",
+      offsetHours: 63,
+      durationHours: 8,
+    },
+  ],
+  commitments: [
+    {
+      title: "Sample appointment",
+      whenLabel: "Sample day 4, 9:30 AM to 10:15 AM",
+      conflict: "inside_predicted_sleep",
+      conflictLabel: "Falls entirely inside predicted sleep",
+    },
+  ],
+  opportunities: [
+    {
+      taskId: "sample-task-call",
+      title: "Sample phone call",
+      whenLabel: "Sample day 2, 11:40 AM to 12:10 PM",
+      needsApproval: true,
+    },
+    {
+      taskId: "sample-task-errand",
+      title: "Sample errand",
+      unplacedLabel: "No window long enough in the next three days",
+      needsApproval: true,
+    },
+  ],
+  awakeLabel: "28 hours 30 minutes",
+  uncertainLabel: "24 hours 6 minutes",
+  disclaimer:
+    "Estimates describe observed sleep-wake timing and uncertainty. This application does not provide medical advice.",
 };

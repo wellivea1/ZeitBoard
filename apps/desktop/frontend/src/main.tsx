@@ -6,6 +6,7 @@ import { AppearanceProvider } from "./theme/AppearanceProvider";
 import { loadAndApplyReducedStimulation } from "./theme/reducedStimulation";
 import { loadAndApplyTheme } from "./theme/theme";
 import "./styles.css";
+import "./styles/outlook.css";
 import "./styles/overview.css";
 import "./styles/rhythm.css";
 import "./styles/rhythm-markers.css";

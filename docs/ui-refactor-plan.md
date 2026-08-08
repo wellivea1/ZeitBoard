@@ -369,6 +369,13 @@ Settings, Assistant, and Help in a utility group.
 - **Rhythm** keeps actogram, drift, and sources as tabs, with statistics behind
   a details disclosure.
 
+**Inherited from ADR-0034 (2026-08-08).** The operational view landed on
+Overview rather than as a ninth destination, precisely to avoid widening the
+navigation this slice is meant to narrow. It replaced Overview's "useful task
+window" tile, which it subsumes. When U-H lands, Overview becomes **Home** and
+the view goes with it; it is the answer to "what is my day", not "what is
+booked", so it does not belong under Plan.
+
 Sequencing note: this is deliberately *not* bundled with a correctness change.
 It touches every screen module, the UI-standards lint, and most of the frontend
 suite, and mixing it with a behavioural fix would make both harder to review.
