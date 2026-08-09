@@ -1031,6 +1031,69 @@ horizontal scroll, and the prediction label legible in every one.
 This lowers the cost of recording a night; it does not make nights arrive
 without the user, and it does not move the release blocker on manual entry.
 
+## Configurable reaching hours (roadmap slice 16)
+
+Verified 2026-08-09 on Windows 11.
+
+The 48-72 hour view assumed Monday to Friday, 09:00 to 17:00, in the user's own
+zone. Everything below tests the schedules that assumption could not express.
+
+`core/outlook` gained four tests, each checked to fail against the previous
+implementation before it passed:
+
+- a service with equal open and close times covers the whole horizon, and loses
+  none of the confidently awake time to a gap;
+- an overnight schedule produces windows that cross midnight and are still eight
+  hours long, rather than being silently dropped — the old code skipped any
+  window whose close was not after its open, so a night desk produced *no* way
+  to reach anyone at all;
+- a window that opened last night and has not closed is reported, clamped to
+  now. The day walk now starts a civil day early for this; yesterday's ordinary
+  daytime window still drops out because it closed before now, and a separate
+  test pins that;
+- no open days means no windows. This one was found by a desktop test rather
+  than by reading the code: `officeWindows` substituted its Monday-to-Friday
+  default whenever `Days` was empty, so switching reaching hours *off* produced
+  three reaching windows. A wholly unset `OfficeHours` still takes the default,
+  and a test pins that too, because that is how every caller who does not care
+  about reaching hours asks for the ordinary case.
+
+Ten Go tests cover the desktop bindings: the default schedule, a saved schedule
+arriving at the outlook, a disabled schedule producing no open days, four
+invalid schedules refused with distinguishable messages, the revision guard
+rejecting a stale edit without overwriting what is stored, the summary wording
+across five shapes, a foreign zone being named while the reader's own is not
+repeated at them, and a saved schedule surviving a restart with its revision
+intact.
+
+Twenty-two frontend tests cover the adapter and the panel, including that a
+missing `enabled` flag reads as *off* — showing reaching windows nobody asked
+for is the failure being removed — and that a conflict is never reported as a
+save.
+
+Three UI-standards lint rules were added and each was checked to fail before it
+passed: neither `outlook.ts` nor `reachingHours.ts` may hard-code a working week,
+the panel must read and write the real stored schedule and must say the hours
+belong to the other party, and Settings must expose the panel.
+
+Checked in the browser preview against a stubbed bridge: the stored schedule
+loads into the form, an overnight pair explains itself rather than looking like
+a typo, saving reports what happened, and switching the section off makes the
+day checkboxes and presets genuinely inert (`:disabled` matches and a click
+changes nothing) rather than merely dimmed. No horizontal overflow and no
+overlapping blocks at 966px. Screenshots were not captured — the preview pane
+was not compositing frames in this session — so the visual checks above are
+measured from the DOM and computed styles rather than from an image.
+
+The durable settings-file machinery was extracted from the appearance file into
+a generic store and appearance was moved onto it. The existing appearance
+revision-conflict, persistence and backup-recovery test passes unchanged, which
+is what makes the extraction safe to claim.
+
+**What this does not establish.** One schedule, and the same hours on every
+selected day. Someone who must reach a clinic on Tuesday mornings *and* an
+employer on weekday afternoons can express only one of them.
+
 ## What this record does not measure
 
 Added 2026-08-04 after an applicability/utility/automaticity review
@@ -1041,11 +1104,12 @@ establishes that the user does less work or decides better, and the distinction
 matters for a product whose premise is reducing burden. Three gaps are recorded
 here so they are not mistaken for passing checks:
 
-- **Passive coverage is unmeasured because it is near zero.** The desktop
-  activity collector emits one startup observation, and the Android companion
-  cannot sync, so principal sleep episodes still reach the estimator mainly by
-  manual entry or import. No test asserts otherwise, and none should until
-  those paths exist.
+- **Passive coverage is unmeasured.** Both halves of this note are now out of
+  date in the sentence and still true in substance: the desktop collector
+  records real transitions (P7-3) and the Android companion syncs (ADR-0032),
+  but nothing measures what fraction of principal sleep episodes arrive without
+  the user typing them. The collector also only runs while ZeitBoard is running.
+  Measuring coverage needs a pilot over weeks, not a test run.
 - **No current-state freshness assertion exists outside the portal.** The
   portal's stale-at-6-hours and withheld-at-24-hours behaviour is verified
   above. The desktop Overview has no equivalent policy to verify. Until one

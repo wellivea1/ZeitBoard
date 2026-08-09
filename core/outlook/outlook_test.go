@@ -687,3 +687,187 @@ func durationOf(ranges []domain.TimeRange) time.Duration {
 	}
 	return total
 }
+
+// The office hours belong to whoever the person needs to reach, and a great
+// many of them do not keep a Monday-to-Friday day. These tests cover the
+// schedules the default silently got wrong.
+
+// TestAServiceThatNeverClosesIsOpenAllHorizon. Equal open and close times mean
+// twenty-four hours; a 24-hour pharmacy or crisis line is the case that makes
+// the whole view worth reading for someone awake at 4am.
+func TestAServiceThatNeverClosesIsOpenAllHorizon(t *testing.T) {
+	f := newFixture(t)
+	in := f.input()
+	in.OfficeHours = outlook.OfficeHours{
+		StartLocal: "00:00",
+		EndLocal:   "00:00",
+		Days: []time.Weekday{
+			time.Sunday, time.Monday, time.Tuesday, time.Wednesday,
+			time.Thursday, time.Friday, time.Saturday,
+		},
+		ZoneID: zone,
+	}
+	view := build(t, in)
+
+	if len(view.OfficeWindows) == 0 {
+		t.Fatal("a service open every hour produced no windows")
+	}
+	var covered time.Duration
+	for _, window := range view.OfficeWindows {
+		covered += window.Interval.End.UTC.Sub(window.Interval.Start.UTC)
+	}
+	horizon := view.Horizon.End.UTC.Sub(view.Horizon.Start.UTC)
+	if covered < horizon-time.Minute {
+		t.Errorf("covered %s of a %s horizon; an always-open service has no gaps", covered, horizon)
+	}
+
+	// Every hour open means every confidently awake hour is reachable.
+	var reachable time.Duration
+	for _, window := range view.OfficeWindows {
+		reachable += window.ReachableFor
+	}
+	if reachable < view.AwakeFor-time.Minute {
+		t.Errorf("reachable %s against %s awake; nothing should be lost", reachable, view.AwakeFor)
+	}
+}
+
+// TestAnOvernightScheduleCrossesMidnight. A night shift, or a contact eight
+// time zones away, closes on the following day. Before this the window was
+// silently dropped and the view reported no way to reach anyone at all.
+func TestAnOvernightScheduleCrossesMidnight(t *testing.T) {
+	f := newFixture(t)
+	in := f.input()
+	in.OfficeHours = outlook.OfficeHours{
+		StartLocal: "22:00",
+		EndLocal:   "06:00",
+		Days: []time.Weekday{
+			time.Sunday, time.Monday, time.Tuesday, time.Wednesday,
+			time.Thursday, time.Friday, time.Saturday,
+		},
+		ZoneID: zone,
+	}
+	view := build(t, in)
+
+	if len(view.OfficeWindows) == 0 {
+		t.Fatal("an overnight schedule produced no windows at all")
+	}
+	location, err := time.LoadLocation(zone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	crossed := false
+	for i, window := range view.OfficeWindows {
+		span := window.Interval.End.UTC.Sub(window.Interval.Start.UTC)
+		if span > 8*time.Hour+time.Minute {
+			t.Errorf("window %d spans %s; the night is eight hours", i, span)
+		}
+		startDay := window.Interval.Start.UTC.In(location).Day()
+		endDay := window.Interval.End.UTC.In(location).Day()
+		if startDay != endDay {
+			crossed = true
+		}
+	}
+	if !crossed {
+		t.Error("no window crossed midnight, so the schedule was flattened into one day")
+	}
+}
+
+// TestAWindowOpenedLastNightIsStillOpenNow. The horizon starts at now, but a
+// window that opened before it and has not closed is the one thing a person
+// awake at 3am can act on immediately.
+func TestAWindowOpenedLastNightIsStillOpenNow(t *testing.T) {
+	location, err := time.LoadLocation(zone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 03:00 local on a Thursday, inside a window that opened at 22:00 on
+	// Wednesday.
+	now := time.Date(2026, 8, 6, 3, 0, 0, 0, location).UTC()
+	sessions := history(t, now.Add(-90*time.Minute), 12)
+	estimate, err := (estimation.RobustEstimator{}).Estimate(context.Background(), sessions, now)
+	if err != nil {
+		t.Fatalf("estimate: %v", err)
+	}
+	view := build(t, outlook.Input{
+		Now:      now,
+		Estimate: estimate,
+		Freshness: freshness.Default().Assess(freshness.Inputs{
+			Now: now, NewestEvidence: now.Add(-90 * time.Minute),
+			LatestSleepEnd: now.Add(-90 * time.Minute),
+		}),
+		OfficeHours: outlook.OfficeHours{
+			StartLocal: "22:00",
+			EndLocal:   "06:00",
+			Days:       []time.Weekday{time.Wednesday},
+			ZoneID:     zone,
+		},
+	})
+
+	if len(view.OfficeWindows) == 0 {
+		t.Fatal("the window that is open right now was not reported")
+	}
+	first := view.OfficeWindows[0]
+	if !first.Interval.Start.UTC.Equal(now) {
+		t.Errorf("the open window starts at %s, not now (%s); it was not clamped",
+			first.Interval.Start.UTC, now)
+	}
+	if got := first.Interval.End.UTC.In(location); got.Hour() != 6 {
+		t.Errorf("the open window closes at %s, not 06:00 local", got)
+	}
+	// Only Wednesday is selected, so the following night must not appear.
+	if len(view.OfficeWindows) != 1 {
+		t.Errorf("%d windows for a single selected weekday", len(view.OfficeWindows))
+	}
+}
+
+// TestYesterdaysDaytimeWindowDoesNotReappear guards the day the loop now starts
+// early: a window that already closed must not be offered as reachable time.
+func TestYesterdaysDaytimeWindowDoesNotReappear(t *testing.T) {
+	f := newFixture(t)
+	view := build(t, f.input())
+
+	for i, window := range view.OfficeWindows {
+		if window.Interval.End.UTC.After(f.now) {
+			continue
+		}
+		t.Errorf("window %d closed at %s, before now (%s)", i, window.Interval.End.UTC, f.now)
+	}
+	for i, window := range view.OfficeWindows {
+		if window.Interval.Start.UTC.Before(f.now) {
+			t.Errorf("window %d starts at %s, before the horizon", i, window.Interval.Start.UTC)
+		}
+	}
+}
+
+// TestNoOpenDaysMeansNoWindows. An OfficeHours with times but no days used to
+// fall back to Monday-to-Friday, so a caller saying "closed" got a working week
+// instead. Silence is the honest answer.
+func TestNoOpenDaysMeansNoWindows(t *testing.T) {
+	f := newFixture(t)
+	in := f.input()
+	in.OfficeHours = outlook.OfficeHours{
+		StartLocal: "09:00",
+		EndLocal:   "17:00",
+		Days:       []time.Weekday{},
+		ZoneID:     zone,
+	}
+	view := build(t, in)
+
+	if len(view.OfficeWindows) != 0 {
+		t.Errorf("%d windows for a schedule with no open days", len(view.OfficeWindows))
+	}
+}
+
+// TestAnUnsetScheduleStillTakesTheDefault. The convenience default has to
+// survive the change above, because Input.OfficeHours left blank is how every
+// caller that does not care about reaching hours asks for the ordinary case.
+func TestAnUnsetScheduleStillTakesTheDefault(t *testing.T) {
+	f := newFixture(t)
+	in := f.input()
+	in.OfficeHours = outlook.OfficeHours{}
+	view := build(t, in)
+
+	if len(view.OfficeWindows) == 0 {
+		t.Fatal("an unset schedule produced no windows")
+	}
+}

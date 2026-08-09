@@ -328,3 +328,115 @@
     font-size: 8px;
   }
 }
+
+/* Reaching hours: when the people this person needs are available. */
+.reaching-form {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 46rem;
+}
+
+.reaching-toggle {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.reaching-toggle input {
+  margin-top: 4px;
+}
+
+.reaching-toggle span,
+.reaching-field > span {
+  display: grid;
+  gap: 2px;
+}
+
+.reaching-toggle small,
+.reaching-field small,
+.reaching-note {
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.reaching-field {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.reaching-field input,
+.reaching-field select {
+  max-width: 22rem;
+}
+
+.reaching-clocks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.reaching-clocks .reaching-field input {
+  max-width: 9rem;
+}
+
+.reaching-note {
+  margin: 0;
+}
+
+.reaching-days {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.reaching-days legend {
+  padding: 0;
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.reaching-day-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.reaching-day-buttons label {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.reaching-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.reaching-presets .button[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* The summary is the sentence the outlook prints, shown here so the effect of
+   an edit is visible before leaving the screen. */
+.reaching-summary {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--panel-alt);
+  border-left: 2px solid var(--accent);
+  border-radius: var(--radius-card);
+  color: var(--ink);
+}
+
+.reaching-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.reaching-days[disabled] {
+  opacity: 0.55;
+}

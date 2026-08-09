@@ -110,10 +110,11 @@ func (a *App) GetOutlook() (OutlookDTO, error) {
 		zoneID = time.Now().Location().String()
 	}
 
+	reaching := a.currentReachingHours()
 	in := outlook.Input{
 		Now:         now,
 		Estimate:    state.Estimate,
-		OfficeHours: outlook.DefaultOfficeHours(zoneID),
+		OfficeHours: reaching.officeHours(zoneID),
 	}
 	if state.Status != "estimated" {
 		in.EstimateError = outlookRefusalError(state)
@@ -173,7 +174,7 @@ func (a *App) GetOutlook() (OutlookDTO, error) {
 	if err != nil {
 		return OutlookDTO{}, err
 	}
-	return outlookDTO(view, titles, taskTitles, zoneID), nil
+	return outlookDTO(view, titles, taskTitles, zoneID, reachingSummary(reaching)), nil
 }
 
 // outlookRefusalError turns the local estimate's state into the typed refusal
@@ -194,6 +195,7 @@ func outlookDTO(
 	eventTitles map[domain.CalendarEventID]string,
 	taskTitles map[domain.FlexibleTaskID]string,
 	zoneID string,
+	officeHoursLabel string,
 ) OutlookDTO {
 	location := loadLocationOrUTC(zoneID)
 	start := view.Horizon.Start.UTC
@@ -209,7 +211,7 @@ func outlookDTO(
 		OfficeWindows:    []OutlookOfficeDTO{},
 		Commitments:      []OutlookCommitmentDTO{},
 		Opportunities:    []OutlookOpportunityDTO{},
-		OfficeHoursLabel: "Typical office hours, Monday to Friday 9:00 AM to 5:00 PM",
+		OfficeHoursLabel: officeHoursLabel,
 		AwakeLabel:       formatDuration(view.AwakeFor),
 		UncertainLabel:   formatDuration(view.UncertainFor),
 		Disclaimer:       disclaimer,

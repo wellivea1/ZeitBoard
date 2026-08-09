@@ -106,12 +106,21 @@ func (s Segment) Duration() time.Duration {
 
 // OfficeHours is when the rest of the world is reachable. It is civil-clock
 // arithmetic, not a claim about the user.
+//
+// The hours belong to whoever the person needs to reach, which is why ZoneID is
+// separate from the user's own zone: a clinic, a family member or an employer
+// can sit in a different one, and the whole value of this view is knowing when
+// their clock and the user's waking hours overlap.
 type OfficeHours struct {
-	// StartLocal and EndLocal are "HH:MM" in ZoneID.
+	// StartLocal and EndLocal are "HH:MM" in ZoneID. EndLocal at or before
+	// StartLocal means the window crosses midnight and closes on the following
+	// day; equal times mean the whole 24 hours, which is how a service that
+	// never closes is expressed.
 	StartLocal string
 	EndLocal   string
 
-	// Days are the weekdays the hours apply to.
+	// Days are the weekdays the hours apply to. For a window that crosses
+	// midnight, the weekday is the day it opens.
 	Days []time.Weekday
 
 	ZoneID string
@@ -119,7 +128,9 @@ type OfficeHours struct {
 
 // DefaultOfficeHours is the ordinary Monday-to-Friday working day, matching the
 // scheduler's own business-hours default so the two cannot disagree about what
-// "business hours" means.
+// "business hours" means. It is a starting point, not a description: a great
+// many people with a drifting rhythm need to reach someone on entirely
+// different hours, and the app must be told rather than assume.
 func DefaultOfficeHours(zoneID string) OfficeHours {
 	return OfficeHours{
 		StartLocal: "09:00",
@@ -550,12 +561,12 @@ func officeWindows(hours OfficeHours, segments []Segment, now, end time.Time, zo
 	if err != nil {
 		return nil, err
 	}
-	days := hours.Days
-	if len(days) == 0 {
-		days = DefaultOfficeHours(hours.ZoneID).Days
-	}
-	open := make(map[time.Weekday]bool, len(days))
-	for _, day := range days {
+	// No open days means no open days. Only a wholly unset OfficeHours takes the
+	// default, above: substituting Monday-to-Friday here would turn "there is
+	// nobody I need to reach on a schedule" into a working week the person
+	// never chose, which is the assumption this whole setting exists to undo.
+	open := make(map[time.Weekday]bool, len(hours.Days))
+	for _, day := range hours.Days {
 		open[day] = true
 	}
 
@@ -564,7 +575,13 @@ func officeWindows(hours OfficeHours, segments []Segment, now, end time.Time, zo
 
 	windows := make([]OfficeWindow, 0, 4)
 	localStart := now.In(location)
-	day := time.Date(localStart.Year(), localStart.Month(), localStart.Day(), 0, 0, 0, 0, location)
+	// Start a civil day early. A window that crosses midnight belongs to the
+	// day it opened, so one that opened last night and is still open now would
+	// otherwise be missed — and "they are reachable right now" is the most
+	// useful thing this view says. Yesterday's ordinary daytime window closes
+	// before now and drops out below.
+	day := time.Date(localStart.Year(), localStart.Month(), localStart.Day(), 0, 0, 0, 0, location).
+		AddDate(0, 0, -1)
 	lastLocal := end.In(location)
 	last := time.Date(lastLocal.Year(), lastLocal.Month(), lastLocal.Day(), 0, 0, 0, 0, location)
 
@@ -576,7 +593,15 @@ func officeWindows(hours OfficeHours, segments []Segment, now, end time.Time, zo
 		// Constructed in the location so a daylight-saving transition shifts
 		// the office day with the civil clock, which is what an office does.
 		openAt := time.Date(day.Year(), day.Month(), day.Day(), startClock.hour, startClock.minute, 0, 0, location).UTC()
-		closeAt := time.Date(day.Year(), day.Month(), day.Day(), endClock.hour, endClock.minute, 0, 0, location).UTC()
+		// A close at or before the open is the next day's clock time: 22:00 to
+		// 06:00 is a night, and 00:00 to 00:00 is a service that never shuts.
+		// Adding a day to the civil date rather than 24 hours to the instant
+		// keeps a daylight-saving transition inside the window honest.
+		closeDay := day
+		if !afterClock(endClock, startClock) {
+			closeDay = day.AddDate(0, 0, 1)
+		}
+		closeAt := time.Date(closeDay.Year(), closeDay.Month(), closeDay.Day(), endClock.hour, endClock.minute, 0, 0, location).UTC()
 		if openAt.Before(now) {
 			openAt = now
 		}
@@ -608,6 +633,11 @@ func officeWindows(hours OfficeHours, segments []Segment, now, end time.Time, zo
 type clock struct {
 	hour   int
 	minute int
+}
+
+// afterClock reports whether a is strictly later in the day than b.
+func afterClock(a, b clock) bool {
+	return a.hour*60+a.minute > b.hour*60+b.minute
 }
 
 func parseClock(value, fallback string) (clock, error) {
