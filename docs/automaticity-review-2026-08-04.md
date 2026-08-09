@@ -152,6 +152,14 @@ Android battery and scheduled-work cost, and sync bandwidth. Baselines must be
 recorded before the collector and orchestrator land, or the cost of adding them
 cannot be stated.
 
+**Manual burden, as of 2026-08-09.** One-tap logging (roadmap slice 15) does
+not clear the blocker below and is not claimed to: a tap is still a self-report,
+and every principal sleep still needs two of them. What changed is the cost of
+each one — two taps instead of a four-field form filled in by someone who has
+just woken up — and the honesty of the result, since an implausible pair now
+produces a question rather than a recorded night. The blocker asks for sleeps
+that arrive *without* the user, and that still depends on items 1 and 2.
+
 **Release blockers.** The product must not be described as automatically
 rhythm-aware while any of these hold: Android data does not reach the
 estimator; desktop activity remains startup-only; more than half of principal

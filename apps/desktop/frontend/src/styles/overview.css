@@ -476,3 +476,103 @@
     justify-content: flex-start;
   }
 }
+
+/* One-tap sleep logging. It sits directly under the status band because it is
+   the first thing someone does on waking, and the band is what they read while
+   doing it. */
+.quick-log {
+  padding: var(--space-4) var(--space-6);
+  display: grid;
+  gap: var(--space-3);
+  border-bottom: 1px solid var(--divider);
+}
+
+.quick-log-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.quick-log-actions .button {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.quick-log-pending {
+  margin: 0;
+  display: grid;
+  gap: 2px;
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--state-asleep);
+}
+
+.quick-log-pending[data-stale] {
+  border-left-color: var(--state-uncertain);
+}
+
+.quick-log-pending small,
+.quick-log-notice {
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.quick-log-notice {
+  margin: 0;
+}
+
+.quick-log-question {
+  padding: var(--space-4);
+  display: grid;
+  gap: var(--space-3);
+  background: var(--panel-alt);
+  border-radius: var(--radius-card);
+}
+
+.quick-log-question > p {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--type-body);
+}
+
+.quick-log-question label {
+  display: grid;
+  gap: var(--space-1);
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.quick-log-question input[type="datetime-local"] {
+  max-width: 16rem;
+}
+
+/* Beats the grid layout the sibling rule gives every label, which would
+   otherwise stack the box above its own text. */
+.quick-log-question label.quick-log-nap {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.quick-log-nap input {
+  width: auto;
+  margin: 0;
+}
+
+/* A prefill drawn from the forecast must never read as something that happened. */
+.quick-log-predicted {
+  color: var(--state-uncertain);
+  font-style: normal;
+}
+
+.quick-log-question-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+@media (max-width: 700px) {
+  .quick-log {
+    padding-inline: var(--space-5);
+  }
+}

@@ -358,6 +358,35 @@ M-E's separately reviewed local agent projection.
     configurable: Monday to Friday 09:00-17:00, matching the scheduler's own
     default, which is simply wrong for a shift worker.
 
+15. ~~**One-tap sleep logging.**~~ ✅ Delivered 2026-08-09. Recording a night
+    cost a four-field form filled in by someone who had just woken up, which is
+    the automaticity review's highest-value usability item and the dependency
+    that held UI guideline finding 7. Home now carries `I am going to sleep` and
+    `I woke up` directly under the current state.
+
+    The rule that shapes it: **a tap is not an observation.** The first tap
+    parks an onset in `local_sleep_pending` as a recorded intent, because
+    appending at that moment would put a row in the append-only log whose end
+    had not happened, and correcting it afterwards would leave a permanent
+    record of a boundary nobody saw. The night is appended when the pair falls
+    between 3 and 14 hours — `core/estimation`'s floor and `core/inference`'s
+    ceiling, not new numbers — and the marked onset is under 20 hours old.
+
+    Everything else returns a typed question and records nothing until it is
+    answered: a nap or a mistap, a missed wake tap, an onset so old that "now"
+    says nothing about when the person woke, or no marked onset at all. Where
+    a prefill comes from the estimator it is labelled a prediction on the field
+    itself. Decision logic lives in `core/quicklog` so a companion surface
+    answers identically, and `DeleteAllSleepData` takes the unfinished sleep
+    with it — otherwise erasure leaves an onset that writes a fresh row on the
+    next tap.
+
+    One defect found in the preview rather than by reasoning: the confirm form's
+    inputs were uncontrolled, so when one question replaced another React reused
+    the element and kept the previous question's time while the app's own
+    suggestion said otherwise. The fields are controlled now, and a regression
+    test pins it.
+
 **Small debts (fold into adjacent slices):** finish ordered local/server migrations; ~~
 → domain decoder (now duplicated across desktop storage, server readmodel, and
 the sync validator);~~ establish one versioned assistant action registry; extract
