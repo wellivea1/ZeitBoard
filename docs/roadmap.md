@@ -298,17 +298,23 @@ M-E's separately reviewed local agent projection.
     merge at a time. **This closes `ui-refactor-plan.md`**: U-A through U-H
     are all delivered.
 
-11. **A real Windows activity collector. — SECOND PRIORITY.**
-    `core/platform/activity/collector.go` emits one `"state": "startup"`
-    observation and nothing else; `SafeCollector` reads as far more capability
-    than exists. Replace it with bounded privacy-minimized transitions:
-    startup/shutdown, session lock/unlock, active/idle thresholds,
-    suspend/resume, and display state, behind platform interfaces and build
-    tags so a Linux adapter stays possible. `privacy.md`'s existing commitment
-    holds and is not relaxed: no keystrokes, typed content, screenshots,
-    browser history, **application names**, or high-frequency input streams.
-    Record desktop CPU/memory/startup baselines before it lands so its cost
-    can be stated rather than guessed.
+11. ~~**A real Windows activity collector.**~~ ✅ Delivered 2026-08-04 as P7-3.
+    The old collector emitted one `"state": "startup"` observation and then
+    blocked forever while being named `SafeCollector` in a package called
+    `activity`. It now records bounded behavioural transitions with a time and
+    how long the previous state lasted, from two narrow calls — time since last
+    input, and whether the interactive desktop is locked — behind a platform
+    interface so a Linux adapter stays possible. `privacy.md`'s commitment is
+    unchanged and unrelaxed: the recorded shape has no field for an application,
+    a window title, a document, or a keystroke, so widening it means changing
+    the type and the commitment that constrains it. *This entry described the
+    old placeholder for five days after it was replaced; corrected 2026-08-09.*
+
+    Still open: the collector runs inside the desktop process, so it collects
+    only while ZeitBoard is running (it survives closing the window, which hides
+    to the tray, but not quitting). Desktop CPU, memory and startup baselines
+    were not captured before it landed, so its cost is still described rather
+    than measured.
 12. ~~**Claim-accuracy defects.**~~ ✅ Delivered. *(b) and (c)* landed with the
     freshness policy and the honest-confidence pass: Home leads estimate quality
     with evidence age, the categorical badge sits behind a disclosure that says
@@ -354,9 +360,8 @@ M-E's separately reviewed local agent projection.
     fall inside predicted sleep; task placements confined to confidently awake
     stretches; and the whole view withheld rather than anchored to nothing when
     the evidence is stale. It replaces Overview's single "useful task window"
-    tile rather than adding a ninth destination. Office hours are not yet
-    configurable: Monday to Friday 09:00-17:00, matching the scheduler's own
-    default, which is simply wrong for a shift worker.
+    tile rather than adding a ninth destination. *Office hours became configurable
+    in slice 16.*
 
 15. ~~**One-tap sleep logging.**~~ ✅ Delivered 2026-08-09. Recording a night
     cost a four-field form filled in by someone who had just woken up, which is
@@ -386,6 +391,38 @@ M-E's separately reviewed local agent projection.
     the element and kept the previous question's time while the app's own
     suggestion said otherwise. The fields are controlled now, and a regression
     test pins it.
+
+16. ~~**Configurable reaching hours.**~~ ✅ Delivered 2026-08-09, closing the
+    residual named in slice 14. The 48-72 hour view intersected predicted waking
+    time with Monday to Friday, 09:00 to 17:00, in the user's own zone, with no
+    way to say otherwise — and every "reachable for three hours" figure drawn
+    from it inherited the error. A great many people with a drifting rhythm need
+    a pharmacy open until eight, a clinic that runs Tuesday and Thursday, or
+    family six time zones away.
+
+    Settings now carries the schedule: whose hours they are, when they open and
+    close, which days, and **their** zone rather than the user's. It can be
+    switched off entirely, which reports nothing rather than a working week
+    nobody chose. The outlook prints a sentence generated from the setting and
+    worded as something the person recorded, not a fact about the world.
+
+    Three things had to change in `core/outlook` to make the setting expressible.
+    A close at or before the open now runs to the following civil day, so an
+    overnight desk is one stretch instead of a silently dropped window, and equal
+    times mean a service that never shuts. The day walk starts a civil day early,
+    so a window that opened last night and is still open is reported — the most
+    useful thing this view can say. And an `OfficeHours` with no open days now
+    means *closed*: it used to fall back to Monday-to-Friday, which turned
+    "switched off" back into the assumption being removed. That last one was
+    found by a test, not by reading the code.
+
+    The desktop's durable settings-file machinery — staged write, backup,
+    validate-or-discard — was extracted from the appearance file rather than
+    copied, and appearance moved onto it unchanged.
+
+    Not done: one schedule at a time, and the same hours on every selected day.
+    Several named contacts, and per-day hours, are a larger change to what
+    `core/outlook` returns and to what Home draws.
 
 **Small debts (fold into adjacent slices):** finish ordered local/server migrations; ~~
 → domain decoder (now duplicated across desktop storage, server readmodel, and

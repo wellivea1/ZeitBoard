@@ -150,6 +150,31 @@ if (!/isPrediction\s*&&/.test(quickLogMarkup) || !/predicted/i.test(quickLogMark
   fail(quickLogPath, "A predicted prefill must be labelled as a prediction.");
 }
 
+// Reaching hours describe whoever the person needs to contact, and the outlook
+// used to assert Monday-to-Friday nine-to-five as a fact. Neither the label nor
+// the empty-state fallback may reintroduce a schedule nobody chose.
+for (const name of ["outlook.ts", "reachingHours.ts"]) {
+  const path = join(frontend, "data", name);
+  const source = readFileSync(path, "utf8").replace(/\/\/[^\n]*/g, "");
+  if (/Monday to Friday/.test(source)) {
+    fail(path, `${name} must not hard-code a working week as the reaching-hours default.`);
+  }
+}
+
+const reachingPanelPath = join(frontend, "screens", "settings", "ReachingHoursSettings.tsx");
+const reachingPanel = readFileSync(reachingPanelPath, "utf8");
+if (!reachingPanel.includes("saveReachingHours") || !reachingPanel.includes("loadReachingHours")) {
+  fail(reachingPanelPath, "Reaching hours must read and write the real stored schedule.");
+}
+if (!/not yours/.test(reachingPanel)) {
+  fail(reachingPanelPath, "Reaching hours must say the schedule belongs to the other party.");
+}
+
+const settingsScreenPath = join(frontend, "screens", "SettingsScreen.tsx");
+if (!readFileSync(settingsScreenPath, "utf8").includes("<ReachingHoursSettings")) {
+  fail(settingsScreenPath, "Settings must expose the reaching-hours schedule.");
+}
+
 const androidAppPath = join(
   root,
   "apps",

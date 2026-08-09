@@ -113,7 +113,9 @@ export const outlookUnavailable: OutlookData = {
   horizonHours: 72,
   days: [],
   segments: [],
-  officeHoursLabel: "Typical office hours, Monday to Friday 9:00 AM to 5:00 PM",
+  // Not a schedule: the preview has none to read, and inventing a working week
+  // here is exactly the assumption the reaching-hours setting exists to remove.
+  officeHoursLabel: "Reaching hours are set in the desktop app.",
   officeWindows: [],
   commitments: [],
   opportunities: [],

@@ -19,6 +19,7 @@ import { deleteAllSleepData } from "../data/sleepEntries";
 import { AppearanceSettings } from "./settings/AppearanceSettings";
 import { BackendSyncSettings } from "./settings/BackendSyncSettings";
 import { LocalAgentSettings } from "./settings/LocalAgentSettings";
+import { ReachingHoursSettings } from "./settings/ReachingHoursSettings";
 import { SleepDataSettings } from "./settings/SleepDataSettings";
 import { createCoalescedRefresh, type CoalescedRefresh } from "../utils/coalescedRefresh";
 
@@ -240,6 +241,7 @@ export function SettingsScreen() {
           onDisable={handleDisableBackendSync}
           onSyncNow={handleSyncNow}
         />
+        <ReachingHoursSettings />
         <LocalAgentSettings status={localAgentStatus} error={localAgentError} />
         <SleepDataSettings
           exported={exportedSleepData}

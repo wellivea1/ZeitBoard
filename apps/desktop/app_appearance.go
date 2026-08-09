@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"os"
 	"path/filepath"
 	"regexp"
 
@@ -47,12 +46,6 @@ type LocalAppearanceEnvelopeDTO struct {
 	State    LocalAppearanceStateDTO `json:"state"`
 	Revision uint64                  `json:"revision"`
 	Conflict bool                    `json:"conflict"`
-}
-
-type appearanceFile struct {
-	SchemaVersion string                  `json:"schema_version"`
-	Revision      uint64                  `json:"revision"`
-	State         LocalAppearanceStateDTO `json:"state"`
 }
 
 type agentNightRuleInput struct {
@@ -175,9 +168,7 @@ func (a *App) loadAppearanceFromDisk() error {
 		return err
 	}
 	if recovered {
-		if err := restoreAppearancePrimary(path, appearanceFile{
-			SchemaVersion: appearanceSchema, Revision: revision, State: stored,
-		}); err != nil {
+		if err := appearanceStore(path).restorePrimary(stored, revision); err != nil {
 			return fmt.Errorf("restore appearance settings backup: %w", err)
 		}
 	}
@@ -194,11 +185,7 @@ func (a *App) persistAppearanceLocked(state LocalAppearanceStateDTO, revision ui
 	if a.configDir == "" {
 		return nil
 	}
-	return writeAppearanceFile(filepath.Join(a.configDir, appearanceFileName), appearanceFile{
-		SchemaVersion: appearanceSchema,
-		Revision:      revision,
-		State:         state,
-	})
+	return appearanceStore(filepath.Join(a.configDir, appearanceFileName)).write(state, revision)
 }
 
 func (a *App) applyAppearanceTool(arguments json.RawMessage) (agentAppearanceProjection, error) {
@@ -266,135 +253,20 @@ func projectAgentAppearance(state LocalAppearanceStateDTO) agentAppearanceProjec
 	}
 }
 
+// appearanceStore is the durable settings file for display preferences. The
+// read/write/restore machinery is shared with every other settings file; only
+// the schema name and what counts as a valid state differ.
+func appearanceStore(path string) localSettingsStore[LocalAppearanceStateDTO] {
+	return localSettingsStore[LocalAppearanceStateDTO]{
+		Path:     path,
+		Schema:   appearanceSchema,
+		Name:     "appearance",
+		Validate: validateLocalAppearanceState,
+	}
+}
+
 func readAppearanceFile(path string) (LocalAppearanceStateDTO, uint64, bool, bool, error) {
-	backupPath := path + ".bak"
-	for index, candidate := range []string{path, backupPath} {
-		data, err := os.ReadFile(candidate)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return LocalAppearanceStateDTO{}, 0, false, false, err
-		}
-		var stored appearanceFile
-		if err := decodeStrictJSON(data, &stored); err != nil || stored.SchemaVersion != appearanceSchema || stored.Revision == 0 {
-			continue
-		}
-		if err := validateLocalAppearanceState(stored.State); err != nil {
-			continue
-		}
-		return stored.State, stored.Revision, true, index == 1, nil
-	}
-	if _, err := os.Stat(path); err == nil {
-		return LocalAppearanceStateDTO{}, 0, false, false, errors.New("stored appearance settings are invalid")
-	}
-	if _, err := os.Stat(backupPath); err == nil {
-		return LocalAppearanceStateDTO{}, 0, false, false, errors.New("stored appearance backup is invalid")
-	}
-	return LocalAppearanceStateDTO{}, 0, false, false, nil
-}
-
-func writeAppearanceFile(path string, stored appearanceFile) error {
-	tempPath, err := stageAppearanceFile(path, stored)
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tempPath)
-
-	backupPath := path + ".bak"
-	hadPrevious := false
-	if _, err := os.Stat(path); err == nil {
-		if err := os.Remove(backupPath); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-		if err := os.Rename(path, backupPath); err != nil {
-			return err
-		}
-		hadPrevious = true
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	if err := os.Rename(tempPath, path); err != nil {
-		if hadPrevious {
-			_ = os.Rename(backupPath, path)
-		}
-		return fmt.Errorf("publish appearance settings: %w", err)
-	}
-	return nil
-}
-
-func restoreAppearancePrimary(path string, stored appearanceFile) error {
-	tempPath, err := stageAppearanceFile(path, stored)
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tempPath)
-
-	displacedPath := ""
-	if _, err := os.Stat(path); err == nil {
-		displaced, err := os.CreateTemp(filepath.Dir(path), ".appearance-invalid-*")
-		if err != nil {
-			return err
-		}
-		displacedPath = displaced.Name()
-		if err := displaced.Close(); err != nil {
-			return err
-		}
-		if err := os.Remove(displacedPath); err != nil {
-			return err
-		}
-		if err := os.Rename(path, displacedPath); err != nil {
-			return err
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	if err := os.Rename(tempPath, path); err != nil {
-		if displacedPath != "" {
-			_ = os.Rename(displacedPath, path)
-		}
-		return fmt.Errorf("restore appearance settings: %w", err)
-	}
-	if displacedPath != "" {
-		_ = os.Remove(displacedPath)
-	}
-	return nil
-}
-
-func stageAppearanceFile(path string, stored appearanceFile) (string, error) {
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return "", err
-	}
-	data, err := json.MarshalIndent(stored, "", "  ")
-	if err != nil {
-		return "", err
-	}
-	data = append(data, '\n')
-	temp, err := os.CreateTemp(filepath.Dir(path), ".appearance-*.tmp")
-	if err != nil {
-		return "", err
-	}
-	tempPath := temp.Name()
-	if err := temp.Chmod(0o600); err != nil {
-		_ = temp.Close()
-		_ = os.Remove(tempPath)
-		return "", err
-	}
-	if _, err := temp.Write(data); err != nil {
-		_ = temp.Close()
-		_ = os.Remove(tempPath)
-		return "", err
-	}
-	if err := temp.Sync(); err != nil {
-		_ = temp.Close()
-		_ = os.Remove(tempPath)
-		return "", err
-	}
-	if err := temp.Close(); err != nil {
-		_ = os.Remove(tempPath)
-		return "", err
-	}
-	return tempPath, nil
+	return appearanceStore(path).read()
 }
 
 func decodeStrictJSON(data []byte, target any) error {

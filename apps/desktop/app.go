@@ -63,6 +63,10 @@ type App struct {
 	appearanceRevision  uint64
 	appearancePersisted bool
 	appearanceErr       string
+	reachingMu          sync.RWMutex
+	reaching            ReachingHoursDTO
+	reachingRevision    uint64
+	reachingErr         string
 }
 
 type RefusalDTO struct {
@@ -240,6 +244,9 @@ func NewApp() *App {
 		if appearanceErr := app.loadAppearanceFromDisk(); appearanceErr != nil {
 			app.appearanceErr = "Stored appearance settings could not be read; local settings remain unchanged."
 		}
+		if reachingErr := app.loadReachingFromDisk(); reachingErr != nil {
+			app.reachingErr = "Stored reaching hours could not be read, so the default schedule is in use."
+		}
 	} else if app.storeErr == nil {
 		app.storeErr = dirErr
 	}
@@ -255,6 +262,7 @@ func newAppWithStore(store *storage.Store, storeErr error) *App {
 		store:              store,
 		storeErr:           storeErr,
 		calendarHTTPClient: newCalendarHTTPClient(),
+		reaching:           defaultReachingHours(localZoneID()),
 		nowFn:              time.Now,
 		appearance:         defaultLocalAppearanceState(),
 	}
