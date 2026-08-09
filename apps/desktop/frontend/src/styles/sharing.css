@@ -271,3 +271,206 @@
     border-left: 0;
   }
 }
+
+/* Real share links (roadmap slice 12a). The screen used to be a static
+   capability preview; these carry the list, the create form, and the one
+   showing of a new link's address. */
+
+.sharing-empty {
+  margin: var(--space-4) 0 0;
+  color: var(--muted);
+  font-size: var(--type-body);
+}
+
+.sharing-link-list {
+  display: grid;
+  gap: 0;
+  margin: var(--space-4) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sharing-link-list > li {
+  padding-block: var(--space-4);
+  border-top: 1px solid var(--divider);
+}
+
+.sharing-link-list > li:first-child {
+  border-top: 0;
+}
+
+.sharing-link-list > li[data-state="revoked"],
+.sharing-link-list > li[data-state="expired"] {
+  opacity: 0.72;
+}
+
+.sharing-link-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: baseline;
+}
+
+.sharing-link-state {
+  padding: 0 var(--space-2);
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  font-size: var(--type-label);
+  font-weight: 700;
+}
+
+.sharing-link-state[data-state="active"] {
+  color: var(--state-awake);
+  border-color: var(--state-awake);
+}
+
+.sharing-link-grants,
+.sharing-link-dates {
+  margin: var(--space-1) 0 0;
+  color: var(--muted);
+  font-size: var(--type-body);
+}
+
+.sharing-link-dates {
+  font-size: var(--type-label);
+}
+
+.sharing-link-access {
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  color: var(--subtle);
+  list-style: none;
+  font-size: var(--type-label);
+}
+
+.sharing-link-actions {
+  margin-top: var(--space-3);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.sharing-link-erase {
+  margin-top: var(--space-3);
+  padding: var(--space-3);
+  display: grid;
+  gap: var(--space-2);
+  background: var(--panel-alt);
+  border-radius: var(--radius-card);
+}
+
+.sharing-link-erase p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.sharing-link-erase label {
+  display: grid;
+  gap: var(--space-1);
+  font-size: var(--type-label);
+}
+
+.sharing-create {
+  margin-top: var(--space-5);
+  padding-top: var(--space-5);
+  display: grid;
+  gap: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+
+.sharing-create h3,
+.sharing-created h3 {
+  margin: 0;
+  font-size: var(--type-body-strong);
+}
+
+.sharing-create label {
+  display: grid;
+  gap: var(--space-1);
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+/* The disclosure sits above the button on purpose: an owner must not be able
+   to create a link without having seen what it reveals. */
+.sharing-disclosure {
+  margin: 0;
+  padding: var(--space-3);
+  color: var(--ink);
+  background: var(--panel-alt);
+  border-left: 2px solid var(--state-uncertain);
+  border-radius: var(--radius-control);
+  font-size: var(--type-body);
+  line-height: 1.5;
+}
+
+.sharing-grants {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+  border: 0;
+}
+
+.sharing-grants legend {
+  padding: 0;
+  color: var(--subtle);
+  font-size: var(--type-label);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sharing-grants label {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  color: var(--ink);
+  font-size: var(--type-body);
+}
+
+.sharing-create > .button {
+  justify-self: start;
+}
+
+.sharing-created {
+  margin-top: var(--space-5);
+  padding: var(--space-4);
+  display: grid;
+  gap: var(--space-2);
+  background: var(--panel-alt);
+  border-radius: var(--radius-card);
+}
+
+.sharing-created p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-body);
+}
+
+.sharing-created-url {
+  padding: var(--space-2) var(--space-3);
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: var(--type-body);
+  overflow-wrap: anywhere;
+}
+
+.sharing-created-expiry {
+  font-size: var(--type-label);
+}
+
+.sharing-created-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}

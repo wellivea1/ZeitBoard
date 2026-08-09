@@ -149,6 +149,20 @@ func TestSharingLifecycle(t *testing.T) {
 	if label != "" {
 		t.Errorf("private label survived erasure: %q", label)
 	}
+
+	// And the profile itself. Erasure used to revoke the link, clear its audit
+	// and drop its label while leaving the row, so an "erased" link stayed in
+	// the owner's list, revoked and nameless — which is not what erasing a
+	// record means, and not what the handler said it did.
+	profiles, err := portalStore.ListProfiles(t.Context(), portalTestNow)
+	if err != nil {
+		t.Fatalf("list portal profiles: %v", err)
+	}
+	for _, profile := range profiles {
+		if profile.ID == created.ProfileID {
+			t.Error("the erased share profile is still stored")
+		}
+	}
 }
 
 // TestSharingLabelStaysOutOfPortalStore is the split-store invariant at the

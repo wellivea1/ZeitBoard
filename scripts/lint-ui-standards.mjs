@@ -116,10 +116,18 @@ for (const [name, requiredClass] of [
   }
 }
 
+// This rule used to forbid anything that looked like a real person or an active
+// link, because the screen was a static capability preview. Since roadmap slice
+// 12a it shows the owner's actual links, so the thing to guard is the opposite:
+// no invented rows, and the state must come from the adapter rather than from a
+// literal in the module.
 const sharingPath = join(frontend, "screens", "SharingScreen.tsx");
 const sharing = readFileSync(sharingPath, "utf8");
-if (/\bavatar\b|>\s*Active\s*</.test(sharing)) {
-  fail(sharingPath, "Sharing examples must not look like real people or active links.");
+if (/\bavatar\b|Example only|relationshipTemplates/.test(sharing)) {
+  fail(sharingPath, "Sharing must render real links, not invented example rows.");
+}
+if (!sharing.includes("loadShareLinks")) {
+  fail(sharingPath, "Sharing must read its state from the share-link adapter.");
 }
 
 const androidAppPath = join(

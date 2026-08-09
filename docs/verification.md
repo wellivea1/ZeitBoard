@@ -919,6 +919,61 @@ closed `<details>` still returns a non-zero client rect in Chrome even though
 its content is not painted. It filters on `checkVisibility()` now. Recorded
 because the first result looked like a defect and was not one.
 
+## Owner-side share links (roadmap slice 12a)
+
+Verified 2026-08-08.
+
+The Sharing screen stopped claiming that link creation is unbuilt. It lists the
+owner's real links from the instance, creates them with a required passcode and
+expiry, and revokes or erases them. `off` (backend sync not configured) and
+`unavailable` (the instance is reachable and its portal is switched off) are
+distinct answers with different remedies, and the screen says which.
+
+**Desktop unit tests**: the duplicated passcode and lifetime limits are pinned
+against the server's; validation refuses a nameless link, a short passcode, a
+missing or over-long expiry, and a link that grants nothing, each with a
+sentence a person can act on; sharing reads as `off` rather than broken without
+sync; erasure requires the link id typed back and offers revocation instead;
+database words become plain ones (`active` → "Working now"); an unnamed link
+still renders.
+
+**Adapter tests**: a status outside the closed set is rejected; a link missing
+its identity is rejected; an unreadable grant flag reads as *withheld* rather
+than granted; and a payload whose link list is missing is treated as no payload
+— defaulting it to empty would render "nothing is being shared" over an instance
+that is in fact sharing, which is the one direction this screen must never be
+wrong in.
+
+**Screen tests**: the stale claim and the example rows are gone; `off` and
+`unavailable` are distinguished; the disclosure renders above the create button
+(exposure gate item 7); a new link says plainly that it cannot be shown again;
+erasure needs the id and revocation does not; and the message grant is labelled
+"not delivered yet" because threads are P5-c.
+
+**Live round trip** against a real `zeitboardd` with the portal enabled —
+enrolling through `ConfigureBackendSync` rather than a hand-built config, so the
+exported methods take the path the app takes. Create, list, revoke and erase all
+round-trip, with the private label preserved, the grants preserved, and the
+state actually changing rather than the call merely returning 200.
+
+**Two defects only that run could find**, both invisible to either side's unit
+tests because each side asserted its own fixture:
+
+1. The desktop's shared HTTP client decodes with `DisallowUnknownFields`, and
+   the response structs omitted `schema_version`. **Every** create and list
+   failed as "invalid JSON response".
+2. The server's erase route revoked the link, cleared its audit and deleted its
+   private label — and left the profile row. An "erased" link stayed in the
+   owner's list, revoked and nameless, while the handler's own comment said it
+   erased the record that the link existed. `portal.Store.DeleteProfile` now
+   removes it; every dependent row cascades, because the schema had declared
+   `ON DELETE CASCADE` on that key all along. `TestSharingLifecycle` asserts it,
+   and was checked to fail before the fix.
+
+A third, smaller one came from the tests rather than the app: the first live
+test hand-built a sync config instead of enrolling, so `RevokeBackendShareLink`
+returned `off` without doing anything and the test blamed the server.
+
 ## What this record does not measure
 
 Added 2026-08-04 after an applicability/utility/automaticity review
