@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Icon, type IconName } from "../components/Icon";
 import { PageHeader } from "../components/AppShell";
 import { OutlookPanel } from "../components/OutlookPanel";
+import { QuickLogBar } from "../components/QuickLogBar";
 import { CycleStrip } from "../components/RhythmVisuals";
 import { loadOverview } from "../data/backend";
 import { loadOutlook } from "../data/outlook";
@@ -167,6 +168,8 @@ export function HomeScreen() {
             </p>
           </div>
         </header>
+
+        <QuickLogBar />
 
         {hasEstimate ? (
           <>

@@ -683,7 +683,14 @@ func (s *Store) DeleteAllSleepData(ctx context.Context) error {
 		_ = tx.Rollback()
 		return err
 	}
-	for _, table := range []string{"local_sleep_sync_records", "local_sleep_corrections", "local_sleep_observations"} {
+	for _, table := range []string{
+		"local_sleep_sync_records",
+		"local_sleep_corrections",
+		"local_sleep_observations",
+		// Including the unfinished one: otherwise erasing everything leaves a
+		// marked onset behind that would write a fresh row on the next tap.
+		"local_sleep_pending",
+	} {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table); err != nil {
 			_ = tx.Rollback()
 			return err

@@ -130,6 +130,26 @@ if (!sharing.includes("loadShareLinks")) {
   fail(sharingPath, "Sharing must read its state from the share-link adapter.");
 }
 
+// One-tap logging belongs on Home, where someone lands on waking. Burying it
+// behind Log is what the four-field form already did, and the form is the thing
+// this replaced.
+if (!home.includes("<QuickLogBar")) {
+  fail(homePath, "Home must offer the one-tap sleep actions.");
+}
+
+// A prefill drawn from the estimator has to say so on the field. Losing this
+// label is how a forecast becomes something the reader believes was recorded.
+const quickLogPath = join(frontend, "components", "QuickLogBar.tsx");
+// Class names and comments are not what the reader sees, so they do not count
+// towards the label.
+const quickLogMarkup = readFileSync(quickLogPath, "utf8")
+  .replace(/className="[^"]*"/g, "")
+  .replace(/\/\*[\s\S]*?\*\//g, "")
+  .replace(/\/\/[^\n]*/g, "");
+if (!/isPrediction\s*&&/.test(quickLogMarkup) || !/predicted/i.test(quickLogMarkup)) {
+  fail(quickLogPath, "A predicted prefill must be labelled as a prediction.");
+}
+
 const androidAppPath = join(
   root,
   "apps",

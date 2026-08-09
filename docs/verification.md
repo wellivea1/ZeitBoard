@@ -974,6 +974,63 @@ A third, smaller one came from the tests rather than the app: the first live
 test hand-built a sync config instead of enrolling, so `RevokeBackendShareLink`
 returned `off` without doing anything and the test blamed the server.
 
+## One-tap sleep logging (roadmap slice 15)
+
+Verified 2026-08-09 on Windows 11, commit at the tip of the slice branch.
+
+`core/quicklog` holds the decision and is tested on its own: the plausible pair
+records, and each implausible one returns its own question rather than a
+recorded night. Its bounds are not new numbers — `MinimumEpisode` is
+`core/estimation`'s floor and `MaximumEpisode` is `core/inference`'s ceiling, so
+a pair the estimator would reject can never enter the log through this path.
+
+Ten Go tests in `apps/desktop/app_quicklog_test.go` cover the bindings end to
+end against a real store, and all pass:
+
+- two taps produce one entry, and the first tap alone produces none — the
+  parked onset is an intent, and the append-only log gets nothing until the
+  episode has both ends;
+- waking with nothing marked asks instead of guessing;
+- 30 minutes, 18 hours, and 26 hours each return their own question and record
+  nothing, while the unfinished sleep survives the question so answering it does
+  not require remembering when you went to bed;
+- confirming records the times the person chose, and refuses a backwards pair;
+- a second sleep tap replaces the first;
+- discarding leaves nothing behind;
+- `DeleteAllSleepData` takes the unfinished sleep with it. Without this,
+  "delete all my sleep data" leaves a parked onset that writes a fresh row on
+  the next tap.
+
+Twenty-two frontend tests cover the adapter and the bar. The adapter's outcome
+set is closed and asserted closed: an outcome this build cannot render is
+rejected rather than shown as a success, because the gap between "recorded" and
+"needs an answer" is a night in the log or a night lost. Two UI-standards lint
+rules were added and each was checked to fail before it passed — one pins the
+taps to Home, one pins the prediction label, and the second was strengthened
+after the first version passed against a CSS class name instead of visible text.
+
+**One defect found in the browser preview, not by reasoning.** The confirm
+form's fields were uncontrolled. When one question replaced another React reused
+the same input element, so the field showed the previous question's time
+(`07:10`) while the `value` attribute carried the app's actual suggestion
+(`23:20`) — a time belonging to a different question, in front of someone about
+to record it as fact. The fields are controlled now. The regression test was
+first written around a discard-and-reopen sequence, which unmounts the form and
+therefore passed against the broken build; it was rewritten to replace one
+question with another while the form stays mounted, and then confirmed to fail
+against the uncontrolled version.
+
+A second, smaller one from the same session: the pending block and the transient
+notice both explained what to do next, so the same instruction appeared twice.
+The notice now renders only when there is no pending block to read.
+
+Checked in the preview at 1120px, 820px light, and 375px mobile: no overlap, no
+horizontal scroll, and the prediction label legible in every one.
+
+**What this does not establish.** A tap is a self-report, not an observation.
+This lowers the cost of recording a night; it does not make nights arrive
+without the user, and it does not move the release blocker on manual entry.
+
 ## What this record does not measure
 
 Added 2026-08-04 after an applicability/utility/automaticity review

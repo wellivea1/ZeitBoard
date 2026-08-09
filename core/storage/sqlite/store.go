@@ -107,6 +107,16 @@ func (s *Store) Migrate(ctx context.Context) error {
 		`CREATE INDEX IF NOT EXISTS idx_local_sleep_import_source_record
 			ON local_sleep_observations(source_record_id)
 			WHERE acquisition_method = 'file_import' AND source_record_id <> ''`,
+		// One-tap logging parks an onset here between the two taps. It is an
+		// intent, not an observation: appending at the first tap would put a
+		// row in the append-only log whose end had not happened yet. At most
+		// one exists, so the id is fixed.
+		`CREATE TABLE IF NOT EXISTS local_sleep_pending (
+			id INTEGER PRIMARY KEY CHECK (id = 1),
+			started_at TEXT NOT NULL,
+			zone_id TEXT NOT NULL,
+			marked_at TEXT NOT NULL
+		)`,
 		`CREATE TABLE IF NOT EXISTS local_sleep_corrections (
 			correction_id TEXT PRIMARY KEY,
 			target_observation_id TEXT NOT NULL,
