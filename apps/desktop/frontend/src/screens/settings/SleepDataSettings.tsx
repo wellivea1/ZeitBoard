@@ -1,4 +1,5 @@
 import { deleteConfirmationToken, type SleepDataExportSummary } from "../../data/sleepDataControl";
+import { StorageProtectionPanel } from "./StorageProtectionPanel";
 
 interface SleepDataSettingsProps {
   exported: SleepDataExportSummary | null;
@@ -98,6 +99,7 @@ export function SleepDataSettings({
             Erase all sleep data
           </button>
         </section>
+        <StorageProtectionPanel />
       </div>
       {error && (
         <p className="form-error" role="alert">

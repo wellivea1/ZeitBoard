@@ -85,9 +85,28 @@ does not reach planning until a documented validation decision allows it.
 
 Private data lives in the local SQLite database and syncs to the user's
 self-hosted instance. Database files, write-ahead logs, exports, and backups must
-be treated as sensitive and have file permissions restricted to the owner.
-**At-rest encryption (local and on the instance) and TLS in transit are required**,
-not optional — the operator holds the keys.
+be treated as sensitive.
+
+**On the instance**, payloads are encrypted at rest with operator-held
+AES-256-GCM keys, and TLS in transit is required. That is built and tested.
+
+**On this computer, the files are restricted to your account and are not
+encrypted.** The database, its write-ahead log, the backend token, the settings
+files and any export carry a permission that names only the account that created
+them — enforced with a real DACL on Windows and the file mode elsewhere, and read
+back and asserted rather than assumed. That stops another account on the same
+machine and a careless copy of the profile directory. It does not stop anyone who
+can read the disk from another operating system, and it does not stop a program
+running as you. Settings → Local data reports which files were checked and says
+this in the same words.
+
+This section previously said at-rest encryption was required locally as well as
+on the instance. That was never true of the local store, and the sentence was
+worse than a gap, because a reader would have concluded their sleep history was
+encrypted when it was not. It is corrected here rather than softened: whole-
+database encryption for the local store is open work, and
+[`ADR-0035`](decisions/0035-local-file-protection.md) records why it does not exist yet
+and what it would take.
 
 Deletion removes local derived data and source records according to the user's
 explicit request, subject to a clear confirmation flow. When backend sync is

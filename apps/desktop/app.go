@@ -288,10 +288,12 @@ func openDesktopStore() (*storage.Store, error) {
 		return nil, err
 	}
 	dir := filepath.Join(base, "ZeitBoard")
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	// The directory restriction is inherited by everything created inside it,
+	// including the write-ahead log SQLite makes on the first write.
+	if err := ensurePrivateDir(dir); err != nil {
 		return nil, err
 	}
-	return storage.Open(filepath.Join(dir, "zeitboard-desktop.db"))
+	return storage.Open(filepath.Join(dir, desktopDatabaseFile))
 }
 
 func (a *App) startup(ctx context.Context) {

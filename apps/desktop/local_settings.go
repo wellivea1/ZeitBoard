@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"non24.app/core/platform/privatefile"
 )
 
 // Durable storage for the desktop's own settings files.
@@ -168,6 +170,12 @@ func (s localSettingsStore[T]) stage(state T, revision uint64) (string, error) {
 	}
 	tempPath := temp.Name()
 	if err := temp.Chmod(0o600); err != nil {
+		_ = temp.Close()
+		_ = os.Remove(tempPath)
+		return "", err
+	}
+	// Applied to the staged file so the published one is never briefly readable.
+	if err := privatefile.Restrict(tempPath); err != nil {
 		_ = temp.Close()
 		_ = os.Remove(tempPath)
 		return "", err

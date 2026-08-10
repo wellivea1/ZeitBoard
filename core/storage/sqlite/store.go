@@ -6,15 +6,22 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"non24.app/core/domain"
+	"non24.app/core/platform/privatefile"
 
 	_ "modernc.org/sqlite"
 )
 
 type Store struct {
-	db *sql.DB
+	db   *sql.DB
+	path string
+
+	// restrictErr records whether the database files actually carry the
+	// owner-only permissions this project claims for them.
+	restrictErr error
 }
 
 func Open(path string) (*Store, error) {
@@ -23,13 +30,34 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	store := &Store{db: db}
+	store := &Store{db: db, path: path}
 	if err := store.Migrate(context.Background()); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
+	// Every recorded sleep is in this file. Restricting it after migration is
+	// deliberate: WAL mode creates the -wal and -shm companions on the first
+	// write, and they hold the same content as the database itself, so they
+	// have to be covered too. A failure here is not fatal — the store still
+	// works — but it is reported, because a permission this project claims and
+	// did not get is exactly the thing docs/privacy.md must not assert.
+	store.restrictErr = store.restrictFiles()
 	return store, nil
 }
+
+// restrictFiles limits the database and its companions to the current user.
+// It is safe to call repeatedly; callers do after a checkpoint, because SQLite
+// recreates the companions.
+func (s *Store) restrictFiles() error {
+	if s.path == "" || s.path == ":memory:" || strings.HasPrefix(s.path, "file::memory:") {
+		return nil
+	}
+	return privatefile.RestrictExisting(s.path, s.path+"-wal", s.path+"-shm", s.path+"-journal")
+}
+
+// FilePermissionError reports a failure to restrict the database files, or nil
+// when they carry the intended permissions.
+func (s *Store) FilePermissionError() error { return s.restrictErr }
 
 func (s *Store) Close() error { return s.db.Close() }
 

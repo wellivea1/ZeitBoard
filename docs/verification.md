@@ -1094,6 +1094,57 @@ is what makes the extraction safe to claim.
 selected day. Someone who must reach a clinic on Tuesday mornings *and* an
 employer on weekday afternoons can express only one of them.
 
+## Local file protection (roadmap slice 17, ADR-0035)
+
+Verified 2026-08-10 on Windows 11.
+
+`privacy.md` said at-rest encryption was required locally as well as on the
+instance. The local half was never true, and the fallback it leaned on — file
+permissions restricted to the owner — was not true either on the only platform
+this app ships on. Measured before the fix, on a development machine, the real
+`%APPDATA%\ZeitBoard` directory granted access to five trustees including
+`SYSTEM` and `BUILTIN\Administrators`, with inheritance enabled. The `0o600`
+mode argument every private file was created with sets the read-only attribute
+on Windows and leaves the DACL alone.
+
+`core/platform/privatefile` now applies a protected, single-grant DACL (the file
+mode elsewhere) and exposes `Describe`, which reads the permission back. Every
+assertion below is against what the operating system reports, not against a nil
+error — a test that only checks `os.Chmod` succeeded is a test that passes while
+the file is exposed, which is how the previous claim survived.
+
+Seven package tests: an unrestricted file becomes owner-only and stops
+inheriting; the operation is idempotent and does not alter content; companions
+that do not exist are skipped without being created; a file written into a
+restricted directory afterwards is private by inheritance; describing an absent
+file fails rather than reporting protection. One test asserts `Describe` reports
+an *unprotected* file as unprotected, so none of the others can pass vacuously.
+
+Two storage tests: opening the store leaves the database, the write-ahead log
+and the shared-memory file all owner-only and non-inheriting, with nothing in the
+test re-applying the restriction — what is under test is that opening was enough.
+Checked to fail before the fix, and the failure output is the concrete defect:
+`zeitboard.db is reachable by another account: entries=[... S-1-5-18
+S-1-5-32-544 ...] protected=false`. An in-memory store reports no permission
+failure for a file that does not exist.
+
+Seven desktop tests: the backend bearer token, the sync configuration, the
+settings files and an export are each owner-only, the token still reads back
+correctly afterwards, the store reports its own permission result, and the
+readout shown to the user never describes a restricted file as encrypted. The
+token and configuration tests were checked to fail with the restriction removed.
+
+Nine frontend tests on the adapter, including that a missing `ownerOnly` flag
+reads as *not* protected — an unknown permission is not a good one — and that the
+detail line always carries "not encrypted".
+
+**What this does not establish, and says so on the screen.** The local database
+is not encrypted. This protects against another account on the same computer and
+against a careless copy of the profile directory. It does not protect against a
+stolen disk read from another operating system, or against any program running
+as this user. ADR-0035 records why whole-database encryption is not shipped: the
+CGo-free driver offers no VFS or serialize hook, and SQLCipher requires CGO.
+
 ## What this record does not measure
 
 Added 2026-08-04 after an applicability/utility/automaticity review

@@ -440,3 +440,38 @@
 .reaching-days[disabled] {
   opacity: 0.55;
 }
+
+/* Who can read the local files. An owner-only permission is not encryption, and
+   the styling must not imply otherwise: the good state is quiet, not a badge. */
+.storage-protection-headline {
+  margin: var(--space-1) 0 0;
+  color: var(--ink);
+}
+
+.storage-protection-headline[data-state="at_risk"] {
+  color: var(--state-uncertain);
+}
+
+.storage-protection-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.storage-protection-list li {
+  display: grid;
+  gap: 2px;
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--state-uncertain);
+}
+
+.storage-protection-list li[data-ok="true"] {
+  border-left-color: var(--divider);
+}
+
+.storage-protection-list small {
+  color: var(--muted);
+  font-size: var(--type-label);
+}
