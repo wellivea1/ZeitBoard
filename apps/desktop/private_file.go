@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"non24.app/core/platform/privatefile"
 )
 
 // writePrivateFileAtomic keeps a previously valid destination intact until a
@@ -23,6 +25,12 @@ func writePrivateFileAtomic(path string, data []byte) error {
 	}()
 
 	if err := temp.Chmod(0o600); err != nil {
+		return fmt.Errorf("restrict staged file: %w", err)
+	}
+	// The mode above is not the access control on Windows. Exports carry the
+	// same content as the database, so the restriction is applied before the
+	// file is published rather than after.
+	if err := privatefile.Restrict(tempPath); err != nil {
 		return fmt.Errorf("restrict staged file: %w", err)
 	}
 	if _, err := temp.Write(data); err != nil {

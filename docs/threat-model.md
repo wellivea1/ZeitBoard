@@ -83,7 +83,9 @@ operator against their own data, and nation-state adversaries.
 
 - The operating-system account, device, and server host are not fully compromised.
 - The operator enables at-rest encryption and TLS and keeps the host patched (the
-  runbook states this).
+  runbook states this). This assumption covers the **instance**. It has never
+  covered the user's own computer, where the database is unencrypted; ADR-0035
+  corrected the documentation that implied otherwise.
 - Official toolchains and pinned dependencies are obtained over authenticated channels.
 - Users understand the visible permission, provider, sharing, and revocation controls.
 
@@ -130,6 +132,8 @@ remain design requirements for future workstreams, not current guarantees.
 | Over-broad platform permission | Unrelated private data becomes accessible | Request only required permissions; collection permission-gated and user-initiated; isolate adapters |
 | Unauthenticated or MITM sync | Private model intercepted or altered in transit | TLS serving; per-device bearer credentials; token hashes stored server-side; repeated record IDs are idempotent no-ops and conflicting payloads are rejected |
 | Server host compromise or stolen backup | Full private history disclosed | Operator-keyed AES-256-GCM payload encryption at rest; no project telemetry; self-hosting runbook covers TLS, key handling, and encrypted backups |
+| Another account on the user's own computer | Full local history, and the device's bearer token, read from disk | The database, its write-ahead log, the backend token, the settings files and every export carry a protected DACL granting only the account that created them (a real ACL, not a mode argument Windows ignores); the permission is read back and asserted, and Settings reports what was checked (ADR-0035) |
+| Stolen or imaged disk, or a program running as the user | Full local history disclosed | **Not mitigated.** The local database is not encrypted. `modernc.org/sqlite` is CGo-free by choice and offers no VFS or serialize hook to put a cipher behind; SQLCipher needs CGO. ADR-0035 records the analysis. Users are told this in Settings and in privacy.md so they can decide about full-disk encryption themselves |
 | BYOK credential leak | Provider key stolen or abused | Provider keys are loaded from env or secret files, never returned by status APIs, never logged, never placed in LLM context, and never projected |
 | Over-broad context to the LLM provider | Health data over-exposed to a third party | The assistant builds role-scoped context field-by-field, omitting medication names, diagnosis, raw behavioral timestamps, full calendar text, tokens, and secrets; provider status discloses the active provider/model |
 | Server read projection leak | Synced private records exposed through read APIs | Overview/rhythm/accuracy endpoints require device auth, replay only decrypted store records internally, return projection DTOs instead of sync envelopes, sanitize internal observation IDs, and test for forbidden fields |

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"non24.app/core/estimation"
+	"non24.app/core/platform/privatefile"
 	storage "non24.app/core/storage/sqlite"
 )
 
@@ -912,7 +913,7 @@ func (a *App) saveBackendSyncConfig(cfg backendSyncConfig) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := ensurePrivateDir(dir); err != nil {
 		return err
 	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
@@ -920,7 +921,7 @@ func (a *App) saveBackendSyncConfig(cfg backendSyncConfig) error {
 		return err
 	}
 	data = append(data, '\n')
-	return os.WriteFile(filepath.Join(dir, backendSyncConfigFile), data, 0o600)
+	return writeRestrictedFile(filepath.Join(dir, backendSyncConfigFile), data)
 }
 
 func (a *App) saveBackendSyncToken(token string) error {
@@ -928,10 +929,12 @@ func (a *App) saveBackendSyncToken(token string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(dir, 0o700); err != nil {
+	if err := ensurePrivateDir(dir); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, backendSyncTokenFile), []byte(token), 0o600)
+	// This is a bearer token for the user's own server. The mode argument that
+	// used to protect it does nothing on Windows.
+	return writeRestrictedFile(filepath.Join(dir, backendSyncTokenFile), []byte(token))
 }
 
 func (a *App) loadBackendSyncToken() (string, error) {
@@ -974,6 +977,25 @@ func desktopDataDir() (string, error) {
 		return "", err
 	}
 	return filepath.Join(base, "ZeitBoard"), nil
+}
+
+// ensurePrivateDir creates the directory and restricts it to this user. The
+// restriction is inherited by files created inside it, so a writer that has not
+// been taught about privatefile still does not leave a readable file behind.
+func ensurePrivateDir(dir string) error {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	return privatefile.RestrictDir(dir)
+}
+
+// writeRestrictedFile writes private content and then applies the permission,
+// rather than assuming the mode argument delivered it. On Windows it does not.
+func writeRestrictedFile(path string, data []byte) error {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return err
+	}
+	return privatefile.Restrict(path)
 }
 
 func (a *App) backendHTTPClient(insecureSkipVerify bool) *http.Client {

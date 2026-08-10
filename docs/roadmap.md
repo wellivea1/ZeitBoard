@@ -424,6 +424,44 @@ M-E's separately reviewed local agent projection.
     Several named contacts, and per-day hours, are a larger change to what
     `core/outlook` returns and to what Home draws.
 
+17. ~~**Local file protection, and an honest at-rest claim.**~~ ✅ Delivered
+    2026-08-10 (ADR-0035). `privacy.md` said in bold that at-rest encryption was
+    required *locally and on the instance*. The instance half was true and
+    tested. The local half was never true: the SQLite database holding every
+    recorded sleep is not encrypted. Worse, the weaker fallback the document
+    leaned on — file permissions restricted to the owner — was not true either,
+    because every private file was created with an `0o600` mode argument, and on
+    Windows that sets the read-only attribute and leaves the inherited DACL
+    alone. Measured before the fix, the real data directory granted access to
+    five trustees including `SYSTEM` and `BUILTIN\Administrators`.
+
+    The project had already learned this once: ADR-0028 says the descriptor's
+    "restrictive-permissions claim has to be enforced with a real DACL or not
+    claimed at all". That fix reached one file and nothing else — not the bearer
+    token for the user's own server, not the settings, not the exports, not the
+    database.
+
+    `core/platform/privatefile` now applies a protected single-grant DACL (the
+    file mode elsewhere) to the database and its write-ahead log and
+    shared-memory companions, the data directory, the token, the sync
+    configuration, the settings files and every staged export. It also exposes
+    `Describe`, which reads the permission back, so the tests assert what the
+    operating system reports rather than that a call returned nil — and one test
+    asserts `Describe` can report an unprotected file as unprotected, so the
+    rest cannot pass vacuously.
+
+    Settings → Local data now reports which files were checked and states that
+    they are restricted **and not encrypted**, in those words. `privacy.md` and
+    `threat-model.md` say the same, and name the residual as unmitigated rather
+    than covered.
+
+    Whole-database encryption is not shipped and ADR-0035 records why:
+    `modernc.org/sqlite` is CGo-free by choice and exposes no VFS or serialize
+    hook to put a cipher behind, SQLCipher requires CGO, decrypt-to-a-working-
+    file leaves plaintext on disk for as long as a tray app runs, and column
+    encryption that leaves `start_at` queryable protects nothing for a product
+    whose health data *is* the timing.
+
 **Small debts (fold into adjacent slices):** finish ordered local/server migrations; ~~
 → domain decoder (now duplicated across desktop storage, server readmodel, and
 the sync validator);~~ establish one versioned assistant action registry; extract
@@ -452,9 +490,13 @@ Largely delivered (see "Where things stand"). Remaining in scope:
   real correction history and diff; reversal today means appending another
   correction in Data Sources).
 - Onboarding beyond the empty state; localization readiness.
-- Local DB encryption at rest + OS credential storage for the desktop store
-  (the token file is 0600; the SQLite store itself is not yet encrypted —
-  privacy.md requires it).
+- Local DB encryption at rest. *Partly addressed 2026-08-10 (slice 17,
+  ADR-0035):* every private local file — the database, its write-ahead log, the
+  backend token, the settings files and exports — now carries a real owner-only
+  DACL that is read back and asserted, and privacy.md no longer claims the local
+  store is encrypted, because it is not. Whole-database encryption remains open
+  and is blocked on the CGo-free driver offering no VFS or serialize hook;
+  SQLCipher would require CGO.
 - Clinical-chart refinements beyond delivered M-C: reserved 48-hour clinical
   orientation, direct PNG/PDF generation, and a blank clinical sleep-log
   template. The shipped 24-hour report already prints to PDF from standalone

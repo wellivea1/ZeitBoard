@@ -175,6 +175,36 @@ if (!readFileSync(settingsScreenPath, "utf8").includes("<ReachingHoursSettings")
   fail(settingsScreenPath, "Settings must expose the reaching-hours schedule.");
 }
 
+// An owner-only file permission is not encryption, and the local database is
+// not encrypted. privacy.md asserted otherwise for months; the readout that
+// replaced that claim must not drift back towards it.
+const protectionPanelPath = join(frontend, "screens", "settings", "StorageProtectionPanel.tsx");
+const protectionPanel = readFileSync(protectionPanelPath, "utf8");
+if (!protectionPanel.includes("report.detail")) {
+  fail(protectionPanelPath, "The storage readout must render the caveat the app computed.");
+}
+// The sentence itself comes from Go, so that is where it has to be pinned. The
+// adapter merely carries it, and the previous version of this rule inspected
+// the adapter and therefore checked nothing.
+const protectionSourcePath = join(root, "apps", "desktop", "app_storage_protection.go");
+const protectionSource = readFileSync(protectionSourcePath, "utf8");
+const detailLiteral = protectionSource.match(/storageProtectionDetail\s*=\s*([\s\S]*?)\n\n/);
+if (!detailLiteral || !/not encrypted/.test(detailLiteral[1])) {
+  fail(
+    protectionSourcePath,
+    "The storage caveat must still say the local files are not encrypted.",
+  );
+}
+
+const protectionAdapterPath = join(frontend, "data", "storageProtection.ts");
+const protectionAdapter = readFileSync(protectionAdapterPath, "utf8");
+if (!/state:\s*"unknown"/.test(protectionAdapter)) {
+  fail(
+    protectionAdapterPath,
+    "A permission the app could not check must read as unknown, never as protected.",
+  );
+}
+
 const androidAppPath = join(
   root,
   "apps",
