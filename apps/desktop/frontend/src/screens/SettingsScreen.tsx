@@ -18,6 +18,7 @@ import { notifySleepDataChanged } from "../data/sleepDataEvents";
 import { deleteAllSleepData } from "../data/sleepEntries";
 import { AppearanceSettings } from "./settings/AppearanceSettings";
 import { ActivityCollectionSettings } from "./settings/ActivityCollectionSettings";
+import { StartupSettings } from "./settings/StartupSettings";
 import { BackendSyncSettings } from "./settings/BackendSyncSettings";
 import { LocalAgentSettings } from "./settings/LocalAgentSettings";
 import { ReachingHoursSettings } from "./settings/ReachingHoursSettings";
@@ -221,6 +222,7 @@ export function SettingsScreen() {
       />
       <section className="settings-stack">
         <AppearanceSettings />
+        <StartupSettings />
         <ActivityCollectionSettings />
         <section className="settings-section">
           <div>

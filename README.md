@@ -27,6 +27,8 @@ testdata                    Synthetic observations and projected sharing fixture
 - Desktop activity collection is explicitly opt-in, persists minimized transitions locally,
   and offers export/erasure in Settings. Enrolled sleep/task sync runs automatically while
   ZeitBoard is running, including when its window is hidden. Activity does not change forecasts.
+  Settings also offers Windows login startup, start-to-tray and explicit quit; a second launch
+  reopens the existing window for that data profile.
 - Contract-shaped JSON export, permanent local erasure, opt-in self-hosted sync, cross-device
   tombstones, user-owned tasks, unified approvals, and the propose-only assistant surface are
   implemented.

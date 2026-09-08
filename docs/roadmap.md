@@ -282,7 +282,8 @@ M-E's separately reviewed local agent projection.
     ADR-0042 (2026-09-08) adds the previously missing saved default-off consent,
     durable source-observation sink, collection status and export/erasure controls.
     Enrolled sleep/task sync now runs independently of the visible window. Activity
-    remains local and does not affect forecasts. Configured startup, background
+    remains local and does not affect forecasts. ADR-0043 adds configured Windows
+    login/start-to-tray, one instance per profile and tray-failure recovery. Background
     projection refresh and native lifecycle qualification remain in C1.
 
     Still open: the collector runs inside the desktop process, so it collects only while ZeitBoard

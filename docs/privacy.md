@@ -89,6 +89,10 @@ Enrolled desktop sync runs from the app context at startup and about every minut
 including while the window is hidden. It uses the existing sleep/task payloads.
 Disable cancels in-flight synchronization; quit stops the background worker.
 It does not install a system service or enable login startup automatically.
+The separate Startup setting registers only the current user's executable with
+Windows; it leaves all data-source and sync grants unchanged. The registry entry
+is authoritative, and the app does not recreate it automatically after removal.
+An explicit quit stops background work even when close-to-tray is available.
 
 This evidence is one input to sleep inference and is not a sleep record on its
 own. Inferred sleep is marked as such, never overwrites a raw observation, and

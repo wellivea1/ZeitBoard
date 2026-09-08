@@ -5,8 +5,9 @@ import "errors"
 var ErrNotificationsUnavailable = errors.New("desktop notifications are unavailable")
 
 type Callbacks struct {
-	Show func()
-	Quit func()
+	Show                func()
+	Quit                func()
+	AvailabilityChanged func(bool)
 }
 
 type Controller interface {

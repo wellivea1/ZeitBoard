@@ -1370,3 +1370,33 @@ Logs: `.tools/desktop-activity-go.log`, `.tools/desktop-activity-vet.log` and
 `.tools/desktop-activity-build.log`. Configured login startup, background estimate
 refresh, desktop restore reconciliation and native lifecycle qualification remain
 open under C1; the full completion goal remains active.
+
+
+## Desktop login and recoverable windows — 2026-09-08
+
+ADR-0043 adds explicit login/start-to-tray controls and distinguishes normal
+window close from explicit quit. No owner startup registration was enabled.
+
+- Desktop Go tests and vet pass. Tests cover either DOM/tray initialization order,
+  hidden-launch fallback, lost tray, explicit quit, a pending manual second launch,
+  profile identity, unchanged activity/sync consent and failed startup writes.
+- Focused race checks pass for the new lifecycle, Windows tray and autostart
+  packages. A disposable non-Run registry key verifies quoted commands, hidden
+  and visible modes, moved-executable detection and source-scoped removal. The
+  tray test dispatches synthetic Explorer restart messages through the real
+  adapter handler with an injected icon publisher; it does not restart Explorer.
+- All 45 installer tests pass. The installer now passes the app's current
+  `--background` flag and recognizes both supported modes during removal.
+- Web checks pass: 403 desktop plus six trusted-web tests, formatting,
+  lint/UI standards, type checks and both production builds. Three pre-existing
+  Fast Refresh warnings remain. The new component tests cover explicit save,
+  unavailable-service recovery and quitting without a tray.
+- Browser preview verifies the layout and named startup controls; oversized
+  checkboxes found visually were corrected without shrinking the clickable rows.
+- Windows Wails production build passes with an isolated data directory during
+  binding generation. No real login/suspend/resume or clean-machine installer
+  qualification is inferred from a successful build.
+
+Evidence: `.tools/desktop-startup-{go,vet,race,web,installer,build}.log`.
+Background estimate projection refresh and desktop enrollment/restore remain
+software work. Native lifecycle, pilot and C1–C8 operational gates remain open.

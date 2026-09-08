@@ -14,8 +14,9 @@ acceptance clause or of its real-device qualification.
 
 - Desktop consent/durability and app-context background sleep/task sync are implemented
   under ADR-0042. Activity is default-off and remains local, with explicit export and
-  erasure. Configured startup, background projection refresh, desktop restore reconciliation
-  and native lifecycle qualification remain in completion plan C1.
+  erasure. ADR-0043 adds explicit Windows login/start-to-tray registration, one instance
+  per profile and recoverable close/quit/tray handling. Background projection refresh,
+  desktop restore reconciliation and native lifecycle qualification remain in C1.
 
 - Conventional Go code owns normalization, correction application, rhythm estimation, forecasting,
   scheduling, medication-relative timing, and sharing projection. No language model is in the

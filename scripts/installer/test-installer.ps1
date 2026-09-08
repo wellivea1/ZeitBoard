@@ -651,7 +651,7 @@ Test-Case 'Set-ZbStartupEntry: add/remove round-trips against a sandbox key' {
     try {
         Set-ZbStartupEntry -TargetPath 'C:\x\ZeitBoard.exe' -Enabled $true -RunKey $sandbox
         $v = (Get-ItemProperty -Path $sandbox -Name 'ZeitBoard').ZeitBoard
-        Assert-Equal '"C:\x\ZeitBoard.exe"' $v
+        Assert-Equal '"C:\x\ZeitBoard.exe" --background' $v
         Set-ZbStartupEntry -TargetPath 'C:\x\ZeitBoard.exe' -Enabled $false -RunKey $sandbox
         $after = Get-ItemProperty -Path $sandbox -Name 'ZeitBoard' -ErrorAction SilentlyContinue
         Assert-True ($null -eq $after) 'entry should be gone after disable'

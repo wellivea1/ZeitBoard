@@ -25,6 +25,7 @@ import (
 	"non24.app/core/sleepv1"
 	storage "non24.app/core/storage/sqlite"
 	"non24.app/desktop/internal/localagent"
+	"non24.app/desktop/platform/autostart"
 	"non24.app/desktop/platform/tray"
 )
 
@@ -38,6 +39,10 @@ var saveSleepDataDialog = runtime.SaveFileDialog
 
 type App struct {
 	ctx                 context.Context
+	serviceMu           sync.Mutex
+	window              desktopWindow
+	startupMu           sync.Mutex
+	startupControl      autostart.Controller
 	closing             atomic.Bool
 	collector           *ingest.Manager
 	activityMu          sync.Mutex
@@ -275,6 +280,7 @@ func NewApp() *App {
 
 func newAppWithStore(store *storage.Store, storeErr error) *App {
 	return &App{
+		window:             newDesktopWindow(),
 		tray:               tray.New(),
 		store:              store,
 		storeErr:           storeErr,
@@ -313,27 +319,22 @@ func openDesktopStore() (*storage.Store, error) {
 }
 
 func (a *App) startup(ctx context.Context) {
+	a.serviceMu.Lock()
+	defer a.serviceMu.Unlock()
+	if a.closing.Load() {
+		return
+	}
 	a.ctx = ctx
 	a.startActivityService(ctx)
 	a.startDesktopBackground(ctx, desktopBackgroundInterval)
 	a.startLocalAgent(ctx)
-	trayErr := a.tray.Start(tray.Callbacks{
-		Show: func() {
-			runtime.WindowUnminimise(ctx)
-			runtime.WindowShow(ctx)
-			runtime.WindowCenter(ctx)
-		},
-		Quit: func() { runtime.Quit(ctx) },
-	})
-	if trayErr != nil {
-		a.setMedicationReminderError("Desktop notifications are unavailable; enabled reminders will not be shown.")
-	} else {
-		a.startMedicationReminderService(ctx)
-	}
+	a.startDesktopTray(ctx)
 }
 
 func (a *App) shutdown(ctx context.Context) {
 	a.closing.Store(true)
+	a.serviceMu.Lock()
+	defer a.serviceMu.Unlock()
 	a.stopDesktopBackground()
 	a.stopMedicationReminderService()
 	a.stopLocalAgent(ctx)
@@ -343,16 +344,6 @@ func (a *App) shutdown(ctx context.Context) {
 	a.stopActivityService(ctx)
 	if a.store != nil {
 		_ = a.store.Close()
-	}
-}
-
-func (a *App) beforeClose(ctx context.Context) bool {
-	return false
-}
-
-func (a *App) HideWindow() {
-	if a.ctx != nil {
-		runtime.WindowHide(a.ctx)
 	}
 }
 

@@ -293,3 +293,31 @@ native hide/resume/restart/quit qualification. In particular, review tray-failur
 close behavior before claiming the desktop lifecycle is complete. Comprehensive
 agent coverage for these controls belongs to C4. Real-device/pilot and the other
 C1–C8 acceptance gates remain open; this software increment does not close the goal.
+
+
+### C1 desktop login and window lifecycle — 2026-09-08
+
+Settings now has explicit Windows login registration, an optional start-in-tray
+mode, manual hide and explicit quit. Registration never grants activity or sync
+consent. Wails uses one process per data profile; another manual launch reopens
+its existing window. Close hides only with a working tray, while explicit quit
+stops workers. A failed tray on startup or during Explorer recovery reveals the
+window. Startup/shutdown serialize service setup and teardown. See ADR-0043.
+
+The installer and app share the current quoted executable / `--background`
+command forms. Installer startup previously promised tray launch without passing
+any flag; that mismatch is fixed. Current startup registration is the authority,
+with no saved preference that can silently recreate an OS-disabled entry.
+
+Verified lifecycle and registry adapter tests, focused race checks, component
+consent/recovery/quit tests, and all 45 installer tests. Registry tests use an
+isolated non-Run key, with no owner login registration or Explorer restart.
+The previous published increment passed all eight GitHub CI jobs.
+
+**Next C1 implementation:** `localEstimate` still reads effective sleep sessions
+and runs `RobustEstimator` on foreground requests. Connect background projection
+refresh to actual readers, with source fingerprint/erasure invalidation, refusal
+states and `freshness.NextChange` expiry. Preserve the existing planning snapshot
+checks; an unconsumed periodic computation is not completion. Then finish desktop
+sync enrollment/restore reconciliation and native login/hide/suspend/resume/quit
+qualification. All later C1–C8 software and operational acceptance remains active.
