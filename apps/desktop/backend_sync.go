@@ -33,7 +33,11 @@ var newBackendHTTPClient = func(insecureSkipVerify bool) *http.Client {
 	if insecureSkipVerify {
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // Explicit localhost/self-hosted dev escape hatch.
 	}
-	return &http.Client{Timeout: backendRequestTimeout, Transport: transport}
+	return &http.Client{Timeout: backendRequestTimeout, Transport: transport,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return errors.New("backend redirects are not supported; use the final HTTPS address")
+		},
+	}
 }
 
 type BackendSyncInput struct {
@@ -189,7 +193,12 @@ type desktopBackendClient struct {
 }
 
 func (a *App) GetBackendSyncStatus() (BackendSyncStatusDTO, error) {
-	cfg, _ := a.loadBackendSyncConfig()
+	a.backendConfigMu.RLock()
+	defer a.backendConfigMu.RUnlock()
+	cfg, err := a.loadBackendSyncConfig()
+	if err != nil {
+		return BackendSyncStatusDTO{}, errors.New("Saved backend settings could not be read. Sync is unavailable.")
+	}
 	return a.backendSyncStatusCounts(cfg, syncCounts{}), nil
 }
 
@@ -197,6 +206,20 @@ func (a *App) ConfigureBackendSync(input BackendSyncInput) (BackendSyncStatusDTO
 	if !input.Enabled {
 		return a.DisableBackendSync()
 	}
+	a.cancelBackendRun()
+	a.backendSyncMu.Lock()
+	configured := false
+	defer func() {
+		a.backendSyncMu.Unlock()
+		if configured {
+			a.wakeDesktopBackground()
+		}
+	}()
+	if a.closing.Load() {
+		return BackendSyncStatusDTO{}, errors.New("ZeitBoard is quitting; reopen it to configure sync.")
+	}
+	a.backendConfigMu.Lock()
+	defer a.backendConfigMu.Unlock()
 	baseURL, err := normalizeBackendURL(input.BackendURL)
 	if err != nil {
 		return BackendSyncStatusDTO{}, err
@@ -209,14 +232,19 @@ func (a *App) ConfigureBackendSync(input BackendSyncInput) (BackendSyncStatusDTO
 		BackendURL:         baseURL,
 		InsecureSkipVerify: input.InsecureSkipVerify,
 	}
-	_ = a.deleteBackendSyncToken()
+	if err := a.saveBackendSyncConfig(cfg); err != nil {
+		return BackendSyncStatusDTO{}, err
+	}
+	if err := a.deleteBackendSyncToken(); err != nil {
+		return BackendSyncStatusDTO{}, err
+	}
 	label := strings.TrimSpace(input.DeviceLabel)
 	if label == "" {
 		label = "ZeitBoard desktop"
 	}
 	client := a.newDesktopBackendClient(cfg, "")
 	var response registerDeviceResponse
-	err = client.postJSON(context.Background(), "/v1/devices", registerDeviceRequest{
+	err = client.postJSON(a.applicationContext(), "/v1/devices", registerDeviceRequest{
 		EnrollmentSecret: input.EnrollmentSecret,
 		Label:            label,
 	}, &response)
@@ -241,10 +269,16 @@ func (a *App) ConfigureBackendSync(input BackendSyncInput) (BackendSyncStatusDTO
 	if err := a.saveBackendSyncConfig(cfg); err != nil {
 		return BackendSyncStatusDTO{}, err
 	}
+	configured = true
 	return a.backendSyncStatusCounts(cfg, syncCounts{}), nil
 }
 
 func (a *App) DisableBackendSync() (BackendSyncStatusDTO, error) {
+	a.cancelBackendRun()
+	a.backendSyncMu.Lock()
+	defer a.backendSyncMu.Unlock()
+	a.backendConfigMu.Lock()
+	defer a.backendConfigMu.Unlock()
 	cfg, _ := a.loadBackendSyncConfig()
 	cfg.Enabled = false
 	cfg.LastError = ""
@@ -258,21 +292,40 @@ func (a *App) DisableBackendSync() (BackendSyncStatusDTO, error) {
 }
 
 func (a *App) SyncNow() (BackendSyncStatusDTO, error) {
+	a.backendSyncMu.Lock()
+	defer a.backendSyncMu.Unlock()
+	if a.closing.Load() {
+		return BackendSyncStatusDTO{}, errors.New("ZeitBoard is quitting; sync has stopped.")
+	}
+	return a.syncNowLocked(a.applicationContext())
+}
+
+func (a *App) syncNowLocked(parent context.Context) (BackendSyncStatusDTO, error) {
+	ctx, cancel := context.WithTimeout(parent, 2*time.Minute)
+	defer cancel()
+	a.backendRunMu.Lock()
+	a.backendRunCancel = cancel
+	a.backendRunMu.Unlock()
+	defer func() { a.backendRunMu.Lock(); a.backendRunCancel = nil; a.backendRunMu.Unlock() }()
 	cfg, token, err := a.requireBackendSync()
 	if err != nil {
 		if cfg.Enabled {
 			cfg.LastError = sanitizeBackendError(err)
+			a.backendConfigMu.Lock()
 			_ = a.saveBackendSyncConfig(cfg)
+			a.backendConfigMu.Unlock()
 		}
 		return a.backendSyncStatusCounts(cfg, syncCounts{}), nil
 	}
-	counts, syncErr := a.syncSleepRecords(context.Background(), cfg, token)
+	counts, syncErr := a.syncSleepRecords(ctx, cfg, token)
+	a.backendConfigMu.Lock()
+	defer a.backendConfigMu.Unlock()
 	if syncErr != nil {
 		cfg.LastError = sanitizeBackendError(syncErr)
 		_ = a.saveBackendSyncConfig(cfg)
 		return a.backendSyncStatusCounts(cfg, counts), nil
 	}
-	cfg.LastSyncAt = time.Now().UTC()
+	cfg.LastSyncAt = a.currentTime().UTC()
 	cfg.LastError = ""
 	if err := a.saveBackendSyncConfig(cfg); err != nil {
 		return BackendSyncStatusDTO{}, err
@@ -833,6 +886,8 @@ func titleConfidence(level string) string {
 }
 
 func (a *App) requireBackendSync() (backendSyncConfig, string, error) {
+	a.backendConfigMu.RLock()
+	defer a.backendConfigMu.RUnlock()
 	cfg, err := a.loadBackendSyncConfig()
 	if err != nil {
 		return cfg, "", err
@@ -932,7 +987,7 @@ func (a *App) saveBackendSyncConfig(cfg backendSyncConfig) error {
 		return err
 	}
 	data = append(data, '\n')
-	return writeRestrictedFile(filepath.Join(dir, backendSyncConfigFile), data)
+	return writePrivateFileAtomic(filepath.Join(dir, backendSyncConfigFile), data)
 }
 
 func (a *App) saveBackendSyncToken(token string) error {
@@ -945,7 +1000,7 @@ func (a *App) saveBackendSyncToken(token string) error {
 	}
 	// This is a bearer token for the user's own server. The mode argument that
 	// used to protect it does nothing on Windows.
-	return writeRestrictedFile(filepath.Join(dir, backendSyncTokenFile), []byte(token))
+	return writePrivateFileAtomic(filepath.Join(dir, backendSyncTokenFile), []byte(token))
 }
 
 func (a *App) loadBackendSyncToken() (string, error) {
@@ -983,6 +1038,12 @@ func (a *App) syncConfigDir() (string, error) {
 }
 
 func desktopDataDir() (string, error) {
+	if configured := strings.TrimSpace(os.Getenv("ZEITBOARD_DATA_DIR")); configured != "" {
+		if !filepath.IsAbs(configured) {
+			return "", errors.New("ZEITBOARD_DATA_DIR must be an absolute path")
+		}
+		return filepath.Clean(configured), nil
+	}
 	base, err := os.UserConfigDir()
 	if err != nil {
 		return "", err
@@ -1131,8 +1192,14 @@ func validateBackendTLS(baseURL string, insecureSkipVerify bool) error {
 }
 
 func (a *App) recordBackendSyncError(cfg backendSyncConfig, err error) {
-	cfg.LastError = sanitizeBackendError(err)
-	_ = a.saveBackendSyncConfig(cfg)
+	a.backendConfigMu.Lock()
+	defer a.backendConfigMu.Unlock()
+	current, loadErr := a.loadBackendSyncConfig()
+	if loadErr != nil || !current.Enabled || current.DeviceID != cfg.DeviceID || current.BackendURL != cfg.BackendURL {
+		return
+	}
+	current.LastError = sanitizeBackendError(err)
+	_ = a.saveBackendSyncConfig(current)
 }
 
 func sanitizeBackendError(err error) string {

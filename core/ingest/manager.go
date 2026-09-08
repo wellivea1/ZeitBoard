@@ -6,14 +6,18 @@ import (
 	"sync"
 )
 
+type collectorRun struct {
+	cancel context.CancelFunc
+	done   chan struct{}
+}
+
 type Manager struct {
 	collectors []Collector
 	sink       ObservationSink
-
-	mu     sync.Mutex
-	cancel context.CancelFunc
-	wait   sync.WaitGroup
-	health ServiceHealth
+	lifecycle  sync.Mutex
+	mu         sync.Mutex
+	run        *collectorRun
+	health     ServiceHealth
 }
 
 func NewManager(sink ObservationSink, collectors ...Collector) *Manager {
@@ -21,19 +25,30 @@ func NewManager(sink ObservationSink, collectors ...Collector) *Manager {
 }
 
 func (m *Manager) Start(ctx context.Context) error {
+	m.lifecycle.Lock()
+	defer m.lifecycle.Unlock()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.cancel != nil {
-		return nil
+	if m.run != nil {
+		select {
+		case <-m.run.done:
+		default:
+			return nil
+		}
 	}
 	runContext, cancel := context.WithCancel(ctx)
-	m.cancel = cancel
-	m.health = ServiceHealth{Running: true}
+	run := &collectorRun{cancel: cancel, done: make(chan struct{})}
+	m.run = run
+	m.health = ServiceHealth{Running: len(m.collectors) > 0}
+	var workers sync.WaitGroup
 	for _, collector := range m.collectors {
 		m.health.CollectorIDs = append(m.health.CollectorIDs, string(collector.ID()))
-		m.wait.Add(1)
+		workers.Add(1)
 		go func(value Collector) {
-			defer m.wait.Done()
+			defer workers.Done()
 			if err := value.Run(runContext, m.sink); err != nil && !errors.Is(err, context.Canceled) {
 				m.mu.Lock()
 				m.health.LastError = err.Error()
@@ -41,18 +56,28 @@ func (m *Manager) Start(ctx context.Context) error {
 			}
 		}(collector)
 	}
+	go func() {
+		workers.Wait()
+		cancel()
+		m.mu.Lock()
+		m.health.Running = false
+		close(run.done)
+		m.mu.Unlock()
+	}()
 	return nil
 }
 
+// Serialize lifecycle transitions, joining the old generation before starting
+// another. Collector cancellation must include a bounded final flush.
 func (m *Manager) Stop(context.Context) error {
+	m.lifecycle.Lock()
+	defer m.lifecycle.Unlock()
 	m.mu.Lock()
-	cancel := m.cancel
-	m.cancel = nil
-	m.health.Running = false
+	run := m.run
 	m.mu.Unlock()
-	if cancel != nil {
-		cancel()
-		m.wait.Wait()
+	if run != nil {
+		run.cancel()
+		<-run.done
 	}
 	return nil
 }

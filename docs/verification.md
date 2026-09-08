@@ -1340,3 +1340,33 @@ enrollment and desktop lifecycle checks remain the next C1 work.
 - Read-only desktop audit found that the app's activity sink remains memory-only
   and collection starts without a saved consent setting. Durable, permission-gated
   background integration must precede its lifecycle acceptance (completion plan C1).
+
+
+## Desktop consent and background sync — 2026-09-08
+
+ADR-0042 closes the memory-only/unconditional-collection finding above.
+
+- All Go core, desktop and server tests plus `go vet` pass. New tests exercise
+  default-off sampling, persisted grant/revocation, restart with repeated clock
+  values, final shutdown, atomic transition batches, source-scoped export/erasure,
+  task revision reopen and refusal of unsupported development columns without
+  backfills. Poll gaps retain inferred provenance and unknown confidence.
+- Focused Go race checks for collection and background lifecycle pass. Actual
+  disposable TLS HTTP tests cover a failed exchange retaining its outbox, automatic
+  retry without a mounted view, restart without re-upload, cancellation on disable,
+  stale-error rejection and refusal to forward enrollment secrets on redirects.
+- Desktop web checks pass: formatting, lint/UI standards, types, 400 desktop and
+  six trusted-web tests, and both production builds. Three existing Fast Refresh
+  warnings remain. New settings tests cover explicit consent, confirmed erasure,
+  stopped/error retry and absent/malformed bridge recovery.
+- A local browser preview was inspected for activity settings layout, reachable
+  named controls and honest service-unavailable state. It used synthetic preview
+  data; collection was not enabled on the owner's desktop profile.
+- The Windows Wails production build passes using an isolated
+  `ZEITBOARD_DATA_DIR` for binding generation. This is a build check, not a
+  published installer or native suspend/resume qualification.
+
+Logs: `.tools/desktop-activity-go.log`, `.tools/desktop-activity-vet.log` and
+`.tools/desktop-activity-build.log`. Configured login startup, background estimate
+refresh, desktop restore reconciliation and native lifecycle qualification remain
+open under C1; the full completion goal remains active.

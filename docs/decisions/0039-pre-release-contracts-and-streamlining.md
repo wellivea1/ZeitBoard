@@ -38,13 +38,18 @@ upgrade guarantees when an actual packaged baseline exists.
   retaining their typed storage adapters. Invalid, missing or trailing response
   data cannot acknowledge pending records or advance a download cursor.
 
+- ADR-0042 removes the remaining desktop historical migration table, task/proposal
+  column backfills and import-index migrations. Fresh schema creation includes
+  current columns, and a partial unique index replaces the legacy-duplicate
+  tolerance trigger. Current reopen and erasure behavior remain tested.
+
 ## Further useful consolidation
 
 ADR-0040 completes the Android repository consolidation: full exchange is the only
 execution path and replica storage is mandatory. It also connects reviewed manual
 corrections, replaces the single-parent relation with reviewed manual heads, and
 removes the prototype enrollment-scope fallback. Local-only correction production
-and later enrollment still need consolidation into this current record contract.
+and later enrollment are consolidated by ADR-0041 into this current record contract.
 
 The assistant action catalog is repeated across validation, provider presentation,
 MCP tools and dispatch. The completion plan's C4 registry should become the single

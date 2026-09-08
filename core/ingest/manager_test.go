@@ -2,6 +2,7 @@ package ingest
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -22,6 +23,41 @@ func (testCollector) Run(ctx context.Context, sink ObservationSink) error {
 	}
 	<-ctx.Done()
 	return ctx.Err()
+}
+
+type exitingCollector struct{ runs chan struct{} }
+
+func (exitingCollector) ID() domain.DataSourceID { return "exiting" }
+func (exitingCollector) Capabilities(context.Context) (Capabilities, error) {
+	return Capabilities{}, nil
+}
+func (c exitingCollector) Run(context.Context, ObservationSink) error {
+	c.runs <- struct{}{}
+	return errors.New("synthetic disk failure")
+}
+
+func TestExitedCollectorReportsStoppedAndCanRestart(t *testing.T) {
+	c := exitingCollector{runs: make(chan struct{}, 2)}
+	m := NewManager(&MemorySink{}, c)
+	for i := 0; i < 2; i++ {
+		if err := m.Start(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case <-c.runs:
+		case <-time.After(time.Second):
+			t.Fatal("collector did not restart")
+		}
+		deadline := time.Now().Add(time.Second)
+		for m.Health(context.Background()).Running && time.Now().Before(deadline) {
+			time.Sleep(time.Millisecond)
+		}
+		h := m.Health(context.Background())
+		if h.Running || h.LastError != "synthetic disk failure" {
+			t.Fatalf("failed collector health: %#v", h)
+		}
+	}
+	_ = m.Stop(context.Background())
 }
 
 func TestManagerStartsAndStopsCollectors(t *testing.T) {

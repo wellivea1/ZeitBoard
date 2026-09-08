@@ -12,6 +12,11 @@ acceptance clause or of its real-device qualification.
 
 ## Implemented
 
+- Desktop consent/durability and app-context background sleep/task sync are implemented
+  under ADR-0042. Activity is default-off and remains local, with explicit export and
+  erasure. Configured startup, background projection refresh, desktop restore reconciliation
+  and native lifecycle qualification remain in completion plan C1.
+
 - Conventional Go code owns normalization, correction application, rhythm estimation, forecasting,
   scheduling, medication-relative timing, and sharing projection. No language model is in the
   authoritative path: the assistant and agent layers emit allowlisted actions that the server

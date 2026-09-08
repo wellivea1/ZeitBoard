@@ -17,6 +17,7 @@ import {
 import { notifySleepDataChanged } from "../data/sleepDataEvents";
 import { deleteAllSleepData } from "../data/sleepEntries";
 import { AppearanceSettings } from "./settings/AppearanceSettings";
+import { ActivityCollectionSettings } from "./settings/ActivityCollectionSettings";
 import { BackendSyncSettings } from "./settings/BackendSyncSettings";
 import { LocalAgentSettings } from "./settings/LocalAgentSettings";
 import { ReachingHoursSettings } from "./settings/ReachingHoursSettings";
@@ -220,6 +221,7 @@ export function SettingsScreen() {
       />
       <section className="settings-stack">
         <AppearanceSettings />
+        <ActivityCollectionSettings />
         <section className="settings-section">
           <div>
             <p className="section-kicker">Estimates</p>

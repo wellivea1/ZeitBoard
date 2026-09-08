@@ -263,10 +263,33 @@ of unseen remote changes. Native fixtures now erase remote records between cases
 the estimator's refusal across ambiguous historical gaps is retained. PR #28's
 published baseline passed all GitHub CI jobs, including installer dry-runs.
 
-**Next C1 work is implementation, then qualification:** `newAppWithStore` still
-constructs an activity collector with `MemorySink`, and `startup` starts it without
-a persisted consent setting. Connect permission-gated durable activity collection,
-background sync/recomputation and configured startup, then exercise hiding,
-sleep/resume, restart and explicit quit. Do not describe the desktop lifecycle as
-already implemented merely because its core collector and server worker exist.
-The full C1–C8 completion goal remains active.
+This audit finding is addressed by the next increment below. The full C1–C8
+completion goal remains active.
+
+### C1 desktop consent and background sync — 2026-09-08
+
+Desktop activity now has persisted default-off consent, an explicit zone, live
+status, durable atomic transition batches and separate export/erasure controls.
+Restart respects consent and revocation; clean stop records a bounded final
+shutdown. Steady unlocked use produces no repeated transitions. Poll-gap records
+carry inferred provenance and unknown confidence. Activity remains local and does
+not enter estimation or planning. See ADR-0042.
+
+The enrolled desktop runs the existing bounded sleep/task sync pipeline from its
+app context, at startup/enrollment and about every minute, independent of views.
+Foreground and background exchanges serialize; disable cancels an active exchange
+and stale errors cannot revive old settings. Credentials/settings publish
+atomically and HTTP redirects cannot forward enrollment secrets. Quit joins work
+before closing storage. A dedicated absolute data-directory override isolates
+qualification profiles.
+
+Removed remaining desktop development migration/backfill code and the
+legacy-duplicate import trigger; current schema creation, source uniqueness,
+reopen, revisions, explicit erasure and external import behavior remain tested.
+
+**Next:** implement configured login/start-hidden behavior and background estimate
+projection refresh; finish desktop enrollment/restore reconciliation and perform
+native hide/resume/restart/quit qualification. In particular, review tray-failure
+close behavior before claiming the desktop lifecycle is complete. Comprehensive
+agent coverage for these controls belongs to C4. Real-device/pilot and the other
+C1–C8 acceptance gates remain open; this software increment does not close the goal.

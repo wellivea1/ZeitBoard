@@ -279,6 +279,12 @@ M-E's separately reviewed local agent projection.
     means changing the type and the commitment that constrains it. _This entry described the old
     placeholder for five days after it was replaced; corrected 2026-08-09._
 
+    ADR-0042 (2026-09-08) adds the previously missing saved default-off consent,
+    durable source-observation sink, collection status and export/erasure controls.
+    Enrolled sleep/task sync now runs independently of the visible window. Activity
+    remains local and does not affect forecasts. Configured startup, background
+    projection refresh and native lifecycle qualification remain in C1.
+
     Still open: the collector runs inside the desktop process, so it collects only while ZeitBoard
     is running (it survives closing the window, which hides to the tray, but not quitting). Desktop
     CPU, memory and startup baselines were not captured before it landed, so its cost is still

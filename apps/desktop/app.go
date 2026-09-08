@@ -8,11 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
@@ -21,7 +21,6 @@ import (
 	"non24.app/core/estimation"
 	"non24.app/core/freshness"
 	"non24.app/core/ingest"
-	"non24.app/core/platform/activity"
 	"non24.app/core/scheduling"
 	"non24.app/core/sleepv1"
 	storage "non24.app/core/storage/sqlite"
@@ -39,8 +38,13 @@ var saveSleepDataDialog = runtime.SaveFileDialog
 
 type App struct {
 	ctx                 context.Context
+	closing             atomic.Bool
 	collector           *ingest.Manager
-	sink                *ingest.MemorySink
+	activityMu          sync.Mutex
+	activitySource      ingest.Collector
+	activityStarted     bool
+	activityClosed      bool
+	activityError       string
 	tray                tray.Controller
 	store               *storage.Store
 	storeErr            error
@@ -48,6 +52,14 @@ type App struct {
 	calendarHTTPClient  calendarHTTPDoer
 	backendHTTPMu       sync.Mutex
 	backendHTTPClients  map[bool]*http.Client
+	backendSyncMu       sync.Mutex
+	backendConfigMu     sync.RWMutex
+	backendRunMu        sync.Mutex
+	backendRunCancel    context.CancelFunc
+	backgroundMu        sync.Mutex
+	backgroundCancel    context.CancelFunc
+	backgroundDone      chan struct{}
+	backgroundWake      chan struct{}
 	sleepImportMu       sync.Mutex
 	sleepImportPending  map[string]pendingSleepImportFile
 	nowFn               func() time.Time
@@ -262,10 +274,7 @@ func NewApp() *App {
 }
 
 func newAppWithStore(store *storage.Store, storeErr error) *App {
-	sink := &ingest.MemorySink{}
 	return &App{
-		sink:               sink,
-		collector:          ingest.NewManager(sink, activity.SafeCollector{ZoneID: defaultZoneID}),
 		tray:               tray.New(),
 		store:              store,
 		storeErr:           storeErr,
@@ -291,11 +300,10 @@ func (a *App) applicationContext() context.Context {
 }
 
 func openDesktopStore() (*storage.Store, error) {
-	base, err := os.UserConfigDir()
+	dir, err := desktopDataDir()
 	if err != nil {
 		return nil, err
 	}
-	dir := filepath.Join(base, "ZeitBoard")
 	// The directory restriction is inherited by everything created inside it,
 	// including the write-ahead log SQLite makes on the first write.
 	if err := ensurePrivateDir(dir); err != nil {
@@ -306,7 +314,8 @@ func openDesktopStore() (*storage.Store, error) {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
-	_ = a.collector.Start(ctx)
+	a.startActivityService(ctx)
+	a.startDesktopBackground(ctx, desktopBackgroundInterval)
 	a.startLocalAgent(ctx)
 	trayErr := a.tray.Start(tray.Callbacks{
 		Show: func() {
@@ -324,12 +333,14 @@ func (a *App) startup(ctx context.Context) {
 }
 
 func (a *App) shutdown(ctx context.Context) {
+	a.closing.Store(true)
+	a.stopDesktopBackground()
 	a.stopMedicationReminderService()
 	a.stopLocalAgent(ctx)
 	a.closeBackendHTTPClients()
 	a.clearPendingSleepImports()
 	_ = a.tray.Stop()
-	_ = a.collector.Stop(ctx)
+	a.stopActivityService(ctx)
 	if a.store != nil {
 		_ = a.store.Close()
 	}
@@ -343,10 +354,6 @@ func (a *App) HideWindow() {
 	if a.ctx != nil {
 		runtime.WindowHide(a.ctx)
 	}
-}
-
-func (a *App) GetCollectorHealth() ingest.ServiceHealth {
-	return a.collector.Health(context.Background())
 }
 
 func (a *App) AddSleepEntry(input SleepEntryInput) (SleepEntryDTO, error) {

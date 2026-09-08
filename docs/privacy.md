@@ -75,6 +75,21 @@ session — an ordinary hour of work produces no records at all. Suspend and res
 from wall-clock gaps rather than observed, and the collector does not claim a power-event capability
 it does not have.
 
+The desktop now persists its explicit default-off activity grant and time zone
+in SQLite. Settings shows whether the collector is running, stopped or failing,
+and how many records are retained. Activity records remain local; they are not
+part of the sleep/task sync payload and do not currently change forecasts or
+planning. The owner can export them to a private JSON file, turn collection off
+without erasing them, or erase them and disable collection together. Export files
+contain exact transition timestamps. Poll-gap suspend/resume records are marked
+inferred, with unknown confidence, because a paused process or clock adjustment
+can also explain the gap. See [ADR-0042](decisions/0042-desktop-consent-and-background-sync.md).
+
+Enrolled desktop sync runs from the app context at startup and about every minute,
+including while the window is hidden. It uses the existing sleep/task payloads.
+Disable cancels in-flight synchronization; quit stops the background worker.
+It does not install a system service or enable login startup automatically.
+
 This evidence is one input to sleep inference and is not a sleep record on its
 own. Inferred sleep is marked as such, never overwrites a raw observation, and
 does not reach planning until a documented validation decision allows it.

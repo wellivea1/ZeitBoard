@@ -24,6 +24,9 @@ testdata                    Synthetic observations and projected sharing fixture
 - The Wails desktop runs on persisted manual sleep observations, immutable raw records, and
   append-only corrections. Overview, Rhythm, and proposals use the real Go estimator and refuse
   honestly when evidence is insufficient.
+- Desktop activity collection is explicitly opt-in, persists minimized transitions locally,
+  and offers export/erasure in Settings. Enrolled sleep/task sync runs automatically while
+  ZeitBoard is running, including when its window is hidden. Activity does not change forecasts.
 - Contract-shaped JSON export, permanent local erasure, opt-in self-hosted sync, cross-device
   tombstones, user-owned tasks, unified approvals, and the propose-only assistant surface are
   implemented.
