@@ -12,7 +12,7 @@ import org.non24.planner.ui.AppViewModel
 import org.non24.planner.ui.Non24App
 
 class MainActivity : ComponentActivity() {
-    private val container by lazy { AppContainer(this) }
+    private val container by lazy { (application as ZeitBoardApplication).container }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -22,11 +22,19 @@ class MainActivity : ComponentActivity() {
                 contract = PermissionController.createRequestPermissionResultContract(),
                 onResult = appViewModel::onHealthPermissionResult,
             )
+            val backgroundPermissionLauncher = rememberLauncherForActivityResult(
+                contract = PermissionController.createRequestPermissionResultContract(),
+                onResult = appViewModel::onBackgroundPermissionResult,
+            )
             Non24App(
                 viewModel = appViewModel,
                 requiredHealthPermissions = container.healthConnectRepository.requiredPermissions,
                 onRequestHealthPermissions = permissionLauncher::launch,
                 onOpenHealthConnectListing = ::openHealthConnectListing,
+                onRequestBackgroundPermission = {
+                    backgroundPermissionLauncher.launch(container.healthConnectRepository.requiredPermissions +
+                        org.non24.planner.data.HealthConnectPermissions.READ_BACKGROUND)
+                },
             )
         }
     }

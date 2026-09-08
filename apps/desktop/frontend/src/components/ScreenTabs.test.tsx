@@ -68,9 +68,11 @@ describe("ScreenTabs", () => {
 
     fireEvent.keyDown(list, { key: "ArrowRight" });
     expect(onSelect).toHaveBeenLastCalledWith("one");
+    expect(screen.getByRole("tab", { name: "One" })).toHaveFocus();
 
     fireEvent.keyDown(list, { key: "ArrowLeft" });
     expect(onSelect).toHaveBeenLastCalledWith("two");
+    expect(screen.getByRole("tab", { name: /Two/ })).toHaveFocus();
 
     fireEvent.keyDown(list, { key: "Home" });
     expect(onSelect).toHaveBeenLastCalledWith("one");

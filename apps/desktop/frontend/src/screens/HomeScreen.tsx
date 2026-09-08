@@ -5,12 +5,15 @@ import { OutlookPanel } from "../components/OutlookPanel";
 import { QuickLogBar } from "../components/QuickLogBar";
 import { CycleStrip } from "../components/RhythmVisuals";
 import { loadOverview } from "../data/backend";
-import { loadOutlook } from "../data/outlook";
+import { loadOutlook, outlookUnavailable } from "../data/outlook";
 import { outlookFixture, overviewFixture } from "../data/fixture";
-import { loadRhythm, rhythmFixture, type RhythmSource } from "../data/rhythm";
-import { sleepDataChangedEvent } from "../data/sleepDataEvents";
+import { loadRhythm, rhythmFixture, rhythmUnavailable, type RhythmSource } from "../data/rhythm";
+import { sleepDataChangedEvent, notifySleepDataChanged } from "../data/sleepDataEvents";
+import { hasDesktopBridge } from "../data/wailsBridge";
+import { overviewUnavailable } from "../data/overview";
+import { subscribeProjectionRefresh } from "../utils/projectionRefresh";
 import { usePendingApprovalsCount } from "../state/approvals";
-import type { ConfidenceLevel, OverviewSource } from "../data/overview";
+import type { ConfidenceLevel, OverviewSource, OverviewData } from "../data/overview";
 import { createCoalescedRefresh } from "../utils/coalescedRefresh";
 
 function ConfidenceBadge({ value }: { value: ConfidenceLevel }) {
@@ -76,13 +79,14 @@ function sourceLabel(source: OverviewSource, hasEstimate: boolean) {
   return "Sample data";
 }
 
-export function HomeScreen() {
-  const [overview, setOverview] = useState(overviewFixture);
-  const [mode, setMode] = useState<OverviewSource>("fixture");
-  const [rhythm, setRhythm] = useState(rhythmFixture);
-  const [rhythmMode, setRhythmMode] = useState<RhythmSource>("fixture");
-  const [outlook, setOutlook] = useState(outlookFixture);
-  const pendingCount = usePendingApprovalsCount();
+function useHomeProjection() {
+  const desktop = hasDesktopBridge();
+  const [overview, setOverview] = useState(desktop ? overviewUnavailable : overviewFixture);
+  const [mode, setMode] = useState<OverviewSource>(desktop ? "local" : "fixture");
+  const [rhythm, setRhythm] = useState(desktop ? rhythmUnavailable : rhythmFixture);
+  const [rhythmMode, setRhythmMode] = useState<RhythmSource>(desktop ? "local" : "fixture");
+  const [outlook, setOutlook] = useState(desktop ? outlookUnavailable : outlookFixture);
+  const [loading, setLoading] = useState(desktop);
 
   useEffect(() => {
     const refresh = createCoalescedRefresh(
@@ -98,17 +102,23 @@ export function HomeScreen() {
         setRhythm(rhythmResult.data);
         setRhythmMode(rhythmResult.source);
         setOutlook(outlookResult);
+        setLoading(false);
       },
     );
     const request = () => refresh.request();
-    request();
-    window.addEventListener(sleepDataChangedEvent, request);
+    const unsubscribe = subscribeProjectionRefresh(request, sleepDataChangedEvent);
     return () => {
-      window.removeEventListener(sleepDataChangedEvent, request);
+      unsubscribe();
       refresh.dispose();
     };
   }, []);
 
+  return { overview, mode, rhythm, rhythmMode, outlook, loading };
+}
+
+export function HomeScreen() {
+  const { overview, mode, rhythm, rhythmMode, outlook, loading } = useHomeProjection();
+  const pendingCount = usePendingApprovalsCount();
   const hasEstimate = overview.status === "estimated";
   const hasMatchingRhythm = hasEstimate && rhythm.status === "estimated" && mode === rhythmMode;
   const todayLabel =
@@ -131,6 +141,11 @@ export function HomeScreen() {
             <span className="sync-dot" data-mode={mode} aria-hidden="true" />
             <span>{sourceLabel(mode, hasEstimate)}</span>
             <small>{overview.updatedLabel}</small>
+            {mode !== "fixture" && (
+              <button className="button secondary" type="button" onClick={notifySleepDataChanged}>
+                Refresh
+              </button>
+            )}
           </div>
         }
       />
@@ -145,7 +160,7 @@ export function HomeScreen() {
                 data-state={stateTone(overview.state)}
                 aria-hidden="true"
               />
-              {overview.state}
+              {loading ? "Loading your rhythm…" : overview.state}
             </h2>
             {hasEstimate && (
               <p className="overview-elapsed">
@@ -244,19 +259,7 @@ export function HomeScreen() {
             )}
           </>
         ) : (
-          <section className="overview-learning" aria-labelledby="learning-title">
-            <div>
-              <p className="section-kicker">Local input needed</p>
-              <h3 id="learning-title">Still learning your rhythm</h3>
-              <p>
-                {overview.refusal?.message ?? overview.confidence.reason} Add civil sleep and wake
-                times before the app draws a forecast.
-              </p>
-            </div>
-            <a className="button primary" href="#/log/sleep">
-              Add sleep entry
-            </a>
-          </section>
+          <OverviewRecovery overview={overview} />
         )}
 
         <footer className="overview-trust-row">
@@ -284,5 +287,37 @@ export function HomeScreen() {
         </footer>
       </section>
     </>
+  );
+}
+
+function OverviewRecovery({ overview }: { overview: OverviewData }) {
+  return (
+    <section className="overview-learning" aria-labelledby="learning-title">
+      <div>
+        <p className="section-kicker">
+          {overview.status === "unavailable" ? "Connection to your records" : "Build your forecast"}
+        </p>
+        <h3 id="learning-title">
+          {overview.status === "unavailable"
+            ? "Your rhythm is not available yet"
+            : "Still learning your rhythm"}
+        </h3>
+        <p>
+          {overview.status === "unavailable"
+            ? "Your saved records have not been changed. Refresh to retry, or check Data Sources."
+            : `${overview.refusal?.message ?? overview.confidence.reason} Log sleep or import existing records to build a forecast.`}
+        </p>
+      </div>
+      <div className="page-actions">
+        {overview.status !== "unavailable" && (
+          <a className="button primary" href="#/log/sleep">
+            Add sleep entry
+          </a>
+        )}
+        <a className="button secondary" href="#/data-sources">
+          {overview.status === "unavailable" ? "Check Data Sources" : "Import sleep records"}
+        </a>
+      </div>
+    </section>
   );
 }

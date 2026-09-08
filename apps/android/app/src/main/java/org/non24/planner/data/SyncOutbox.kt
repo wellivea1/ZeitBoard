@@ -18,6 +18,9 @@ data class OutboxRecord(
     val payload: String,
 )
 
+/** Includes queued revisions: a source can change again before its first upload. */
+data class SourceSyncRevision(val revision: Instant, val correctionId: String? = null)
+
 /**
  * What the user is told about sync. These are deliberately distinguishable:
  * "queued" and "error" mean different things to someone deciding whether to
@@ -27,6 +30,9 @@ data class OutboxRecord(
 enum class SyncState {
     /** Sync is not configured. Local-only use is a supported mode, not a fault. */
     OFF,
+
+    /** Enrolled, but no successful upload is recorded. */
+    READY,
 
     /** Records are waiting; nothing has failed. */
     QUEUED,
@@ -52,22 +58,30 @@ data class SyncStatus(
     val heldCount: Int = 0,
     val lastSyncedAt: Instant? = null,
     val lastError: String? = null,
+    val serverUrl: String? = null,
 ) {
     /**
-     * True when the server's copy is known to be complete as of the last
-     * successful push. The desktop uses this to decide whether its own
-     * freshness claim can lean on Android at all.
+     * Queue bookkeeping only. This is never evidence of estimate freshness
+     * or of whether Health Connect has supplied newer records.
      */
-    val isCurrent: Boolean get() = state == SyncState.SYNCED && queuedCount == 0
+    val hasUploadedKnownRecords: Boolean
+        get() = state == SyncState.SYNCED && queuedCount == 0 && heldCount == 0 && lastSyncedAt != null
 }
 
 /** Durable storage for the outbox and its bookkeeping. */
 interface SyncOutboxStore {
+    /** Select the persisted enrollment generation before accessing any queue data. */
+    fun activateScope(scope: String)
     /** Records not yet accepted, oldest first, bounded by [limit]. */
     fun pending(limit: Int): List<OutboxRecord>
+    fun prepareBatch(limit: Int, knownSources: Map<String, SourceSyncRevision>): List<OutboxRecord> = pending(limit)
+    /** After a complete pull, recover accepted local records absent from the restored server. */
+    fun reconcileAccepted() {}
 
     /** Adds records, ignoring any whose record id is already pending. */
     fun enqueue(records: List<OutboxRecord>)
+    fun contains(recordId: String): Boolean
+    fun hasPendingManualCorrection(observationId: String): Boolean
 
     /**
      * Marks records accepted and remembers the revision each represented, which
@@ -75,8 +89,8 @@ interface SyncOutboxStore {
      */
     fun markSynced(recordIds: List<String>, at: Instant)
 
-    /** Record id to last accepted source revision. */
-    fun syncedRevisions(): Map<String, Instant>
+    /** Observation id to latest durably queued or uploaded source revision. */
+    fun knownSources(): Map<String, SourceSyncRevision>
 
     fun pendingCount(): Int
 

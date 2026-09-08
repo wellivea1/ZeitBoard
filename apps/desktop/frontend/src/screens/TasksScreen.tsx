@@ -1,31 +1,37 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "../components/Icon";
 import { PageHeader, PlaceholderNotice } from "../components/AppShell";
 import { ProposalCard } from "../components/ProposalCard";
+import { TaskEditor } from "../components/TaskEditor";
 import { useApprovals } from "../state/approvals";
 import {
   addTask,
+  updateTask,
   deleteTask,
   loadTasks,
   setTaskDone,
   type Task,
+  type TaskInput,
   type TasksData,
 } from "../data/tasks";
+import { sleepDataChangedEvent } from "../data/sleepDataEvents";
+import { hasDesktopBridge } from "../data/wailsBridge";
+import { createCoalescedRefresh } from "../utils/coalescedRefresh";
+import { subscribeProjectionRefresh } from "../utils/projectionRefresh";
 
 function TaskRow({
   task,
   busy,
   onToggleDone,
+  onEdit,
   onDelete,
 }: {
   task: Task;
   busy: boolean;
   onToggleDone: (task: Task) => void;
+  onEdit: (task: Task) => void;
   onDelete: (task: Task) => void;
 }) {
-  const details = [task.durationLabel, task.windowLabel, task.afterWakeLabel]
-    .filter(Boolean)
-    .join(" · ");
   return (
     <div className="task-row" role="row" data-status={task.status}>
       <span role="cell">
@@ -38,15 +44,27 @@ function TaskRow({
         />
         {task.title}
       </span>
-      <span role="cell">{details}</span>
+      <span role="cell">
+        {[task.durationLabel, task.windowLabel, task.afterWakeLabel].filter(Boolean).join(" · ")}
+      </span>
       <span role="cell">
         <span className="task-chip">{task.status === "done" ? "Done" : "Open"}</span>
       </span>
-      <span role="cell">
+      <span role="cell" className="task-actions">
+        <button
+          className="button secondary"
+          type="button"
+          disabled={busy || !task.editable}
+          aria-label={`Edit ${task.title}`}
+          onClick={() => onEdit(task)}
+        >
+          Edit
+        </button>
         <button
           className="button secondary"
           type="button"
           disabled={busy}
+          aria-label={`Delete ${task.title}`}
           onClick={() => onDelete(task)}
         >
           Delete
@@ -57,101 +75,232 @@ function TaskRow({
 }
 
 export function TasksScreen({ embedded }: { embedded?: boolean } = {}) {
-  const { pending, pendingCount, unplaced } = useApprovals();
+  const { pending, pendingCount, unplaced, error: proposalError } = useApprovals();
   const firstUnplaced = unplaced[0];
-  const [data, setData] = useState<TasksData>({ status: "unavailable", tasks: [] });
-  const [title, setTitle] = useState("");
-  const [durationMinutes, setDurationMinutes] = useState(45);
-  const [latestFinishLocal, setLatestFinishLocal] = useState("");
-  const [afterWakeMinutes, setAfterWakeMinutes] = useState(0);
+  const [data, setData] = useState<TasksData>({
+    status: "unavailable",
+    tasks: [],
+    message: "Loading your tasks…",
+  });
+  const [editing, setEditing] = useState<Task | null>(null);
+  const [deleting, setDeleting] = useState<Task | null>(null);
+  const [editorVersion, setEditorVersion] = useState(0);
   const [busy, setBusy] = useState(false);
-  const [formError, setFormError] = useState("");
+  const [error, setError] = useState("");
+  const [readError, setReadError] = useState("");
   const [announcement, setAnnouncement] = useState("");
+  const busyRef = useRef(false);
+  const refreshRef = useRef<ReturnType<typeof createCoalescedRefresh> | null>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    let current = true;
-    void loadTasks().then((result) => {
-      if (current) setData(result);
+    const refresh = createCoalescedRefresh(loadTasks, (result) => {
+      setReadError(
+        result.status === "ok" ? "" : (result.message ?? "Tasks could not be refreshed."),
+      );
+      setData((current) => (result.status === "ok" || current.status !== "ok" ? result : current));
     });
+    refreshRef.current = refresh;
+    const unsubscribe = subscribeProjectionRefresh(() => {
+      if (!busyRef.current) refresh.request();
+    }, sleepDataChangedEvent);
     return () => {
-      current = false;
+      unsubscribe();
+      refresh.dispose();
+      refreshRef.current = null;
     };
   }, []);
 
-  const available = data.status === "ok";
-  const openTasks = data.tasks.filter((task) => task.status === "open");
-  const doneTasks = data.tasks.filter((task) => task.status === "done");
-
-  const runMutation = (
-    operation: Promise<TasksData>,
-    successMessage: string,
-    onSuccess?: () => void,
+  const runMutation = async (
+    operation: () => Promise<TasksData>,
+    success: string,
+    resetEditor = false,
   ) => {
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
-    setFormError("");
+    setError("");
     setAnnouncement("");
-    operation
-      .then((result) => {
-        setData(result);
-        setAnnouncement(successMessage);
-        onSuccess?.();
-      })
-      .catch((error: unknown) => {
-        setFormError(error instanceof Error ? error.message : "The task action failed.");
-      })
-      .finally(() => setBusy(false));
+    refreshRef.current?.supersede();
+    try {
+      setData(await operation());
+      setReadError("");
+      setAnnouncement(success);
+      setDeleting(null);
+      if (resetEditor) {
+        setEditing(null);
+        setEditorVersion((version) => version + 1);
+      }
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "The task action failed. Refresh and try again.",
+      );
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
   };
-
-  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const submittedTitle = title.trim();
-    runMutation(
-      addTask({
-        title: submittedTitle,
-        durationMinutes,
-        ...(latestFinishLocal ? { latestFinishLocal } : {}),
-        ...(afterWakeMinutes > 0 ? { preferredAfterWakeMinutes: afterWakeMinutes } : {}),
-        zoneId: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      }),
-      `Added ${submittedTitle}.`,
-      () => {
-        setTitle("");
-        setLatestFinishLocal("");
-        setAfterWakeMinutes(0);
-      },
+  const save = (input: TaskInput) =>
+    void runMutation(
+      () => (editing ? updateTask(input) : addTask(input)),
+      `${editing ? "Updated" : "Added"} ${input.title}. Review proposals to place it on your calendar.`,
+      true,
     );
+  const edit = (task: Task) => {
+    setEditing(task);
+    setDeleting(null);
+    setError("");
+    setEditorVersion((version) => version + 1);
+    editorRef.current?.scrollIntoView?.({ block: "nearest" });
   };
+  const available = data.status === "ok";
+  const openCount = data.tasks.filter((task) => task.status === "open").length;
 
   return (
     <>
       <PageHeader
         title="Tasks"
-        description="Describe flexibility and effort; the planner returns proposals, not calendar changes."
+        description="Add flexible work, then review a proposed time before it reaches your calendar."
         level={embedded ? "panel" : "page"}
+        actions={
+          hasDesktopBridge() && (
+            <button
+              className="button secondary"
+              disabled={busy}
+              onClick={() => refreshRef.current?.request()}
+            >
+              Refresh tasks
+            </button>
+          )
+        }
       />
-      {!available && (
-        <PlaceholderNotice>
-          {data.message ??
-            "This browser preview is read-only. Open the ZeitBoard desktop app to manage tasks."}
-        </PlaceholderNotice>
-      )}
-      <section className="screen-grid" aria-label="Task planning and approvals">
+      {!available && <PlaceholderNotice>{data.message}</PlaceholderNotice>}
+      <section className="task-workspace" aria-label="Task planning and approvals">
+        {available && readError && (
+          <p role="alert">
+            Latest refresh failed. Showing the last loaded tasks; your draft is kept. {readError}
+          </p>
+        )}
+        {available && (
+          <section className="task-list-panel" aria-label="Your tasks">
+            <div ref={editorRef}>
+              <TaskEditor
+                key={editorVersion}
+                task={editing}
+                busy={busy}
+                error={deleting ? "" : error}
+                onSave={save}
+                onCancel={() => {
+                  setEditing(null);
+                  setError("");
+                  setEditorVersion((version) => version + 1);
+                }}
+              />
+            </div>
+            <p className="task-feedback" role="status">
+              {announcement}
+            </p>
+            <div className="panel-heading">
+              <h2 id="task-list-title">
+                {openCount} open · {data.tasks.length - openCount} done
+              </h2>
+            </div>
+            {deleting && (
+              <section className="task-delete-confirmation" aria-label={`Delete ${deleting.title}`}>
+                <strong>Delete “{deleting.title}” permanently?</strong>
+                <p>
+                  This removes the task and syncs its deletion to your enrolled devices. You can
+                  mark it done instead to keep it.
+                </p>
+                {error && <p role="alert">{error}</p>}
+                <div className="page-actions">
+                  <button
+                    className="button danger"
+                    disabled={busy}
+                    onClick={() =>
+                      void runMutation(
+                        () => deleteTask(deleting.taskId, deleting.revision),
+                        `Deleted ${deleting.title}.`,
+                        editing?.taskId === deleting.taskId,
+                      )
+                    }
+                  >
+                    Delete task
+                  </button>
+                  <button
+                    className="button secondary"
+                    disabled={busy}
+                    onClick={() => {
+                      setDeleting(null);
+                      setError("");
+                    }}
+                  >
+                    Keep task
+                  </button>
+                </div>
+              </section>
+            )}
+            {data.tasks.length ? (
+              <div className="task-table" role="table" aria-labelledby="task-list-title">
+                <div className="task-row task-head" role="row">
+                  <span role="columnheader">Task</span>
+                  <span role="columnheader">Constraints</span>
+                  <span role="columnheader">Status</span>
+                  <span role="columnheader">Actions</span>
+                </div>
+                {[...data.tasks]
+                  .sort((a, b) => Number(a.status === "done") - Number(b.status === "done"))
+                  .map((task) => (
+                    <TaskRow
+                      key={task.taskId}
+                      task={task}
+                      busy={busy}
+                      onEdit={edit}
+                      onDelete={(target) => {
+                        setDeleting(target);
+                        setError("");
+                      }}
+                      onToggleDone={(target) =>
+                        void runMutation(
+                          () =>
+                            setTaskDone(target.taskId, target.revision, target.status !== "done"),
+                          `${target.title} marked ${target.status === "done" ? "open" : "done"}.`,
+                        )
+                      }
+                    />
+                  ))}
+              </div>
+            ) : (
+              <p className="phase-two-copy">
+                No tasks yet. Start with a name and duration. Timing constraints are optional.
+              </p>
+            )}
+            {data.tasks.some((task) => !task.editable) && (
+              <p className="phase-two-copy">
+                Update the desktop app to edit all saved timing constraints.
+              </p>
+            )}
+          </section>
+        )}
+
         <section
-          className="panel phase-two-panel approval-summary"
+          className="approval-summary task-proposal-summary"
           aria-labelledby="approval-title"
         >
+          {proposalError && (
+            <p role="alert">
+              {proposalError} <a href="#/plan/approvals">Review queue</a>
+            </p>
+          )}
           <div className="panel-heading">
-            <div>
-              <p className="section-kicker">Proposal review</p>
-              <h2 id="approval-title">Approval queue</h2>
-            </div>
+            <h2 id="approval-title">Proposed times</h2>
             <a href="#/plan/approvals">
-              Open all <Icon name="chevron" />
+              Review all <Icon name="chevron" />
             </a>
           </div>
           <p className="phase-two-copy">
             {pendingCount > 0
-              ? `${pendingCount} pending ${pendingCount === 1 ? "proposal is" : "proposals are"} waiting for explicit approval.`
+              ? `${pendingCount} pending ${pendingCount === 1 ? "proposal needs" : "proposals need"} your approval.`
               : "No proposals are waiting for approval."}
           </p>
           {pending.slice(0, 1).map((proposal) => (
@@ -168,122 +317,12 @@ export function TasksScreen({ embedded }: { embedded?: boolean } = {}) {
               <p>
                 {firstUnplaced
                   ? firstUnplaced.reason
-                  : "Every open task either has a proposal or there are no open tasks."}
+                  : "Open tasks with no feasible window will appear here."}
               </p>
               {firstUnplaced && <small>{firstUnplaced.nextAction}</small>}
             </div>
           </aside>
         </section>
-
-        {available && (
-          <section className="panel table-panel task-list-panel" aria-labelledby="add-task-title">
-            <div className="panel-heading">
-              <div>
-                <p className="section-kicker">Flexible work</p>
-                <h2 id="add-task-title">Add a task</h2>
-              </div>
-            </div>
-            <form className="sleep-entry-fields" onSubmit={onSubmit}>
-              <label>
-                Task
-                <input
-                  type="text"
-                  value={title}
-                  maxLength={120}
-                  required
-                  disabled={busy}
-                  onChange={(event) => setTitle(event.target.value)}
-                />
-              </label>
-              <label>
-                Duration (minutes)
-                <input
-                  type="number"
-                  min={5}
-                  max={720}
-                  value={durationMinutes}
-                  required
-                  disabled={busy}
-                  onChange={(event) => setDurationMinutes(Number(event.target.value))}
-                />
-              </label>
-              <label>
-                Finish by (optional)
-                <input
-                  type="datetime-local"
-                  value={latestFinishLocal}
-                  disabled={busy}
-                  onChange={(event) => setLatestFinishLocal(event.target.value)}
-                />
-              </label>
-              <label>
-                Minutes after waking (optional)
-                <input
-                  type="number"
-                  min={0}
-                  max={1440}
-                  value={afterWakeMinutes}
-                  disabled={busy}
-                  onChange={(event) => setAfterWakeMinutes(Number(event.target.value))}
-                />
-              </label>
-              <button className="button primary" type="submit" disabled={busy || !title.trim()}>
-                Save task
-              </button>
-            </form>
-            {formError && (
-              <p className="diff-note" role="alert">
-                {formError}
-              </p>
-            )}
-
-            <div className="panel-heading">
-              <div>
-                <p className="section-kicker">Your tasks</p>
-                <h2 id="task-list-title">
-                  {openTasks.length} open{doneTasks.length > 0 && `, ${doneTasks.length} done`}
-                </h2>
-              </div>
-            </div>
-            {data.tasks.length > 0 ? (
-              <div className="task-table" role="table" aria-labelledby="task-list-title">
-                <div className="task-row task-head" role="row">
-                  <span role="columnheader">Task</span>
-                  <span role="columnheader">Constraints</span>
-                  <span role="columnheader">Status</span>
-                  <span role="columnheader">Actions</span>
-                </div>
-                {data.tasks.map((task) => (
-                  <TaskRow
-                    task={task}
-                    busy={busy}
-                    onToggleDone={(target) =>
-                      runMutation(
-                        setTaskDone(target.taskId, target.revision, target.status !== "done"),
-                        `${target.title} marked ${target.status === "done" ? "open" : "done"}.`,
-                      )
-                    }
-                    onDelete={(target) =>
-                      runMutation(
-                        deleteTask(target.taskId, target.revision),
-                        `Deleted ${target.title}.`,
-                      )
-                    }
-                    key={task.taskId}
-                  />
-                ))}
-              </div>
-            ) : (
-              <p className="phase-two-copy">
-                No tasks yet. Add flexible work above and the planner will propose windows inside
-                your predicted waking time — nothing is scheduled without your approval.
-              </p>
-            )}
-            <p role="status" aria-live="polite" className="sr-only">
-              {announcement}
-            </p>
-          </section>
-        )}
       </section>
     </>
   );

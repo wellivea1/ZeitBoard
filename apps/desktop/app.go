@@ -23,6 +23,7 @@ import (
 	"non24.app/core/ingest"
 	"non24.app/core/platform/activity"
 	"non24.app/core/scheduling"
+	"non24.app/core/sleepv1"
 	storage "non24.app/core/storage/sqlite"
 	"non24.app/desktop/internal/localagent"
 	"non24.app/desktop/platform/tray"
@@ -154,6 +155,8 @@ type SleepEntryInput struct {
 }
 
 type SleepCorrectionInput struct {
+	ReviewToken    string `json:"reviewToken"`
+	Excluded       bool   `json:"excluded"`
 	ObservationID  string `json:"observationId"`
 	StartLocal     string `json:"startLocal"`
 	EndLocal       string `json:"endLocal"`
@@ -162,6 +165,7 @@ type SleepCorrectionInput struct {
 }
 
 type SleepSuppressInput struct {
+	ReviewToken   string `json:"reviewToken"`
 	ObservationID string `json:"observationId"`
 }
 
@@ -201,6 +205,10 @@ type SleepDataExportSummaryDTO struct {
 }
 
 type SleepEntryDTO struct {
+	ReviewToken             string               `json:"reviewToken"`
+	NeedsReview             bool                 `json:"needsReview"`
+	SourceWindowLabel       string               `json:"sourceWindowLabel"`
+	ActiveEdits             []SleepCorrectionDTO `json:"activeEdits"`
 	ObservationID           string               `json:"observationId"`
 	StartLocal              string               `json:"startLocal"`
 	EndLocal                string               `json:"endLocal"`
@@ -221,11 +229,11 @@ type SleepEntryDTO struct {
 }
 
 type SleepCorrectionDTO struct {
-	CorrectionID           string `json:"correctionId"`
-	SupersedesCorrectionID string `json:"supersedesCorrectionId,omitempty"`
-	CreatedLabel           string `json:"createdLabel"`
-	Reason                 string `json:"reason"`
-	Summary                string `json:"summary"`
+	CorrectionID            string   `json:"correctionId"`
+	SupersedesCorrectionIDs []string `json:"supersedesCorrectionIds,omitempty"`
+	CreatedLabel            string   `json:"createdLabel"`
+	Reason                  string   `json:"reason"`
+	Summary                 string   `json:"summary"`
 }
 
 type localEstimateState struct {
@@ -518,20 +526,29 @@ func (a *App) CorrectSleepEntry(input SleepCorrectionInput) (SleepEntryDTO, erro
 	if err != nil {
 		return SleepEntryDTO{}, err
 	}
-	supersedes, err := store.LatestSleepCorrectionID(context.Background(), input.ObservationID)
+	review, err := store.SleepReview(context.Background(), input.ObservationID)
 	if err != nil {
 		return SleepEntryDTO{}, err
 	}
+	if input.ReviewToken != review.Token() {
+		return SleepEntryDTO{}, errors.New("This sleep record changed. Reload the log and review its current source and edits before saving.")
+	}
+	if input.ZoneID != review.Observation.ZoneID {
+		return SleepEntryDTO{}, errors.New("A correction must use the source observation's time zone.")
+	}
 	record := storage.SleepCorrectionRecord{
-		CorrectionID:           newLocalID("corr_sleep"),
-		TargetObservationID:    input.ObservationID,
-		SupersedesCorrectionID: supersedes,
-		CreatedAt:              time.Now().UTC(),
-		Reason:                 storage.CorrectionReasonUserEdit,
+		CorrectionID:            newLocalID("corr_sleep"),
+		TargetObservationID:     input.ObservationID,
+		SupersedesCorrectionIDs: review.CorrectionIDs(),
+		BasedOnSourceRevision:   &review.SourceRevision,
+		AcquisitionMethod:       storage.ProvenanceAcquisitionManual,
+		CreatedAt:               time.Now().UTC(),
+		Reason:                  storage.CorrectionReasonUserEdit,
 		Changes: storage.SleepCorrectionChanges{
 			StartAt:             &start,
 			EndAt:               &end,
 			SleepClassification: &classification,
+			Excluded:            &input.Excluded,
 		},
 	}
 	if err := store.AppendSleepCorrection(context.Background(), record); err != nil {
@@ -545,40 +562,24 @@ func (a *App) SuppressSleepEntry(input SleepSuppressInput) (SleepEntryDTO, error
 	if err != nil {
 		return SleepEntryDTO{}, err
 	}
-	entries, err := a.listSleepEntriesWithStore(context.Background(), store)
+	review, err := store.SleepReview(context.Background(), input.ObservationID)
 	if err != nil {
 		return SleepEntryDTO{}, err
 	}
-	var current *SleepEntryDTO
-	for i := range entries.Entries {
-		if entries.Entries[i].ObservationID == input.ObservationID {
-			current = &entries.Entries[i]
-			break
-		}
+	if input.ReviewToken != review.Token() || review.NeedsReview {
+		return SleepEntryDTO{}, errors.New("Review the current source and conflicting edits before suppressing this entry.")
 	}
-	if current == nil {
-		return SleepEntryDTO{}, fmt.Errorf("sleep entry %s not found", input.ObservationID)
-	}
-	start, end, _, classification, err := parseSleepInput(SleepEntryInput{
-		StartLocal:     current.EffectiveStartLocal,
-		EndLocal:       current.EffectiveEndLocal,
-		ZoneID:         current.ZoneID,
-		Classification: current.EffectiveClassification,
-	})
-	if err != nil {
-		return SleepEntryDTO{}, err
-	}
-	supersedes, err := store.LatestSleepCorrectionID(context.Background(), input.ObservationID)
-	if err != nil {
-		return SleepEntryDTO{}, err
-	}
+	interval := review.Effective.Intervals[0].Interval
+	start, end, classification := interval.Start.UTC, interval.End.UTC, string(review.Effective.EffectiveClassification())
 	excluded := true
 	record := storage.SleepCorrectionRecord{
-		CorrectionID:           newLocalID("corr_sleep"),
-		TargetObservationID:    input.ObservationID,
-		SupersedesCorrectionID: supersedes,
-		CreatedAt:              time.Now().UTC(),
-		Reason:                 storage.CorrectionReasonUserEdit,
+		CorrectionID:            newLocalID("corr_sleep"),
+		TargetObservationID:     input.ObservationID,
+		SupersedesCorrectionIDs: review.CorrectionIDs(),
+		BasedOnSourceRevision:   &review.SourceRevision,
+		AcquisitionMethod:       storage.ProvenanceAcquisitionManual,
+		CreatedAt:               time.Now().UTC(),
+		Reason:                  storage.CorrectionReasonUserEdit,
 		Changes: storage.SleepCorrectionChanges{
 			StartAt:             &start,
 			EndAt:               &end,
@@ -783,21 +784,27 @@ type TaskInput struct {
 	DurationMinutes           int    `json:"durationMinutes"`
 	EarliestStartLocal        string `json:"earliestStartLocal,omitempty"`
 	LatestFinishLocal         string `json:"latestFinishLocal,omitempty"`
+	EarliestStartAt           string `json:"earliestStartAt,omitempty"`
+	LatestFinishAt            string `json:"latestFinishAt,omitempty"`
 	ZoneID                    string `json:"zoneId,omitempty"`
 	PreferredAfterWakeMinutes int    `json:"preferredAfterWakeMinutes,omitempty"`
 	MinimumConfidence         string `json:"minimumConfidence,omitempty"`
 }
 
 type TaskDTO struct {
-	TaskID          string `json:"taskId"`
-	Revision        int    `json:"revision"`
-	Title           string `json:"title"`
-	DurationMinutes int    `json:"durationMinutes"`
-	DurationLabel   string `json:"durationLabel"`
-	Status          string `json:"status"`
-	WindowLabel     string `json:"windowLabel,omitempty"`
-	AfterWakeLabel  string `json:"afterWakeLabel,omitempty"`
-	CreatedLabel    string `json:"createdLabel"`
+	TaskID                    string `json:"taskId"`
+	Revision                  int    `json:"revision"`
+	Title                     string `json:"title"`
+	DurationMinutes           int    `json:"durationMinutes"`
+	DurationLabel             string `json:"durationLabel"`
+	Status                    string `json:"status"`
+	WindowLabel               string `json:"windowLabel,omitempty"`
+	AfterWakeLabel            string `json:"afterWakeLabel,omitempty"`
+	CreatedLabel              string `json:"createdLabel"`
+	EarliestStartAt           string `json:"earliestStartAt,omitempty"`
+	LatestFinishAt            string `json:"latestFinishAt,omitempty"`
+	PreferredAfterWakeMinutes int    `json:"preferredAfterWakeMinutes"`
+	MinimumConfidence         string `json:"minimumConfidence"`
 }
 
 type TasksDTO struct {
@@ -916,16 +923,16 @@ func taskRecordFromInput(input TaskInput, taskID string, createdAt time.Time, st
 		CreatedAt:         createdAt,
 		MinimumConfidence: strings.TrimSpace(input.MinimumConfidence),
 	}
-	if input.EarliestStartLocal != "" {
-		parsed, err := parseCivilTime(input.EarliestStartLocal, location)
+	if input.EarliestStartLocal != "" || input.EarliestStartAt != "" {
+		parsed, err := parseTaskConstraintTime(input.EarliestStartLocal, input.EarliestStartAt, location)
 		if err != nil {
 			return storage.TaskRecord{}, fmt.Errorf("earliest start: %w", err)
 		}
 		utc := parsed.UTC()
 		record.EarliestStartAt = &utc
 	}
-	if input.LatestFinishLocal != "" {
-		parsed, err := parseCivilTime(input.LatestFinishLocal, location)
+	if input.LatestFinishLocal != "" || input.LatestFinishAt != "" {
+		parsed, err := parseTaskConstraintTime(input.LatestFinishLocal, input.LatestFinishAt, location)
 		if err != nil {
 			return storage.TaskRecord{}, fmt.Errorf("latest finish: %w", err)
 		}
@@ -939,15 +946,34 @@ func taskRecordFromInput(input TaskInput, taskID string, createdAt time.Time, st
 	return record, nil
 }
 
+// Exact instants let an unchanged constraint survive travel, seconds precision,
+// and the repeated hour at DST fallback. Edited wall times use the civil parser.
+func parseTaskConstraintTime(local, instant string, location *time.Location) (time.Time, error) {
+	if local != "" && instant != "" {
+		return time.Time{}, errors.New("provide either a civil time or an exact instant, not both")
+	}
+	if instant != "" {
+		return time.Parse(time.RFC3339Nano, instant)
+	}
+	return parseCivilTime(local, location)
+}
+
 func taskDTO(record storage.TaskRecord) TaskDTO {
 	dto := TaskDTO{
-		TaskID:          record.TaskID,
-		Title:           record.Title,
-		DurationMinutes: record.DurationMinutes,
-		DurationLabel:   formatDuration(time.Duration(record.DurationMinutes) * time.Minute),
-		Status:          record.Status,
-		Revision:        record.Revision,
-		CreatedLabel:    "Added " + record.CreatedAt.Local().Format("Jan 2"),
+		TaskID:            record.TaskID,
+		Title:             record.Title,
+		DurationMinutes:   record.DurationMinutes,
+		DurationLabel:     formatDuration(time.Duration(record.DurationMinutes) * time.Minute),
+		Status:            record.Status,
+		Revision:          record.Revision,
+		CreatedLabel:      "Added " + record.CreatedAt.Local().Format("Jan 2"),
+		MinimumConfidence: record.MinimumConfidence,
+	}
+	if record.EarliestStartAt != nil {
+		dto.EarliestStartAt = record.EarliestStartAt.UTC().Format(time.RFC3339Nano)
+	}
+	if record.LatestFinishAt != nil {
+		dto.LatestFinishAt = record.LatestFinishAt.UTC().Format(time.RFC3339Nano)
 	}
 	switch {
 	case record.EarliestStartAt != nil && record.LatestFinishAt != nil:
@@ -959,6 +985,7 @@ func taskDTO(record storage.TaskRecord) TaskDTO {
 		dto.WindowLabel = "Finish by " + record.LatestFinishAt.Local().Format("Jan 2, 3:04 PM")
 	}
 	if record.PreferredAfterWakeMinutes != nil {
+		dto.PreferredAfterWakeMinutes = *record.PreferredAfterWakeMinutes
 		dto.AfterWakeLabel = fmt.Sprintf("At least %d min after waking", *record.PreferredAfterWakeMinutes)
 	}
 	return dto
@@ -1079,52 +1106,19 @@ func refusalDTO(refusal *estimation.EstimationRefusal, fallback string) *Refusal
 }
 
 func (a *App) listSleepEntriesWithStore(ctx context.Context, store *storage.Store) (SleepEntriesDTO, error) {
-	snapshot, err := store.ReadSleepSnapshot(ctx)
+	reviews, err := store.ReadSleepReviews(ctx)
 	if err != nil {
 		return SleepEntriesDTO{}, err
 	}
-	observations := snapshot.Observations
-	if len(observations) == 0 {
-		return SleepEntriesDTO{
-			Status:  "empty",
-			Empty:   true,
-			Message: "No sleep entries yet. Add a sleep interval to start a local estimate.",
-			Entries: []SleepEntryDTO{},
-		}, nil
+	if len(reviews) == 0 {
+		return SleepEntriesDTO{Status: "empty", Empty: true, Message: "No sleep entries yet. Add a sleep interval to start a local estimate.", Entries: []SleepEntryDTO{}}, nil
 	}
-	rawSessions := snapshot.RawSessions
-	correctedSessions := snapshot.CorrectedSessions
-	corrections := snapshot.Corrections
-	rawByID := map[string]domain.SleepSession{}
-	for _, session := range rawSessions {
-		rawByID[string(session.ID)] = session
+	sort.Slice(reviews, func(i, j int) bool { return reviews[i].Observation.StartAt.After(reviews[j].Observation.StartAt) })
+	entries := make([]SleepEntryDTO, 0, len(reviews))
+	for _, review := range reviews {
+		entries = append(entries, sleepEntryFromReview(review))
 	}
-	correctedByID := map[string]domain.SleepSession{}
-	for _, session := range correctedSessions {
-		correctedByID[string(session.ID)] = session
-	}
-	history := map[string][]storage.SleepCorrectionRecord{}
-	for _, correction := range corrections {
-		history[correction.TargetObservationID] = append(history[correction.TargetObservationID], correction)
-	}
-	sort.Slice(observations, func(i, j int) bool {
-		return observations[i].StartAt.After(observations[j].StartAt)
-	})
-	entries := make([]SleepEntryDTO, 0, len(observations))
-	for _, observation := range observations {
-		rawSession := rawByID[observation.ObservationID]
-		correctedSession := correctedByID[observation.ObservationID]
-		if len(correctedSession.Intervals) == 0 {
-			correctedSession = rawSession
-		}
-		entries = append(entries, sleepEntryDTO(observation, rawSession, correctedSession, history[observation.ObservationID]))
-	}
-	return SleepEntriesDTO{
-		Status:  "ready",
-		Empty:   false,
-		Message: fmt.Sprintf("%d local sleep %s stored on this device.", len(entries), plural(len(entries), "entry", "entries")),
-		Entries: entries,
-	}, nil
+	return SleepEntriesDTO{Status: "ready", Message: fmt.Sprintf("%d local sleep %s stored on this device.", len(entries), plural(len(entries), "entry", "entries")), Entries: entries}, nil
 }
 
 func (a *App) sleepEntryByID(observationID string) (SleepEntryDTO, error) {
@@ -1132,11 +1126,24 @@ func (a *App) sleepEntryByID(observationID string) (SleepEntryDTO, error) {
 	if err != nil {
 		return SleepEntryDTO{}, err
 	}
-	snapshot, err := store.ReadSleepObservationSnapshot(a.applicationContext(), observationID)
+	review, err := store.SleepReview(a.applicationContext(), observationID)
 	if err != nil {
 		return SleepEntryDTO{}, err
 	}
-	return sleepEntryDTO(snapshot.Observation, snapshot.RawSession, snapshot.CorrectedSession, snapshot.Corrections), nil
+	return sleepEntryFromReview(review), nil
+}
+
+func sleepEntryFromReview(review sleepv1.ReviewContext) SleepEntryDTO {
+	raw, _ := sleepv1.SessionFromObservation(review.Observation) // Review already validated the original.
+	result := sleepEntryDTO(review.Observation, raw, review.Effective, review.Corrections)
+	result.ReviewToken, result.NeedsReview = review.Token(), review.NeedsReview
+	interval := review.Source.Intervals[0].Interval
+	result.SourceWindowLabel = formatInstant(interval.Start) + " to " + formatInstant(interval.End)
+	result.ActiveEdits = []SleepCorrectionDTO{}
+	for _, correction := range review.ManualCorrections {
+		result.ActiveEdits = append(result.ActiveEdits, correctionDTO(correction, review.Observation.ZoneID))
+	}
+	return result
 }
 
 func sleepEntryDTO(observation storage.SleepObservationRecord, rawSession, correctedSession domain.SleepSession, corrections []storage.SleepCorrectionRecord) SleepEntryDTO {
@@ -1172,11 +1179,11 @@ func sleepEntryDTO(observation storage.SleepObservationRecord, rawSession, corre
 
 func correctionDTO(correction storage.SleepCorrectionRecord, zoneID string) SleepCorrectionDTO {
 	return SleepCorrectionDTO{
-		CorrectionID:           correction.CorrectionID,
-		SupersedesCorrectionID: correction.SupersedesCorrectionID,
-		CreatedLabel:           correction.CreatedAt.In(locationOrUTC(zoneID)).Format("Jan 2, 3:04 PM"),
-		Reason:                 strings.ReplaceAll(correction.Reason, "_", " "),
-		Summary:                correctionSummary(correction.Changes, zoneID),
+		CorrectionID:            correction.CorrectionID,
+		SupersedesCorrectionIDs: correction.SupersedesCorrectionIDs,
+		CreatedLabel:            correction.CreatedAt.In(locationOrUTC(zoneID)).Format("Jan 2, 3:04 PM"),
+		Reason:                  strings.ReplaceAll(correction.Reason, "_", " "),
+		Summary:                 correctionSummary(correction.Changes, zoneID),
 	}
 }
 
@@ -1215,7 +1222,7 @@ func parseSleepInput(input SleepEntryInput) (time.Time, time.Time, string, strin
 		classification = storage.SleepClassificationPrincipal
 	}
 	if !validInputClassification(classification) {
-		return time.Time{}, time.Time{}, "", "", errors.New("classification must be principal or nap")
+		return time.Time{}, time.Time{}, "", "", errors.New("classification must be principal, nap or unknown")
 	}
 	start, err := parseCivilTime(strings.TrimSpace(input.StartLocal), location)
 	if err != nil {
@@ -1236,18 +1243,24 @@ func parseCivilTime(value string, location *time.Location) (time.Time, error) {
 		return time.Time{}, errors.New("civil time is required")
 	}
 	for _, layout := range []string{"2006-01-02T15:04", "2006-01-02T15:04:05"} {
-		if parsed, err := time.ParseInLocation(layout, value, location); err == nil {
-			return parsed, nil
+		if parsed, err := time.Parse(layout, value); err == nil {
+			resolved, resolveErr := domain.ResolveCivilTime(location, parsed.Year(), parsed.Month(), parsed.Day(), parsed.Hour(), parsed.Minute(), parsed.Second())
+			return resolved.Time.Add(time.Duration(parsed.Nanosecond())), resolveErr
 		}
 	}
 	if parsed, err := time.Parse(time.RFC3339, value); err == nil {
+		_, offset := parsed.Zone()
+		_, actual := parsed.In(location).Zone()
+		if offset != actual {
+			return time.Time{}, errors.New("UTC offset does not match the selected time zone")
+		}
 		return parsed, nil
 	}
 	return time.Time{}, errors.New("use a local date and time")
 }
 
 func validInputClassification(value string) bool {
-	return value == storage.SleepClassificationPrincipal || value == storage.SleepClassificationNap
+	return sleepv1.ValidClassification(value)
 }
 
 func requireDeleteConfirmation(value string) error {
@@ -1307,7 +1320,7 @@ func inputValue(value domain.ZonedInstant) string {
 	if err != nil {
 		local = value.UTC
 	}
-	return local.Format("2006-01-02T15:04")
+	return local.Format(time.RFC3339Nano)
 }
 
 func formatInstant(value domain.ZonedInstant) string {

@@ -28,11 +28,11 @@ export function SleepDataSettings({
         <p className="section-kicker">Local data</p>
         <h2>Storage</h2>
         <p className="settings-copy">
-          Export produces v1 JSON with observation-set and correction-set sections. Suppress appends
-          a correction; erase permanently removes local observations and their correction history.
-          If backend sync is on, erasure also propagates on the next sync: the server hard-deletes
-          its copy and a tombstone tells your other devices to erase theirs. ZeitBoard cannot
-          restore an erased record.
+          Export produces versioned JSON with observation-set and correction-set sections. Suppress
+          appends a correction; erase permanently removes local observations and their correction
+          history. If backend sync is on, erasure also propagates on the next sync: the server
+          hard-deletes its copy and a tombstone tells your other devices to erase theirs. ZeitBoard
+          cannot restore an erased record.
         </p>
       </div>
       <div className="data-control-grid">

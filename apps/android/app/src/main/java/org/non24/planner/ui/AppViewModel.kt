@@ -17,6 +17,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -26,7 +29,11 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.non24.planner.AppDependencies
 import org.non24.planner.data.DurableLocalDataState
+import org.non24.planner.data.safeSyncError
+import org.non24.planner.data.normalizeSyncUrl
 import org.non24.planner.data.SleepRepository
+import org.non24.planner.data.SleepReview
+import org.non24.planner.data.formatReviewInput
 import org.non24.planner.domain.AcquisitionMethod
 import org.non24.planner.domain.AmbiguousLocalTimeException
 import org.non24.planner.domain.AppSettings
@@ -97,6 +104,102 @@ class AppViewModel(
     private val mutableMedicationSaveState = MutableStateFlow<MedicationSaveState>(MedicationSaveState.Idle)
     private var retryableMedicationEvent: MedicationEvent? = null
     val medicationSaveState: StateFlow<MedicationSaveState> = mutableMedicationSaveState.asStateFlow()
+    val syncStatus = container.syncStatus
+    val companion = container.backendSyncRepository.companion
+    val sleepReview = container.backendSyncRepository.sleepReview
+    val backgroundReadState = container.healthConnectRepository.backgroundReadState
+    private val syncGuard = AtomicBoolean(false)
+    private val mutableSyncBusy = MutableStateFlow(false)
+    val syncBusy = mutableSyncBusy.asStateFlow()
+    private val mutableSyncError = MutableStateFlow<String?>(null)
+    val syncError = mutableSyncError.asStateFlow()
+    private val mutableEnrollmentRevision = MutableStateFlow(0L)
+    val enrollmentRevision = mutableEnrollmentRevision.asStateFlow()
+    private var foregroundJob: Job? = null
+
+    fun onForeground() {
+        foregroundJob?.cancel()
+        foregroundJob = viewModelScope.launch {
+            try {
+                while (isActive) {
+                    container.evidenceSync.refreshForeground()
+                    container.healthConnectRepository.refreshPermissionState()
+                    delay(60_000)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                mutableSyncError.value = "Automatic refresh could not finish. Retry from Settings."
+            }
+        }
+    }
+
+    fun onBackground() { foregroundJob?.cancel() }
+
+    private fun syncOperation(action: suspend () -> Unit) {
+        if (!syncGuard.compareAndSet(false, true)) return
+        mutableSyncBusy.value = true
+        mutableSyncError.value = null
+        viewModelScope.launch {
+            try {
+                action()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                mutableSyncError.value = safeSyncError(error)
+            } finally {
+                mutableSyncBusy.value = false
+                syncGuard.set(false)
+            }
+        }
+    }
+
+    fun enrollBackend(address: String, secret: String, homeZone: String) {
+        try {
+            normalizeSyncUrl(address)
+            ZoneId.of(homeZone.trim())
+            require(secret.isNotBlank())
+        } catch (_: Exception) {
+            mutableSyncError.value = "Enter a valid HTTPS server address, enrollment secret and IANA home zone (for example America/New_York)."
+            return
+        }
+        syncOperation {
+            container.backendSyncRepository.enroll(address, secret, homeZone, "ZeitBoard Android").getOrThrow()
+            container.settingsRepository.update { it.copy(dataMode = DataMode.HEALTH_CONNECT) }
+            mutableEnrollmentRevision.value += 1
+            mutableMessage.value = "Connected to your server."
+            container.evidenceSync.refreshForeground()
+        }
+    }
+
+    fun disableBackend() = syncOperation {
+        container.backgroundScheduler.cancelAll()
+        container.backendSyncRepository.disable()
+        container.settingsRepository.update { it.copy(backgroundSyncEnabled = false) }
+        mutableMessage.value = "Disconnected. Local records are retained; server records and device revocation are managed on your server."
+    }
+
+    fun setBackgroundSyncEnabled(enabled: Boolean) = syncOperation {
+        require(!enabled || container.backendSyncRepository.isConfigured())
+        container.settingsRepository.update { it.copy(backgroundSyncEnabled = enabled) }
+        container.evidenceSync.reconcileSchedule()
+    }
+
+    fun uploadNow() = syncOperation {
+        val count = container.evidenceSync.uploadNow().getOrThrow()
+        mutableMessage.value = if (count == 0) "Sync finished. Downloaded records and server forecast are up to date as of this check."
+        else "Sync finished; uploaded $count sleep records."
+    }
+
+    fun onBackgroundPermissionResult(granted: Set<String>) {
+        syncOperation {
+            container.healthConnectRepository.refreshPermissionState()
+            container.evidenceSync.reconcileSchedule()
+            mutableMessage.value = if (org.non24.planner.data.HealthConnectPermissions.READ_BACKGROUND in granted) {
+                "Background sleep access granted. Automatic refresh follows your Settings choice."
+            } else "Background sleep access was not granted. Foreground import remains available."
+        }
+    }
 
     private val fixtureState = combine(
         container.fixtureSleepRepository.sourceEpisodes,
@@ -198,23 +301,30 @@ class AppViewModel(
     }
 
     fun setDataMode(mode: DataMode) {
-        viewModelScope.launch {
+        syncOperation {
             container.settingsRepository.update { it.copy(dataMode = mode) }
             if (mode == DataMode.HEALTH_CONNECT) {
-                container.healthConnectRepository.refresh()
+                container.evidenceSync.refreshForeground()
             }
+            container.evidenceSync.reconcileSchedule()
         }
     }
 
     fun setUse24HourTime(enabled: Boolean) {
         viewModelScope.launch {
-            container.settingsRepository.update { it.copy(use24HourTime = enabled) }
+            try {
+                container.settingsRepository.update { it.copy(use24HourTime = enabled) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                mutableMessage.value = "The display setting could not be saved. Try again."
+            }
         }
     }
 
     fun refreshHealthConnect() {
-        viewModelScope.launch {
-            container.healthConnectRepository.refresh()
+        syncOperation {
+            container.evidenceSync.refreshForeground()
             mutableMessage.value = container.healthConnectRepository.lastRefreshError.value
                 ?: when (container.healthConnectRepository.permissionState.value) {
                 HealthPermissionState.GRANTED -> "Health Connect sleep import refreshed."
@@ -226,8 +336,11 @@ class AppViewModel(
     }
 
     fun onHealthPermissionResult(grantedPermissions: Set<String>) {
-        viewModelScope.launch {
+        syncOperation {
             container.healthConnectRepository.onPermissionResult(grantedPermissions)
+            if (grantedPermissions.containsAll(container.healthConnectRepository.requiredPermissions)) {
+                container.evidenceSync.refreshForeground()
+            }
             mutableMessage.value = if (
                 grantedPermissions.containsAll(container.healthConnectRepository.requiredPermissions)
             ) {
@@ -272,8 +385,26 @@ class AppViewModel(
         val repository = selectedSleepRepository()
         viewModelScope.launch {
             repository.appendCorrection(correction)
-                .onSuccess { mutableMessage.value = "Manual sleep/wake correction saved." }
+                .onSuccess { mutableMessage.value = "Correction saved locally. To change a synced record, connect to your server and use its review in Correct." }
                 .onFailure { mutableMessage.value = it.message ?: "Correction could not be saved." }
+        }
+    }
+
+    fun loadSleepReview(observationId: String) = syncOperation {
+        container.backendSyncRepository.loadSleepReview(observationId)
+    }
+
+    fun saveServerSleepCorrection(review: SleepReview, startText: String, endText: String, classification: String, excluded: Boolean) {
+        val zone = review.effective.zoneId
+        val start = if (startText == formatReviewInput(review.effective.start, zone)) review.effective.start
+            else parseLocalDateTime(startText, zone, null)?.instant ?: return
+        val end = if (endText == formatReviewInput(review.effective.end, zone)) review.effective.end
+            else parseLocalDateTime(endText, zone, null)?.instant ?: return
+        if (!end.isAfter(start)) { mutableMessage.value = "Wake time must be after sleep time."; return }
+        syncOperation {
+            container.backendSyncRepository.saveSleepReview(review, start, end, classification, excluded).getOrThrow()
+            mutableMessage.value = "Correction saved on this phone and queued for your server."
+            container.evidenceSync.refreshForeground()
         }
     }
 
@@ -380,6 +511,10 @@ class AppViewModel(
         private val CORRECTION_INPUT_FORMATTER: DateTimeFormatter = DateTimeFormatterBuilder()
             .parseStrict()
             .append(INPUT_FORMATTER)
+            .optionalStart()
+            .appendPattern(":ss")
+            .appendFraction(java.time.temporal.ChronoField.NANO_OF_SECOND, 0, 9, true)
+            .optionalEnd()
             .optionalStart()
             .appendLiteral(' ')
             .appendOffset("+HH:MM", "Z")

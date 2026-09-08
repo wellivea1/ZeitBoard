@@ -148,7 +148,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 		`CREATE TABLE IF NOT EXISTS local_sleep_corrections (
 			correction_id TEXT PRIMARY KEY,
 			target_observation_id TEXT NOT NULL,
-			supersedes_correction_id TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL,
 			reason TEXT NOT NULL,
 			changes_json BLOB NOT NULL,

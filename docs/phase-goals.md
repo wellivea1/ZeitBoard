@@ -1,5 +1,10 @@
 # Meta review and phase goals (2026-07)
 
+> **2026-09-08:** [`completion-plan.md`](completion-plan.md) is the active project completion goal
+> and sequence. The prompts below are historical phase inputs, not an instruction to rebuild
+> delivered features. Later ADRs and owner decisions govern conflicts; software delivery and
+> operational acceptance are tracked separately.
+
 > Direction review against the ultimate goal, and one `/goal` prompt per
 > phase — each prompt is self-contained and pasteable into an agent session.
 > Engineering notes only; not medical advice.
@@ -70,14 +75,12 @@ which no amount of implementation satisfies on its own because item 6 requires
 an independent review. The original framing below still describes why this is
 the largest threat-model change in the project's history.
 
-**Gap 5 (original framing).** Today's trusted-web prototype is static
-synthetic HTML; `future-relay-design.md` was written for exactly this
-successor. New requirements beyond the old design: *interactive* ask
-("when will they be awake?"), *time requests* that land in the approval
-queue, and visitor↔user messaging with notifications. Public-facing means
-anonymous-adjacent traffic against the same server that stores health data
-— the design must keep the portal surface projection-only (allowlisted
-availability fields, never health records), expiring, revocable,
+**Gap 5 (original framing).** Today's trusted-web prototype is static synthetic HTML;
+`future-relay-design.md` was written for exactly this successor. New requirements beyond the old
+design: _interactive_ ask ("when will they be awake?"), _time requests_ that land in the approval
+queue, and visitor↔user messaging with notifications. Public-facing means anonymous-adjacent traffic
+against the same server that stores health data — the design must keep the portal surface
+projection-only (allowlisted availability fields, never health records), expiring, revocable,
 rate-limited, and enumeration-proof.
 
 **Gap 6 — notifications have no transport.** Portal requests and Medfriend-
@@ -132,22 +135,18 @@ Status: achieved on 2026-07-19 via ADR-0022 and `verification.md`.
 Status: achieved on 2026-07-22 via ADR-0023 and the calendar verification
 record in `verification.md`. External-provider write-back remains out of scope.
 
-> **Goal: make ZeitBoard a real calendar: imported events, real fixed
-> events in planning, and write-back of approved placements.**
-> Context: roadmap slice 6 + Phase 3c, `docs/data-model.md` fixed events,
-> scheduling engine inputs, ADR-0018/0020 task model. First write the
-> placement ADR: adapters live device-side first (ICS file + CalDAV
-> read-only; no Google OAuth yet), imported event **text stays out of
-> projections** (times/ids only reach the scheduler; titles render only
-> locally like task titles). Then: contract for event sets, local storage,
-> Calendar screen showing real events against predicted sleep/wake bands
-> (retiring the five-day fixture), scheduler consuming real fixed events.
-> Finally Phase 3c: applying an *approved* placement writes a ZeitBoard-
-> owned calendar block (local store; exportable ICS), never edits imported
-> events. Invariants: import is read-only; every write is an approved
-> proposal; sync via revision records if events sync at all. Acceptance:
-> real .ics imports; proposals avoid real events; approving a placement
-> materializes a block visible on Calendar and in export.
+> **Goal: make ZeitBoard a real calendar: imported events, real fixed events in planning, and
+> write-back of approved placements.** Context: roadmap slice 6 + Phase 3c, `docs/data-model.md`
+> fixed events, scheduling engine inputs, ADR-0018/0020 task model. First write the placement ADR:
+> adapters live device-side first (ICS file + CalDAV read-only; no Google OAuth yet), imported event
+> **text stays out of projections** (times/ids only reach the scheduler; titles render only locally
+> like task titles). Then: contract for event sets, local storage, Calendar screen showing real
+> events against predicted sleep/wake bands (retiring the five-day fixture), scheduler consuming
+> real fixed events. Finally Phase 3c: applying an _approved_ placement writes a ZeitBoard- owned
+> calendar block (local store; exportable ICS), never edits imported events. Invariants: import is
+> read-only; every write is an approved proposal; sync via revision records if events sync at all.
+> Acceptance: real .ics imports; proposals avoid real events; approving a placement materializes a
+> block visible on Calendar and in export.
 
 ### `/goal phase-3-disease-management`
 
@@ -240,29 +239,23 @@ always visible), passcodes required on every link, request horizon
 uncapped with a beyond-horizon warning, and calendar-inline
 approve/decline that also materializes the ADR-0023 block.
 
-> **Goal: the public-facing portal: share a link that shows when the user
-> is likely awake, lets visitors ask, and lets them request a time — every
-> request landing in the approval queue.**
-> Context: `docs/future-relay-design.md` (input), `apps/trusted-web-
-> prototype` (to be replaced), sharing spec §9.7/9.8, ADR-0016 queue,
-> threat model. Server-side on the self-hosted instance: per-profile
-> expiring, revocable, passcode-optional links serving a **projection-only
-> availability page** (waking windows + confidence bands; civil-time
-> primary; zero health records, zero names of medications/tasks ever).
-> Visitor actions: (a) "ask" — canned availability answers computed from
-> the projection, no LLM on the public path; (b) "request a time" —
-> structured slot request (window + short message, length-capped,
-> sanitized) that becomes a **proposal with origin `visitor`** in the
-> existing queue, decided with one-use tokens like every proposal;
-> (c) messaging — a thread per request, visible in-app; visitor sees
-> status changes (pending/approved/declined) without seeing the calendar.
-> Hard requirements: rate limits + proof-of-work or captcha-free
-> throttling, link-token entropy + no enumeration, per-profile audit log,
-> kill switch (revoke = 410), threat-model v2 + privacy.md update BEFORE
-> exposure, CSP with zero third-party origins. Acceptance: a visitor with
-> the link sees only allowlisted fields in every response body (asserted
-> by test), a request round-trips to an in-app decision and a visitor-
-> visible status, and revocation is immediate.
+> **Goal: the public-facing portal: share a link that shows when the user is likely awake, lets
+> visitors ask, and lets them request a time — every request landing in the approval queue.**
+> Context: `docs/future-relay-design.md` (input), `apps/trusted-web- prototype` (to be replaced),
+> sharing spec §9.7/9.8, ADR-0016 queue, threat model. Server-side on the self-hosted instance:
+> per-profile expiring, revocable, passcode-required links serving a **projection-only availability
+> page** (waking windows + confidence bands; civil-time primary; zero health records, zero names of
+> medications/tasks ever). Visitor actions: (a) "ask" — canned availability answers computed from
+> the projection, no LLM on the public path; (b) "request a time" — structured slot request
+> (window + short message, length-capped, sanitized) that becomes a **proposal with origin
+> `visitor`** in the existing queue, decided with one-use tokens like every proposal; (c) messaging
+> — a thread per request, visible in-app; visitor sees status changes (pending/approved/declined)
+> without seeing the calendar. Hard requirements: rate limits + proof-of-work or captcha-free
+> throttling, link-token entropy + no enumeration, per-profile audit log, kill switch (revoke =
+> 410), threat-model v2 + privacy.md update BEFORE exposure, CSP with zero third-party origins.
+> Acceptance: a visitor with the link sees only allowlisted fields in every response body (asserted
+> by test), a request round-trips to an in-app decision and a visitor- visible status, and
+> revocation is immediate.
 
 ### `/goal phase-6-companion-and-notifications`
 
@@ -294,73 +287,60 @@ shadow-only — (7) via `core/freshness`, (2) via
 [ADR-0033](decisions/0033-recompute-orchestrator.md), and (8) via
 [ADR-0034](decisions/0034-operational-outlook.md).
 
-**The phase's acceptance is not fully met, and the gap is measurement.** Six of
-its seven acceptance clauses hold: Health Connect sleep reaches the core without
-manual export, the collector records real privacy-minimized evidence, inference
-runs in shadow with explainable support and conflict, analysis refreshes in the
-background, stale current-state claims are withheld consistently, and the
-operational view exists. The seventh — *a private pilot report stating measured
-accuracy, manual burden, and resource use* — has not been produced, and cannot
-be produced from synthetic data. It needs the owner running the built app on
-real days.
+**The phase's acceptance is not fully met, and the gap is measurement.** Six of its seven acceptance
+clauses hold: Health Connect sleep reaches the core without manual export, the collector records
+real privacy-minimized evidence, inference runs in shadow with explainable support and conflict,
+analysis refreshes in the background, stale current-state claims are withheld consistently, and the
+operational view exists. The seventh — _a private pilot report stating measured accuracy, manual
+burden, and resource use_ — has not been produced, and cannot be produced from synthetic data. It
+needs the owner running the built app on real days.
 
-Three residuals carry forward: the activity collector still runs only while the
-desktop app runs; Android pushes without a background schedule or a pull; and
-office hours in the operational view are not user-configurable.
+Current residuals: the activity collector runs only while the desktop app runs; Android now has
+background sync, pull/erasure, cached Go forecasts and read-only tasks (ADR-0037/0038), but
+phone-authored correction/medication synchronization remains;
+operational acceptance still needs real-device evidence. Reaching hours are now configurable
+(roadmap slice 16), and ADR-0036 adds visible desktop projection refresh/recovery.
 
-> **Goal: close the automatic daily loop. Bring fresh sleep/wake evidence from
-> Android Health Connect and privacy-minimized Windows activity into the shared
-> Go analysis path, and refresh the user's near-term planning state without
-> manual transcription and without an open UI screen.**
+> **Goal: close the automatic daily loop. Bring fresh sleep/wake evidence from Android Health
+> Connect and privacy-minimized Windows activity into the shared Go analysis path, and refresh the
+> user's near-term planning state without manual transcription and without an open UI screen.**
 > Context: `core/platform/activity/collector.go` (startup-only today),
-> `apps/android/.../HealthConnectSleepRepository.kt` (ingests but does not
-> sync), ADR-0015/0017/0020 (enrollment, tombstones, revision sync),
-> ADR-0022 (the measured-delta gate), ADR-0029 (the freshness policy the
-> portal already has and the desktop does not).
-> **Slices.** (1) An ADR covering Android sleep-record sync, Windows activity
-> evidence, inference provenance, background recomputation, freshness
-> semantics, and per-source opt-out and erasure — plus recorded desktop
-> CPU/memory/startup and Android battery baselines *before* the collector
-> lands, so its cost can be stated rather than guessed. (2) Android
-> enrollment and push/pull over the existing model: immutable source
-> revisions, idempotent dedupe, endpoint offsets preserved without inventing
-> an IANA zone, corrections synced separately, tombstones propagated, a
-> durable outbox with explicit queued/syncing/synced/error state, last-good
-> UI on failure, and local-only mode still supported. Android still runs no
-> estimator of its own. (3) A real Windows collector: startup/shutdown,
-> lock/unlock, active/idle transitions, suspend/resume, display state —
-> compact intervals and transitions, never keystrokes, typed content,
-> screenshots, browser history, application names, or a high-frequency input
-> stream. Platform interfaces and build tags so a Linux adapter stays
-> possible. (4) A multi-source candidate builder emitting `inferred` episodes
-> with start/end uncertainty, supporting and conflicting source ids, and an
-> algorithm version — **shadow-only**, never merging away raw evidence, with
-> corrections remaining a separate append-only layer. (5) A validation gate:
-> extend the seeded generator with quiet wake, a shared desktop, wearable
-> false sleep, missingness, forced-appointment wake, fragmentation, delayed
-> cross-device sync, and revision/correction conflict; add replay tooling;
-> an inferred episode reaches production planning only after a documented
-> positive measured decision. (6) A durable, idempotent recompute
-> orchestrator that coalesces bursts, records an input fingerprint, runs no
-> LLM, needs no open screen, and cannot emit duplicate proposals.
-> (7) **One** freshness policy shared by desktop, server, local agent, and
-> portal, exposing newest observation time, analysis time, source
-> completeness, and the reason for any withholding — and fixing any path that
-> can show "Likely awake" indefinitely after expected sleep. (8) A 48–72 hour
-> operational view: next sleep/wake range, fixed-event and office-hours
-> overlap, task opportunities, freshness, and explicit refusal.
-> **Invariants.** No DLMO or exact phase claim; no medication recommendation;
-> no cognitive-fitness or driving-safety claim; no portal exposure, messaging,
-> or live layer; no new assistant action; no automatic external calendar
-> write; no silent application of an uncertain change. Relaxed approval, when
-> it arrives, covers only the user's own reversible internal operations under
-> an explicit opt-in with undo — never an agent, visitor, or external surface.
-> **Acceptance:** a Health Connect sleep session reaches the core without
-> manual export; the collector records real privacy-minimized evidence;
-> inference runs in shadow with explainable support and conflict; analysis
-> refreshes in the background; stale current-state claims are withheld
-> consistently; and a private pilot report states measured accuracy, manual
-> burden, and resource use.
+> `apps/android/.../HealthConnectSleepRepository.kt` (ingests but does not sync), ADR-0015/0017/0020
+> (enrollment, tombstones, revision sync), ADR-0022 (the measured-delta gate), ADR-0029 (the
+> freshness policy the portal already has and the desktop does not). **Slices.** (1) An ADR covering
+> Android sleep-record sync, Windows activity evidence, inference provenance, background
+> recomputation, freshness semantics, and per-source opt-out and erasure — plus recorded desktop
+> CPU/memory/startup and Android battery baselines _before_ the collector lands, so its cost can be
+> stated rather than guessed. (2) Android enrollment and push/pull over the existing model:
+> immutable source revisions, idempotent dedupe, endpoint offsets preserved without inventing an
+> IANA zone, corrections synced separately, tombstones propagated, a durable outbox with explicit
+> queued/syncing/synced/error state, last-good UI on failure, and local-only mode still supported.
+> Android still runs no estimator of its own. (3) A real Windows collector: startup/shutdown,
+> lock/unlock, active/idle transitions, suspend/resume, display state — compact intervals and
+> transitions, never keystrokes, typed content, screenshots, browser history, application names, or
+> a high-frequency input stream. Platform interfaces and build tags so a Linux adapter stays
+> possible. (4) A multi-source candidate builder emitting `inferred` episodes with start/end
+> uncertainty, supporting and conflicting source ids, and an algorithm version — **shadow-only**,
+> never merging away raw evidence, with corrections remaining a separate append-only layer. (5) A
+> validation gate: extend the seeded generator with quiet wake, a shared desktop, wearable false
+> sleep, missingness, forced-appointment wake, fragmentation, delayed cross-device sync, and
+> revision/correction conflict; add replay tooling; an inferred episode reaches production planning
+> only after a documented positive measured decision. (6) A durable, idempotent recompute
+> orchestrator that coalesces bursts, records an input fingerprint, runs no LLM, needs no open
+> screen, and cannot emit duplicate proposals. (7) **One** freshness policy shared by desktop,
+> server, local agent, and portal, exposing newest observation time, analysis time, source
+> completeness, and the reason for any withholding — and fixing any path that can show "Likely
+> awake" indefinitely after expected sleep. (8) A 48–72 hour operational view: next sleep/wake
+> range, fixed-event and office-hours overlap, task opportunities, freshness, and explicit refusal.
+> **Invariants.** No DLMO or exact phase claim; no medication recommendation; no cognitive-fitness
+> or driving-safety claim; no portal exposure, messaging, or live layer; no new assistant action; no
+> automatic external calendar write; no silent application of an uncertain change. Relaxed approval,
+> when it arrives, covers only the user's own reversible internal operations under an explicit
+> opt-in with undo — never an agent, visitor, or external surface. **Acceptance:** a Health Connect
+> sleep session reaches the core without manual export; the collector records real privacy-minimized
+> evidence; inference runs in shadow with explainable support and conflict; analysis refreshes in
+> the background; stale current-state claims are withheld consistently; and a private pilot report
+> states measured accuracy, manual burden, and resource use.
 
 ---
 

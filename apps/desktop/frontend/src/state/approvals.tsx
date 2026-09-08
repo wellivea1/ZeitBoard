@@ -20,6 +20,7 @@ import {
 } from "../data/proposals";
 import { notifyCalendarDataChanged } from "../data/calendar";
 import { sleepDataChangedEvent } from "../data/sleepDataEvents";
+import { subscribeProjectionRefresh } from "../utils/projectionRefresh";
 
 export type ProposalDecision = "approved" | "rejected";
 export type ProposalStatus = "pending" | ProposalDecision;
@@ -49,6 +50,7 @@ interface ApprovalsContextValue {
   error: string;
   ready: boolean;
   dismissError: () => void;
+  refresh: () => Promise<void>;
 }
 
 const ApprovalsContext = createContext<ApprovalsContextValue | null>(null);
@@ -91,6 +93,8 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
       setError("");
     } catch (reason) {
       if (!mounted.current || version !== requestVersion.current) return;
+      setProposals([]);
+      setUnplaced([]);
       setReady(true);
       setError(reason instanceof Error ? reason.message : "Proposal queue could not be loaded.");
     }
@@ -98,14 +102,13 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     mounted.current = true;
-    void Promise.resolve().then(refresh);
     const onSleepChanged = () => {
       if (busyRef.current === null) void refresh();
     };
-    window.addEventListener(sleepDataChangedEvent, onSleepChanged);
+    const unsubscribe = subscribeProjectionRefresh(onSleepChanged, sleepDataChangedEvent);
     return () => {
       mounted.current = false;
-      window.removeEventListener(sleepDataChangedEvent, onSleepChanged);
+      unsubscribe();
     };
   }, [refresh]);
 
@@ -206,6 +209,7 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
     error,
     ready,
     dismissError,
+    refresh,
   };
 
   return (

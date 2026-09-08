@@ -39,8 +39,14 @@ private fun PermissionsRationale() {
                     "imported sleep and add local corrections.",
             )
             Text(
-                "Health data remains on this device in phase one. The app has no analytics, " +
-                    "tracking SDKs, or health-data upload.",
+                "Health data stays in the app-private database unless you connect to your own server. " +
+                    "Connecting uploads Health Connect sleep and provider revisions over TLS. " +
+                    "Medication events and manual corrections remain local. There are no analytics or tracking SDKs.",
+            )
+            Text(
+                "Background sleep access is optional and requested separately. With automatic refresh enabled, " +
+                    "it lets ZeitBoard import sleep while closed. You can revoke access in Health Connect " +
+                    "or turn automatic refresh off in ZeitBoard Settings.",
             )
             Text(
                 "Android does not calculate an estimated sleep-wake phase. Any displayed " +

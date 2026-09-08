@@ -52,14 +52,13 @@ type fixtureSpec struct {
 var fixtureManifest = []fixtureSpec{
 	{"v1/observations", ManifestEntry{Version: "v1", Name: "observations.json", Schema: "observation-set.schema.json"}},
 	{"v1/corrections", ManifestEntry{Version: "v1", Name: "corrections.json", Schema: "correction-set.schema.json"}},
+	{"v1/sleep-review", ManifestEntry{Version: "v1", Name: "sleep-review.json", Schema: "sleep-review.schema.json"}},
 	{"v1/sleep-data-export", ManifestEntry{Version: "v1", Name: "sleep-data-export.json", Schema: "sleep-data-export.schema.json"}},
 	{"v1/sync-batch", ManifestEntry{Version: "v1", Name: "sync-batch.json", Schema: "sync-batch.schema.json"}},
+	{"v1/sync-android-source-revision", ManifestEntry{Version: "v1", Name: "sync-android-source-revision.json", Schema: "sync-batch.schema.json"}},
 	{"v1/sync-erase", ManifestEntry{Version: "v1", Name: "sync-erase.json", Schema: "sync-erase.schema.json"}},
 	{"v1/task-set", ManifestEntry{Version: "v1", Name: "task-set.json", Schema: "task-set.schema.json"}},
 	{"v1/calendar-event-set", ManifestEntry{Version: "v1", Name: "calendar-event-set.json", Schema: "calendar-event-set.schema.json"}},
-	{"v1/medication-set", ManifestEntry{Version: "v1", Name: "medication-set.json", Schema: "medication-set.schema.json"}},
-	{"v1/medication-event-set", ManifestEntry{Version: "v1", Name: "medication-event-set.json", Schema: "medication-event-set.schema.json"}},
-	{"v1/medication-data-export", ManifestEntry{Version: "v1", Name: "medication-data-export.json", Schema: "medication-data-export.schema.json"}},
 	{"v1/rhythm-marker-set", ManifestEntry{Version: "v1", Name: "rhythm-marker-set.json", Schema: "rhythm-marker-set.schema.json"}},
 	{"v1/clinical-chart-request", ManifestEntry{Version: "v1", Name: "clinical-chart-request.json", Schema: "clinical-chart-request.schema.json"}},
 	{"v1/assistant-action", ManifestEntry{Version: "v1", Name: "assistant-action.json", Schema: "assistant-action.schema.json"}},
@@ -79,6 +78,8 @@ var fixtureManifest = []fixtureSpec{
 	{"v2/medication-set", ManifestEntry{Version: "v2", Name: "medication-set.json", Schema: "medication-set.schema.json"}},
 	{"v2/medication-event-set", ManifestEntry{Version: "v2", Name: "medication-event-set.json", Schema: "medication-event-set.schema.json"}},
 	{"v2/medication-data-export", ManifestEntry{Version: "v2", Name: "medication-data-export.json", Schema: "medication-data-export.schema.json"}},
+	{"v2/companion", ManifestEntry{Version: "v2", Name: "companion.json", Schema: "companion.schema.json"}},
+	{"v2/companion-refused", ManifestEntry{Version: "v2", Name: "companion-refused.json", Schema: "companion.schema.json"}},
 }
 
 // Manifest returns a copy of the generated fixture registry in stable output
@@ -849,25 +850,8 @@ func Build() ([]File, error) {
 		},
 	}
 
-	medicationSetFixture := medicationSet{
-		SchemaVersion: "v1",
-		GeneratedAt:   ts(generatedAt),
-		Medications: []medicationItem{
-			{
-				MedicationID:  "med_synthetic_01",
-				Label:         "Synthetic medication record",
-				Form:          "tablet",
-				StrengthLabel: "user-entered strength",
-				Active:        true,
-				Schedule:      medicationSchedule{Kind: "as_needed"},
-				CreatedAt:     ts(generatedAt.Add(-14 * 24 * time.Hour)),
-				Revision:      1,
-				UpdatedAt:     ts(generatedAt.Add(-14 * 24 * time.Hour)),
-			},
-		},
-	}
 	medicationEventSetFixture := medicationEventSet{
-		SchemaVersion: "v1",
+		SchemaVersion: "v2",
 		GeneratedAt:   ts(generatedAt),
 		Events: []medicationEventItem{
 			{
@@ -895,12 +879,6 @@ func Build() ([]File, error) {
 				Changes:       medicationEventChanges{Note: "Corrected synthetic local-only note"},
 			},
 		},
-	}
-	medicationDataExportFixture := medicationDataExport{
-		SchemaVersion: "v1",
-		GeneratedAt:   ts(generatedAt),
-		MedicationSet: medicationSetFixture,
-		EventSet:      medicationEventSetFixture,
 	}
 	rhythmMarkerSetFixture := rhythmMarkerSet{
 		SchemaVersion: "v1",
@@ -966,7 +944,7 @@ func Build() ([]File, error) {
 		Include:       clinicalChartInclude{Forecast: false, Medication: true, RhythmContext: true},
 		Redactions:    []string{"diagnosis", "location", "clinician_rule", "medication_labels", "medication_notes", "rhythm_context_notes"},
 	}
-	medicationSetFixtureV2 := medicationSet{
+	medicationSetFixture := medicationSet{
 		SchemaVersion: "v2",
 		GeneratedAt:   ts(generatedAt),
 		Medications: []medicationItem{
@@ -989,13 +967,11 @@ func Build() ([]File, error) {
 			},
 		},
 	}
-	medicationEventSetFixtureV2 := medicationEventSetFixture
-	medicationEventSetFixtureV2.SchemaVersion = "v2"
-	medicationDataExportFixtureV2 := medicationDataExport{
+	medicationDataExportFixture := medicationDataExport{
 		SchemaVersion: "v2",
 		GeneratedAt:   ts(generatedAt),
-		MedicationSet: medicationSetFixtureV2,
-		EventSet:      medicationEventSetFixtureV2,
+		MedicationSet: medicationSetFixture,
+		EventSet:      medicationEventSetFixture,
 	}
 
 	assistantActionFixture := assistantAction{
@@ -1419,35 +1395,36 @@ func Build() ([]File, error) {
 	}
 
 	values := map[fixtureID]any{
-		"v1/observations":               observationsFixture,
-		"v1/corrections":                correctionsFixture,
-		"v1/sleep-data-export":          sleepDataExportFixture,
-		"v1/sync-batch":                 syncBatchFixture,
-		"v1/sync-erase":                 syncEraseFixture,
-		"v1/task-set":                   taskSetFixture,
-		"v1/calendar-event-set":         calendarEventSetFixture,
-		"v1/medication-set":             medicationSetFixture,
-		"v1/medication-event-set":       medicationEventSetFixture,
-		"v1/medication-data-export":     medicationDataExportFixture,
-		"v1/rhythm-marker-set":          rhythmMarkerSetFixture,
-		"v1/clinical-chart-request":     clinicalChartRequestFixture,
-		"v1/assistant-action":           assistantActionFixture,
-		"v1/direct-proposal-request":    directProposalRequestFixture,
-		"v1/phase-estimate":             estimateFixture,
-		"v1/phase-estimate-refused":     refusedEstimateFixture,
-		"v1/schedule-request":           scheduleRequestFixture,
-		"v1/schedule-proposals":         scheduleProposalsFixture,
-		"v1/proposal-response":          directProposalResponseFixture,
-		"v1/share-profile-default-deny": shareProfileDefaultDeny,
-		"v1/share-profile-allowlisted":  shareProfileAllowlisted,
-		"v1/trusted-view-default-deny":  trustedViewDefaultDeny,
-		"v1/trusted-view":               trustedViewFixture,
-		"v1/overview":                   overviewFixture,
-		"v1/rhythm":                     rhythmFixture,
-		"v1/accuracy":                   accuracyFixture,
-		"v2/medication-set":             medicationSetFixtureV2,
-		"v2/medication-event-set":       medicationEventSetFixtureV2,
-		"v2/medication-data-export":     medicationDataExportFixtureV2,
+		"v1/observations":                 observationsFixture,
+		"v1/corrections":                  correctionsFixture,
+		"v1/sleep-data-export":            sleepDataExportFixture,
+		"v1/sync-batch":                   syncBatchFixture,
+		"v1/sync-android-source-revision": androidSourceRevisionFixture(),
+		"v2/companion":                    companionFixture(false),
+		"v1/sleep-review":                 sleepReviewFixture(),
+		"v2/companion-refused":            companionFixture(true),
+		"v1/sync-erase":                   syncEraseFixture,
+		"v1/task-set":                     taskSetFixture,
+		"v1/calendar-event-set":           calendarEventSetFixture,
+		"v1/rhythm-marker-set":            rhythmMarkerSetFixture,
+		"v1/clinical-chart-request":       clinicalChartRequestFixture,
+		"v1/assistant-action":             assistantActionFixture,
+		"v1/direct-proposal-request":      directProposalRequestFixture,
+		"v1/phase-estimate":               estimateFixture,
+		"v1/phase-estimate-refused":       refusedEstimateFixture,
+		"v1/schedule-request":             scheduleRequestFixture,
+		"v1/schedule-proposals":           scheduleProposalsFixture,
+		"v1/proposal-response":            directProposalResponseFixture,
+		"v1/share-profile-default-deny":   shareProfileDefaultDeny,
+		"v1/share-profile-allowlisted":    shareProfileAllowlisted,
+		"v1/trusted-view-default-deny":    trustedViewDefaultDeny,
+		"v1/trusted-view":                 trustedViewFixture,
+		"v1/overview":                     overviewFixture,
+		"v1/rhythm":                       rhythmFixture,
+		"v1/accuracy":                     accuracyFixture,
+		"v2/medication-set":               medicationSetFixture,
+		"v2/medication-event-set":         medicationEventSetFixture,
+		"v2/medication-data-export":       medicationDataExportFixture,
 	}
 	return encodeFixtureManifest(fixtureManifest, values)
 }
@@ -1564,4 +1541,56 @@ func walkForbidden(value any) error {
 		}
 	}
 	return nil
+}
+
+// Android and Go tests consume this same synthetic wire fixture.
+func androidSourceRevisionFixture() syncBatch {
+	const observationID = "hc-18a9d62fc1ee92e8a9435e8e"
+	const correctionID = "cor-5dde5096ea7a1d4f459dde8b"
+	return syncBatch{SchemaVersion: "v1", Cursor: 2, Records: []syncRecord{
+		{Seq: 1, RecordID: observationID, Kind: "observation", DeviceID: "device_android_synthetic", CreatedAt: "2026-09-02T11:01:00Z", Payload: map[string]any{
+			"observation_id": observationID, "kind": "sleep_episode", "start_at": "2026-09-02T02:00:00Z", "end_at": "2026-09-02T10:00:00Z", "zone_id": "UTC",
+			"sleep":      map[string]any{"classification": "principal"},
+			"provenance": map[string]any{"acquisition_method": "health_connect", "evidence_status": "directly_observed", "recorded_at": "2026-09-02T11:00:00.123456789Z", "source_record_id": "sleep-1"},
+		}},
+		{Seq: 2, RecordID: correctionID, Kind: "correction", DeviceID: "device_android_synthetic", CreatedAt: "2026-09-02T11:02:00Z", Payload: map[string]any{
+			"correction_id": correctionID, "target_observation_id": observationID, "created_at": "2026-09-02T11:00:00.123456790Z", "reason": "source_conflict", "acquisition_method": "health_connect",
+			"changes": map[string]any{"start_at": "2026-09-02T02:02:00Z", "end_at": "2026-09-02T10:00:00Z"},
+		}},
+	}}
+}
+
+func sleepReviewFixture() map[string]any {
+	window := map[string]any{"start_at": "2026-03-05T04:30:00.123456789Z", "end_at": "2026-03-05T12:30:00.987654321Z", "zone_id": zoneID}
+	return map[string]any{
+		"schema_version": "v1", "source_cursor": 3, "generated_at": "2026-03-05T14:00:00Z",
+		"observation_id": "obs_review", "source_revision": "2026-03-05T12:35:00Z",
+		"source_window": window, "effective_window": window, "sleep_classification": "principal", "excluded": false, "needs_review": true,
+		"manual_corrections": []any{
+			map[string]any{"correction_id": "cor_review_1", "created_at": "2026-03-05T13:00:00Z", "changes": map[string]any{"start_at": "2026-03-05T04:10:00Z"}},
+			map[string]any{"correction_id": "cor_review_2", "created_at": "2026-03-05T13:00:00Z", "changes": map[string]any{"start_at": "2026-03-05T04:20:00Z", "excluded": true}},
+		},
+	}
+}
+
+func companionFixture(refused bool) map[string]any {
+	result := map[string]any{
+		"schema_version": "v2", "contains_synthetic_data": true, "source_cursor": 2, "generated_at": "2026-09-02T12:00:00Z", "valid_until": "2026-09-02T12:15:00Z",
+		"algorithm_version": "theil-sen-sleep-start/v1", "provenance": "self_hosted_synced_sleep", "status": "estimated",
+		"freshness":  map[string]any{"state": "current", "reason": "", "explanation": "Based on recent synced sleep."},
+		"confidence": map[string]any{"level": "medium", "reasons": []string{"Synthetic contract example with explicit uncertainty."}},
+		"forecasts": []any{map[string]any{
+			"predicted_sleep_window":  map[string]any{"start_at": "2026-09-03T03:00:00Z", "end_at": "2026-09-03T04:00:00Z", "zone_id": "UTC"},
+			"predicted_waking_window": map[string]any{"start_at": "2026-09-03T12:00:00Z", "end_at": "2026-09-03T22:00:00Z", "zone_id": "UTC"},
+		}},
+		"sleep": []any{map[string]any{"row_id": "sleep_synthetic", "start_at": "2026-09-02T02:02:00Z", "end_at": "2026-09-02T10:00:00Z", "zone_id": "UTC", "classification": "principal", "corrected": true}},
+	}
+	if refused {
+		result["status"] = "refused"
+		result["refusal"] = map[string]any{"code": "insufficient_data", "message": "More usable sleep history is needed."}
+		result["freshness"] = map[string]any{"state": "withheld", "reason": "insufficient_data", "explanation": "More usable sleep history is needed."}
+		result["forecasts"] = []any{}
+		delete(result, "confidence")
+	}
+	return result
 }

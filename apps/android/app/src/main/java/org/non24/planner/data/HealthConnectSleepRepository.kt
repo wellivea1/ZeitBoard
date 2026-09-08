@@ -2,6 +2,7 @@ package org.non24.planner.data
 
 import android.content.Context
 import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.HealthConnectFeatures
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
@@ -18,6 +19,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.non24.planner.domain.AcquisitionMethod
+import org.non24.planner.domain.BackgroundReadState
 import org.non24.planner.domain.EvidenceStatus
 import org.non24.planner.domain.HealthConnectAvailability
 import org.non24.planner.domain.HealthPermissionState
@@ -26,10 +28,12 @@ import org.non24.planner.domain.SleepEpisode
 
 object HealthConnectPermissions {
     const val READ_SLEEP = "android.permission.health.READ_SLEEP"
+    const val READ_BACKGROUND = "android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND"
     val required: Set<String> = setOf(READ_SLEEP)
 }
 
 interface HealthConnectClientAdapter {
+    fun backgroundReadAvailable(): Boolean = false
     fun availability(): HealthConnectAvailability
 
     suspend fun grantedPermissions(): Set<String>
@@ -48,6 +52,8 @@ internal class HealthConnectSleepRepository(
     private val mutableAvailability = MutableStateFlow(client.availability())
     private val mutablePermissionState = MutableStateFlow(initialPermissionState(mutableAvailability.value))
     private val mutableLastRefreshError = MutableStateFlow<String?>(null)
+    private val mutableBackgroundReadState = MutableStateFlow(BackgroundReadState.UNKNOWN)
+    override val backgroundReadState: StateFlow<BackgroundReadState> = mutableBackgroundReadState.asStateFlow()
 
     override val sourceEpisodes: StateFlow<List<SleepEpisode>> = localUserDataRepository.healthEpisodes
     override val availability: StateFlow<HealthConnectAvailability> = mutableAvailability.asStateFlow()
@@ -63,12 +69,20 @@ internal class HealthConnectSleepRepository(
         mutableAvailability.value = client.availability()
         if (mutableAvailability.value != HealthConnectAvailability.AVAILABLE) {
             mutablePermissionState.value = HealthPermissionState.UNAVAILABLE
+            mutableBackgroundReadState.value = BackgroundReadState.UNAVAILABLE
             return
         }
         val granted = try {
-            client.grantedPermissions()
+            client.grantedPermissions().also { permissions ->
+                mutableBackgroundReadState.value = when {
+                    !client.backgroundReadAvailable() -> BackgroundReadState.UNAVAILABLE
+                    HealthConnectPermissions.READ_BACKGROUND !in permissions -> BackgroundReadState.REQUIRED
+                    else -> BackgroundReadState.GRANTED
+                }
+            }
         } catch (_: SecurityException) {
             mutablePermissionState.value = HealthPermissionState.REQUIRED
+            mutableBackgroundReadState.value = BackgroundReadState.REQUIRED
             mutableLastRefreshError.value =
                 "Health Connect permission changed. The last saved sleep snapshot is still shown."
             return
@@ -76,6 +90,7 @@ internal class HealthConnectSleepRepository(
             throw exception
         } catch (_: Exception) {
             mutablePermissionState.value = HealthPermissionState.UNKNOWN
+            mutableBackgroundReadState.value = BackgroundReadState.UNKNOWN
             mutableLastRefreshError.value =
                 "Health Connect could not be queried. The last saved sleep snapshot is still shown."
             return
@@ -149,6 +164,9 @@ internal class AndroidHealthConnectClientAdapter(
     private val context: Context,
     private val clock: Clock = Clock.systemUTC(),
 ) : HealthConnectClientAdapter {
+    override fun backgroundReadAvailable(): Boolean = availableClient()?.features?.getFeatureStatus(
+        HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_IN_BACKGROUND,
+    ) == HealthConnectFeatures.FEATURE_STATUS_AVAILABLE
     override fun availability(): HealthConnectAvailability =
         when (HealthConnectClient.getSdkStatus(context, HEALTH_CONNECT_PACKAGE)) {
             HealthConnectClient.SDK_AVAILABLE -> HealthConnectAvailability.AVAILABLE

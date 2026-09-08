@@ -52,7 +52,10 @@ export function ScreenTabs<Id extends string>({
     else return;
     event.preventDefault();
     const next = tabs[nextIndex];
-    if (next) onSelect(next.id);
+    if (next) {
+      document.getElementById(tabId(name, next.id))?.focus();
+      onSelect(next.id);
+    }
   };
 
   return (

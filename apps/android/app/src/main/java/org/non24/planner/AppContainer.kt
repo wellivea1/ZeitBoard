@@ -3,6 +3,10 @@ package org.non24.planner
 import android.content.Context
 import kotlinx.coroutines.flow.StateFlow
 import org.non24.planner.data.AndroidHealthConnectClientAdapter
+import org.non24.planner.data.AndroidBackgroundSyncScheduler
+import org.non24.planner.data.BackgroundSyncScheduler
+import org.non24.planner.data.EvidenceSyncCoordinator
+import org.non24.planner.data.SQLiteSyncReplicaStore
 import org.non24.planner.data.BackendSyncRepository
 import org.non24.planner.data.HttpBackendSyncClient
 import org.non24.planner.data.SQLiteSyncOutboxStore
@@ -24,6 +28,8 @@ import org.non24.planner.data.fixtureEstimateRepository
 import org.non24.planner.data.fixtureSleepEpisodes
 
 interface AppDependencies {
+    val backgroundScheduler: BackgroundSyncScheduler
+    val evidenceSync: EvidenceSyncCoordinator
     val settingsRepository: SettingsRepository
     val fixtureSleepRepository: SleepRepository
     val fixtureEstimateRepository: EstimateRepository
@@ -68,8 +74,15 @@ class AppContainer(context: Context) : AppDependencies {
         ),
         configStore = SharedPreferencesSyncConfigStore(applicationContext),
         client = HttpBackendSyncClient(),
+        replica = SQLiteSyncReplicaStore { localDataStore.writableDatabase },
+        onRecordsChanged = localUserDataRepository::reloadAfterSync,
     )
     override val syncStatus: StateFlow<SyncStatus> = backendSyncRepository.status
+    override val backgroundScheduler: BackgroundSyncScheduler = AndroidBackgroundSyncScheduler(applicationContext)
+    override val evidenceSync = EvidenceSyncCoordinator(
+        settingsRepository, healthConnectRepository, backendSyncRepository,
+        backgroundScheduler, ::initializeLocalUserData,
+    )
 
     override suspend fun initializeLocalUserData() {
         localUserDataRepository.initialize()

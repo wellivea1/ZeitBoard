@@ -179,6 +179,11 @@ func (s *Store) Migrate(ctx context.Context) error {
 			device_id TEXT NOT NULL,
 			erased_at TEXT NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS sync_correction_targets (
+			record_id TEXT PRIMARY KEY REFERENCES sync_records(record_id) ON DELETE CASCADE,
+			observation_id TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_sync_correction_observation ON sync_correction_targets(observation_id)`,
 		`CREATE TABLE IF NOT EXISTS proposals (
 			id TEXT PRIMARY KEY,
 			action_id TEXT NOT NULL,
@@ -263,39 +268,10 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("migrate server sqlite: %w", err)
 		}
 	}
-	if err := s.ensureColumn(ctx, "devices", "revoked_at", `TEXT NOT NULL DEFAULT ''`); err != nil {
-		return err
-	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(1, ?)`,
 		time.Now().UTC().Format(time.RFC3339Nano),
 	)
-	return err
-}
-
-func (s *Store) ensureColumn(ctx context.Context, table, column, definition string) error {
-	rows, err := s.db.QueryContext(ctx, `PRAGMA table_info(`+table+`)`)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var cid int
-		var name, typ string
-		var notNull int
-		var defaultValue any
-		var pk int
-		if err := rows.Scan(&cid, &name, &typ, &notNull, &defaultValue, &pk); err != nil {
-			return err
-		}
-		if name == column {
-			return nil
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-	_, err = s.db.ExecContext(ctx, `ALTER TABLE `+table+` ADD COLUMN `+column+` `+definition)
 	return err
 }
 
@@ -393,6 +369,7 @@ func (s *Store) Append(ctx context.Context, deviceID string, records []syncmodel
 
 	accepted := 0
 	for _, record := range records {
+		var correctionTarget string
 		// A tombstoned record id can never be resurrected: a stale device
 		// re-pushing an erased record is a silent no-op, not a conflict.
 		var tombstoned int
@@ -404,6 +381,25 @@ func (s *Store) Append(ctx context.Context, deviceID string, records []syncmodel
 		}
 		if !errors.Is(err, sql.ErrNoRows) {
 			return 0, 0, err
+		}
+		if record.Kind == syncmodel.KindCorrection {
+			var correction struct {
+				TargetObservationID string `json:"target_observation_id"`
+			}
+			if err := json.Unmarshal(record.Payload, &correction); err != nil {
+				return 0, 0, errors.New("invalid correction payload")
+			}
+			correctionTarget = correction.TargetObservationID
+			// A provider can revise sleep while this device is offline. Erasing
+			// the original must also block new correction IDs that would retain
+			// its behavioral timestamps after the erasure.
+			err := tx.QueryRowContext(ctx, `SELECT 1 FROM sync_tombstones WHERE record_id = ?`, correction.TargetObservationID).Scan(&tombstoned)
+			if err == nil {
+				continue
+			}
+			if !errors.Is(err, sql.ErrNoRows) {
+				return 0, 0, err
+			}
 		}
 		if record.Kind == syncmodel.KindTask {
 			taskID, ok := taskIDFromRevisionRecordID(record.RecordID)
@@ -454,6 +450,11 @@ func (s *Store) Append(ctx context.Context, deviceID string, records []syncmodel
 			return 0, 0, err
 		}
 		accepted++
+		if correctionTarget != "" {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO sync_correction_targets(record_id, observation_id) VALUES(?, ?)`, record.RecordID, correctionTarget); err != nil {
+				return 0, 0, err
+			}
+		}
 	}
 
 	cursor, err := maxCursor(ctx, tx)
@@ -588,8 +589,25 @@ func expandTaskErasureTargets(
 
 	for _, recordID := range recordIDs {
 		appendID(recordID)
+		dependent, err := tx.QueryContext(ctx, `SELECT record_id FROM sync_correction_targets WHERE observation_id = ? ORDER BY record_id`, recordID)
+		if err != nil {
+			return nil, err
+		}
+		for dependent.Next() {
+			var id string
+			if err := dependent.Scan(&id); err != nil {
+				dependent.Close()
+				return nil, err
+			}
+			appendID(id)
+		}
+		if err := dependent.Err(); err != nil {
+			dependent.Close()
+			return nil, err
+		}
+		dependent.Close()
 		var kind string
-		err := tx.QueryRowContext(ctx,
+		err = tx.QueryRowContext(ctx,
 			`SELECT kind FROM sync_records WHERE record_id = ? AND kind != ?`,
 			recordID, string(syncmodel.KindTombstone),
 		).Scan(&kind)

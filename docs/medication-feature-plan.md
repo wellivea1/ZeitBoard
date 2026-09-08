@@ -1,5 +1,7 @@
 # Medication tracking: comprehensive feature plan
 
+> [ADR-0039](decisions/0039-pre-release-contracts-and-streamlining.md) supersedes the prototype-compatibility notes below: only the current v2 medication contracts are maintained. There are no packaged releases or deployed v1 consumers.
+
 > Implementation plan. M-A through M-C are delivered under ADR-0024 through
 > ADR-0027; M-D..M-F remain gated.
 > Extends `ui-ux-design.md` §9.6 and the

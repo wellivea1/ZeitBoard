@@ -1,6 +1,7 @@
 import { overviewFixture } from "./fixture";
 import type { OverviewData, OverviewResult } from "./overview";
-import { findWailsMethod, type WailsRoot } from "./wailsBridge";
+import { overviewUnavailable } from "./overview";
+import { findWailsMethod, hasDesktopBridge, type WailsRoot } from "./wailsBridge";
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -66,7 +67,7 @@ function normalizeRefusal(value: unknown): OverviewData["refusal"] | undefined {
 }
 
 function normalizeWailsOverview(value: unknown): OverviewData | undefined {
-  if (isOverviewData(value)) return value;
+  if (isOverviewData(value)) return { ...value, freshness: normalizeFreshness(value.freshness) };
   if (!isRecord(value)) return undefined;
 
   const state = asString(value.currentEstimatedState);
@@ -159,7 +160,7 @@ function normalizeFreshness(value: unknown): OverviewData["freshness"] {
     reason: asString(record.reason) ?? "",
     explanation: asString(record.explanation) ?? fallback.explanation,
     ageLabel: asString(record.ageLabel) ?? "",
-    trusted: record.trusted === true,
+    trusted: state === "current" && record.trusted === true,
   };
 }
 
@@ -167,20 +168,23 @@ export async function loadOverview(
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<OverviewResult> {
   const method = findWailsMethod(root, methodNames);
-  if (!method) return { data: overviewFixture, source: "fixture" };
+  if (!method && !hasDesktopBridge(root)) return { data: overviewFixture, source: "fixture" };
 
   try {
-    const result = await method();
+    const result = await method?.();
     const overview = normalizeWailsOverview(result);
     if (overview) {
+      if (!overview.fixtureMode && !overview.freshness.trusted && overview.status === "estimated") {
+        overview.state = "Current state uncertain";
+      }
       const source = isRecord(result)
         ? normalizeSource(result.estimateSource, overview.fixtureMode)
         : normalizeSource(undefined, overview.fixtureMode);
       return { data: overview, source };
     }
   } catch {
-    // Fixture mode keeps the desktop shell usable before the Wails service is ready.
+    // Never replace an unreadable personal forecast with synthetic evidence.
   }
 
-  return { data: overviewFixture, source: "fixture" };
+  return { data: overviewUnavailable, source: "local" };
 }

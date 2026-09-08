@@ -3,12 +3,11 @@
 > **Architecture: connected, self-hosted, BYOK**
 > ([ADR-0007](decisions/0007-connected-cloud-architecture.md) +
 > [ADR-0008](decisions/0008-self-hostable-backend-byok-llm.md)). The backend is **entirely
-> self-hostable** (the project operates no service and collects no telemetry); the user's
-> data syncs to *their own* instance, and the assistant LLM is **bring-your-own-key**. The
-> Milestone 1 sync path, Milestone 2 BYOK assistant backend, Milestone 3 server-side
-> read projections, and the Milestone 4 local MCP connector are implemented; cloud skill
-> packaging remains future work.
-> Not legal advice.
+> self-hostable** (the project operates no service and collects no telemetry); the user's data syncs
+> to _their own_ instance, and the assistant LLM is **bring-your-own-key**. The Milestone 1 sync
+> path, Milestone 2 BYOK assistant backend, Milestone 3 server-side read projections, and the
+> Milestone 4 local MCP connector are implemented; cloud skill packaging remains future work. Not
+> legal advice.
 
 ## Commitments
 
@@ -69,13 +68,12 @@ document, a URL, or a keystroke, and a test asserts the encoded payload
 carries no key suggesting one. It answers "was this machine in use", never
 "what was it used for".
 
-It reads that state through two narrow system calls: time since last input,
-which cannot expose what the input was, and whether the interactive desktop is
-locked. It does not hook input, capture the screen, read the foreground window,
-or sample at a rate that could reconstruct activity within a session — an
-ordinary hour of work produces no records at all. Suspend and resume are
-*inferred* from wall-clock gaps rather than observed, and the collector does
-not claim a power-event capability it does not have.
+It reads that state through two narrow system calls: time since last input, which cannot expose what
+the input was, and whether the interactive desktop is locked. It does not hook input, capture the
+screen, read the foreground window, or sample at a rate that could reconstruct activity within a
+session — an ordinary hour of work produces no records at all. Suspend and resume are _inferred_
+from wall-clock gaps rather than observed, and the collector does not claim a power-event capability
+it does not have.
 
 This evidence is one input to sleep inference and is not a sleep record on its
 own. Inferred sleep is marked as such, never overwrites a raw observation, and
@@ -100,27 +98,38 @@ can read the disk from another operating system, and it does not stop a program
 running as you. Settings → Local data reports which files were checked and says
 this in the same words.
 
-This section previously said at-rest encryption was required locally as well as
-on the instance. That was never true of the local store, and the sentence was
-worse than a gap, because a reader would have concluded their sleep history was
-encrypted when it was not. It is corrected here rather than softened: whole-
-database encryption for the local store is open work, and
-[`ADR-0035`](decisions/0035-local-file-protection.md) records why it does not exist yet
-and what it would take.
+This section previously said at-rest encryption was required locally as well as on the instance.
+That was never true of the local store, and the sentence was worse than a gap, because a reader
+would have concluded their sleep history was encrypted when it was not. Whole-database encryption
+for the local store is not part of the chosen release architecture, and
+[`ADR-0035`](decisions/0035-local-file-protection.md) records why it does not exist yet and what it
+would take.
 
-Deletion removes local derived data and source records according to the user's
-explicit request, subject to a clear confirmation flow. When backend sync is
-enabled, erasure propagates: the self-hosted instance hard-deletes its synced
-copy and mints a metadata-only tombstone (record id plus original kind when
-known, no health content) so every other
-enrolled device erases its copy on the next pull, and an erased record can
-never be re-pushed (ADR-0017). A device that never syncs again retains its
-local copy until it does. Export must be an intentional action and should
-identify whether it contains private data or only a minimized projection.
-Task deletion applies to the logical task: the instance erases every retained
-immutable revision and rejects all later revisions, including revisions that
-were not present when deletion was requested.
+Android exposes opt-in self-hosted sleep sync and separately opt-in background refresh. READ_SLEEP
+permits foreground collection; READ_HEALTH_DATA_IN_BACKGROUND is separately requested where
+supported. Background import also requires enrollment, the automatic-refresh setting and real-data
+mode. Queued foreground uploads may finish while closed. Disconnect cancels jobs and forgets the
+local token/queue and downloaded cache, retaining phone-authored observations; server erasure and
+device revocation are separate actions. Corrections made in the connected Android review upload
+with explicit source-review context; earlier local-only corrections and medication events remain
+local. Android downloads raw sleep/task records, private editing context and a typed, expiring Go forecast into
+app-private storage. It applies server tombstones atomically and retains metadata-only suppression
+for erased Health Connect sources across re-enrollment, preventing re-import. See
+[ADR-0038](decisions/0038-android-companion-cache-and-erasure.md).
+The authenticated review endpoint does not expand portal or agent projections. Erasure clears
+cached and open review context; see [ADR-0040](decisions/0040-sleep-correction-review-context.md).
 
+Deletion removes local derived data and source records according to the user's explicit request,
+subject to a clear confirmation flow. When backend sync is enabled, erasure propagates: the
+self-hosted instance hard-deletes its synced copy and mints a metadata-only tombstone (record id
+plus original kind when known, no health content) so enrolled desktop and Android clients erase
+their copies on the next completed pull. An erased record cannot be re-pushed, and a new provider
+correction targeting an erased observation is also rejected (ADR-0017/0038). Retained corrections
+targeting the erased observation are also hard-deleted and tombstoned. A device that never pulls
+again retains its local copy until it does. Export must be an intentional action and should identify
+whether it contains private data or only a minimized projection. Task deletion applies to the
+logical task: the instance erases every retained immutable revision and rejects all later revisions,
+including revisions that were not present when deletion was requested.
 
 The instance also keeps a small operational record of when analysis last ran
 (ADR-0033). Each entry holds a digest of the inputs and of what was published,
@@ -224,12 +233,10 @@ Sharing a live projection is observable over time: a recipient who checks
 repeatedly can watch the user's rhythm drift. That is inherent to the feature,
 is disclosed when a link is created, and is a reason to share deliberately.
 
-The portal keeps its own database. It holds hashed link tokens, hashed
-passcodes, the materialized windows, sessions, rate-limit counters, and a
-coarse access log. It holds no health data, and public request handlers have no
-route to the private database at all. The user's own name for a link — "Mum", a
-clinician — is stored encrypted in the *private* database and never reaches the
-portal.
+The portal keeps its own database. It holds hashed link tokens, hashed passcodes, the materialized
+windows, sessions, rate-limit counters, and a coarse access log. It holds no health data, and public
+request handlers have no route to the private database at all. The user's own name for a link —
+"Mum", a clinician — is stored encrypted in the _private_ database and never reaches the portal.
 
 Abuse limits need to tell visitors apart, so the portal stores a keyed hash of
 a normalized network address and discards the address itself. This is
@@ -286,14 +293,13 @@ display action (`set_appearance`, reversible and non-health per ADR-0021), and
 propose-only scheduling tools that require an enrolled backend. It has no approve/apply
 tool either.
 
-What the local endpoint may return includes **medication timing facts and rhythm context
-markers** drawn from local records - for example how long after waking a dose was logged,
-or that a travel marker exists on a date. These are the same projections the local UI
-shows, never raw records: no clinician notes, no free-text medication notes, and no
-observation payloads. Medication *labels* are the user's own private text and stay on the
-device; they are not sent to any LLM provider by this path, because the endpoint answers
-from local records without calling one. Requests that ask for a medical decision return
-the standard refusal instead of an answer.
+What the local endpoint may return includes **medication timing facts and rhythm context markers**
+drawn from local records - for example how long after waking a dose was logged, or that a travel
+marker exists on a date. These are the same projections the local UI shows, never raw records: no
+clinician notes, no free-text medication notes, and no observation payloads. Medication _labels_ are
+the user's own private text and stay on the device; they are not sent to any LLM provider by this
+path, because the endpoint answers from local records without calling one. Requests that ask for a
+medical decision return the standard refusal instead of an answer.
 
 Access to the endpoint requires a bearer token held in a descriptor file that is
 restricted to the current user (an explicit owner-only DACL on Windows, mode 0600

@@ -5,7 +5,7 @@ import {
   type ProposalOrigin,
 } from "./phaseTwo";
 import type { ConfidenceLevel } from "./overview";
-import { findWailsMethod, type WailsRoot } from "./wailsBridge";
+import { findWailsMethod, hasDesktopBridge, type WailsRoot } from "./wailsBridge";
 
 export interface UnplacedProposal {
   title: string;
@@ -64,7 +64,7 @@ const methodNames = ["GetProposals", "Proposals"] as const;
 export function hasLocalProposalService(
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): boolean {
-  return Boolean(findWailsMethod(root, methodNames));
+  return hasDesktopBridge(root);
 }
 
 function isRecord(value: unknown): value is UnknownRecord {
@@ -204,7 +204,8 @@ export async function loadProposals(
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<ProposalsResult> {
   const method = findWailsMethod(root, methodNames);
-  if (!method) return { data: proposalsFixture, source: "fixture" };
+  if (!method && !hasDesktopBridge(root)) return { data: proposalsFixture, source: "fixture" };
+  if (!method) throw new Error("The desktop proposal service is unavailable. Refresh to retry.");
   const result = await method();
   const proposals = normalizeProposals(result);
   if (!proposals) throw new Error("Proposal service returned an invalid response.");

@@ -278,6 +278,7 @@ func TestSleepEntryEditAndSuppressAreAppendOnly(t *testing.T) {
 	editedEnd := start.Add(8*time.Hour + 15*time.Minute)
 	edited, err := app.CorrectSleepEntry(SleepCorrectionInput{
 		ObservationID:  added.ObservationID,
+		ReviewToken:    added.ReviewToken,
 		StartLocal:     editedStart.Format("2006-01-02T15:04"),
 		EndLocal:       editedEnd.Format("2006-01-02T15:04"),
 		ZoneID:         defaultZoneID,
@@ -293,7 +294,7 @@ func TestSleepEntryEditAndSuppressAreAppendOnly(t *testing.T) {
 		t.Fatalf("edit was not reflected with history: %#v", edited)
 	}
 
-	suppressed, err := app.SuppressSleepEntry(SleepSuppressInput{ObservationID: added.ObservationID})
+	suppressed, err := app.SuppressSleepEntry(SleepSuppressInput{ObservationID: added.ObservationID, ReviewToken: edited.ReviewToken})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -315,7 +316,7 @@ func TestSleepExportAndDeleteRequireExplicitErasure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := app.SuppressSleepEntry(SleepSuppressInput{ObservationID: added.ObservationID}); err != nil {
+	if _, err := app.SuppressSleepEntry(SleepSuppressInput{ObservationID: added.ObservationID, ReviewToken: added.ReviewToken}); err != nil {
 		t.Fatal(err)
 	}
 

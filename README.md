@@ -19,14 +19,30 @@ scripts                     Reproducible setup, development, and fixture generat
 testdata                    Synthetic observations and projected sharing fixtures
 ```
 
-
 ## Current status
 
-- The Wails desktop runs on persisted manual sleep observations, immutable raw records, and append-only corrections. Overview, Rhythm, and proposals use the real Go estimator and refuse honestly when evidence is insufficient.
-- Contract-shaped JSON export, permanent local erasure, opt-in self-hosted sync, cross-device tombstones, user-owned tasks, unified approvals, and the propose-only assistant surface are implemented.
-- The self-hosted backend provides encrypted sync, server-side projections, BYOK assistant providers, and a local MCP connector with read and propose-only tools.
-- The Android companion remains a build-ready Health Connect skeleton and does not yet sync. The trusted-view prototype remains static and synthetic.
-- Browser-only desktop preview data is synthetic and visibly labeled `Sample data`; it is not used by the running Wails desktop service.
+- The Wails desktop runs on persisted manual sleep observations, immutable raw records, and
+  append-only corrections. Overview, Rhythm, and proposals use the real Go estimator and refuse
+  honestly when evidence is insufficient.
+- Contract-shaped JSON export, permanent local erasure, opt-in self-hosted sync, cross-device
+  tombstones, user-owned tasks, unified approvals, and the propose-only assistant surface are
+  implemented.
+- The self-hosted backend provides encrypted sync, server-side projections, BYOK assistant
+  providers, and a local MCP connector with read and propose-only tools.
+- The Android companion has opt-in automatic Health Connect sync, durable pull/erasure, cached Go
+  forecasts and read-only task downloads. It exposes uncertainty, cache age and time-zone holds.
+  Phone-authored manual corrections/medication sync and lifecycle qualification remain
+  unfinished; real-device background reliability and passive coverage need pilot measurement
+  (ADR-0037/0038).
+- The desktop Sharing screen manages real passcode-protected availability links on the owner's
+  server. The separate trusted-web prototype remains static and synthetic.
+- Task creation, editing, completion and reviewed deletion are available in Plan. Desktop service
+  failures show retryable unavailable states; sample forecasts are confined to browser preview.
+- Browser-only desktop preview data is synthetic and visibly labeled `Sample data`; it is not used
+  by the running Wails desktop service.
+
+See the [September product quality review](docs/product-quality-review-2026-09-08.md) for the
+current usability assessment, implemented repairs and remaining work.
 
 ## Install (end users)
 

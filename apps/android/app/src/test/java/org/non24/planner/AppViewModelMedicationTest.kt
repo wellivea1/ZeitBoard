@@ -30,6 +30,10 @@ import org.non24.planner.data.OutboxRecord
 import org.non24.planner.data.SyncConfig
 import org.non24.planner.data.SyncConfigStore
 import org.non24.planner.data.SyncOutboxStore
+import org.non24.planner.data.SourceSyncRevision
+import org.non24.planner.data.BackgroundSyncScheduler
+import org.non24.planner.data.EvidenceSyncCoordinator
+import org.non24.planner.domain.BackgroundReadState
 import org.non24.planner.data.SettingsRepository
 import org.non24.planner.data.SleepRepository
 import org.non24.planner.domain.AppSettings
@@ -160,9 +164,14 @@ class AppViewModelMedicationTest {
         override val backendSyncRepository = BackendSyncRepository(
             outbox = NoOutbox(),
             configStore = NoSyncConfig(),
-            client = NoSyncClient(),
-        )
+            client = NoSyncClient(), replica = FakeReplica())
         override val syncStatus = backendSyncRepository.status
+        override val backgroundScheduler = object : BackgroundSyncScheduler {
+            override fun reconcile(enabled: Boolean) = Unit
+            override fun requestUpload() = Unit
+            override fun cancelAll() = Unit
+        }
+        override val evidenceSync = EvidenceSyncCoordinator(settingsRepository, health, backendSyncRepository, backgroundScheduler, ::initializeLocalUserData)
         var initializeCalls = 0
 
         override suspend fun initializeLocalUserData() {
@@ -171,13 +180,16 @@ class AppViewModelMedicationTest {
     }
 
     private class NoOutbox : SyncOutboxStore {
+        override fun contains(recordId: String) = false
+        override fun hasPendingManualCorrection(observationId: String) = false
+        override fun activateScope(scope: String) = Unit
         override fun pending(limit: Int): List<OutboxRecord> = emptyList()
 
         override fun enqueue(records: List<OutboxRecord>) = Unit
 
         override fun markSynced(recordIds: List<String>, at: Instant) = Unit
 
-        override fun syncedRevisions(): Map<String, Instant> = emptyMap()
+        override fun knownSources(): Map<String, SourceSyncRevision> = emptyMap()
 
         override fun pendingCount(): Int = 0
 
@@ -195,6 +207,9 @@ class AppViewModelMedicationTest {
     }
 
     private class NoSyncClient : BackendSyncClient {
+        override suspend fun sleepReview(baseUrl: String, token: String, observationId: String): Result<kotlinx.serialization.json.JsonObject> = error("Not configured")
+        override suspend fun pull(baseUrl: String, token: String, since: Long): Result<org.non24.planner.data.PullPage> = error("Not configured")
+        override suspend fun companion(baseUrl: String, token: String): Result<kotlinx.serialization.json.JsonObject> = error("Not configured")
         override suspend fun enroll(baseUrl: String, enrollmentSecret: String, label: String) =
             Result.failure<String>(IllegalStateException("Sync is not configured in this test."))
 
@@ -222,6 +237,7 @@ class AppViewModelMedicationTest {
     }
 
     private class EmptyHealthConnectRepository : EmptySleepRepository(), HealthConnectRepository {
+        override val backgroundReadState = MutableStateFlow(BackgroundReadState.UNAVAILABLE)
         override val availability = MutableStateFlow(HealthConnectAvailability.UNAVAILABLE)
         override val permissionState = MutableStateFlow(HealthPermissionState.UNAVAILABLE)
         override val requiredPermissions: Set<String> = emptySet()

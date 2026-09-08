@@ -190,9 +190,10 @@ internal class LocalUserDataRepository(
             runStorageOperationLocked {
                 initializeLocked()
                 store.replaceHealthConnectSleepSnapshot(sorted)
-                val projection = loadCorrectionProjection(sorted)
-                mutableHealthEpisodes.value = sorted
-                publishCorrectionProjection(projection, sorted)
+                val saved = store.loadHealthConnectSleepSnapshot(MAX_HEALTH_EPISODES)
+                val projection = loadCorrectionProjection(saved)
+                mutableHealthEpisodes.value = saved
+                publishCorrectionProjection(projection, saved)
             }
         }
     }
@@ -226,6 +227,17 @@ internal class LocalUserDataRepository(
                 )
             }
         }
+    }
+
+    suspend fun reloadAfterSync(erased: Boolean = false) = mutex.withLock {
+        if (erased) {
+            mutableHealthEpisodes.value = emptyList()
+            mutableActiveCorrections.value = emptyMap()
+            mutableCorrectionHistory.value = emptyList()
+            mutableCorrectionReviews.value = emptyList()
+        }
+        initialized = false
+        runStorageOperationLocked { initializeLocked() }
     }
 
     suspend fun appendMedicationEvent(event: MedicationEvent) {

@@ -211,9 +211,9 @@ func (s *Store) AppendSleepCorrection(ctx context.Context, record SleepCorrectio
 		return err
 	}
 	_, err = s.db.ExecContext(ctx, `INSERT INTO local_sleep_corrections(
-		correction_id, target_observation_id, supersedes_correction_id, created_at, reason, changes_json, payload_json
-	) VALUES(?, ?, ?, ?, ?, ?, ?)`,
-		record.CorrectionID, record.TargetObservationID, record.SupersedesCorrectionID,
+		correction_id, target_observation_id, created_at, reason, changes_json, payload_json
+	) VALUES(?, ?, ?, ?, ?, ?)`,
+		record.CorrectionID, record.TargetObservationID,
 		formatSQLiteTime(record.CreatedAt), record.Reason, changes, encoded,
 	)
 	return err
@@ -763,19 +763,6 @@ func (s *Store) EraseSyncedSleepRecord(ctx context.Context, recordID string) (bo
 		return false, nil
 	}
 	return true, s.compactDeletedData(ctx)
-}
-
-func (s *Store) LatestSleepCorrectionID(ctx context.Context, targetObservationID string) (string, error) {
-	var id string
-	err := s.db.QueryRowContext(ctx, `SELECT correction_id
-		FROM local_sleep_corrections
-		WHERE target_observation_id = ?
-		ORDER BY created_at DESC, correction_id DESC
-		LIMIT 1`, targetObservationID).Scan(&id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
-	}
-	return id, err
 }
 
 func (s *Store) RawSleepSessions(ctx context.Context) ([]domain.SleepSession, error) {

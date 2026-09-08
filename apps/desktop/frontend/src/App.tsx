@@ -3,6 +3,7 @@ import { AppShell, useScreenNavigation } from "./components/AppShell";
 import { ApprovalsProvider } from "./state/approvals";
 import { BackendProposalsProvider } from "./state/backendProposals";
 import { HomeScreen } from "./screens/HomeScreen";
+import { ScreenErrorBoundary } from "./components/ScreenErrorBoundary";
 
 const PlanScreen = lazy(() =>
   import("./screens/PlanScreen").then((module) => ({ default: module.PlanScreen })),
@@ -47,11 +48,20 @@ export default function App() {
   return (
     <ApprovalsProvider>
       <BackendProposalsProvider>
-        <a className="skip-link" href="#main-content">
+        <a
+          className="skip-link"
+          href="#main-content"
+          onClick={(event) => {
+            event.preventDefault();
+            document.getElementById("main-content")?.focus();
+          }}
+        >
           Skip to content
         </a>
         <AppShell screen={route.screen}>
-          <Suspense fallback={<ScreenLoading />}>{content}</Suspense>
+          <ScreenErrorBoundary key={`${route.screen}/${route.planTab}/${route.logTab}`}>
+            <Suspense fallback={<ScreenLoading />}>{content}</Suspense>
+          </ScreenErrorBoundary>
         </AppShell>
       </BackendProposalsProvider>
     </ApprovalsProvider>

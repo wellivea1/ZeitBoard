@@ -17,6 +17,14 @@ beforeEach(() => {
 });
 
 describe("desktop navigation", () => {
+  it("skips to the active view without changing its route", async () => {
+    window.location.hash = "#/plan/tasks";
+    render(<App />);
+    await screen.findByRole("heading", { level: 1, name: "Plan" });
+    fireEvent.click(screen.getByRole("link", { name: "Skip to content" }));
+    expect(window.location.hash).toBe("#/plan/tasks");
+    expect(screen.getByRole("main")).toHaveFocus();
+  });
   // Slice U-H: five primary destinations and a separate utility group. Eight
   // equal-weight entries was too much undifferentiated navigation for someone
   // operating under fatigue, and the count is the whole point of the change.
@@ -270,6 +278,10 @@ describe("desktop navigation", () => {
       effectiveStartLabel: "Sun Mar 1, 10:30 PM EST",
       effectiveEndLabel: "Mon Mar 2, 6:00 AM EST",
       effectiveClassification: "principal",
+      reviewToken: "synthetic-review-token",
+      needsReview: false,
+      sourceWindowLabel: "Synthetic source window",
+      activeEdits: [],
       durationLabel: "7 hours 30 minutes",
       suppressed: false,
       sourceLabel: "Manual sleep log",
@@ -420,6 +432,10 @@ describe("desktop navigation", () => {
       effectiveStartLabel: "Sun Mar 1, 10:00 PM EST",
       effectiveEndLabel: "Mon Mar 2, 6:00 AM EST",
       effectiveClassification: "principal",
+      reviewToken: "synthetic-review-token",
+      needsReview: false,
+      sourceWindowLabel: "Synthetic source window",
+      activeEdits: [],
       durationLabel: "8 hours 0 minutes",
       suppressed: false,
       sourceLabel: "Manual sleep log",
@@ -535,6 +551,10 @@ describe("desktop navigation", () => {
       effectiveStartLabel: "Sun Mar 1, 10:00 PM EST",
       effectiveEndLabel: "Mon Mar 2, 6:00 AM EST",
       effectiveClassification: "principal",
+      reviewToken: "synthetic-review-token",
+      needsReview: false,
+      sourceWindowLabel: "Synthetic source window",
+      activeEdits: [],
       durationLabel: "8 hours 0 minutes",
       suppressed: false,
       sourceLabel: "Manual sleep log",
@@ -600,6 +620,12 @@ describe("desktop navigation", () => {
       main: {
         App: {
           ListTasks: async () => ({ status: "ok", tasks: [] }),
+          GetProposals: async () => ({
+            fixtureMode: false,
+            status: "empty",
+            proposals: [],
+            unplaced: [],
+          }),
           AddTask: addTask,
         },
       },

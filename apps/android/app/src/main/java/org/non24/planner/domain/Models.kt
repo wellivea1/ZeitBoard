@@ -12,12 +12,14 @@ enum class DataMode {
 }
 
 enum class AcquisitionMethod {
+    SERVER,
     FIXTURE,
     HEALTH_CONNECT,
     MANUAL,
 }
 
 enum class EvidenceStatus {
+    ESTIMATED,
     SYNTHETIC,
     IMPORTED,
     USER_CORRECTED,
@@ -120,7 +122,10 @@ data class MedicationEvent(
 data class AppSettings(
     val dataMode: DataMode = DataMode.FIXTURE,
     val use24HourTime: Boolean = true,
+    val backgroundSyncEnabled: Boolean = false,
 )
+
+enum class BackgroundReadState { UNKNOWN, UNAVAILABLE, REQUIRED, GRANTED }
 
 enum class HealthConnectAvailability {
     AVAILABLE,

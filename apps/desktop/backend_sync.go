@@ -99,6 +99,24 @@ type syncPushResponse struct {
 	Accepted      int    `json:"accepted"`
 }
 
+func (r *syncPushResponse) UnmarshalJSON(data []byte) error {
+	var value struct {
+		SchemaVersion string `json:"schema_version"`
+		Cursor        *int64 `json:"cursor"`
+		Accepted      *int   `json:"accepted"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&value); err != nil {
+		return err
+	}
+	if value.Cursor == nil || value.Accepted == nil {
+		return errors.New("sync acknowledgment is incomplete")
+	}
+	*r = syncPushResponse{SchemaVersion: value.SchemaVersion, Cursor: *value.Cursor, Accepted: *value.Accepted}
+	return nil
+}
+
 type syncEnvelope struct {
 	Seq       int64           `json:"seq"`
 	RecordID  string          `json:"recordId"`
@@ -298,41 +316,11 @@ func (a *App) syncSleepRecords(ctx context.Context, cfg backendSyncConfig, token
 // pushTaskRecords pushes the current revision of every locally-edited task as
 // an immutable revision record (ADR-0020).
 func (a *App) pushTaskRecords(ctx context.Context, store *storage.Store, client desktopBackendClient) (int, error) {
-	totalPushed := 0
-	for {
-		records, err := store.PendingTaskSyncRecords(ctx, storage.MaxTaskSyncPageSize)
-		if err != nil {
-			return totalPushed, err
-		}
-		if len(records) == 0 {
-			return totalPushed, nil
-		}
-		pushRecords := make([]syncPushRecord, 0, len(records))
-		for _, record := range records {
-			pushRecords = append(pushRecords, syncPushRecord{
-				RecordID:  record.RecordID,
-				Kind:      "task",
-				CreatedAt: record.CreatedAt.UTC(),
-				Payload:   record.Payload,
-			})
-		}
-		for offset := 0; offset < len(records); {
-			batchLength, err := nextSyncPushBatchLength(pushRecords[offset:])
-			if err != nil {
-				return totalPushed, err
-			}
-			end := offset + batchLength
-			var response syncPushResponse
-			if err := client.postJSON(ctx, "/v1/sync/push", syncPushRequest{SchemaVersion: "v1", Records: pushRecords[offset:end]}, &response); err != nil {
-				return totalPushed, err
-			}
-			if err := store.MarkTaskSyncRecordsPushed(ctx, records[offset:end], time.Now().UTC()); err != nil {
-				return totalPushed, err
-			}
-			offset = end
-			totalPushed += batchLength
-		}
-	}
+	return pushPendingSyncRecords(ctx, client, storage.MaxTaskSyncPageSize,
+		store.PendingTaskSyncRecords, store.MarkTaskSyncRecordsPushed,
+		func(record storage.TaskSyncRecord) syncPushRecord {
+			return syncPushRecord{RecordID: record.RecordID, Kind: "task", CreatedAt: record.CreatedAt.UTC(), Payload: record.Payload}
+		})
 }
 
 // pushSleepErasures propagates local hard-deletes of already-pushed records to
@@ -361,23 +349,33 @@ func (a *App) pushSleepErasures(ctx context.Context, store *storage.Store, clien
 }
 
 func (a *App) pushSleepRecords(ctx context.Context, store *storage.Store, client desktopBackendClient) (int, error) {
+	return pushPendingSyncRecords(ctx, client, storage.MaxSleepSyncPageSize,
+		store.PendingSleepSyncRecords, store.MarkSleepSyncRecordsPushed,
+		func(record storage.SleepSyncRecord) syncPushRecord {
+			return syncPushRecord{RecordID: record.RecordID, Kind: record.Kind, CreatedAt: record.CreatedAt.UTC(), Payload: record.Payload}
+		})
+}
+
+// Sleep and task uploads share the same request bounds, acknowledgment checks
+// and durable commit order. Their stores retain ownership of payload encoding
+// and bookkeeping; no domain records are generalized into untyped maps.
+func pushPendingSyncRecords[T any](ctx context.Context, client desktopBackendClient, pageLimit int,
+	pending func(context.Context, int) ([]T, error),
+	markPushed func(context.Context, []T, time.Time) error,
+	encode func(T) syncPushRecord,
+) (int, error) {
 	totalPushed := 0
 	for {
-		records, err := store.PendingSleepSyncRecords(ctx, storage.MaxSleepSyncPageSize)
+		records, err := pending(ctx, pageLimit)
 		if err != nil {
 			return totalPushed, err
 		}
 		if len(records) == 0 {
 			return totalPushed, nil
 		}
-		pushRecords := make([]syncPushRecord, 0, len(records))
-		for _, record := range records {
-			pushRecords = append(pushRecords, syncPushRecord{
-				RecordID:  record.RecordID,
-				Kind:      record.Kind,
-				CreatedAt: record.CreatedAt.UTC(),
-				Payload:   record.Payload,
-			})
+		pushRecords := make([]syncPushRecord, len(records))
+		for i, record := range records {
+			pushRecords[i] = encode(record)
 		}
 		for offset := 0; offset < len(records); {
 			batchLength, err := nextSyncPushBatchLength(pushRecords[offset:])
@@ -389,13 +387,23 @@ func (a *App) pushSleepRecords(ctx context.Context, store *storage.Store, client
 			if err := client.postJSON(ctx, "/v1/sync/push", syncPushRequest{SchemaVersion: "v1", Records: pushRecords[offset:end]}, &response); err != nil {
 				return totalPushed, err
 			}
-			if err := store.MarkSleepSyncRecordsPushed(ctx, records[offset:end], time.Now().UTC()); err != nil {
+			if err := validateSyncAcknowledgment(response, batchLength); err != nil {
+				return totalPushed, err
+			}
+			if err := markPushed(ctx, records[offset:end], time.Now().UTC()); err != nil {
 				return totalPushed, err
 			}
 			offset = end
 			totalPushed += batchLength
 		}
 	}
+}
+
+func validateSyncAcknowledgment(response syncPushResponse, batchLength int) error {
+	if response.SchemaVersion != "v1" || response.Cursor < 0 || response.Accepted < 0 || response.Accepted > batchLength {
+		return errors.New("server returned an invalid sync acknowledgment; pending records were retained")
+	}
+	return nil
 }
 
 func nextSyncPushBatchLength(records []syncPushRecord) (int, error) {
@@ -429,6 +437,9 @@ func (a *App) pullSleepRecords(ctx context.Context, store *storage.Store, client
 	var response syncPullResponse
 	if err := client.getJSON(ctx, fmt.Sprintf("/v1/sync/pull?since=%d", cursor), &response); err != nil {
 		return 0, 0, 0, err
+	}
+	if response.SchemaVersion != "v1" {
+		return 0, 0, 0, errors.New("server returned an unsupported sync version; no records were applied")
 	}
 	records := make([]storage.SyncPullRecord, 0, len(response.Records))
 	for _, record := range response.Records {
@@ -1068,9 +1079,13 @@ func (c desktopBackendClient) doJSON(ctx context.Context, method, path string, p
 		return errors.New("backend request failed")
 	}
 	defer resp.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 2*1024*1024))
+	const responseLimit = 2 * 1024 * 1024
+	data, err := io.ReadAll(io.LimitReader(resp.Body, responseLimit+1))
 	if err != nil {
 		return err
+	}
+	if len(data) > responseLimit {
+		return errors.New("backend response exceeded the supported size")
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return backendHTTPError{StatusCode: resp.StatusCode, Message: sanitizeHTTPBody(data)}
@@ -1082,6 +1097,10 @@ func (c desktopBackendClient) doJSON(ctx context.Context, method, path string, p
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(target); err != nil {
 		return errors.New("backend returned an invalid JSON response")
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		return errors.New("backend returned more than one JSON value")
 	}
 	return nil
 }

@@ -176,7 +176,7 @@ export function AppShell({ screen, children }: { screen: ScreenId; children: Rea
         </div>
       </aside>
 
-      <main className="main-content" id="main-content">
+      <main className="main-content" id="main-content" tabIndex={-1}>
         <button
           className="assistant-toggle"
           type="button"
