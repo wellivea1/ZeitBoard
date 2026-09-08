@@ -29,6 +29,10 @@ internal abstract class CorrectableSleepRepository(
             ?: return Result.failure(IllegalArgumentException("The selected sleep episode no longer exists."))
         val validation = SleepCorrectionPolicy.validate(source, correction)
         if (validation.isFailure) return validation
+        val current = activeCorrections.value[source.id]
+        if (current?.id != correction.id && correction.supersedesCorrectionIds != listOfNotNull(current?.id)) {
+            return Result.failure(IllegalStateException("The correction changed while the form was open. Reload the current record before saving."))
+        }
         return try {
             localUserDataRepository.appendSleepCorrection(correction)
             Result.success(Unit)

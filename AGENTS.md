@@ -32,8 +32,8 @@
 
 ## Engineering
 
+- **Pre-release simplification (owner direction, 2026-09-08):** there are no packaged releases or deployed users. Maintain one current contract per capability; change it in place with its producers, consumers and fixtures. Do not add backward-compatibility routes, dual-format exports, old-client negotiation or historical development-schema migrations. Establish upgrade guarantees against the first packaged release. Current-data durability, explicit erasure, external import formats and retry integrity still apply.
 - Pin tool and dependency versions.
 - Format Go with `gofmt`, Kotlin with the configured formatter, and TypeScript with Prettier.
 - Add focused tests for time-zone behavior, provenance/corrections, estimation refusal, scheduling constraints, and permission projection.
 - Keep changes scoped and document architecture changes with an ADR.
-

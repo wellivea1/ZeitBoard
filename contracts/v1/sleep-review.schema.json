@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Private sleep correction review",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source_cursor",
+    "generated_at",
+    "observation_id",
+    "source_revision",
+    "source_window",
+    "effective_window",
+    "sleep_classification",
+    "excluded",
+    "needs_review",
+    "manual_corrections"
+  ],
+  "properties": {
+    "schema_version": { "const": "v1" },
+    "source_cursor": { "type": "integer", "minimum": 0 },
+    "generated_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "observation_id": { "$ref": "common.schema.json#/$defs/identifier" },
+    "source_revision": { "$ref": "common.schema.json#/$defs/timestamp" },
+    "source_window": { "$ref": "#/$defs/window" },
+    "effective_window": { "$ref": "#/$defs/window" },
+    "sleep_classification": { "enum": ["principal", "nap", "unknown"] },
+    "excluded": { "type": "boolean" },
+    "needs_review": { "type": "boolean" },
+    "manual_corrections": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["correction_id", "created_at", "changes"],
+        "properties": {
+          "correction_id": { "$ref": "common.schema.json#/$defs/identifier" },
+          "created_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+          "changes": { "$ref": "correction-set.schema.json#/$defs/correction/properties/changes" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_at", "end_at", "zone_id"],
+      "properties": {
+        "start_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "end_at": { "$ref": "common.schema.json#/$defs/timestamp" },
+        "zone_id": { "$ref": "common.schema.json#/$defs/zoneId" }
+      }
+    }
+  }
+}

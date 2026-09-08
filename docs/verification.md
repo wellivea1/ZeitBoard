@@ -1,8 +1,39 @@
 # Verification record
 
-Most recent local verification: Windows 11 on 2026-07-22.
+Most recent local verification: Windows 11 on 2026-09-08.
 
-## Passing checks
+## 2026-09-08 product quality pass
+
+- `npm run check:web`: formatting, ESLint/UI standards, TypeScript, 397 desktop tests in 54 files, 6
+  trusted-view tests in 2 files, and both production builds pass. Three existing Fast Refresh export
+  warnings remain; no lint errors.
+- `go test ./core/... ./apps/desktop/... ./apps/server/...` passes. Desktop tests were rerun after
+  the task DTO and civil-time fixes and pass, including exact constraint round-trips across
+  DST/travel, stale revisions, invalid mixed timestamp representations and nonexistent civil times.
+- `go vet ./core/... ./apps/desktop/... ./apps/server/...` passes.
+- `scripts/dev.ps1 -Action check -Component contracts`: all 29 versioned fixtures, standalone tools
+  tests/vet and schema validation pass.
+- `scripts/dev.ps1 -Action check -Component android`: unit tests and lint pass. This is not a new
+  real-device or wearable collection trial.
+- `scripts/dev.ps1 -Action build -Component desktop`: native Windows/amd64 production build succeeds
+  at `apps/desktop/build/bin/ZeitBoard.exe`.
+- Clean production browser smoke: Home and all ten remaining route/tab destinations open with no
+  render failures or console warnings/errors.
+- Desktop and 390px viewport review: all eleven route/tab destinations stay within document width.
+  Calendar/chart content retains its internal scroll. Settings and the assistant remain usable at
+  narrow width.
+- An ignored, synthetic bridge harness verifies task editing/save, visible narrow task actions,
+  service failure withholding and successful Home recovery. It does not read or change a personal
+  database or call a provider. Temporary hot-reload errors during source replacement were excluded
+  from the clean production smoke; they are not counted as a passing runtime test.
+- `git diff --check` passes. Test/build artifacts and the review harness remain ignored. The
+  installed desktop and personal data store were not replaced.
+
+The review and limitations are in
+[`product-quality-review-2026-09-08.md`](product-quality-review-2026-09-08.md). Earlier verification
+records below are historical, not the current test count.
+
+## 2026-07-22 passing checks
 
 - Frontend formatting, ESLint, and repository UI standards. The UI guard passed
   with 16 screen modules and 10 component stylesheets.
@@ -79,15 +110,15 @@ remain private and ignored.
 
 The finalized digital source conversion accounted for every source row:
 
-| Stage | Count |
-|---|---:|
-| Finalized Fitbit files read | 35 |
-| Source rows read | 923 |
-| Exact overlapping rows | 105 |
-| Rows outside 2021-2023 | 80 |
-| Included observations | 738 |
-| Included observations under 3h, classified as nap | 1 |
-| Matching superseded files excluded (`Old` / `Incomplete` / `weekly`) | 26 |
+| Stage                                                                | Count |
+| -------------------------------------------------------------------- | ----: |
+| Finalized Fitbit files read                                          |    35 |
+| Source rows read                                                     |   923 |
+| Exact overlapping rows                                               |   105 |
+| Rows outside 2021-2023                                               |    80 |
+| Included observations                                                |   738 |
+| Included observations under 3h, classified as nap                    |     1 |
+| Matching superseded files excluded (`Old` / `Incomplete` / `weekly`) |    26 |
 
 Against a fresh ignored database, preview reported 738 ready, 0 duplicate,
 and 0 invalid rows. Commit imported all 738 atomically. A second preview
@@ -124,19 +155,19 @@ was the reported Fitbit nap. With the seven-episode minimum, all 945 eligible
 holdouts were accounted for as 809 evaluations plus 136 typed refusals
 (coverage 0.856). Every refusal was `ambiguous_cycle_index`.
 
-| Candidate | Scale | Evaluations | Refusals | Coverage | Median error | Mean error | P90 error | Hit rate | Mean window |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| Baseline | 1.00 | 809 | 136 | 0.856 | 1.71 h | 2.40 h | 5.41 h | 0.78 | 14.71 h |
-| Tighten-75 | 0.75 | 809 | 136 | 0.856 | 1.71 h | 2.40 h | 5.41 h | 0.72 | 13.31 h |
-| Tighten-50 | 0.50 | 809 | 136 | 0.856 | 1.71 h | 2.40 h | 5.41 h | 0.66 | 11.91 h |
+| Candidate  | Scale | Evaluations | Refusals | Coverage | Median error | Mean error | P90 error | Hit rate | Mean window |
+| ---------- | ----: | ----------: | -------: | -------: | -----------: | ---------: | --------: | -------: | ----------: |
+| Baseline   |  1.00 |         809 |      136 |    0.856 |       1.71 h |     2.40 h |    5.41 h |     0.78 |     14.71 h |
+| Tighten-75 |  0.75 |         809 |      136 |    0.856 |       1.71 h |     2.40 h |    5.41 h |     0.72 |     13.31 h |
+| Tighten-50 |  0.50 |         809 |      136 |    0.856 |       1.71 h |     2.40 h |    5.41 h |     0.66 |     11.91 h |
 
 Baseline confidence calibration:
 
 | Confidence | Evaluations | Hit rate | Median error |
-|---|---:|---:|---:|
-| High | 28 | 0.61 | 1.23 h |
-| Medium | 386 | 0.81 | 1.42 h |
-| Low | 395 | 0.77 | 2.19 h |
+| ---------- | ----------: | -------: | -----------: |
+| High       |          28 |     0.61 |       1.23 h |
+| Medium     |         386 |     0.81 |       1.42 h |
+| Low        |         395 |     0.77 |       2.19 h |
 
 Measured decision: keep the production uncertainty scale at 1.00. Tighten-75
 reduced mean width by 1.40h but lost 6 percentage points of hit rate;
@@ -256,28 +287,24 @@ Verified on Windows 11 on 2026-06-15 and 2026-06-16:
 
 Verified on Windows 11 on 2026-07-26, after the Phase 4 review:
 
-- Full suites green: gofmt clean; `core` 10, `apps/desktop` 4, `apps/server` 7
-  package groups pass `go vet` and `go test`; 29 contract fixtures verified and
-  validated; 222 desktop frontend tests; TypeScript typecheck; ESLint plus the
-  UI-standards check; 33 installer library tests.
-- **Endpoint gates** (`internal/localagent`): non-loopback callers, absent or
-  invalid bearer tokens, and requests carrying an `Origin` header - including a
-  present-but-empty one - are refused. `Header.Get` cannot distinguish an empty
-  header from an absent one, so the check tests for presence.
-- **Descriptor ACL**: a Windows-only test asserts the published descriptor has
-  a *protected* DACL with exactly one entry, for the current user.
-  `os.Chmod(0600)` alone does not achieve this on Windows, which is why the
-  explicit DACL exists.
-- **Medical safety**: the post-provider screen is reachable. A benign prompt
-  whose model answer smuggles a dosing directive is refused, while an ordinary
-  scheduling answer using "you should"/"take the 3 PM slot" is not. Decision
-  questions about an unknown medication name ("how much Hetlioz should I
-  take?") refuse via the phrasing rule; ordinary planning ("when should I take
+- Full suites green: gofmt clean; `core` 10, `apps/desktop` 4, `apps/server` 7 package groups pass
+  `go vet` and `go test`; 29 contract fixtures verified and validated; 222 desktop frontend tests;
+  TypeScript typecheck; ESLint plus the UI-standards check; 33 installer library tests.
+- **Endpoint gates** (`internal/localagent`): non-loopback callers, absent or invalid bearer tokens,
+  and requests carrying an `Origin` header - including a present-but-empty one - are refused.
+  `Header.Get` cannot distinguish an empty header from an absent one, so the check tests for
+  presence.
+- **Descriptor ACL**: a Windows-only test asserts the published descriptor has a _protected_ DACL
+  with exactly one entry, for the current user. `os.Chmod(0600)` alone does not achieve this on
+  Windows, which is why the explicit DACL exists.
+- **Medical safety**: the post-provider screen is reachable. A benign prompt whose model answer
+  smuggles a dosing directive is refused, while an ordinary scheduling answer using "you
+  should"/"take the 3 PM slot" is not. Decision questions about an unknown medication name ("how
+  much Hetlioz should I take?") refuse via the phrasing rule; ordinary planning ("when should I take
   my lunch break?") does not.
-- **Publish transaction**: a half-published install (pending marker present, or
-  a declared component missing) fails validation closed; completing clears the
-  marker only after every declared artifact validates. A test asserts the
-  transaction is actually invoked by `install.ps1` and `update.ps1`.
+- **Publish transaction**: a half-published install (pending marker present, or a declared component
+  missing) fails validation closed; completing clears the marker only after every declared artifact
+  validates. A test asserts the transaction is actually invoked by `install.ps1` and `update.ps1`.
 
 Not verified here: the end-to-end voice path through a real MCP client, which
 needs a running desktop app and a GUI session. `scripts/smoke-local-mcp.ps1`
@@ -529,15 +556,13 @@ SSE live layer and audit UI (P5-d). The exposure gate is unchanged and unmet.
 
 Verified 2026-08-04 for the first P7 slices.
 
-**Freshness.** `core/freshness` covers fresh, aging, and withheld bands; no
-evidence distinguished from old evidence; the unrecorded-expected-sleep case
-that a pure age threshold cannot catch; a two-hour-late onset *not* withholding,
-which checks the grace period against ADR-0022's measured 5.41 h P90 error;
-configured-but-silent sources withholding while no configured source does not;
-clock-skew evidence clamped rather than producing a negative age; an
-unconfigured policy falling back to the defaults; and every explanation asserted
-free of medication, dose, task, calendar, and diagnosis vocabulary so the same
-strings stay safe on the public surface.
+**Freshness.** `core/freshness` covers fresh, aging, and withheld bands; no evidence distinguished
+from old evidence; the unrecorded-expected-sleep case that a pure age threshold cannot catch; a
+two-hour-late onset _not_ withholding, which checks the grace period against ADR-0022's measured
+5.41 h P90 error; configured-but-silent sources withholding while no configured source does not;
+clock-skew evidence clamped rather than producing a negative age; an unconfigured policy falling
+back to the defaults; and every explanation asserted free of medication, dose, task, calendar, and
+diagnosis vocabulary so the same strings stay safe on the public surface.
 
 **The two defects it closes.** A desktop test seeds a fittable rhythm whose
 newest record is four days old and asserts the current state is withheld rather
@@ -547,14 +572,12 @@ three days ago and asserts the snapshot is not published as available — the ca
 where `generatedAt` was refreshed by an unrelated task push while the sleep
 evidence was stale.
 
-**Activity.** The state machine covers startup; an hour of ordinary work
-producing no records at all; idle backdated to when input stopped rather than to
-the poll that noticed; the return to use carrying the full idle duration; a clock
-jump becoming suspend/resume; an ordinary 90-second poll gap *not* becoming one;
-lock taking precedence over idle; a source asserting nothing moving nothing;
-shutdown recorded once; and the encoded payload asserted against a four-key
-allowlist with no key suggesting content capture. An unknown state fails to
-encode.
+**Activity.** The state machine covers startup; an hour of ordinary work producing no records at
+all; idle backdated to when input stopped rather than to the poll that noticed; the return to use
+carrying the full idle duration; a clock jump becoming suspend/resume; an ordinary 90-second poll
+gap _not_ becoming one; lock taking precedence over idle; a source asserting nothing moving nothing;
+shutdown recorded once; and the encoded payload asserted against a four-key allowlist with no key
+suggesting content capture. An unknown state fails to encode.
 
 **Inference.** Quiet desktop time becoming a candidate with non-zero boundary
 uncertainty; an evening and a weekend away both refused with a typed code; no
@@ -582,18 +605,18 @@ Ten scenarios, each a generated rhythm plus generated desktop activity around
 it. Candidates are matched to truth by greatest overlap; bias is the signed
 median, which distinguishes a correctable offset from noise.
 
-| Scenario | Truth | Cand | Cover | Onset med | Onset P90 | Wake med | Wake P90 | Onset bias | Wake bias | False |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| stable rhythm | 21 | 21 | 1.00 | 44m | 57m | 30m | 51m | −44m | +30m | 0 |
-| free-running tau 24.8 | 18 | 18 | 1.00 | 43m | 1h02m | 23m | 41m | −49m | +23m | 0 |
-| forced wake | 18 | 16 | 0.89 | 37m | 1h05m | 29m | 44m | −38m | +29m | 0 |
-| fragmented sleep | 18 | 18 | 1.00 | 36m | 59m | 23m | 38m | −38m | +23m | 0 |
-| naps | 18 | 18 | 1.00 | 33m | 55m | 24m | 42m | −35m | +24m | 0 |
-| quiet wake | 18 | 18 | 1.00 | 43m | 1h02m | **1h58m** | **2h16m** | −49m | **+1h58m** | 0 |
-| long wind-down | 18 | 18 | 1.00 | **2h03m** | **2h22m** | 23m | 41m | **−2h09m** | +23m | 0 |
-| machine used mid-sleep | 18 | 20 | 1.00 | 49m | 1h03m | 23m | 45m | −43m | +18m | 0 |
-| machine off some nights | 18 | 15 | 0.83 | 49m | 1h02m | 18m | 41m | −49m | +18m | 0 |
-| suspend instead of idle | 18 | 18 | 1.00 | 43m | 1h02m | 23m | 41m | −49m | +23m | 0 |
+| Scenario                | Truth | Cand | Cover | Onset med | Onset P90 |  Wake med |  Wake P90 | Onset bias |  Wake bias | False |
+| ----------------------- | ----: | ---: | ----: | --------: | --------: | --------: | --------: | ---------: | ---------: | ----: |
+| stable rhythm           |    21 |   21 |  1.00 |       44m |       57m |       30m |       51m |       −44m |       +30m |     0 |
+| free-running tau 24.8   |    18 |   18 |  1.00 |       43m |     1h02m |       23m |       41m |       −49m |       +23m |     0 |
+| forced wake             |    18 |   16 |  0.89 |       37m |     1h05m |       29m |       44m |       −38m |       +29m |     0 |
+| fragmented sleep        |    18 |   18 |  1.00 |       36m |       59m |       23m |       38m |       −38m |       +23m |     0 |
+| naps                    |    18 |   18 |  1.00 |       33m |       55m |       24m |       42m |       −35m |       +24m |     0 |
+| quiet wake              |    18 |   18 |  1.00 |       43m |     1h02m | **1h58m** | **2h16m** |       −49m | **+1h58m** |     0 |
+| long wind-down          |    18 |   18 |  1.00 | **2h03m** | **2h22m** |       23m |       41m | **−2h09m** |       +23m |     0 |
+| machine used mid-sleep  |    18 |   20 |  1.00 |       49m |     1h03m |       23m |       45m |       −43m |       +18m |     0 |
+| machine off some nights |    18 |   15 |  0.83 |       49m |     1h02m |       18m |       41m |       −49m |       +18m |     0 |
+| suspend instead of idle |    18 |   18 |  1.00 |       43m |     1h02m |       23m |       41m |       −49m |       +23m |     0 |
 
 Against the pilot targets (onset median ≤45 m, wake median ≤30 m, boundary P90
 ≤90 m, coverage ≥0.85, zero false positives): **5 of 10 scenarios pass.**
@@ -603,31 +626,26 @@ shadow-only.
 
 **What the numbers say.** Three results matter more than the pass count.
 
-*The error is systematic, not noisy.* Onset bias is −33 to −49 minutes and wake
-bias +18 to +30 minutes across every well-behaved scenario. Desktop inactivity
-brackets sleep by construction: someone stops using the machine before falling
-asleep and touches it again after waking. That is a correctable offset rather
-than an accuracy ceiling, which is a much better position than an unbiased error
-of the same size.
+_The error is systematic, not noisy._ Onset bias is −33 to −49 minutes and wake bias +18 to +30
+minutes across every well-behaved scenario. Desktop inactivity brackets sleep by construction:
+someone stops using the machine before falling asleep and touches it again after waking. That is a
+correctable offset rather than an accuracy ceiling, which is a much better position than an unbiased
+error of the same size.
 
-*Behaviour dominates the algorithm.* The two scenarios that fail badly fail on
-the user's habits, not on the inference rules. A two-hour gap before touching
-the machine after waking produces a 1h58m wake error; a two-hour wind-down
-produces a 2h03m onset error. No refinement of the interval logic recovers
-information the machine never had. This is the strongest argument for Android
-sync: a wearable observes sleep directly and does not depend on whether someone
-opened a laptop.
+_Behaviour dominates the algorithm._ The two scenarios that fail badly fail on the user's habits,
+not on the inference rules. A two-hour gap before touching the machine after waking produces a 1h58m
+wake error; a two-hour wind-down produces a 2h03m onset error. No refinement of the interval logic
+recovers information the machine never had. This is the strongest argument for Android sync: a
+wearable observes sleep directly and does not depend on whether someone opened a laptop.
 
-*Nothing was invented, but one episode can be reported as two.* Zero false
-positives in every scenario, including the ones with missing evidence, and
-coverage degrades honestly — 0.83 with four nights of no data, 0.89 under forced
-wake. The mid-sleep-use scenario is subtler: it does **not** lose coverage, it
-produces 20 candidates for 18 episodes. Splitting an eight-hour sleep leaves two
-four-hour halves, both above the three-hour minimum, so each becomes a candidate
-and one real night is counted twice. For a drift estimator that indexes by cycle
-this is worse than a miss — a missing night widens uncertainty, an extra episode
-shifts the fit. Merging adjacent candidates separated by a short waking gap is
-the obvious remedy and is deliberately not written against synthetic data.
+_Nothing was invented, but one episode can be reported as two._ Zero false positives in every
+scenario, including the ones with missing evidence, and coverage degrades honestly — 0.83 with four
+nights of no data, 0.89 under forced wake. The mid-sleep-use scenario is subtler: it does **not**
+lose coverage, it produces 20 candidates for 18 episodes. Splitting an eight-hour sleep leaves two
+four-hour halves, both above the three-hour minimum, so each becomes a candidate and one real night
+is counted twice. For a drift estimator that indexes by cycle this is worse than a miss — a missing
+night widens uncertainty, an extra episode shifts the fit. Merging adjacent candidates separated by
+a short waking gap is the obvious remedy and is deliberately not written against synthetic data.
 
 **The calibration trap, stated so it is not walked into.** The measured bias is
 close to the `StopUsingBefore` and `ResumeUsingAfter` values used to generate
@@ -741,10 +759,10 @@ sequence. The recomputation landed 30 seconds after the burst rather than 3,
 which is the minimum interval measuring from the link-creation run — the floor
 working, not a delay.
 
-The third row is the ADR-0031 defect finally closed. That ADR found that pushing
-a task refreshed the portal's freshness signal while the sleep evidence
-underneath was days old; it corrected the *status* and left the stamp moving.
-The page's 6-hour and 24-hour age rules now measure the evidence.
+The third row is the ADR-0031 defect finally closed. That ADR found that pushing a task refreshed
+the portal's freshness signal while the sleep evidence underneath was days old; it corrected the
+_status_ and left the stamp moving. The page's 6-hour and 24-hour age rules now measure the
+evidence.
 
 Not covered by the live run: the freshness-expiry wake, because observing it in a
 real daemon means waiting hours for a real threshold. It is covered by the
@@ -755,14 +773,13 @@ runs the real goroutine and timer against a result that expires in 60 ms.
 Also not covered: the desktop, which recomputes on screen load and is unchanged.
 The background guarantee lives in the daemon.
 
-**A defect only the running worker could find.** Forty requests fired against a
-live worker while its startup run was still finishing, and every one was lost:
-the completion cleared the pending flag, including requests that arrived after
-the run had already read its inputs. The unit tests passed throughout, because
-they drove the schedule one call at a time and never overlapped a run with a
-request. The flag is now cleared when a run *begins*, and two tests pin it — one
-for the mid-run request, one asserting that asking again during a *failed* run
-does not pull the retry forward through the backoff.
+**A defect only the running worker could find.** Forty requests fired against a live worker while
+its startup run was still finishing, and every one was lost: the completion cleared the pending
+flag, including requests that arrived after the run had already read its inputs. The unit tests
+passed throughout, because they drove the schedule one call at a time and never overlapped a run
+with a request. The flag is now cleared when a run _begins_, and two tests pin it — one for the
+mid-run request, one asserting that asking again during a _failed_ run does not pull the retry
+forward through the backoff.
 
 The worker's locking is reviewed rather than race-detected: this toolchain has
 CGO disabled, so `go test -race` cannot run (see environment limitations). The
@@ -828,11 +845,10 @@ and the separation are enforced by `scripts/lint-ui-standards.mjs`, along with
 Plan and Log composing the screens they absorbed rather than copying them, and
 every legacy hash still redirecting.
 
-**Routing** (`readRouteFromHash`): unknown paths fall back to Home; a screen and
-its tab are read from the address; an unrecognised second segment falls back to
-the first tab; `#/overview`, `#/timeline`, `#/calendar`, `#/tasks`,
-`#/approvals` and `#/medications` all land on the right screen *and* the right
-tab; the utility destinations stay addressable.
+**Routing** (`readRouteFromHash`): unknown paths fall back to Home; a screen and its tab are read
+from the address; an unrecognised second segment falls back to the first tab; `#/overview`,
+`#/timeline`, `#/calendar`, `#/tasks`, `#/approvals` and `#/medications` all land on the right
+screen _and_ the right tab; the utility destinations stay addressable.
 
 **Tabs** (`ScreenTabs`): one tab stop for the whole group; arrow keys move and
 wrap; Home and End jump to the ends; other keys are ignored; the pending count
@@ -884,9 +900,9 @@ Checked to fail before it was checked to pass. Two DOM assertions cover the
 markup fixes: the day labels render outside the clipped track, and no list in
 the outlook carries a leading icon the others lack.
 
-Not covered: nothing here is a layout *test*. jsdom does not lay out, so the
-geometry above was measured in a real browser and the durable guards are the
-lint rule and the two structural assertions.
+Not covered: nothing here is a layout _test_. jsdom does not lay out, so the geometry above was
+measured in a real browser and the durable guards are the lint rule and the two structural
+assertions.
 
 ## Reported UI defects (2026-08-08)
 
@@ -937,12 +953,11 @@ sync; erasure requires the link id typed back and offers revocation instead;
 database words become plain ones (`active` → "Working now"); an unnamed link
 still renders.
 
-**Adapter tests**: a status outside the closed set is rejected; a link missing
-its identity is rejected; an unreadable grant flag reads as *withheld* rather
-than granted; and a payload whose link list is missing is treated as no payload
-— defaulting it to empty would render "nothing is being shared" over an instance
-that is in fact sharing, which is the one direction this screen must never be
-wrong in.
+**Adapter tests**: a status outside the closed set is rejected; a link missing its identity is
+rejected; an unreadable grant flag reads as _withheld_ rather than granted; and a payload whose link
+list is missing is treated as no payload — defaulting it to empty would render "nothing is being
+shared" over an instance that is in fact sharing, which is the one direction this screen must never
+be wrong in.
 
 **Screen tests**: the stale claim and the example rows are gone; `off` and
 `unavailable` are distinguished; the disclosure renders above the create button
@@ -1041,21 +1056,18 @@ zone. Everything below tests the schedules that assumption could not express.
 `core/outlook` gained four tests, each checked to fail against the previous
 implementation before it passed:
 
-- a service with equal open and close times covers the whole horizon, and loses
-  none of the confidently awake time to a gap;
-- an overnight schedule produces windows that cross midnight and are still eight
-  hours long, rather than being silently dropped — the old code skipped any
-  window whose close was not after its open, so a night desk produced *no* way
-  to reach anyone at all;
-- a window that opened last night and has not closed is reported, clamped to
-  now. The day walk now starts a civil day early for this; yesterday's ordinary
-  daytime window still drops out because it closed before now, and a separate
-  test pins that;
-- no open days means no windows. This one was found by a desktop test rather
-  than by reading the code: `officeWindows` substituted its Monday-to-Friday
-  default whenever `Days` was empty, so switching reaching hours *off* produced
-  three reaching windows. A wholly unset `OfficeHours` still takes the default,
-  and a test pins that too, because that is how every caller who does not care
+- a service with equal open and close times covers the whole horizon, and loses none of the
+  confidently awake time to a gap;
+- an overnight schedule produces windows that cross midnight and are still eight hours long, rather
+  than being silently dropped — the old code skipped any window whose close was not after its open,
+  so a night desk produced _no_ way to reach anyone at all;
+- a window that opened last night and has not closed is reported, clamped to now. The day walk now
+  starts a civil day early for this; yesterday's ordinary daytime window still drops out because it
+  closed before now, and a separate test pins that;
+- no open days means no windows. This one was found by a desktop test rather than by reading the
+  code: `officeWindows` substituted its Monday-to-Friday default whenever `Days` was empty, so
+  switching reaching hours _off_ produced three reaching windows. A wholly unset `OfficeHours` still
+  takes the default, and a test pins that too, because that is how every caller who does not care
   about reaching hours asks for the ordinary case.
 
 Ten Go tests cover the desktop bindings: the default schedule, a saved schedule
@@ -1066,10 +1078,9 @@ across five shapes, a foreign zone being named while the reader's own is not
 repeated at them, and a saved schedule surviving a restart with its revision
 intact.
 
-Twenty-two frontend tests cover the adapter and the panel, including that a
-missing `enabled` flag reads as *off* — showing reaching windows nobody asked
-for is the failure being removed — and that a conflict is never reported as a
-save.
+Twenty-two frontend tests cover the adapter and the panel, including that a missing `enabled` flag
+reads as _off_ — showing reaching windows nobody asked for is the failure being removed — and that a
+conflict is never reported as a save.
 
 Three UI-standards lint rules were added and each was checked to fail before it
 passed: neither `outlook.ts` nor `reachingHours.ts` may hard-code a working week,
@@ -1090,9 +1101,9 @@ a generic store and appearance was moved onto it. The existing appearance
 revision-conflict, persistence and backup-recovery test passes unchanged, which
 is what makes the extraction safe to claim.
 
-**What this does not establish.** One schedule, and the same hours on every
-selected day. Someone who must reach a clinic on Tuesday mornings *and* an
-employer on weekday afternoons can express only one of them.
+**What this does not establish.** One schedule, and the same hours on every selected day. Someone
+who must reach a clinic on Tuesday mornings _and_ an employer on weekday afternoons can express only
+one of them.
 
 ## Local file protection (roadmap slice 17, ADR-0035)
 
@@ -1113,12 +1124,11 @@ assertion below is against what the operating system reports, not against a nil
 error — a test that only checks `os.Chmod` succeeded is a test that passes while
 the file is exposed, which is how the previous claim survived.
 
-Seven package tests: an unrestricted file becomes owner-only and stops
-inheriting; the operation is idempotent and does not alter content; companions
-that do not exist are skipped without being created; a file written into a
-restricted directory afterwards is private by inheritance; describing an absent
-file fails rather than reporting protection. One test asserts `Describe` reports
-an *unprotected* file as unprotected, so none of the others can pass vacuously.
+Seven package tests: an unrestricted file becomes owner-only and stops inheriting; the operation is
+idempotent and does not alter content; companions that do not exist are skipped without being
+created; a file written into a restricted directory afterwards is private by inheritance; describing
+an absent file fails rather than reporting protection. One test asserts `Describe` reports an
+_unprotected_ file as unprotected, so none of the others can pass vacuously.
 
 Two storage tests: opening the store leaves the database, the write-ahead log
 and the shared-memory file all owner-only and non-inheriting, with nothing in the
@@ -1134,9 +1144,9 @@ correctly afterwards, the store reports its own permission result, and the
 readout shown to the user never describes a restricted file as encrypted. The
 token and configuration tests were checked to fail with the restriction removed.
 
-Nine frontend tests on the adapter, including that a missing `ownerOnly` flag
-reads as *not* protected — an unknown permission is not a good one — and that the
-detail line always carries "not encrypted".
+Nine frontend tests on the adapter, including that a missing `ownerOnly` flag reads as _not_
+protected — an unknown permission is not a good one — and that the detail line always carries "not
+encrypted".
 
 **What this does not establish, and says so on the screen.** The local database
 is not encrypted. This protects against another account on the same computer and
@@ -1155,21 +1165,18 @@ establishes that the user does less work or decides better, and the distinction
 matters for a product whose premise is reducing burden. Three gaps are recorded
 here so they are not mistaken for passing checks:
 
-- **Passive coverage is unmeasured.** Both halves of this note are now out of
-  date in the sentence and still true in substance: the desktop collector
-  records real transitions (P7-3) and the Android companion syncs (ADR-0032),
-  but nothing measures what fraction of principal sleep episodes arrive without
-  the user typing them. The collector also only runs while ZeitBoard is running.
-  Measuring coverage needs a pilot over weeks, not a test run.
-- **No current-state freshness assertion exists outside the portal.** The
-  portal's stale-at-6-hours and withheld-at-24-hours behaviour is verified
-  above. The desktop Overview has no equivalent policy to verify. Until one
-  shared policy exists, "the freshness rules are tested" is true only of the
-  public surface.
-- **Confidence calibration is measured and unresolved.** ADR-0022 recorded the
-  buckets inverted (High 0.61 against Medium 0.81). The portal withholds the
-  label on that evidence; the desktop still renders it. That is a known,
-  measured inconsistency, not an untested area.
+- **Passive coverage is unmeasured.** Both halves of this note are now out of date in the sentence
+  and still true in substance: the desktop collector records real transitions (P7-3) and the Android
+  companion syncs (ADR-0032), but nothing measures what fraction of principal sleep episodes arrive
+  without the user typing them. The collector also only runs while ZeitBoard is running. Measuring
+  coverage needs a pilot over weeks, not a test run.
+- **Current-state freshness now has software checks.** ADR-0031 introduced the shared evidence
+  freshness policy; the September desktop recovery pass also verifies unavailable/stale read
+  handling and automatic refresh. These checks do not measure real-world stale-output incidents or
+  passive coverage.
+- **Confidence calibration is measured and unresolved.** ADR-0022 recorded the buckets inverted
+  (High 0.61 against Medium 0.81). The portal withholds the label on that evidence; the desktop
+  still renders it. That is a known, measured inconsistency, not an untested area.
 
 The pilot metric framework — passive coverage, boundary error, forecast utility
 by horizon, task and calendar utility, and resource cost — is defined in the
@@ -1185,3 +1192,240 @@ orchestrator land, or their cost can only be guessed afterwards.
   TalkBack and desktop screen-reader participant walkthroughs remain roadmap
   work; automated roles and minimum target sizes do not substitute for them.
 - The installed Go toolchain has CGO disabled, so `go test -race` is unavailable.
+
+
+## Android automatic upload increment — 2026-09-08
+
+- 83 passing Android unit tests cover pending/offline source revision chains, nanosecond precision,
+  failed/canonical re-enrollment, bounded batches/retries, cancellation, permissions and sample-mode
+  gates, JSON/acknowledgment/redirect/response limits, failed preference durability and the shared
+  Go/Kotlin wire fixture.
+- Android `check` and `assembleDebug` pass. A disposable Android 16 / API 36.1 emulator passed all
+  eight instrumentation tests, including schema 1→4 and 3→4 migration, SQLite reopen/revision
+  preservation, interrupted server-switch generation recovery, and native HTTP
+  enrollment/upload/provider revision/ restart against a disposable Go API through loopback
+  `adb reverse`.
+- The installed enrollment and connected Settings screens were inspected at 1080×2400. The secret is
+  masked and clears after confirmed enrollment; the screen distinguishes connected-with-no-upload,
+  queued/held counts, background consent and unavailable estimate/task downloads. Sample mode
+  remains labeled.
+- Go core/desktop/server tests and vet pass; added core tests preserve provider provenance and
+  refuse unresolved source/user correction conflicts. Affected API/store tests verify that a later
+  correction cannot retain erased timestamps.
+- The generated shared Android wire fixture validates under the correction and sync schemas and
+  replays as one observed sleep episode. Contract generation, tools tests/vet and schema validation
+  cover 30 deterministic fixture files.
+
+Local logs: `.tools/completion-android-final.log`, `.tools/completion-android-final-check.log`,
+`.tools/completion-go.log`, `.tools/completion-go-sync.log`, `.tools/completion-erasure.log`,
+`.tools/completion-go-vet.log`, `.tools/completion-contracts.log`; visual evidence:
+`.tools/completion-settings.png`. All use synthetic/disposable data.
+
+This does not verify production certificate installation, a wearable's ongoing delivery, OEM
+background/battery behavior, Android pull/remote erasure, cached estimates or task downloads, a
+real-device pilot or independent portal review. Those remained open after that increment; the
+companion increment below adds software evidence for pull/erasure, cached estimates and tasks.
+
+## Android companion increment — 2026-09-08
+
+- 88 Android unit tests pass, including strict v2 forecast/refusal parsing, bounded expiry,
+  synthetic provenance, typed UTC/DST instants, task constraints, cursor validation and all
+  preceding upload/permission/durability checks.
+- Android `check`, `assembleDebug` and `assembleDebugAndroidTest` pass. Native SQLite/HTTP
+  instrumentation runs explicitly on disposable `emulator-5580`, Android 16 / API 36.1, against a
+  loopback Go API with synthetic records. The 16 tests cover schema 1→5 and 3→5, source revision
+  nanoseconds, reopened task revisions, atomic invalid-page rollback, remote erasure, suppression
+  across Health Connect re-import/re-enrollment, conflicting equal provider revisions,
+  restored-server replay, and correct handling of task-shaped observation IDs. Actual HTTP
+  enrollment/push/pull returns a Go estimate and task revisions; erasure removes the downloaded task
+  and affected local Health Connect rows.
+- Go core/server/desktop tests and vet pass. Added coverage checks private companion auth, typed
+  refusal/windows/cache expiry, effective erasure, correction-target backfill on older encrypted
+  databases, and preservation of a provider endpoint beneath a manual overlay. All 32 generated
+  contract fixtures, tools tests/vet and schema validation pass.
+- Native Settings, Status and Tasks were inspected at 1080×2400 using a separate empty loopback
+  server seeded only with explicitly synthetic observations and a synthetic task. Enrollment
+  switches to My data; the phone downloads without Health Connect permission. Status visibly marks
+  server sample forecasts, confidence, snapshot age and zones. Tasks shows duration, revision,
+  civil-time constraints and the desktop editing handoff. The visual pass removed an empty
+  local-sleep panel when synced sleep is already available. With the disposable server stopped, a
+  manual sync retained the downloaded task and original download timestamp and showed a retryable
+  connection error. The cached forecast also survived force-stop and relaunch while the server was
+  offline.
+
+The initial native run caught a `secure_delete` pragma call that Android rejected through `execSQL`;
+the query-based fix passes actual SQLite instrumentation. Local logs:
+`.tools/companion-android-final.log`, `.tools/companion-instrumentation.log`,
+`.tools/companion-go-final.log`, `.tools/companion-contracts.log`; screenshots:
+`.tools/companion-status.png`, `.tools/companion-tasks.png`, `.tools/companion-settings.png`.
+Offline evidence: `.tools/companion-offline.png` and `.tools/companion-restart.xml`.
+
+These checks do not qualify Android-authored manual
+correction/medication sync, wearable/OEM delivery, production TLS, private pilot outcomes,
+clean-machine release behavior or independent portal exposure review. C1–C8 remain open as specified
+in `completion-plan.md`.
+
+## Pre-release simplification — 2026-09-08
+
+Owner clarification removes prototype backward compatibility from acceptance;
+there are no packaged releases or deployed consumers. ADR-0039 records the current
+contract/storage policy. Historical migration results above remain a work log,
+not a supported-version matrix.
+
+- Go core/server/desktop suites pass. Desktop acknowledgment tests retain pending
+  records on wrong versions, missing fields, negative cursors and trailing JSON.
+  Sleep and task batching now run through one shared loop. Current erasure tests
+  still verify deletion of dependent corrections and rejection of later revisions.
+- Android `check` and debug app/test APK builds pass with 88 unit tests. All 15
+  native Android 16 instrumentation tests pass against a disposable Go API. Fresh
+  schema completeness and non-destructive refusal of an obsolete development
+  database replace old migration fixtures. Current reopen, source revisions,
+  enrollment generations, remote erasure, tasks and restored-server replay remain.
+- All 29 maintained contract fixtures validate. Removed the three unused v1
+  medication fixtures and the unreleased duplicate sync/export contract work;
+  provenance and current medication consent/zone fields remain tested.
+- Desktop/web formatting, type checking, lint and production builds pass; all
+  403 web tests pass (397 desktop and six trusted-prototype tests). Lint retains
+  three existing Fast Refresh export warnings and has no errors.
+
+Evidence: `.tools/streamline-go.log`, `.tools/streamline-go-vet.log`,
+`.tools/streamline-android.log`, `.tools/streamline-instrumentation.log`,
+`.tools/streamline-contracts.log`, `.tools/streamline-desktop.log`.
+
+## Connected correction review — 2026-09-08
+
+ADR-0040 adds reviewed source revision / concurrent manual heads to the single
+current correction contract, the private server review endpoint and Android and
+desktop resolution flows. The following checks passed with synthetic data:
+
+- Go core, desktop and server tests; `go vet` across all three modules. Regression
+  tests cover stale forms, concurrent heads, later-save/older-source refusal,
+  reviewed resolution, immutable evidence, erasure, DST repetition and nanoseconds.
+- Root desktop check: lint (three existing Fast Refresh warnings), UI standards,
+  typecheck, 397 desktop + 6 trusted-web tests, and both frontend production builds.
+- Contract generator/check: 30 maintained fixtures, including the private v1
+  sleep-review fixture consumed by Android; all versioned schemas validate.
+- Android check / debug APK / instrumentation APK: 92 unit tests, lint and builds.
+- Disposable Android 16 emulator: 16 instrumentation tests pass against the actual
+  disposable Go HTTP API. The new path saves a manual correction, reopens SQLite
+  with its queue intact, synchronizes full-precision endpoints/classification/
+  exclusion, rejects a stale review, resolves two manual heads and clears open and
+  durable review context on erasure.
+- Native visual interaction: enrolled a disposable server, selected a downloaded
+  source and saved a correction through the actual form. The check found and fixed
+  misleading stale-review text after the phone's own successful save. The Android
+  layout retains reachable controls and the five primary destinations.
+
+Logs: `.tools/manual-review-{go,go-vet,desktop,contracts,android,instrumentation}.log`.
+The screenshot `.tools/manual-review-screen.png` contains synthetic data only.
+No real wearable/OEM battery, production TLS, private pilot, independent portal
+review or signing qualification is claimed. Local-only correction handoff on later
+enrollment and desktop lifecycle checks remain the next C1 work.
+
+## Pre-enrollment correction handoff — 2026-09-08
+
+- Android `check assembleDebug assembleDebugAndroidTest` passes: 92 JVM tests,
+  lint and both APKs. No Go or web runtime code changed in this increment.
+- 21 disposable Android 16 instrumentation tests pass against the actual Go API.
+  Added coverage includes pre-enrollment save/reopen, source aging out of the
+  provider snapshot, unseen newer source/manual edits, explicit resolution,
+  stable parent references and exact instants, clock regression, held-page progress,
+  home-zone reconsideration, missing-source restoration, erasure and fixture exclusion.
+- The test harness erases each case's remote records. An old synthetic observation
+  previously made a later forecast fixture correctly refuse an ambiguous cycle gap;
+  this was a fixture-isolation failure, not grounds to relax the estimator gate.
+- Logs: `.tools/local-handoff-android.log` and
+  `.tools/local-handoff-instrumentation.log`. No real-device, pilot, production TLS
+  or package/signing evidence is inferred from these checks.
+- Read-only desktop audit found that the app's activity sink remains memory-only
+  and collection starts without a saved consent setting. Durable, permission-gated
+  background integration must precede its lifecycle acceptance (completion plan C1).
+
+
+## Desktop consent and background sync — 2026-09-08
+
+ADR-0042 closes the memory-only/unconditional-collection finding above.
+
+- All Go core, desktop and server tests plus `go vet` pass. New tests exercise
+  default-off sampling, persisted grant/revocation, restart with repeated clock
+  values, final shutdown, atomic transition batches, source-scoped export/erasure,
+  task revision reopen and refusal of unsupported development columns without
+  backfills. Poll gaps retain inferred provenance and unknown confidence.
+- Focused Go race checks for collection and background lifecycle pass. Actual
+  disposable TLS HTTP tests cover a failed exchange retaining its outbox, automatic
+  retry without a mounted view, restart without re-upload, cancellation on disable,
+  stale-error rejection and refusal to forward enrollment secrets on redirects.
+- Desktop web checks pass: formatting, lint/UI standards, types, 400 desktop and
+  six trusted-web tests, and both production builds. Three existing Fast Refresh
+  warnings remain. New settings tests cover explicit consent, confirmed erasure,
+  stopped/error retry and absent/malformed bridge recovery.
+- A local browser preview was inspected for activity settings layout, reachable
+  named controls and honest service-unavailable state. It used synthetic preview
+  data; collection was not enabled on the owner's desktop profile.
+- The Windows Wails production build passes using an isolated
+  `ZEITBOARD_DATA_DIR` for binding generation. This is a build check, not a
+  published installer or native suspend/resume qualification.
+
+Logs: `.tools/desktop-activity-go.log`, `.tools/desktop-activity-vet.log` and
+`.tools/desktop-activity-build.log`. Configured login startup, background estimate
+refresh, desktop restore reconciliation and native lifecycle qualification remain
+open under C1; the full completion goal remains active.
+
+
+## Desktop login and recoverable windows — 2026-09-08
+
+ADR-0043 adds explicit login/start-to-tray controls and distinguishes normal
+window close from explicit quit. No owner startup registration was enabled.
+
+- Desktop Go tests and vet pass. Tests cover either DOM/tray initialization order,
+  hidden-launch fallback, lost tray, explicit quit, a pending manual second launch,
+  profile identity, unchanged activity/sync consent and failed startup writes.
+- Focused race checks pass for the new lifecycle, Windows tray and autostart
+  packages. A disposable non-Run registry key verifies quoted commands, hidden
+  and visible modes, moved-executable detection and source-scoped removal. The
+  tray test dispatches synthetic Explorer restart messages through the real
+  adapter handler with an injected icon publisher; it does not restart Explorer.
+- All 45 installer tests pass. The installer now passes the app's current
+  `--background` flag and recognizes both supported modes during removal.
+- Web checks pass: 403 desktop plus six trusted-web tests, formatting,
+  lint/UI standards, type checks and both production builds. Three pre-existing
+  Fast Refresh warnings remain. The new component tests cover explicit save,
+  unavailable-service recovery and quitting without a tray.
+- Browser preview verifies the layout and named startup controls; oversized
+  checkboxes found visually were corrected without shrinking the clickable rows.
+- Windows Wails production build passes with an isolated data directory during
+  binding generation. No real login/suspend/resume or clean-machine installer
+  qualification is inferred from a successful build.
+
+Evidence: `.tools/desktop-startup-{go,vet,race,web,installer,build}.log`.
+Background estimate projection refresh and desktop enrollment/restore remain
+software work. Native lifecycle, pilot and C1–C8 operational gates remain open.
+
+## Desktop background analysis — 2026-09-08
+
+ADR-0044 connects actual desktop readers to the expiring, evidence-guarded
+background snapshot. The server and desktop share `core/recompute.Worker`.
+
+- All Go core, desktop and server tests and vet pass. New coverage includes
+  background expiry without a mounted view, reuse without a foreground estimator
+  call, reopen, unchanged content-change time, correction invalidation, clock
+  regression, erasure during computation, corrupt derived data and bounded,
+  sanitized journal recovery after restart.
+- Race suites pass for `core/recompute`, desktop SQLite, desktop services,
+  server analysis and the daemon. Tests verify that journal recovery cannot
+  interrupt an active foreground publication, close cancels and joins readers,
+  duplicate start returns the active completion signal, and synchronous refresh
+  moves a sleeping worker's deadline forward. Expiry preempts burst throttling;
+  heartbeat cannot bypass failed-refresh backoff.
+- Canonical web checks pass: formatting, lint/UI standards, types, 405 desktop
+  and six trusted-web tests, and both production builds. Three existing Fast
+  Refresh warnings remain. The new native-event bridge tests cover dispatch to
+  existing evidence listeners, disposal and browser-preview absence of Wails.
+- Windows Wails production build passes with an isolated `ZEITBOARD_DATA_DIR`
+  during binding generation. Android, public contracts and installer code are
+  unchanged in this increment; their prior recorded qualification remains.
+
+Evidence: `.tools/desktop-analysis-{go,vet,race,web,build}.log`. The full goal
+remains active. Desktop enrollment/restore reconciliation is the next C1 software
+step; native login/suspend/resume, supported hardware, the private pilot and
+independent portal/release qualification are not established by these tests.

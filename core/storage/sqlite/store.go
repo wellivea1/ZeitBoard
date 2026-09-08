@@ -31,7 +31,7 @@ func Open(path string) (*Store, error) {
 	}
 	db.SetMaxOpenConns(1)
 	store := &Store{db: db, path: path}
-	if err := store.Migrate(context.Background()); err != nil {
+	if err := store.initialize(context.Background()); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
@@ -61,16 +61,12 @@ func (s *Store) FilePermissionError() error { return s.restrictErr }
 
 func (s *Store) Close() error { return s.db.Close() }
 
-func (s *Store) Migrate(ctx context.Context) error {
+func (s *Store) initialize(ctx context.Context) error {
 	statements := []string{
 		`PRAGMA foreign_keys = ON`,
 		`PRAGMA secure_delete = ON`,
 		`PRAGMA journal_mode = WAL`,
 		`PRAGMA busy_timeout = 5000`,
-		`CREATE TABLE IF NOT EXISTS schema_migrations (
-			version INTEGER PRIMARY KEY,
-			applied_at TEXT NOT NULL
-		)`,
 		`CREATE TABLE IF NOT EXISTS source_observations (
 			id TEXT PRIMARY KEY,
 			source_id TEXT NOT NULL,
@@ -84,6 +80,12 @@ func (s *Store) Migrate(ctx context.Context) error {
 		)`,
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_source_external
 			ON source_observations(source_id, external_id) WHERE external_id <> ''`,
+		`CREATE INDEX IF NOT EXISTS idx_source_observations_source ON source_observations(source_id)`,
+		`CREATE TABLE IF NOT EXISTS source_collection_preferences (
+			source_id TEXT PRIMARY KEY,
+			enabled INTEGER NOT NULL CHECK(enabled IN (0, 1)),
+			zone_id TEXT NOT NULL
+		)`,
 		`CREATE TABLE IF NOT EXISTS manual_corrections (
 			id TEXT PRIMARY KEY,
 			target_id TEXT NOT NULL,
@@ -120,21 +122,9 @@ func (s *Store) Migrate(ctx context.Context) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_local_sleep_observations_start
 			ON local_sleep_observations(start_at)`,
-		`CREATE TRIGGER IF NOT EXISTS trg_local_sleep_import_source_record
-			BEFORE INSERT ON local_sleep_observations
-			WHEN NEW.acquisition_method = 'file_import'
-				AND NEW.source_record_id <> ''
-				AND EXISTS (
-					SELECT 1 FROM local_sleep_observations
-					WHERE acquisition_method = 'file_import'
-						AND source_record_id = NEW.source_record_id
-				)
-			BEGIN
-				SELECT RAISE(ABORT, 'duplicate imported source_record_id');
-			END`,
-		`CREATE INDEX IF NOT EXISTS idx_local_sleep_import_source_record
-			ON local_sleep_observations(source_record_id)
-			WHERE acquisition_method = 'file_import' AND source_record_id <> ''`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_local_sleep_import_source_record
+            ON local_sleep_observations(source_record_id)
+            WHERE acquisition_method = 'file_import' AND source_record_id <> ''`,
 		// One-tap logging parks an onset here between the two taps. It is an
 		// intent, not an observation: appending at the first tap would put a
 		// row in the append-only log whose end had not happened yet. At most
@@ -148,7 +138,6 @@ func (s *Store) Migrate(ctx context.Context) error {
 		`CREATE TABLE IF NOT EXISTS local_sleep_corrections (
 			correction_id TEXT PRIMARY KEY,
 			target_observation_id TEXT NOT NULL,
-			supersedes_correction_id TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL,
 			reason TEXT NOT NULL,
 			changes_json BLOB NOT NULL,
@@ -350,110 +339,47 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("migrate sqlite: %w", err)
 		}
 	}
-	hasSleepSnapshotHash, err := sqliteTableHasColumn(ctx, s.db, "local_proposal_decisions", "sleep_snapshot_hash")
-	if err != nil {
-		return fmt.Errorf("inspect proposal decision migration: %w", err)
+	if err := s.initializeSleepAnalysis(ctx); err != nil {
+		return err
 	}
-	if !hasSleepSnapshotHash {
-		if _, err := s.db.ExecContext(ctx, `ALTER TABLE local_proposal_decisions
-			ADD COLUMN sleep_snapshot_hash TEXT NOT NULL DEFAULT ''`); err != nil {
-			return fmt.Errorf("add proposal sleep snapshot hash: %w", err)
+	// Validate the current shape without rewriting development-era records.
+	// Packaged-release upgrade guarantees begin with the first release.
+	for _, query := range []string{
+		`SELECT revision FROM local_tasks LIMIT 0`,
+		`SELECT sleep_snapshot_hash FROM local_proposal_decisions LIMIT 0`,
+	} {
+		rows, err := s.db.QueryContext(ctx, query)
+		if err != nil {
+			return fmt.Errorf("unsupported local database schema: %w", err)
 		}
-	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	for _, version := range []int{1, 2, 3, 4, 5, 6, 7, 8} {
-		if _, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(?, ?)`, version, now); err != nil {
+		if err := rows.Close(); err != nil {
 			return err
 		}
-	}
-	if err := s.applyMigration(ctx, 9, migrateLocalTaskRevision); err != nil {
-		return fmt.Errorf("migrate local task revisions: %w", err)
-	}
-	if err := s.applyMigration(ctx, 10, migrateSleepImportSourceIndex); err != nil {
-		return fmt.Errorf("migrate sleep import source index: %w", err)
 	}
 	return nil
 }
 
-type sqliteQueryer interface {
-	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+func (s *Store) AppendObservation(ctx context.Context, observation domain.SourceObservation) error {
+	return s.Append(ctx, []domain.SourceObservation{observation})
 }
 
-func (s *Store) applyMigration(ctx context.Context, version int, migrate func(context.Context, *sql.Tx) error) error {
+// Append commits a collector's transition batch together. A failed batch leaves
+// neither a partial suspend/resume pair nor a partially recorded restart.
+func (s *Store) Append(ctx context.Context, observations []domain.SourceObservation) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	var applied int
-	err = tx.QueryRowContext(ctx, `SELECT 1 FROM schema_migrations WHERE version = ?`, version).Scan(&applied)
-	switch {
-	case err == nil:
-		return nil
-	case !errors.Is(err, sql.ErrNoRows):
-		return err
-	}
-	if err := migrate(ctx, tx); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO schema_migrations(version, applied_at) VALUES(?, ?)`,
-		version, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
-		return err
+	for _, observation := range observations {
+		if err := appendObservation(ctx, tx, observation); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }
 
-func migrateLocalTaskRevision(ctx context.Context, tx *sql.Tx) error {
-	hasRevision, err := sqliteTableHasColumn(ctx, tx, "local_tasks", "revision")
-	if err != nil {
-		return err
-	}
-	if !hasRevision {
-		if _, err := tx.ExecContext(ctx,
-			`ALTER TABLE local_tasks ADD COLUMN revision INTEGER NOT NULL DEFAULT 1 CHECK(revision >= 1)`); err != nil {
-			return err
-		}
-	}
-	_, err = tx.ExecContext(ctx, `UPDATE local_tasks
-		SET revision = CASE
-			WHEN json_type(payload_json, '$.revision') = 'integer'
-				AND CAST(json_extract(payload_json, '$.revision') AS INTEGER) >= 1
-			THEN CAST(json_extract(payload_json, '$.revision') AS INTEGER)
-			ELSE 1
-		END`)
-	return err
-}
-
-func migrateSleepImportSourceIndex(ctx context.Context, tx *sql.Tx) error {
-	if _, err := tx.ExecContext(ctx, `DROP INDEX IF EXISTS idx_local_sleep_import_source_record`); err != nil {
-		return err
-	}
-	_, err := tx.ExecContext(ctx, `CREATE INDEX idx_local_sleep_import_source_record
-		ON local_sleep_observations(source_record_id)
-		WHERE acquisition_method = 'file_import' AND source_record_id <> ''`)
-	return err
-}
-
-func sqliteTableHasColumn(ctx context.Context, db sqliteQueryer, table, column string) (bool, error) {
-	rows, err := db.QueryContext(ctx, `SELECT name FROM pragma_table_info(?)`, table)
-	if err != nil {
-		return false, err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			return false, err
-		}
-		if name == column {
-			return true, nil
-		}
-	}
-	return false, rows.Err()
-}
-
-func (s *Store) AppendObservation(ctx context.Context, observation domain.SourceObservation) error {
+func appendObservation(ctx context.Context, tx *sql.Tx, observation domain.SourceObservation) error {
 	if observation.ID == "" || observation.SourceID == "" {
 		return errors.New("observation ID and source ID are required")
 	}
@@ -464,7 +390,7 @@ func (s *Store) AppendObservation(ctx context.Context, observation domain.Source
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO source_observations(
+	_, err = tx.ExecContext(ctx, `INSERT INTO source_observations(
 		id, source_id, external_id, kind, observed_utc, zone_id, recorded_at, evidence_json, payload_json
 	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		observation.ID, observation.SourceID, observation.ExternalID, observation.Kind,
@@ -616,7 +542,7 @@ func (s *Store) DeleteAll(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	for _, table := range []string{"source_observations", "manual_corrections", "phase_estimates", "medication_events", "share_profiles", "local_sleep_corrections", "local_sleep_observations", "local_medication_reminder_claims", "local_medication_event_corrections", "local_medication_events", "local_medications", "local_rhythm_markers", "local_proposal_decisions", "local_calendar_events", "local_calendar_sources"} {
+	for _, table := range []string{"local_sleep_analysis", "local_recompute_runs", "source_collection_preferences", "source_observations", "manual_corrections", "phase_estimates", "medication_events", "share_profiles", "local_sleep_corrections", "local_sleep_observations", "local_medication_reminder_claims", "local_medication_event_corrections", "local_medication_events", "local_medications", "local_rhythm_markers", "local_proposal_decisions", "local_calendar_events", "local_calendar_sources"} {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table); err != nil {
 			_ = tx.Rollback()
 			return err

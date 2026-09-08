@@ -23,6 +23,26 @@
   font-size: var(--type-data);
 }
 
+.data-control-card .startup-toggle {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  min-height: 44px;
+  gap: var(--space-3);
+  font-size: var(--type-body);
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.data-control-card .startup-toggle input {
+  width: 20px;
+  height: 20px;
+  min-height: 20px;
+  padding: 0;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
 .settings-section > :not(:first-child) {
   grid-column: 2;
 }

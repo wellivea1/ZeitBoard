@@ -54,8 +54,8 @@ fatigue-state screen:
 1. one `overview-surface`, with no generic nested panels or metric cards;
 2. a dominant current-state band;
 3. a cycle strip derived from the same estimate source as Overview;
-4. three compact fact rows, a confidence row, conditional attention, and the
-   trust boundary;
+4. compact sleep/drift facts, a 72-hour operational outlook, evidence quality,
+   conditional attention, and the trust boundary;
 5. an honest empty/refusal state when no estimate exists.
 
 The cycle strip visualizes the estimated waking span and predicted sleep. The
@@ -93,8 +93,9 @@ tokens rather than raw colors or ad-hoc radii.
 ## Data and privacy semantics
 
 - Sample fixtures are labeled `Sample data` and are never presented as local or
-  synced output. They keep the browser preview usable when no valid Wails DTO
-  is available.
+  synced output. They are used only when the desktop bridge is absent. Missing
+  methods, invalid DTOs and failed reads in the desktop produce unavailable
+  states with recovery actions; see ADR-0036.
 - Overview and its cycle strip render together only when both DTOs are
   estimated and come from the same source.
 - Suppressing a sleep entry appends an `excluded` correction. The immutable

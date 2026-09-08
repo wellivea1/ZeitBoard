@@ -200,7 +200,7 @@ export function ApprovalsScreen({ embedded }: { embedded?: boolean } = {}) {
     busyProposalId,
     error,
     ready,
-    dismissError,
+    refresh,
   } = useApprovals();
   const byOrigin = (origin: ProposalOrigin) =>
     pending.filter((proposal) => proposal.origin === origin).length;
@@ -232,8 +232,8 @@ export function ApprovalsScreen({ embedded }: { embedded?: boolean } = {}) {
       {error && (
         <div className="approval-error" role="alert">
           <span>{error}</span>
-          <button className="text-button" type="button" onClick={dismissError}>
-            Dismiss
+          <button className="text-button" type="button" onClick={() => void refresh()}>
+            Retry
           </button>
         </div>
       )}

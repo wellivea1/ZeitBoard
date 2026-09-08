@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"non24.app/core/domain"
 )
 
 // State is the closed set of desktop states this collector will ever record.
@@ -74,9 +76,9 @@ type Config struct {
 	// resolution of every duration this package reports.
 	PollInterval time.Duration
 
-	// SuspendGap is the wall-clock jump between consecutive samples above
-	// which the machine is assumed to have been suspended. A gap far larger
-	// than the poll interval cannot be anything else.
+	// SuspendGap is the wall-clock gap recorded as possible suspension.
+	// A paused process or clock adjustment can also explain a missing poll;
+	// this is inferred evidence, never an observed OS power event.
 	SuspendGap time.Duration
 }
 
@@ -136,8 +138,8 @@ func (m *Machine) Observe(sample Sample) []Transition {
 
 	var out []Transition
 
-	// A wall-clock jump far beyond the poll interval means the process was
-	// not running: the machine slept, hibernated, or the host was paused.
+	// A wall-clock jump far beyond the poll interval may mean the machine
+	// slept, hibernated, the host was paused or its clock was adjusted.
 	// Recording it as a suspend/resume pair is more honest than pretending
 	// the intervening hours were idle, because the user may well have been
 	// asleep and the machine was not merely unattended.
@@ -151,7 +153,7 @@ func (m *Machine) Observe(sample Sample) []Transition {
 		m.stateSince = at
 	}
 
-	if sample.LockedKnown {
+	if sample.LockedKnown && (sample.Locked || m.state == StateLocked) {
 		want := StateUnlocked
 		if sample.Locked {
 			want = StateLocked
@@ -214,24 +216,29 @@ func (m *Machine) transitionTo(state State, at time.Time) Transition {
 // payload is the recorded body of a transition observation. Every field is
 // behavioural; there is nowhere to put content even by accident.
 type payload struct {
-	State            string `json:"state"`
-	PriorSeconds     int64  `json:"priorSeconds,omitempty"`
-	OS               string `json:"os"`
-	CollectorVersion string `json:"collectorVersion"`
+	State            string                      `json:"state"`
+	PriorSeconds     int64                       `json:"priorSeconds,omitempty"`
+	OS               string                      `json:"os"`
+	CollectorVersion string                      `json:"collectorVersion"`
+	Confidence       *domain.InferenceConfidence `json:"confidence,omitempty"`
 }
 
 // CollectorVersion identifies the transition semantics, so evidence recorded
 // under different rules can be told apart later.
-const CollectorVersion = "activity-v2"
+const CollectorVersion = "activity-v3"
 
 func (t Transition) encode(osName string) (json.RawMessage, error) {
 	if !t.State.valid() {
 		return nil, fmt.Errorf("unsupported activity state %q", string(t.State))
 	}
-	return json.Marshal(payload{
+	value := payload{
 		State:            string(t.State),
 		PriorSeconds:     int64(t.PriorDuration / time.Second),
 		OS:               osName,
 		CollectorVersion: CollectorVersion,
-	})
+	}
+	if t.State == StateSuspended || t.State == StateResumed {
+		value.Confidence = &domain.InferenceConfidence{Level: domain.ConfidenceUnknown, Reasons: []string{"poll_gap_not_observed_power_event"}}
+	}
+	return json.Marshal(value)
 }

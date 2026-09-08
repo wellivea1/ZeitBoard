@@ -367,6 +367,9 @@ func freshnessInputs(sessions []domain.SleepSession, nextSleep domain.TimeRange,
 				in.LatestSleepEnd = end
 			}
 			recorded := interval.EndEvidence.RecordedAt
+			if interval.StartEvidence.RecordedAt.After(recorded) {
+				recorded = interval.StartEvidence.RecordedAt
+			}
 			if session.CreatedAt.After(recorded) {
 				recorded = session.CreatedAt
 			}

@@ -153,6 +153,49 @@ func TestExpiryRunsWithNobodyAsking(t *testing.T) {
 	}
 }
 
+func TestExpiryPreemptsDebounceFloorButFailureUsesBackoff(t *testing.T) {
+	s := testSchedule()
+	s.Succeeded(base)
+	s.Expires(base.Add(time.Second))
+	if at, _ := s.NextWake(base); !at.Equal(base.Add(time.Second)) {
+		t.Fatal("minimum interval delayed expiry")
+	}
+	if c, ok := s.Begin(base.Add(time.Second)); !ok || c.Reason != recompute.ReasonFreshnessExpiry {
+		t.Fatal("expiry was throttled")
+	}
+	delay := s.Failed(base.Add(time.Second))
+	if _, ok := s.Begin(base.Add(2 * time.Second)); ok {
+		t.Fatal("expired timer bypassed failure backoff")
+	}
+	if at, _ := s.NextWake(base.Add(2 * time.Second)); !at.Equal(base.Add(time.Second).Add(delay)) {
+		t.Fatal("wrong retry wake")
+	}
+}
+
+func TestClockRegressionRequestsImmediateReconciliation(t *testing.T) {
+	s := testSchedule()
+	s.Succeeded(base)
+	before := base.Add(-time.Hour)
+	if at, _ := s.NextWake(before); !at.Equal(before) {
+		t.Fatal("clock regression left worker asleep")
+	}
+	if c, ok := s.Begin(before); !ok || c.Reason != recompute.ReasonHeartbeat {
+		t.Fatal("clock regression did not reconcile")
+	}
+}
+
+func TestHeartbeatCannotBypassFailureBackoff(t *testing.T) {
+	s := recompute.Schedule{Heartbeat: time.Second, RetryBase: time.Minute}
+	s.Succeeded(base)
+	s.Failed(base)
+	if _, due := s.Begin(base.Add(2 * time.Second)); due {
+		t.Fatal("heartbeat bypassed retry backoff")
+	}
+	if at, _ := s.NextWake(base.Add(2 * time.Second)); !at.Equal(base.Add(time.Minute)) {
+		t.Fatalf("retry wake = %v", at)
+	}
+}
+
 // TestNextWakeIsExactlyTheNextDeadline: the worker sleeps on this value, so a
 // wake later than the deadline is a late withholding.
 func TestNextWakeIsExactlyTheNextDeadline(t *testing.T) {

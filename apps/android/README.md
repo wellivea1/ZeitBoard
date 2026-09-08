@@ -11,14 +11,44 @@ Native Kotlin and Jetpack Compose companion for ZeitBoard.
 - Compose BOM 2026.05.01
 - Activity Compose 1.13.0, Navigation Compose 2.9.8, Lifecycle 2.10.0
 - Health Connect 1.1.0
+- WorkManager 2.11.2; kotlinx.serialization JSON 1.9.0
 
 ## Architecture
 
 - `domain`: repository-neutral observations, corrections, events, and imported estimate snapshots.
-- `data`: fixture repositories, a durable local SQLite projection, settings persistence, and the Health Connect adapter.
-- `ui`: one application view model and four Compose destinations.
+- `data`: fixture repositories, a durable local SQLite projection, settings persistence, and the
+  Health Connect adapter.
+- `ui`: one application view model and five Compose destinations.
 
-The Android app does not implement estimation. Fixture mode exposes a prebuilt synthetic estimate snapshot. Health Connect mode imports recent sleep sessions after the user grants only `READ_SLEEP` and leaves estimation to the shared core.
+The Android app does not implement estimation. Fixture mode exposes a labeled synthetic estimate. My
+data mode imports recent sleep after READ_SLEEP permission and downloads estimates from the Go core
+on the enrolled server. It works as a read-only forecast/task companion without Health Connect
+permission. Cached forecasts show their age, expiry and uncertainty; refused or unavailable server
+data never becomes a sample forecast.
+
+## Connect and refresh
+
+In Settings, enter your own server's HTTPS address, enrollment secret and home IANA zone. Connecting
+selects My data and permits forecast/task downloads plus upload of the recent Health Connect sleep
+snapshot and provider revisions when sleep access is granted. Corrections made in the connected
+Correct screen also upload. Saved local corrections and their source observations join sync on
+enrollment, including sources outside the recent provider snapshot. Medication events remain local.
+The screen shows queued and held records, last upload and recovery errors. A last upload is not
+proof of a current estimate. Use the current backend, desktop and Android contracts together.
+
+Automatic refresh is separately off by default. Enable it and grant the optional background sleep
+permission to allow hourly WorkManager import attempts. Android may delay them; force-stop pauses
+jobs until the app reopens. Unsupported devices retain foreground refresh. Imports can queue
+offline, and uploads wait for a connected network with bounded retries. Uploads already started in
+the foreground can finish while closed. Disconnect cancels jobs and removes the local enrollment and
+queue; it retains local evidence and does not erase server data or revoke the device remotely.
+Downloaded caches are removed on disconnect; suppression markers for erased Health Connect records
+persist. Pure sample mode pauses periodic imports. Sync pulls erasures before uploads and reconciles
+restored server history after re-enrollment. Status and Tasks display downloaded state.
+
+For local development only, use `adb reverse tcp:18767 tcp:18767` and a disposable API on
+`http://127.0.0.1:18767`. LAN HTTP and emulator-host aliases are refused; ordinary connections
+require validated TLS.
 
 ## Local persistence
 
@@ -37,12 +67,30 @@ bounded queries, so trimming visible history cannot revert a correction. When a 
 changes a source revision, a correction attached to the prior immutable revision is
 listed for review and is never silently applied to the new revision.
 
-Schema version 2 persists logical source identity separately and migrates version 1 in
-place inside `SQLiteOpenHelper`'s upgrade transaction. Unknown upgrades and downgrades
-fail closed instead of recreating or discarding health-related data. Android cloud backup
-and device transfer exclude the database and preferences through the module's backup
-rules. Uninstalling removes this app-private data; ZeitBoard does not sync Android records
-to another device.
+The current schema 5 creates the downloaded replica/cursor, forecast cache and erasure
+suppression directly. Obsolete development databases are explicitly refused and must be
+reset intentionally; no prior packaged release needs a migration (ADR-0039).
+Unknown upgrades and downgrades fail closed instead of recreating or discarding health-related data.
+Android cloud backup and device transfer exclude the database and preferences through the module's
+backup rules. Uninstalling removes this app-private data. Opt-in synchronization sends supported
+sleep observations and corrections to the owner's enrolled backend; this is not a complete backup of
+every local record type. See [ADR-0032](../../docs/decisions/0032-android-sleep-synchronisation.md)
+for durable outbox/revision handling and
+[ADR-0037](../../docs/decisions/0037-android-automatic-upload-and-source-provenance.md) for
+automatic execution and provenance.
+[ADR-0038](../../docs/decisions/0038-android-companion-cache-and-erasure.md) covers downloaded
+state, erasure and restore reconciliation. [ADR-0039](../../docs/decisions/0039-pre-release-contracts-and-streamlining.md)
+keeps one current pre-release contract and removes obsolete prototype compatibility paths.
+[ADR-0040](../../docs/decisions/0040-sleep-correction-review-context.md) defines private review
+snapshots and connected manual correction sync. Correct shows the original source and competing
+edits, preserves timestamp precision and saves classification/exclusion with the resolution.
+Offline saves use cached review and the durable queue. New downloaded changes require review;
+erasure clears open and cached editing context. One pending edit per source prevents duplicate
+offline submissions. The source list shows the latest 500 synced sleep observations.
+[ADR-0041](../../docs/decisions/0041-local-corrections-join-enrollment.md) connects pre-enrollment
+corrections through the same encoder and outbox. Each exchange queues a bounded page, preserves
+the original reviewed revision, and skips held sources so other corrections can progress. Local
+heads use a durable append sequence, preserving the latest save across clock changes and compaction.
 
 Local hydration starts independently of Health Connect and publishes an explicit
 `Loading`, `Ready`, or `Failed` state. Sleep, correction, and medication screens retain

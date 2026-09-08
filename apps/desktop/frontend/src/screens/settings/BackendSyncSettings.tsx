@@ -35,10 +35,16 @@ export function BackendSyncSettings({
         <p className="section-kicker">Backend sync</p>
         <h2>Self-hosted server</h2>
         <p className="settings-copy">
-          Sync is off by default. When enabled, only v1 sleep observations, corrections, and your
-          task list are sent to your enrolled self-hosted backend. Deleting a task or erasing sleep
-          data propagates the deletion to the server and every synced device. Overview and Rhythm
-          clearly label synced server estimates.
+          Sync is off by default. When enabled, sleep observations, corrections, and your task list
+          are sent to your enrolled self-hosted backend. Deleting a task or erasing sleep data
+          propagates the deletion to the server and every synced device. Overview and Rhythm clearly
+          label synced server estimates.
+        </p>
+        <p className="settings-copy">
+          Sync runs automatically after enrollment, when ZeitBoard starts, and about every minute
+          while the app is running, including when its window is hidden. Interrupted exchanges retry
+          from saved records. Quit stops background sync. Activity and medication records remain
+          local.
         </p>
       </div>
       <div className="data-control-grid">

@@ -413,9 +413,9 @@ func insertSyncedSleepCorrectionTx(
 		return false, err
 	}
 	result, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO local_sleep_corrections(
-		correction_id, target_observation_id, supersedes_correction_id, created_at, reason, changes_json, payload_json
-	) VALUES(?, ?, ?, ?, ?, ?, ?)`,
-		record.CorrectionID, record.TargetObservationID, record.SupersedesCorrectionID,
+		correction_id, target_observation_id, created_at, reason, changes_json, payload_json
+	) VALUES(?, ?, ?, ?, ?, ?)`,
+		record.CorrectionID, record.TargetObservationID,
 		formatSQLiteTime(record.CreatedAt), record.Reason, prepared.changes, prepared.encoded,
 	)
 	if err != nil {

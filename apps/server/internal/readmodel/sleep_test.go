@@ -142,7 +142,7 @@ func testSleepObservationPayload(id string, start, end time.Time) json.RawMessag
 func testSleepStartCorrectionPayload(id, targetID, supersedesID string, start time.Time) json.RawMessage {
 	supersedes := ""
 	if supersedesID != "" {
-		supersedes = fmt.Sprintf(`,"supersedes_correction_id":%q`, supersedesID)
+		supersedes = fmt.Sprintf(`,"supersedes_correction_ids":[%q]`, supersedesID)
 	}
 	return json.RawMessage(fmt.Sprintf(
 		`{"correction_id":%q,"target_observation_id":%q%s,"created_at":%q,"reason":"user_edit","changes":{"start_at":%q}}`,
@@ -157,7 +157,7 @@ func testSleepStartCorrectionPayload(id, targetID, supersedesID string, start ti
 func testSleepCorrectionPayload(id, targetID, supersedesID string, start time.Time, final bool) json.RawMessage {
 	supersedes := ""
 	if supersedesID != "" {
-		supersedes = fmt.Sprintf(`,"supersedes_correction_id":%q`, supersedesID)
+		supersedes = fmt.Sprintf(`,"supersedes_correction_ids":[%q]`, supersedesID)
 	}
 	changes := fmt.Sprintf(`"start_at":%q`, start.UTC().Format(time.RFC3339))
 	if final {

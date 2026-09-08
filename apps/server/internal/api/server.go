@@ -74,6 +74,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /v1/overview", s.requireDevice(http.HandlerFunc(s.handleOverview)))
 	mux.Handle("GET /v1/rhythm", s.requireDevice(http.HandlerFunc(s.handleRhythm)))
 	mux.Handle("GET /v1/accuracy", s.requireDevice(http.HandlerFunc(s.handleAccuracy)))
+	mux.Handle("GET /v2/companion", s.requireDevice(http.HandlerFunc(s.handleCompanion)))
+	mux.Handle("GET /v1/sleep/{id}/review", s.requireDevice(http.HandlerFunc(s.handleSleepReview)))
 	mux.Handle("POST /v1/sync/push", s.requireDevice(http.HandlerFunc(s.handlePush)))
 	mux.Handle("GET /v1/sync/pull", s.requireDevice(http.HandlerFunc(s.handlePull)))
 	mux.Handle("POST /v1/sync/erase", s.requireDevice(http.HandlerFunc(s.handleErase)))
@@ -500,6 +502,7 @@ func (s *Server) handleErase(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePull(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	since := int64(0)
 	if raw := r.URL.Query().Get("since"); raw != "" {
 		parsed, err := strconv.ParseInt(raw, 10, 64)
@@ -509,7 +512,16 @@ func (s *Server) handlePull(w http.ResponseWriter, r *http.Request) {
 		}
 		since = parsed
 	}
-	records, cursor, err := s.store.Pull(r.Context(), since, syncmodel.MaxPullRecords)
+	limit := syncmodel.MaxPullRecords
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 || parsed > syncmodel.MaxPullRecords {
+			writeError(w, http.StatusBadRequest, "invalid page limit")
+			return
+		}
+		limit = parsed
+	}
+	records, cursor, err := s.store.Pull(r.Context(), since, limit)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "sync pull failed")
 		return

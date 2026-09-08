@@ -11,6 +11,67 @@ import (
 	syncmodel "non24.app/server/internal/sync"
 )
 
+func TestErasingObservationRemovesItsRetainedCorrectionPayloads(t *testing.T) {
+	ctx := context.Background()
+	st, err := Open(t.TempDir()+"/synthetic.db", bytes.Repeat([]byte{7}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	now := time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)
+	if err := st.RegisterDevice(ctx, "device_synthetic", "synthetic", bytes.Repeat([]byte{1}, 32), now); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = st.Append(ctx, "device_synthetic", []syncmodel.PushRecord{
+		{RecordID: "obs_synthetic", Kind: syncmodel.KindObservation, CreatedAt: now, Payload: json.RawMessage(`{"kind":"sleep_episode"}`)},
+		{RecordID: "cor_synthetic", Kind: syncmodel.KindCorrection, CreatedAt: now, Payload: json.RawMessage(`{"target_observation_id":"obs_synthetic","reason":"user_edit"}`)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	erased, tombstones, _, err := st.EraseSyncRecords(ctx, "device_synthetic", []string{"obs_synthetic"}, now)
+	if err != nil || erased != 2 || tombstones != 2 {
+		t.Fatalf("dependent erasure: erased=%d tombstones=%d err=%v", erased, tombstones, err)
+	}
+	var remaining int
+	if err := st.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sync_records WHERE kind != 'tombstone'`).Scan(&remaining); err != nil || remaining != 0 {
+		t.Fatal("private correction payload remained")
+	}
+}
+
+func TestErasedObservationRejectsLaterProviderRevisionIDs(t *testing.T) {
+	ctx := context.Background()
+	st, err := Open(t.TempDir()+"/server.db", bytes.Repeat([]byte{7}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	now := time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)
+	if err := st.RegisterDevice(ctx, "device_synthetic", "synthetic", bytes.Repeat([]byte{1}, 32), now); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := st.EraseSyncRecords(ctx, "device_synthetic", []string{"hc_erased_synthetic"}, now); err != nil {
+		t.Fatal(err)
+	}
+	_, accepted, err := st.Append(ctx, "device_synthetic", []syncmodel.PushRecord{{
+		RecordID: "cor_new_provider_revision", Kind: syncmodel.KindCorrection, CreatedAt: now,
+		Payload: json.RawMessage(`{"correction_id":"cor_new_provider_revision","target_observation_id":"hc_erased_synthetic","created_at":"2026-09-02T11:00:00Z","reason":"source_conflict","acquisition_method":"health_connect","changes":{"start_at":"2026-09-02T02:02:00Z"}}`),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if accepted != 0 {
+		t.Fatal("new provider revision retained erased behavioral timestamps")
+	}
+	var corrections int
+	if err := st.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sync_records WHERE kind = 'correction'`).Scan(&corrections); err != nil {
+		t.Fatal(err)
+	}
+	if corrections != 0 {
+		t.Fatal("erased target acquired another correction payload")
+	}
+}
+
 func TestPullKindThroughFiltersAndHonorsHighWater(t *testing.T) {
 	ctx := context.Background()
 	st, err := Open(t.TempDir()+"/server.db", bytes.Repeat([]byte{7}, 32))

@@ -1,4 +1,4 @@
-// Package sleepv1 owns the v1 sleep wire records and their authoritative
+// Package sleepv1 owns the current sleep wire records and their authoritative
 // conversion into the effective domain read model.
 package sleepv1
 
@@ -39,6 +39,8 @@ const (
 	CorrectionSourceConflict = "source_conflict"
 )
 
+var ErrCorrectionReviewRequired = errors.New("sleep corrections require review of the current source and manual edits")
+
 var identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{2,63}$`)
 
 type Observation struct {
@@ -63,12 +65,14 @@ type Provenance struct {
 }
 
 type Correction struct {
-	CorrectionID           string            `json:"correction_id"`
-	TargetObservationID    string            `json:"target_observation_id"`
-	SupersedesCorrectionID string            `json:"supersedes_correction_id,omitempty"`
-	CreatedAt              time.Time         `json:"created_at"`
-	Reason                 string            `json:"reason"`
-	Changes                CorrectionChanges `json:"changes"`
+	CorrectionID            string            `json:"correction_id"`
+	TargetObservationID     string            `json:"target_observation_id"`
+	SupersedesCorrectionIDs []string          `json:"supersedes_correction_ids,omitempty"`
+	BasedOnSourceRevision   *time.Time        `json:"based_on_source_revision,omitempty"`
+	CreatedAt               time.Time         `json:"created_at"`
+	Reason                  string            `json:"reason"`
+	AcquisitionMethod       string            `json:"acquisition_method,omitempty"`
+	Changes                 CorrectionChanges `json:"changes"`
 }
 
 type CorrectionChanges struct {
@@ -96,6 +100,24 @@ func DecodeCorrection(payload []byte) (Correction, error) {
 	}
 	if err := ValidateCorrection(correction); err != nil {
 		return Correction{}, err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		return Correction{}, err
+	}
+	if _, present := fields["acquisition_method"]; present && correction.AcquisitionMethod == "" {
+		return Correction{}, errors.New("correction acquisition_method cannot be empty or null")
+	}
+	if _, present := fields["based_on_source_revision"]; present && correction.BasedOnSourceRevision == nil {
+		return Correction{}, errors.New("reviewed source revision cannot be null")
+	}
+	if raw, present := fields["supersedes_correction_ids"]; present && bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+		return Correction{}, errors.New("reviewed correction identifiers cannot be null")
+	}
+	if correction.AcquisitionMethod == AcquisitionHealthConnect {
+		if _, present := fields["supersedes_correction_ids"]; present {
+			return Correction{}, errors.New("provider revision cannot claim manual review")
+		}
 	}
 	return correction, nil
 }
@@ -143,8 +165,21 @@ func ValidateCorrection(record Correction) error {
 	if !identifierPattern.MatchString(record.TargetObservationID) {
 		return errors.New("target_observation_id must match the v1 identifier format")
 	}
-	if record.SupersedesCorrectionID != "" && !identifierPattern.MatchString(record.SupersedesCorrectionID) {
-		return errors.New("supersedes_correction_id must match the v1 identifier format")
+	if len(record.SupersedesCorrectionIDs) > 256 {
+		return errors.New("too many reviewed corrections")
+	}
+	seen := map[string]bool{}
+	for _, id := range record.SupersedesCorrectionIDs {
+		if !identifierPattern.MatchString(id) || id == record.CorrectionID || seen[id] {
+			return errors.New("reviewed correction identifiers must be unique and valid")
+		}
+		seen[id] = true
+	}
+	if record.BasedOnSourceRevision != nil && record.BasedOnSourceRevision.IsZero() {
+		return errors.New("source revision must be an instant")
+	}
+	if record.AcquisitionMethod == AcquisitionHealthConnect && (record.BasedOnSourceRevision != nil || len(record.SupersedesCorrectionIDs) != 0) {
+		return errors.New("provider revisions cannot claim a user's review")
 	}
 	if record.CreatedAt.IsZero() {
 		return errors.New("created_at is required")
@@ -153,6 +188,13 @@ func ValidateCorrection(record Correction) error {
 		return errors.New("correction reason is not supported")
 	}
 	changes := record.Changes
+	if record.AcquisitionMethod != "" && record.AcquisitionMethod != AcquisitionManual && record.AcquisitionMethod != AcquisitionHealthConnect {
+		return errors.New("correction acquisition_method must be manual or health_connect")
+	}
+	if record.AcquisitionMethod == AcquisitionHealthConnect &&
+		(record.Reason != CorrectionSourceConflict || changes.SleepClassification != nil || changes.Excluded != nil) {
+		return errors.New("Health Connect revisions may only correct source-conflict timestamps")
+	}
 	count := 0
 	if changes.StartAt != nil {
 		count++
@@ -184,6 +226,8 @@ func Fold(observations []Observation, corrections []Correction) ([]domain.SleepS
 	sessions := make([]domain.SleepSession, 0, len(observations))
 	index := make(map[string]int, len(observations))
 	zones := make(map[string]string, len(observations))
+	originalRevisions := make(map[string]time.Time, len(observations))
+	acquisitions := make(map[string]string, len(observations))
 	for _, observation := range observations {
 		if _, exists := index[observation.ObservationID]; exists {
 			return nil, fmt.Errorf("duplicate observation %s", observation.ObservationID)
@@ -194,11 +238,16 @@ func Fold(observations []Observation, corrections []Correction) ([]domain.SleepS
 		}
 		index[observation.ObservationID] = len(sessions)
 		zones[observation.ObservationID] = observation.ZoneID
+		acquisitions[observation.ObservationID] = observation.Provenance.AcquisitionMethod
+		originalRevisions[observation.ObservationID] = observation.Provenance.RecordedAt
 		sessions = append(sessions, session)
 	}
 
 	byID := make(map[string]Correction, len(corrections))
-	superseded := make(map[string]struct{}, len(corrections))
+	latestSourceRevision := make(map[string]time.Time, len(originalRevisions))
+	for id, revision := range originalRevisions {
+		latestSourceRevision[id] = revision
+	}
 	for _, correction := range corrections {
 		if err := ValidateCorrection(correction); err != nil {
 			return nil, fmt.Errorf("correction %s: %w", correction.CorrectionID, err)
@@ -206,31 +255,72 @@ func Fold(observations []Observation, corrections []Correction) ([]domain.SleepS
 		if _, exists := byID[correction.CorrectionID]; exists {
 			return nil, fmt.Errorf("duplicate correction %s", correction.CorrectionID)
 		}
-		byID[correction.CorrectionID] = correction
-		if correction.SupersedesCorrectionID != "" {
-			superseded[correction.SupersedesCorrectionID] = struct{}{}
+		acquisition := acquisitions[correction.TargetObservationID]
+		if correction.AcquisitionMethod == AcquisitionHealthConnect {
+			if acquisition != AcquisitionHealthConnect {
+				return nil, errors.New("Health Connect revision targets a different observation source")
+			}
+			if correction.CreatedAt.After(latestSourceRevision[correction.TargetObservationID]) {
+				latestSourceRevision[correction.TargetObservationID] = correction.CreatedAt
+			}
 		}
+		byID[correction.CorrectionID] = correction
 	}
 	if err := validateCorrectionGraph(byID); err != nil {
 		return nil, err
 	}
 
+	// Provider revisions establish the source baseline independently of the
+	// device's observed lineage. User corrections form a separate overlay;
+	// superseding a source record must not discard its unedited endpoint.
+	superseded := make(map[string]struct{}, len(corrections))
+	for _, correction := range byID {
+		if correction.AcquisitionMethod == AcquisitionHealthConnect {
+			continue
+		}
+		for _, parentID := range correction.SupersedesCorrectionIDs {
+			if parent, ok := byID[parentID]; ok && parent.AcquisitionMethod != AcquisitionHealthConnect {
+				superseded[parent.CorrectionID] = struct{}{}
+			}
+		}
+	}
 	active := make([]Correction, 0, len(corrections))
-	for _, correction := range corrections {
+	for _, correction := range byID {
+		if correction.AcquisitionMethod == AcquisitionHealthConnect && correction.CreatedAt.Before(originalRevisions[correction.TargetObservationID]) {
+			continue
+		}
 		if _, inactive := superseded[correction.CorrectionID]; !inactive {
 			active = append(active, correction)
 		}
 	}
-	sort.SliceStable(active, func(i, j int) bool {
+	sort.Slice(active, func(i, j int) bool {
+		leftSource, rightSource := active[i].AcquisitionMethod == AcquisitionHealthConnect, active[j].AcquisitionMethod == AcquisitionHealthConnect
+		if leftSource != rightSource {
+			return leftSource
+		}
 		if active[i].CreatedAt.Equal(active[j].CreatedAt) {
 			return active[i].CorrectionID < active[j].CorrectionID
 		}
 		return active[i].CreatedAt.Before(active[j].CreatedAt)
 	})
+	manualCounts := map[string]int{}
 	for _, correction := range active {
 		position, ok := index[correction.TargetObservationID]
 		if !ok {
 			return nil, fmt.Errorf("correction %s targets unknown sleep observation %s", correction.CorrectionID, correction.TargetObservationID)
+		}
+		if correction.AcquisitionMethod != AcquisitionHealthConnect {
+			manualCounts[correction.TargetObservationID]++
+			if manualCounts[correction.TargetObservationID] > 1 {
+				return nil, ErrCorrectionReviewRequired
+			}
+			reviewed := originalRevisions[correction.TargetObservationID]
+			if correction.BasedOnSourceRevision != nil {
+				reviewed = *correction.BasedOnSourceRevision
+			}
+			if !reviewed.Equal(latestSourceRevision[correction.TargetObservationID]) {
+				return nil, ErrCorrectionReviewRequired
+			}
 		}
 		if err := applyCorrection(&sessions[position], correction, zones[correction.TargetObservationID]); err != nil {
 			return nil, fmt.Errorf("correction %s: %w", correction.CorrectionID, err)
@@ -331,7 +421,7 @@ func applyCorrection(session *domain.SleepSession, correction Correction, zoneID
 			return err
 		}
 		interval.Interval.Start = start
-		interval.StartEvidence = correctedEvidence(interval.StartEvidence, domain.CorrectionID(correction.CorrectionID))
+		interval.StartEvidence = correctedEvidence(interval.StartEvidence, domain.CorrectionID(correction.CorrectionID), correction)
 	}
 	if correction.Changes.EndAt != nil {
 		end, err := domain.NewZonedInstant(*correction.Changes.EndAt, zoneID)
@@ -339,7 +429,7 @@ func applyCorrection(session *domain.SleepSession, correction Correction, zoneID
 			return err
 		}
 		interval.Interval.End = end
-		interval.EndEvidence = correctedEvidence(interval.EndEvidence, domain.CorrectionID(correction.CorrectionID+"_end"))
+		interval.EndEvidence = correctedEvidence(interval.EndEvidence, domain.CorrectionID(correction.CorrectionID+"_end"), correction)
 	}
 	if correction.Changes.SleepClassification != nil {
 		classification := domain.SleepClassification(*correction.Changes.SleepClassification)
@@ -372,10 +462,10 @@ func validateCorrectionGraph(byID map[string]Correction) error {
 		}
 		state[id] = visiting
 		record := byID[id]
-		if parentID := record.SupersedesCorrectionID; parentID != "" {
+		for _, parentID := range record.SupersedesCorrectionIDs {
 			if parent, ok := byID[parentID]; ok {
 				if parent.TargetObservationID != record.TargetObservationID {
-					return fmt.Errorf("correction %s supersedes correction for another observation", id)
+					return fmt.Errorf("correction %s reviews another observation", id)
 				}
 				if err := visit(parentID); err != nil {
 					return err
@@ -393,12 +483,18 @@ func validateCorrectionGraph(byID map[string]Correction) error {
 	return nil
 }
 
-func correctedEvidence(source domain.Evidence, correctionID domain.CorrectionID) domain.Evidence {
+func correctedEvidence(source domain.Evidence, correctionID domain.CorrectionID, correction Correction) domain.Evidence {
 	result := source
 	result.SourceIDs = append([]domain.DataSourceID(nil), source.SourceIDs...)
 	result.ObservationIDs = append([]domain.ObservationID(nil), source.ObservationIDs...)
 	result.CorrectionIDs = append([]domain.CorrectionID(nil), source.CorrectionIDs...)
 	result.Status = domain.StatusUserConfirmed
+	result.RecordedAt = correction.CreatedAt.UTC()
+	if correction.AcquisitionMethod == AcquisitionHealthConnect {
+		result.Acquisition = domain.AcquisitionImported
+		result.Status = domain.StatusObserved
+		result.RecordedAt = correction.CreatedAt.UTC()
+	}
 	result.CorrectionIDs = append(result.CorrectionIDs, correctionID)
 	return result
 }

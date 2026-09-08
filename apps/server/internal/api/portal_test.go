@@ -72,7 +72,7 @@ func newPortalHarness(t *testing.T) (*testHarness, *portal.Store) {
 				Private: s.store,
 				Now:     func() time.Time { return portalTestNow },
 			},
-			Recompute: &analysis.Worker{
+			Recompute: &recompute.Worker{
 				Orchestrator: recompute.Orchestrator{
 					Analysis: analysis.Portal{Materializer: materializer},
 					Journal:  store.RecomputeJournal{Store: s.store},

@@ -56,11 +56,8 @@ func TestClinicalChartRequestFixtureIsManifestedAndValidated(t *testing.T) {
 	}
 }
 
-func TestMedicationContractV2DoesNotRedefineV1(t *testing.T) {
-	v1, root := testSet(t)
-	if err := v1.ValidateFile("medication-set.schema.json", filepath.Join(root, "testdata", "v1", "medication-set.json")); err != nil {
-		t.Fatalf("v1 medication fixture no longer validates: %v", err)
-	}
+func TestCurrentMedicationContractRequiresExplicitScheduleZones(t *testing.T) {
+	_, root := testSet(t)
 	v2, err := loadVersion(root, "v2")
 	if err != nil {
 		t.Fatal(err)

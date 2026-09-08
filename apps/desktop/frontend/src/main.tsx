@@ -11,6 +11,7 @@ import "./styles/overview.css";
 import "./styles/rhythm.css";
 import "./styles/rhythm-markers.css";
 import "./styles/settings.css";
+import "./styles/tasks.css";
 import "./styles/data-sources.css";
 import "./styles/sharing.css";
 import "./styles/calendar.css";

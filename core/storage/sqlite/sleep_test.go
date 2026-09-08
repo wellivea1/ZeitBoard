@@ -131,11 +131,11 @@ func TestLocalSleepCorrectionsAreAppendOnlyAndSuperseded(t *testing.T) {
 	}
 	excluded := true
 	second := SleepCorrectionRecord{
-		CorrectionID:           "corr_sleep_03",
-		TargetObservationID:    obs.ObservationID,
-		SupersedesCorrectionID: first.CorrectionID,
-		CreatedAt:              end.Add(2 * time.Minute),
-		Reason:                 CorrectionReasonUserEdit,
+		CorrectionID:            "corr_sleep_03",
+		TargetObservationID:     obs.ObservationID,
+		SupersedesCorrectionIDs: []string{first.CorrectionID},
+		CreatedAt:               end.Add(2 * time.Minute),
+		Reason:                  CorrectionReasonUserEdit,
 		Changes: SleepCorrectionChanges{
 			StartAt:  &firstStart,
 			EndAt:    &end,
@@ -161,6 +161,40 @@ func TestLocalSleepCorrectionsAreAppendOnlyAndSuperseded(t *testing.T) {
 	}
 	if got := effective[0].Intervals[0].Interval.Start.UTC; !got.Equal(firstStart) {
 		t.Fatalf("superseding correction failed to retain full effective start: got %s want %s", got, firstStart)
+	}
+}
+
+func TestProviderCorrectionExportPreservesCurrentContractAndObservations(t *testing.T) {
+	for _, author := range []string{"", "health_connect"} {
+		t.Run(author, func(t *testing.T) {
+			store, err := Open(filepath.Join(t.TempDir(), "synthetic.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer store.Close()
+			ctx := context.Background()
+			start := time.Date(2026, 9, 1, 4, 0, 0, 0, time.UTC)
+			obs := testSleepObservation("obs_version_01", start, start.Add(8*time.Hour))
+			obs.Provenance.AcquisitionMethod = ProvenanceAcquisitionHealthConnect
+			if err := store.AppendSleepObservation(ctx, obs); err != nil {
+				t.Fatal(err)
+			}
+			changed := start.Add(30 * time.Minute)
+			correction := SleepCorrectionRecord{CorrectionID: "cor_version_01", TargetObservationID: obs.ObservationID, CreatedAt: obs.EndAt.Add(time.Hour), Reason: CorrectionReasonSourceConflict, AcquisitionMethod: author, Changes: SleepCorrectionChanges{StartAt: &changed}}
+			if err := store.AppendSleepCorrection(ctx, correction); err != nil {
+				t.Fatal(err)
+			}
+			exported, err := store.ExportSleepData(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if exported.SchemaVersion != "v1" || exported.CorrectionSet.SchemaVersion != "v1" || exported.ObservationSet.SchemaVersion != "v1" {
+				t.Fatal("provider evidence lost the current export shape")
+			}
+			if exported.CorrectionSet.Corrections[0].AcquisitionMethod != author || !exported.ObservationSet.Observations[0].StartAt.Equal(start) {
+				t.Fatal("export rewrote immutable records")
+			}
+		})
 	}
 }
 
@@ -759,11 +793,11 @@ func TestLocalReplayMatchesSharedZoneClassificationAndSuppressionSemantics(t *te
 	unknown := SleepClassificationUnknown
 	excluded := true
 	second := SleepCorrectionRecord{
-		CorrectionID:           "corr_sleep_parity_2",
-		TargetObservationID:    observation.ObservationID,
-		SupersedesCorrectionID: first.CorrectionID,
-		CreatedAt:              start.Add(10 * time.Hour),
-		Reason:                 CorrectionReasonUserEdit,
+		CorrectionID:            "corr_sleep_parity_2",
+		TargetObservationID:     observation.ObservationID,
+		SupersedesCorrectionIDs: []string{first.CorrectionID},
+		CreatedAt:               start.Add(10 * time.Hour),
+		Reason:                  CorrectionReasonUserEdit,
 		Changes: SleepCorrectionChanges{
 			StartAt:             &finalStart,
 			SleepClassification: &unknown,

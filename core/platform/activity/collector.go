@@ -14,6 +14,9 @@ package activity
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
 	"fmt"
 	"runtime"
 	"time"
@@ -84,12 +87,33 @@ func (collector SafeCollector) sleep(ctx context.Context, d time.Duration) error
 // Run polls until the context ends, appending an observation per transition.
 // A shutdown transition is recorded on the way out so a clean exit is
 // distinguishable from the process vanishing.
-func (collector SafeCollector) Run(ctx context.Context, sink ingest.ObservationSink) error {
+func (collector SafeCollector) Run(ctx context.Context, sink ingest.ObservationSink) (runErr error) {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	var random [16]byte
+	if _, err := rand.Read(random[:]); err != nil {
+		return err
+	}
+	session := hex.EncodeToString(random[:])
+	var sequence uint64
 	config := collector.Config.withDefaults()
 	source := collector.source()
 	machine := NewMachine(config)
+	defer func() {
+		if final := machine.Close(collector.now()); len(final) > 0 {
+			flushContext, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer cancel()
+			if err := collector.append(flushContext, sink, final, session, &sequence); err != nil {
+				runErr = errors.New("activity shutdown record could not be saved")
+			}
+		}
+	}()
 
 	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		sample, err := source.Sample(collector.now())
 		if err != nil {
 			// A source that cannot read the machine's state is not a reason to
@@ -98,29 +122,24 @@ func (collector SafeCollector) Run(ctx context.Context, sink ingest.ObservationS
 			sample = Sample{At: collector.now()}
 		}
 		if transitions := machine.Observe(sample); len(transitions) > 0 {
-			if err := collector.append(ctx, sink, transitions); err != nil {
+			if err := collector.append(ctx, sink, transitions, session, &sequence); err != nil {
 				return err
 			}
 		}
 		if err := collector.sleep(ctx, config.PollInterval); err != nil {
-			// Record the shutdown against the same sink before returning. A
-			// failure here is reported, but the context error is what caused
-			// the exit and is what the caller needs.
-			if final := machine.Close(collector.now()); len(final) > 0 {
-				_ = collector.append(context.WithoutCancel(ctx), sink, final)
-			}
 			return err
 		}
 	}
 }
 
-func (collector SafeCollector) append(ctx context.Context, sink ingest.ObservationSink, transitions []Transition) error {
+func (collector SafeCollector) append(ctx context.Context, sink ingest.ObservationSink, transitions []Transition, session string, sequence *uint64) error {
 	zone := collector.ZoneID
 	if zone == "" {
 		zone = "UTC"
 	}
 	observations := make([]domain.SourceObservation, 0, len(transitions))
 	for _, transition := range transitions {
+		*sequence += 1
 		at := transition.At.UTC()
 		instant, err := domain.NewZonedInstant(at, zone)
 		if err != nil {
@@ -130,16 +149,20 @@ func (collector SafeCollector) append(ctx context.Context, sink ingest.Observati
 		if err != nil {
 			return err
 		}
+		status := domain.StatusObserved
+		if transition.State == StateSuspended || transition.State == StateResumed {
+			status = domain.StatusInferred
+		}
 		observations = append(observations, domain.SourceObservation{
-			ID: domain.ObservationID(fmt.Sprintf("desktop-%s-%s",
-				transition.State, at.Format("20060102T150405.000000000Z"))),
+			ID:         domain.ObservationID(fmt.Sprintf("activity-%s-%d", session, *sequence)),
 			SourceID:   SourceID,
 			Kind:       "activity",
 			ObservedAt: instant,
 			RecordedAt: collector.now(),
 			Evidence: domain.Evidence{
 				Acquisition: domain.AcquisitionCollected,
-				Status:      domain.StatusObserved,
+				Status:      status,
+				Algorithm:   CollectorVersion,
 				SourceIDs:   []domain.DataSourceID{SourceID},
 				RecordedAt:  collector.now(),
 			},

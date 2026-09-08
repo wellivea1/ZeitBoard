@@ -1,133 +1,132 @@
 # Specification alignment
 
-The user-supplied specifications in this directory refine the product beyond
-the original scaffold. They are authoritative design and validation inputs,
-subject to the versioned contracts. They are not a claim that every described
-feature is already implemented. Current build status in one place is
-[`roadmap.md`](roadmap.md) ("Where things stand"); this file maps the *analysis
-and UI specifications* to what implements them.
+The user-supplied specifications in this directory refine the product beyond the original scaffold.
+They are authoritative design and validation inputs, subject to the versioned contracts. They are
+not a claim that every described feature is already implemented. Current build status in one place
+is [`roadmap.md`](roadmap.md) ("Where things stand"); this file maps the _analysis and UI
+specifications_ to what implements them.
+
+The current remaining deliverables and acceptance criteria are consolidated in
+[`completion-plan.md`](completion-plan.md). A delivered slice does not imply completion of every
+acceptance clause or of its real-device qualification.
 
 ## Implemented
 
-- Conventional Go code owns normalization, correction application, rhythm
-  estimation, forecasting, scheduling, medication-relative timing, and sharing
-  projection. No language model is in the authoritative path: the assistant
-  and agent layers emit allowlisted actions that the server resolves into
-  pending proposals (ADR-0010/0012).
-- The estimator uses a documented Theil-Sen sleep-start trajectory, reports
-  drift per observed sleep cycle, widens forecast ranges with horizon, and
-  uses the v1 contract refusal codes. `estimation.Backtest` provides
-  walk-forward point-error / hit-rate / calibration measurement, and
-  `core/simulate` implements the validation plan's seeded synthetic generator
-  (latent truth retained) with a 12-scenario estimator validation suite and
-  benchmark table (ADR-0019). ADR-0022 adds strict local JSON/CSV import and a
-  combined 2021–2023 owner-history benchmark with source-calibrated chart
-  uncertainty; estimator candidates are now gated on that measured baseline.
-- Observations are immutable and corrections are append-only and reversible
-  through superseding records — locally (desktop SQLite, ADR-0013), on the
-  self-hosted backend (sync log, ADR-0009), and in every read path
-  (`ApplySleepCorrections` + overlap resolution).
-- The desktop runs on the user's real entered sleep data with honest
-  empty/refusal states; export and hard erasure are implemented (ADR-0014);
-  opt-in backend sync round-trips contract-shaped records (ADR-0015), and
-  erasure propagates through server tombstones (ADR-0017).
-- The desktop UI implements visual slices U-A through U-G: one-surface Overview
-  with a source-matched cycle strip, a full-width Rhythm visual, semantic theme
-  tokens, an appearance manager with Auto plus five presets, chronological time
-  probes, ruled Data Sources and Sharing workspaces, and compact ruled proposal
-  queues. Screen/data/style boundaries are enforced as described in
-  [`frontend-architecture.md`](frontend-architecture.md).
-- The local Calendar is real under ADR-0023: bounded read-only ICS/CalDAV
-  snapshots persist locally, private event text renders only in the desktop,
-  scheduler projections contain identifiers and intervals only, and source
-  removal performs confirmed erasure. Approved local proposals create
-  ZeitBoard-owned blocks visible in Calendar and app-owned ICS export; reject
-  and undo preserve imported events.
-- Medication M-A through M-C is real under ADR-0024/0025/0027: the strict v1
-  logging contracts remain valid and strict v2 definition/event/schedule/export
-  contracts carry the local records, alongside revision-checked
-  definitions, immutable raw events, correction chains, explicit civil-time
-  schedules, neutral observed-versus-predicted collision context, opt-in
-  claim-first desktop reminders, explicit exclusion, and separate typed hard
-  erasure. ADR-0026 adds immutable local illness, travel, disruption, and
-  forced-schedule markers. M-C adds explicit-record adherence, dose/start
-  markers, descriptive association with named possible confounders, and a
-  redaction-first printable HTML clinician report. The desktop adapter rejects
-  contradictory labels, references, counts, schedule shapes, occurrence
-  contexts, civil times, and fixture claims.
-- Real fixed events are immutable scheduler inputs; proposals carry contract
-  explanation codes and honest unplaced reasons. Decisions transactionally
-  reject stale task, sleep, or calendar snapshots.
-- Trusted views are static synthetic projections, render only allowlisted
-  fields, and disclose no private source data (unchanged since phase one).
-- Windows collection remains deliberately minimal; Android requests only
-  Health Connect sleep access and retains a fixture fallback.
+- Desktop consent/durability and app-context background sleep/task sync are implemented
+  under ADR-0042. Activity is default-off and remains local, with explicit export and
+  erasure. ADR-0043 adds explicit Windows login/start-to-tray registration, one instance
+  per profile and recoverable close/quit/tray handling. Background projection refresh,
+  desktop restore reconciliation and native lifecycle qualification remain in C1.
+
+- Conventional Go code owns normalization, correction application, rhythm estimation, forecasting,
+  scheduling, medication-relative timing, and sharing projection. No language model is in the
+  authoritative path: the assistant and agent layers emit allowlisted actions that the server
+  resolves into pending proposals (ADR-0010/0012).
+- The estimator uses a documented Theil-Sen sleep-start trajectory, reports drift per observed sleep
+  cycle, widens forecast ranges with horizon, and uses the v1 contract refusal codes.
+  `estimation.Backtest` provides walk-forward point-error / hit-rate / calibration measurement, and
+  `core/simulate` implements the validation plan's seeded synthetic generator (latent truth
+  retained) with a 12-scenario estimator validation suite and benchmark table (ADR-0019). ADR-0022
+  adds strict local JSON/CSV import and a combined 2021–2023 owner-history benchmark with
+  source-calibrated chart uncertainty; estimator candidates are now gated on that measured baseline.
+- Observations are immutable and corrections are append-only and reversible through superseding
+  records — locally (desktop SQLite, ADR-0013), on the self-hosted backend (sync log, ADR-0009), and
+  in every read path (`ApplySleepCorrections` + overlap resolution).
+- The desktop runs on the user's real entered sleep data with honest empty/refusal states; export
+  and hard erasure are implemented (ADR-0014); opt-in backend sync round-trips contract-shaped
+  records (ADR-0015), and erasure propagates through server tombstones (ADR-0017).
+- The desktop UI implements visual slices U-A through U-H: one-surface Overview with a
+  source-matched cycle strip, a full-width Rhythm visual, semantic theme tokens, an appearance
+  manager with Auto plus five presets, chronological time probes, ruled Data Sources and Sharing
+  workspaces, and compact ruled proposal queues. Screen/data/style boundaries are enforced as
+  described in [`frontend-architecture.md`](frontend-architecture.md).
+- The local Calendar is real under ADR-0023: bounded read-only ICS/CalDAV snapshots persist locally,
+  private event text renders only in the desktop, scheduler projections contain identifiers and
+  intervals only, and source removal performs confirmed erasure. Approved local proposals create
+  ZeitBoard-owned blocks visible in Calendar and app-owned ICS export; reject and undo preserve
+  imported events.
+- Medication M-A through M-C is real under ADR-0024/0025/0027: the strict v1 logging contracts
+  remain valid and strict v2 definition/event/schedule/export contracts carry the local records,
+  alongside revision-checked definitions, immutable raw events, correction chains, explicit
+  civil-time schedules, neutral observed-versus-predicted collision context, opt-in claim-first
+  desktop reminders, explicit exclusion, and separate typed hard erasure. ADR-0026 adds immutable
+  local illness, travel, disruption, and forced-schedule markers. M-C adds explicit-record
+  adherence, dose/start markers, descriptive association with named possible confounders, and a
+  redaction-first printable HTML clinician report. The desktop adapter rejects contradictory labels,
+  references, counts, schedule shapes, occurrence contexts, civil times, and fixture claims.
+- Real fixed events are immutable scheduler inputs; proposals carry contract explanation codes and
+  honest unplaced reasons. Decisions transactionally reject stale task, sleep, or calendar
+  snapshots.
+- The separate trusted-web prototype remains static and synthetic. The real server portal has
+  required-passcode link management, allowlisted availability and visitor requests (ADR-0029/0030);
+  the desktop manages real links. Live transport, threads, notifications and exposure qualification
+  remain open.
+- Windows records privacy-minimized activity transitions while the app runs. Android has
+  permission-gated Health Connect ingestion and durable sleep push (ADR-0032). ADR-0037 adds
+  reachable enrollment, opt-in background scheduling and source-provenance/retry repairs. ADR-0038
+  adds pull/erasure, cached Go forecasts, read-only task revisions and restore reconciliation.
+  Phone-authored sleep correction sync is connected, including pre-enrollment handoff (ADR-0040/0041).
+  Medication sync and desktop lifecycle implementation remain open. Prototype compatibility is unnecessary (ADR-0039).
+  Synthetic modes are explicitly separated from personal projections.
 
 ## Partially implemented (UI ahead of or behind data)
 
-- **Approvals:** local scheduler proposals and backend assistant/agent
-  proposals are both real. Local decisions persist with visible history,
-  per-item undo, and app-owned placement materialization; backend proposals
-  retain one-use tokens. They still appear as distinct queue sections; batch
-  review, combined presentation, and surfaced backend expiry remain open.
-- **Rhythm "Sources" tab and Data Sources:** driven by real local data in the
-  desktop app (real refusal, real correction history, real per-source
-  composition, real sync status); synthetic previews remain only in the
-  labeled browser-preview fixture mode. A real cross-source conflict list
-  still awaits an engine-surfaced overlap DTO.
-- **Tasks:** user-owned tasks are real and synced (contract, local CRUD, real
-  Tasks screen, scheduler plans only stored open tasks — ADR-0018; cross-device
-  revision sync with erasure-grade deletion — ADR-0020). Approved placements
-  now materialize in the app-owned local calendar; external-provider
-  write-back remains future work (Phase 3c).
-- **Appearance and visual system:** U-A through U-G are implemented. ADR-0021
-  defines the reversible direct-action boundary for rhythm-linked preset
-  switching; only the agent-readable desktop-local action surface remains
-  deferred.
-- **Medications:** M-A local logging, M-B user-authored schedules and neutral
-  collision forecasts, and M-C adherence plus clinician context export are
-  implemented; the sample preview is retired. M-D sync, M-E's explicitly
-  reviewed local-agent projection, and M-F missed-dose sharing remain
-  separately gated.
+- **Approvals:** local scheduler proposals and backend assistant/agent proposals are both real.
+  Local decisions persist with visible history, per-item undo, and app-owned placement
+  materialization; backend proposals retain one-use tokens. They still appear as distinct queue
+  sections; batch review, combined presentation, and surfaced backend expiry remain open.
+- **Rhythm "Sources" tab and Data Sources:** driven by real local data in the desktop app (real
+  refusal, real correction history, real per-source composition, real sync status); synthetic
+  previews remain only in the labeled browser-preview fixture mode. A real cross-source conflict
+  list still awaits an engine-surfaced overlap DTO.
+- **Tasks:** user-owned tasks are real and synced (contract, local CRUD, real Tasks screen,
+  scheduler plans only stored open tasks — ADR-0018; cross-device revision sync with erasure-grade
+  deletion — ADR-0020). Approved placements now materialize in the app-owned local calendar;
+  external-provider write-back remains future work (Phase 3c).
+- **Appearance and visual system:** U-A through U-H and the ADR-0028 desktop-local direct appearance
+  action are implemented. ADR-0036 adds service-failure recovery, keyboard fixes and task-editing
+  UX.
+- **Medications:** M-A local logging, M-B user-authored schedules and neutral collision forecasts,
+  and M-C adherence plus clinician context export are implemented; the sample preview is retired.
+  M-D sync, completion of M-E beyond its delivered factual projections, and M-F's separately
+  permissioned signal remain open; these are not ordinary availability-sharing fields.
 
 ## Deferred analysis work
 
-- Probabilistic multi-source sleep/wake inference and calibrated
-  boundary-error metrics (first consumer: Takeout/"My Activity" import,
-  roadmap slice 7 — gated by the backtest).
-- Explicit missingness records, source reliability learning, conflict scoring,
-  and inferred forced-schedule qualification. Owner-entered travel, illness,
-  disruption, and forced-schedule context markers are implemented under
-  ADR-0026; source-derived marker inference is not.
-- Multi-window change-point classification and operating-state history. The
-  ADR-0022 real-history baseline justifies evaluating an explicit
-  calibration/misfit candidate (the high-confidence bucket was poorly
-  calibrated), but no candidate ships without a positive backtest delta.
-  Phase-dependent sleep duration remains deferred until duration is scored.
-- State-space, particle-filter, Bayesian, physiological-signal, or
-  biomarker-calibrated estimation.
-- Optional language-model summaries, task parsing, voice extraction, and
-  clinician-report drafting beyond the implemented propose-only assistant
-  (whose desktop chat surface now ships — §4 rail with redacted context and
-  provider disclosure). The delivered clinician report is deterministic, not
-  language-model-authored; any generated drafting requires the safety
-  evaluation suite before it can be enabled.
+- Production use of multi-source sleep/wake inference and calibrated boundary-error metrics.
+  ADR-0031 delivered shadow inference and a negative promotion decision; inferred episodes must
+  remain shadow-only until a new candidate passes the measured gate. Takeout/My Activity remains an
+  extension.
+- Explicit missingness records, source reliability learning, conflict scoring, and inferred
+  forced-schedule qualification. Owner-entered travel, illness, disruption, and forced-schedule
+  context markers are implemented under ADR-0026; source-derived marker inference is not.
+- Multi-window change-point classification and operating-state history. The ADR-0022 real-history
+  baseline justifies evaluating an explicit calibration/misfit candidate (the high-confidence bucket
+  was poorly calibrated), but no candidate ships without a positive backtest delta. Phase-dependent
+  sleep duration remains deferred until duration is scored.
+- State-space, particle-filter, Bayesian, physiological-signal, or biomarker-calibrated estimation.
+- Optional language-model summaries, task parsing, voice extraction, and clinician-report drafting
+  beyond the implemented propose-only assistant (whose desktop chat surface now ships — §4 rail with
+  redacted context and provider disclosure). The delivered clinician report is deterministic, not
+  language-model-authored; any generated drafting requires the safety evaluation suite before it can
+  be enabled.
 
 ## Deferred product and validation work
 
-- Full onboarding, direct clinician PDF/PNG generation, reserved 48-hour
-  clinical orientation, a blank clinical sleep-log template, and the complete
-  accessibility acceptance matrix from `ui-ux-design.md`. The current
-  selected-range clinical chart and report already export as standalone,
-  printable HTML under ADR-0027.
-- A real trusted-view sharing transport (passcodes, access logs, remote
-  revocation); the former relay design survives only as input to that path.
-- Local desktop DB encryption at rest and OS credential storage.
-- Real-device and participant validation beyond the named Pixel 10 emulator,
-  real-world pilot validation, and calibration plots. Of the plan's 20
-  synthetic scenarios, the 12 sleep-timing scenarios plus boundary-level
-  corruption checks are implemented with benchmark reporting (ADR-0019);
-  scenarios 11–15 and 18–19 await the multi-source streams of roadmap slice 7.
+- Full onboarding, direct clinician PDF/PNG generation, reserved 48-hour clinical orientation, a
+  blank clinical sleep-log template, and the complete accessibility acceptance matrix from
+  `ui-ux-design.md`. The current selected-range clinical chart and report already export as
+  standalone, printable HTML under ADR-0027.
+- The remaining live portal transport, message threads, audit UI and notification delivery;
+  passcodes and remote revocation already exist. Public exposure still requires the documented
+  independent review and technical gates.
+- Local database encryption is not a completion requirement: ADR-0035 accepts OS file protection and
+  honest at-rest claims instead. Verify that boundary during installation and upgrade rather than
+  reviving the superseded claim.
+- Real-device and participant validation beyond the named Pixel 10 emulator, real-world pilot
+  validation, and calibration plots. Of the plan's 20 synthetic scenarios, the 12 sleep-timing
+  scenarios plus boundary-level corruption checks are implemented with benchmark reporting
+  (ADR-0019); scenarios 11–15 and 18–19 await the multi-source streams of roadmap slice 7.
 
 The specifications' central safety rule is preserved everywhere: the software
 declines to guess when evidence is inadequate, and every automation path ends

@@ -26,6 +26,10 @@ const entry = {
   effectiveStartLabel: "Sun Mar 1, 10:30 PM EST",
   effectiveEndLabel: "Mon Mar 2, 6:00 AM EST",
   effectiveClassification: "principal",
+  reviewToken: "synthetic-review-token",
+  needsReview: false,
+  sourceWindowLabel: "Synthetic source window",
+  activeEdits: [],
   durationLabel: "7 hours 30 minutes",
   suppressed: false,
   sourceLabel: "Manual sleep log",
@@ -62,7 +66,7 @@ describe("sleep entry adapter", () => {
         status: "ready",
         empty: false,
         message: "bad",
-        entries: [{ ...entry, classification: "unknown" }],
+        entries: [{ ...entry, classification: "invalid" }],
       }),
     ).toBeUndefined();
   });
