@@ -21,6 +21,7 @@ import (
 	"non24.app/core/estimation"
 	"non24.app/core/freshness"
 	"non24.app/core/ingest"
+	"non24.app/core/recompute"
 	"non24.app/core/scheduling"
 	"non24.app/core/sleepv1"
 	storage "non24.app/core/storage/sqlite"
@@ -39,6 +40,11 @@ var saveSleepDataDialog = runtime.SaveFileDialog
 
 type App struct {
 	ctx                 context.Context
+	analysisMu          sync.Mutex
+	analysisWorker      *recompute.Worker
+	analysisStop        chan struct{}
+	analysisDone        <-chan struct{}
+	analysisEstimator   estimation.Estimator
 	serviceMu           sync.Mutex
 	window              desktopWindow
 	startupMu           sync.Mutex
@@ -254,11 +260,13 @@ type SleepCorrectionDTO struct {
 }
 
 type localEstimateState struct {
-	Status   string
-	Message  string
-	Sessions []domain.SleepSession
-	Estimate domain.PhaseEstimate
-	Refusal  *estimation.EstimationRefusal
+	ComputedAt time.Time
+	ChangedAt  time.Time
+	Status     string
+	Message    string
+	Sessions   []domain.SleepSession
+	Estimate   domain.PhaseEstimate
+	Refusal    *estimation.EstimationRefusal
 }
 
 func NewApp() *App {
@@ -325,6 +333,7 @@ func (a *App) startup(ctx context.Context) {
 		return
 	}
 	a.ctx = ctx
+	a.startLocalAnalysis()
 	a.startActivityService(ctx)
 	a.startDesktopBackground(ctx, desktopBackgroundInterval)
 	a.startLocalAgent(ctx)
@@ -338,6 +347,7 @@ func (a *App) shutdown(ctx context.Context) {
 	a.stopDesktopBackground()
 	a.stopMedicationReminderService()
 	a.stopLocalAgent(ctx)
+	a.stopLocalAnalysis()
 	a.closeBackendHTTPClients()
 	a.clearPendingSleepImports()
 	_ = a.tray.Stop()
@@ -348,6 +358,7 @@ func (a *App) shutdown(ctx context.Context) {
 }
 
 func (a *App) AddSleepEntry(input SleepEntryInput) (SleepEntryDTO, error) {
+	defer a.requestLocalAnalysis(recompute.ReasonEvidence)
 	store, err := a.requireStore()
 	if err != nil {
 		return SleepEntryDTO{}, err
@@ -483,6 +494,7 @@ func utf8Preview(value []byte, maxRunes int) (string, bool) {
 }
 
 func (a *App) DeleteSleepObservation(input SleepDeleteInput) (SleepEntriesDTO, error) {
+	defer a.requestLocalAnalysis(recompute.ReasonErasure)
 	if err := requireDeleteConfirmation(input.Confirmation); err != nil {
 		return SleepEntriesDTO{}, err
 	}
@@ -497,6 +509,7 @@ func (a *App) DeleteSleepObservation(input SleepDeleteInput) (SleepEntriesDTO, e
 }
 
 func (a *App) DeleteAllSleepData(input SleepDeleteAllInput) (SleepEntriesDTO, error) {
+	defer a.requestLocalAnalysis(recompute.ReasonErasure)
 	if err := requireDeleteConfirmation(input.Confirmation); err != nil {
 		return SleepEntriesDTO{}, err
 	}
@@ -511,6 +524,7 @@ func (a *App) DeleteAllSleepData(input SleepDeleteAllInput) (SleepEntriesDTO, er
 }
 
 func (a *App) CorrectSleepEntry(input SleepCorrectionInput) (SleepEntryDTO, error) {
+	defer a.requestLocalAnalysis(recompute.ReasonEvidence)
 	store, err := a.requireStore()
 	if err != nil {
 		return SleepEntryDTO{}, err
@@ -556,6 +570,7 @@ func (a *App) CorrectSleepEntry(input SleepCorrectionInput) (SleepEntryDTO, erro
 }
 
 func (a *App) SuppressSleepEntry(input SleepSuppressInput) (SleepEntryDTO, error) {
+	defer a.requestLocalAnalysis(recompute.ReasonEvidence)
 	store, err := a.requireStore()
 	if err != nil {
 		return SleepEntryDTO{}, err
@@ -593,7 +608,7 @@ func (a *App) SuppressSleepEntry(input SleepSuppressInput) (SleepEntryDTO, error
 
 func (a *App) GetOverview() (OverviewDTO, error) {
 	ctx := a.applicationContext()
-	now := a.currentTime().UTC().Truncate(time.Minute)
+	now := a.currentTime().UTC()
 	if overview, ok := a.serverOverview(ctx, now); ok {
 		return overview, nil
 	}
@@ -625,8 +640,8 @@ func (a *App) localOverview(ctx context.Context, now time.Time) (OverviewDTO, er
 
 	// Decide whether a current-state claim is permitted at all before
 	// composing one. The shared policy keys on the age of the evidence, not on
-	// when this function last ran — the desktop recomputes on every screen
-	// load, so analysis age is always zero and says nothing.
+	// when the background snapshot was refreshed. Reassess at the reader's
+	// actual instant so a screen never extends a freshness deadline.
 	assessment := freshness.Default().Assess(desktopFreshnessInputs(state, latest, nextSleep, now))
 
 	currentState := "Likely awake"
@@ -695,7 +710,7 @@ func (a *App) localOverview(ctx context.Context, now time.Time) (OverviewDTO, er
 		// The old label said "just now" on every screen load, which described
 		// the recomputation rather than the data. The freshness block below
 		// reports the age of the evidence, which is the useful fact.
-		UpdatedLabel: "Computed from local sleep entries",
+		UpdatedLabel: analysisUpdatedLabel(state),
 		Freshness:    freshnessDTO(assessment),
 	}, nil
 }
@@ -999,38 +1014,6 @@ func (a *App) requireStore() (*storage.Store, error) {
 	return a.store, nil
 }
 
-func (a *App) localEstimate(ctx context.Context, now time.Time) (localEstimateState, error) {
-	store, err := a.requireStore()
-	if err != nil {
-		return localEstimateState{Status: "unavailable", Message: err.Error()}, nil
-	}
-	sessions, err := store.EffectiveSleepSessions(ctx)
-	if err != nil {
-		return localEstimateState{}, err
-	}
-	if len(sessions) == 0 {
-		return localEstimateState{
-			Status:   "empty",
-			Message:  "Add your first sleep entry to start a local estimate.",
-			Sessions: sessions,
-		}, nil
-	}
-	estimate, err := (estimation.RobustEstimator{}).Estimate(ctx, sessions, now)
-	if err != nil {
-		var refusal *estimation.EstimationRefusal
-		if errors.As(err, &refusal) {
-			return localEstimateState{
-				Status:   "refused",
-				Message:  refusal.Message,
-				Sessions: sessions,
-				Refusal:  refusal,
-			}, nil
-		}
-		return localEstimateState{}, err
-	}
-	return localEstimateState{Status: "estimated", Sessions: sessions, Estimate: estimate}, nil
-}
-
 func overviewUnavailable(state localEstimateState, now time.Time) OverviewDTO {
 	title := "No sleep entries yet"
 	message := state.Message
@@ -1058,7 +1041,7 @@ func overviewUnavailable(state localEstimateState, now time.Time) OverviewDTO {
 		MedicationEvents:         []MedicationEventDTO{},
 		FixtureMode:              false,
 		Disclaimer:               disclaimer,
-		UpdatedLabel:             now.Local().Format("Updated Jan 2, 3:04 PM"),
+		UpdatedLabel:             analysisUpdatedLabel(state),
 	}
 }
 

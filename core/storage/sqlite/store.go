@@ -339,6 +339,9 @@ func (s *Store) initialize(ctx context.Context) error {
 			return fmt.Errorf("migrate sqlite: %w", err)
 		}
 	}
+	if err := s.initializeSleepAnalysis(ctx); err != nil {
+		return err
+	}
 	// Validate the current shape without rewriting development-era records.
 	// Packaged-release upgrade guarantees begin with the first release.
 	for _, query := range []string{
@@ -539,7 +542,7 @@ func (s *Store) DeleteAll(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	for _, table := range []string{"source_collection_preferences", "source_observations", "manual_corrections", "phase_estimates", "medication_events", "share_profiles", "local_sleep_corrections", "local_sleep_observations", "local_medication_reminder_claims", "local_medication_event_corrections", "local_medication_events", "local_medications", "local_rhythm_markers", "local_proposal_decisions", "local_calendar_events", "local_calendar_sources"} {
+	for _, table := range []string{"local_sleep_analysis", "local_recompute_runs", "source_collection_preferences", "source_observations", "manual_corrections", "phase_estimates", "medication_events", "share_profiles", "local_sleep_corrections", "local_sleep_observations", "local_medication_reminder_claims", "local_medication_event_corrections", "local_medication_events", "local_medications", "local_rhythm_markers", "local_proposal_decisions", "local_calendar_events", "local_calendar_sources"} {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table); err != nil {
 			_ = tx.Rollback()
 			return err

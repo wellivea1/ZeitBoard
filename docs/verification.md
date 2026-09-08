@@ -1400,3 +1400,32 @@ window close from explicit quit. No owner startup registration was enabled.
 Evidence: `.tools/desktop-startup-{go,vet,race,web,installer,build}.log`.
 Background estimate projection refresh and desktop enrollment/restore remain
 software work. Native lifecycle, pilot and C1–C8 operational gates remain open.
+
+## Desktop background analysis — 2026-09-08
+
+ADR-0044 connects actual desktop readers to the expiring, evidence-guarded
+background snapshot. The server and desktop share `core/recompute.Worker`.
+
+- All Go core, desktop and server tests and vet pass. New coverage includes
+  background expiry without a mounted view, reuse without a foreground estimator
+  call, reopen, unchanged content-change time, correction invalidation, clock
+  regression, erasure during computation, corrupt derived data and bounded,
+  sanitized journal recovery after restart.
+- Race suites pass for `core/recompute`, desktop SQLite, desktop services,
+  server analysis and the daemon. Tests verify that journal recovery cannot
+  interrupt an active foreground publication, close cancels and joins readers,
+  duplicate start returns the active completion signal, and synchronous refresh
+  moves a sleeping worker's deadline forward. Expiry preempts burst throttling;
+  heartbeat cannot bypass failed-refresh backoff.
+- Canonical web checks pass: formatting, lint/UI standards, types, 405 desktop
+  and six trusted-web tests, and both production builds. Three existing Fast
+  Refresh warnings remain. The new native-event bridge tests cover dispatch to
+  existing evidence listeners, disposal and browser-preview absence of Wails.
+- Windows Wails production build passes with an isolated `ZEITBOARD_DATA_DIR`
+  during binding generation. Android, public contracts and installer code are
+  unchanged in this increment; their prior recorded qualification remains.
+
+Evidence: `.tools/desktop-analysis-{go,vet,race,web,build}.log`. The full goal
+remains active. Desktop enrollment/restore reconciliation is the next C1 software
+step; native login/suspend/resume, supported hardware, the private pilot and
+independent portal/release qualification are not established by these tests.

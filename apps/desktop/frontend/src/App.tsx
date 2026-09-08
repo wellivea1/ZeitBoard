@@ -1,9 +1,10 @@
-import { lazy, Suspense, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import { AppShell, useScreenNavigation } from "./components/AppShell";
 import { ApprovalsProvider } from "./state/approvals";
 import { BackendProposalsProvider } from "./state/backendProposals";
 import { HomeScreen } from "./screens/HomeScreen";
 import { ScreenErrorBoundary } from "./components/ScreenErrorBoundary";
+import { subscribeAnalysisUpdates } from "./data/sleepDataEvents";
 
 const PlanScreen = lazy(() =>
   import("./screens/PlanScreen").then((module) => ({ default: module.PlanScreen })),
@@ -34,6 +35,7 @@ function ScreenLoading() {
 
 export default function App() {
   const { route, selectPlanTab, selectLogTab } = useScreenNavigation();
+  useEffect(subscribeAnalysisUpdates, []);
 
   const content: ReactNode = {
     home: <HomeScreen />,

@@ -101,7 +101,7 @@ func serve(configPath string, stop <-chan struct{}, ready chan<- struct{}) error
 		// A dedicated stop channel rather than the caller's: `stop` may be nil,
 		// and these defers must run before the store closes (LIFO) so no worker
 		// touches a closed database.
-		recomputeWorker := &analysis.Worker{
+		recomputeWorker := &recompute.Worker{
 			Orchestrator: recompute.Orchestrator{
 				Analysis: analysis.Portal{Materializer: materializer},
 				Journal:  store.RecomputeJournal{Store: st},
@@ -111,6 +111,7 @@ func serve(configPath string, stop <-chan struct{}, ready chan<- struct{}) error
 		analysisDone := recomputeWorker.Start(analysisStop)
 		defer func() {
 			close(analysisStop)
+			recomputeWorker.Close()
 			<-analysisDone
 		}()
 

@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+
+	"non24.app/core/recompute"
 	storage "non24.app/core/storage/sqlite"
 )
 
@@ -74,6 +76,7 @@ func (a *App) PreviewSleepImport(input SleepImportInput) (SleepImportDTO, error)
 }
 
 func (a *App) ImportSleepData(input SleepImportInput) (SleepImportDTO, error) {
+	defer a.requestLocalAnalysis(recompute.ReasonEvidence)
 	store, err := a.requireStore()
 	if err != nil {
 		return SleepImportDTO{}, err
@@ -134,6 +137,7 @@ func (a *App) PreviewSleepImportFile() (SleepImportDTO, error) {
 // ImportSleepDataFile consumes a preview token and rejects a file that changed
 // after preview, so the committed bytes are exactly the bytes the owner saw.
 func (a *App) ImportSleepDataFile(input SleepImportFileInput) (SleepImportDTO, error) {
+	defer a.requestLocalAnalysis(recompute.ReasonEvidence)
 	store, err := a.requireStore()
 	if err != nil {
 		return SleepImportDTO{}, err

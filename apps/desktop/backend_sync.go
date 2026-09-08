@@ -17,6 +17,7 @@ import (
 
 	"non24.app/core/estimation"
 	"non24.app/core/platform/privatefile"
+	"non24.app/core/recompute"
 	storage "non24.app/core/storage/sqlite"
 )
 
@@ -342,6 +343,7 @@ type syncCounts struct {
 }
 
 func (a *App) syncSleepRecords(ctx context.Context, cfg backendSyncConfig, token string) (syncCounts, error) {
+	defer a.requestLocalAnalysis(recompute.ReasonEvidence)
 	counts := syncCounts{}
 	store, err := a.requireStore()
 	if err != nil {

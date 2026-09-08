@@ -322,8 +322,9 @@ M-E's separately reviewed local agent projection.
     materialization when the user recorded nothing — which is exactly when the
     rule applies. Verified live: twelve pushes → one run, an unrelated task push
     leaving the stamp unmoved, and erasure withdrawing the projection with
-    nobody refreshing anything. The desktop is unchanged and still recomputes on
-    screen load.
+    nobody refreshing anything. ADR-0044 extends the same worker to desktop:
+    readers consume an expiring SQLite snapshot guarded by current evidence,
+    with cold-read recovery, erasure invalidation and unchanged-content stamps.
 
 14. ~~**The 48-72 hour operational view.**~~ ✅ Delivered (ADR-0034): the question the product
     exists for, answered on the screen a person opens. A three-state timeline — awake, asleep, and

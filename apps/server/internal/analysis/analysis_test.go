@@ -366,7 +366,7 @@ func TestABurstOfPushesPublishesOnce(t *testing.T) {
 	materializer := f.materializer()
 	materializer.Sink = sink
 
-	worker := &analysis.Worker{
+	worker := &recompute.Worker{
 		Orchestrator: recompute.Orchestrator{
 			Analysis: analysis.Portal{Materializer: materializer},
 			Journal:  store.RecomputeJournal{Store: f.private},
@@ -440,7 +440,7 @@ func (e *expiringAnalysis) Prepare(_ context.Context, now time.Time) (recompute.
 func TestTheLoopWakesForAnExpiryWithNoRequest(t *testing.T) {
 	f := newFixture(t)
 	analysisStub := &expiringAnalysis{after: 60 * time.Millisecond, runs: make(chan struct{}, 8)}
-	worker := &analysis.Worker{
+	worker := &recompute.Worker{
 		Orchestrator: recompute.Orchestrator{
 			Analysis: analysisStub,
 			Journal:  store.RecomputeJournal{Store: f.private},
@@ -476,7 +476,7 @@ func TestTheLoopWakesForAnExpiryWithNoRequest(t *testing.T) {
 // link must not be handed out pointing at a page that has nothing on it yet.
 func TestRunNowPublishesBeforeItReturns(t *testing.T) {
 	f := newFixture(t)
-	worker := &analysis.Worker{Orchestrator: f.orchestrator(), Now: func() time.Time { return f.clock }}
+	worker := &recompute.Worker{Orchestrator: f.orchestrator(), Now: func() time.Time { return f.clock }}
 
 	if err := worker.RunNow(context.Background(), recompute.ReasonSharing); err != nil {
 		t.Fatalf("run now: %v", err)

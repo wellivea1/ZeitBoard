@@ -321,3 +321,34 @@ states and `freshness.NextChange` expiry. Preserve the existing planning snapsho
 checks; an unconsumed periodic computation is not completion. Then finish desktop
 sync enrollment/restore reconciliation and native login/hide/suspend/resume/quit
 qualification. All later C1–C8 software and operational acceptance remains active.
+
+### C1 desktop background analysis — 2026-09-08
+
+Desktop readers now consume the background worker's SQLite estimate snapshot.
+The app owns startup, expiry, evidence-change and cold-read refresh, using the
+shared `core/recompute` worker formerly owned by the server. There is one current
+pipeline for both consumers. Empty/refused states, source and content fingerprints,
+minute validity and earlier freshness boundaries prevent obsolete cache use.
+Content-change timestamps remain stable during unchanged housekeeping.
+
+Source changes invalidate derived state transactionally. Erasure removes the
+snapshot and journal, including a computation racing deletion; publication
+rechecks evidence before persisting. Startup recovery serializes with foreground
+work, and quit cancels/joins both kinds of calculation before storage closes.
+Native update events refresh existing evidence-dependent views without carrying
+private payloads. Existing correction-review refusals and planning snapshot guards
+remain in place. See [ADR-0044](decisions/0044-desktop-background-analysis.md).
+
+Verified all Go core/desktop/server tests and vet; affected worker, SQLite,
+desktop and server race suites; 405 desktop plus six trusted-web tests and the
+canonical web checks; and a Windows Wails production build with an isolated
+profile. Tests demonstrate background freshness expiry without any open view,
+foreground consumption without rerunning the estimator, reopen/recovery,
+clock regression, erased-source rejection and timer/backoff behavior. The prior
+published startup increment passed all eight GitHub CI jobs.
+
+**Next C1 software:** finish desktop enrollment/restore reconciliation. Native
+login/hide/suspend/resume/quit, supported-device and pilot evidence remain open.
+The C8 history/performance audit still applies to source folding/fingerprinting;
+estimator caching does not prove bounded resource use over years of records.
+The full C1–C8 completion goal remains active.

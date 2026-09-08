@@ -684,6 +684,7 @@ func (s *Store) DeleteAllSleepData(ctx context.Context) error {
 		return err
 	}
 	for _, table := range []string{
+		"local_sleep_analysis", "local_recompute_runs",
 		"local_sleep_sync_records",
 		"local_sleep_corrections",
 		"local_sleep_observations",
