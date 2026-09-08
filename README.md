@@ -31,7 +31,8 @@ testdata                    Synthetic observations and projected sharing fixture
   providers, and a local MCP connector with read and propose-only tools.
 - The Android companion has opt-in automatic Health Connect sync, durable pull/erasure, cached Go
   forecasts and read-only task downloads. It exposes uncertainty, cache age and time-zone holds.
-  Phone-authored manual corrections/medication sync and lifecycle qualification remain
+  Phone-authored sleep corrections now sync, including pre-enrollment edits.
+  Medication sync and desktop lifecycle implementation/qualification remain
   unfinished; real-device background reliability and passive coverage need pilot measurement
   (ADR-0037/0038).
 - The desktop Sharing screen manages real passcode-protected availability links on the owner's

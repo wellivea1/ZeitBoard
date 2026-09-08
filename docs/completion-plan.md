@@ -24,8 +24,8 @@ current UX repairs and recovered owner direction. Preserve that uncommitted work
 
 - Android initially had enrollment and durable sleep push beneath an incomplete UI. The C1 increment
   below adds reachable enrollment and automatic execution; a subsequent increment adds pull,
-  erasure, real cached Go estimates and tasks; phone-authored correction/medication sync and
-  complete recovery acceptance remain. Calling the companion either a non-syncing skeleton or
+  erasure, real cached Go estimates, tasks and phone-authored sleep corrections. Medication sync
+  and complete recovery acceptance remain. Calling the companion either a non-syncing skeleton or
   complete is wrong.
 - P7 delivered its foundations; a negative inference validation result is an accepted result, not
   permission to promote inferred sleep. Its operational acceptance and private pilot remain
@@ -241,3 +241,32 @@ enrollment handoff with the current reviewed-record contract, then complete desk
 hidden/resume/startup checks. Connected correction editing is delivered; complete
 phone-authored record synchronization and C1–C8 remain open. Do not add compatibility
 paths for prototype schemas or treat this increment as completion of the goal.
+
+### C1 pre-enrollment correction handoff — 2026-09-08
+
+Saved Android sleep corrections now join enrollment through the same current
+manual-record encoder and durable exchange. Their immutable source versions and
+reviewed parent IDs preserve what was actually seen, including sources outside the
+recent provider snapshot. A newer source or unseen remote edit produces a review
+conflict instead of being overwritten. Enrollment explicitly includes this saved
+evidence; fixtures and medication remain excluded.
+
+Bounded pages progress past held sources, with holds reconsidered after a home-zone
+change. Missing source dependencies can be requeued after restore. Erasure removes
+local correction payloads as well as queued/downloaded copies. Local forms retain
+their reviewed snapshot and exact instants; a durable append sequence preserves the
+latest edit across clock regression and SQLite compaction. See ADR-0041.
+
+Verified 92 Android unit tests, lint/APK builds and 21 disposable Android 16 tests,
+including an actual pre-enrollment save/reopen/HTTP handoff and explicit resolution
+of unseen remote changes. Native fixtures now erase remote records between cases;
+the estimator's refusal across ambiguous historical gaps is retained. PR #28's
+published baseline passed all GitHub CI jobs, including installer dry-runs.
+
+**Next C1 work is implementation, then qualification:** `newAppWithStore` still
+constructs an activity collector with `MemorySink`, and `startup` starts it without
+a persisted consent setting. Connect permission-gated durable activity collection,
+background sync/recomputation and configured startup, then exercise hiding,
+sleep/resume, restart and explicit quit. Do not describe the desktop lifecycle as
+already implemented merely because its core collector and server worker exist.
+The full C1–C8 completion goal remains active.

@@ -111,7 +111,9 @@ supported. Background import also requires enrollment, the automatic-refresh set
 mode. Queued foreground uploads may finish while closed. Disconnect cancels jobs and forgets the
 local token/queue and downloaded cache, retaining phone-authored observations; server erasure and
 device revocation are separate actions. Corrections made in the connected Android review upload
-with explicit source-review context; earlier local-only corrections and medication events remain
+with explicit source-review context. Enrollment also includes saved local corrections and their
+original source evidence, including records outside the recent import snapshot. Further Health
+Connect reads still require permission. Sample corrections are excluded; medication events remain
 local. Android downloads raw sleep/task records, private editing context and a typed, expiring Go forecast into
 app-private storage. It applies server tombstones atomically and retains metadata-only suppression
 for erased Health Connect sources across re-enrollment, preventing re-import. See

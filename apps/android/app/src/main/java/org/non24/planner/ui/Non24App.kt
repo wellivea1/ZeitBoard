@@ -217,7 +217,7 @@ fun Non24App(
                     } else CorrectionScreen(
                         state = uiState,
                         onRetryLocalData = viewModel::retryLocalData,
-                        onSave = viewModel::saveLatestSleepCorrection,
+                        onSave = viewModel::saveLocalSleepCorrection,
                     )
                 }
                 composable(Destination.MEDICATION.route) {
@@ -625,11 +625,16 @@ private fun ServerSleepReviewScreen(
 private fun CorrectionScreen(
     state: AppUiState,
     onRetryLocalData: () -> Unit,
-    onSave: (String, String) -> Unit,
+    onSave: (EffectiveSleepEpisode, String, String) -> Unit,
 ) {
     val canDisplaySnapshot = state.localDataState != DurableLocalDataState.Loading
-    val canSave = state.localDataState == DurableLocalDataState.Ready
-    val latest = state.latestSleepEpisode
+    var selected by remember(state.settings.dataMode) { mutableStateOf(state.latestSleepEpisode) }
+    LaunchedEffect(state.latestSleepEpisode) {
+        if (selected == null || state.latestSleepEpisode == null) selected = state.latestSleepEpisode
+    }
+    val latest = selected
+    val stale = latest != state.latestSleepEpisode
+    val canSave = state.localDataState == DurableLocalDataState.Ready && !stale
     val startZone = resolveTemporalZone(latest?.ianaTimeZoneId, latest?.startZoneOffset)
     val endZone = resolveTemporalZone(latest?.ianaTimeZoneId, latest?.endZoneOffset)
     val usesDeviceZoneFallback = latest != null && latest.ianaTimeZoneId == null &&
@@ -642,10 +647,10 @@ private fun CorrectionScreen(
     val zoneLabel = endpointZoneLabel + if (usesDeviceZoneFallback) " / device fallback" else ""
 
     var startText by remember(latest?.source?.id, latest?.start, startZone) {
-        mutableStateOf(latest?.start?.let { formatForInput(it, startZone) }.orEmpty())
+        mutableStateOf(latest?.start?.let { formatReviewInput(it, startZone.id) }.orEmpty())
     }
     var endText by remember(latest?.source?.id, latest?.end, endZone) {
-        mutableStateOf(latest?.end?.let { formatForInput(it, endZone) }.orEmpty())
+        mutableStateOf(latest?.end?.let { formatReviewInput(it, endZone.id) }.orEmpty())
     }
 
     ScreenColumn {
@@ -656,6 +661,10 @@ private fun CorrectionScreen(
         )
         DurableLocalDataNotice(state.localDataState, onRetryLocalData)
         InfoStrip("Imported observations stay unchanged. Corrections remain a separate history.")
+        if (stale) {
+            InfoStrip("The source or its correction changed. Your draft is retained; reload to edit the current record.")
+            SecondaryButton("Reload current record (replace draft)", { selected = state.latestSleepEpisode })
+        }
 
         if (canDisplaySnapshot && latest == null && canSave) {
             RuledSection {
@@ -696,7 +705,7 @@ private fun CorrectionScreen(
                 ) {
                     PrimaryButton(
                         text = "Save correction",
-                        onClick = { onSave(startText, endText) },
+                        onClick = { latest?.let { onSave(it, startText, endText) } },
                         enabled = canSave,
                         modifier = Modifier.widthIn(min = 150.dp),
                     )
@@ -939,7 +948,7 @@ private fun SettingsScreen(
                     "in ZeitBoard's app-private database.",
             )
             PrivacyLine("No analytics, telemetry or tracking SDKs. Connecting explicitly enables sleep uploads to your own server over TLS.")
-            PrivacyLine("Health Connect sleep, provider revisions and corrections saved from the synced-record review upload. Earlier local-only corrections and medication events remain on this device.")
+            PrivacyLine("Health Connect sleep, provider revisions and saved sleep corrections upload, including corrections made before enrollment and their source observations. Sample records and medication events stay on this device.")
             PrivacyLine("Medication labels and exact behavioral timestamps are never logged.")
         }
     }
@@ -991,6 +1000,7 @@ private fun BackendConnectionSection(
         if (connected) {
             DataRow("Queued", status.queuedCount.toString())
             DataRow("Held on device", status.heldCount.toString())
+            if (status.heldLocalCorrectionCount > 0) DataRow("Held local corrections", status.heldLocalCorrectionCount.toString())
             Text(
                 status.lastSyncedAt?.let {
                     "Last upload: " + DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
@@ -998,7 +1008,7 @@ private fun BackendConnectionSection(
                 } ?: "No successful upload is recorded on this device.",
                 style = MaterialTheme.typography.bodySmall,
             )
-            if (status.heldCount > 0) InfoStrip(
+            if (status.heldCount > 0 || status.heldLocalCorrectionCount > 0) InfoStrip(
                 "Held records lack offsets or disagree with the configured home zone. " +
                     "Travel zones are never guessed; these records remain local.",
             )
@@ -1011,7 +1021,7 @@ private fun BackendConnectionSection(
         if (!connected || editing) {
             Text(
                 "Connect to download your server's forecasts and tasks, and upload permitted recent Health Connect sleep and provider revisions. " +
-                    "Corrections you save from synced-record review also upload. Sample records, medication events and earlier local-only corrections are excluded from uploads.",
+                    "Saved sleep corrections also upload, including those made before enrollment and their original source observations. Sample records and medication events are excluded from uploads.",
                 style = MaterialTheme.typography.bodySmall,
             )
             if (connected) InfoStrip(

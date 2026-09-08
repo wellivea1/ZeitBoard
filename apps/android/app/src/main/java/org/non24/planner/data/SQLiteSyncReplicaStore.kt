@@ -172,6 +172,7 @@ class SQLiteSyncReplicaStore(private val database: () -> SQLiteDatabase) : SyncR
         }
         db.delete("sync_replica", "record_id = ? OR (kind = 'correction' AND target_id = ?)", arrayOf(id, id))
         db.delete("sync_outbox", "record_id = ? OR observation_id = ?", arrayOf(id, id))
+        db.delete("sleep_corrections", "id = ?", arrayOf(id))
         if ((erasedKind == null || erasedKind == "observation") && Regex("^hc-[a-f0-9]{24}$").matches(id)) {
             db.insertWithOnConflict("erased_health_sources", null, ContentValues().apply { put("observation_id", id) }, SQLiteDatabase.CONFLICT_IGNORE)
             db.delete("sleep_corrections", "target_logical_source_id IN (SELECT logical_source_id FROM health_sleep_episodes WHERE sync_observation_id = ?)", arrayOf(id))

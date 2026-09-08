@@ -12,7 +12,7 @@ measuring the automatic loop and completing existing workflows.
 
 The first C1 increment adds reachable Android enrollment, opt-in background sleep import/upload,
 durable retry and provider-provenance repairs (ADR-0037). ADR-0038 adds atomic pull/erasure, cached
-Go forecasts, read-only tasks and restore reconciliation. Phone-authored correction/medication sync,
+Go forecasts, read-only tasks, phone-authored sleep corrections and restore reconciliation. Medication sync,
 operational qualification remain open. Prototype compatibility is unnecessary (ADR-0039).
 
 ZeitBoard is a planner for free-running sleep-wake rhythms: a **connected,

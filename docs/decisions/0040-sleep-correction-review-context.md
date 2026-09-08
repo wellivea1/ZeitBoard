@@ -55,9 +55,7 @@ the Go API: a queued manual edit survives database reopen, reaches the server,
 resolves a competing edit and disappears from open/cached review on erasure.
 The native form was also exercised through enrollment, selection and save.
 
-Local-only Android corrections still use the local repository. They do not yet
-transfer automatically on later enrollment; consent and UI copy disclose this.
-Complete that current-user workflow by consolidating its record production with
-the reviewed correction contract, without adding historical database migration or
-legacy-format support. Desktop lifecycle acceptance and C2–C8 remain in the full
-completion plan. Synthetic checks do not qualify wearable/OEM behavior or a pilot.
+ADR-0041 closes the local-only correction handoff through the same current encoder
+and outbox, with explicit enrollment disclosure. Desktop lifecycle implementation
+and acceptance and C2–C8 remain in the full completion plan. Synthetic checks do
+not qualify wearable/OEM behavior or a pilot.

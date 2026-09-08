@@ -59,16 +59,21 @@ internal fun parseSleepReview(json: JsonObject): SleepReview {
 }
 
 internal fun manualCorrection(review: SleepReview, id: String, at: Instant, start: Instant, end: Instant, classification: String, excluded: Boolean): OutboxRecord {
+    return manualCorrection(review.observationId, review.sourceRevision, review.edits.map { it.id }, id, at, start, end, classification, excluded)
+}
+
+internal fun manualCorrection(observationId: String, sourceRevision: Instant, reviewedIds: List<String>, id: String, at: Instant, start: Instant, end: Instant, classification: String, excluded: Boolean): OutboxRecord {
     require(validSyncId(id) && end.isAfter(start) && classification in setOf("principal", "nap", "unknown"))
+    require(validSyncId(observationId) && reviewedIds.size <= 256 && reviewedIds.distinct().size == reviewedIds.size && reviewedIds.all { validSyncId(it) && it != id })
     val payload = buildJsonObject {
-        put("correction_id", id); put("target_observation_id", review.observationId)
+        put("correction_id", id); put("target_observation_id", observationId)
         put("created_at", at.toString()); put("reason", "user_edit"); put("acquisition_method", "manual")
-        put("based_on_source_revision", review.sourceRevision.toString())
-        put("supersedes_correction_ids", buildJsonArray { review.edits.forEach { add(JsonPrimitive(it.id)) } })
+        put("based_on_source_revision", sourceRevision.toString())
+        put("supersedes_correction_ids", buildJsonArray { reviewedIds.forEach { add(JsonPrimitive(it)) } })
         put("changes", buildJsonObject {
             put("start_at", start.toString()); put("end_at", end.toString())
             put("sleep_classification", classification); put("excluded", excluded)
         })
     }
-    return OutboxRecord(id, "correction", at, review.sourceRevision, payload.toString())
+    return OutboxRecord(id, "correction", at, sourceRevision, payload.toString())
 }

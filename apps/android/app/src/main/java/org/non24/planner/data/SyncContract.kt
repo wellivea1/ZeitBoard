@@ -29,8 +29,8 @@ import org.non24.planner.domain.SleepEpisode
  * observation requires an IANA zone. Rather than inventing one, an episode
  * syncs only when its stored offset matches the configured home zone at that
  * instant. Episodes that disagree — typically travel — are held back and
- * reported rather than guessed at or silently dropped. Carrying true offsets
- * end to end needs a v2 observation contract.
+ * reported rather than guessed at or silently dropped. Extending offset support
+ * must update the current observation contract and its consumers together.
  */
 object SyncContract {
 

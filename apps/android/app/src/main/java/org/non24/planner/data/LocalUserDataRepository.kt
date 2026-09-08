@@ -10,7 +10,6 @@ import org.non24.planner.domain.MedicationEvent
 import org.non24.planner.domain.SleepCorrection
 import org.non24.planner.domain.SleepCorrectionReview
 import org.non24.planner.domain.SleepEpisode
-import org.non24.planner.domain.isCorrectionNewer
 
 sealed interface DurableLocalDataState {
     data object Loading : DurableLocalDataState
@@ -111,10 +110,7 @@ internal class InMemoryLocalUserDataStore : LocalUserDataStore {
         sleepCorrections.values.forEach { candidate ->
             val candidateKey = key(candidate)
             if (candidateKey !in allowedKeys) return@forEach
-            val selected = latest[candidateKey]
-            if (selected == null || isCorrectionNewer(candidate, selected)) {
-                latest[candidateKey] = candidate
-            }
+            latest[candidateKey] = candidate
         }
         return latest.values.sortedWith(compareBy<SleepCorrection> { it.createdAt }.thenBy { it.id })
     }
@@ -212,15 +208,9 @@ internal class LocalUserDataRepository(
                 ) { it.id }
 
                 val latestByTarget = mutableActiveCorrections.value.toMutableMap()
-                val selectedForTarget = latestByTarget[correction.targetEpisodeId]
-                if (selectedForTarget == null || isCorrectionNewer(correction, selectedForTarget)) {
-                    latestByTarget[correction.targetEpisodeId] = correction
-                }
+                store.loadLatestSleepCorrectionsForTargets(setOf(correction.targetEpisodeId)).forEach { latestByTarget[it.targetEpisodeId] = it }
                 val latestByLogical = latestCorrectionsByLogicalSource.toMutableMap()
-                val selectedForLogical = latestByLogical[correction.targetLogicalSourceId]
-                if (selectedForLogical == null || isCorrectionNewer(correction, selectedForLogical)) {
-                    latestByLogical[correction.targetLogicalSourceId] = correction
-                }
+                store.loadLatestSleepCorrectionsForLogicalSources(setOf(correction.targetLogicalSourceId)).forEach { latestByLogical[it.targetLogicalSourceId] = it }
                 publishCorrectionProjection(
                     CorrectionProjection(latestByTarget, latestByLogical),
                     mutableHealthEpisodes.value,

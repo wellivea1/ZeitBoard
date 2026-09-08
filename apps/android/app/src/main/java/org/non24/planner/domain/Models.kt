@@ -76,6 +76,7 @@ data class SleepCorrection(
     val endZoneOffset: ZoneOffset?,
     val createdAt: Instant,
     val provenance: Provenance,
+    val supersedesCorrectionIds: List<String> = emptyList(),
 ) {
     init {
         require(id.isNotBlank()) { "Sleep correction ID must not be blank." }

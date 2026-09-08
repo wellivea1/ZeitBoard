@@ -180,6 +180,7 @@ class AppViewModelMedicationTest {
     }
 
     private class NoOutbox : SyncOutboxStore {
+        override fun queueLocalCorrections(homeZone: java.time.ZoneId, knownSources: Map<String, SourceSyncRevision>, now: Instant, limit: Int) = org.non24.planner.data.LocalCorrectionQueueResult(false, 0)
         override fun contains(recordId: String) = false
         override fun hasPendingManualCorrection(observationId: String) = false
         override fun activateScope(scope: String) = Unit

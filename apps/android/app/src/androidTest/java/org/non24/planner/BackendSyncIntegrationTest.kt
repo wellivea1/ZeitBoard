@@ -23,6 +23,59 @@ import org.non24.planner.domain.*
 @RunWith(AndroidJUnit4::class)
 class BackendSyncIntegrationTest {
     @Test
+    fun preEnrollmentCorrectionHandoffPreservesUnseenRemoteChangesForReview() = runBlocking {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("zeitboardSyncIntegration") == "true")
+        val context: Context = ApplicationProvider.getApplicationContext()
+        val name = "zeitboard-pre-enrollment-correction-test.db"
+        val config = SharedPreferencesSyncConfigStore(context, "zeitboard_pre_enrollment_test")
+        val address = "http://127.0.0.1:18767"
+        val client = HttpBackendSyncClient()
+        val source = SleepEpisode("synthetic-local-before-enrollment", "synthetic-handoff-${UUID.randomUUID()}|sleep",
+            Instant.parse("2026-08-01T02:00:00.123456789Z"), Instant.parse("2026-08-01T10:00:00.987654321Z"),
+            null, ZoneOffset.UTC, ZoneOffset.UTC, Provenance(AcquisitionMethod.HEALTH_CONNECT, EvidenceStatus.IMPORTED, "synthetic-handoff", "sleep", Instant.parse("2026-08-01T11:00:00Z")))
+        val edit = SleepCorrection("cor-local-${UUID.randomUUID()}", source.id, source.logicalSourceId, source.start.plusSeconds(60), source.end.plusNanos(1), null, ZoneOffset.UTC, ZoneOffset.UTC,
+            source.end.plusSeconds(7200), Provenance(AcquisitionMethod.MANUAL, EvidenceStatus.USER_CORRECTED, "local-user"))
+        val id = SyncContract.observationId(source.logicalSourceId)
+        context.deleteDatabase(name); config.clear()
+        var cleanupToken: String? = null
+        try {
+            SQLiteLocalUserDataStore(context, name).use { store ->
+                store.replaceHealthConnectSleepSnapshot(listOf(source))
+                store.appendSleepCorrection(edit)
+                // Aging out of the recent provider snapshot must not strand its saved correction.
+                store.replaceHealthConnectSleepSnapshot(emptyList())
+                assertEquals(0, SQLiteSyncOutboxStore({ store.readableDatabase }, { store.writableDatabase }).pendingCount())
+            }
+            val remoteToken = client.enroll(address, "synthetic-completion-secret", "Synthetic other device").getOrThrow()
+            cleanupToken = remoteToken
+            val changedSource = source.copy(start = source.start.plusSeconds(120), provenance = source.provenance.copy(sourceUpdatedAt = source.provenance.sourceUpdatedAt!!.plusSeconds(600)))
+            client.push(address, remoteToken, SyncContract.map(listOf(changedSource), java.time.ZoneId.of("UTC"), emptyMap(), Instant.now()).records).getOrThrow()
+            val remoteReview = parseSleepReview(client.sleepReview(address, remoteToken, id).getOrThrow())
+            client.push(address, remoteToken, listOf(manualCorrection(remoteReview, "cor-remote-${UUID.randomUUID()}", Instant.now(), changedSource.start, changedSource.end, "nap", false))).getOrThrow()
+            SQLiteLocalUserDataStore(context, name).use { store ->
+                val queue = SQLiteSyncOutboxStore({ store.readableDatabase }, { store.writableDatabase })
+                val sync = BackendSyncRepository(queue, config, client, replica = SQLiteSyncReplicaStore { store.writableDatabase })
+                sync.enroll(address, "synthetic-completion-secret", "UTC", "Synthetic handoff phone").getOrThrow()
+                // No import, permission grant, explicit enqueue or separate upload method is needed.
+                sync.synchronize().getOrThrow()
+                assertTrue(queue.contains(edit.id))
+                sync.loadSleepReview(id).getOrThrow()
+                val review = requireNotNull(sync.sleepReview.value.context)
+                assertTrue(review.needsReview); assertEquals(2, review.edits.size)
+                assertEquals(changedSource.start, review.source.start)
+                assertEquals(edit.correctedEnd, review.edits.single { it.id == edit.id }.end)
+                sync.saveSleepReview(review, edit.correctedStart, edit.correctedEnd, "principal", false).getOrThrow()
+                sync.synchronize().getOrThrow(); sync.loadSleepReview(id).getOrThrow()
+                assertFalse(requireNotNull(sync.sleepReview.value.context).needsReview)
+                assertEquals(0, sync.synchronize().getOrThrow())
+            }
+        } finally {
+            cleanupToken?.let { eraseRemote(it, listOf(id)) }
+            config.clear(); context.deleteDatabase(name)
+        }
+    }
+
+    @Test
     fun manualReviewSurvivesRestartResolvesConcurrentEditsAndClearsOnErasure() = runBlocking {
         assumeTrue(InstrumentationRegistry.getArguments().getString("zeitboardSyncIntegration") == "true")
         val context: Context = ApplicationProvider.getApplicationContext()
@@ -89,7 +142,10 @@ class BackendSyncIntegrationTest {
                 assertNull(sync.sleepReview.value.context); assertNull(replica.cachedReview(id))
                 assertFalse(sync.companion.value.sleepSources.any { it.id == id })
             }
-        } finally { config.clear(); context.deleteDatabase(name) }
+        } finally {
+            config.load()?.let { eraseRemote(it.token, listOf(id)) }
+            config.clear(); context.deleteDatabase(name)
+        }
     }
 
     @Test
@@ -153,6 +209,7 @@ class BackendSyncIntegrationTest {
                 assertEquals(0, sync.enqueue(sources))
             }
         } finally {
+            config.load()?.let { saved -> eraseRemote(saved.token, sources.map { SyncContract.observationId(it.logicalSourceId) } + "${taskId}_r1") }
             config.clear(); context.deleteDatabase(databaseName)
         }
     }
@@ -190,8 +247,22 @@ class BackendSyncIntegrationTest {
                 assertEquals(0, sync.run { enqueue(listOf(revised)); synchronize() }.getOrNull())
             }
         } finally {
+            config.load()?.let { eraseRemote(it.token, listOf(SyncContract.observationId(source.logicalSourceId))) }
             config.clear()
             context.deleteDatabase(databaseName)
         }
+    }
+
+    private fun eraseRemote(token: String, ids: List<String>) {
+        val connection = URL("http://127.0.0.1:18767/v1/sync/erase").openConnection() as HttpURLConnection
+        try {
+            connection.requestMethod = "POST"; connection.doOutput = true; connection.instanceFollowRedirects = false
+            connection.connectTimeout = 15000; connection.readTimeout = 30000
+            connection.setRequestProperty("Authorization", "Bearer $token"); connection.setRequestProperty("Content-Type", "application/json")
+            connection.outputStream.use { it.write(buildJsonObject {
+                put("schema_version", "v1"); put("record_ids", JsonArray(ids.map(::JsonPrimitive)))
+            }.toString().toByteArray()) }
+            assertEquals(200, connection.responseCode)
+        } finally { connection.disconnect() }
     }
 }

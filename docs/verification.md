@@ -1321,3 +1321,22 @@ The screenshot `.tools/manual-review-screen.png` contains synthetic data only.
 No real wearable/OEM battery, production TLS, private pilot, independent portal
 review or signing qualification is claimed. Local-only correction handoff on later
 enrollment and desktop lifecycle checks remain the next C1 work.
+
+## Pre-enrollment correction handoff — 2026-09-08
+
+- Android `check assembleDebug assembleDebugAndroidTest` passes: 92 JVM tests,
+  lint and both APKs. No Go or web runtime code changed in this increment.
+- 21 disposable Android 16 instrumentation tests pass against the actual Go API.
+  Added coverage includes pre-enrollment save/reopen, source aging out of the
+  provider snapshot, unseen newer source/manual edits, explicit resolution,
+  stable parent references and exact instants, clock regression, held-page progress,
+  home-zone reconsideration, missing-source restoration, erasure and fixture exclusion.
+- The test harness erases each case's remote records. An old synthetic observation
+  previously made a later forecast fixture correctly refuse an ambiguous cycle gap;
+  this was a fixture-isolation failure, not grounds to relax the estimator gate.
+- Logs: `.tools/local-handoff-android.log` and
+  `.tools/local-handoff-instrumentation.log`. No real-device, pilot, production TLS
+  or package/signing evidence is inferred from these checks.
+- Read-only desktop audit found that the app's activity sink remains memory-only
+  and collection starts without a saved consent setting. Durable, permission-gated
+  background integration must precede its lifecycle acceptance (completion plan C1).

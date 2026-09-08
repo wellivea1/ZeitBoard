@@ -33,6 +33,7 @@ import org.non24.planner.domain.SleepEpisode
 
 /** An in-memory outbox with the same ordering and idempotency contract. */
 internal class FakeOutbox : SyncOutboxStore {
+    override fun queueLocalCorrections(homeZone: ZoneId, knownSources: Map<String, SourceSyncRevision>, now: Instant, limit: Int) = org.non24.planner.data.LocalCorrectionQueueResult(false, 0)
     private val rows = LinkedHashMap<String, Pair<OutboxRecord, Instant?>>()
     private var scope = "synthetic-scope"
     override fun activateScope(scope: String) {

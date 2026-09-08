@@ -59,7 +59,8 @@ acceptance clause or of its real-device qualification.
   permission-gated Health Connect ingestion and durable sleep push (ADR-0032). ADR-0037 adds
   reachable enrollment, opt-in background scheduling and source-provenance/retry repairs. ADR-0038
   adds pull/erasure, cached Go forecasts, read-only task revisions and restore reconciliation.
-  Phone-authored corrections/medication sync remain open. Prototype compatibility is unnecessary (ADR-0039).
+  Phone-authored sleep correction sync is connected, including pre-enrollment handoff (ADR-0040/0041).
+  Medication sync and desktop lifecycle implementation remain open. Prototype compatibility is unnecessary (ADR-0039).
   Synthetic modes are explicitly separated from personal projections.
 
 ## Partially implemented (UI ahead of or behind data)

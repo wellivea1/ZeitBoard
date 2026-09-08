@@ -197,6 +197,8 @@ class BackendSyncRepository(
             if (beforeUpload.cursor < cache.cursor()) throw SyncServerResetException()
             if (beforeUpload.cursor > cache.cursor()) throw SyncMorePagesException()
             outbox.reconcileAccepted()
+            val local = outbox.queueLocalCorrections(config.homeZone(), replica.knownSources(), now(), 100)
+            statusState.value = statusState.value.copy(heldLocalCorrectionCount = local.held)
             val uploaded = pushLocked(config)
             if (outbox.pendingCount() > 0) throw SyncMorePagesException()
             pullUntilCaughtUp()
@@ -206,6 +208,7 @@ class BackendSyncRepository(
             if (projectionCursor > cache.cursor()) throw SyncMorePagesException()
             cache.cache(projection, now())
             companionState.value = cache.state()
+            if (local.hasMore) throw SyncMorePagesException()
             publishIdle(config)
             reviewState.value.selectedId?.let { id -> reviewState.value = reviewState.value.copy(pending = outbox.hasPendingManualCorrection(id)) }
             uploaded
@@ -253,6 +256,7 @@ class BackendSyncRepository(
             },
             queuedCount = pending,
             heldCount = held,
+            heldLocalCorrectionCount = statusState.value.heldLocalCorrectionCount,
             lastSyncedAt = lastUpload,
             serverUrl = config.baseUrl,
         )

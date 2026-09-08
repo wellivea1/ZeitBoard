@@ -31,7 +31,8 @@ data never becomes a sample forecast.
 In Settings, enter your own server's HTTPS address, enrollment secret and home IANA zone. Connecting
 selects My data and permits forecast/task downloads plus upload of the recent Health Connect sleep
 snapshot and provider revisions when sleep access is granted. Corrections made in the connected
-Correct screen also upload. Earlier local-only corrections and medication events remain local.
+Correct screen also upload. Saved local corrections and their source observations join sync on
+enrollment, including sources outside the recent provider snapshot. Medication events remain local.
 The screen shows queued and held records, last upload and recovery errors. A last upload is not
 proof of a current estimate. Use the current backend, desktop and Android contracts together.
 
@@ -86,6 +87,10 @@ edits, preserves timestamp precision and saves classification/exclusion with the
 Offline saves use cached review and the durable queue. New downloaded changes require review;
 erasure clears open and cached editing context. One pending edit per source prevents duplicate
 offline submissions. The source list shows the latest 500 synced sleep observations.
+[ADR-0041](../../docs/decisions/0041-local-corrections-join-enrollment.md) connects pre-enrollment
+corrections through the same encoder and outbox. Each exchange queues a bounded page, preserves
+the original reviewed revision, and skips held sources so other corrections can progress. Local
+heads use a durable append sequence, preserving the latest save across clock changes and compaction.
 
 Local hydration starts independently of Health Connect and publishes an explicit
 `Loading`, `Ready`, or `Failed` state. Sleep, correction, and medication screens retain

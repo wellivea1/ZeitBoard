@@ -109,6 +109,7 @@ class AppViewModel(
     val sleepReview = container.backendSyncRepository.sleepReview
     val backgroundReadState = container.healthConnectRepository.backgroundReadState
     private val syncGuard = AtomicBoolean(false)
+    private val localCorrectionSaveGuard = AtomicBoolean(false)
     private val mutableSyncBusy = MutableStateFlow(false)
     val syncBusy = mutableSyncBusy.asStateFlow()
     private val mutableSyncError = MutableStateFlow<String?>(null)
@@ -351,23 +352,28 @@ class AppViewModel(
         }
     }
 
-    fun saveLatestSleepCorrection(startText: String, endText: String) {
-        val latest = uiState.value.latestSleepEpisode ?: run {
-            mutableMessage.value = "No sleep episode is available to correct."
+    fun saveLocalSleepCorrection(latest: EffectiveSleepEpisode, startText: String, endText: String) {
+        val repository = selectedSleepRepository()
+        if (repository.sourceEpisodes.value.none { it == latest.source }) {
+            mutableMessage.value = "The source changed. Reload its current revision before saving."
             return
         }
-        val correctedStart = parseLocalDateTime(
+        val correctedStart = if (startText == formatReviewInput(latest.start, org.non24.planner.domain.resolveTemporalZone(latest.ianaTimeZoneId, latest.startZoneOffset).id)) {
+            ResolvedLocalDateTime(latest.start, latest.startZoneOffset ?: ZoneId.of(latest.ianaTimeZoneId ?: ZoneId.systemDefault().id).rules.getOffset(latest.start))
+        } else parseLocalDateTime(
             startText,
             latest.ianaTimeZoneId,
             latest.startZoneOffset,
         ) ?: return
-        val correctedEnd = parseLocalDateTime(
+        val correctedEnd = if (endText == formatReviewInput(latest.end, org.non24.planner.domain.resolveTemporalZone(latest.ianaTimeZoneId, latest.endZoneOffset).id)) {
+            ResolvedLocalDateTime(latest.end, latest.endZoneOffset ?: ZoneId.of(latest.ianaTimeZoneId ?: ZoneId.systemDefault().id).rules.getOffset(latest.end))
+        } else parseLocalDateTime(
             endText,
             latest.ianaTimeZoneId,
             latest.endZoneOffset,
         ) ?: return
         val correction = SleepCorrection(
-            id = UUID.randomUUID().toString(),
+            id = "cor-user-" + UUID.randomUUID().toString(),
             targetEpisodeId = latest.source.id,
             targetLogicalSourceId = latest.source.logicalSourceId,
             correctedStart = correctedStart.instant,
@@ -376,17 +382,19 @@ class AppViewModel(
             startZoneOffset = correctedStart.offset,
             endZoneOffset = correctedEnd.offset,
             createdAt = Instant.now(clock),
+            supersedesCorrectionIds = listOfNotNull(latest.appliedCorrection?.id),
             provenance = Provenance(
                 acquisitionMethod = AcquisitionMethod.MANUAL,
                 evidenceStatus = EvidenceStatus.USER_CORRECTED,
                 sourceId = "local-user",
             ),
         )
-        val repository = selectedSleepRepository()
+        if (!localCorrectionSaveGuard.compareAndSet(false, true)) return
         viewModelScope.launch {
-            repository.appendCorrection(correction)
-                .onSuccess { mutableMessage.value = "Correction saved locally. To change a synced record, connect to your server and use its review in Correct." }
+            try { repository.appendCorrection(correction)
+                .onSuccess { mutableMessage.value = "Correction saved locally. Connecting to your server includes saved corrections in sync." }
                 .onFailure { mutableMessage.value = it.message ?: "Correction could not be saved." }
+            } finally { localCorrectionSaveGuard.set(false) }
         }
     }
 

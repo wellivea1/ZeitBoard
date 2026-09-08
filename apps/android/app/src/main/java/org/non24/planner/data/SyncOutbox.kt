@@ -1,6 +1,9 @@
 package org.non24.planner.data
 
 import java.time.Instant
+import java.time.ZoneId
+
+data class LocalCorrectionQueueResult(val hasMore: Boolean, val held: Int)
 
 /**
  * One record waiting to reach the user's own server.
@@ -56,6 +59,7 @@ data class SyncStatus(
     val state: SyncState = SyncState.OFF,
     val queuedCount: Int = 0,
     val heldCount: Int = 0,
+    val heldLocalCorrectionCount: Int = 0,
     val lastSyncedAt: Instant? = null,
     val lastError: String? = null,
     val serverUrl: String? = null,
@@ -65,11 +69,13 @@ data class SyncStatus(
      * or of whether Health Connect has supplied newer records.
      */
     val hasUploadedKnownRecords: Boolean
-        get() = state == SyncState.SYNCED && queuedCount == 0 && heldCount == 0 && lastSyncedAt != null
+        get() = state == SyncState.SYNCED && queuedCount == 0 && heldCount == 0 && heldLocalCorrectionCount == 0 && lastSyncedAt != null
 }
 
 /** Durable storage for the outbox and its bookkeeping. */
 interface SyncOutboxStore {
+    /** Queue a bounded page of saved local corrections and their original source evidence. */
+    fun queueLocalCorrections(homeZone: ZoneId, knownSources: Map<String, SourceSyncRevision>, now: Instant, limit: Int): LocalCorrectionQueueResult
     /** Select the persisted enrollment generation before accessing any queue data. */
     fun activateScope(scope: String)
     /** Records not yet accepted, oldest first, bounded by [limit]. */
