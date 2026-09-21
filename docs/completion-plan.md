@@ -352,3 +352,33 @@ login/hide/suspend/resume/quit, supported-device and pilot evidence remain open.
 The C8 history/performance audit still applies to source folding/fingerprinting;
 estimator caching does not prove bounded resource use over years of records.
 The full C1–C8 completion goal remains active.
+
+### C1 desktop enrollment and restore reconciliation — 2026-09-21
+
+Enrollment now commits credentials, settings and sync progress in the same local
+SQLite transaction. Failed server switches retain the prior connection; stale
+status writes cannot revive disabled enrollment. New enrollment downloads from
+zero before reconciling acknowledgments and uploading missing retained records.
+Desktop pull now includes its own device's records and drains bounded pages.
+The API detects a cursor ahead of restored history; both clients direct the owner
+to re-enroll. See [ADR-0045](decisions/0045-desktop-enrollment-and-restore-reconciliation.md).
+
+Durable suppression prevents erased IDs and task revisions from returning across
+replay/re-enrollment. Deletes account for uploads whose acknowledgments were lost.
+Corrections arriving before their sources are saved and applied on a later page;
+Settings shows waiting corrections and pending deletions. Immutable mismatches and
+unsent task conflicts retain the local record instead of silently acknowledging
+or overwriting it. The previous separate development config/token path is removed.
+
+Stateful TLS and actual disposable-daemon tests demonstrate same-device restore,
+failed/successful server switches, correction exchange, erasure and re-enrollment.
+The full Go suite, vet, affected race suites, web checks and Android checks are
+recorded in `verification.md`. PR #28's prior background-analysis increment passed
+all eight GitHub CI jobs.
+
+**Next:** continue C1's native lifecycle qualification where the environment can
+provide actual evidence, then complete C2's coherent approval queue, task conflict
+review and supported calendar write-back. Do not stall independent C2–C8 software
+on hardware/pilot evidence. Native login/suspend/resume, supported-device resource
+measurements, private pilot, independent portal review and release acceptance
+remain open. The goal remains active.

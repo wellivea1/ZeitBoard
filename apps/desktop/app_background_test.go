@@ -44,7 +44,7 @@ func TestDesktopBackgroundSyncRetriesWithoutAViewAndStops(t *testing.T) {
 			}
 			_ = json.NewEncoder(w).Encode(syncPushResponse{SchemaVersion: "v1", Cursor: 1, Accepted: len(req.Records)})
 		case "/v1/sync/pull":
-			_ = json.NewEncoder(w).Encode(syncPullResponse{SchemaVersion: "v1", Cursor: 1, Records: []syncEnvelope{}})
+			writePullFixture(t, w, r, syncPullResponse{SchemaVersion: "v1", Cursor: 1, Records: []syncEnvelope{}})
 		default:
 			http.NotFound(w, r)
 		}

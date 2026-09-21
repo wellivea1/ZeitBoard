@@ -34,6 +34,8 @@ const initialBackendSyncStatus: BackendSyncStatus = {
   lastSyncLabel: "Not synced yet",
   lastError: "",
   pendingPushCount: 0,
+  pendingErasureCount: 0,
+  waitingCorrectionCount: 0,
   pushedCount: 0,
   pulledCount: 0,
   cursor: 0,

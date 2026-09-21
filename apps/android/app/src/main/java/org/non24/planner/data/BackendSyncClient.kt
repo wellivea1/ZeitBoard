@@ -76,7 +76,12 @@ class HttpBackendSyncClient(
 
     override suspend fun pull(baseUrl: String, token: String, since: Long): Result<PullPage> = syncResult {
         require(since >= 0)
-        parsePullPage(request(baseUrl, "/v1/sync/pull?since=$since&limit=$SYNC_PULL_LIMIT", token, null, 8 * 1024 * 1024), since)
+        try {
+            parsePullPage(request(baseUrl, "/v1/sync/pull?since=$since&limit=$SYNC_PULL_LIMIT", token, null, 8 * 1024 * 1024), since)
+        } catch (error: BackendSyncException) {
+            if (error.status == 409) throw SyncServerResetException()
+            throw error
+        }
     }
 
     override suspend fun companion(baseUrl: String, token: String): Result<JsonObject> = syncResult {

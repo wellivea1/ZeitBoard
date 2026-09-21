@@ -17,6 +17,8 @@ func TestSyncUnsupportedOrIncompleteAcknowledgmentRetainsPendingRecords(t *testi
 				switch r.URL.Path {
 				case "/v1/devices":
 					_ = json.NewEncoder(w).Encode(registerDeviceResponse{SchemaVersion: "v1", DeviceID: "device_desktop", Token: "synthetic-version-token"})
+				case "/v1/sync/pull":
+					writePullFixture(t, w, r, syncPullResponse{})
 				case "/v1/sync/push":
 					_, _ = w.Write([]byte(body))
 				default:

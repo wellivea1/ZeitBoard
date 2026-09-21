@@ -208,12 +208,12 @@ func (s *Store) DeleteTask(ctx context.Context, taskID string, expectedRevision 
 	if currentRevision != expectedRevision {
 		return ErrTaskRevisionConflict
 	}
-	// Revisions that already reached the synced backend need server-side
-	// erasure too (ADR-0017): enqueue every pushed revision before its
-	// bookkeeping disappears. Never-pushed tasks never left this device.
+	// Include the current revision even without an acknowledgment: its upload
+	// may have completed remotely before a local interruption.
 	erasedAt := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO local_sleep_erasures(record_id, erased_at)
-		SELECT record_id, ? FROM local_task_sync_records WHERE task_id = ?`, erasedAt, taskID); err != nil {
+		SELECT record_id, ? FROM local_task_sync_records WHERE task_id = ?
+		UNION SELECT task_id || '_r' || revision, ? FROM local_tasks WHERE task_id=?`, erasedAt, taskID, erasedAt, taskID); err != nil {
 		_ = tx.Rollback()
 		return err
 	}

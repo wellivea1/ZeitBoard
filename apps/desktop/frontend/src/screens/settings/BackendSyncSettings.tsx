@@ -46,6 +46,13 @@ export function BackendSyncSettings({
           from saved records. Quit stops background sync. Activity and medication records remain
           local.
         </p>
+        <p className="settings-copy">
+          Re-enrolling downloads the server history before replaying missing saved records. A failed
+          connection attempt keeps your previous enrollment. Retained deletion markers prevent
+          erased records from returning after a restore. Changing servers sends this profile's saved
+          sleep records, tasks and deletion markers to the new server; it does not delete the old
+          server's copies.
+        </p>
       </div>
       <div className="data-control-grid">
         <section
@@ -56,7 +63,8 @@ export function BackendSyncSettings({
             <h3 id="backend-sync-connect-title">Connect backend</h3>
             <p>
               Use an HTTPS URL and enrollment secret from your own server. The device token is
-              stored outside the editable config and is never shown here.
+              stored with enrollment in your account-protected local database and is never shown
+              here.
             </p>
           </div>
           <form
@@ -152,6 +160,14 @@ export function BackendSyncSettings({
             <div>
               <dt>Pending push</dt>
               <dd>{status.pendingPushCount}</dd>
+            </div>
+            <div>
+              <dt>Pending deletions</dt>
+              <dd>{status.pendingErasureCount}</dd>
+            </div>
+            <div>
+              <dt>Corrections waiting for sources</dt>
+              <dd>{status.waitingCorrectionCount}</dd>
             </div>
             <div>
               <dt>Last sync</dt>

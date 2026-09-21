@@ -1180,6 +1180,8 @@ func (s *Store) scanSyncRows(rows *sql.Rows, cursor int64) ([]syncmodel.Envelope
 	return records, cursor, nil
 }
 
+var ErrSyncCursorAhead = errors.New("sync cursor is ahead of the server history")
+
 func (s *Store) Pull(ctx context.Context, since int64, limit int) ([]syncmodel.Envelope, int64, error) {
 	if since < 0 {
 		return nil, 0, errors.New("cursor must not be negative")
@@ -1187,7 +1189,19 @@ func (s *Store) Pull(ctx context.Context, since int64, limit int) ([]syncmodel.E
 	if limit <= 0 || limit > syncmodel.MaxPullRecords {
 		limit = syncmodel.MaxPullRecords
 	}
-	rows, err := s.db.QueryContext(ctx,
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, 0, err
+	}
+	defer tx.Rollback()
+	head, err := maxCursor(ctx, tx)
+	if err != nil {
+		return nil, 0, err
+	}
+	if since > head {
+		return nil, head, ErrSyncCursorAhead
+	}
+	rows, err := tx.QueryContext(ctx,
 		`SELECT seq, record_id, kind, device_id, created_at, nonce, ciphertext
 		 FROM sync_records
 		 WHERE seq > ?
@@ -1200,7 +1214,14 @@ func (s *Store) Pull(ctx context.Context, since int64, limit int) ([]syncmodel.E
 	}
 	defer rows.Close()
 
-	return s.scanSyncRows(rows, since)
+	records, cursor, err := s.scanSyncRows(rows, since)
+	if err != nil {
+		return nil, 0, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, 0, err
+	}
+	return records, cursor, tx.Commit()
 }
 
 func (s *Store) CountRecords(ctx context.Context) (int, error) {

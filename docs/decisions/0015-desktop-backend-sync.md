@@ -32,7 +32,9 @@ Add explicit desktop backend sync controls and a thin HTTP client:
   error are stored in local config. The bearer token is stored separately in an
   owner-restricted local token file as the desktop fallback credential store; it
   is not written to editable config, UI status, sync payloads, or logs. Moving to
-  OS keychain storage remains a hardening item.
+  OS keychain storage remains a hardening item. **Updated by ADR-0045:** desktop
+  settings and the token now commit atomically in the owner-protected SQLite
+  database; the separate development config/token files are no longer consumed.
 - HTTPS certificate verification is required by default. The insecure skip-verify
   knob is off by default, visible in Settings, and accepted only for localhost
   self-hosted development endpoints.

@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -144,6 +145,20 @@ func (s *Store) applySyncPullPage(
 	syncedAt := time.Now().UTC()
 	result := SyncPullPageResult{}
 	for index, record := range prepared {
+		var seenID string
+		switch record.kind {
+		case preparedSyncPullObservation:
+			seenID = record.observation.record.ObservationID
+		case preparedSyncPullCorrection:
+			seenID = record.correction.record.CorrectionID
+		case preparedSyncPullTask:
+			seenID = taskRevisionRecordID(record.task.record.TaskID, record.task.record.Revision)
+		case preparedSyncPullTombstone:
+			seenID = record.recordID
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO local_sync_seen SELECT ? WHERE EXISTS(SELECT 1 FROM local_sync_state WHERE key='sync_reconcile' AND value='1')`, seenID); err != nil {
+			return SyncPullPageResult{}, err
+		}
 		var applied bool
 		handled := true
 		switch record.kind {
@@ -170,6 +185,9 @@ func (s *Store) applySyncPullPage(
 		}
 		applied, applyErr := insertSyncedSleepCorrectionTx(ctx, tx, record.correction, syncedAt)
 		if errors.Is(applyErr, ErrSleepObservationMissing) {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO local_sync_deferred_corrections VALUES(?,?,?) ON CONFLICT(correction_id) DO NOTHING`, record.correction.record.CorrectionID, record.correction.record.TargetObservationID, record.correction.encoded); err != nil {
+				return SyncPullPageResult{}, err
+			}
 			result.Skipped++
 			continue
 		}
@@ -180,6 +198,35 @@ func (s *Store) applySyncPullPage(
 			result.Applied++
 		} else {
 			result.Skipped++
+		}
+	}
+	// A correction can precede its source across page boundaries. Keep its
+	// immutable payload until the source arrives rather than losing it at cursor
+	// advance. Tombstones below erase both applied and deferred copies.
+	var deferred []preparedSyncedSleepCorrection
+	if err := readJSONRows(ctx, tx, `SELECT payload_json FROM local_sync_deferred_corrections WHERE target_id IN(SELECT observation_id FROM local_sleep_observations) LIMIT 500`, func(data []byte) error {
+		var record SleepCorrectionRecord
+		if err := json.Unmarshal(data, &record); err != nil {
+			return err
+		}
+		prepared, err := prepareSyncedSleepCorrection(record)
+		if err == nil {
+			deferred = append(deferred, prepared)
+		}
+		return err
+	}); err != nil {
+		return SyncPullPageResult{}, err
+	}
+	for _, record := range deferred {
+		applied, err := insertSyncedSleepCorrectionTx(ctx, tx, record, syncedAt)
+		if err != nil {
+			return SyncPullPageResult{}, err
+		}
+		if applied {
+			result.Applied++
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM local_sync_deferred_corrections WHERE correction_id=?`, record.record.CorrectionID); err != nil {
+			return SyncPullPageResult{}, err
 		}
 	}
 
@@ -367,6 +414,9 @@ func insertSyncedSleepObservationTx(
 	syncedAt time.Time,
 ) (bool, error) {
 	record := prepared.record
+	if suppressed, err := syncRecordSuppressed(ctx, tx, record.ObservationID, "", ""); err != nil || suppressed {
+		return false, err
+	}
 	result, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO local_sleep_observations(
 		observation_id, kind, start_at, end_at, zone_id, classification,
 		acquisition_method, evidence_status, recorded_at, source_record_id, payload_json
@@ -382,6 +432,12 @@ func insertSyncedSleepObservationTx(
 	rows, err := result.RowsAffected()
 	if err != nil {
 		return false, err
+	}
+	if rows == 0 {
+		var existing []byte
+		if err := tx.QueryRowContext(ctx, `SELECT payload_json FROM local_sleep_observations WHERE observation_id=?`, record.ObservationID).Scan(&existing); err != nil || !bytes.Equal(existing, prepared.encoded) {
+			return false, errors.New("downloaded sleep evidence conflicts with an immutable local record")
+		}
 	}
 	synced := newSleepSyncRecord(
 		record.ObservationID,
@@ -402,6 +458,9 @@ func insertSyncedSleepCorrectionTx(
 	syncedAt time.Time,
 ) (bool, error) {
 	record := prepared.record
+	if suppressed, err := syncRecordSuppressed(ctx, tx, record.CorrectionID, record.TargetObservationID, ""); err != nil || suppressed {
+		return false, err
+	}
 	var exists int
 	err := tx.QueryRowContext(ctx,
 		`SELECT 1 FROM local_sleep_observations WHERE observation_id = ?`,
@@ -425,6 +484,12 @@ func insertSyncedSleepCorrectionTx(
 	if err != nil {
 		return false, err
 	}
+	if rows == 0 {
+		var existing []byte
+		if err := tx.QueryRowContext(ctx, `SELECT payload_json FROM local_sleep_corrections WHERE correction_id=?`, record.CorrectionID).Scan(&existing); err != nil || !bytes.Equal(existing, prepared.encoded) {
+			return false, errors.New("downloaded sleep correction conflicts with an immutable local record")
+		}
+	}
 	synced := newSleepSyncRecord(
 		record.CorrectionID,
 		SleepSyncKindCorrection,
@@ -444,7 +509,23 @@ func applySyncedTaskTx(
 	syncedAt time.Time,
 ) (bool, error) {
 	record := prepared.record
+	if suppressed, err := syncRecordSuppressed(ctx, tx, taskRevisionRecordID(record.TaskID, record.Revision), "", record.TaskID); err != nil || suppressed {
+		return false, err
+	}
 	existing, err := taskByIDFrom(ctx, tx, record.TaskID)
+	if err == nil && record.Revision >= effectiveRevision(existing) {
+		var acknowledged bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM local_task_sync_records WHERE record_id=?)`, taskRevisionRecordID(existing.TaskID, effectiveRevision(existing))).Scan(&acknowledged); err != nil {
+			return false, err
+		}
+		existingJSON, err := json.Marshal(normalizeTaskTimes(existing))
+		if err != nil {
+			return false, err
+		}
+		if (!acknowledged || record.Revision == effectiveRevision(existing)) && !bytes.Equal(existingJSON, prepared.encoded) {
+			return false, errors.New("a downloaded task conflicts with an unsent local edit; the local edit has been retained")
+		}
+	}
 	applied := false
 	switch {
 	case errors.Is(err, ErrTaskNotFound):
@@ -481,6 +562,12 @@ func applySyncedTaskTx(
 }
 
 func eraseSyncedSleepRecordTx(ctx context.Context, tx *sql.Tx, recordID string) (bool, error) {
+	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO local_sync_tombstones VALUES(?,'')`, recordID); err != nil {
+		return false, err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM local_sync_deferred_corrections WHERE correction_id=? OR target_id=?`, recordID, recordID); err != nil {
+		return false, err
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM local_sleep_sync_records
 		WHERE record_id = ?
 			OR record_id IN (
@@ -519,6 +606,12 @@ func eraseSyncedTaskRecordTx(ctx context.Context, tx *sql.Tx, recordID string) (
 		return false, fmt.Errorf("record id %q is not a task revision id", recordID)
 	}
 	taskID := match[1]
+	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO local_sync_tombstones VALUES(?,'task')`, recordID); err != nil {
+		return false, err
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO local_sync_erased_tasks VALUES(?)`, taskID); err != nil {
+		return false, err
+	}
 	if _, err := tx.ExecContext(ctx, `DELETE FROM local_task_sync_records WHERE task_id = ?`, taskID); err != nil {
 		return false, err
 	}
@@ -540,6 +633,16 @@ func markSleepSyncRecordsPushedTx(
 	pushedAt time.Time,
 ) error {
 	for _, record := range records {
+		var present bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM local_sleep_observations WHERE observation_id=?) OR EXISTS(SELECT 1 FROM local_sleep_corrections WHERE correction_id=?)`, record.RecordID, record.RecordID).Scan(&present); err != nil {
+			return err
+		}
+		if !present {
+			if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO local_sleep_erasures VALUES(?,?)`, record.RecordID, formatSQLiteTime(pushedAt)); err != nil {
+				return err
+			}
+			continue
+		}
 		if _, err := tx.ExecContext(ctx,
 			`INSERT OR REPLACE INTO local_sleep_sync_records(record_id, kind, payload_hash, pushed_at) VALUES(?, ?, ?, ?)`,
 			record.RecordID, record.Kind, record.PayloadHash, formatSQLiteTime(pushedAt)); err != nil {

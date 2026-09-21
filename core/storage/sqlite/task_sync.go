@@ -115,6 +115,16 @@ func (s *Store) MarkTaskSyncRecordsPushed(ctx context.Context, records []TaskSyn
 
 func markTaskSyncRecordsPushed(ctx context.Context, tx *sql.Tx, records []TaskSyncRecord, pushedAt time.Time) error {
 	for _, record := range records {
+		var erased bool
+		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM local_sync_erased_tasks WHERE task_id=?)`, record.TaskID).Scan(&erased); err != nil {
+			return err
+		}
+		if erased {
+			if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO local_sleep_erasures VALUES(?,?)`, record.RecordID, formatSQLiteTime(pushedAt)); err != nil {
+				return err
+			}
+			continue
+		}
 		if _, err := tx.ExecContext(ctx, `INSERT OR REPLACE INTO local_task_sync_records(record_id, task_id, pushed_at) VALUES(?, ?, ?)`,
 			record.RecordID, record.TaskID, formatSQLiteTime(pushedAt)); err != nil {
 			return err

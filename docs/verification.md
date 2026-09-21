@@ -1429,3 +1429,44 @@ Evidence: `.tools/desktop-analysis-{go,vet,race,web,build}.log`. The full goal
 remains active. Desktop enrollment/restore reconciliation is the next C1 software
 step; native login/suspend/resume, supported hardware, the private pilot and
 independent portal/release qualification are not established by these tests.
+
+## Desktop enrollment and restore reconciliation — 2026-09-21
+
+ADR-0045 replaces separate desktop config/token publication with atomic SQLite
+enrollment and adds durable reconciliation, suppression and deferred corrections.
+
+- All Go core, desktop and server tests and vet pass. Storage regressions cover
+  failed enrollment commit/reopen, stale status after disable, incomplete versus
+  complete download reconciliation, corrections across pages, erased-source
+  suppression, deletion before upload acknowledgment and preservation of unsent
+  task edits. The API rejects a cursor ahead of restored history.
+- Race suites pass for desktop SQLite, desktop services, server store and API.
+  Stateful TLS tests verify a failed switch retaining the old credential/cursor,
+  successful switching and returning to an earlier server, rollback detected
+  before upload, replay of missing accepted records, suppression after a later
+  server restore, and a 501-record download including this device's envelopes.
+- `TestDesktopSyncAgainstDisposableDaemon` passes against the actual Go daemon
+  over loopback TLS with an isolated server directory and synthetic records. A
+  second local profile restores data using the same credential, exchanges a
+  correction, receives erasure and stays erased after re-enrollment. The test
+  cleans remote payloads; the qualification daemon was stopped after the run.
+  Routine suites skip this opt-in test unless its disposable-server variables
+  are configured.
+- Canonical web checks pass: formatting, lint/UI standards, type checks, 405
+  desktop plus six trusted-web tests, and both production builds. Three existing
+  Fast Refresh warnings remain. Settings shows pending deletion and missing-source
+  counts and explains failed switches, re-enrollment and server-change scope.
+- Android check/lint passes with 93 JVM tests. The new test verifies that a pull
+  HTTP 409 maps to the existing restore/re-enrollment instruction, rather than an
+  upload conflict. The debug APK builds successfully. The earlier 21 native
+  instrumentation cases were not rerun for this error-mapping change.
+- Windows Wails production build passes with an isolated `ZEITBOARD_DATA_DIR`
+  during binding generation. A missing initial value for the new frontend status
+  fields was corrected after the first build caught it; final web/build checks
+  pass. No owner profile or startup registration was modified.
+
+Evidence: `.tools/desktop-reconcile-{go,vet,race,http,live,web,build,android,android-build}.log`.
+Native login/hide/suspend/resume/quit and resource/pilot measurements remain open.
+Task conflict resolution needs C2's reviewed editing flow; this increment proves
+preservation/refusal, not that the conflict UI is finished. The full C1–C8 goal
+remains active.

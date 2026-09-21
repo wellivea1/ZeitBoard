@@ -15,8 +15,16 @@ import org.non24.planner.data.HttpBackendSyncClient
 import org.non24.planner.data.MAX_SYNC_RESPONSE_BYTES
 import org.non24.planner.data.OutboxRecord
 import org.non24.planner.data.normalizeSyncUrl
+import org.non24.planner.data.SyncServerResetException
 
 class BackendSyncClientTest {
+    @Test
+    fun `a pull cursor beyond restored history requests reenrollment`() = runTest {
+        val connection = Connection("", 409)
+        val client = HttpBackendSyncClient(openConnection = { connection })
+        assertTrue(client.pull("https://synthetic.test", "synthetic-token", 42).exceptionOrNull() is SyncServerResetException)
+        assertTrue(connection.closed)
+    }
     private class Connection(val response: String, private val status: Int = 200) : HttpURLConnection(URL("https://synthetic.test")) {
         val body = ByteArrayOutputStream()
         var closed = false

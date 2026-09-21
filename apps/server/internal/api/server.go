@@ -522,6 +522,10 @@ func (s *Server) handlePull(w http.ResponseWriter, r *http.Request) {
 		limit = parsed
 	}
 	records, cursor, err := s.store.Pull(r.Context(), since, limit)
+	if errors.Is(err, store.ErrSyncCursorAhead) {
+		writeError(w, http.StatusConflict, "server history changed after a restore; re-enroll to reconcile records")
+		return
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "sync pull failed")
 		return

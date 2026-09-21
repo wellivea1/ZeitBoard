@@ -17,6 +17,8 @@ export interface BackendSyncStatus {
   lastSyncLabel: string;
   lastError: string;
   pendingPushCount: number;
+  pendingErasureCount: number;
+  waitingCorrectionCount: number;
   pushedCount: number;
   pulledCount: number;
   cursor: number;
@@ -32,6 +34,8 @@ const unavailableStatus: BackendSyncStatus = {
   lastSyncLabel: "Not synced yet",
   lastError: "",
   pendingPushCount: 0,
+  pendingErasureCount: 0,
+  waitingCorrectionCount: 0,
   pushedCount: 0,
   pulledCount: 0,
   cursor: 0,
@@ -67,6 +71,8 @@ export function normalizeBackendSyncStatus(value: unknown): BackendSyncStatus | 
     lastSyncLabel: str(value.lastSyncLabel) || "Not synced yet",
     lastError: str(value.lastError),
     pendingPushCount: count(value.pendingPushCount),
+    pendingErasureCount: count(value.pendingErasureCount),
+    waitingCorrectionCount: count(value.waitingCorrectionCount),
     pushedCount: count(value.pushedCount),
     pulledCount: count(value.pulledCount),
     cursor: count(value.cursor),

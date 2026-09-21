@@ -22,8 +22,6 @@ import (
 )
 
 const (
-	backendSyncConfigFile   = "backend-sync.json"
-	backendSyncTokenFile    = "backend-sync-token"
 	backendRequestTimeout   = 10 * time.Second
 	maxSyncPushRecords      = 100
 	maxSyncPushRequestBytes = 1024 * 1024
@@ -50,30 +48,25 @@ type BackendSyncInput struct {
 }
 
 type BackendSyncStatusDTO struct {
-	Enabled            bool   `json:"enabled"`
-	Status             string `json:"status"`
-	BackendURL         string `json:"backendUrl"`
-	DeviceID           string `json:"deviceId"`
-	InsecureSkipVerify bool   `json:"insecureSkipVerify"`
-	LastSyncLabel      string `json:"lastSyncLabel"`
-	LastError          string `json:"lastError"`
-	PendingPushCount   int    `json:"pendingPushCount"`
-	PushedCount        int    `json:"pushedCount"`
-	PulledCount        int    `json:"pulledCount"`
-	SkippedCount       int    `json:"skippedCount"`
-	ErasuresPushed     int    `json:"erasuresPushed"`
-	TombstonesApplied  int    `json:"tombstonesApplied"`
-	Cursor             int64  `json:"cursor"`
+	Enabled                bool   `json:"enabled"`
+	Status                 string `json:"status"`
+	BackendURL             string `json:"backendUrl"`
+	DeviceID               string `json:"deviceId"`
+	InsecureSkipVerify     bool   `json:"insecureSkipVerify"`
+	LastSyncLabel          string `json:"lastSyncLabel"`
+	LastError              string `json:"lastError"`
+	PendingPushCount       int    `json:"pendingPushCount"`
+	PendingErasureCount    int    `json:"pendingErasureCount"`
+	WaitingCorrectionCount int    `json:"waitingCorrectionCount"`
+	PushedCount            int    `json:"pushedCount"`
+	PulledCount            int    `json:"pulledCount"`
+	SkippedCount           int    `json:"skippedCount"`
+	ErasuresPushed         int    `json:"erasuresPushed"`
+	TombstonesApplied      int    `json:"tombstonesApplied"`
+	Cursor                 int64  `json:"cursor"`
 }
 
-type backendSyncConfig struct {
-	Enabled            bool      `json:"enabled"`
-	BackendURL         string    `json:"backendUrl"`
-	DeviceID           string    `json:"deviceId"`
-	InsecureSkipVerify bool      `json:"insecureSkipVerify,omitempty"`
-	LastSyncAt         time.Time `json:"lastSyncAt,omitempty"`
-	LastError          string    `json:"lastError,omitempty"`
-}
+type backendSyncConfig = storage.SyncConnection
 
 type registerDeviceRequest struct {
 	EnrollmentSecret string `json:"enrollmentSecret"`
@@ -228,17 +221,15 @@ func (a *App) ConfigureBackendSync(input BackendSyncInput) (BackendSyncStatusDTO
 	if err := validateBackendTLS(baseURL, input.InsecureSkipVerify); err != nil {
 		return BackendSyncStatusDTO{}, err
 	}
-	cfg := backendSyncConfig{
-		Enabled:            false,
-		BackendURL:         baseURL,
-		InsecureSkipVerify: input.InsecureSkipVerify,
-	}
-	if err := a.saveBackendSyncConfig(cfg); err != nil {
+	store, err := a.requireStore()
+	if err != nil {
 		return BackendSyncStatusDTO{}, err
 	}
-	if err := a.deleteBackendSyncToken(); err != nil {
-		return BackendSyncStatusDTO{}, err
+	previous, _, err := store.LoadSyncConnection(a.applicationContext())
+	if err != nil {
+		return BackendSyncStatusDTO{}, errors.New("Saved backend settings could not be read.")
 	}
+	cfg := backendSyncConfig{Enabled: true, BackendURL: baseURL, InsecureSkipVerify: input.InsecureSkipVerify}
 	label := strings.TrimSpace(input.DeviceLabel)
 	if label == "" {
 		label = "ZeitBoard desktop"
@@ -250,25 +241,14 @@ func (a *App) ConfigureBackendSync(input BackendSyncInput) (BackendSyncStatusDTO
 		Label:            label,
 	}, &response)
 	if err != nil {
-		cfg.LastError = sanitizeBackendError(err)
-		_ = a.saveBackendSyncConfig(cfg)
-		return a.backendSyncStatusCounts(cfg, syncCounts{}), errors.New(cfg.LastError)
+		return a.backendSyncStatusCounts(previous, syncCounts{}), errors.New(sanitizeBackendError(err))
 	}
-	if response.DeviceID == "" || response.Token == "" {
-		cfg.LastError = "backend enrollment returned an invalid device credential"
-		_ = a.saveBackendSyncConfig(cfg)
-		return a.backendSyncStatusCounts(cfg, syncCounts{}), errors.New(cfg.LastError)
+	if response.SchemaVersion != "v1" || response.DeviceID == "" || response.Token == "" {
+		return a.backendSyncStatusCounts(previous, syncCounts{}), errors.New("Backend enrollment returned an invalid device credential; the previous connection was retained.")
 	}
-	if err := a.saveBackendSyncToken(response.Token); err != nil {
-		cfg.LastError = "could not store backend device token"
-		_ = a.saveBackendSyncConfig(cfg)
-		return a.backendSyncStatusCounts(cfg, syncCounts{}), errors.New(cfg.LastError)
-	}
-	cfg.Enabled = true
 	cfg.DeviceID = response.DeviceID
-	cfg.LastError = ""
-	if err := a.saveBackendSyncConfig(cfg); err != nil {
-		return BackendSyncStatusDTO{}, err
+	if err := store.SaveSyncEnrollment(a.applicationContext(), cfg, response.Token); err != nil {
+		return a.backendSyncStatusCounts(previous, syncCounts{}), errors.New("Could not save the new enrollment; the previous connection was retained.")
 	}
 	configured = true
 	return a.backendSyncStatusCounts(cfg, syncCounts{}), nil
@@ -284,9 +264,6 @@ func (a *App) DisableBackendSync() (BackendSyncStatusDTO, error) {
 	cfg.Enabled = false
 	cfg.LastError = ""
 	if err := a.saveBackendSyncConfig(cfg); err != nil {
-		return BackendSyncStatusDTO{}, err
-	}
-	if err := a.deleteBackendSyncToken(); err != nil {
 		return BackendSyncStatusDTO{}, err
 	}
 	return a.backendSyncStatusCounts(cfg, syncCounts{}), nil
@@ -350,6 +327,19 @@ func (a *App) syncSleepRecords(ctx context.Context, cfg backendSyncConfig, token
 		return counts, err
 	}
 	client := a.newDesktopBackendClient(cfg, token)
+	// Learn remote erasure before replaying local data. A new enrollment starts
+	// at zero and reconciles old acknowledgments only after a complete pull.
+	counts.pulled, counts.skipped, counts.tombstonesApplied, err = a.pullSleepRecords(ctx, store, client)
+	if err != nil {
+		return counts, err
+	}
+	if err := store.FinishSyncReconciliation(ctx); err != nil {
+		return counts, err
+	}
+	counts.erasuresPushed, err = a.pushSleepErasures(ctx, store, client)
+	if err != nil {
+		return counts, err
+	}
 	sleepPushed, err := a.pushSleepRecords(ctx, store, client)
 	counts.pushed += sleepPushed
 	if err != nil {
@@ -360,11 +350,22 @@ func (a *App) syncSleepRecords(ctx context.Context, cfg backendSyncConfig, token
 	if err != nil {
 		return counts, err
 	}
-	counts.erasuresPushed, err = a.pushSleepErasures(ctx, store, client)
+	moreErasures, err := a.pushSleepErasures(ctx, store, client)
+	counts.erasuresPushed += moreErasures
 	if err != nil {
 		return counts, err
 	}
-	counts.pulled, counts.skipped, counts.tombstonesApplied, err = a.pullSleepRecords(ctx, store, client, cfg.DeviceID)
+	pulled, skipped, tombstones, err := a.pullSleepRecords(ctx, store, client)
+	counts.pulled += pulled
+	counts.skipped += skipped
+	counts.tombstonesApplied += tombstones
+	if err == nil {
+		var deferred int
+		deferred, err = store.DeferredSyncCorrectionCount(ctx)
+		if err == nil && deferred > 0 {
+			err = errors.New("Downloaded corrections are waiting for their source records. They are saved locally; sync will retry.")
+		}
+	}
 	return counts, err
 }
 
@@ -378,7 +379,7 @@ func (a *App) pushTaskRecords(ctx context.Context, store *storage.Store, client 
 		})
 }
 
-// pushSleepErasures propagates local hard-deletes of already-pushed records to
+// pushSleepErasures propagates local hard-deletes, including uncertain uploads, to
 // the backend, which hard-deletes the synced copies and mints tombstones so
 // every other device erases too (ADR-0017).
 func (a *App) pushSleepErasures(ctx context.Context, store *storage.Store, client desktopBackendClient) (int, error) {
@@ -394,6 +395,9 @@ func (a *App) pushSleepErasures(ctx context.Context, store *storage.Store, clien
 		var response syncEraseResponse
 		if err := client.postJSON(ctx, "/v1/sync/erase", syncEraseRequest{SchemaVersion: "v1", RecordIDs: batch}, &response); err != nil {
 			return confirmed, err
+		}
+		if response.SchemaVersion != "v1" || response.Cursor < 0 || response.Erased < 0 || response.Tombstones < 0 {
+			return confirmed, errors.New("server returned an invalid erasure acknowledgment; deletion markers were retained")
 		}
 		if err := store.ClearSyncErasures(ctx, batch); err != nil {
 			return confirmed, err
@@ -484,46 +488,69 @@ func nextSyncPushBatchLength(records []syncPushRecord) (int, error) {
 	return limit, nil
 }
 
-func (a *App) pullSleepRecords(ctx context.Context, store *storage.Store, client desktopBackendClient, deviceID string) (int, int, int, error) {
+var errSyncMorePages = errors.New("More records are waiting. Sync will continue on the next attempt.")
+
+func (a *App) pullSleepRecords(ctx context.Context, store *storage.Store, client desktopBackendClient) (int, int, int, error) {
+	total := storage.SyncPullPageResult{}
+	for page := 0; page < 4; page++ {
+		result, complete, err := a.pullSleepPage(ctx, store, client)
+		total.Applied += result.Applied
+		total.Skipped += result.Skipped
+		total.TombstonesApplied += result.TombstonesApplied
+		if err != nil {
+			return total.Applied, total.Skipped, total.TombstonesApplied, err
+		}
+		if complete {
+			return total.Applied, total.Skipped, total.TombstonesApplied, nil
+		}
+	}
+	return total.Applied, total.Skipped, total.TombstonesApplied, errSyncMorePages
+}
+
+func (a *App) pullSleepPage(ctx context.Context, store *storage.Store, client desktopBackendClient) (storage.SyncPullPageResult, bool, error) {
 	cursor, err := store.SleepSyncCursor(ctx)
 	if err != nil {
-		return 0, 0, 0, err
+		return storage.SyncPullPageResult{}, false, err
 	}
 	var response syncPullResponse
 	if err := client.getJSON(ctx, fmt.Sprintf("/v1/sync/pull?since=%d", cursor), &response); err != nil {
-		return 0, 0, 0, err
+		var httpErr backendHTTPError
+		if errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusConflict {
+			err = errors.New("The server history changed after a restore. Re-enroll in Settings to download it again; saved local records will be reconciled.")
+		}
+		return storage.SyncPullPageResult{}, false, err
 	}
 	if response.SchemaVersion != "v1" {
-		return 0, 0, 0, errors.New("server returned an unsupported sync version; no records were applied")
+		return storage.SyncPullPageResult{}, false, errors.New("server returned an unsupported sync version; no records were applied")
+	}
+	if err := validatePullEnvelopePage(response, cursor); err != nil {
+		return storage.SyncPullPageResult{}, false, err
 	}
 	records := make([]storage.SyncPullRecord, 0, len(response.Records))
 	for _, record := range response.Records {
-		if record.DeviceID == deviceID {
-			continue
-		}
 		switch record.Kind {
 		case storage.SleepSyncKindObservation:
 			var observation storage.SleepObservationRecord
 			if err := json.Unmarshal(record.Payload, &observation); err != nil {
-				return 0, 0, 0, err
+				return storage.SyncPullPageResult{}, false, err
 			}
 			records = append(records, storage.SyncPullObservation{Observation: observation})
 		case storage.SleepSyncKindCorrection:
 			var correction storage.SleepCorrectionRecord
 			if err := json.Unmarshal(record.Payload, &correction); err != nil {
-				return 0, 0, 0, err
+				return storage.SyncPullPageResult{}, false, err
 			}
 			records = append(records, storage.SyncPullCorrection{Correction: correction})
 		case "task":
 			var task storage.TaskRecord
 			if err := json.Unmarshal(record.Payload, &task); err != nil {
-				return 0, 0, 0, err
+				return storage.SyncPullPageResult{}, false, err
 			}
 			records = append(records, storage.SyncPullTask{Task: task})
 		case "tombstone":
 			var payload syncTombstonePayload
 			if err := json.Unmarshal(record.Payload, &payload); err != nil {
-				return 0, 0, 0, err
+				return storage.SyncPullPageResult{}, false, err
 			}
 			id := payload.RecordID
 			if id == "" {
@@ -535,7 +562,7 @@ func (a *App) pullSleepRecords(ctx context.Context, store *storage.Store, client
 				RecordID: id, RecordKind: payload.RecordKind,
 			})
 		default:
-			return 0, 0, 0, fmt.Errorf("unsupported synced record kind %q", record.Kind)
+			return storage.SyncPullPageResult{}, false, fmt.Errorf("unsupported synced record kind %q", record.Kind)
 		}
 	}
 	result, err := store.ApplySyncPullPage(ctx, storage.SyncPullPage{
@@ -543,9 +570,9 @@ func (a *App) pullSleepRecords(ctx context.Context, store *storage.Store, client
 		Records: records,
 	})
 	if err != nil {
-		return result.Applied, result.Skipped, result.TombstonesApplied, err
+		return result, false, err
 	}
-	return result.Applied, result.Skipped, result.TombstonesApplied, nil
+	return result, len(response.Records) < storage.MaxSyncPullPageSize, nil
 }
 
 func (a *App) serverOverview(ctx context.Context, now time.Time) (OverviewDTO, bool) {
@@ -890,7 +917,11 @@ func titleConfidence(level string) string {
 func (a *App) requireBackendSync() (backendSyncConfig, string, error) {
 	a.backendConfigMu.RLock()
 	defer a.backendConfigMu.RUnlock()
-	cfg, err := a.loadBackendSyncConfig()
+	store, err := a.requireStore()
+	if err != nil {
+		return backendSyncConfig{}, "", err
+	}
+	cfg, token, err := store.LoadSyncConnection(a.applicationContext())
 	if err != nil {
 		return cfg, "", err
 	}
@@ -905,10 +936,6 @@ func (a *App) requireBackendSync() (backendSyncConfig, string, error) {
 		return cfg, "", err
 	}
 	if err := validateBackendTLS(baseURL, cfg.InsecureSkipVerify); err != nil {
-		return cfg, "", err
-	}
-	token, err := a.loadBackendSyncToken()
-	if err != nil {
 		return cfg, "", err
 	}
 	if token == "" {
@@ -926,6 +953,7 @@ func (a *App) backendSyncStatusCounts(cfg backendSyncConfig, counts syncCounts) 
 		}
 	}
 	pending := 0
+	pendingErasures, waitingCorrections := 0, 0
 	cursor := int64(0)
 	if store, err := a.requireStore(); err == nil {
 		ctx := a.applicationContext()
@@ -938,105 +966,44 @@ func (a *App) backendSyncStatusCounts(cfg backendSyncConfig, counts syncCounts) 
 		if value, err := store.SleepSyncCursor(ctx); err == nil {
 			cursor = value
 		}
+		pendingErasures, _ = store.PendingSyncErasureCount(ctx)
+		waitingCorrections, _ = store.DeferredSyncCorrectionCount(ctx)
 	}
 	return BackendSyncStatusDTO{
-		Enabled:            cfg.Enabled,
-		Status:             status,
-		BackendURL:         cfg.BackendURL,
-		DeviceID:           cfg.DeviceID,
-		InsecureSkipVerify: cfg.InsecureSkipVerify,
-		LastSyncLabel:      lastSyncLabel(cfg.LastSyncAt),
-		LastError:          cfg.LastError,
-		PendingPushCount:   pending,
-		PushedCount:        counts.pushed,
-		PulledCount:        counts.pulled,
-		SkippedCount:       counts.skipped,
-		ErasuresPushed:     counts.erasuresPushed,
-		TombstonesApplied:  counts.tombstonesApplied,
-		Cursor:             cursor,
+		Enabled:                cfg.Enabled,
+		Status:                 status,
+		BackendURL:             cfg.BackendURL,
+		DeviceID:               cfg.DeviceID,
+		InsecureSkipVerify:     cfg.InsecureSkipVerify,
+		LastSyncLabel:          lastSyncLabel(cfg.LastSyncAt),
+		LastError:              cfg.LastError,
+		PendingPushCount:       pending,
+		PendingErasureCount:    pendingErasures,
+		WaitingCorrectionCount: waitingCorrections,
+		PushedCount:            counts.pushed,
+		PulledCount:            counts.pulled,
+		SkippedCount:           counts.skipped,
+		ErasuresPushed:         counts.erasuresPushed,
+		TombstonesApplied:      counts.tombstonesApplied,
+		Cursor:                 cursor,
 	}
 }
 
 func (a *App) loadBackendSyncConfig() (backendSyncConfig, error) {
-	dir, err := a.syncConfigDir()
+	store, err := a.requireStore()
 	if err != nil {
 		return backendSyncConfig{}, err
 	}
-	data, err := os.ReadFile(filepath.Join(dir, backendSyncConfigFile))
-	if errors.Is(err, os.ErrNotExist) {
-		return backendSyncConfig{}, nil
-	}
-	if err != nil {
-		return backendSyncConfig{}, err
-	}
-	var cfg backendSyncConfig
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return backendSyncConfig{}, err
-	}
-	return cfg, nil
+	cfg, _, err := store.LoadSyncConnection(a.applicationContext())
+	return cfg, err
 }
 
 func (a *App) saveBackendSyncConfig(cfg backendSyncConfig) error {
-	dir, err := a.syncConfigDir()
+	store, err := a.requireStore()
 	if err != nil {
 		return err
 	}
-	if err := ensurePrivateDir(dir); err != nil {
-		return err
-	}
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return err
-	}
-	data = append(data, '\n')
-	return writePrivateFileAtomic(filepath.Join(dir, backendSyncConfigFile), data)
-}
-
-func (a *App) saveBackendSyncToken(token string) error {
-	dir, err := a.syncConfigDir()
-	if err != nil {
-		return err
-	}
-	if err := ensurePrivateDir(dir); err != nil {
-		return err
-	}
-	// This is a bearer token for the user's own server. The mode argument that
-	// used to protect it does nothing on Windows.
-	return writePrivateFileAtomic(filepath.Join(dir, backendSyncTokenFile), []byte(token))
-}
-
-func (a *App) loadBackendSyncToken() (string, error) {
-	dir, err := a.syncConfigDir()
-	if err != nil {
-		return "", err
-	}
-	data, err := os.ReadFile(filepath.Join(dir, backendSyncTokenFile))
-	if errors.Is(err, os.ErrNotExist) {
-		return "", nil
-	}
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(data)), nil
-}
-
-func (a *App) deleteBackendSyncToken() error {
-	dir, err := a.syncConfigDir()
-	if err != nil {
-		return err
-	}
-	err = os.Remove(filepath.Join(dir, backendSyncTokenFile))
-	if errors.Is(err, os.ErrNotExist) {
-		return nil
-	}
-	return err
-}
-
-func (a *App) syncConfigDir() (string, error) {
-	if a.configDir != "" {
-		return a.configDir, nil
-	}
-	return desktopDataDir()
+	return store.UpdateSyncConnection(a.applicationContext(), cfg)
 }
 
 func desktopDataDir() (string, error) {
@@ -1061,15 +1028,6 @@ func ensurePrivateDir(dir string) error {
 		return err
 	}
 	return privatefile.RestrictDir(dir)
-}
-
-// writeRestrictedFile writes private content and then applies the permission,
-// rather than assuming the mode argument delivered it. On Windows it does not.
-func writeRestrictedFile(path string, data []byte) error {
-	if err := os.WriteFile(path, data, 0o600); err != nil {
-		return err
-	}
-	return privatefile.Restrict(path)
 }
 
 func (a *App) backendHTTPClient(insecureSkipVerify bool) *http.Client {
@@ -1174,6 +1132,11 @@ func normalizeBackendURL(raw string) (string, error) {
 	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
 		return "", errors.New("backend URL must be an https URL")
 	}
+	if parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", errors.New("backend URL must not contain credentials, a query or a fragment")
+	}
+	parsed.Host = strings.ToLower(parsed.Host)
+	value = parsed.String()
 	return value, nil
 }
 

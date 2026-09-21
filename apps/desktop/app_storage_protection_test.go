@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	storage "non24.app/core/storage/sqlite"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,31 +25,24 @@ func assertOwnerOnly(t *testing.T, path, what string) {
 	}
 }
 
-// The bearer token authenticates this device to the user's own server. It was
-// written with a mode argument that restricts nothing on Windows, so on a
-// shared machine it inherited whatever the profile directory allowed.
-func TestTheBackendTokenIsOwnerOnly(t *testing.T) {
-	app := newTestApp(t)
-	if err := app.saveBackendSyncToken("device-token-value"); err != nil {
-		t.Fatalf("save token: %v", err)
+// Enrollment settings and its bearer token share the owner-protected database
+// so their publication and reconciliation boundary are atomic.
+func TestTheBackendCredentialDatabaseIsOwnerOnly(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "credentials.db")
+	store, err := storage.Open(path)
+	if err != nil {
+		t.Fatal(err)
 	}
-	assertOwnerOnly(t, filepath.Join(app.configDir, backendSyncTokenFile), "the backend token")
-
-	// The token still reads back, so this restricted access rather than losing it.
-	token, err := app.loadBackendSyncToken()
-	if err != nil || token != "device-token-value" {
-		t.Fatalf("token after restriction = %q, %v", token, err)
+	defer store.Close()
+	cfg := storage.SyncConnection{Enabled: true, BackendURL: "https://localhost:8443", DeviceID: "device_synthetic"}
+	if err := store.SaveSyncEnrollment(context.Background(), cfg, "synthetic-token"); err != nil {
+		t.Fatal(err)
 	}
-}
-
-func TestTheSyncConfigurationIsOwnerOnly(t *testing.T) {
-	app := newTestApp(t)
-	if err := app.saveBackendSyncConfig(backendSyncConfig{
-		Enabled: true, BackendURL: "https://localhost:8443", DeviceID: "dev-1",
-	}); err != nil {
-		t.Fatalf("save config: %v", err)
+	assertOwnerOnly(t, path, "the backend credential database")
+	_, token, err := store.LoadSyncConnection(context.Background())
+	if err != nil || token != "synthetic-token" {
+		t.Fatal("credential was not retained")
 	}
-	assertOwnerOnly(t, filepath.Join(app.configDir, backendSyncConfigFile), "the sync configuration")
 }
 
 // Settings files are less sensitive than the database, but they go through the

@@ -490,19 +490,19 @@ func TestLocalSleepSyncTrackingCursorAndErasure(t *testing.T) {
 	if err := store.DeleteSleepObservation(ctx, obs.ObservationID); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.AppendSleepObservation(ctx, obs); err != nil {
-		t.Fatal(err)
+	if err := store.AppendSleepObservation(ctx, obs); err == nil {
+		t.Fatal("erased observation was resurrected")
 	}
 	unpushed, err = store.UnpushedSleepSyncRecords(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(unpushed) != 1 || unpushed[0].RecordID != obs.ObservationID {
-		t.Fatalf("erasure should remove pushed tracking for sleep IDs, got %#v", unpushed)
+	if len(unpushed) != 0 {
+		t.Fatalf("erasure should leave no record eligible for re-upload, got %#v", unpushed)
 	}
 }
 
-func TestDeleteEnqueuesErasuresOnlyForPushedRecords(t *testing.T) {
+func TestDeleteEnqueuesErasuresIncludingUnacknowledgedRecords(t *testing.T) {
 	store, err := Open(filepath.Join(t.TempDir(), "non24.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -557,7 +557,7 @@ func TestDeleteEnqueuesErasuresOnlyForPushedRecords(t *testing.T) {
 		t.Fatalf("pending erasures = %v, want observation + correction", pending)
 	}
 
-	// Deleting the never-pushed observation enqueues nothing new.
+	// An unacknowledged upload may already be remote after a lost response.
 	if err := store.DeleteSleepObservation(ctx, unpushed.ObservationID); err != nil {
 		t.Fatal(err)
 	}
@@ -565,8 +565,8 @@ func TestDeleteEnqueuesErasuresOnlyForPushedRecords(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(pending) != 2 {
-		t.Fatalf("unpushed delete should not enqueue erasure: %v", pending)
+	if len(pending) != 3 {
+		t.Fatalf("unacknowledged delete must enqueue erasure: %v", pending)
 	}
 
 	// Clearing removes confirmed entries.
