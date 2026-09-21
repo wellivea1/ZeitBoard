@@ -791,6 +791,10 @@ makes is tested by calling it directly rather than by waiting.
 
 Verified 2026-08-08.
 
+Historical routing evidence: ADR-0046 removes the pre-release route aliases and
+their lint requirement on 2026-09-21. The current five destinations and tab routes
+remain the supported navigation contract.
+
 **Arithmetic** (`core/outlook`): the timeline covers the horizon with no gaps and
 no unmerged neighbours; every predicted boundary carries an uncertain stretch and
 those stretches widen with forecast distance; the current period reads awake
@@ -1470,3 +1474,41 @@ Native login/hide/suspend/resume/quit and resource/pilot measurements remain ope
 Task conflict resolution needs C2's reviewed editing flow; this increment proves
 preservation/refusal, not that the conflict UI is finished. The full C1–C8 goal
 remains active.
+
+
+## Unified review queue and exact request times — 2026-09-21
+
+ADR-0046 connects queue counts and request decisions across Home, Plan, Calendar and
+Approvals. Full Go core/desktop/server tests and vet passed; worker, SQLite, desktop,
+server store and API race suites passed. Canonical web formatting, lint, types,
+**410 tests (404 desktop + 6 trusted prototype)** and production builds passed. The
+count replaces 12 obsolete route-alias tests with current queue/time regression
+coverage; three existing Fast Refresh lint warnings remain. Windows Wails production
+build passed with an isolated profile.
+
+Focused evidence includes:
+
+- Storage and authenticated TLS API pages with older visitor requests behind 105
+  assistant proposals, authoritative totals, consumed/expired nonces and scope-bound
+  cursors. Subsecond checks align queue expiry and token rejection at the boundary.
+- Desktop TLS decoding of the real visitor response fields, always-present terminal
+  pagination, exact repeated-hour UTC submission, and a confirmed POST followed by a
+  failing GET without losing the decision acknowledgment.
+- Shared provider tests for mixed totals beyond loaded pages, transient errors,
+  disable, request drafts across remounts, synchronous double-click refusal,
+  non-advancing cursors, expiry wakes, and initial StrictMode remount recovery.
+- Civil-time tests for New York gaps/folds, Lord Howe half-hour transitions, invalid
+  dates and explicitly selected instants. Planning-anchor reads leave the live
+  analysis cache, worker deadline and journal unchanged.
+- Browser inspection of the actual React screens with disposable synthetic bridge
+  fixtures: approval count and history/undo, distinct source filters, full-width
+  request controls and disclosure, explicit UTC offsets, a selected repeated-hour
+  occurrence surviving the switch to Calendar, and approval reducing the shared
+  count. The temporary fixture and local preview server were removed/stopped.
+
+Logs: `.tools/approval-queue-{web,go,vet,race,build,focused-go,focused-web,api}.log`;
+final expiry checks are in `approval-queue-go-expiry.log` and
+`approval-queue-race-expiry.log`. These are local verification artifacts. No actual
+external CalDAV write-back, production visitor exchange, native lifecycle, wearable
+pilot or release qualification is claimed. C2 and the overall completion goal remain
+open as described in the completion plan.

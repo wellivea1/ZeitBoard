@@ -48,6 +48,7 @@ interface ApprovalsContextValue {
   lastDecision: LastDecision | null;
   busyProposalId: string | null;
   error: string;
+  loadError: string;
   ready: boolean;
   dismissError: () => void;
   refresh: () => Promise<void>;
@@ -73,6 +74,7 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
   const [lastDecision, setLastDecision] = useState<LastDecision | null>(null);
   const [busyProposalId, setBusyProposalId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [decisionError, setDecisionError] = useState("");
   const mounted = useRef(false);
   const requestVersion = useRef(0);
   const busyRef = useRef<string | null>(null);
@@ -129,7 +131,7 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
 
     busyRef.current = id;
     setBusyProposalId(id);
-    setError("");
+    setDecisionError("");
     void decideLocalProposal(id, decision).then(
       async () => {
         if (decision === "approved") notifyCalendarDataChanged();
@@ -143,7 +145,7 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
         busyRef.current = null;
         if (!mounted.current) return;
         setBusyProposalId(null);
-        setError(reason instanceof Error ? reason.message : "Proposal decision failed.");
+        setDecisionError(reason instanceof Error ? reason.message : "Proposal decision failed.");
         void refresh();
       },
     );
@@ -166,7 +168,7 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
 
     busyRef.current = id;
     setBusyProposalId(id);
-    setError("");
+    setDecisionError("");
     void undoLocalProposalDecision(id).then(
       async () => {
         notifyCalendarDataChanged();
@@ -180,7 +182,7 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
         busyRef.current = null;
         if (!mounted.current) return;
         setBusyProposalId(null);
-        setError(reason instanceof Error ? reason.message : "Proposal undo failed.");
+        setDecisionError(reason instanceof Error ? reason.message : "Proposal undo failed.");
         void refresh();
       },
     );
@@ -191,7 +193,7 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
   };
 
   const dismiss = useCallback(() => setLastDecision(null), []);
-  const dismissError = useCallback(() => setError(""), []);
+  const dismissError = useCallback(() => setDecisionError(""), []);
   const pending = proposals.filter((proposal) => proposal.status === "pending");
   const decided = proposals.filter((proposal) => proposal.status !== "pending");
   const value: ApprovalsContextValue = {
@@ -206,7 +208,8 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
     undoLast,
     lastDecision,
     busyProposalId,
-    error,
+    error: decisionError || error,
+    loadError: error,
     ready,
     dismissError,
     refresh,
@@ -269,10 +272,10 @@ export function useApprovals(): ApprovalsContextValue {
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
-export function usePendingApprovalsCount(): number {
+export function useLocalPendingApprovalsCount(): number {
   const context = useContext(PendingApprovalsCountContext);
   if (context === null) {
-    throw new Error("usePendingApprovalsCount must be used within ApprovalsProvider");
+    throw new Error("useLocalPendingApprovalsCount must be used within ApprovalsProvider");
   }
   return context;
 }

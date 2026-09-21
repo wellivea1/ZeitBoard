@@ -265,7 +265,7 @@ M-E's separately reviewed local agent projection.
     Sources and Settings in a separate utility group. Plan hosts Calendar, Tasks and Approvals as
     tabs and carries the pending count, so the queue is no longer a permanent destination that is
     empty most of the time; Log hosts sleep, medications and context markers. One shared tablist
-    replaced what would have been three, every legacy hash still redirects to the right screen _and_
+    replaced what would have been three, the historical route aliases (removed pre-release by ADR-0046) redirected to the right screen _and_
     tab, and the lint enforces the count so a ninth destination cannot arrive one merge at a time.
     **This closes `ui-refactor-plan.md`**: U-A through U-H are all delivered.
 

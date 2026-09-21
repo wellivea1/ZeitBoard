@@ -1,3 +1,4 @@
+vi.mock("../components/VisitorRequestsPanel", () => ({ VisitorRequestsPanel: () => null }));
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 

@@ -47,21 +47,6 @@ describe("desktop navigation", () => {
     expect(screen.getByText("Sample data")).toBeVisible();
   });
 
-  // Old hashes are written down in this app's own links, in the runbook, and in
-  // whatever the user bookmarked. A dead link is a worse answer than a redirect.
-  it.each([
-    ["#/overview", "Home"],
-    ["#/calendar", "Plan"],
-    ["#/tasks", "Plan"],
-    ["#/approvals", "Plan"],
-    ["#/medications", "Log"],
-    ["#/timeline", "Rhythm"],
-  ])("redirects the legacy route %s", async (hash, heading) => {
-    window.location.hash = hash;
-    render(<App />);
-    expect(await screen.findByRole("heading", { level: 1, name: heading })).toBeVisible();
-  });
-
   it("opens the tab named in the address", async () => {
     window.location.hash = "#/log/medications";
     render(<App />);
@@ -125,9 +110,11 @@ describe("desktop navigation", () => {
     expect(within(navigation()).getByLabelText("2 pending")).toBeVisible();
 
     fireEvent.click(accepts[0] as HTMLElement);
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
 
     expect(screen.getByText("Email Dr. Okafor")).toBeVisible();
     expect(screen.getByText("approved")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "All 1" }));
     expect(screen.getAllByRole("button", { name: "Accept proposal" })).toHaveLength(1);
     expect(within(navigation()).getByLabelText("1 pending")).toBeVisible();
 
@@ -383,8 +370,8 @@ describe("desktop navigation", () => {
     ).toBeNull();
   });
 
-  it("keeps the legacy timeline route usable as Rhythm", async () => {
-    window.location.hash = "#/timeline";
+  it("opens the rhythm destination", async () => {
+    window.location.hash = "#/rhythm";
     render(<App />);
 
     expect(await screen.findByRole("heading", { name: "Rhythm" })).toBeVisible();
@@ -482,6 +469,7 @@ describe("desktop navigation", () => {
                       explanationCodes: ["within_predicted_waking_window"],
                       reasonLabels: ["In a predicted waking window"],
                       createdLabel: "Proposed by Scheduler from local sleep entries",
+                      expiresAt: "2099-01-01T00:00:00Z",
                       expiresLabel: "valid for the current estimate",
                     },
                   ],
@@ -839,7 +827,13 @@ describe("assistant rail", () => {
   });
 
   it("sends a message and renders the propose-only action card with decisions", async () => {
-    const decide = vi.fn(async () => ({ status: "ok", proposals: [] }));
+    const decide = vi.fn(async () => ({
+      pendingCount: 0,
+      nextExpiryAt: "",
+      pagination: { nextCursor: "", hasMore: false },
+      status: "ok",
+      proposals: [],
+    }));
     (globalThis as { go?: unknown }).go = {
       main: {
         App: {
@@ -849,7 +843,13 @@ describe("assistant rail", () => {
             provider: "anthropic",
             model: "claude-sonnet-5",
           }),
-          GetBackendProposals: async () => ({ status: "ok", proposals: [] }),
+          GetBackendProposals: async () => ({
+            pendingCount: 0,
+            nextExpiryAt: "",
+            pagination: { nextCursor: "", hasMore: false },
+            status: "ok",
+            proposals: [],
+          }),
           SendAssistantMessage: async () => ({
             available: true,
             result: "proposal_pending",
@@ -866,6 +866,7 @@ describe("assistant rail", () => {
                 confidence: "Medium",
                 reasonLabels: ["Fits the predicted waking window"],
                 createdLabel: "Proposed Jul 10, 8:00 AM",
+                expiresAt: "2099-01-01T00:00:00Z",
                 expiresLabel: "expires Jul 10, 8:15 AM",
                 decisionToken: "one-use-token",
               },

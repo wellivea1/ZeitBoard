@@ -1,14 +1,19 @@
+const summary = {
+  pendingCount: 1,
+  nextExpiryAt: "2099-01-01T00:00:00Z",
+  pagination: { nextCursor: "", hasMore: false },
+};
 import { describe, expect, it } from "vitest";
 
 import {
   decideBackendProposal,
   loadBackendProposalPage,
   loadBackendProposals,
-  normalizeBackendProposalPage,
   normalizeBackendProposals,
 } from "./backendProposals";
 
 const backendList = {
+  ...summary,
   status: "ok",
   proposals: [
     {
@@ -21,6 +26,7 @@ const backendList = {
       reasonLabels: ["In a predicted waking window"],
       answer: "Queued for approval.",
       createdLabel: "Proposed Mar 12, 6:00 AM",
+      expiresAt: "2099-01-01T00:00:00Z",
       expiresLabel: "expires Mar 12, 6:15 AM",
       decisionToken: "one-use-token",
     },
@@ -37,29 +43,35 @@ describe("backend proposals", () => {
     expect(data?.pagination).toEqual({ nextCursor: "cursor-older-01", hasMore: true });
   });
 
-  it("defaults legacy lists to a terminal page and validates cursor invariants", () => {
+  it("requires pagination and validates cursor invariants", () => {
     expect(
-      normalizeBackendProposals({ status: "ok", proposals: backendList.proposals })?.pagination,
-    ).toEqual({ nextCursor: "", hasMore: false });
+      normalizeBackendProposals({
+        ...summary,
+        pagination: undefined,
+        status: "ok",
+        proposals: backendList.proposals,
+      }),
+    ).toBeUndefined();
     expect(
-      normalizeBackendProposalPage({
+      normalizeBackendProposals({
         ...backendList,
         pagination: { nextCursor: "", hasMore: true },
       }),
     ).toBeUndefined();
     expect(
-      normalizeBackendProposalPage({
+      normalizeBackendProposals({
         ...backendList,
         pagination: { nextCursor: "cursor-without-more", hasMore: false },
       }),
     ).toBeUndefined();
-    expect(normalizeBackendProposalPage({ status: "ok", proposals: [] })).toBeUndefined();
+    expect(normalizeBackendProposals({ status: "ok", proposals: [] })).toBeUndefined();
   });
 
   it("rejects an off-enum status or malformed proposal", () => {
     expect(normalizeBackendProposals({ status: "weird", proposals: [] })).toBeUndefined();
     expect(
       normalizeBackendProposals({
+        ...summary,
         status: "ok",
         proposals: [{ proposalId: "p", status: "applied" }],
       }),
@@ -68,6 +80,9 @@ describe("backend proposals", () => {
 
   it("is absent (off) when the Wails bridge is missing", async () => {
     await expect(loadBackendProposals({})).resolves.toEqual({
+      ...summary,
+      pendingCount: 0,
+      nextExpiryAt: "",
       status: "off",
       proposals: [],
       pagination: { nextCursor: "", hasMore: false },
@@ -85,6 +100,7 @@ describe("backend proposals", () => {
             GetBackendProposalPage: async (input: unknown) => {
               pageRequests.push(input);
               return {
+                ...summary,
                 status: "ok",
                 proposals: [],
                 pagination: { nextCursor: "", hasMore: false },
@@ -93,6 +109,7 @@ describe("backend proposals", () => {
             DecideBackendProposal: async (input: unknown) => {
               decisions.push(input);
               return {
+                ...summary,
                 status: "ok",
                 proposals: [{ ...backendList.proposals[0], status: "approved", decisionToken: "" }],
               };

@@ -3,10 +3,10 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { proposalsFixture } from "../data/proposals";
-import { ApprovalsProvider, useApprovals, usePendingApprovalsCount } from "./approvals";
+import { ApprovalsProvider, useApprovals, useLocalPendingApprovalsCount } from "./approvals";
 
 function PendingCountProbe() {
-  const pendingCount = usePendingApprovalsCount();
+  const pendingCount = useLocalPendingApprovalsCount();
   return <span>{pendingCount} pending</span>;
 }
 
@@ -103,4 +103,32 @@ describe("ApprovalsProvider contexts", () => {
     await waitFor(() => expect(screen.getByText("0 pending")).toBeVisible());
     expect(getProposals).toHaveBeenCalledTimes(2);
   });
+});
+
+it("keeps a failed local decision visible after refreshing its proposal list", async () => {
+  function ErrorProbe() {
+    const queue = useApprovals();
+    return <output>{queue.error}</output>;
+  }
+  const pending = { ...proposalsFixture, fixtureMode: false };
+  (globalThis as { go?: unknown }).go = {
+    main: {
+      App: {
+        GetProposals: async () => pending,
+        DecideLocalProposal: async () => {
+          throw new Error("The task changed. Review its current proposal.");
+        },
+      },
+    },
+  };
+  render(
+    <ApprovalsProvider>
+      <DecisionControl />
+      <ErrorProbe />
+    </ApprovalsProvider>,
+  );
+  const button = await screen.findByRole("button", { name: "Decide first proposal" });
+  await waitFor(() => expect(button).toBeEnabled());
+  fireEvent.click(button);
+  expect(await screen.findByText("The task changed. Review its current proposal.")).toBeVisible();
 });

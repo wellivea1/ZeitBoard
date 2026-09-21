@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { Icon, type IconName } from "./Icon";
-import { usePendingApprovalsCount } from "../state/approvals";
+import { usePendingApprovalsCount } from "../state/approvalQueue";
 import type { LogTab, PlanTab, ScreenId } from "../types";
 
 const AssistantRail = lazy(() =>
@@ -46,27 +46,11 @@ export interface Route {
 const planTabs = new Set<PlanTab>(["calendar", "tasks", "approvals"]);
 const logTabs = new Set<LogTab>(["sleep", "medications", "markers"]);
 
-// Routes that existed before the consolidation. They are kept because they are
-// still written down — in this app's own links, in the runbook, and in whatever
-// the user has bookmarked — and because a dead link is a worse answer than a
-// redirect that costs one line each.
-const legacyRoutes: Record<string, Partial<Route> & { screen: ScreenId }> = {
-  overview: { screen: "home" },
-  timeline: { screen: "rhythm" },
-  calendar: { screen: "plan", planTab: "calendar" },
-  tasks: { screen: "plan", planTab: "tasks" },
-  approvals: { screen: "plan", planTab: "approvals" },
-  medications: { screen: "log", logTab: "medications" },
-};
-
 const defaultRoute: Route = { screen: "home", planTab: "calendar", logTab: "sleep" };
 
 export function readRouteFromHash(hash: string): Route {
   const path = hash.replace(/^#\/?/, "");
   const [head = "", second = ""] = path.split("/");
-
-  const legacy = legacyRoutes[head];
-  if (legacy) return { ...defaultRoute, ...legacy };
 
   if (!screenIds.has(head as ScreenId)) return defaultRoute;
   const screen = head as ScreenId;

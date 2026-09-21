@@ -1,3 +1,4 @@
+import { notifyReviewQueueChanged } from "./reviewQueue";
 import { findWailsMethod, type WailsRoot } from "./wailsBridge";
 
 export interface BackendSyncInput {
@@ -97,6 +98,7 @@ export async function configureBackendSync(
   const result = await method(input);
   const status = normalizeBackendSyncStatus(result);
   if (!status) throw new Error("Backend sync service returned an invalid status.");
+  notifyReviewQueueChanged();
   return status;
 }
 
@@ -108,6 +110,7 @@ export async function disableBackendSync(
   const result = await method();
   const status = normalizeBackendSyncStatus(result);
   if (!status) throw new Error("Backend sync service returned an invalid status.");
+  notifyReviewQueueChanged();
   return status;
 }
 
@@ -119,5 +122,6 @@ export async function syncNow(
   const result = await method();
   const status = normalizeBackendSyncStatus(result);
   if (!status) throw new Error("Backend sync service returned an invalid status.");
+  notifyReviewQueueChanged();
   return status;
 }

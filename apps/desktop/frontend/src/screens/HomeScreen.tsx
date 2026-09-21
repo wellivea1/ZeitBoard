@@ -12,7 +12,7 @@ import { sleepDataChangedEvent, notifySleepDataChanged } from "../data/sleepData
 import { hasDesktopBridge } from "../data/wailsBridge";
 import { overviewUnavailable } from "../data/overview";
 import { subscribeProjectionRefresh } from "../utils/projectionRefresh";
-import { usePendingApprovalsCount } from "../state/approvals";
+import { useApprovalQueue } from "../state/approvalQueue";
 import type { ConfidenceLevel, OverviewSource, OverviewData } from "../data/overview";
 import { createCoalescedRefresh } from "../utils/coalescedRefresh";
 
@@ -118,7 +118,7 @@ function useHomeProjection() {
 
 export function HomeScreen() {
   const { overview, mode, rhythm, rhythmMode, outlook, loading } = useHomeProjection();
-  const pendingCount = usePendingApprovalsCount();
+  const { pendingCount, ready: queueReady, incomplete: queueIncomplete } = useApprovalQueue();
   const hasEstimate = overview.status === "estimated";
   const hasMatchingRhythm = hasEstimate && rhythm.status === "estimated" && mode === rhythmMode;
   const todayLabel =
@@ -270,7 +270,11 @@ export function HomeScreen() {
             </strong>
             <small>
               {hasEstimate
-                ? `${pendingCount} pending ${pendingCount === 1 ? "proposal" : "proposals"}; every change needs explicit approval.`
+                ? !queueReady
+                  ? "Loading approvals..."
+                  : queueIncomplete
+                    ? "Approvals need a refresh; some sources are unavailable."
+                    : `${pendingCount} pending ${pendingCount === 1 ? "proposal" : "proposals"}; every change needs explicit approval.`
                 : "Suppression preserves history; permanent deletion is a separate confirmed action."}
             </small>
           </div>

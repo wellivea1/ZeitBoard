@@ -382,3 +382,35 @@ review and supported calendar write-back. Do not stall independent C2–C8 softw
 on hardware/pilot evidence. Native login/suspend/resume, supported-device resource
 measurements, private pilot, independent portal review and release acceptance
 remain open. The goal remains active.
+
+
+### C2 unified review queue increment — 2026-09-21
+
+Home, Plan, navigation and the assistant Approvals link now share one pending count
+across local proposals, assistant/agent proposals and visitor requests. Server
+counts cover unloaded pages; scoped pagination prevents mixed work from hiding
+requests. Real visitor response decoding, terminal pagination, expired-token
+visibility and persistent decision errors are corrected. Approvals has functional
+source filters and history. Calendar and Approvals share request drafts and the
+same exact-block decision flow, including explicit repeated-hour choices. A
+committed decision survives a failed follow-up list read. See
+[ADR-0046](decisions/0046-unified-review-queue-and-exact-request-times.md).
+
+The review also found and fixed a C1 regression: contextual planning reads no
+longer overwrite or reschedule live background analysis. Pre-release cleanup removes
+old route aliases and permissive list adapters instead of maintaining two contracts.
+
+Verification: full Go tests/vet, focused race suites, 410 web tests (404 desktop,
+6 trusted prototype), canonical web checks/builds and Windows Wails build. Targeted
+checks cover pagination/counts with 105 intervening assistant proposals, scoped
+cursor rejection, used/expired tokens, exact expiry boundaries, current TLS response
+shapes, acknowledgment followed by refresh failure, shared drafts, duplicate
+submissions, loading remounts and DST gaps/folds. Browser inspection used synthetic
+fixtures and verified shared count/history, the request form, a repeated-hour choice
+preserved on Calendar, and a decision reducing the count.
+
+**Next C2 work:** reviewed batch semantics, task conflict resolution, remaining
+constraint affordances and supported calendar write-back. Native lifecycle, actual
+wearable/device conditions, production TLS, independent portal review, clean-machine
+installation/signing and the private pilot remain unqualified. The full C0–C8 goal
+remains active; this is a partial C2 implementation, not project completion.

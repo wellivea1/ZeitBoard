@@ -1,3 +1,5 @@
+import { reviewIsPending, reviewStatus } from "../data/reviewQueue";
+import { usePendingApprovalsCount } from "../state/approvalQueue";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Icon } from "./Icon";
 import {
@@ -42,7 +44,7 @@ function ActionCard({
   busy: boolean;
   onDecide: (proposal: BackendProposal, decision: "approved" | "rejected") => void;
 }) {
-  const decidable = proposal.status === "pending" && Boolean(proposal.decisionToken);
+  const decidable = reviewIsPending(proposal);
   const filled = { Low: 1, Medium: 2, High: 3 }[proposal.confidence];
   return (
     <article className="assistant-action-card" data-status={proposal.status}>
@@ -90,7 +92,7 @@ function ActionCard({
             </button>
           </>
         ) : (
-          <span className="task-chip">{proposal.status}</span>
+          <span className="task-chip">{reviewStatus(proposal)}</span>
         )}
       </footer>
     </article>
@@ -182,8 +184,9 @@ export function AssistantRail({ open, onClose }: { open: boolean; onClose: () =>
     void decideProposal(proposal, decision);
   };
 
+  const totalPending = usePendingApprovalsCount();
   const backend = backendLabel(status);
-  const pendingQueue = queue.proposals.filter((proposal) => proposal.status === "pending");
+  const pendingQueue = queue.proposals.filter((proposal) => reviewIsPending(proposal));
   const currentProposal = new Map(
     queue.proposals.map((proposal) => [proposal.proposalId, proposal]),
   );
@@ -198,7 +201,7 @@ export function AssistantRail({ open, onClose }: { open: boolean; onClose: () =>
           <i aria-hidden="true" /> {backend.text}
         </span>
         <a className="assistant-queue-link" href="#/plan/approvals">
-          Approvals{pendingQueue.length > 0 && ` ${pendingQueue.length}`}
+          Approvals{totalPending > 0 && ` ${totalPending}`}
         </a>
         <button
           className="icon-button"

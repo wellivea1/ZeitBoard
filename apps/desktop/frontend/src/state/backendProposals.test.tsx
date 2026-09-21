@@ -1,3 +1,8 @@
+const summary = {
+  pendingCount: 1,
+  nextExpiryAt: "2099-01-01T00:00:00Z",
+  pagination: { nextCursor: "", hasMore: false },
+};
 import { useEffect, useState } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -14,6 +19,7 @@ const proposal: BackendProposal = {
   confidence: "Medium",
   reasonLabels: ["Fits predicted waking time"],
   createdLabel: "Created now",
+  expiresAt: "2099-01-01T00:00:00Z",
   expiresLabel: "expires soon",
   decisionToken: "one-use-token",
 };
@@ -120,8 +126,8 @@ afterEach(() => {
 
 describe("BackendProposalsProvider", () => {
   it("coalesces simultaneous consumers and publishes decisions to both", async () => {
-    const list = vi.fn(async () => ({ status: "ok", proposals: [proposal] }));
-    const decide = vi.fn(async () => ({ status: "ok", proposals: [] }));
+    const list = vi.fn(async () => ({ ...summary, status: "ok", proposals: [proposal] }));
+    const decide = vi.fn(async () => ({ ...summary, status: "ok", proposals: [] }));
     (globalThis as { go?: unknown }).go = {
       main: { App: { GetBackendProposals: list, DecideBackendProposal: decide } },
     };
@@ -157,7 +163,11 @@ describe("BackendProposalsProvider", () => {
     (globalThis as { go?: unknown }).go = {
       main: {
         App: {
-          GetBackendProposals: vi.fn(async () => ({ status: "ok", proposals: [proposal] })),
+          GetBackendProposals: vi.fn(async () => ({
+            ...summary,
+            status: "ok",
+            proposals: [proposal],
+          })),
           DecideBackendProposal: decide,
         },
       },
@@ -178,7 +188,7 @@ describe("BackendProposalsProvider", () => {
       await screen.findByText("Another proposal decision is already in progress."),
     ).toBeVisible();
 
-    resolveDecision({ status: "ok", proposals: [] });
+    resolveDecision({ ...summary, status: "ok", proposals: [] });
     await waitFor(() => expect(screen.getByText("approved")).toBeVisible());
   });
 
@@ -189,6 +199,7 @@ describe("BackendProposalsProvider", () => {
       main: {
         App: {
           GetBackendProposals: vi.fn(async () => ({
+            ...summary,
             status: "ok",
             proposals: [proposal, overlapProposal],
             pagination: { nextCursor: "cursor-older-01", hasMore: true },
@@ -212,6 +223,7 @@ describe("BackendProposalsProvider", () => {
     expect(screen.getByRole("button", { name: "Loading older proposals..." })).toBeDisabled();
 
     olderPage.resolve({
+      ...summary,
       status: "ok",
       proposals: [
         { ...overlapProposal, title: "Stale overlap title" },
@@ -240,6 +252,7 @@ describe("BackendProposalsProvider", () => {
       main: {
         App: {
           GetBackendProposals: vi.fn(async () => ({
+            ...summary,
             status: "ok",
             proposals: [proposal],
             pagination: { nextCursor: "cursor-older-01", hasMore: true },
@@ -263,6 +276,7 @@ describe("BackendProposalsProvider", () => {
     expect(await screen.findByText("Newly ingested proposal")).toBeVisible();
 
     olderPage.resolve({
+      ...summary,
       status: "ok",
       proposals: [
         { ...proposal, title: "Stale current title" },

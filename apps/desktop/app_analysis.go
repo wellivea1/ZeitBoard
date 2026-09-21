@@ -198,6 +198,20 @@ func (a *App) localEstimate(ctx context.Context, now time.Time) (localEstimateSt
 	if err != nil {
 		return localEstimateState{Status: "unavailable", Message: err.Error()}, nil
 	}
+	// Planning deliberately uses a stable half-hour anchor. Contextual reads
+	// must not replace the live snapshot or move its worker deadline backwards:
+	// doing so creates a refresh/event loop between the planner and Overview.
+	if !now.UTC().Truncate(time.Minute).Equal(a.currentTime().UTC().Truncate(time.Minute)) {
+		input, err := store.ReadSleepAnalysisInput(ctx)
+		if err != nil {
+			return localEstimateState{}, err
+		}
+		value, err := a.computeSleepAnalysis(ctx, input, now)
+		if err != nil {
+			return localEstimateState{}, err
+		}
+		return analysisState(value, input.Snapshot.EffectiveSessions), nil
+	}
 	for attempt := 0; attempt < 3; attempt++ {
 		input, err := store.ReadSleepAnalysisInput(ctx)
 		if err != nil {

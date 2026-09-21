@@ -699,6 +699,8 @@ type backendProposalPagination struct {
 }
 
 type backendProposalListResponse struct {
+	PendingCount  int                       `json:"pendingCount"`
+	NextExpiryAt  string                    `json:"nextExpiryAt"`
 	SchemaVersion string                    `json:"schema_version"`
 	Proposals     []backendProposalRecord   `json:"proposals"`
 	Pagination    backendProposalPagination `json:"pagination"`
@@ -722,6 +724,7 @@ type backendProposalPayload struct {
 }
 
 type BackendProposalDTO struct {
+	ExpiresAt     string   `json:"expiresAt"`
 	ProposalID    string   `json:"proposalId"`
 	Action        string   `json:"action"`
 	Status        string   `json:"status"`
@@ -738,14 +741,17 @@ type BackendProposalDTO struct {
 type BackendProposalPaginationDTO struct {
 	Limit      int    `json:"limit"`
 	HasMore    bool   `json:"hasMore"`
-	NextCursor string `json:"nextCursor,omitempty"`
+	NextCursor string `json:"nextCursor"`
 }
 
 type BackendProposalsDTO struct {
-	Status     string                       `json:"status"`
-	Message    string                       `json:"message,omitempty"`
-	Proposals  []BackendProposalDTO         `json:"proposals"`
-	Pagination BackendProposalPaginationDTO `json:"pagination"`
+	DecisionRecorded bool                         `json:"decisionRecorded,omitempty"`
+	PendingCount     int                          `json:"pendingCount"`
+	NextExpiryAt     string                       `json:"nextExpiryAt"`
+	Status           string                       `json:"status"`
+	Message          string                       `json:"message,omitempty"`
+	Proposals        []BackendProposalDTO         `json:"proposals"`
+	Pagination       BackendProposalPaginationDTO `json:"pagination"`
 }
 type BackendProposalPageInput struct {
 	Cursor string `json:"cursor"`
@@ -812,7 +818,13 @@ func (a *App) DecideBackendProposal(input BackendProposalDecisionInput) (Backend
 		result.Message = sanitizeBackendError(err)
 		return result, nil
 	}
-	return a.fetchBackendProposals(ctx, cfg, token, ""), nil
+	result := a.fetchBackendProposals(ctx, cfg, token, "")
+	result.DecisionRecorded = true
+	if result.Status != "ok" {
+		result.Status = "error"
+		result.Message = "Decision recorded. The queue could not be refreshed; refresh it before another decision."
+	}
+	return result, nil
 }
 
 func (a *App) fetchBackendProposals(ctx context.Context, cfg backendSyncConfig, token, cursor string) BackendProposalsDTO {
@@ -838,8 +850,10 @@ func (a *App) fetchBackendProposals(ctx context.Context, cfg backendSyncConfig, 
 		proposals = append(proposals, backendProposalDTO(record))
 	}
 	return BackendProposalsDTO{
-		Status:    "ok",
-		Proposals: proposals,
+		Status:       "ok",
+		PendingCount: response.PendingCount,
+		NextExpiryAt: response.NextExpiryAt,
+		Proposals:    proposals,
 		Pagination: BackendProposalPaginationDTO{
 			Limit:      response.Pagination.Limit,
 			HasMore:    response.Pagination.HasMore,
@@ -850,6 +864,7 @@ func (a *App) fetchBackendProposals(ctx context.Context, cfg backendSyncConfig, 
 
 func backendProposalDTO(record backendProposalRecord) BackendProposalDTO {
 	dto := BackendProposalDTO{
+		ExpiresAt:     record.ExpiresAt.UTC().Format(time.RFC3339Nano),
 		ProposalID:    record.ProposalID,
 		Action:        record.ActionID,
 		Status:        record.Status,

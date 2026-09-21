@@ -1,6 +1,6 @@
 import { PageHeader } from "../components/AppShell";
 import { ScreenTabPanel, ScreenTabs, type ScreenTab } from "../components/ScreenTabs";
-import { usePendingApprovalsCount } from "../state/approvals";
+import { usePendingApprovalsCount } from "../state/approvalQueue";
 import { ApprovalsScreen } from "./ApprovalsScreen";
 import { CalendarScreen } from "./CalendarScreen";
 import { TasksScreen } from "./TasksScreen";

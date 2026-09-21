@@ -1,37 +1,32 @@
-// Requests that arrived through a share link (ADR-0030).
-//
-// This is a separate surface from synced assistant proposals on purpose.
-// Approving one is not a yes/no: the visitor asked for a window and the owner
-// answers with an exact block inside it, which the backend re-checks. The
-// generic proposal controls cannot express that, so they are not reused here.
+import { defaultSlot, type VisitorRequest } from "../data/visitorRequests";
 
-import { useCallback, useEffect, useState } from "react";
-import {
-  decideVisitorRequest,
-  defaultSlot,
-  loadVisitorRequests,
-  type VisitorRequest,
-  type VisitorRequestsData,
-} from "../data/visitorRequests";
+import { useVisitorRequests } from "../state/visitorRequests";
 
-function VisitorRequestCard({
-  request,
-  busy,
-  onDecide,
-}: {
-  request: VisitorRequest;
-  busy: boolean;
-  onDecide: (
-    request: VisitorRequest,
-    decision: "approved" | "rejected",
-    slot: { start: string; end: string },
-  ) => void;
-}) {
-  const initial = defaultSlot(request);
-  const [start, setStart] = useState(initial.start);
-  const [end, setEnd] = useState(initial.end);
-  const startId = `visitor-start-${request.proposalId}`;
-  const endId = `visitor-end-${request.proposalId}`;
+import { useApprovalQueue } from "../state/approvalQueue";
+
+import { reviewIsPending } from "../data/reviewQueue";
+
+import { civilCandidates, localZone, selectedCivilInstant } from "../utils/civilTime";
+
+export function VisitorRequestCard({ request }: { request: VisitorRequest }) {
+  const queue = useVisitorRequests();
+
+  const { now } = useApprovalQueue();
+
+  const slot = queue.drafts[request.proposalId] ?? defaultSlot(request);
+
+  const startAt = selectedCivilInstant(slot.start, slot.startAt);
+
+  const endAt = selectedCivilInstant(slot.end, slot.endAt);
+
+  const valid =
+    Boolean(startAt && endAt) &&
+    Date.parse(endAt) > Date.parse(startAt) &&
+    Date.parse(startAt) >= Date.parse(request.windowStartAt) &&
+    Date.parse(endAt) <= Date.parse(request.windowEndAt);
+
+  const busy =
+    queue.busyId !== null || queue.data.status !== "ok" || !reviewIsPending(request, now);
 
   return (
     <article className="proposal-card" data-origin="visitor">
@@ -50,7 +45,7 @@ function VisitorRequestCard({
         {request.durationLabel && <small>For {request.durationLabel}.</small>}
       </p>
 
-      {request.message && <p className="visitor-message">&ldquo;{request.message}&rdquo;</p>}
+      {request.message && <p className="visitor-message">“{request.message}”</p>}
 
       {request.beyondHorizonNote && (
         <p className="diff-note" role="note">
@@ -58,32 +53,70 @@ function VisitorRequestCard({
         </p>
       )}
 
+      <p className="proposal-meta">Choose a block in {localZone()}.</p>
+
       <div className="visitor-slot">
-        <div className="visitor-slot-field">
-          <label htmlFor={startId}>Block starts</label>
-          <input
-            id={startId}
-            type="datetime-local"
-            value={start}
-            min={request.windowStartLocal}
-            max={request.windowEndLocal}
-            disabled={busy}
-            onChange={(event) => setStart(event.target.value)}
-          />
-        </div>
-        <div className="visitor-slot-field">
-          <label htmlFor={endId}>Block ends</label>
-          <input
-            id={endId}
-            type="datetime-local"
-            value={end}
-            min={request.windowStartLocal}
-            max={request.windowEndLocal}
-            disabled={busy}
-            onChange={(event) => setEnd(event.target.value)}
-          />
-        </div>
+        {(["start", "end"] as const).map((field) => {
+          const id = `visitor-${field}-${request.proposalId}`;
+
+          const candidates = civilCandidates(slot[field]);
+
+          const selected = field === "start" ? startAt : endAt;
+
+          return (
+            <div className="visitor-slot-field" key={field}>
+              <label htmlFor={id}>{field === "start" ? "Block starts" : "Block ends"}</label>
+
+              <input
+                id={id}
+                type="datetime-local"
+                value={slot[field]}
+                disabled={busy}
+                onChange={(event) =>
+                  queue.setDraft(request, {
+                    [field]: event.target.value,
+                    [`${field}At`]: undefined,
+                  })
+                }
+              />
+
+              {candidates.length > 1 && (
+                <>
+                  <label htmlFor={`${id}-occurrence`}>
+                    {field === "start" ? "Start clock occurrence" : "End clock occurrence"}
+                  </label>
+                  <select
+                    id={`${id}-occurrence`}
+                    value={selected}
+                    disabled={busy}
+                    onChange={(event) =>
+                      queue.setDraft(request, { [`${field}At`]: event.target.value })
+                    }
+                  >
+                    <option value="">Choose an occurrence</option>
+                    {candidates.map((candidate) => (
+                      <option key={candidate.instant} value={candidate.instant}>
+                        {candidate.label}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
+
+              {slot[field] && candidates.length === 0 && (
+                <small role="alert">This time does not exist in {localZone()}.</small>
+              )}
+            </div>
+          );
+        })}
       </div>
+
+      {!valid && (
+        <p className="diff-note">
+          Choose an end after the start, within the requested window. Select the clock occurrence
+          when a time repeats.
+        </p>
+      )}
 
       <p className="proposal-disclosure">{request.approvalDisclosure}</p>
 
@@ -91,19 +124,21 @@ function VisitorRequestCard({
         <button
           className="button primary compact"
           type="button"
-          disabled={busy || !request.decisionToken}
-          onClick={() => onDecide(request, "approved", { start, end })}
+          disabled={busy || !valid}
+          onClick={() => void queue.decide(request, "approved", slot)}
         >
-          {busy ? "Recording..." : "Accept this block"}
+          {queue.busyId === request.proposalId ? "Recording..." : "Accept this block"}
         </button>
+
         <button
-          className="button ghost compact"
+          className="button secondary compact"
           type="button"
-          disabled={busy || !request.decisionToken}
-          onClick={() => onDecide(request, "rejected", { start, end })}
+          disabled={busy}
+          onClick={() => void queue.decide(request, "rejected", slot)}
         >
           Decline
         </button>
+
         <small>
           {request.createdLabel}, {request.expiresLabel}
         </small>
@@ -113,51 +148,11 @@ function VisitorRequestCard({
 }
 
 export function VisitorRequestsPanel() {
-  const [data, setData] = useState<VisitorRequestsData>({ status: "off", requests: [] });
-  const [busyId, setBusyId] = useState<string | null>(null);
-  const [announcement, setAnnouncement] = useState("");
+  const queue = useVisitorRequests();
 
-  const refresh = useCallback(() => {
-    let current = true;
-    void loadVisitorRequests().then((loaded) => {
-      if (current) setData(loaded);
-    });
-    return () => {
-      current = false;
-    };
-  }, []);
+  const { now } = useApprovalQueue();
 
-  useEffect(() => refresh(), [refresh]);
-
-  // Omit, don't disable: with the portal off there is nothing here to explain.
-  if (data.status === "off") return null;
-
-  const onDecide = (
-    request: VisitorRequest,
-    decision: "approved" | "rejected",
-    slot: { start: string; end: string },
-  ) => {
-    if (!request.decisionToken) return;
-    setBusyId(request.proposalId);
-    void decideVisitorRequest({
-      proposalId: request.proposalId,
-      decision,
-      token: request.decisionToken,
-      ...(decision === "approved" ? { startLocal: slot.start, endLocal: slot.end } : {}),
-    }).then((result) => {
-      setBusyId(null);
-      if (result.status === "ok") {
-        setData(result);
-        setAnnouncement(
-          decision === "approved"
-            ? "Accepted. They will see the exact time you chose."
-            : "Declined. They are told only that the time did not work.",
-        );
-        return;
-      }
-      setAnnouncement(result.message ?? "The decision could not be recorded.");
-    });
-  };
+  if (queue.ready && queue.data.status === "off") return null;
 
   return (
     <section className="panel visitor-requests-panel" aria-labelledby="visitor-requests-title">
@@ -166,31 +161,47 @@ export function VisitorRequestsPanel() {
           <p className="section-kicker">From your share links</p>
           <h2 id="visitor-requests-title">Time requests</h2>
         </div>
+        <a href="#/plan/approvals">Review all approvals</a>
       </div>
 
-      {data.status === "error" && (
+      <p>
+        {!queue.ready
+          ? "Loading time requests..."
+          : `${queue.data.pendingCount} pending time requests`}
+      </p>
+
+      {(queue.decisionError || queue.data.status === "error") && (
         <p className="diff-note" role="alert">
-          {data.message ?? "Could not load requests from your links."}
+          {queue.decisionError || queue.data.message}
+          <button className="text-button" type="button" onClick={queue.refresh}>
+            Refresh requests
+          </button>
         </p>
       )}
 
-      {data.status === "ok" && data.requests.length === 0 && (
-        <p className="diff-note">No one has asked for a time yet.</p>
-      )}
-
       <div className="proposal-list">
-        {data.requests.map((request) => (
-          <VisitorRequestCard
-            key={request.proposalId}
-            request={request}
-            busy={busyId === request.proposalId}
-            onDecide={onDecide}
-          />
-        ))}
+        {queue.data.requests
+          .filter((request) => reviewIsPending(request, now))
+          .map((request) => (
+            <VisitorRequestCard request={request} key={request.proposalId} />
+          ))}
       </div>
 
-      <p role="status" aria-live="polite" className="sr-only">
-        {announcement}
+      {queue.loadOlderError && <p role="alert">{queue.loadOlderError}</p>}
+
+      {queue.data.pagination.hasMore && (
+        <button
+          className="button secondary compact"
+          type="button"
+          disabled={queue.loading || queue.loadingOlder || queue.busyId !== null}
+          onClick={() => void queue.loadOlder()}
+        >
+          Load more time requests
+        </button>
+      )}
+
+      <p role="status" className="sr-only">
+        {queue.announcement}
       </p>
     </section>
   );

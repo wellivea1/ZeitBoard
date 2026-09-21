@@ -3,7 +3,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { HomeScreen } from "./HomeScreen";
 import { overviewUnavailable } from "../data/overview";
 
-vi.mock("../state/approvals", () => ({ usePendingApprovalsCount: () => 0 }));
+vi.mock("../state/approvalQueue", () => ({
+  useApprovalQueue: () => ({ pendingCount: 0, ready: true, incomplete: false }),
+}));
 afterEach(() => {
   delete (globalThis as { go?: unknown }).go;
 });

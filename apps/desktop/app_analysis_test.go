@@ -200,3 +200,35 @@ func TestAnalysisInvalidatesOnCorrectionAndNeverServesAnOldForecast(t *testing.T
 		t.Fatal("correction returned stale forecast")
 	}
 }
+
+func TestPlanningAnchorCannotReplaceLiveAnalysisOrRescheduleItsWorker(t *testing.T) {
+	a := newTestApp(t)
+	now := time.Date(2026, 9, 21, 12, 17, 1, 0, time.UTC)
+	a.nowFn = func() time.Time { return now }
+	seedAnalysisEvidence(t, a, now, now.Add(-time.Hour))
+	counter := &countedLocalEstimator{}
+	a.analysisEstimator = counter
+	a.startLocalAnalysis()
+	t.Cleanup(a.stopLocalAnalysis)
+	live := waitAnalysis(t, a, func(v *storage.SleepAnalysis) bool { return v.AsOf.Equal(now.Truncate(time.Minute)) })
+	for range 3 {
+		if _, _, err := a.localEstimateForPlanningSnapshot(context.Background(), now.Truncate(localProposalTTL)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	input, err := a.store.ReadSleepAnalysisInput(context.Background())
+	if err != nil || input.Cached == nil || input.Cached.Estimate.ID != live.Estimate.ID || !input.Cached.ValidUntil.Equal(live.ValidUntil) {
+		t.Fatal("planning replaced the current background snapshot")
+	}
+	before := counter.calls.Load()
+	if _, err := a.GetOverview(); err != nil {
+		t.Fatal(err)
+	}
+	if counter.calls.Load() != before {
+		t.Fatal("Overview had to repair planning's historical snapshot")
+	}
+	run, found, err := (storage.SleepAnalysisJournal{Store: a.store}).LastCompleted(context.Background())
+	if err != nil || !found || !run.StartedAt.Equal(now) {
+		t.Fatal("planning changed the background journal/deadline")
+	}
+}
