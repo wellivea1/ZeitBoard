@@ -53,11 +53,17 @@ if (existsSync(secondaryScreens)) {
 
 const homePath = join(frontend, "screens", "HomeScreen.tsx");
 const home = readFileSync(homePath, "utf8");
-for (const required of ["CycleStrip", "OutlookPanel", "overview-surface", "overview-facts"]) {
+// Home is one screen: the current state with the one-tap actions, one
+// timeline, and what needs you. The 24-hour strip restated the timeline, and a
+// second one must not creep back; nor may the grid of metric cards it replaced.
+for (const required of ["OutlookPanel", "QuickLogBar", "home-now", "NeedsYou"]) {
   if (!home.includes(required)) fail(homePath, `Home must retain ${required}.`);
 }
+if (/CycleStrip|cycle-strip/.test(home)) {
+  fail(homePath, "Home draws one timeline; the 24-hour strip must not return.");
+}
 if (/metric-card/.test(home) || hasStaticClass(home, "panel")) {
-  fail(homePath, "Home is one surface; generic panels and metric cards are forbidden.");
+  fail(homePath, "Generic panels and metric cards are forbidden on Home.");
 }
 
 // Slice U-H: five primary destinations, then a utility group. The count is the

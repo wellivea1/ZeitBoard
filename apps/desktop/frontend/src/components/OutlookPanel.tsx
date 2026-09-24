@@ -1,13 +1,20 @@
 import { Icon } from "./Icon";
+import { isCommitmentConflict } from "../data/outlook";
 import type { OutlookData, OutlookSegment, Presence } from "../data/outlook";
 
-// The 48-72 hour operational view (ADR-0034).
+// The 48-72 hour operational view (ADR-0034), drawn as one timeline.
 //
-// The strip has three states, not two. The estimator's sleep and waking
+// The rhythm row has three states, not two. The estimator's sleep and waking
 // envelopes overlap on purpose, and an instant inside both is one where the
 // model does not know which side of the boundary it is on. Painting a sharp
 // line there would be a confident claim against a measured P90 onset error of
 // over five hours, so the uncertain band is drawn as a band.
+//
+// Reachable hours and fixed events used to be separate lists under the strip,
+// each restating days and times the strip already showed. They are rows on the
+// same axis now, so "can I ring the clinic while I'm awake" and "does Monday's
+// appointment land in sleep" are read off the picture rather than cross-checked
+// between three lists.
 
 const PRESENCE_LABELS: Record<Presence, string> = {
   awake: "Likely awake",
@@ -21,142 +28,140 @@ function percent(hours: number, horizonHours: number) {
   return `${Math.max(0, Math.min(100, (hours / horizonHours) * 100))}%`;
 }
 
+function horizonTitle(hours: number) {
+  const days = Math.round(hours / 24);
+  return days >= 2 ? `Next ${days} days` : `Next ${Math.round(hours)} hours`;
+}
+
+function segmentTitle(segment: OutlookSegment) {
+  return `${PRESENCE_LABELS[segment.presence]}${segment.observed ? " (recorded)" : ""}: ${
+    segment.dayLabel
+  } ${segment.rangeLabel}`;
+}
+
 function OutlookTimeline({ data }: { data: OutlookData }) {
+  const placedEvents = data.commitments.filter(
+    (commitment) => commitment.offsetHours !== undefined && commitment.durationHours !== undefined,
+  );
   return (
     <figure className="outlook-timeline">
-      <div className="outlook-track" aria-hidden="true">
-        {data.segments.map((segment) => (
-          <span
-            key={`${segment.presence}-${segment.offsetHours}`}
-            className="outlook-band"
-            data-presence={segment.presence}
-            data-observed={segment.observed || undefined}
-            style={{
-              left: percent(segment.offsetHours, data.horizonHours),
-              width: percent(segment.durationHours, data.horizonHours),
-            }}
-          />
-        ))}
-        {data.days.map((day) => (
-          <span
-            key={day.label}
-            className="outlook-day-mark"
-            style={{ left: percent(day.offsetHours, data.horizonHours) }}
-          />
-        ))}
+      <div className="outlook-grid">
+        <span className="outlook-row-label">Rhythm</span>
+        <div className="outlook-track" aria-hidden="true">
+          {data.segments.map((segment) => (
+            <span
+              key={`${segment.presence}-${segment.offsetHours}`}
+              className="outlook-band"
+              data-presence={segment.presence}
+              data-observed={segment.observed || undefined}
+              title={segmentTitle(segment)}
+              style={{
+                left: percent(segment.offsetHours, data.horizonHours),
+                width: percent(segment.durationHours, data.horizonHours),
+              }}
+            />
+          ))}
+          {data.days.map((day) => (
+            <span
+              key={day.label}
+              className="outlook-day-mark"
+              style={{ left: percent(day.offsetHours, data.horizonHours) }}
+            />
+          ))}
+          <span className="outlook-now" title="Now" />
+        </div>
+
+        {data.officeWindows.length > 0 && (
+          <>
+            <span className="outlook-row-label" title={data.officeHoursLabel}>
+              Reachable
+            </span>
+            <div className="outlook-track outlook-track-thin" aria-hidden="true">
+              {data.officeWindows.map((window) => (
+                <span
+                  key={`${window.dayLabel}-${window.offsetHours}`}
+                  className="outlook-reach"
+                  data-status={window.status}
+                  title={`${window.dayLabel}, ${window.hoursLabel}. ${window.detail}`}
+                  style={{
+                    left: percent(window.offsetHours, data.horizonHours),
+                    width: percent(window.durationHours, data.horizonHours),
+                  }}
+                />
+              ))}
+            </div>
+          </>
+        )}
+
+        {placedEvents.length > 0 && (
+          <>
+            <span className="outlook-row-label">Events</span>
+            <div className="outlook-track outlook-track-events" aria-hidden="true">
+              {placedEvents.map((commitment) => (
+                <span
+                  key={`${commitment.title}-${commitment.offsetHours}`}
+                  className="outlook-event"
+                  data-conflict={isCommitmentConflict(commitment) || undefined}
+                  title={`${commitment.title}, ${commitment.whenLabel}${
+                    commitment.conflictLabel ? `. ${commitment.conflictLabel}` : ""
+                  }`}
+                  style={{
+                    left: percent(commitment.offsetHours ?? 0, data.horizonHours),
+                    width: percent(commitment.durationHours ?? 0, data.horizonHours),
+                  }}
+                />
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* The day labels live outside the tracks. Inside they were clipped by
+            the overflow that keeps the bands' rounded corners. */}
+        <span />
+        <div className="outlook-axis" aria-hidden="true">
+          <small className="outlook-axis-now">Now</small>
+          {data.days.map((day) => (
+            <small key={day.label} style={{ left: percent(day.offsetHours, data.horizonHours) }}>
+              {day.label}
+            </small>
+          ))}
+        </div>
       </div>
 
-      {/* The day labels live outside the track. Inside it they were clipped by
-          the overflow that keeps the bands' rounded corners, so the strip had
-          tick marks and nothing saying which day each one began. */}
-      <div className="outlook-axis" aria-hidden="true">
-        {data.days.map((day) => (
-          <small key={day.label} style={{ left: percent(day.offsetHours, data.horizonHours) }}>
-            {day.label}
-          </small>
-        ))}
+      {/* The picture carries the shape; this carries the same facts in words,
+          so a screen reader loses nothing and the drawing gives up nothing. */}
+      <div className="sr-only">
+        <ol aria-label="Predicted sleep and waking">
+          {data.segments.map((segment) => (
+            <li key={`text-${segment.presence}-${segment.offsetHours}`}>
+              {PRESENCE_LABELS[segment.presence]}
+              {segment.observed ? " (recorded)" : ""}, {segment.dayLabel} {segment.rangeLabel},
+              lasting {segment.durationLabel}.
+            </li>
+          ))}
+        </ol>
+        {data.officeWindows.length > 0 && (
+          <ol aria-label={data.officeHoursLabel}>
+            {data.officeWindows.map((window) => (
+              <li key={`text-${window.dayLabel}-${window.offsetHours}`}>
+                {window.dayLabel}, {window.hoursLabel}: {window.detail}
+              </li>
+            ))}
+          </ol>
+        )}
       </div>
-
-      {/* The strip carries the shape; this carries the same facts in words, so
-          a screen reader loses nothing and the drawing gives up nothing. */}
-      <ol className="sr-only">
-        {data.segments.map((segment) => (
-          <li key={`text-${segment.presence}-${segment.offsetHours}`}>
-            {PRESENCE_LABELS[segment.presence]}
-            {segment.observed ? " (recorded)" : ""}, {segment.dayLabel} {segment.rangeLabel},
-            lasting {segment.durationLabel}.
-          </li>
-        ))}
-      </ol>
 
       <figcaption className="outlook-legend">
         <span data-presence="awake">Awake</span>
         <span data-presence="uncertain">Uncertain</span>
         <span data-presence="asleep">Asleep</span>
+        {data.officeWindows.length > 0 && <span data-legend="reach">Reachable</span>}
+        {placedEvents.length > 0 && <span data-legend="event">Event</span>}
         <small>
-          {data.awakeLabel} awake, {data.uncertainLabel} the model will not call.
+          {data.awakeLabel} likely awake · {data.uncertainLabel} uncertain
         </small>
       </figcaption>
     </figure>
-  );
-}
-
-function OfficeList({ data }: { data: OutlookData }) {
-  if (data.officeWindows.length === 0) return null;
-  return (
-    <section className="outlook-office" aria-labelledby="outlook-office-title">
-      <div className="outlook-section-head">
-        <span className="overview-row-label">Reaching people</span>
-        <h4 id="outlook-office-title">Office hours</h4>
-        <small>{data.officeHoursLabel}</small>
-      </div>
-      <ul>
-        {data.officeWindows.map((window) => (
-          <li key={`${window.dayLabel}-${window.offsetHours}`} data-status={window.status}>
-            <span>
-              <strong>{window.dayLabel}</strong>
-              <em>{window.hoursLabel}</em>
-              {window.reachableLabel && <b>Awake {window.reachableLabel}</b>}
-              <small>{window.detail}</small>
-            </span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-function CommitmentList({ data }: { data: OutlookData }) {
-  if (data.commitments.length === 0) return null;
-  return (
-    <section className="outlook-commitments" aria-labelledby="outlook-commitments-title">
-      <div className="outlook-section-head">
-        <span className="overview-row-label">Already booked</span>
-        <h4 id="outlook-commitments-title">Fixed events</h4>
-      </div>
-      <ul>
-        {data.commitments.map((commitment) => (
-          <li
-            key={`${commitment.title}-${commitment.whenLabel}`}
-            data-conflict={commitment.conflict}
-          >
-            <span>
-              <strong>{commitment.title}</strong>
-              <em>{commitment.whenLabel}</em>
-              {commitment.conflictLabel && <small>{commitment.conflictLabel}</small>}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-function OpportunityList({ data }: { data: OutlookData }) {
-  if (data.opportunities.length === 0) return null;
-  return (
-    <section className="outlook-opportunities" aria-labelledby="outlook-opportunities-title">
-      <div className="outlook-section-head">
-        <span className="overview-row-label">Suggestions only</span>
-        <h4 id="outlook-opportunities-title">Where your tasks could go</h4>
-        <small>Nothing here is scheduled; every placement needs your approval.</small>
-        <a href="#/plan/approvals">Review proposals</a>
-      </div>
-      <ul>
-        {data.opportunities.map((opportunity) => (
-          <li key={opportunity.taskId} data-placed={opportunity.whenLabel ? "yes" : "no"}>
-            <span>
-              <strong>{opportunity.title}</strong>
-              {opportunity.whenLabel ? (
-                <em>{opportunity.whenLabel}</em>
-              ) : (
-                <small>{opportunity.unplacedLabel}</small>
-              )}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </section>
   );
 }
 
@@ -172,19 +177,12 @@ function OutlookNotice({ data }: { data: OutlookData }) {
             : "Not enough history to look ahead yet"}
         </strong>
         <small>{data.withheldMessage ?? data.refusal?.message ?? data.freshness.explanation}</small>
-        {data.status === "withheld" && (
-          <small>
-            A forecast is anchored to where you are in your cycle right now. Without a recent record
-            there is nothing to anchor it to, so office windows drawn over it would be arithmetic
-            rather than a plan.
-          </small>
-        )}
       </span>
       <a
         className="button secondary"
         href={data.status === "unavailable" ? "#/data-sources" : "#/log/sleep"}
       >
-        {data.status === "unavailable" ? "Check Data Sources" : "Add sleep entry"}
+        {data.status === "unavailable" ? "Check Data Sources" : "Log sleep"}
       </a>
     </div>
   );
@@ -194,28 +192,11 @@ export function OutlookPanel({ data }: { data: OutlookData }) {
   return (
     <section className="outlook" aria-labelledby="outlook-title">
       <header className="outlook-head">
-        <div>
-          <span className="overview-row-label">{data.horizonLabel}</span>
-          <h3 id="outlook-title">What the next three days look like</h3>
-        </div>
-        {data.status === "available" && data.nextSleepLabel && (
-          <p className="outlook-next">
-            <Icon name="moon" />
-            <span>
-              <strong>Next sleep</strong>
-              <small>{data.nextSleepLabel}</small>
-            </span>
-          </p>
-        )}
+        <h3 id="outlook-title">{horizonTitle(data.horizonHours)}</h3>
+        <a href="#/rhythm">Full rhythm</a>
       </header>
-
       {data.status === "available" ? (
-        <>
-          <OutlookTimeline data={data} />
-          <OfficeList data={data} />
-          <CommitmentList data={data} />
-          <OpportunityList data={data} />
-        </>
+        <OutlookTimeline data={data} />
       ) : (
         <OutlookNotice data={data} />
       )}

@@ -216,6 +216,8 @@ export const outlookFixture: OutlookData = {
       whenLabel: "Sample day 4, 9:30 AM to 10:15 AM",
       conflict: "inside_predicted_sleep",
       conflictLabel: "Falls entirely inside predicted sleep",
+      offsetHours: 63.5,
+      durationHours: 0.75,
     },
   ],
   opportunities: [

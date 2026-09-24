@@ -57,17 +57,23 @@ describe("desktop navigation", () => {
     );
   });
 
-  it("renders Overview as one rhythm-first surface instead of metric cards", () => {
+  // Home answers three questions once each: the current state, when the next
+  // sleep is likely, and what needs you. It used to answer them several times
+  // over across nine sections and two timelines.
+  it("renders Home as one screen of state, timeline and what needs you", () => {
     const { container } = render(<App />);
 
     expect(screen.getByRole("heading", { name: "Likely awake" })).toBeVisible();
-    expect(screen.getByText("Sample date · Jun 16")).toBeVisible();
-    expect(screen.getByText("Today in your cycle")).toBeVisible();
-    expect(screen.getByText("Today, 10:15 PM to 1:27 AM")).toBeVisible();
-    expect(screen.getByText("+48 min per cycle")).toBeVisible();
-    expect(container.querySelectorAll(".overview-surface")).toHaveLength(1);
-    expect(container.querySelector(".overview-surface .panel")).toBeNull();
+    expect(screen.getByText("Next sleep")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Next 3 days" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Needs you" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Coming up" })).toBeVisible();
+    // One timeline: the 24-hour strip that restated it is gone.
+    expect(container.querySelectorAll(".outlook-timeline")).toHaveLength(1);
+    expect(container.querySelector(".cycle-strip")).toBeNull();
     expect(container.querySelector(".metric-card")).toBeNull();
+    // The event that lands in predicted sleep is named where it is listed.
+    expect(screen.getByText("Sample appointment")).toBeVisible();
   });
 
   it("renders approval proposals with explicit actions", async () => {
