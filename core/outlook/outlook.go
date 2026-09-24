@@ -388,11 +388,19 @@ func buildSegments(in Input, now, end time.Time, zoneID string) []Segment {
 	// this the next several hours — the most useful part of the whole view —
 	// would read "unknown".
 	//
-	// Its end is the earliest plausible onset, which is where the next sleep
-	// envelope opens. Beyond that the envelopes take over and say "uncertain",
-	// which is correct: from then on the model will not say whether sleep has
-	// started.
-	if len(sleep) > 0 {
+	// Every later night gets an uncertain onset band from the overlap of the
+	// previous waking envelope with its sleep envelope: [c-u, c+u] around the
+	// predicted onset c. This span has to give the first night the same band,
+	// so it runs to c+u rather than stopping where the sleep envelope opens.
+	// Stopping there drew the first — most consulted — night starting sharply
+	// at its earliest plausible onset, as if that were the prediction.
+	if bandEnd, ok := firstOnsetBandEnd(in.Estimate, now); ok {
+		if bandEnd.After(now) {
+			wake = append(wake, span{start: now, stop: bandEnd})
+		}
+	} else if len(sleep) > 0 {
+		// Without the cycle length the band cannot be recovered, so fall back to
+		// the envelope's opening: conservative about when sleep may begin.
 		earliestOnset := sleep[0].start
 		for _, interval := range sleep {
 			if interval.start.Before(earliestOnset) {
@@ -463,6 +471,34 @@ func mergeAdjacent(segments []Segment) []Segment {
 		merged = append(merged, segment)
 	}
 	return merged
+}
+
+// firstOnsetBandEnd returns c+u for the night whose sleep envelope has not yet
+// closed. The estimator pairs each sleep envelope [c-u, c+d+u+du] with the
+// waking envelope that follows it, [c+d-u-du, c+P+u], so the waking envelope's
+// end less the sleep envelope's start is P+2u, and u follows from the fitted
+// period P. That recovers the onset half-width without widening the contract
+// between the estimator and this view.
+func firstOnsetBandEnd(estimate domain.PhaseEstimate, now time.Time) (time.Time, bool) {
+	period := estimate.ObservedCycleLength
+	if period <= 0 {
+		return time.Time{}, false
+	}
+	for index, window := range estimate.PredictedSleepWindows {
+		if !window.Interval.End.UTC.After(now) {
+			continue
+		}
+		if index >= len(estimate.PredictedWakingWindows) {
+			return time.Time{}, false
+		}
+		waking := estimate.PredictedWakingWindows[index].Interval
+		halfWidth := (waking.End.UTC.Sub(window.Interval.Start.UTC) - period) / 2
+		if halfWidth <= 0 {
+			return time.Time{}, false
+		}
+		return window.Interval.Start.UTC.Add(2 * halfWidth), true
+	}
+	return time.Time{}, false
 }
 
 type span struct {

@@ -904,3 +904,81 @@ func TestSuggestedPlacementsDoNotOverlap(t *testing.T) {
 		t.Fatalf("only %d tasks were placed, so overlap was not exercised", len(placed))
 	}
 }
+
+// TestTheFirstNightHasAnOnsetBandLikeEveryOther. Later nights get an uncertain
+// onset band from the overlap of the previous waking envelope with their sleep
+// envelope. The first night has no previous waking envelope, and was drawn
+// starting sharply at its earliest plausible onset — the first and most
+// consulted night was the one presented with false precision.
+func TestTheFirstNightHasAnOnsetBandLikeEveryOther(t *testing.T) {
+	f := newFixture(t)
+	view := build(t, f.input())
+
+	firstAsleep := -1
+	for i, segment := range view.Segments {
+		if segment.Presence == outlook.PresenceAsleep {
+			firstAsleep = i
+			break
+		}
+	}
+	if firstAsleep < 1 {
+		t.Fatalf("no sleep after a waking stretch: %v", presences(view.Segments))
+	}
+	before := view.Segments[firstAsleep-1]
+	if before.Presence != outlook.PresenceUncertain {
+		t.Fatalf("the first night begins sharply after %q: %v", before.Presence, presences(view.Segments))
+	}
+
+	// The band is centred on the predicted onset: about as wide as the next
+	// night's, which is a little wider because uncertainty grows with distance.
+	var next time.Duration
+	for i := firstAsleep + 1; i < len(view.Segments); i++ {
+		if view.Segments[i].Presence == outlook.PresenceAsleep && view.Segments[i-1].Presence == outlook.PresenceUncertain {
+			next = view.Segments[i-1].Duration()
+			break
+		}
+	}
+	first := before.Duration()
+	if next == 0 {
+		t.Fatal("no second night with an onset band to compare against")
+	}
+	if first > next || first < next/3 {
+		t.Errorf("first onset band %s is out of proportion to the next night's %s", first, next)
+	}
+}
+
+// TestInsideTheOnsetBandTheCurrentStateIsUncertain. If the first night's onset
+// band has already opened, the honest answer about right now is "uncertain",
+// not "asleep".
+func TestInsideTheOnsetBandTheCurrentStateIsUncertain(t *testing.T) {
+	f := newFixture(t)
+	probe := build(t, f.input())
+	var bandStart time.Time
+	for i, segment := range probe.Segments {
+		if segment.Presence == outlook.PresenceAsleep && i > 0 {
+			bandStart = probe.Segments[i-1].Interval.Start.UTC
+			break
+		}
+	}
+	if bandStart.IsZero() {
+		t.Fatal("fixture has no first onset band")
+	}
+
+	in := f.input()
+	in.Now = bandStart.Add(20 * time.Minute)
+	in.Freshness = freshness.Default().Assess(freshness.Inputs{
+		Now: in.Now, NewestEvidence: f.now.Add(-2 * time.Hour), LatestSleepEnd: f.now.Add(-2 * time.Hour),
+	})
+	view := build(t, in)
+	if len(view.Segments) == 0 || view.Segments[0].Presence != outlook.PresenceUncertain {
+		t.Fatalf("inside the onset band the view opens with %v", presences(view.Segments))
+	}
+}
+
+func presences(segments []outlook.Segment) []string {
+	out := make([]string, 0, len(segments))
+	for _, segment := range segments {
+		out = append(out, string(segment.Presence))
+	}
+	return out
+}
