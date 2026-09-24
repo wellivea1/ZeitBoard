@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState, type CSSProperties } from "react";
 import type { CalendarData, CalendarDay, CalendarEventSegment } from "../data/calendar";
 import { TimeProbe } from "./TimeProbe";
-import { assignEventLanes } from "./calendarLayout";
+import { assignEventLanes, rhythmSegments } from "./calendarLayout";
 import { civilProbeLabel, useTimeProbe } from "./timeProbeLogic";
 
 type PositionedStyle = CSSProperties & {
@@ -21,6 +21,25 @@ function positionStyle(startMinute: number, endMinute: number): PositionedStyle 
     "--calendar-width": percent(Math.max(endMinute - startMinute, 15)),
   };
 }
+
+/** Minutes since local midnight in `zoneId`, or undefined for an unknown zone. */
+function minuteOfDay(zoneId: string, now = new Date()) {
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: zoneId,
+      hour: "numeric",
+      minute: "numeric",
+      hourCycle: "h23",
+    }).formatToParts(now);
+    const value = (type: string) => Number(parts.find((part) => part.type === type)?.value);
+    const minutes = value("hour") * 60 + value("minute");
+    return Number.isFinite(minutes) ? minutes : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+const hourMarks = ["12 AM", "6 AM", "12 PM", "6 PM", "12 AM"];
 
 function CalendarDayTrack({
   day,
@@ -51,12 +70,18 @@ function CalendarDayTrack({
   );
   const probe = useTimeProbe(resolveProbe);
   const trackStyle = { "--calendar-lanes": layout.count } as PositionedStyle;
+  const segments = useMemo(() => rhythmSegments(day.predictions), [day.predictions]);
+  const now = day.isToday ? minuteOfDay(zoneId) : undefined;
 
   return (
     <section className="calendar-day-row" data-today={day.isToday || undefined}>
       <header className="calendar-day-label">
         <time dateTime={day.civilDate}>{day.label}</time>
-        <small>{day.events.length} fixed</small>
+        <small>
+          {day.events.length === 0
+            ? "No events"
+            : `${day.events.length} ${day.events.length === 1 ? "event" : "events"}`}
+        </small>
       </header>
       <div
         className="calendar-day-track has-time-probe"
@@ -64,20 +89,32 @@ function CalendarDayTrack({
         onPointerMove={probe.onPointerMove}
         onPointerLeave={probe.onPointerLeave}
       >
-        {day.predictions.map((band) => (
+        {segments.map((segment) => (
           <span
             className="calendar-prediction-band"
-            data-kind={band.kind}
-            data-confidence={band.confidence}
-            style={positionStyle(band.startMinute, band.endMinute)}
-            title={`${band.title}: ${band.startLabel} to ${band.endLabel}`}
-            key={band.segmentId}
-          >
-            <span className="sr-only">
-              {band.title}, {band.startLabel} to {band.endLabel}
-            </span>
-          </span>
+            data-state={segment.state}
+            aria-hidden="true"
+            style={
+              {
+                "--calendar-left": percent(segment.startMinute),
+                "--calendar-width": percent(segment.endMinute - segment.startMinute),
+              } as PositionedStyle
+            }
+            key={`${segment.state}-${segment.startMinute}`}
+          />
         ))}
+        {day.predictions.length > 0 && (
+          <ul className="sr-only">
+            {day.predictions.map((band) => (
+              <li key={band.segmentId}>
+                {band.title}, {band.startLabel} to {band.endLabel}
+              </li>
+            ))}
+          </ul>
+        )}
+        {now !== undefined && (
+          <span className="calendar-now" aria-hidden="true" style={{ left: percent(now) }} />
+        )}
         {day.events.map((event) => {
           const style = {
             ...positionStyle(event.startMinute, event.endMinute),
@@ -100,7 +137,6 @@ function CalendarDayTrack({
             </button>
           );
         })}
-        {day.events.length === 0 && <span className="calendar-empty-track">No fixed events</span>}
         <TimeProbe probeRef={probe.probeRef} labelRef={probe.labelRef} />
       </div>
     </section>
@@ -112,7 +148,7 @@ function EventInspector({ event, onClose }: { event: CalendarEventSegment; onClo
     <section className="calendar-event-inspector" aria-live="polite" aria-label="Selected event">
       <div>
         <p className="section-kicker">
-          {event.ownership === "app_owned" ? "ZeitBoard placement" : "Read-only import"}
+          {event.ownership === "app_owned" ? "Accepted time" : "From your calendar"}
         </p>
         <h2>{event.title}</h2>
       </div>
@@ -151,9 +187,9 @@ function CalendarEventTable({ data }: { data: CalendarData }) {
   const rows = data.days.flatMap((day) => day.events.map((event) => ({ day, event })));
   return (
     <details className="calendar-list-disclosure">
-      <summary>Event list ({rows.length} visible segments)</summary>
+      <summary>List these events ({rows.length})</summary>
       {rows.length === 0 ? (
-        <p>No fixed events occur in this range.</p>
+        <p>No events in these days.</p>
       ) : (
         <div className="calendar-table-scroll">
           <table>
@@ -163,7 +199,7 @@ function CalendarEventTable({ data }: { data: CalendarData }) {
                 <th scope="col">Event</th>
                 <th scope="col">Time</th>
                 <th scope="col">Source</th>
-                <th scope="col">Effect</th>
+                <th scope="col">Shows as</th>
               </tr>
             </thead>
             <tbody>
@@ -173,7 +209,7 @@ function CalendarEventTable({ data }: { data: CalendarData }) {
                   <td>{event.title}</td>
                   <td>{event.allDay ? "All day" : `${event.startLabel} to ${event.endLabel}`}</td>
                   <td>{event.sourceLabel}</td>
-                  <td>{event.busy ? "Blocks placement" : "Available"}</td>
+                  <td>{event.busy ? "Busy" : "Free"}</td>
                 </tr>
               ))}
             </tbody>
@@ -193,26 +229,15 @@ export function CalendarBoard({ data }: { data: CalendarData }) {
     : null;
   return (
     <section className="calendar-board" aria-label="Calendar events and rhythm forecast">
-      <header className="calendar-board-header">
-        <div>
-          <p className="section-kicker">Civil-time board</p>
-          <h2>
-            {data.startCivilDate} to {data.endCivilDate}
-          </h2>
-        </div>
-        <div className="calendar-legend" aria-label="Calendar legend">
-          <span data-kind="predicted_sleep">Predicted sleep</span>
-          <span data-kind="predicted_wake">Predicted waking</span>
-          <span data-kind="imported">Imported fixed</span>
-          <span data-kind="app_owned">ZeitBoard placement</span>
-        </div>
-      </header>
       <div className="calendar-hour-axis" aria-hidden="true">
-        <span>12 AM</span>
-        <span>6 AM</span>
-        <span>12 PM</span>
-        <span>6 PM</span>
-        <span>12 AM</span>
+        <span />
+        <div>
+          {hourMarks.map((label, index) => (
+            <span style={{ left: `${index * 25}%` }} key={`${label}-${index}`}>
+              {label}
+            </span>
+          ))}
+        </div>
       </div>
       <div className="calendar-day-list">
         {data.days.map((day) => (
@@ -227,6 +252,20 @@ export function CalendarBoard({ data }: { data: CalendarData }) {
       {visibleSelection && (
         <EventInspector event={visibleSelection} onClose={() => setSelected(null)} />
       )}
+      <footer className="calendar-board-foot">
+        <div className="calendar-legend" aria-label="Calendar legend">
+          <span data-state="awake">Likely awake</span>
+          <span data-state="uncertain">Uncertain</span>
+          <span data-state="asleep">Likely asleep</span>
+          <span data-kind="imported">Calendar event</span>
+          <span data-kind="app_owned">Accepted time</span>
+        </div>
+        {data.status !== "estimated" && (
+          <p>
+            No sleep prediction to draw yet. <a href="#/log/sleep">Log sleep</a> to see it here.
+          </p>
+        )}
+      </footer>
       <CalendarEventTable data={data} />
     </section>
   );

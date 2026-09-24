@@ -840,6 +840,6 @@ function calendarFixture(query: CalendarQuery): CalendarData {
     updatedLabel: "Sample preview",
     sources: [source],
     days,
-    warnings: ["Sample mode does not read or write calendar files."],
+    warnings: [],
   };
 }

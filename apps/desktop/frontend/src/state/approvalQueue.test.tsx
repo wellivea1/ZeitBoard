@@ -6,7 +6,6 @@ import { ApprovalsProvider } from "./approvals";
 import { BackendProposalsProvider } from "./backendProposals";
 import { VisitorRequestsProvider, useVisitorRequests } from "./visitorRequests";
 import { ApprovalQueueProvider, useApprovalQueue } from "./approvalQueue";
-import { VisitorRequestsPanel } from "../components/VisitorRequestsPanel";
 import { DecisionHistory, DecisionQueue } from "../components/DecisionQueue";
 import { emptyVisitorRequests, type VisitorRequest } from "../data/visitorRequests";
 import { notifyReviewQueueChanged } from "../data/reviewQueue";
@@ -106,7 +105,7 @@ describe("shared approval queue", () => {
     render(
       <Providers>
         <Probe />
-        <VisitorRequestsPanel />
+        <DecisionQueue />
       </Providers>,
     );
     await screen.findByText("13 ready");
@@ -118,13 +117,15 @@ describe("shared approval queue", () => {
     expect(await screen.findByText("9 ready")).toBeVisible();
     expect(screen.queryByText("Sam asked for a time")).toBeNull();
   });
-  it("shares a request draft across the calendar and the decision queue", async () => {
+  // Switching Plan to Calendar and back unmounts the decision list; a draft
+  // block for a request lives in the provider, not the card.
+  it("keeps a request draft when the decision list is remounted", async () => {
     function Views() {
-      const [calendar, setCalendar] = useState(true);
+      const [shown, setShown] = useState(true);
       return (
         <>
-          <button onClick={() => setCalendar(!calendar)}>Switch view</button>
-          {calendar ? <VisitorRequestsPanel /> : <DecisionQueue />}
+          <button onClick={() => setShown(!shown)}>Switch view</button>
+          {shown && <DecisionQueue />}
         </>
       );
     }
@@ -137,6 +138,8 @@ describe("shared approval queue", () => {
     const start = await screen.findByLabelText("Block starts");
     const draft = civilMinute("2099-01-01T13:00:00Z");
     fireEvent.change(start, { target: { value: draft } });
+    fireEvent.click(screen.getByRole("button", { name: "Switch view" }));
+    expect(screen.queryByLabelText("Block starts")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Switch view" }));
     expect(screen.getByLabelText("Block starts")).toHaveValue(draft);
   });
@@ -187,7 +190,7 @@ describe("shared approval queue", () => {
     install({ GetBackendVisitorRequestPage: page });
     render(
       <Providers>
-        <VisitorRequestsPanel />
+        <DecisionQueue />
         <More />
       </Providers>,
     );
@@ -214,7 +217,7 @@ describe("shared approval queue", () => {
     install({ GetBackendVisitorRequests: list });
     render(
       <Providers>
-        <VisitorRequestsPanel />
+        <DecisionQueue />
       </Providers>,
     );
     await act(async () => {});

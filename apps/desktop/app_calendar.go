@@ -19,6 +19,7 @@ import (
 
 	calendarcore "non24.app/core/calendar"
 	"non24.app/core/domain"
+	"non24.app/core/outlook"
 )
 
 const (
@@ -310,6 +311,11 @@ func (a *App) getCalendar(ctx context.Context, input CalendarQueryInput) (Calend
 		visible := visibleBySource[source.SourceID]
 		coverageStart := source.CoverageStartAt.In(location)
 		coverageEnd := source.CoverageEndAt.In(location)
+		coverageLabel := coverageStart.Format("Jan 2, 2006") + " to " + coverageEnd.Format("Jan 2, 2006")
+		if !source.ReadOnly {
+			// The placements calendar has no range; it holds whatever is accepted.
+			coverageLabel = "Times you accept in Plan"
+		}
 		dto := CalendarSourceDTO{
 			SourceID:      source.SourceID,
 			Label:         source.Label,
@@ -317,7 +323,7 @@ func (a *App) getCalendar(ctx context.Context, input CalendarQueryInput) (Calend
 			ReadOnly:      source.ReadOnly,
 			Endpoint:      source.Endpoint,
 			VisibleEvents: visible,
-			CoverageLabel: coverageStart.Format("Jan 2, 2006") + " to " + coverageEnd.Format("Jan 2, 2006"),
+			CoverageLabel: coverageLabel,
 			CoverageStart: source.CoverageStartAt.UTC().Format(time.RFC3339),
 			CoverageEnd:   source.CoverageEndAt.UTC().Format(time.RFC3339),
 		}
@@ -362,8 +368,25 @@ func (a *App) getCalendar(ctx context.Context, input CalendarQueryInput) (Calend
 				}
 			}
 		}
+		waking := estimate.Estimate.PredictedWakingWindows
+		// The stretch under way has no estimator window; draw it as the Home
+		// outlook does, or today reads blank until the night's onset band.
+		if stop, ok := outlook.CurrentWakingEnd(estimate.Estimate, now); ok {
+			from, fromErr := domain.NewZonedInstant(now, zoneID)
+			to, toErr := domain.NewZonedInstant(stop, zoneID)
+			if fromErr == nil && toErr == nil {
+				current := domain.AvailabilityWindow{
+					ID:         domain.AvailabilityWindowID(string(estimate.Estimate.ID) + "_current_waking"),
+					Kind:       domain.AvailabilityPredictedWake,
+					Interval:   domain.TimeRange{Start: from, End: to},
+					Confidence: estimate.Estimate.Confidence,
+					EstimateID: estimate.Estimate.ID,
+				}
+				waking = append([]domain.AvailabilityWindow{current}, waking...)
+			}
+		}
 		appendWindows(estimate.Estimate.PredictedSleepWindows, "predicted_sleep", "Predicted sleep window")
-		appendWindows(estimate.Estimate.PredictedWakingWindows, "predicted_wake", "Predicted waking window")
+		appendWindows(waking, "predicted_wake", "Predicted waking window")
 	}
 	for index := range dayDTOs {
 		sort.Slice(dayDTOs[index].Events, func(i, j int) bool {
@@ -680,7 +703,7 @@ func calendarImportDTO(set calendarcore.EventSet, imported bool) CalendarImportD
 		CoverageLabel:    source.CoverageStartAt.Local().Format("Jan 2, 2006") + " to " + source.CoverageEndAt.Local().Format("Jan 2, 2006"),
 		PreviewTruncated: len(set.Events) > previewCount,
 		Events:           preview,
-		Message:          fmt.Sprintf("%s %d calendar events; %d block scheduling.", verb, len(set.Events), busyCount),
+		Message:          fmt.Sprintf("%s %d events, %d of them busy.", verb, len(set.Events), busyCount),
 	}
 }
 

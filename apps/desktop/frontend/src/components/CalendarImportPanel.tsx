@@ -41,7 +41,7 @@ function ImportReport({ report }: { report: CalendarImportReport }) {
             </div>
           ))}
           {(report.previewTruncated || report.events.length > 6) && (
-            <small>Preview is abbreviated; commit uses the complete source.</small>
+            <small>Showing the first few. Importing uses the whole calendar.</small>
           )}
         </div>
       )}
@@ -72,7 +72,7 @@ function CalendarFileForm({
   return (
     <div className="calendar-import-form" role="tabpanel">
       <label>
-        <span>iCalendar file</span>
+        <span>Calendar file (.ics)</span>
         <input
           type="file"
           accept=".ics,text/calendar"
@@ -80,7 +80,7 @@ function CalendarFileForm({
           onChange={onChoose}
         />
       </label>
-      {file && <small>{file.fileName} - contents stay in this desktop process</small>}
+      {file && <small>{file.fileName} · stays on this device</small>}
       <div className="calendar-import-actions">
         <button
           className="button secondary compact"
@@ -88,7 +88,7 @@ function CalendarFileForm({
           disabled={!available || !file || busy}
           onClick={() => onRun(false)}
         >
-          {busy ? "Reading..." : "Preview"}
+          {busy ? "Reading…" : "Preview"}
         </button>
         <button
           className="button primary compact"
@@ -98,7 +98,7 @@ function CalendarFileForm({
           }
           onClick={() => onRun(true)}
         >
-          Import snapshot
+          Import
         </button>
       </div>
     </div>
@@ -141,7 +141,7 @@ function CalDAVForm({
         />
       </label>
       <label>
-        <span>Local label</span>
+        <span>Name</span>
         <input
           value={fields.label}
           placeholder="Personal calendar"
@@ -160,7 +160,7 @@ function CalDAVForm({
           />
         </label>
         <label>
-          <span>One-shot password</span>
+          <span>Password</span>
           <input
             type="password"
             autoComplete="current-password"
@@ -170,7 +170,7 @@ function CalDAVForm({
           />
         </label>
       </div>
-      <small>The password is cleared after each request and is never stored.</small>
+      <small>Used for this request only, then cleared. It is never stored.</small>
       <div className="calendar-import-actions">
         <button
           className="button secondary compact"
@@ -178,7 +178,7 @@ function CalDAVForm({
           disabled={!canRequest}
           onClick={() => onRun(false)}
         >
-          {busy ? "Connecting..." : "Preview REPORT"}
+          {busy ? "Connecting…" : "Preview"}
         </button>
         <button
           className="button primary compact"
@@ -186,7 +186,7 @@ function CalDAVForm({
           disabled={!canRequest || !report || report.imported || report.kind !== "caldav"}
           onClick={() => onRun(true)}
         >
-          Fetch and import
+          Import
         </button>
       </div>
     </div>
@@ -309,10 +309,7 @@ export function CalendarImportPanel({
 
   return (
     <section className="calendar-import-panel" aria-labelledby="calendar-import-title">
-      <header>
-        <p className="section-kicker">Read-only adapters</p>
-        <h2 id="calendar-import-title">Add calendar source</h2>
-      </header>
+      <h3 id="calendar-import-title">Add a calendar</h3>
       <div className="calendar-import-tabs" role="tablist" aria-label="Calendar source type">
         <button
           type="button"
@@ -320,7 +317,7 @@ export function CalendarImportPanel({
           aria-selected={mode === "file"}
           onClick={() => selectMode("file")}
         >
-          ICS file
+          Calendar file
         </button>
         <button
           type="button"
@@ -328,12 +325,12 @@ export function CalendarImportPanel({
           aria-selected={mode === "caldav"}
           onClick={() => selectMode("caldav")}
         >
-          CalDAV
+          CalDAV account
         </button>
       </div>
 
       {!available && (
-        <p className="inline-notice">Import controls require the ZeitBoard desktop service.</p>
+        <p className="inline-notice">Adding a calendar needs the ZeitBoard desktop app.</p>
       )}
 
       {mode === "file" ? (

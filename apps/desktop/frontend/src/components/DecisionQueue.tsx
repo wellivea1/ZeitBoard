@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { ProposalCard } from "./ProposalCard";
 import { TaskConflictCard, TaskConflictHistoryCard } from "./TaskConflictCard";
-import { VisitorRequestCard } from "./VisitorRequestsPanel";
+import { VisitorRequestCard } from "./VisitorRequestCard";
 import { useApprovals } from "../state/approvals";
 import { useBackendProposals } from "../state/backendProposals";
 import { useVisitorRequests } from "../state/visitorRequests";

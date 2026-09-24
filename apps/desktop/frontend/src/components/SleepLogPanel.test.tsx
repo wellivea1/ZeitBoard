@@ -83,6 +83,6 @@ describe("SleepLogPanel", () => {
     expect(screen.getByRole("heading", { name: "Add sleep entry" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Sleep log" })).toBeVisible();
     // Source configuration stayed on Data Sources.
-    expect(screen.queryByRole("heading", { name: "Source status" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Connected" })).toBeNull();
   });
 });

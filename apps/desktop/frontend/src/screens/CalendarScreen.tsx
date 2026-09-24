@@ -1,9 +1,7 @@
-import { VisitorRequestsPanel } from "../components/VisitorRequestsPanel";
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader, PlaceholderNotice } from "../components/AppShell";
 import { CalendarBoard } from "../components/CalendarBoard";
-import { CalendarImportPanel } from "../components/CalendarImportPanel";
-import { CalendarSourcesPanel } from "../components/CalendarSourcesPanel";
+import { Icon } from "../components/Icon";
 import {
   addCivilDays,
   calendarDataChangedEvent,
@@ -11,13 +9,36 @@ import {
   exportOwnedCalendar,
   hasLocalCalendarService,
   loadCalendar,
-  notifyCalendarDataChanged,
   todayCivilDate,
   type CalendarData,
 } from "../data/calendar";
 
 const calendarZone = "America/New_York";
 const visibleDays = 5;
+
+// Plan > Calendar is the board: fixed events against predicted sleep, five days
+// at a time. Adding and removing calendars moved to Data Sources with the other
+// inputs. Beside the board they took a 272-pixel column of import forms and
+// squeezed the board until the hours it exists to show were clipped.
+
+function dayLabel(civilDate: string) {
+  return new Date(`${civilDate}T12:00:00`).toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function rangeTitle(startDate: string) {
+  return `${dayLabel(startDate)} – ${dayLabel(addCivilDays(startDate, visibleDays - 1))}`;
+}
+
+function sourceSummary(data: CalendarData) {
+  const events = new Set(data.days.flatMap((day) => day.events.map((event) => event.eventId)));
+  const count = `${events.size} ${events.size === 1 ? "event" : "events"}`;
+  if (data.sources.length === 0) return `${count} · no calendars added yet`;
+  return `${count} · from ${data.sources.map((source) => source.label).join(", ")}`;
+}
 
 export function CalendarScreen({ embedded }: { embedded?: boolean } = {}) {
   const localServicePresent = hasLocalCalendarService();
@@ -69,11 +90,6 @@ export function CalendarScreen({ embedded }: { embedded?: boolean } = {}) {
     };
   }, [revision, startDate]);
 
-  const onDataChanged = () => {
-    setAnnouncement("Calendar source updated.");
-    notifyCalendarDataChanged();
-  };
-
   const exportCalendar = () => {
     if (source !== "local" || exporting) return;
     setExporting(true);
@@ -83,7 +99,7 @@ export function CalendarScreen({ embedded }: { embedded?: boolean } = {}) {
         setExporting(false);
         const downloaded = downloadCalendarExport(result);
         setAnnouncement(
-          `${result.eventCount} ZeitBoard ${result.eventCount === 1 ? "placement" : "placements"} exported${downloaded ? ` to ${result.fileName}` : "."}`,
+          `${result.eventCount} accepted ${result.eventCount === 1 ? "time" : "times"} exported${downloaded ? ` to ${result.fileName}` : "."}`,
         );
       },
       (reason: unknown) => {
@@ -93,20 +109,52 @@ export function CalendarScreen({ embedded }: { embedded?: boolean } = {}) {
     );
   };
 
+  const today = todayCivilDate(calendarZone);
+
   return (
     <>
-      <PageHeader
-        title="Calendar"
-        description="Plan against real fixed events while keeping uncertain sleep and waking windows visually distinct."
-        actions={
-          <div className="calendar-page-actions">
-            <div className="calendar-date-controls" aria-label="Calendar date range">
+      {!embedded && <PageHeader title="Calendar" />}
+      {source === "fixture" && (
+        <PlaceholderNotice>
+          Sample calendar. Nothing is read from your files or written anywhere.
+        </PlaceholderNotice>
+      )}
+      <section className="calendar-view" aria-labelledby="calendar-range-title">
+        <header className="calendar-view-head">
+          <div>
+            <h2 id="calendar-range-title">{rangeTitle(startDate)}</h2>
+            {data && (
+              <p>
+                {sourceSummary(data)} · <a href="#/data-sources">Manage calendars</a>
+              </p>
+            )}
+          </div>
+          <div className="calendar-toolbar">
+            <div className="calendar-date-controls" role="group" aria-label="Calendar dates">
+              <button
+                className="button ghost compact calendar-step"
+                data-direction="back"
+                type="button"
+                aria-label={`Previous ${visibleDays} days`}
+                onClick={() => setStartDate((current) => addCivilDays(current, -visibleDays))}
+              >
+                <Icon name="chevron" />
+              </button>
               <button
                 className="button ghost compact"
                 type="button"
-                onClick={() => setStartDate((current) => addCivilDays(current, -visibleDays))}
+                disabled={startDate === today}
+                onClick={() => setStartDate(today)}
               >
-                Previous
+                Today
+              </button>
+              <button
+                className="button ghost compact calendar-step"
+                type="button"
+                aria-label={`Next ${visibleDays} days`}
+                onClick={() => setStartDate((current) => addCivilDays(current, visibleDays))}
+              >
+                <Icon name="chevron" />
               </button>
               <input
                 type="date"
@@ -116,91 +164,46 @@ export function CalendarScreen({ embedded }: { embedded?: boolean } = {}) {
                   if (event.currentTarget.value) setStartDate(event.currentTarget.value);
                 }}
               />
-              <button
-                className="button ghost compact"
-                type="button"
-                onClick={() => setStartDate(todayCivilDate(calendarZone))}
-              >
-                Today
-              </button>
-              <button
-                className="button ghost compact"
-                type="button"
-                onClick={() => setStartDate((current) => addCivilDays(current, visibleDays))}
-              >
-                Next
-              </button>
             </div>
             <button
-              className="button secondary compact"
+              className="button ghost compact"
               type="button"
               disabled={source !== "local" || exporting}
+              title="Save the times you accepted as an .ics file for another calendar app"
               onClick={exportCalendar}
             >
-              {exporting ? "Exporting..." : "Export placements (.ics)"}
+              {exporting ? "Exporting…" : "Export accepted times"}
             </button>
           </div>
-        }
-        level={embedded ? "panel" : "page"}
-      />
+        </header>
 
-      {source === "fixture" && (
-        <PlaceholderNotice>
-          Sample mode is clearly isolated: it does not read files, contact CalDAV, or write
-          placements.
-        </PlaceholderNotice>
-      )}
-      {error && (
-        <p className="calendar-error" role="alert">
-          {error}
+        {error && (
+          <p className="calendar-error" role="alert">
+            {error}
+          </p>
+        )}
+        <p className="sr-only" role="status" aria-live="polite">
+          {announcement}
         </p>
-      )}
-      <p className="sr-only" role="status" aria-live="polite">
-        {announcement}
-      </p>
-
-      <section className="calendar-workspace">
-        <aside className="calendar-control-rail" aria-label="Calendar sources and import controls">
-          <CalendarSourcesPanel
-            sources={data?.sources ?? []}
-            available={source === "local"}
-            onChanged={onDataChanged}
-          />
-          <CalendarImportPanel
-            available={source === "local"}
-            zoneId={data?.zoneId ?? calendarZone}
-            onChanged={onDataChanged}
-          />
-        </aside>
-
-        <div className="calendar-main-column">
-          {data && (
-            <div className="calendar-status-line">
-              <span className="sync-dot" data-mode={source} aria-hidden="true" />
-              <strong>{source === "local" ? "Local calendar" : "Sample preview"}</strong>
-              <span>{data.message}</span>
-              <small>{data.updatedLabel}</small>
-            </div>
-          )}
-          {data?.warnings.map((warning) => (
-            <p className="calendar-warning" key={warning}>
-              {warning}
-            </p>
-          ))}
-          {loading && !data ? (
-            <div className="calendar-loading" role="status">
-              Loading calendar...
-            </div>
-          ) : data ? (
+        {data?.warnings.map((warning) => (
+          <p className="calendar-warning" key={warning}>
+            {warning}
+          </p>
+        ))}
+        {loading && !data ? (
+          <div className="calendar-loading" role="status">
+            Loading calendar…
+          </div>
+        ) : data ? (
+          <div className="calendar-board-scroll">
             <CalendarBoard data={data} />
-          ) : (
-            <div className="calendar-loading" role="status">
-              Calendar unavailable.
-            </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="calendar-loading" role="status">
+            Calendar unavailable.
+          </div>
+        )}
       </section>
-      <VisitorRequestsPanel />
     </>
   );
 }

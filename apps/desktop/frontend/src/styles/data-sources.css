@@ -115,8 +115,7 @@
 }
 
 .sleep-import-panel {
-  padding-left: var(--space-6);
-  border-left: 1px solid var(--line);
+  border-top: 1px solid var(--line);
 }
 
 .sleep-entry-fields {
@@ -534,12 +533,6 @@
 
   .sleep-entry-panel {
     padding-right: 0;
-  }
-
-  .sleep-import-panel {
-    padding-left: 0;
-    border-top: 1px solid var(--line);
-    border-left: 0;
   }
 }
 

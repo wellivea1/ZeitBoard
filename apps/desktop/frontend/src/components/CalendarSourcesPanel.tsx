@@ -1,25 +1,33 @@
 import { useState } from "react";
+import { CalendarImportPanel } from "./CalendarImportPanel";
 import { removeCalendarSource, type CalendarSource } from "../data/calendar";
 
+// The calendars ZeitBoard reads, and adding another. This used to sit in a
+// narrow column beside the calendar board; it is set up once and rarely
+// touched, so it lives in Data Sources with the other inputs.
+
 const kindLabels: Record<CalendarSource["kind"], string> = {
-  ics: "ICS snapshot",
-  caldav: "CalDAV snapshot",
-  zeitboard: "App-owned",
+  ics: "Calendar file",
+  caldav: "CalDAV account",
+  zeitboard: "ZeitBoard",
 };
 
 export function CalendarSourcesPanel({
   sources,
   available,
+  zoneId = "America/New_York",
   onChanged,
 }: {
   sources: CalendarSource[];
   available: boolean;
+  zoneId?: string;
   onChanged: () => void;
 }) {
   const [removing, setRemoving] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [adding, setAdding] = useState(false);
   const sourceBeingRemoved = sources.find((source) => source.sourceId === removing);
 
   const remove = (sourceId: string) => {
@@ -42,31 +50,44 @@ export function CalendarSourcesPanel({
 
   return (
     <section className="calendar-sources-panel" aria-labelledby="calendar-sources-title">
-      <header>
-        <p className="section-kicker">Local ownership</p>
-        <h2 id="calendar-sources-title">Calendar sources</h2>
-      </header>
+      <div className="data-source-section-heading">
+        <h2 id="calendar-sources-title">Calendars</h2>
+        {available && (
+          <button
+            className="button secondary compact"
+            type="button"
+            aria-expanded={adding}
+            onClick={() => setAdding((current) => !current)}
+          >
+            {adding ? "Done adding" : "Add a calendar"}
+          </button>
+        )}
+      </div>
+      <p className="calendar-ownership-note">
+        Suggested times stay clear of busy events. ZeitBoard never changes your calendars; the times
+        you accept are kept in ZeitBoard placements.
+      </p>
       {sources.length === 0 ? (
-        <p className="calendar-source-empty">No local calendar sources. Importing is optional.</p>
+        <p className="calendar-source-empty">No calendars yet. Adding one is optional.</p>
       ) : (
-        <div className="calendar-source-list">
+        <ul className="calendar-source-list">
           {sources.map((source) => (
-            <div className="calendar-source-row" data-kind={source.kind} key={source.sourceId}>
+            <li className="calendar-source-row" data-kind={source.kind} key={source.sourceId}>
               <span className="calendar-source-mark" aria-hidden="true" />
               <div>
                 <strong>{source.label}</strong>
                 <span>
-                  {kindLabels[source.kind]} - {source.visibleEvents} visible
+                  {kindLabels[source.kind]} · {source.coverageLabel}
                 </span>
-                <small>{source.coverageLabel}</small>
                 {source.endpoint && (
                   <small className="calendar-source-endpoint">{source.endpoint}</small>
                 )}
               </div>
               {source.readOnly && available && (
                 <button
-                  className="text-button danger"
+                  className="button ghost compact"
                   type="button"
+                  aria-label={`Remove ${source.label}`}
                   onClick={() => {
                     setRemoving(source.sourceId);
                     setConfirmation("");
@@ -76,14 +97,16 @@ export function CalendarSourcesPanel({
                   Remove
                 </button>
               )}
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
       {sourceBeingRemoved && (
         <div className="calendar-remove-confirmation">
           <label>
-            <span>Type REMOVE to erase this imported snapshot</span>
+            <span>
+              Type REMOVE to erase {sourceBeingRemoved.label} and its events from ZeitBoard
+            </span>
             <input
               value={confirmation}
               autoComplete="off"
@@ -109,7 +132,7 @@ export function CalendarSourcesPanel({
               disabled={busy || confirmation !== "REMOVE"}
               onClick={() => remove(sourceBeingRemoved.sourceId)}
             >
-              {busy ? "Erasing..." : "Erase source"}
+              {busy ? "Erasing…" : "Erase calendar"}
             </button>
           </div>
         </div>
@@ -119,9 +142,9 @@ export function CalendarSourcesPanel({
           {error}
         </p>
       )}
-      <p className="calendar-ownership-note">
-        Imported events are immutable. Approvals write only to ZeitBoard placements.
-      </p>
+      {adding && (
+        <CalendarImportPanel available={available} zoneId={zoneId} onChanged={onChanged} />
+      )}
     </section>
   );
 }

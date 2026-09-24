@@ -81,6 +81,18 @@ if (!shell.includes("utilityNavigation") || !shell.includes('className="utility-
   fail(shellPath, "The utility group must stay separate from the primary destinations.");
 }
 
+// Legacy hashes stay routable. They are written down in the verification
+// record and in whatever the user bookmarked; a dead link is a worse answer
+// than a redirect.
+const legacyStart = shell.indexOf("const legacyRoutes");
+const legacyBlock =
+  legacyStart < 0 ? "" : shell.slice(legacyStart, shell.indexOf("};", legacyStart));
+for (const legacy of ["overview", "calendar", "tasks", "approvals", "medications", "timeline"]) {
+  if (!legacyBlock.includes(`${legacy}: { screen:`)) {
+    fail(shellPath, `The legacy #/${legacy} route must keep redirecting.`);
+  }
+}
+
 // Plan and Log are tab hosts, not new monoliths: they compose the screens they
 // absorbed rather than copying them.
 for (const [name, required] of [

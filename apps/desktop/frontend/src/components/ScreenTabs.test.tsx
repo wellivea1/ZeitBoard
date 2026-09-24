@@ -26,6 +26,19 @@ describe("readRouteFromHash", () => {
     expect(readRouteFromHash("#/log")).toMatchObject({ screen: "log", logTab: "sleep" });
   });
 
+  // The consolidation removed destinations that are still written down — in
+  // the verification record and in whatever the user bookmarked.
+  it.each([
+    ["#/overview", { screen: "home" }],
+    ["#/timeline", { screen: "rhythm" }],
+    ["#/calendar", { screen: "plan", planTab: "calendar" }],
+    ["#/tasks", { screen: "plan", planTab: "tasks" }],
+    ["#/approvals", { screen: "plan", planTab: "tasks" }],
+    ["#/medications", { screen: "log", logTab: "medications" }],
+  ])("keeps the legacy route %s working", (hash, expected) => {
+    expect(readRouteFromHash(hash)).toMatchObject(expected);
+  });
+
   it("keeps the utility destinations addressable", () => {
     expect(readRouteFromHash("#/data-sources")).toMatchObject({ screen: "data-sources" });
     expect(readRouteFromHash("#/settings")).toMatchObject({ screen: "settings" });

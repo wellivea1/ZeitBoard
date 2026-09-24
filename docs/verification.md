@@ -852,7 +852,8 @@ every legacy hash still redirecting.
 **Routing** (`readRouteFromHash`): unknown paths fall back to Home; a screen and its tab are read
 from the address; an unrecognised second segment falls back to the first tab; `#/overview`,
 `#/timeline`, `#/calendar`, `#/tasks`, `#/approvals` and `#/medications` all land on the right
-screen _and_ the right tab; the utility destinations stay addressable.
+screen _and_ the right tab (`#/approvals`, and `#/plan/approvals`, on Plan › Tasks, where decisions
+now are); the utility destinations stay addressable.
 
 **Tabs** (`ScreenTabs`): one tab stop for the whole group; arrow keys move and
 wrap; Home and End jump to the ends; other keys are ignored; the pending count

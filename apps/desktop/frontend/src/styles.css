@@ -2708,9 +2708,6 @@ a.button {
   align-items: center;
   gap: var(--space-3);
 }
-.visitor-requests-panel {
-  padding: var(--space-4) var(--space-5);
-}
 
 .visitor-message {
   margin: 0 0 0.6rem;

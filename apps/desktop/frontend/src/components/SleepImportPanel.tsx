@@ -226,16 +226,11 @@ export function SleepImportPanel({ onImported }: { onImported: () => Promise<voi
   return (
     <section className="sleep-import-panel" aria-labelledby="sleep-import-title">
       <div className="data-source-section-heading sleep-import-heading">
-        <div>
-          <p className="section-kicker">Local file import</p>
-          <h2 id="sleep-import-title">Import a v1 observation set</h2>
-        </div>
-        <span className="data-source-scope">Local only</span>
+        <h2 id="sleep-import-title">Import sleep records</h2>
       </div>
       <p className="sleep-import-intro">
-        Choose contract-shaped JSON or canonical CSV. Preview is read-only; import reruns every
-        check in one append-only transaction. Invalid rows block the whole file, and exact source
-        record duplicates remain visible in the report.
+        A JSON or CSV file in ZeitBoard&apos;s format. You see what it contains before anything is
+        saved, and a file with any invalid row is not imported.
       </p>
       <div className="sleep-import-controls">
         {nativeImportAvailable ? (
@@ -245,11 +240,11 @@ export function SleepImportPanel({ onImported }: { onImported: () => Promise<voi
             disabled={busy}
             onClick={() => void chooseNativeFile()}
           >
-            Choose observation file
+            Choose a file
           </button>
         ) : (
           <label className="sleep-import-picker">
-            Observation file
+            Sleep records file
             <input
               type="file"
               accept=".json,.csv,application/json,text/csv"
@@ -268,7 +263,7 @@ export function SleepImportPanel({ onImported }: { onImported: () => Promise<voi
           disabled={busy}
           onClick={downloadTranscriptionTemplate}
         >
-          Download transcription template
+          Download CSV template
         </button>
         <button
           className="button primary"
@@ -276,13 +271,17 @@ export function SleepImportPanel({ onImported }: { onImported: () => Promise<voi
           disabled={busy || !selection || !report?.canImport}
           onClick={() => void commit()}
         >
-          {busy ? "Checking..." : `Import ${report?.readyRows ?? 0} ready rows`}
+          {busy
+            ? "Checking…"
+            : report
+              ? `Import ${report.readyRows} ${report.readyRows === 1 ? "record" : "records"}`
+              : "Import"}
         </button>
       </div>
       <p className="sleep-import-note">
-        Handwritten charts require owner-reviewed CSV transcription and the local converter. Each
-        dated row stays needs_review until marked confirmed_sleep or confirmed_no_observation.
-        ZeitBoard does not claim to recognize handwriting or silently infer missing times.
+        Paper charts: copy them into the CSV template. Each row stays <code>needs_review</code>{" "}
+        until you set it to <code>confirmed_sleep</code> or <code>confirmed_no_observation</code>.
+        ZeitBoard does not read handwriting or fill in missing times.
       </p>
       {error && (
         <p className="form-error" role="alert">

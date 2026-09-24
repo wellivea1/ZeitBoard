@@ -53,14 +53,14 @@ describe("SleepImportPanel", () => {
     const onImported = vi.fn(async () => undefined);
     render(<SleepImportPanel onImported={onImported} />);
 
-    const importButton = screen.getByRole("button", { name: "Import 0 ready rows" });
+    const importButton = screen.getByRole("button", { name: "Import" });
     expect(importButton).toBeDisabled();
     const file = new File(["{}"], "owner-history.json", { type: "application/json" });
     Object.defineProperty(file, "text", { value: async () => "{}" });
-    fireEvent.change(screen.getByLabelText("Observation file"), { target: { files: [file] } });
+    fireEvent.change(screen.getByLabelText("Sleep records file"), { target: { files: [file] } });
 
     expect(await screen.findByText(readyReport.message)).toBeVisible();
-    const enabledButton = screen.getByRole("button", { name: "Import 1 ready rows" });
+    const enabledButton = screen.getByRole("button", { name: "Import 1 record" });
     expect(enabledButton).toBeEnabled();
     expect(preview).toHaveBeenCalledWith({ fileName: "owner-history.json", contents: "{}" });
 
@@ -83,9 +83,9 @@ describe("SleepImportPanel", () => {
 
     const file = new File(["{}"], "owner-history.json", { type: "application/json" });
     Object.defineProperty(file, "text", { value: async () => "{}" });
-    fireEvent.change(screen.getByLabelText("Observation file"), { target: { files: [file] } });
+    fireEvent.change(screen.getByLabelText("Sleep records file"), { target: { files: [file] } });
 
-    const importButton = await screen.findByRole("button", { name: "Import 1 ready rows" });
+    const importButton = await screen.findByRole("button", { name: "Import 1 record" });
     fireEvent.click(importButton);
     await waitFor(() => expect(commit).toHaveBeenCalledTimes(1));
     expect(importButton).toBeDisabled();
@@ -113,7 +113,7 @@ describe("SleepImportPanel", () => {
 
     const file = new File(["{}"], "owner-history.json", { type: "application/json" });
     Object.defineProperty(file, "text", { value: async () => "{}" });
-    fireEvent.change(screen.getByLabelText("Observation file"), { target: { files: [file] } });
+    fireEvent.change(screen.getByLabelText("Sleep records file"), { target: { files: [file] } });
 
     fireEvent.click(await screen.findByText("Review all 101 row results"));
     expect(screen.getByText("Rows 1-100 of 101")).toBeVisible();
@@ -150,12 +150,12 @@ describe("SleepImportPanel", () => {
     const onImported = vi.fn(async () => undefined);
     render(<SleepImportPanel onImported={onImported} />);
 
-    expect(screen.queryByLabelText("Observation file")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Choose observation file" }));
+    expect(screen.queryByLabelText("Sleep records file")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Choose a file" }));
     expect(await screen.findByText(readyReport.message)).toBeVisible();
     expect(nativePreview).toHaveBeenCalledWith();
 
-    fireEvent.click(screen.getByRole("button", { name: "Import 1 ready rows" }));
+    fireEvent.click(screen.getByRole("button", { name: "Import 1 record" }));
     await waitFor(() =>
       expect(nativeCommit).toHaveBeenCalledWith({ importToken: "sleep_import_token" }),
     );

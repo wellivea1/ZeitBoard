@@ -46,6 +46,19 @@ export interface Route {
 const planTabs = new Set<PlanTab>(["tasks", "calendar"]);
 const logTabs = new Set<LogTab>(["sleep", "medications", "markers"]);
 
+// Routes that existed before the consolidation. They are still written down,
+// in the verification record and in whatever was bookmarked, and a dead link is
+// a worse answer than a redirect that costs one line each. Approvals became
+// part of Tasks, so its old address lands there.
+const legacyRoutes: Record<string, Partial<Route> & { screen: ScreenId }> = {
+  overview: { screen: "home" },
+  timeline: { screen: "rhythm" },
+  calendar: { screen: "plan", planTab: "calendar" },
+  tasks: { screen: "plan", planTab: "tasks" },
+  approvals: { screen: "plan", planTab: "tasks" },
+  medications: { screen: "log", logTab: "medications" },
+};
+
 // Plan opens on Tasks: it carries the pending count, so the badge on Plan and
 // the page it opens agree about what needs you.
 const defaultRoute: Route = { screen: "home", planTab: "tasks", logTab: "sleep" };
@@ -53,6 +66,9 @@ const defaultRoute: Route = { screen: "home", planTab: "tasks", logTab: "sleep" 
 export function readRouteFromHash(hash: string): Route {
   const path = hash.replace(/^#\/?/, "");
   const [head = "", second = ""] = path.split("/");
+
+  const legacy = legacyRoutes[head];
+  if (legacy) return { ...defaultRoute, ...legacy };
 
   if (!screenIds.has(head as ScreenId)) return defaultRoute;
   const screen = head as ScreenId;
