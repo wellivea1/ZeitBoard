@@ -414,3 +414,40 @@ constraint affordances and supported calendar write-back. Native lifecycle, actu
 wearable/device conditions, production TLS, independent portal review, clean-machine
 installation/signing and the private pilot remain unqualified. The full C0–C8 goal
 remains active; this is a partial C2 implementation, not project completion.
+
+### C2 task conflicts and a plan that does not overlap itself — 2026-09-24
+
+Continues the C2 increment above, which stopped mid-way when the Codex session reached its usage
+limit. The conflict retention and review code it left uncommitted is finished and verified; using
+the app against a synthetic data directory then found two planner defects that made the "reviewed
+batch semantics" in the C2 acceptance unsafe to build.
+
+**Task conflicts.** A downloaded task revision that conflicts with an unsent local edit is retained
+instead of aborting the sync page; only that task is held from upload and placement while it awaits
+review. Approvals shows a comparison card, and choosing a version creates a new revision and records
+the resolution in history. Two defects were fixed before committing: none of the new TypeScript met
+the repository's formatting check, so CI's web job would have failed; and each radio was wrapped in
+a label containing the whole detail list, which left Chromium with no usable accessible name
+("local", and nothing) — a failure jsdom did not reproduce. The card now shows only the fields that
+differ, with the rest stated once, because eight rows of mostly identical values buried the one or
+two a person has to choose between.
+
+**The planner suggested overlapping and already-started blocks.** With three open tasks it suggested
+all three for the same minute, because each task was placed as if it were the only one; accepting
+them all would have triple-booked that time. It also suggested, and accepted, a block that began
+eleven minutes earlier: the planning snapshot is pinned to the start of a 30-minute bucket so a
+proposal keeps its identity while it is read, and suggestions were allowed to start at the beginning
+of that bucket rather than its end. Suggestions now start when the bucket ends, each reserves its
+time for the next (`scheduling.Request. Reserved`, busy but never reported as "avoids a fixed
+event"), tasks are placed earliest-deadline-first so an open-ended task cannot take the only time
+before another task's deadline, and approving a block that has begun is refused. Home's outlook
+suggestions use the same reservation. Each regression test was checked to fail without its fix.
+
+**Development environment.** `wails dev` could not start: the watcher ran `npm --prefix frontend`
+from inside the frontend directory, and Vite was pinned to 34115, the port `wails dev` needs for
+browser access to the Go bindings. Both are fixed, so the real app can be driven from a browser
+against a disposable data directory, which is how the defects above were found.
+
+**Next C2 work:** reviewed batch semantics can now be built on a plan that does not overlap itself;
+supported calendar write-back and the remaining constraint affordances remain. Operational
+qualification is unchanged from the record above.
