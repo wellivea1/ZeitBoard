@@ -340,7 +340,7 @@
   color: var(--subtle);
   border-bottom: 1px solid var(--line);
   background: var(--panel-alt);
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;

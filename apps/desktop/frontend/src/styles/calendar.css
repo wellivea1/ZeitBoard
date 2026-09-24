@@ -407,7 +407,7 @@
   color: var(--subtle);
   background: var(--panel-alt);
   border-bottom: 1px solid var(--line);
-  font-size: 9px;
+  font-size: var(--type-micro);
   font-variant-numeric: tabular-nums;
 }
 
@@ -519,7 +519,7 @@
   flex: 1 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 
 .calendar-empty-track {

@@ -105,11 +105,17 @@
   --radius-control: 4px;
   --radius-card: 8px;
   --radius-overlay: 12px;
-  --type-label: 11px;
-  --type-body: 13px;
-  --type-body-strong: 15px;
-  --type-data: 18px;
-  --type-data-large: 22px;
+  /* Type scale. Body text used to be 13px with 10-11px labels (and some 8-9px
+     axis text): too small to read at a glance for someone who is tired, which
+     is when this app gets opened. Nothing renders below --type-micro. */
+  --type-micro: 11px;
+  --type-label: 12px;
+  --type-body: 14px;
+  --type-body-strong: 16px;
+  --type-section: 17px;
+  --type-data: 20px;
+  --type-data-large: 26px;
+  --type-display: 34px;
   --z-strip: 10;
   --z-rail: 20;
   --z-scrim: 90;
@@ -572,7 +578,7 @@ button {
 .brand small {
   margin-top: 4px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--type-label);
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -634,7 +640,7 @@ button {
   color: var(--confidence-medium-text);
   background: var(--confidence-medium-bg);
   border-radius: 999px;
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 850;
 }
 .nav-link svg {
@@ -679,14 +685,14 @@ button {
   gap: 3px;
 }
 .privacy-note strong {
-  font-size: 11px;
+  font-size: var(--type-label);
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 .privacy-note small {
   max-width: 145px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
   line-height: 1.4;
 }
 
@@ -723,11 +729,13 @@ button {
 }
 .eyebrow,
 .section-kicker {
-  margin-bottom: 7px;
-  color: var(--sage);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
+  margin-bottom: 6px;
+  /* Quiet by design: a label, not an accent. Fifty-odd sage, extra-bold,
+     widely tracked kickers were the loudest thing on most screens. */
+  color: var(--muted);
+  font-size: var(--type-micro);
+  font-weight: 700;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 .page-actions {
@@ -743,13 +751,13 @@ button {
   column-gap: 8px;
   align-items: center;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--type-label);
 }
 .status-cluster small {
   grid-column: 2;
   margin-top: 2px;
   color: var(--subtle);
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 .status-cluster > .button {
   grid-column: 3;
@@ -795,7 +803,7 @@ button {
   min-height: 23px;
   padding: 3px 9px;
   border-radius: 999px;
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 800;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -844,7 +852,7 @@ button {
   align-items: center;
   gap: 4px;
   color: var(--sage-dark);
-  font-size: 11px;
+  font-size: var(--type-label);
   font-weight: 700;
   text-decoration: none;
 }
@@ -859,7 +867,7 @@ button {
   background: transparent;
   border: 1px solid var(--line);
   border-radius: 4px;
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 700;
   letter-spacing: 0.03em;
 }
@@ -884,12 +892,12 @@ button {
 
 .button {
   min-height: 44px;
-  padding: 0 15px;
+  padding: 0 16px;
   border: 1px solid transparent;
   border-radius: 7px;
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 750;
+  font-size: var(--type-body);
+  font-weight: 650;
 }
 a.button {
   display: inline-flex;
@@ -907,6 +915,24 @@ a.button {
 .button.secondary {
   color: var(--button-secondary-text);
   background: var(--button-secondary-bg);
+  border-color: var(--button-secondary-border);
+}
+/* Secondary actions inside dense rows. Still well above the 24px minimum
+   target size; the full 44px is kept for primary actions. */
+.button.compact {
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: var(--type-label);
+}
+/* Quiet actions that should not compete with the content, such as a manual
+   refresh on a view that already refreshes itself. */
+.button.ghost {
+  color: var(--sage-dark);
+  background: transparent;
+  border-color: transparent;
+}
+.button.ghost:hover {
+  background: var(--chrome-hover);
   border-color: var(--button-secondary-border);
 }
 .button.secondary.danger-outline {
@@ -932,7 +958,7 @@ a.button {
   color: var(--muted);
   background: var(--sage-soft);
   border-left: 3px solid var(--sage);
-  font-size: 11px;
+  font-size: var(--type-label);
   line-height: 1.45;
 }
 .has-time-probe {
@@ -1014,7 +1040,7 @@ a.button {
   color: var(--danger-text);
   background: var(--danger-bg);
   border: 1px solid var(--danger-border);
-  font-size: 12px;
+  font-size: var(--type-label);
 }
 .approval-decision-list {
   display: grid;
@@ -1043,7 +1069,7 @@ a.button {
 .approval-decision-list span,
 .approval-decision-list small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 .decision-state {
   padding-left: 8px;
@@ -1077,7 +1103,7 @@ a.button {
   gap: 14px;
   border-top: 1px solid var(--divider);
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 .rhythm-panel {
   grid-column: span 12;
@@ -1099,7 +1125,7 @@ a.button {
 .refusal-panel p {
   margin: 0 0 16px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--type-label);
   line-height: 1.55;
 }
 .unplaced-panel h2,
@@ -1110,7 +1136,7 @@ a.button {
 .unplaced-panel small,
 .correction-inspector small {
   color: var(--subtle);
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 .unplaced-panel {
   padding: var(--space-4) var(--space-5);
@@ -1144,7 +1170,7 @@ a.button {
 }
 .unplaced-list small {
   color: var(--subtle);
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 .unplaced-row {
   margin-top: var(--space-4);
@@ -1170,7 +1196,7 @@ a.button {
 }
 .unplaced-row small {
   color: var(--subtle);
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 .approval-filter,
 .rhythm-tabs {
@@ -1197,7 +1223,7 @@ a.button {
 .approval-filter span {
   margin-right: 16px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--type-label);
   font-weight: 750;
 }
 .empty-state {
@@ -1213,7 +1239,7 @@ a.button {
   max-width: 460px;
   margin: 0 auto;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--type-body);
   line-height: 1.55;
 }
 .undo-toast {
@@ -1231,7 +1257,7 @@ a.button {
   border: 1px solid var(--line);
   border-radius: 10px;
   box-shadow: var(--shadow);
-  font-size: 13px;
+  font-size: var(--type-body);
 }
 .undo-toast button {
   min-height: 44px;
@@ -1241,7 +1267,7 @@ a.button {
   border: 0;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--type-body);
   font-weight: 800;
 }
 .proposal-card {
@@ -1300,7 +1326,7 @@ a.button {
   color: var(--sage-dark);
   background: transparent;
   border-radius: 0;
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 850;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -1337,15 +1363,15 @@ a.button {
   align-items: baseline;
   gap: 8px 12px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--type-label);
 }
 .proposal-change strong {
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--type-body);
 }
 .proposal-change small {
   color: var(--subtle);
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 .proposal-reasons {
   grid-area: reasons;
@@ -1373,7 +1399,7 @@ a.button {
   grid-area: meta;
   margin: 0;
   color: var(--subtle);
-  font-size: 11px;
+  font-size: var(--type-label);
 }
 .approval-actions {
   grid-area: actions;
@@ -1400,7 +1426,7 @@ a.button {
   border: 0;
   border-radius: 5px;
   cursor: pointer;
-  font-size: 11px;
+  font-size: var(--type-label);
   font-weight: 700;
 }
 .filter.active {
@@ -1416,7 +1442,7 @@ a.button {
   gap: 15px;
   border-bottom: 1px solid var(--divider);
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--type-label);
 }
 .task-row:last-child {
   border-bottom: 0;
@@ -1426,21 +1452,21 @@ a.button {
   align-items: center;
   gap: 11px;
   color: var(--ink);
-  font-size: 12px;
+  font-size: var(--type-label);
   font-weight: 650;
 }
 .task-head {
   min-height: 38px;
   color: var(--subtle);
   background: var(--panel-alt);
-  font-size: 9px;
+  font-size: var(--type-micro);
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 .task-head > span:first-child {
   color: var(--subtle);
-  font-size: 9px;
+  font-size: var(--type-micro);
 }
 .empty-check {
   width: 16px;
@@ -1454,7 +1480,7 @@ a.button {
   align-items: center;
   gap: 7px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 .legend i {
   width: 19px;
@@ -1478,7 +1504,7 @@ a.button {
   align-items: center;
   gap: 6px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 750;
 }
 .actogram-controls input {
@@ -1497,7 +1523,7 @@ a.button {
 .actogram-visual-axis {
   padding-bottom: 9px;
   color: var(--subtle);
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 .actogram-visual-axis span {
   /* All hour labels share one grid cell and spread horizontally; without the
@@ -1547,13 +1573,13 @@ a.button {
 }
 .actogram-visual-row time {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--type-label);
   font-weight: 750;
   text-align: right;
 }
 .actogram-visual-row small {
   color: var(--subtle);
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 .actogram-visual-track {
   --probe-line: var(--actogram-grid);
@@ -1585,7 +1611,7 @@ a.button {
   background: var(--actogram-observed);
   border-radius: 3px;
   white-space: nowrap;
-  font-size: 8px;
+  font-size: var(--type-micro);
   font-weight: 750;
 }
 .actogram-band span {
@@ -1641,7 +1667,7 @@ a.button {
 .actogram-now-line span {
   grid-column: 3;
   color: var(--sage-dark);
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -1652,7 +1678,7 @@ a.button {
   align-items: center;
   gap: 10px 16px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 .actogram-footer span {
   display: inline-flex;
@@ -1669,7 +1695,7 @@ a.button {
   flex-basis: 100%;
   margin: 2px 0 0;
   color: var(--subtle);
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 .legend-observed,
 .legend-point {
@@ -1695,11 +1721,11 @@ a.button {
   justify-items: end;
   gap: 3px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 .drift-summary strong {
   color: var(--sage-dark);
-  font-size: 13px;
+  font-size: var(--type-body);
 }
 .drift-body {
   display: grid;
@@ -1713,7 +1739,7 @@ a.button {
   flex-direction: column;
   justify-content: space-between;
   color: var(--subtle);
-  font-size: 9px;
+  font-size: var(--type-micro);
   text-align: right;
 }
 .drift-chart {
@@ -1758,7 +1784,7 @@ a.button {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
   color: var(--subtle);
-  font-size: 9px;
+  font-size: var(--type-micro);
 }
 .drift-x-axis span {
   text-align: center;
@@ -1769,7 +1795,7 @@ a.button {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   color: var(--subtle);
-  font-size: 9px;
+  font-size: var(--type-micro);
 }
 .timeline-axis span:last-child {
   text-align: right;
@@ -1787,12 +1813,12 @@ a.button {
 }
 .actogram-row time {
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 700;
 }
 .actogram-row small {
   color: var(--subtle);
-  font-size: 9px;
+  font-size: var(--type-micro);
 }
 .actogram-track {
   position: relative;
@@ -1831,7 +1857,7 @@ a.button {
 .correction-diff dt {
   margin-bottom: 4px;
   color: var(--sage);
-  font-size: 9px;
+  font-size: var(--type-micro);
   font-weight: 850;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1839,13 +1865,13 @@ a.button {
 .correction-diff dd {
   margin: 0;
   color: var(--ink);
-  font-size: 12px;
+  font-size: var(--type-label);
   line-height: 1.45;
 }
 .diff-note {
   margin: 14px 0 8px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--type-label);
   line-height: 1.5;
 }
 .conflict-list {
@@ -1871,18 +1897,18 @@ a.button {
 }
 .conflict-row h3 {
   margin: 7px 0 5px;
-  font-size: 13px;
+  font-size: var(--type-body);
 }
 .conflict-row p {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--type-label);
   line-height: 1.5;
 }
 .conflict-row small {
   align-self: center;
   color: var(--subtle);
-  font-size: 10px;
+  font-size: var(--type-micro);
   line-height: 1.45;
 }
 .state-pill {
@@ -1891,7 +1917,7 @@ a.button {
   color: var(--confidence-medium-text);
   background: var(--confidence-medium-bg);
   border-radius: 999px;
-  font-size: 8px;
+  font-size: var(--type-micro);
   font-weight: 850;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1924,7 +1950,7 @@ a.button {
   display: grid;
   gap: 8px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 750;
 }
 .sleep-entry-fields input,
@@ -1935,7 +1961,7 @@ a.button {
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: 6px;
-  font-size: 12px;
+  font-size: var(--type-label);
 }
 .sleep-entry-fields .button {
   align-self: end;
@@ -1943,7 +1969,7 @@ a.button {
 .form-error,
 .form-status {
   margin: 14px 0 0;
-  font-size: 12px;
+  font-size: var(--type-label);
   line-height: 1.5;
 }
 .form-error {
@@ -1975,12 +2001,12 @@ a.button {
 }
 .sleep-entry-main h2 {
   margin: 0 0 5px;
-  font-size: 13px;
+  font-size: var(--type-body);
 }
 .sleep-entry-main p {
   margin: 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 .sleep-entry-raw {
   margin-top: 5px !important;
@@ -2010,19 +2036,19 @@ a.button {
   display: block;
   margin-bottom: 5px;
   color: var(--danger-text);
-  font-size: 12px;
+  font-size: var(--type-label);
 }
 .sleep-delete-confirmation p {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--type-label);
   line-height: 1.5;
 }
 .sleep-delete-confirmation label {
   display: grid;
   gap: 7px;
   color: var(--danger-text);
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 800;
 }
 .sleep-delete-confirmation input {
@@ -2032,7 +2058,7 @@ a.button {
   background: var(--paper);
   border: 1px solid var(--danger-border);
   border-radius: 6px;
-  font-size: 12px;
+  font-size: var(--type-label);
 }
 .sleep-delete-actions {
   display: flex;
@@ -2042,7 +2068,7 @@ a.button {
 .sleep-entry-history {
   margin: 0 0 16px 58px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--type-label);
 }
 .sleep-entry-history summary {
   min-height: 44px;
@@ -2091,16 +2117,16 @@ a.button {
 }
 .record-list h2 {
   margin: 0 0 5px;
-  font-size: 13px;
+  font-size: var(--type-body);
 }
 .record-list p {
   margin: 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 .record-time {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--type-label);
 }
 .icon-button {
   width: 44px;
@@ -2124,7 +2150,7 @@ a.button {
 
 .source-status {
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 750;
 }
 .source-status.connected::before {
@@ -2156,7 +2182,7 @@ a.button {
   display: grid;
   gap: 8px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 750;
 }
 .settings-section select {
@@ -2166,7 +2192,7 @@ a.button {
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: 6px;
-  font-size: 11px;
+  font-size: var(--type-label);
 }
 .toggle-row {
   grid-template-columns: minmax(0, 1fr) auto;
@@ -2178,11 +2204,11 @@ a.button {
 }
 .toggle-row strong {
   color: var(--ink);
-  font-size: 11px;
+  font-size: var(--type-label);
 }
 .toggle-row small {
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--type-micro);
   font-weight: 400;
   line-height: 1.4;
 }
@@ -2194,7 +2220,7 @@ a.button {
 .settings-copy {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--type-label);
   line-height: 1.55;
 }
 .settings-section > .button {
@@ -2238,14 +2264,14 @@ a.button {
 .data-control-card p {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--type-label);
   line-height: 1.55;
 }
 .data-control-card label {
   display: grid;
   gap: 8px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 800;
 }
 .data-control-card input,
@@ -2257,13 +2283,13 @@ a.button {
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: 6px;
-  font-size: 12px;
+  font-size: var(--type-label);
 }
 .export-preview {
   min-height: 132px;
   resize: vertical;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 10px;
+  font-size: var(--type-micro);
   line-height: 1.5;
 }
 .backend-sync-card {
@@ -2294,7 +2320,7 @@ a.button {
 }
 .sync-status-list dt {
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -2303,7 +2329,7 @@ a.button {
   margin: 0;
   overflow-wrap: anywhere;
   color: var(--ink);
-  font-size: 12px;
+  font-size: var(--type-label);
 }
 .settings-boundary-list {
   margin: 0;
@@ -2311,7 +2337,7 @@ a.button {
   display: grid;
   gap: 7px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--type-label);
   line-height: 1.5;
 }
 .danger-zone {
@@ -2525,7 +2551,7 @@ a.button {
   gap: 8px;
   padding: 0 12px;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--type-body);
   font-weight: 600;
   color: var(--muted);
   background: var(--paper);
@@ -2583,7 +2609,7 @@ a.button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--type-label);
   color: var(--subtle);
   white-space: nowrap;
 }
@@ -2598,7 +2624,7 @@ a.button {
 }
 .assistant-queue-link {
   margin-left: auto;
-  font-size: 12px;
+  font-size: var(--type-label);
   color: var(--muted);
   white-space: nowrap;
 }
@@ -2620,7 +2646,7 @@ a.button {
 }
 .assistant-empty {
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--type-body);
   line-height: 1.55;
 }
 .assistant-examples {
@@ -2634,7 +2660,7 @@ a.button {
   border: 1px solid var(--line);
   background: var(--paper);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--type-label);
 }
 .assistant-examples .task-chip:hover {
   background: var(--sage-soft);
@@ -2648,7 +2674,7 @@ a.button {
   max-width: 86%;
   padding: 12px 16px;
   border-radius: 11px;
-  font-size: 13px;
+  font-size: var(--type-body);
   line-height: 1.5;
   white-space: pre-wrap;
   background: var(--paper);
@@ -2707,7 +2733,7 @@ a.button {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  font-size: 13px;
+  font-size: var(--type-body);
 }
 .assistant-action-card header .confidence-meter {
   width: 54px;
@@ -2715,7 +2741,7 @@ a.button {
   flex: none;
 }
 .assistant-action-card p {
-  font-size: 12px;
+  font-size: var(--type-label);
   color: var(--muted);
 }
 .assistant-action-card footer {
@@ -2725,7 +2751,7 @@ a.button {
 }
 .assistant-action-card footer a {
   margin-right: auto;
-  font-size: 12px;
+  font-size: var(--type-label);
   color: var(--muted);
 }
 .assistant-action-card[data-status="approved"] {
@@ -2750,7 +2776,7 @@ a.button {
   resize: none;
   padding: 12px;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--type-body);
   color: var(--ink);
   background: var(--bg);
   border: 1px solid var(--line);
@@ -2763,7 +2789,7 @@ a.button {
 .assistant-disclaimer {
   flex: none;
   padding: 0 16px 12px;
-  font-size: 10px;
+  font-size: var(--type-micro);
   color: var(--subtle);
 }
 
@@ -2778,7 +2804,7 @@ a.button {
 .night-rule-fields label {
   display: grid;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--type-label);
   color: var(--muted);
 }
 .night-rule-fields input,
@@ -2954,7 +2980,7 @@ a.button {
 .approval-history-panel > p {
   padding: 0 16px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--type-label);
 }
 
 .approval-screen > .synced-proposal-pagination {
@@ -2970,7 +2996,7 @@ a.button {
   margin: 6px 0;
 }
 .task-conflict-card > p {
-  font-size: 12px;
+  font-size: var(--type-label);
   color: var(--muted);
 }
 .task-conflict-card fieldset {
@@ -2980,7 +3006,7 @@ a.button {
   min-width: 0;
 }
 .task-conflict-card legend {
-  font-size: 12px;
+  font-size: var(--type-label);
   font-weight: 700;
   margin-bottom: 12px;
 }
@@ -3022,12 +3048,12 @@ a.button {
 }
 .task-conflict-same {
   margin: 12px 0 0;
-  font-size: 12px;
+  font-size: var(--type-label);
   color: var(--muted);
 }
 .task-version-details {
   margin: 8px 0 0;
-  font-size: 12px;
+  font-size: var(--type-label);
 }
 .task-version-details > div {
   display: grid;
@@ -3045,12 +3071,12 @@ a.button {
 .task-review-history {
   padding: 16px;
   border-top: 1px solid var(--line);
-  font-size: 12px;
+  font-size: var(--type-label);
 }
 .task-review-history summary {
   cursor: pointer;
   min-height: 44px;
 }
 .task-review-history h3 {
-  font-size: 13px;
+  font-size: var(--type-body);
 }

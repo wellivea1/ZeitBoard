@@ -200,7 +200,11 @@ export function PageHeader({
 }: {
   eyebrow?: string;
   title: string;
-  description: string;
+  /**
+   * Optional. Most screens are clear from their title; a sentence restating
+   * the title on every page was part of what made the app read as prose.
+   */
+  description?: string;
   actions?: ReactNode;
 
   /**
@@ -215,7 +219,7 @@ export function PageHeader({
   if (level === "panel") {
     return (
       <header className="panel-header">
-        <p>{description}</p>
+        {description && <p>{description}</p>}
         {actions && <div className="page-actions">{actions}</div>}
       </header>
     );
@@ -225,7 +229,7 @@ export function PageHeader({
       <div>
         {eyebrow && <p className="eyebrow">{eyebrow}</p>}
         <h1>{title}</h1>
-        <p>{description}</p>
+        {description && <p>{description}</p>}
       </div>
       {actions && <div className="page-actions">{actions}</div>}
     </header>

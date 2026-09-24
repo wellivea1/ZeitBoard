@@ -146,7 +146,7 @@
   color: var(--button-primary-text);
   background: var(--button-primary-bg);
   border-radius: var(--radius-control);
-  font-size: 9px;
+  font-size: var(--type-micro);
   font-weight: 850;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -337,7 +337,7 @@
   }
 
   .appearance-option-copy small {
-    font-size: 9px;
+    font-size: var(--type-micro);
     line-height: 1.25;
   }
 
@@ -345,7 +345,7 @@
     top: var(--space-2);
     right: var(--space-2);
     padding-inline: var(--space-1);
-    font-size: 8px;
+    font-size: var(--type-micro);
   }
 }
 
