@@ -118,3 +118,32 @@ func window(start, end time.Time, zone string, confidence domain.ConfidenceLevel
 func rangeAt(start, end time.Time, zone string) domain.TimeRange {
 	return domain.TimeRange{Start: domain.MustZonedInstant(start, zone), End: domain.MustZonedInstant(end, zone)}
 }
+
+// Reserved time is somebody else's suggestion in the same plan. It must push
+// the next task along, and it must not be described as a fixed event, because
+// nothing fixed was avoided.
+func TestReservedTimeIsBusyButNotAFixedEvent(t *testing.T) {
+	zone := "America/New_York"
+	location, _ := time.LoadLocation(zone)
+	day := time.Date(2026, 9, 24, 0, 0, 0, 0, location)
+	availability := window(day.Add(10*time.Hour), day.Add(18*time.Hour), zone, domain.ConfidenceMedium)
+	task := domain.FlexibleTask{ID: "task", EstimatedDuration: 30 * time.Minute}
+
+	proposal, err := (Scheduler{}).Propose(Request{
+		Task:         task,
+		Availability: []domain.AvailabilityWindow{availability},
+		Reserved:     []domain.TimeRange{rangeAt(day.Add(10*time.Hour), day.Add(11*time.Hour), zone)},
+		Now:          day,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := day.Add(11 * time.Hour).UTC(); !proposal.Window.Start.UTC.Equal(want) {
+		t.Fatalf("start = %v, want %v after the reserved hour", proposal.Window.Start.UTC, want)
+	}
+	for _, code := range proposal.ExplanationCodes {
+		if code == CodeAvoidsFixedEvent {
+			t.Fatal("avoiding another suggestion was reported as avoiding a fixed event")
+		}
+	}
+}

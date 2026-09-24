@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	calendarcore "non24.app/core/calendar"
@@ -69,6 +70,11 @@ func (a *App) DecideLocalProposal(input LocalProposalDecisionInput) (LocalPropos
 	}
 	candidate, found := built.pending[input.ProposalID]
 	if !found {
+		return LocalProposalDecisionDTO{}, storage.ErrStaleProposal
+	}
+	// A block that has already begun is not a plan. The planner no longer
+	// offers one, and this keeps a decision from recording one if it ever did.
+	if input.Decision == storage.ProposalApproved && candidate.proposal.Window.Start.UTC.Before(now) {
 		return LocalProposalDecisionDTO{}, storage.ErrStaleProposal
 	}
 	decision := storage.ProposalDecisionInput{
@@ -228,7 +234,18 @@ func (a *App) buildLocalProposals(now time.Time) (localProposalBuild, error) {
 	}
 	expiresAt := planningNow.Add(localProposalTTL)
 	scheduler := scheduling.Scheduler{}
-	for index, task := range tasks {
+	// The planning snapshot is pinned to the start of a 30-minute bucket so a
+	// proposal keeps its identity while someone reads it. Suggestions must not
+	// start inside that bucket, though: planning from its start offered, and
+	// accepted, a block that had begun eleven minutes earlier. They start when
+	// the bucket ends, which is also when they are replaced.
+	earliestStart := expiresAt
+	// Each suggestion reserves its time for the ones after it, so the pending
+	// set is a plan that can be accepted whole rather than several tasks
+	// stacked on one minute.
+	var reserved []domain.TimeRange
+	for _, index := range planningOrder(tasks) {
+		task := tasks[index]
 		record := taskRecords[index]
 		if approvedTaskRevisions[record.TaskID] == effectiveTaskRevision(record) {
 			continue
@@ -238,7 +255,8 @@ func (a *App) buildLocalProposals(now time.Time) (localProposalBuild, error) {
 			Availability: availability,
 			Events:       fixedEvents,
 			WakeAnchor:   wakeAnchor,
-			Now:          planningNow,
+			Now:          earliestStart,
+			Reserved:     reserved,
 		})
 		if proposalErr != nil {
 			reason := scheduling.ClassifyUnplaced(proposalErr)
@@ -254,6 +272,7 @@ func (a *App) buildLocalProposals(now time.Time) (localProposalBuild, error) {
 		if _, alreadyDecided := activeByID[proposalID]; alreadyDecided {
 			continue
 		}
+		reserved = append(reserved, proposal.Window)
 		result.dto.Proposals = append(result.dto.Proposals, ProposalDTO{
 			ID:               proposalID,
 			Origin:           "scheduler",
@@ -351,6 +370,40 @@ func planningSnapshotRange(availability []domain.AvailabilityWindow) (time.Time,
 		}
 	}
 	return start.UTC(), end.UTC(), !start.IsZero() && start.Before(end)
+}
+
+// planningOrder places the task with the nearest deadline first. Scheduling is
+// greedy — each suggestion reserves its time before the next task is placed —
+// so the order decides who gets the earliest free time. In stored order, a
+// ninety-minute task with no deadline could take the only slot before another
+// task's deadline and push that task off the plan entirely. Tasks without a
+// deadline keep their stored order behind those that have one, and the order
+// is deterministic, so rebuilding the plan to record a decision reproduces the
+// same windows and the same proposal identities.
+func planningOrder(tasks []domain.FlexibleTask) []int {
+	order := make([]int, len(tasks))
+	for index := range order {
+		order[index] = index
+	}
+	deadline := func(task domain.FlexibleTask) (time.Time, bool) {
+		var latest time.Time
+		if task.Constraint.Deadline != nil {
+			latest = task.Constraint.Deadline.UTC
+		}
+		if bound := task.Constraint.LatestFinish; bound != nil && (latest.IsZero() || bound.UTC.Before(latest)) {
+			latest = bound.UTC
+		}
+		return latest, !latest.IsZero()
+	}
+	sort.SliceStable(order, func(i, j int) bool {
+		left, leftBounded := deadline(tasks[order[i]])
+		right, rightBounded := deadline(tasks[order[j]])
+		if leftBounded != rightBounded {
+			return leftBounded
+		}
+		return leftBounded && left.Before(right)
+	})
+	return order
 }
 
 func deterministicProposalID(task storage.TaskRecord, estimateID domain.PhaseEstimateID, window domain.TimeRange, eventSnapshotHash, sleepSnapshotHash string) string {

@@ -871,3 +871,36 @@ func TestAnUnsetScheduleStillTakesTheDefault(t *testing.T) {
 		t.Fatal("an unset schedule produced no windows")
 	}
 }
+
+// TestSuggestedPlacementsDoNotOverlap. Each task used to be placed as if it were
+// the only one, so two tasks could be suggested for the same minute.
+func TestSuggestedPlacementsDoNotOverlap(t *testing.T) {
+	f := newFixture(t)
+	in := f.input()
+	for _, title := range []string{"Ring the pharmacy", "Email the landlord", "Post the forms"} {
+		in.Tasks = append(in.Tasks, domain.FlexibleTask{
+			ID:                domain.FlexibleTaskID(title),
+			Title:             title,
+			EstimatedDuration: 30 * time.Minute,
+			Constraint:        domain.TaskConstraint{MinimumConfidence: domain.ConfidenceLow, RequiresApproval: true},
+		})
+	}
+
+	view := build(t, in)
+	var placed []domain.TimeRange
+	for _, opportunity := range view.Opportunities {
+		if opportunity.Window == nil {
+			continue
+		}
+		for _, earlier := range placed {
+			if opportunity.Window.Overlaps(earlier) {
+				t.Errorf("two suggestions share time: %s and %s",
+					earlier.Start.UTC, opportunity.Window.Start.UTC)
+			}
+		}
+		placed = append(placed, *opportunity.Window)
+	}
+	if len(placed) < 2 {
+		t.Fatalf("only %d tasks were placed, so overlap was not exercised", len(placed))
+	}
+}

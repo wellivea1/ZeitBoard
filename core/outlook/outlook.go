@@ -779,6 +779,9 @@ func opportunities(in Input, segments []Segment, now time.Time) []Opportunity {
 
 	scheduler := scheduling.Scheduler{}
 	result := make([]Opportunity, 0, limit)
+	// Each placement reserves its time for the next, as the approval queue's
+	// planner does, so the list never shows two tasks in the same minute.
+	var reserved []domain.TimeRange
 	for _, task := range in.Tasks {
 		if len(result) >= limit {
 			break
@@ -789,6 +792,7 @@ func opportunities(in Input, segments []Segment, now time.Time) []Opportunity {
 			Events:       in.Events,
 			WakeAnchor:   in.WakeAnchor,
 			Now:          now,
+			Reserved:     reserved,
 		})
 		if err != nil {
 			result = append(result, Opportunity{
@@ -799,6 +803,7 @@ func opportunities(in Input, segments []Segment, now time.Time) []Opportunity {
 			continue
 		}
 		window := proposal.Window
+		reserved = append(reserved, window)
 		result = append(result, Opportunity{
 			TaskID: task.ID,
 			Window: &window,

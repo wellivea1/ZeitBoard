@@ -60,6 +60,13 @@ type Request struct {
 	Events       []domain.CalendarEvent
 	WakeAnchor   *domain.WakeAnchor
 	Now          time.Time
+
+	// Reserved is time already promised to other suggestions in the same plan.
+	// It is busy, but it is not a fixed event, so avoiding it never earns the
+	// "avoids a fixed event" explanation. Without it each task was placed as
+	// if it were the only one, and a plan of three tasks could put all three
+	// at the same minute.
+	Reserved []domain.TimeRange
 }
 
 type Scheduler struct{}
@@ -69,7 +76,12 @@ func (Scheduler) Propose(request Request) (Proposal, error) {
 		return Proposal{}, errors.New("task duration must be positive")
 	}
 	constraint := request.Task.Constraint
-	busyIntervals := mergeEventIntervals(request.Events)
+	busy := make([]domain.CalendarEvent, 0, len(request.Events)+len(request.Reserved))
+	busy = append(busy, request.Events...)
+	for _, reserved := range request.Reserved {
+		busy = append(busy, domain.CalendarEvent{Interval: reserved})
+	}
+	busyIntervals := mergeEventIntervals(busy)
 	var candidates []candidate
 	for _, availability := range request.Availability {
 		if availability.Kind != domain.AvailabilityPredictedWake && availability.Kind != domain.AvailabilityFunctional && availability.Kind != domain.AvailabilityFree {
