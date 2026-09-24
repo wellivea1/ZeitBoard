@@ -918,6 +918,41 @@ a.button {
   padding: 0 12px;
   font-size: var(--type-label);
 }
+/* A summary laid out with flex loses the browser's disclosure triangle, so
+   those draw their own. */
+.decision-history > summary,
+.medication-feasibility > summary {
+  list-style: none;
+}
+.decision-history > summary::-webkit-details-marker,
+.medication-feasibility > summary::-webkit-details-marker {
+  display: none;
+}
+.decision-history > summary::before,
+.medication-feasibility > summary::before {
+  content: "";
+  width: 0;
+  height: 0;
+  align-self: center;
+  border-block: 5px solid transparent;
+  border-left: 7px solid var(--muted);
+  transition: transform 120ms ease;
+}
+.decision-history[open] > summary::before,
+.medication-feasibility[open] > summary::before {
+  transform: rotate(90deg);
+}
+/* A button that reads as a link inside a sentence. */
+.text-link {
+  padding: 0;
+  color: var(--sage-dark);
+  background: none;
+  border: 0;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
 /* Quiet actions that should not compete with the content, such as a manual
    refresh on a view that already refreshes itself. */
 .button.ghost {
@@ -1854,116 +1889,7 @@ a.button {
 .form-status {
   color: var(--muted);
 }
-.sleep-entry-list {
-  display: grid;
-  gap: 14px;
-}
-.sleep-entry-card {
-  padding: 17px 0 0;
-  border-top: 1px solid var(--divider);
-}
-.sleep-entry-card:first-child {
-  padding-top: 0;
-  border-top: 0;
-}
-.sleep-entry-card[data-suppressed="true"] {
-  opacity: 0.78;
-}
-.sleep-entry-main {
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 16px;
-}
-.sleep-entry-main h2 {
-  margin: 0 0 5px;
-  font-size: var(--type-body);
-}
-.sleep-entry-main p {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--type-micro);
-}
-.sleep-entry-raw {
-  margin-top: 5px !important;
-  color: var(--subtle) !important;
-}
-.sleep-entry-actions,
-.sleep-edit-form {
-  margin: 14px 0 16px 58px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-.sleep-edit-form {
-  display: grid;
-}
-.sleep-delete-confirmation {
-  margin: 14px 0 16px 58px;
-  padding: 14px;
-  display: grid;
-  gap: 11px;
-  color: var(--danger-text);
-  background: var(--danger-bg);
-  border: 1px solid var(--danger-border);
-  border-radius: 8px;
-}
-.sleep-delete-confirmation strong {
-  display: block;
-  margin-bottom: 5px;
-  color: var(--danger-text);
-  font-size: var(--type-label);
-}
-.sleep-delete-confirmation p {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--type-label);
-  line-height: 1.5;
-}
-.sleep-delete-confirmation label {
-  display: grid;
-  gap: 7px;
-  color: var(--danger-text);
-  font-size: var(--type-micro);
-  font-weight: 800;
-}
-.sleep-delete-confirmation input {
-  min-height: 44px;
-  padding: 0 11px;
-  color: var(--ink);
-  background: var(--paper);
-  border: 1px solid var(--danger-border);
-  border-radius: 6px;
-  font-size: var(--type-label);
-}
-.sleep-delete-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-.sleep-entry-history {
-  margin: 0 0 16px 58px;
-  color: var(--muted);
-  font-size: var(--type-label);
-}
-.sleep-entry-history summary {
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  color: var(--sage-dark);
-  cursor: pointer;
-  font-weight: 800;
-}
-.sleep-entry-history ul {
-  margin: 0 0 0 18px;
-  padding: 0;
-  display: grid;
-  gap: 6px;
-  line-height: 1.5;
-}
-.sleep-log-empty {
-  padding-block: 28px;
-}
+
 .record-list article {
   min-height: 88px;
   padding: 17px 21px;
@@ -2000,10 +1926,7 @@ a.button {
   color: var(--muted);
   font-size: var(--type-micro);
 }
-.record-time {
-  color: var(--muted);
-  font-size: var(--type-label);
-}
+
 .icon-button {
   width: 44px;
   height: 44px;
@@ -2376,17 +2299,10 @@ a.button {
   .record-list article {
     grid-template-columns: 42px minmax(0, 1fr) auto;
   }
-  .sleep-entry-fields,
-  .sleep-entry-main {
+  .sleep-entry-fields {
     grid-template-columns: 1fr;
   }
-  .sleep-entry-actions,
-  .sleep-edit-form,
-  .sleep-delete-confirmation,
-  .sleep-entry-history {
-    margin-left: 0;
-  }
-  .record-time,
+
   .source-status {
     display: none;
   }

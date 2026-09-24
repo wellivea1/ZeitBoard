@@ -56,14 +56,7 @@ export function MedicationLogForm({
   };
 
   return (
-    <section className="medication-log-section" aria-labelledby="medication-log-title">
-      <header className="medication-section-heading">
-        <div>
-          <p className="section-kicker">Append-only evidence</p>
-          <h2 id="medication-log-title">Quick log</h2>
-        </div>
-        <span>Taken or skipped only</span>
-      </header>
+    <section className="medication-log-section" aria-label="Log a medication event">
       {active.length === 0 ? (
         <p className="medication-log-unavailable">
           Add or reactivate a medication label to log an event.
@@ -150,7 +143,7 @@ export function MedicationLogForm({
             type="submit"
             disabled={!available || busy || !selectedMedicationId}
           >
-            {busy ? "Recording..." : `Record ${status}`}
+            {busy ? "Recording…" : `Record ${status}`}
           </button>
         </form>
       )}

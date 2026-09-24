@@ -89,8 +89,7 @@ export function MedicationHistory({
     <section className="medication-history-section" aria-labelledby="medication-history-title">
       <header className="medication-section-heading">
         <div>
-          <p className="section-kicker">Civil-time history</p>
-          <h2 id="medication-history-title">Medication events</h2>
+          <h2 id="medication-history-title">History</h2>
         </div>
         <span>{events.length} stored</span>
       </header>

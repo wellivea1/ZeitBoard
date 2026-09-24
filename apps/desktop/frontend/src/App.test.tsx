@@ -234,14 +234,16 @@ describe("desktop navigation", () => {
     fireEvent.change(screen.getByLabelText("Started"), {
       target: { value: "2026-07-22T09:00" },
     });
-    fireEvent.change(screen.getByLabelText("IANA time zone"), {
+    fireEvent.change(screen.getByLabelText("Time zone"), {
       target: { value: "America/New_York" },
     });
     fireEvent.change(screen.getByLabelText("Private note (optional)"), {
       target: { value: "Arrival context" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Append marker" }));
-    expect(await screen.findByText("Arrival context")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Add marker" }));
+    // In the recorded list, not the note field it was typed into.
+    const recorded = screen.getByLabelText("Recorded rhythm markers");
+    expect(await within(recorded).findByText("Arrival context")).toBeVisible();
     expect(add).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: "travel",
@@ -522,14 +524,15 @@ describe("desktop navigation", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Save sleep entry" }));
 
-    expect(await screen.findByText("Sleep entry saved locally.")).toBeVisible();
+    expect(await screen.findByText("Night saved.")).toBeVisible();
     expect(addSleep).toHaveBeenCalledWith({
       startLocal: "2026-03-01T22:00",
       endLocal: "2026-03-02T06:00",
       zoneId: "America/New_York",
       classification: "principal",
     });
-    expect(screen.getByText(/Sun Mar 1, 10:00 PM EST to Mon Mar 2, 6:00 AM EST/)).toBeVisible();
+    expect(screen.getByText("Sun, Mar 1")).toBeVisible();
+    expect(screen.getByText("10:00 PM – 6:00 AM")).toBeVisible();
 
     // Plan opens on Tasks, where a task without a usable estimate says why.
     fireEvent.click(screen.getByRole("link", { name: /^Plan/ }));
@@ -568,21 +571,30 @@ describe("desktop navigation", () => {
         },
       ],
     };
-    const deleteSleep = vi.fn(async () => ({
+    const empty = {
       status: "empty",
       empty: true,
       message: "No sleep entries yet.",
       entries: [],
-    }));
+    };
+    let deleted = false;
+    const deleteSleep = vi.fn(async () => {
+      deleted = true;
+      return empty;
+    });
     (globalThis as { go?: unknown }).go = {
       main: {
         App: {
-          ListSleepEntries: async () => ({
-            status: "ready",
-            empty: false,
-            message: "1 local sleep entry stored on this device.",
-            entries: [entry],
-          }),
+          // The log reloads when sleep data changes, so the store is stateful.
+          ListSleepEntries: async () =>
+            deleted
+              ? empty
+              : {
+                  status: "ready",
+                  empty: false,
+                  message: "1 local sleep entry stored on this device.",
+                  entries: [entry],
+                },
           DeleteSleepObservation: deleteSleep,
         },
       },
@@ -590,20 +602,21 @@ describe("desktop navigation", () => {
 
     render(<App />);
 
+    expect(await screen.findByText("Sun, Mar 1")).toBeVisible();
+    // Excluding keeps the night; deleting is the separate, confirmed step.
     expect(
-      await screen.findByText(/Sun Mar 1, 10:00 PM EST to Mon Mar 2, 6:00 AM EST/),
+      screen.getByRole("button", { name: "Exclude Sun, Mar 1, 10:00 PM – 6:00 AM from estimates" }),
     ).toBeVisible();
-    expect(screen.getByRole("button", { name: "Suppress from estimates" })).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Delete permanently" }));
-    const eraseButton = screen.getByRole("button", { name: "Erase entry" });
+    fireEvent.click(screen.getByRole("button", { name: "Delete Sun, Mar 1, 10:00 PM – 6:00 AM" }));
+    const eraseButton = screen.getByRole("button", { name: "Delete night" });
     expect(eraseButton).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText("Deletion confirmation"), {
+    fireEvent.change(screen.getByLabelText("Type DELETE to confirm"), {
       target: { value: "DELETE" },
     });
     fireEvent.click(eraseButton);
 
-    expect(await screen.findByText("Sleep entry erased permanently.")).toBeVisible();
+    expect(await screen.findByText("Night deleted.")).toBeVisible();
     expect(deleteSleep).toHaveBeenCalledWith({
       observationId: "obs_sleep_01",
       confirmation: "DELETE",

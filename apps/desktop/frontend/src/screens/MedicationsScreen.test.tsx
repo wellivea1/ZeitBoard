@@ -123,6 +123,30 @@ describe("MedicationsScreen", () => {
     expect(screen.getByText("No interaction checking")).toBeInTheDocument();
   });
 
+  // The everyday case is one tap: this medication, now, taken or skipped.
+  it("records a dose now with one tap per medication", async () => {
+    const log = vi.fn(async () => structuredClone(response));
+    (globalThis as GlobalWithGo).go = {
+      main: {
+        App: {
+          GetMedications: vi.fn(async () => structuredClone(response)),
+          LogMedicationEvent: log,
+        },
+      },
+    };
+
+    render(<MedicationsScreen />);
+    const taken = await screen.findByRole("button", { name: "Record Evening record taken now" });
+    await waitFor(() => expect(taken).toBeEnabled());
+    fireEvent.click(taken);
+
+    await waitFor(() => expect(log).toHaveBeenCalledTimes(1));
+    expect(log).toHaveBeenCalledWith(
+      expect.objectContaining({ medicationId: "med_local_01", status: "taken", scheduled: false }),
+    );
+    expect(screen.getByRole("button", { name: "Record Evening record skipped now" })).toBeVisible();
+  });
+
   it("appends corrections and gates real event erasure behind typed confirmation", async () => {
     const current = structuredClone(response);
     const getMedications = vi.fn(async () => structuredClone(current));

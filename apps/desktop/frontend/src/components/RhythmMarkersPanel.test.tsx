@@ -66,13 +66,13 @@ describe("RhythmMarkersPanel", () => {
     fireEvent.change(screen.getByLabelText("Ended (optional)"), {
       target: { value: "2026-07-21T10:00" },
     });
-    fireEvent.change(screen.getByLabelText("IANA time zone"), {
+    fireEvent.change(screen.getByLabelText("Time zone"), {
       target: { value: "America/Chicago" },
     });
     fireEvent.change(screen.getByLabelText("Private note (optional)"), {
       target: { value: "  self reported context  " },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Append marker" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add marker" }));
 
     await waitFor(() =>
       expect(onAdd).toHaveBeenCalledWith({
@@ -107,7 +107,7 @@ describe("RhythmMarkersPanel", () => {
     };
     renderPanel(unavailable);
     expect(screen.getByText("This browser preview does not invent health context.")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Append marker" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Add marker" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Export markers" })).toBeDisabled();
   });
 });

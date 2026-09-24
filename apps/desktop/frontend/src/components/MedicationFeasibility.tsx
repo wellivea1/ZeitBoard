@@ -32,16 +32,25 @@ export function MedicationFeasibility({
   reminderMessage: string;
 }) {
   const scheduled = medications.filter((medication) => medication.schedule !== undefined);
+  const collisions = scheduled.reduce(
+    (total, medication) => total + (medication.schedule?.forecast.collisionCount ?? 0),
+    0,
+  );
 
   return (
-    <section className="medication-feasibility" aria-labelledby="medication-feasibility-title">
-      <header className="medication-section-heading">
-        <div>
-          <p className="section-kicker">User-authored timing</p>
-          <h2 id="medication-feasibility-title">Schedule feasibility</h2>
-        </div>
-        <span>Next 14 civil days</span>
-      </header>
+    // Occasional reading, so it opens on request. The summary still says
+    // whether any entered time lands in predicted sleep.
+    <details className="medication-feasibility" aria-labelledby="medication-feasibility-title">
+      <summary>
+        <h2 id="medication-feasibility-title">Schedule feasibility</h2>
+        <span>
+          {scheduled.length === 0
+            ? "No schedules"
+            : `${scheduled.length} ${scheduled.length === 1 ? "schedule" : "schedules"}, ${
+                collisions === 0 ? "none in predicted sleep" : `${collisions} in predicted sleep`
+              } · next 14 days`}
+        </span>
+      </summary>
 
       <div className="medication-reminder-state" data-status={reminderStatus}>
         <strong>Reminder delivery: {reminderStatus}</strong>
@@ -51,16 +60,15 @@ export function MedicationFeasibility({
       {scheduled.length === 0 ? (
         <div className="medication-feasibility-empty">
           <strong>No medication schedules stored</strong>
-          <p>
-            Add a schedule from the medication rail to compare only the times you entered with the
-            current rhythm forecast.
-          </p>
+          <p>Use Schedule on a medication to compare the times you entered with predicted sleep.</p>
         </div>
       ) : (
         <div className="medication-feasibility-list">
           {scheduled.map((medication) => {
             const schedule = medication.schedule!;
             const forecast = schedule.forecast;
+            // Only a clock change makes this column say anything.
+            const clockChange = forecast.occurrences.some((occurrence) => occurrence.dstNote);
             return (
               <article key={medication.medicationId} data-forecast={forecast.status}>
                 <header className="medication-feasibility-record-header">
@@ -113,10 +121,10 @@ export function MedicationFeasibility({
                     <table className="medication-forecast-table">
                       <thead>
                         <tr>
-                          <th scope="col">Scheduled civil time</th>
-                          <th scope="col">Forecast context</th>
+                          <th scope="col">Scheduled</th>
+                          <th scope="col">Predicted rhythm</th>
                           <th scope="col">Confidence</th>
-                          <th scope="col">DST handling</th>
+                          {clockChange && <th scope="col">Clock change</th>}
                         </tr>
                       </thead>
                       <tbody>
@@ -130,7 +138,7 @@ export function MedicationFeasibility({
                             </td>
                             <td>{occurrence.context}</td>
                             <td>{occurrence.confidence}</td>
-                            <td>{occurrence.dstNote ?? "Standard civil-time occurrence"}</td>
+                            {clockChange && <td>{occurrence.dstNote ?? "No clock change"}</td>}
                           </tr>
                         ))}
                       </tbody>
@@ -153,6 +161,6 @@ export function MedicationFeasibility({
           })}
         </div>
       )}
-    </section>
+    </details>
   );
 }

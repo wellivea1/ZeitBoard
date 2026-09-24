@@ -97,21 +97,9 @@
   border-left-color: var(--danger-border);
 }
 
-.data-source-input-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
-}
-
-.sleep-entry-panel,
 .sleep-import-panel {
   min-width: 0;
   padding: var(--space-5) 0;
-}
-
-.sleep-entry-panel {
-  padding-right: var(--space-6);
 }
 
 .sleep-import-panel {
@@ -146,12 +134,39 @@
 .sleep-entry-submit {
   grid-column: 1 / -1;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-start;
+  gap: var(--space-2);
 }
 
-.sleep-entry-submit .button {
+.sleep-entry-submit .button.primary {
   min-width: 152px;
+}
+
+.sleep-entry-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-label);
+  line-height: 1.5;
+}
+
+.sleep-entry-fields .sleep-entry-check {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--ink);
+  font-size: var(--type-body);
+  font-weight: 600;
+}
+
+.sleep-entry-fields .sleep-entry-check input {
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  padding: 0;
+  accent-color: var(--sage);
 }
 
 .form-error,
@@ -169,60 +184,8 @@
   color: var(--muted);
 }
 
-.sleep-entry-list {
-  display: grid;
-}
-
-.sleep-entry-card {
-  padding: var(--space-4) 0;
-  border-top: 1px solid var(--divider);
-}
-
-.sleep-entry-card[data-suppressed="true"] {
-  opacity: 0.78;
-}
-
-.sleep-entry-main {
-  display: grid;
-  grid-template-columns: 24px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-3);
-}
-
-.sleep-entry-main .record-icon {
-  width: 20px;
-  height: 20px;
-  display: grid;
-  place-items: center;
-  color: var(--state-asleep);
-  background: transparent;
-  border-radius: 0;
-}
-
-.sleep-entry-main .record-icon svg {
-  width: 18px;
-  height: 18px;
-}
-
-.sleep-entry-main h2 {
-  margin: 0 0 3px;
-  font-size: var(--type-body-strong);
-}
-
-.sleep-entry-main p {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--type-label);
-}
-
-.sleep-entry-raw {
-  margin-top: var(--space-1) !important;
-  color: var(--subtle) !important;
-}
-
-.sleep-entry-actions,
 .sleep-edit-form {
-  margin: var(--space-3) 0 0 36px;
+  margin: var(--space-3) 0 0 30px;
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
@@ -233,12 +196,14 @@
 }
 
 .sleep-delete-confirmation {
-  margin: var(--space-3) 0 0 36px;
-  padding: var(--space-3) 0 var(--space-1) var(--space-4);
+  margin: var(--space-3) 0 0 30px;
+  padding: var(--space-3) var(--space-4);
   display: grid;
   gap: var(--space-3);
   color: var(--danger-text);
-  border-left: 2px solid var(--danger-border);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-card);
 }
 
 .sleep-delete-confirmation strong {
@@ -280,7 +245,7 @@
 }
 
 .sleep-entry-history {
-  margin: var(--space-2) 0 0 36px;
+  margin: var(--space-2) 0 0 30px;
   color: var(--muted);
   font-size: var(--type-label);
 }
@@ -303,24 +268,19 @@
 }
 
 .sleep-log-empty {
-  min-height: 112px;
   padding: var(--space-5) 0;
-  place-content: center start;
-  text-align: left;
+  border-top: 1px solid var(--divider);
 }
 
-.sleep-log-empty > p:last-child {
+.sleep-log-empty h2 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--type-body-strong);
+}
+
+.sleep-log-empty p {
   margin: 0;
-}
-
-.data-source-scope {
-  align-self: start;
-  padding-left: var(--space-2);
-  color: var(--confidence-high-text);
-  border-left: 2px solid var(--state-awake);
-  font-size: var(--type-label);
-  font-weight: 800;
-  white-space: nowrap;
+  color: var(--muted);
+  font-size: var(--type-body);
 }
 
 .sleep-import-intro,
@@ -520,8 +480,7 @@
 }
 
 @media (max-width: 980px) {
-  .source-ledger,
-  .data-source-input-grid {
+  .source-ledger {
     grid-template-columns: 1fr;
   }
 
@@ -529,10 +488,6 @@
   .source-ledger-row:nth-child(even) {
     padding-inline: 0;
     border-right: 0;
-  }
-
-  .sleep-entry-panel {
-    padding-right: 0;
   }
 }
 
@@ -556,21 +511,10 @@
     justify-self: start;
   }
 
-  .sleep-entry-fields,
-  .sleep-entry-main {
+  .sleep-entry-fields {
     grid-template-columns: 1fr;
   }
 
-  .sleep-entry-main .record-icon {
-    display: none;
-  }
-
-  .sleep-entry-main .source-status {
-    display: inline-block;
-    justify-self: start;
-  }
-
-  .sleep-entry-actions,
   .sleep-edit-form,
   .sleep-delete-confirmation,
   .sleep-entry-history {
@@ -593,6 +537,146 @@
   font-size: var(--type-body);
 }
 
+/* Log > Sleep: the two quick buttons, a fold-out for a night that was missed,
+   then one line per night with its actions kept quiet. */
 .sleep-log-workspace {
-  padding-top: 0;
+  display: grid;
+  gap: var(--space-4);
+}
+
+.sleep-log-workspace > .form-status:empty,
+.sleep-log-workspace > .form-error:empty {
+  display: none;
+}
+
+.sleep-log-workspace > .form-status,
+.sleep-log-workspace > .form-error {
+  margin: 0;
+}
+
+.sleep-add {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+}
+
+.sleep-add > summary {
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.sleep-add[open] > summary {
+  border-bottom: 1px solid var(--divider);
+}
+
+.sleep-add > form {
+  padding: var(--space-4);
+}
+
+.sleep-entry-list-panel .plan-section-head {
+  margin-bottom: var(--space-3);
+}
+
+.sleep-night-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--divider);
+}
+
+.sleep-night {
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--divider);
+}
+
+.sleep-night[data-suppressed] .sleep-night-text {
+  opacity: 0.6;
+}
+
+.sleep-night-main {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.sleep-night-main > svg {
+  width: 16px;
+  height: 16px;
+  color: var(--state-asleep);
+}
+
+.sleep-night-text {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.sleep-night-main strong {
+  font-size: var(--type-body);
+  font-weight: 700;
+}
+
+.sleep-night-main strong span {
+  margin-left: var(--space-2);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.sleep-night-main small {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.sleep-night-state {
+  margin-left: var(--space-2);
+  padding: 2px 8px;
+  font-style: normal;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  font-size: var(--type-micro);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sleep-night[data-review] .sleep-night-state {
+  color: var(--confidence-medium-text);
+  border-color: var(--state-uncertain);
+}
+
+.sleep-night-actions {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.sleep-night-review {
+  margin: var(--space-3) 0 0 30px;
+  padding-left: var(--space-3);
+  color: var(--muted);
+  border-left: 2px solid var(--state-uncertain);
+  font-size: var(--type-label);
+  line-height: 1.5;
+}
+
+.sleep-night-review p,
+.sleep-night-review ul {
+  margin: 0 0 var(--space-2);
+}
+
+@media (max-width: 720px) {
+  .sleep-night-main {
+    grid-template-columns: 18px minmax(0, 1fr);
+  }
+
+  .sleep-night-actions {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .sleep-night-review {
+    margin-left: 0;
+  }
 }

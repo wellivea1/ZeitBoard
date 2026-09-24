@@ -74,6 +74,11 @@
   gap: var(--space-6);
 }
 
+/* Without a description the controls still sit at the right. */
+.panel-header > .page-actions {
+  margin-left: auto;
+}
+
 .panel-header p {
   max-width: 690px;
   margin: 0;
