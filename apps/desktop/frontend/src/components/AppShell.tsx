@@ -43,10 +43,12 @@ export interface Route {
   logTab: LogTab;
 }
 
-const planTabs = new Set<PlanTab>(["calendar", "tasks", "approvals"]);
+const planTabs = new Set<PlanTab>(["tasks", "calendar"]);
 const logTabs = new Set<LogTab>(["sleep", "medications", "markers"]);
 
-const defaultRoute: Route = { screen: "home", planTab: "calendar", logTab: "sleep" };
+// Plan opens on Tasks: it carries the pending count, so the badge on Plan and
+// the page it opens agree about what needs you.
+const defaultRoute: Route = { screen: "home", planTab: "tasks", logTab: "sleep" };
 
 export function readRouteFromHash(hash: string): Route {
   const path = hash.replace(/^#\/?/, "");

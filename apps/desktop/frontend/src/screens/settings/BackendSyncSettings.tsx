@@ -176,7 +176,7 @@ export function BackendSyncSettings({
                 {status.taskConflictCount > 0 && (
                   <>
                     {" "}
-                    · <a href="#/plan/approvals">Review conflicting edits</a>
+                    · <a href="#/plan/tasks">Review conflicting edits</a>
                   </>
                 )}
               </dd>

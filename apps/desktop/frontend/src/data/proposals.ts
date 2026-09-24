@@ -157,6 +157,13 @@ function proposal(value: unknown): ProposalRecord | undefined {
     return undefined;
   }
   const from = str(value.from);
+  // Both or neither: half a block cannot be drawn or worded.
+  const startAt = str(value.startAt);
+  const endAt = str(value.endAt);
+  const exact =
+    startAt && endAt && Number.isFinite(Date.parse(startAt)) && Number.isFinite(Date.parse(endAt))
+      ? { startAt, endAt }
+      : {};
   return {
     id,
     origin,
@@ -164,6 +171,7 @@ function proposal(value: unknown): ProposalRecord | undefined {
     title,
     ...(from ? { from } : {}),
     to,
+    ...exact,
     rhythmContext,
     confidence: level,
     explanationCodes,

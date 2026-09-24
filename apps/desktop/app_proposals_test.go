@@ -386,3 +386,102 @@ func TestADeadlineTaskIsPlannedBeforeAnOpenEndedOne(t *testing.T) {
 		t.Errorf("the deadline task starts at %v, want the earliest free time %v", dueSoon.proposal.Window.Start.UTC, firstStart)
 	}
 }
+
+// Durations are read by people, so they are counted the way people count.
+func TestDurationsReadNaturally(t *testing.T) {
+	for _, testCase := range []struct {
+		value time.Duration
+		want  string
+	}{
+		{time.Minute, "1 minute"},
+		{42 * time.Minute, "42 minutes"},
+		{time.Hour, "1 hour"},
+		{time.Hour + 42*time.Minute, "1 hour 42 minutes"},
+		{2*time.Hour + time.Minute, "2 hours 1 minute"},
+		{8 * time.Hour, "8 hours"},
+	} {
+		if got := formatDuration(testCase.value); got != testCase.want {
+			t.Errorf("formatDuration(%s) = %q, want %q", testCase.value, got, testCase.want)
+		}
+	}
+}
+
+// Found by using the app: a block at 4 PM, for someone awake since 8 AM, was
+// described as "about 30 minutes into a predicted waking window", because the
+// window for now begins at the planning snapshot. In the stretch someone is in,
+// the useful reference is when they woke.
+func TestASuggestionTodayIsPlacedRelativeToWaking(t *testing.T) {
+	app := newTestApp(t)
+	fixedNow := time.Now().UTC().Truncate(localProposalTTL).Add(11 * time.Minute)
+	app.nowFn = func() time.Time { return fixedNow }
+	seedSleepEntries(t, app, 12)
+	if _, err := app.AddTask(TaskInput{Title: "Email landlord", DurationMinutes: 15}); err != nil {
+		t.Fatal(err)
+	}
+	built, err := app.buildLocalProposals(fixedNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var context string
+	for _, proposal := range built.dto.Proposals {
+		if proposal.Title == "Email landlord" {
+			context = proposal.RhythmContext
+		}
+	}
+	if !strings.Contains(context, "after you woke") {
+		t.Fatalf("rhythm context %q is not measured from waking", context)
+	}
+	if strings.Contains(context, "1 hours") {
+		t.Errorf("rhythm context %q miscounts hours", context)
+	}
+}
+
+// Found by using the app: after accepting a suggestion, the task list gave no
+// sign the task had a time. The accepted block belongs on the task, and only
+// while it still describes the task as it is.
+func TestAnAcceptedTimeShowsOnItsTask(t *testing.T) {
+	app := newTestApp(t)
+	fixedNow := time.Now().UTC().Truncate(localProposalTTL).Add(11 * time.Minute)
+	app.nowFn = func() time.Time { return fixedNow }
+	seedSleepEntries(t, app, 12)
+	if _, err := app.AddTask(TaskInput{Title: "Email landlord", DurationMinutes: 15}); err != nil {
+		t.Fatal(err)
+	}
+	built, err := app.buildLocalProposals(fixedNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, candidate := onlyPendingCandidate(t, built)
+
+	list, err := app.ListTasks()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list.Tasks[0].ScheduledStartAt != "" {
+		t.Fatalf("a task with only a pending suggestion shows a time: %#v", list.Tasks[0])
+	}
+
+	if _, err := app.DecideLocalProposal(LocalProposalDecisionInput{ProposalID: id, Decision: storage.ProposalApproved}); err != nil {
+		t.Fatal(err)
+	}
+	list, err = app.ListTasks()
+	if err != nil {
+		t.Fatal(err)
+	}
+	task := list.Tasks[0]
+	if task.ScheduledStartAt != candidate.proposal.Window.Start.UTC.Format(time.RFC3339) ||
+		task.ScheduledEndAt != candidate.proposal.Window.End.UTC.Format(time.RFC3339) ||
+		task.ScheduledLabel == "" {
+		t.Fatalf("accepted time is missing from the task: %#v", task)
+	}
+
+	// Editing the task makes that block a placement of an older version. The
+	// planner offers a new one, and the task stops claiming the old time.
+	list, err = app.UpdateTask(TaskInput{TaskID: task.TaskID, Revision: task.Revision, Title: "Email landlord", DurationMinutes: 45})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if list.Tasks[0].ScheduledStartAt != "" {
+		t.Fatalf("an edited task still shows the time accepted for its old version: %#v", list.Tasks[0])
+	}
+}

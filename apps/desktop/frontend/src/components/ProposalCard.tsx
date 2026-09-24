@@ -1,58 +1,47 @@
 import { useApprovals } from "../state/approvals";
 import type { ChangeProposalFixture, ProposalOrigin } from "../data/phaseTwo";
-import type { ConfidenceLevel } from "../data/overview";
+import { blockWording } from "../utils/relativeTime";
 
-const confidenceSegments: Record<ConfidenceLevel, number> = { Low: 1, Medium: 2, High: 3 };
+// One suggested change, read in the order a person decides it: what, when,
+// why, then accept or reject.
+//
+// The card used to lead with a High/Medium/Low meter. ADR-0022 measured those
+// buckets inverted on real history, and Home already keeps the label behind a
+// disclosure for that reason; a proposal is no place to put it back on the
+// surface. The reasons say what the planner actually guaranteed.
+
 const originLabels: Record<ProposalOrigin, string> = {
-  scheduler: "Scheduler",
-  assistant: "Assistant",
+  scheduler: "Planner suggestion",
+  assistant: "Assistant proposal",
   sync_conflict: "Sync conflict",
 };
 
-export function ConfidenceDots({ value }: { value: ConfidenceLevel }) {
-  const filled = confidenceSegments[value];
-  return (
-    <span className="proposal-confidence" aria-label={`${value} confidence`}>
-      <span className="proposal-confidence-label" aria-hidden="true">
-        {value}
-      </span>
-      <span className="proposal-confidence-meter" aria-hidden="true">
-        {[0, 1, 2].map((index) => (
-          <span key={index} data-muted={index >= filled || undefined} />
-        ))}
-      </span>
-    </span>
-  );
-}
+const kindLabels: Record<ChangeProposalFixture["kind"], string> = {
+  Place: "new time",
+  Move: "moves an existing block",
+  Reminder: "reminder",
+};
 
 export function ProposalCard({ proposal }: { proposal: ChangeProposalFixture }) {
   const { decide, busyProposalId, ready } = useApprovals();
   const busy = !ready || busyProposalId !== null;
   return (
     <article className="proposal-card" data-origin={proposal.origin}>
-      <div className="proposal-header">
-        <span className="proposal-kind">{proposal.kind}</span>
-        <div>
-          <p className="section-kicker">{originLabels[proposal.origin]} proposal</p>
-          <h2>{proposal.title}</h2>
-        </div>
-        <ConfidenceDots value={proposal.confidence} />
+      <div className="proposal-heading">
+        <p>
+          {originLabels[proposal.origin]} · {kindLabels[proposal.kind]}
+        </p>
+        <h3>{proposal.title}</h3>
       </div>
       <p className="proposal-change">
-        {proposal.from && <span>From {proposal.from}</span>}
-        <strong>To {proposal.to}</strong>
+        <strong>{blockWording(proposal.startAt, proposal.endAt, proposal.to)}</strong>
         <small>{proposal.rhythmContext}</small>
+        {proposal.from && <small>Currently {proposal.from}</small>}
       </p>
-      <div className="proposal-reasons" aria-label="Proposal reasons">
-        {proposal.reasonLabels.map((reason) => (
-          <span className="task-chip" key={reason}>
-            {reason}
-          </span>
-        ))}
-      </div>
-      <p className="proposal-meta">
-        {proposal.createdLabel} - {proposal.expiresLabel}
-      </p>
+      {proposal.reasonLabels.length > 0 && (
+        <p className="proposal-reasons">{proposal.reasonLabels.join(" · ")}</p>
+      )}
+      <p className="proposal-meta">{proposal.expiresLabel}</p>
       <div className="approval-actions">
         <button
           className="button secondary"
@@ -60,7 +49,7 @@ export function ProposalCard({ proposal }: { proposal: ChangeProposalFixture }) 
           disabled={busy}
           onClick={() => decide(proposal.id, "rejected")}
         >
-          {busyProposalId === proposal.id ? "Recording..." : "Reject proposal"}
+          {busyProposalId === proposal.id ? "Recording…" : "Reject proposal"}
         </button>
         <button
           className="button primary"
@@ -68,7 +57,7 @@ export function ProposalCard({ proposal }: { proposal: ChangeProposalFixture }) 
           disabled={busy}
           onClick={() => decide(proposal.id, "approved")}
         >
-          {busyProposalId === proposal.id ? "Recording..." : "Accept proposal"}
+          {busyProposalId === proposal.id ? "Recording…" : "Accept proposal"}
         </button>
       </div>
     </article>

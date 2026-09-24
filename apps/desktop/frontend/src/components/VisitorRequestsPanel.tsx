@@ -161,7 +161,7 @@ export function VisitorRequestsPanel() {
           <p className="section-kicker">From your share links</p>
           <h2 id="visitor-requests-title">Time requests</h2>
         </div>
-        <a href="#/plan/approvals">Review all approvals</a>
+        <a href="#/plan/tasks">All decisions</a>
       </div>
 
       <p>

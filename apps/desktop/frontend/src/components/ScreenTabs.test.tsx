@@ -17,7 +17,12 @@ describe("readRouteFromHash", () => {
   });
 
   it("falls back to the first tab when the second segment is not one", () => {
-    expect(readRouteFromHash("#/plan/wat")).toMatchObject({ screen: "plan", planTab: "calendar" });
+    expect(readRouteFromHash("#/plan/wat")).toMatchObject({ screen: "plan", planTab: "tasks" });
+    // Approvals is part of Tasks now; an old link lands where its decisions are.
+    expect(readRouteFromHash("#/plan/approvals")).toMatchObject({
+      screen: "plan",
+      planTab: "tasks",
+    });
     expect(readRouteFromHash("#/log")).toMatchObject({ screen: "log", logTab: "sleep" });
   });
 

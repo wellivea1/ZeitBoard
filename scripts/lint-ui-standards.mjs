@@ -84,7 +84,7 @@ if (!shell.includes("utilityNavigation") || !shell.includes('className="utility-
 // Plan and Log are tab hosts, not new monoliths: they compose the screens they
 // absorbed rather than copying them.
 for (const [name, required] of [
-  ["PlanScreen.tsx", ["CalendarScreen", "TasksScreen", "ApprovalsScreen", "ScreenTabs"]],
+  ["PlanScreen.tsx", ["CalendarScreen", "TasksScreen", "ScreenTabs"]],
   ["LogScreen.tsx", ["SleepLogPanel", "MedicationsScreen", "RhythmMarkersPanel", "ScreenTabs"]],
 ]) {
   const path = join(frontend, "screens", name);
@@ -92,6 +92,17 @@ for (const [name, required] of [
   for (const symbol of required) {
     if (!source.includes(symbol)) fail(path, `${name} must compose ${symbol}.`);
   }
+}
+
+// Tasks and the decisions about them are one view. Accepting a task's time on
+// a different tab from the one it was added on was the most awkward loop in
+// the app; the Approvals tab must not come back.
+const tasksPath = join(frontend, "screens", "TasksScreen.tsx");
+if (!readFileSync(tasksPath, "utf8").includes("<DecisionQueue")) {
+  fail(tasksPath, "Tasks must show the decisions about them.");
+}
+if (existsSync(join(frontend, "screens", "ApprovalsScreen.tsx"))) {
+  fail(tasksPath, "Decisions live beside tasks; a separate Approvals screen must not return.");
 }
 
 for (const [name, requiredClass] of [

@@ -1,30 +1,99 @@
+/* Plan > Tasks: add a task, decide its suggested time, see the list, look back.
+   Four cards with space between them, in the order the work happens. */
 .task-workspace {
   display: grid;
-  gap: var(--space-5);
+  gap: var(--space-4);
 }
-.task-workspace > section {
+.task-workspace > section,
+.task-workspace > details {
   min-width: 0;
   padding: var(--space-5);
   border: 1px solid var(--line);
   border-radius: var(--radius-card);
   background: var(--paper);
 }
+
+.plan-section-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+.plan-section-head h2 {
+  margin: 0;
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  font-size: var(--type-section);
+}
+.plan-section-head small {
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+/* A count beside a heading: quiet when zero is not shown at all. */
+.count {
+  min-width: 22px;
+  height: 22px;
+  padding: 0 7px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  color: var(--confidence-medium-text);
+  background: var(--confidence-medium-bg);
+  font-size: var(--type-label);
+  font-weight: 700;
+}
+
+.plan-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-body);
+}
+
+.decision-queue .proposal-stack {
+  margin-top: 0;
+}
+.decision-queue .unplaced-list {
+  margin-top: var(--space-4);
+}
+
+.decision-history > summary {
+  cursor: pointer;
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  font-size: var(--type-body-strong);
+  font-weight: 700;
+}
+.decision-history[open] > summary {
+  margin-bottom: var(--space-3);
+}
+.decision-history .count {
+  color: var(--muted);
+  background: var(--panel-alt);
+}
+
 .task-editor h2 {
   margin: 0 0 var(--space-4);
+  font-size: var(--type-section);
 }
-.task-editor {
-  padding-bottom: var(--space-5);
-  margin-bottom: var(--space-5);
-  border-bottom: 1px solid var(--line);
-}
+/* One row to add a task: name, minutes, Add. Timing constraints are optional
+   and fold out underneath. */
 .task-editor > form {
-  grid-template-columns: minmax(0, 1fr) 10rem;
+  grid-template-columns: minmax(0, 1fr) 7rem auto;
+  align-items: end;
+}
+.task-editor > form > .task-editor-actions {
+  grid-column: 3;
+  grid-row: 1;
 }
 .task-timing .sleep-entry-fields {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 .task-timing,
-.task-editor-actions,
 .task-feedback {
   grid-column: 1 / -1;
 }
@@ -37,6 +106,9 @@
 .task-feedback {
   color: var(--muted);
 }
+.task-feedback {
+  margin: var(--space-3) 0 0;
+}
 .task-feedback:empty {
   display: none;
 }
@@ -46,44 +118,90 @@
   gap: var(--space-2);
 }
 
-/* The old compact table hid its action column. Task controls stay available
-   at every width, including when the assistant rail is open. */
-.task-workspace .task-row > span:nth-child(3),
-.task-workspace .task-row > span:nth-child(4) {
-  display: flex;
-}
 .task-delete-confirmation {
   padding: var(--space-4);
-  margin-block: var(--space-4);
+  margin-block: 0 var(--space-4);
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
   background: var(--panel-alt);
 }
-.task-workspace .task-row {
-  grid-template-columns: minmax(10rem, 1.2fr) minmax(10rem, 1.6fr) 4rem minmax(9rem, auto);
+
+/* The task list: done box, what and when, then its two actions on the same
+   line at every width the sidebar leaves room for. */
+.task-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.task-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   gap: var(--space-3);
+  align-items: center;
+  padding-block: var(--space-3);
+  border-top: 1px solid var(--divider);
 }
-.task-row > span {
-  overflow-wrap: anywhere;
+.task-item:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+.task-item:last-child {
+  padding-bottom: 0;
+}
+.task-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--sage);
+}
+.task-item-text {
   min-width: 0;
+  display: grid;
+  gap: 2px;
 }
-@media (max-width: 1000px) {
-  .task-workspace .task-row {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
-  .task-workspace .task-head {
-    display: none;
-  }
+.task-item-text strong {
+  color: var(--ink);
+  font-size: var(--type-body);
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.task-item-text > span {
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+.task-scheduled {
+  color: var(--sage-dark);
+  font-weight: 700;
+}
+.task-item-text .task-chip {
+  justify-self: start;
+  margin-top: var(--space-1);
+}
+.task-item[data-status="done"] .task-item-text strong {
+  color: var(--muted);
+  font-weight: 500;
+  text-decoration: line-through;
+}
+.task-item .task-actions {
+  gap: var(--space-1);
 }
 @media (max-width: 560px) {
   .task-editor > form,
   .task-timing .sleep-entry-fields {
     grid-template-columns: minmax(0, 1fr);
   }
-  .task-workspace > section {
+  .task-editor > form > .task-editor-actions {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .task-workspace > section,
+  .task-workspace > details {
     padding: var(--space-4);
   }
-  .task-workspace .task-row {
-    grid-template-columns: minmax(0, 1fr);
+  .task-item {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .task-item .task-actions {
+    grid-column: 2;
   }
 }

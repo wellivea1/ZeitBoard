@@ -9,6 +9,9 @@ export interface ChangeProposalFixture {
   title: string;
   from?: string;
   to: string;
+  /** The exact block, when the desktop supplies it. */
+  startAt?: string;
+  endAt?: string;
   rhythmContext: string;
   confidence: ConfidenceLevel;
   explanationCodes: string[];

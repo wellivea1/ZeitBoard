@@ -76,61 +76,63 @@ describe("desktop navigation", () => {
     expect(screen.getByText("Sample appointment")).toBeVisible();
   });
 
-  it("renders approval proposals with explicit actions", async () => {
-    window.location.hash = "#/plan/approvals";
-    const { container } = render(<App />);
-
-    expect(await screen.findByRole("tab", { name: /Approvals/ })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-    expect(screen.getByText("Email Dr. Okafor")).toBeVisible();
-    expect(screen.getAllByRole("button", { name: "Accept proposal" })).toHaveLength(2);
-    expect(screen.getAllByRole("button", { name: "Reject proposal" })).toHaveLength(2);
-    expect(screen.getByText("Medium")).toBeVisible();
-    expect(container.querySelector(".approval-filter.panel")).toBeNull();
-    expect(container.querySelectorAll(".proposal-stack > .proposal-card")).toHaveLength(2);
-    expect(container.querySelector(".proposal-stack > .panel")).toBeNull();
-  });
-
-  it("keeps task proposals and no-safe-window context in one approval surface", async () => {
+  // Decisions sit directly under the tasks they are about. They used to be a
+  // separate Approvals tab, so a task was added on one tab and its time
+  // accepted on another.
+  it("shows each suggested time with explicit actions beside the tasks", async () => {
     window.location.hash = "#/plan/tasks";
     const { container } = render(<App />);
 
-    await screen.findByRole("heading", { level: 3, name: "Call service provider" });
-    expect(container.querySelector(".approval-summary > .proposal-card")).not.toBeNull();
-    expect(container.querySelector(".approval-summary > .unplaced-row")).not.toBeNull();
-    expect(container.querySelector(".screen-grid > .unplaced-panel")).toBeNull();
-    expect(screen.getByRole("heading", { level: 3, name: "Call service provider" })).toBeVisible();
+    expect(await screen.findByRole("tab", { name: /Tasks/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.queryByRole("tab", { name: /Approvals/ })).toBeNull();
+    expect(screen.getByRole("heading", { name: /Needs your decision/ })).toBeVisible();
+    expect(screen.getByText("Email Dr. Okafor")).toBeVisible();
+    expect(screen.getAllByRole("button", { name: "Accept proposal" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Reject proposal" })).toHaveLength(2);
+    expect(container.querySelectorAll(".decision-queue .proposal-card")).toHaveLength(2);
+    expect(container.querySelector(".proposal-stack > .panel")).toBeNull();
+    // No filter chips: every origin is listed together.
+    expect(screen.queryByRole("group", { name: "Filter approvals" })).toBeNull();
   });
 
-  it("approves a proposal, updates the queue and badge, and supports undo", async () => {
-    window.location.hash = "#/plan/approvals";
+  it("keeps suggestions and tasks without a safe time in one list", async () => {
+    window.location.hash = "#/plan/tasks";
+    const { container } = render(<App />);
+
+    expect(await screen.findByText("Call service provider")).toBeVisible();
+    expect(container.querySelector(".decision-queue .proposal-card")).not.toBeNull();
+    expect(container.querySelector(".decision-queue .unplaced-list")).not.toBeNull();
+  });
+
+  it("approves a suggestion, updates the queue and badge, and supports undo", async () => {
+    window.location.hash = "#/plan/tasks";
     render(<App />);
 
-    // The count now appears twice on purpose: on the Plan destination, so it is
-    // visible from anywhere, and on the Approvals tab once you are here.
+    // The count appears on the Plan destination, so it is visible from
+    // anywhere, and on the Tasks tab once you are here.
     const navigation = () => screen.getByRole("navigation", { name: "Primary navigation" });
     const accepts = await screen.findAllByRole("button", { name: "Accept proposal" });
     expect(accepts).toHaveLength(2);
     expect(within(navigation()).getByLabelText("2 pending")).toBeVisible();
 
     fireEvent.click(accepts[0] as HTMLElement);
-    fireEvent.click(screen.getByRole("button", { name: "History" }));
-
-    expect(screen.getByText("Email Dr. Okafor")).toBeVisible();
-    expect(screen.getByText("approved")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "All 1" }));
     expect(screen.getAllByRole("button", { name: "Accept proposal" })).toHaveLength(1);
     expect(within(navigation()).getByLabelText("1 pending")).toBeVisible();
 
-    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    fireEvent.click(screen.getByText(/Decision history/));
     expect(screen.getByText("Email Dr. Okafor")).toBeVisible();
+    expect(screen.getByText("approved")).toBeVisible();
+
+    // Named for what it undoes: the confirmation toast has its own Undo.
+    fireEvent.click(screen.getByRole("button", { name: "Undo decision on Email Dr. Okafor" }));
     expect(screen.getAllByRole("button", { name: "Accept proposal" })).toHaveLength(2);
   });
 
-  it("shows the empty state once every proposal is decided", async () => {
-    window.location.hash = "#/plan/approvals";
+  it("says so plainly once every suggestion is decided", async () => {
+    window.location.hash = "#/plan/tasks";
     render(<App />);
 
     fireEvent.click(
@@ -138,7 +140,7 @@ describe("desktop navigation", () => {
     );
     fireEvent.click(screen.getAllByRole("button", { name: "Reject proposal" })[0] as HTMLElement);
 
-    expect(screen.getByRole("heading", { name: "Nothing waiting for approval" })).toBeVisible();
+    expect(screen.getByText(/Nothing is waiting for you/)).toBeVisible();
     expect(screen.queryByRole("button", { name: "Accept proposal" })).toBeNull();
   });
 
@@ -529,8 +531,8 @@ describe("desktop navigation", () => {
     });
     expect(screen.getByText(/Sun Mar 1, 10:00 PM EST to Mon Mar 2, 6:00 AM EST/)).toBeVisible();
 
+    // Plan opens on Tasks, where a task without a usable estimate says why.
     fireEvent.click(screen.getByRole("link", { name: /^Plan/ }));
-    fireEvent.click(await screen.findByRole("tab", { name: /Approvals/ }));
     expect(await screen.findByText("Local sleep data follow-up")).toBeVisible();
   });
 
@@ -635,9 +637,12 @@ describe("desktop navigation", () => {
 
     const taskInput = await screen.findByLabelText("Task");
     fireEvent.change(taskInput, { target: { value: "Call clinic" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save task" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add task" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Task storage is unavailable.");
+    // Tasks and decisions share a screen, so this looks for the task error
+    // itself rather than whichever alert happens to be first.
+    const failure = await screen.findByText("Task storage is unavailable.");
+    expect(failure.closest('[role="alert"]')).not.toBeNull();
     expect(taskInput).toHaveValue("Call clinic");
     expect(addTask).toHaveBeenCalledWith(
       expect.objectContaining({ title: "Call clinic", durationMinutes: 45 }),
@@ -901,7 +906,7 @@ describe("assistant rail", () => {
     ).toBeVisible();
     expect(screen.getByText("Place task “Call clinic”")).toBeVisible();
     expect(screen.getByText("Thu Jul 10, 11:00 AM to 11:45 AM EDT")).toBeVisible();
-    expect(screen.getByRole("link", { name: "View in Approvals" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "View in Plan" })).toBeVisible();
 
     // Approve goes through the same one-use-token queue decision.
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));

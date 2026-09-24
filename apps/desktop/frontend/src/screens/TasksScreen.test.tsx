@@ -1,9 +1,13 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TasksScreen } from "./TasksScreen";
+import { calendarDataChangedEvent } from "../data/calendar";
 
-vi.mock("../state/approvals", () => ({
-  useApprovals: () => ({ pending: [], pendingCount: 0, unplaced: [] }),
+// These tests are about the task list and editor. The decision queue beside it
+// has its own tests and needs the whole review-queue provider tree.
+vi.mock("../components/DecisionQueue", () => ({
+  DecisionQueue: () => null,
+  DecisionHistory: () => null,
 }));
 const task = {
   needsReview: false,
@@ -82,7 +86,7 @@ describe("task workflow", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Task" }), {
       target: { value: "Draft a note" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Save task" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add task" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("could not be added");
     expect(screen.getByRole("textbox", { name: "Task" })).toHaveValue("Draft a note");
     expect(screen.getByRole("status")).not.toHaveTextContent("Added Draft a note");
@@ -93,19 +97,44 @@ describe("task workflow", () => {
     render(<TasksScreen />);
     expect(await screen.findByText(/Your tasks could not be loaded/)).toBeVisible();
     expect(screen.queryByText(/No tasks yet/)).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Refresh tasks" }));
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByRole("button", { name: "Edit File paperwork" })).toBeVisible();
   });
 });
 
-it("links conflicted tasks to review and blocks edits or status changes", async () => {
+// The version choice is in the decision list directly above the task list, so
+// the row points up to it rather than linking to another tab.
+it("points conflicted tasks at their review and blocks edits or status changes", async () => {
   service.ListTasks.mockResolvedValue({ status: "ok", tasks: [{ ...task, needsReview: true }] });
   render(<TasksScreen />);
-  expect(await screen.findByRole("link", { name: "Review conflicting edits" })).toHaveAttribute(
-    "href",
-    "#/plan/approvals",
-  );
+  expect(await screen.findByText("Choose a version above")).toBeVisible();
   expect(screen.getByRole("button", { name: "Edit File paperwork" })).toBeDisabled();
   expect(screen.getByRole("checkbox", { name: "Mark File paperwork done" })).toBeDisabled();
   expect(screen.getByRole("button", { name: "Delete File paperwork" })).toBeEnabled();
+});
+
+// Accepting or undoing a suggested time is a calendar change made elsewhere on
+// the page, and the task row says when the task is scheduled.
+it("shows an accepted time and follows it when a decision changes", async () => {
+  const start = new Date();
+  start.setHours(21, 30, 0, 0);
+  const end = new Date(start.getTime() + 20 * 60_000);
+  service.ListTasks.mockResolvedValue({
+    status: "ok",
+    tasks: [
+      {
+        ...task,
+        scheduledStartAt: start.toISOString(),
+        scheduledEndAt: end.toISOString(),
+        scheduledLabel: "Full label",
+      },
+    ],
+  });
+  render(<TasksScreen />);
+  const scheduled = await screen.findByText(/^Tonight /);
+  expect(scheduled).toHaveAttribute("title", "Full label");
+
+  service.ListTasks.mockResolvedValue(list);
+  window.dispatchEvent(new Event(calendarDataChangedEvent));
+  await waitFor(() => expect(screen.queryByText(/^Tonight /)).toBeNull());
 });

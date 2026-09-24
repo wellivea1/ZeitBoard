@@ -140,11 +140,15 @@ type MedicationEventDTO struct {
 }
 
 type ProposalDTO struct {
-	ID               string   `json:"id"`
-	Origin           string   `json:"origin"`
-	Kind             string   `json:"kind"`
-	Title            string   `json:"title"`
-	To               string   `json:"to"`
+	ID     string `json:"id"`
+	Origin string `json:"origin"`
+	Kind   string `json:"kind"`
+	Title  string `json:"title"`
+	To     string `json:"to"`
+	// StartAt and EndAt are the exact block, so a card can say "Tonight 9:30
+	// – 10:00 PM" instead of repeating the full dated range.
+	StartAt          string   `json:"startAt,omitempty"`
+	EndAt            string   `json:"endAt,omitempty"`
 	RhythmContext    string   `json:"rhythmContext"`
 	Confidence       string   `json:"confidence"`
 	ExplanationCodes []string `json:"explanationCodes"`
@@ -822,6 +826,11 @@ type TaskDTO struct {
 	LatestFinishAt            string `json:"latestFinishAt,omitempty"`
 	PreferredAfterWakeMinutes int    `json:"preferredAfterWakeMinutes"`
 	MinimumConfidence         string `json:"minimumConfidence"`
+	// The block accepted for this version of the task, if any. An edit makes
+	// it a placement of an older version, and it is no longer reported here.
+	ScheduledStartAt string `json:"scheduledStartAt,omitempty"`
+	ScheduledEndAt   string `json:"scheduledEndAt,omitempty"`
+	ScheduledLabel   string `json:"scheduledLabel,omitempty"`
 }
 
 type TasksDTO struct {
@@ -866,10 +875,31 @@ func (a *App) ListTasks() (TasksDTO, error) {
 	if err != nil {
 		return TasksDTO{}, err
 	}
+	decisions, err := store.ActiveProposalDecisions(context.Background())
+	if err != nil {
+		return TasksDTO{}, err
+	}
+	// Decisions come oldest first, so the last approval for a task wins, as it
+	// does when the planner decides which tasks still need a time.
+	accepted := make(map[string]storage.ProposalDecisionRecord)
+	for _, decision := range decisions {
+		if decision.Decision == storage.ProposalApproved {
+			accepted[decision.TaskID] = decision
+		}
+	}
 	tasks := make([]TaskDTO, 0, len(records))
 	for _, record := range records {
 		dto := taskDTO(record)
 		dto.NeedsReview = conflicts[record.TaskID]
+		if decision, ok := accepted[record.TaskID]; ok && decision.TaskRevision == effectiveTaskRevision(record) {
+			start, startErr := domain.NewZonedInstant(decision.ProposalStartAt, decision.ZoneID)
+			end, endErr := domain.NewZonedInstant(decision.ProposalEndAt, decision.ZoneID)
+			if startErr == nil && endErr == nil {
+				dto.ScheduledStartAt = start.UTC.Format(time.RFC3339)
+				dto.ScheduledEndAt = end.UTC.Format(time.RFC3339)
+				dto.ScheduledLabel = formatRange(domain.TimeRange{Start: start, End: end})
+			}
+		}
 		tasks = append(tasks, dto)
 	}
 	return TasksDTO{Status: "ok", Tasks: tasks}, nil
@@ -1333,15 +1363,37 @@ func formatDuration(value time.Duration) string {
 	}
 	hours := int(value.Hours())
 	minutes := int(value.Minutes()) % 60
-	if hours == 0 {
-		return fmt.Sprintf("%d minutes", minutes)
+	unit := func(count int, one, many string) string {
+		if count == 1 {
+			return fmt.Sprintf("%d %s", count, one)
+		}
+		return fmt.Sprintf("%d %s", count, many)
 	}
-	return fmt.Sprintf("%d hours %d minutes", hours, minutes)
+	switch {
+	case hours == 0:
+		return unit(minutes, "minute", "minutes")
+	case minutes == 0:
+		return unit(hours, "hour", "hours")
+	default:
+		return unit(hours, "hour", "hours") + " " + unit(minutes, "minute", "minutes")
+	}
 }
 
-func rhythmContext(proposal scheduling.Proposal, availability []domain.AvailabilityWindow) string {
+// rhythmContext says where a block sits in the person's day. Inside the waking
+// stretch they are in now, that is time since they actually woke: the planning
+// window for "now" begins at the planning snapshot, so measuring from its start
+// told someone awake since morning that 4 PM was "30 minutes into" their day.
+func rhythmContext(
+	proposal scheduling.Proposal,
+	availability []domain.AvailabilityWindow,
+	wake *domain.WakeAnchor,
+	planningNow time.Time,
+) string {
 	for _, window := range availability {
 		if window.Interval.Contains(proposal.Window.Start.UTC) {
+			if wake != nil && window.Interval.Contains(planningNow) && wake.At.UTC.Before(proposal.Window.Start.UTC) {
+				return "about " + formatDuration(proposal.Window.Start.UTC.Sub(wake.At.UTC).Round(5*time.Minute)) + " after you woke"
+			}
 			offset := proposal.Window.Start.UTC.Sub(window.Interval.Start.UTC)
 			if offset < 5*time.Minute {
 				return "at the start of a predicted waking window"

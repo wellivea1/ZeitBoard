@@ -71,3 +71,21 @@ export function atOffset(start: string | undefined, offsetHours: number) {
   if (!Number.isFinite(base)) return undefined;
   return new Date(base + offsetHours * HOUR);
 }
+
+/**
+ * Relative wording for an exact block, or the supplied label when the block is
+ * not known. Used where a DTO carries both the full label and the instants.
+ */
+export function blockWording(
+  startAt: string | undefined,
+  endAt: string | undefined,
+  fallback: string,
+  now = new Date(),
+) {
+  const start = startAt ? new Date(startAt) : undefined;
+  const end = endAt ? new Date(endAt) : undefined;
+  if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    return fallback;
+  }
+  return relativeRange(start, end, now);
+}
