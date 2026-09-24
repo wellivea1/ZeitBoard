@@ -33,7 +33,7 @@ const MaxTaskSyncPageSize = 100
 const pendingTaskSyncRecordsFrom = `FROM local_tasks AS task
 	LEFT JOIN local_task_sync_records AS synced
 		ON synced.record_id = task.task_id || '_r' || task.revision
-	WHERE synced.record_id IS NULL`
+	WHERE synced.record_id IS NULL AND NOT EXISTS(SELECT 1 FROM local_task_sync_conflicts conflict WHERE conflict.task_id=task.task_id)`
 
 func (s *Store) PendingTaskSyncRecords(ctx context.Context, limit int) ([]TaskSyncRecord, error) {
 	if limit < 1 || limit > MaxTaskSyncPageSize {
@@ -124,6 +124,9 @@ func markTaskSyncRecordsPushed(ctx context.Context, tx *sql.Tx, records []TaskSy
 				return err
 			}
 			continue
+		}
+		if err := recordTaskFingerprint(ctx, tx, record); err != nil {
+			return err
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT OR REPLACE INTO local_task_sync_records(record_id, task_id, pushed_at) VALUES(?, ?, ?)`,
 			record.RecordID, record.TaskID, formatSQLiteTime(pushedAt)); err != nil {

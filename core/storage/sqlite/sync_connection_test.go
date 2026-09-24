@@ -177,22 +177,26 @@ func TestUnsentTaskEditIsNotOverwrittenOrFalselyAcknowledged(t *testing.T) {
 	}
 	remote := local
 	remote.Title = "Different synthetic edit"
-	if _, err := s.ApplySyncPullPage(ctx, SyncPullPage{Cursor: 1, Records: []SyncPullRecord{SyncPullTask{Task: remote}}}); err == nil {
-		t.Fatal("equal-revision conflict was silently acknowledged")
+	if _, err := s.ApplySyncPullPage(ctx, SyncPullPage{Cursor: 1, Records: []SyncPullRecord{SyncPullTask{Task: remote}}}); err != nil {
+		t.Fatal(err)
 	}
 	remote.Revision = 3
-	if _, err := s.ApplySyncPullPage(ctx, SyncPullPage{Cursor: 1, Records: []SyncPullRecord{SyncPullTask{Task: remote}}}); err == nil {
-		t.Fatal("unsent edit was overwritten")
+	if _, err := s.ApplySyncPullPage(ctx, SyncPullPage{Cursor: 1, Records: []SyncPullRecord{SyncPullTask{Task: remote}}}); err != nil {
+		t.Fatal(err)
 	}
 	actual, err := s.GetTask(ctx, local.TaskID)
 	if err != nil || actual.Title != local.Title || actual.Revision != 2 {
 		t.Fatal("conflict lost the local task")
 	}
-	if count, err := s.PendingTaskSyncRecordCount(ctx); err != nil || count != 1 {
-		t.Fatal("conflict falsely acknowledged the local revision")
+	if count, err := s.PendingTaskSyncRecordCount(ctx); err != nil || count != 0 {
+		t.Fatal("conflicted task remained uploadable")
 	}
-	if cursor, err := s.SleepSyncCursor(ctx); err != nil || cursor != 0 {
-		t.Fatal("conflict advanced the cursor")
+	if cursor, err := s.SleepSyncCursor(ctx); err != nil || cursor != 1 {
+		t.Fatal("retained conflict prevented cursor progress")
+	}
+	conflicts, err := s.ListTaskSyncConflicts(ctx)
+	if err != nil || len(conflicts) != 1 || len(conflicts[0].Downloaded) != 2 {
+		t.Fatal("conflicting payloads were not retained")
 	}
 	if err := s.DeleteTask(ctx, local.TaskID, 2); err != nil {
 		t.Fatal(err)

@@ -48,6 +48,7 @@ type BackendSyncInput struct {
 }
 
 type BackendSyncStatusDTO struct {
+	TaskConflictCount      int    `json:"taskConflictCount"`
 	Enabled                bool   `json:"enabled"`
 	Status                 string `json:"status"`
 	BackendURL             string `json:"backendUrl"`
@@ -968,7 +969,7 @@ func (a *App) backendSyncStatusCounts(cfg backendSyncConfig, counts syncCounts) 
 		}
 	}
 	pending := 0
-	pendingErasures, waitingCorrections := 0, 0
+	pendingErasures, waitingCorrections, taskConflicts := 0, 0, 0
 	cursor := int64(0)
 	if store, err := a.requireStore(); err == nil {
 		ctx := a.applicationContext()
@@ -983,6 +984,7 @@ func (a *App) backendSyncStatusCounts(cfg backendSyncConfig, counts syncCounts) 
 		}
 		pendingErasures, _ = store.PendingSyncErasureCount(ctx)
 		waitingCorrections, _ = store.DeferredSyncCorrectionCount(ctx)
+		taskConflicts, _ = store.TaskSyncConflictCount(ctx)
 	}
 	return BackendSyncStatusDTO{
 		Enabled:                cfg.Enabled,
@@ -995,6 +997,7 @@ func (a *App) backendSyncStatusCounts(cfg backendSyncConfig, counts syncCounts) 
 		PendingPushCount:       pending,
 		PendingErasureCount:    pendingErasures,
 		WaitingCorrectionCount: waitingCorrections,
+		TaskConflictCount:      taskConflicts,
 		PushedCount:            counts.pushed,
 		PulledCount:            counts.pulled,
 		SkippedCount:           counts.skipped,

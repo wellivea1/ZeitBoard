@@ -6,8 +6,12 @@ const backendTasks = {
   status: "ok",
   tasks: [
     {
+      needsReview: false,
+      updatedAt: "2026-09-21T12:00:00Z",
       taskId: "task_abc123def456",
       revision: 3,
+      preferredAfterWakeMinutes: 60,
+      minimumConfidence: "medium",
       title: "File paperwork",
       durationMinutes: 45,
       durationLabel: "45 minutes",

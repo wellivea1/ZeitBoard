@@ -38,7 +38,7 @@ function TaskRow({
         <input
           type="checkbox"
           checked={task.status === "done"}
-          disabled={busy}
+          disabled={busy || task.needsReview}
           onChange={() => onToggleDone(task)}
           aria-label={`Mark ${task.title} ${task.status === "done" ? "open" : "done"}`}
         />
@@ -48,9 +48,16 @@ function TaskRow({
         {[task.durationLabel, task.windowLabel, task.afterWakeLabel].filter(Boolean).join(" · ")}
       </span>
       <span role="cell">
-        <span className="task-chip">{task.status === "done" ? "Done" : "Open"}</span>
+        <span className="task-chip">
+          {task.needsReview ? "Needs review" : task.status === "done" ? "Done" : "Open"}
+        </span>
       </span>
       <span role="cell" className="task-actions">
+        {task.needsReview && (
+          <a className="button secondary" href="#/plan/approvals">
+            Review conflicting edits
+          </a>
+        )}
         <button
           className="button secondary"
           type="button"

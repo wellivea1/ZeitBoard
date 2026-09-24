@@ -1,4 +1,10 @@
 import {
+  normalizeTaskConflict,
+  normalizeTaskConflictHistory,
+  type TaskConflict,
+  type TaskConflictHistory,
+} from "./taskConflicts";
+import {
   proposalFixtures,
   unplacedTaskFixture,
   type ChangeProposalFixture,
@@ -23,6 +29,8 @@ export interface ProposalRecord extends ChangeProposalFixture {
 }
 
 export interface ProposalsData {
+  taskConflicts: TaskConflict[];
+  taskConflictHistory: TaskConflictHistory[];
   fixtureMode: boolean;
   status: "estimated" | "empty" | "refused" | "unavailable";
   refusal?: {
@@ -41,6 +49,8 @@ export interface ProposalsResult {
 // Repackaged from the shared phaseTwo data so the offline shell renders the same
 // shape the scheduler supplies.
 export const proposalsFixture: ProposalsData = {
+  taskConflicts: [],
+  taskConflictHistory: [],
   fixtureMode: true,
   status: "estimated",
   proposals: proposalFixtures.map((proposal) => ({
@@ -59,7 +69,7 @@ export const proposalsFixture: ProposalsData = {
 
 type UnknownRecord = Record<string, unknown>;
 
-const methodNames = ["GetProposals", "Proposals"] as const;
+const methodNames = ["GetProposals"] as const;
 
 export function hasLocalProposalService(
   root: WailsRoot = globalThis as unknown as WailsRoot,
@@ -190,8 +200,12 @@ export function normalizeProposals(value: unknown): ProposalsData | undefined {
   if (!isRecord(value)) return undefined;
   const proposals = mapAll(value.proposals, proposal);
   const unplacedList = mapAll(value.unplaced, unplaced);
-  if (!proposals || !unplacedList) return undefined;
+  const taskConflicts = mapAll(value.taskConflicts, normalizeTaskConflict);
+  const taskConflictHistory = mapAll(value.taskConflictHistory, normalizeTaskConflictHistory);
+  if (!proposals || !unplacedList || !taskConflicts || !taskConflictHistory) return undefined;
   return {
+    taskConflicts,
+    taskConflictHistory,
     fixtureMode: value.fixtureMode === true,
     status: status(value.status),
     ...(refusal(value.refusal) ? { refusal: refusal(value.refusal) } : {}),

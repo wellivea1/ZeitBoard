@@ -5,6 +5,8 @@ import { findWailsMethod, hasDesktopBridge, type WailsRoot } from "./wailsBridge
 // proposes windows for. Titles are private user text and stay local.
 
 export interface Task {
+  needsReview: boolean;
+  updatedAt: string;
   taskId: string;
   revision: number;
   title: string;
@@ -61,7 +63,7 @@ function positiveInteger(value: unknown): number | undefined {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : undefined;
 }
 
-function normalizeTask(value: unknown): Task | undefined {
+export function normalizeTask(value: unknown): Task | undefined {
   if (!isRecord(value)) return undefined;
   const taskId = str(value.taskId);
   const title = str(value.title);
@@ -100,9 +102,20 @@ function normalizeTask(value: unknown): Task | undefined {
     value.preferredAfterWakeMinutes <= 1440
       ? value.preferredAfterWakeMinutes
       : undefined;
+  const updatedAt = str(value.updatedAt);
+  if (
+    !updatedAt ||
+    !Number.isFinite(Date.parse(updatedAt)) ||
+    typeof value.needsReview !== "boolean" ||
+    preferredAfterWakeMinutes === undefined
+  )
+    return undefined;
   const minimumConfidence =
     typeof value.minimumConfidence === "string" ? value.minimumConfidence : undefined;
+  if (minimumConfidence === undefined) return undefined;
   return {
+    needsReview: value.needsReview,
+    updatedAt,
     taskId,
     revision,
     title,
@@ -116,8 +129,8 @@ function normalizeTask(value: unknown): Task | undefined {
     ...(latestFinishAt ? { latestFinishAt } : {}),
     preferredAfterWakeMinutes,
     minimumConfidence,
-    // Older builds expose only prose. Never parse it or erase hidden constraints.
-    editable: preferredAfterWakeMinutes !== undefined && minimumConfidence !== undefined,
+    // Conflicted task constraints are frozen until the owner reviews both versions.
+    editable: !value.needsReview,
   };
 }
 

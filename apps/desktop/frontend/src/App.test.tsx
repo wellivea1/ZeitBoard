@@ -455,6 +455,8 @@ describe("desktop navigation", () => {
           GetProposals: async () =>
             saved
               ? {
+                  taskConflicts: [],
+                  taskConflictHistory: [],
                   fixtureMode: false,
                   status: "estimated",
                   proposals: [
@@ -476,6 +478,8 @@ describe("desktop navigation", () => {
                   unplaced: [],
                 }
               : {
+                  taskConflicts: [],
+                  taskConflictHistory: [],
                   fixtureMode: false,
                   status: "empty",
                   refusal: {
@@ -609,6 +613,8 @@ describe("desktop navigation", () => {
         App: {
           ListTasks: async () => ({ status: "ok", tasks: [] }),
           GetProposals: async () => ({
+            taskConflicts: [],
+            taskConflictHistory: [],
             fixtureMode: false,
             status: "empty",
             proposals: [],

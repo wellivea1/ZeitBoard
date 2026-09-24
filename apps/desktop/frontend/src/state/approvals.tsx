@@ -1,4 +1,10 @@
 import {
+  resolveTaskConflict as recordTaskResolution,
+  type TaskConflict,
+  type TaskConflictHistory,
+} from "../data/taskConflicts";
+import { notifySleepDataChanged } from "../data/sleepDataEvents";
+import {
   createContext,
   useCallback,
   useContext,
@@ -36,6 +42,9 @@ interface LastDecision {
 }
 
 interface ApprovalsContextValue {
+  taskConflicts: TaskConflict[];
+  taskConflictHistory: TaskConflictHistory[];
+  resolveTaskConflict: (conflict: TaskConflict, choiceId: string) => Promise<void>;
   proposals: DecidedProposal[];
   pending: DecidedProposal[];
   decided: DecidedProposal[];
@@ -66,6 +75,8 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
   const [proposals, setProposals] = useState<DecidedProposal[]>(() =>
     localServicePresent ? [] : proposalsFixture.proposals.map(withStatus),
   );
+  const [taskConflicts, setTaskConflicts] = useState<TaskConflict[]>([]);
+  const [taskConflictHistory, setTaskConflictHistory] = useState<TaskConflictHistory[]>([]);
   const [unplaced, setUnplaced] = useState<UnplacedProposal[]>(
     localServicePresent ? [] : proposalsFixture.unplaced,
   );
@@ -80,6 +91,8 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
   const busyRef = useRef<string | null>(null);
 
   const applyResult = useCallback((result: ProposalsResult) => {
+    setTaskConflicts(result.data.taskConflicts);
+    setTaskConflictHistory(result.data.taskConflictHistory);
     setSource(result.source);
     setUnplaced(result.data.unplaced);
     setProposals(result.data.proposals.map(withStatus));
@@ -188,6 +201,41 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
     );
   };
 
+  const resolveTaskConflict = async (conflict: TaskConflict, choiceId: string) => {
+    if (busyRef.current || !ready || error) return;
+    busyRef.current = conflict.taskId;
+    setBusyProposalId(conflict.taskId);
+    setDecisionError("");
+    ++requestVersion.current;
+    try {
+      const confirmed = await recordTaskResolution({
+        taskId: conflict.taskId,
+        reviewToken: conflict.reviewToken,
+        choiceId,
+      });
+      if (!mounted.current) return;
+      setTaskConflicts((current) => current.filter((item) => item.taskId !== conflict.taskId));
+      setTaskConflictHistory((current) =>
+        [confirmed, ...current.filter((item) => item.reviewToken !== confirmed.reviewToken)].slice(
+          0,
+          50,
+        ),
+      );
+      notifySleepDataChanged();
+      await refresh();
+    } catch (reason) {
+      if (mounted.current) {
+        setDecisionError(
+          reason instanceof Error ? reason.message : "The task review could not be confirmed.",
+        );
+        await refresh();
+      }
+    } finally {
+      busyRef.current = null;
+      if (mounted.current) setBusyProposalId(null);
+    }
+  };
+
   const undoLast = () => {
     if (lastDecision) undo(lastDecision.id);
   };
@@ -200,7 +248,10 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
     proposals,
     pending,
     decided,
-    pendingCount: pending.length,
+    taskConflicts,
+    taskConflictHistory,
+    resolveTaskConflict,
+    pendingCount: pending.length + taskConflicts.length,
     unplaced,
     source,
     decide,
@@ -216,7 +267,7 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <PendingApprovalsCountContext.Provider value={pending.length}>
+    <PendingApprovalsCountContext.Provider value={pending.length + taskConflicts.length}>
       <ApprovalsContext.Provider value={value}>
         {children}
         {lastDecision && (

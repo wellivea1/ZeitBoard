@@ -170,6 +170,18 @@ export function BackendSyncSettings({
               <dd>{status.waitingCorrectionCount}</dd>
             </div>
             <div>
+              <dt>Tasks needing review</dt>
+              <dd>
+                {status.taskConflictCount}
+                {status.taskConflictCount > 0 && (
+                  <>
+                    {" "}
+                    · <a href="#/plan/approvals">Review conflicting edits</a>
+                  </>
+                )}
+              </dd>
+            </div>
+            <div>
               <dt>Last sync</dt>
               <dd>{status.lastSyncLabel}</dd>
             </div>

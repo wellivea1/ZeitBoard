@@ -513,19 +513,36 @@ func applySyncedTaskTx(
 		return false, err
 	}
 	existing, err := taskByIDFrom(ctx, tx, record.TaskID)
-	if err == nil && record.Revision >= effectiveRevision(existing) {
+
+	if err == nil {
+		existingJSON, encodeErr := json.Marshal(normalizeTaskTimes(existing))
+		if encodeErr != nil {
+			return false, encodeErr
+		}
+
+		var knownID, knownPayload bool
+		if knownErr := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM local_task_sync_fingerprints WHERE record_id=?),EXISTS(SELECT 1 FROM local_task_sync_fingerprints WHERE record_id=? AND payload_hash=?)`, taskRevisionRecordID(record.TaskID, record.Revision), taskRevisionRecordID(record.TaskID, record.Revision), taskPayloadHash(prepared.encoded)).Scan(&knownID, &knownPayload); knownErr != nil {
+			return false, knownErr
+		}
+		if knownPayload {
+			return false, nil
+		}
+
+		held, reviewErr := taskNeedsReview(ctx, tx, record.TaskID)
+		if reviewErr != nil {
+			return false, reviewErr
+		}
 		var acknowledged bool
-		if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM local_task_sync_records WHERE record_id=?)`, taskRevisionRecordID(existing.TaskID, effectiveRevision(existing))).Scan(&acknowledged); err != nil {
-			return false, err
+		var baseRevision int
+		if queryErr := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM local_task_sync_records WHERE record_id=?),COALESCE((SELECT MAX(CAST(substr(record_id,length(task_id)+3) AS INTEGER)) FROM local_task_sync_records WHERE task_id=?),0)`, taskRevisionRecordID(existing.TaskID, existing.Revision), record.TaskID).Scan(&acknowledged, &baseRevision); queryErr != nil {
+			return false, queryErr
 		}
-		existingJSON, err := json.Marshal(normalizeTaskTimes(existing))
-		if err != nil {
-			return false, err
-		}
-		if (!acknowledged || record.Revision == effectiveRevision(existing)) && !bytes.Equal(existingJSON, prepared.encoded) {
-			return false, errors.New("a downloaded task conflicts with an unsent local edit; the local edit has been retained")
+		differs := !bytes.Equal(existingJSON, prepared.encoded)
+		if differs && (held || knownID || record.Revision == existing.Revision || (!acknowledged && record.Revision > baseRevision)) {
+			return retainTaskConflict(ctx, tx, prepared)
 		}
 	}
+
 	applied := false
 	switch {
 	case errors.Is(err, ErrTaskNotFound):
@@ -554,6 +571,7 @@ func applySyncedTaskTx(
 	synced := TaskSyncRecord{
 		RecordID: taskRevisionRecordID(record.TaskID, record.Revision),
 		TaskID:   record.TaskID,
+		Payload:  prepared.encoded,
 	}
 	if err := markTaskSyncRecordsPushed(ctx, tx, []TaskSyncRecord{synced}, syncedAt); err != nil {
 		return false, err

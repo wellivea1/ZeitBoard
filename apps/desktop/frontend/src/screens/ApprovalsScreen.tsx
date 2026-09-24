@@ -1,3 +1,4 @@
+import { TaskConflictCard, TaskConflictHistoryCard } from "../components/TaskConflictCard";
 import { useState } from "react";
 
 import { PageHeader, PlaceholderNotice } from "../components/AppShell";
@@ -279,9 +280,14 @@ function ReviewHistory() {
         ))}
       </div>
 
-      {local.decided.length + backendHistory.length + visitorHistory.length === 0 && (
-        <p>No history loaded yet.</p>
-      )}
+      {local.taskConflictHistory.map((item) => (
+        <TaskConflictHistoryCard item={item} key={item.reviewToken} />
+      ))}
+      {local.decided.length +
+        local.taskConflictHistory.length +
+        backendHistory.length +
+        visitorHistory.length ===
+        0 && <p>No history loaded yet.</p>}
     </section>
   );
 }
@@ -364,7 +370,9 @@ function PendingReviews({
   const requests = visitor.data.requests.filter((item) => reviewIsPending(item, summary.now));
 
   const loaded =
-    (filter === "all" || filter === "planner" ? local.pending.length : 0) +
+    (filter === "all" || filter === "planner"
+      ? local.pending.length + local.taskConflicts.length
+      : 0) +
     (filter === "all" || filter === "backend" ? remotePending.length : 0) +
     (filter === "all" || filter === "requests" ? requests.length : 0);
 
@@ -374,6 +382,10 @@ function PendingReviews({
 
       {loaded > 0 && (
         <div className="proposal-stack">
+          {(filter === "all" || filter === "planner") &&
+            local.taskConflicts.map((conflict) => (
+              <TaskConflictCard conflict={conflict} key={conflict.reviewToken} />
+            ))}
           {(filter === "all" || filter === "planner") &&
             local.pending.map((proposal) => (
               <ProposalCard proposal={proposal} key={`local-${proposal.id}`} />

@@ -6,6 +6,8 @@ vi.mock("../state/approvals", () => ({
   useApprovals: () => ({ pending: [], pendingCount: 0, unplaced: [] }),
 }));
 const task = {
+  needsReview: false,
+  updatedAt: "2026-09-21T12:00:00Z",
   taskId: "task_synthetic",
   revision: 4,
   title: "File paperwork",
@@ -94,4 +96,16 @@ describe("task workflow", () => {
     fireEvent.click(screen.getByRole("button", { name: "Refresh tasks" }));
     expect(await screen.findByRole("button", { name: "Edit File paperwork" })).toBeVisible();
   });
+});
+
+it("links conflicted tasks to review and blocks edits or status changes", async () => {
+  service.ListTasks.mockResolvedValue({ status: "ok", tasks: [{ ...task, needsReview: true }] });
+  render(<TasksScreen />);
+  expect(await screen.findByRole("link", { name: "Review conflicting edits" })).toHaveAttribute(
+    "href",
+    "#/plan/approvals",
+  );
+  expect(screen.getByRole("button", { name: "Edit File paperwork" })).toBeDisabled();
+  expect(screen.getByRole("checkbox", { name: "Mark File paperwork done" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Delete File paperwork" })).toBeEnabled();
 });

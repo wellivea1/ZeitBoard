@@ -342,6 +342,9 @@ func (s *Store) initialize(ctx context.Context) error {
 	if err := s.initializeSleepAnalysis(ctx); err != nil {
 		return err
 	}
+	if err := s.initializeTaskConflicts(ctx); err != nil {
+		return err
+	}
 	if err := s.initializeSyncConnection(ctx); err != nil {
 		return err
 	}

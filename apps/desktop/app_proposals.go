@@ -52,6 +52,9 @@ func (a *App) GetProposals() (ProposalsDTO, error) {
 	if err != nil {
 		return ProposalsDTO{}, err
 	}
+	if err := a.attachTaskConflictReview(&result.dto); err != nil {
+		return ProposalsDTO{}, err
+	}
 	return result.dto, nil
 }
 

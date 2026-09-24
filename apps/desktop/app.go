@@ -163,11 +163,13 @@ type UnplacedDTO struct {
 }
 
 type ProposalsDTO struct {
-	Status      string        `json:"status"`
-	Refusal     *RefusalDTO   `json:"refusal,omitempty"`
-	FixtureMode bool          `json:"fixtureMode"`
-	Proposals   []ProposalDTO `json:"proposals"`
-	Unplaced    []UnplacedDTO `json:"unplaced"`
+	TaskConflicts       []TaskConflictDTO        `json:"taskConflicts"`
+	TaskConflictHistory []TaskConflictHistoryDTO `json:"taskConflictHistory"`
+	Status              string                   `json:"status"`
+	Refusal             *RefusalDTO              `json:"refusal,omitempty"`
+	FixtureMode         bool                     `json:"fixtureMode"`
+	Proposals           []ProposalDTO            `json:"proposals"`
+	Unplaced            []UnplacedDTO            `json:"unplaced"`
 }
 
 type SleepEntryInput struct {
@@ -805,6 +807,8 @@ type TaskInput struct {
 }
 
 type TaskDTO struct {
+	NeedsReview               bool   `json:"needsReview"`
+	UpdatedAt                 string `json:"updatedAt"`
 	TaskID                    string `json:"taskId"`
 	Revision                  int    `json:"revision"`
 	Title                     string `json:"title"`
@@ -858,9 +862,15 @@ func (a *App) ListTasks() (TasksDTO, error) {
 	if err != nil {
 		return TasksDTO{}, err
 	}
+	conflicts, err := store.TaskSyncConflictIDs(context.Background())
+	if err != nil {
+		return TasksDTO{}, err
+	}
 	tasks := make([]TaskDTO, 0, len(records))
 	for _, record := range records {
-		tasks = append(tasks, taskDTO(record))
+		dto := taskDTO(record)
+		dto.NeedsReview = conflicts[record.TaskID]
+		tasks = append(tasks, dto)
 	}
 	return TasksDTO{Status: "ok", Tasks: tasks}, nil
 }
@@ -973,6 +983,7 @@ func parseTaskConstraintTime(local, instant string, location *time.Location) (ti
 
 func taskDTO(record storage.TaskRecord) TaskDTO {
 	dto := TaskDTO{
+		UpdatedAt:         record.UpdatedAt.UTC().Format(time.RFC3339Nano),
 		TaskID:            record.TaskID,
 		Title:             record.Title,
 		DurationMinutes:   record.DurationMinutes,
