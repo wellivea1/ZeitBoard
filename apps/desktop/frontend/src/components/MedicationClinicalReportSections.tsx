@@ -130,6 +130,21 @@ export function MedicationReportControls({
           </select>
         </label>
         <label>
+          <span>Each row</span>
+          <select
+            value={input.orientation}
+            disabled={busy}
+            onChange={(event) =>
+              onChange({
+                orientation: event.target.value as MedicationClinicalReportInput["orientation"],
+              })
+            }
+          >
+            <option value="24h">One day (24 hours)</option>
+            <option value="48h">A day and the next (48-hour double plot)</option>
+          </select>
+        </label>
+        <label>
           <span>IANA time zone</span>
           <input
             value={input.zoneId}

@@ -8,6 +8,8 @@ export interface MedicationClinicalReportInput {
   toDate: string;
   zoneId: string;
   dayStartHour: 12 | 18;
+  /** One civil day per row, or the double plot: each day and then the next. */
+  orientation: MedicationClinicalOrientation;
   includeForecast: boolean;
   includeMedication: boolean;
   includeMedicationLabels: boolean;
@@ -15,6 +17,8 @@ export interface MedicationClinicalReportInput {
   includeRhythmContext: boolean;
   includeRhythmContextNotes: boolean;
 }
+
+export type MedicationClinicalOrientation = "24h" | "48h";
 
 export type MedicationClinicalSleepKind =
   | "sleep_observed"
@@ -40,6 +44,8 @@ export interface MedicationClinicalSleepSegment {
   durationLabel: string;
   source: string;
   confidence: string;
+  /** The right half of a double-plot row: the next row's day drawn again. */
+  repeat?: boolean;
 }
 
 export interface MedicationClinicalAnnotation {
@@ -48,6 +54,7 @@ export interface MedicationClinicalAnnotation {
   label: string;
   atLabel: string;
   detail?: string;
+  repeat?: boolean;
 }
 
 export interface MedicationClinicalActogramRow {
@@ -90,6 +97,7 @@ export interface MedicationClinicalReport {
     label: string;
     dayStartHour: 12 | 18;
     dayStartLabel: string;
+    orientation: MedicationClinicalOrientation;
   };
   summary: {
     calendarRows: number;
@@ -104,6 +112,7 @@ export interface MedicationClinicalReport {
   };
   redactions: string[];
   actogram: {
+    orientation: MedicationClinicalOrientation;
     axisLabels: string[];
     rows: MedicationClinicalActogramRow[];
     legend: MedicationClinicalLegend[];
@@ -237,6 +246,10 @@ function stringArray(value: unknown): string[] | undefined {
   return values.every(Boolean) ? (values as string[]) : undefined;
 }
 
+function orientationOf(value: unknown): MedicationClinicalOrientation | undefined {
+  return value === "24h" || value === "48h" ? value : undefined;
+}
+
 function normalizeSleep(value: unknown): MedicationClinicalSleepSegment | undefined {
   if (!isRecord(value) || !sleepKinds.has(value.kind as MedicationClinicalSleepKind)) {
     return undefined;
@@ -273,6 +286,7 @@ function normalizeSleep(value: unknown): MedicationClinicalSleepSegment | undefi
     durationLabel,
     source,
     confidence,
+    ...(value.repeat === true ? { repeat: true } : {}),
   };
 }
 
@@ -299,6 +313,7 @@ function normalizeAnnotation(value: unknown): MedicationClinicalAnnotation | und
     label,
     atLabel,
     ...(detail ? { detail } : {}),
+    ...(value.repeat === true ? { repeat: true } : {}),
   };
 }
 
@@ -318,7 +333,7 @@ function normalizeRow(value: unknown): MedicationClinicalActogramRow | undefined
     typeof value.noData !== "boolean" ||
     sleep.some((item) => !item) ||
     annotations.some((item) => !item) ||
-    value.noData !== sleep.every((item) => item?.kind === "forecast")
+    value.noData !== sleep.every((item) => item?.repeat || item?.kind === "forecast")
   ) {
     return undefined;
   }
@@ -429,6 +444,7 @@ export function normalizeMedicationClinicalReport(
       ? value.range.dayStartHour
       : undefined;
   const dayStartLabel = text(value.range.dayStartLabel);
+  const orientation = orientationOf(value.range.orientation);
   const summary = value.summary;
   const calendarRows = integer(summary.calendarRows);
   const observedSleepSegments = integer(summary.observedSleepSegments);
@@ -446,6 +462,8 @@ export function normalizeMedicationClinicalReport(
     !rangeLabel ||
     !dayStartHour ||
     !dayStartLabel ||
+    !orientation ||
+    orientationOf(value.actogram.orientation) !== orientation ||
     calendarRows === undefined ||
     observedSleepSegments === undefined ||
     noDataRows === undefined ||
@@ -485,7 +503,7 @@ export function normalizeMedicationClinicalReport(
     : [];
   if (
     !axisLabels ||
-    axisLabels.length !== 5 ||
+    axisLabels.length !== (orientation === "48h" ? 9 : 5) ||
     rows.some((item) => !item) ||
     legend.some((item) => !item) ||
     !actogramSummary ||
@@ -611,11 +629,14 @@ export function normalizeMedicationClinicalReport(
   let countedContextMarkers = 0;
   for (const row of normalizedRows) {
     if (row.noData) countedNoDataRows += 1;
+    // A double plot's right half is the next row drawn again: count it there.
     for (const segment of row.sleep) {
+      if (segment.repeat) continue;
       presentKinds.add(segment.kind);
       if (segment.kind !== "forecast") countedSleepSegments += 1;
     }
     for (const annotation of row.annotations) {
+      if (annotation.repeat) continue;
       presentKinds.add(annotation.kind);
       if (annotation.kind === "medication_taken" || annotation.kind === "medication_skipped") {
         countedMedicationEvents += 1;
@@ -681,6 +702,7 @@ export function normalizeMedicationClinicalReport(
       label: rangeLabel,
       dayStartHour,
       dayStartLabel,
+      orientation,
     },
     summary: {
       calendarRows,
@@ -695,6 +717,7 @@ export function normalizeMedicationClinicalReport(
     },
     redactions,
     actogram: {
+      orientation,
       axisLabels,
       rows: normalizedRows,
       legend: normalizedLegend,

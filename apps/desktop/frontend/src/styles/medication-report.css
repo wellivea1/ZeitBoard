@@ -332,17 +332,30 @@
 }
 
 .clinical-actogram-axis {
-  grid-template-columns: 92px repeat(5, minmax(0, 1fr));
   min-height: 24px;
-  align-items: center;
   color: var(--subtle);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
 
-.clinical-actogram-axis span:not(:first-child) {
-  padding-left: var(--space-1);
-  border-left: 1px solid var(--divider);
+.clinical-actogram-ticks {
+  position: relative;
+}
+
+/* Centred on its hour; the first and last keep inside the row. */
+.clinical-actogram-ticks span {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  white-space: nowrap;
+}
+
+.clinical-actogram-ticks span:first-child {
+  transform: translate(0, -50%);
+}
+
+.clinical-actogram-ticks span:last-child {
+  transform: translate(-100%, -50%);
 }
 
 .clinical-actogram-row {
@@ -388,6 +401,33 @@
     var(--divider) 75%,
     transparent 75%
   );
+}
+
+/* The double plot: two days a row, a rule every six hours, and the day
+   boundary in the middle drawn in ink. It needs the width to stay legible. */
+.clinical-actogram[data-orientation="48h"],
+.clinical-actogram[data-orientation="48h"] .clinical-actogram-axis,
+.clinical-actogram[data-orientation="48h"] .clinical-actogram-month,
+.clinical-actogram[data-orientation="48h"] .clinical-actogram-row {
+  min-width: 760px;
+}
+
+.clinical-actogram[data-orientation="48h"] .clinical-actogram-track {
+  background-image:
+    linear-gradient(
+      to right,
+      transparent calc(50% - 1px),
+      var(--ink) calc(50% - 1px),
+      var(--ink) 50%,
+      transparent 50%
+    ),
+    repeating-linear-gradient(
+      to right,
+      transparent 0,
+      transparent calc(12.5% - 1px),
+      var(--divider) calc(12.5% - 1px),
+      var(--divider) 12.5%
+    );
 }
 
 .clinical-actogram-gap {

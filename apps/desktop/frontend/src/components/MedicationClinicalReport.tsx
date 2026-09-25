@@ -38,6 +38,7 @@ function initialInput(): MedicationClinicalReportInput {
     toDate: localDate(),
     zoneId: localZone(),
     dayStartHour: 18,
+    orientation: "24h",
     includeForecast: false,
     includeMedication: true,
     includeMedicationLabels: false,

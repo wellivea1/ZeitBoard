@@ -8,6 +8,8 @@ import {
   normalizeMedicationClinicalReport,
 } from "./medicationReport";
 import {
+  asDoublePlot,
+  medicationClinicalDoublePlotFixture,
   medicationClinicalReportExportFixture,
   medicationClinicalReportFixture,
   medicationClinicalReportInput,
@@ -88,6 +90,37 @@ describe("medication clinician report adapter", () => {
     const driftOutsideBounds = medicationClinicalReportFixture();
     driftOutsideBounds.drift.points[0]!.onsetHour = 30;
     expect(normalizeMedicationClinicalReport(driftOutsideBounds)).toBeUndefined();
+  });
+
+  it("reads a double plot, counting each day once", () => {
+    const normalized = normalizeMedicationClinicalReport(medicationClinicalDoublePlotFixture(3));
+    expect(normalized).toMatchObject({
+      range: { orientation: "48h" },
+      actogram: { orientation: "48h" },
+      summary: { observedSleepSegments: 2, medicationEvents: 2, rhythmContextMarkers: 1 },
+    });
+    expect(normalized?.actogram.axisLabels).toHaveLength(9);
+    // Row one's right half is row two's night, marked as drawn again.
+    expect(normalized?.actogram.rows[0]?.sleep.map((segment) => segment.repeat ?? false)).toEqual([
+      false,
+      true,
+    ]);
+
+    // A day with no sleep may still show the next day's on its right half.
+    const withGap = medicationClinicalReportFixture(3);
+    withGap.actogram.rows[0]!.sleep = [];
+    withGap.actogram.rows[0]!.noData = true;
+    withGap.summary.observedSleepSegments -= 1;
+    withGap.summary.noDataRows += 1;
+    expect(normalizeMedicationClinicalReport(asDoublePlot(withGap))).toBeDefined();
+
+    const wrongAxis = medicationClinicalDoublePlotFixture(3);
+    wrongAxis.actogram.axisLabels = wrongAxis.actogram.axisLabels.slice(0, 5);
+    expect(normalizeMedicationClinicalReport(wrongAxis)).toBeUndefined();
+
+    const mixed = medicationClinicalDoublePlotFixture(3);
+    mixed.range.orientation = "24h";
+    expect(normalizeMedicationClinicalReport(mixed)).toBeUndefined();
   });
 
   it("loads and exports only through the local desktop bridge", async () => {

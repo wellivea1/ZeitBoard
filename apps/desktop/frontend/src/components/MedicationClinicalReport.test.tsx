@@ -5,6 +5,7 @@ import { medicationDataChangedEvent } from "../data/medications";
 import { rhythmMarkersChangedEvent } from "../data/rhythmMarkers";
 import { sleepDataChangedEvent } from "../data/sleepDataEvents";
 import {
+  medicationClinicalDoublePlotFixture,
   medicationClinicalReportExportFixture,
   medicationClinicalReportFixture,
 } from "../test/medicationReportFixture";
@@ -74,6 +75,56 @@ describe("MedicationClinicalReport", () => {
     expect(
       screen.getByRole("table", { name: /sleep and timing details for rows 32 through 32/i }),
     ).toBeInTheDocument();
+  });
+
+  it("draws the double plot on request and still names each night once", async () => {
+    const getReport = vi.fn(async () => structuredClone(medicationClinicalDoublePlotFixture(3)));
+    (globalThis as GlobalWithGo).go = {
+      main: {
+        App: {
+          GetMedicationClinicianReport: getReport,
+          ExportMedicationClinicianReport: vi.fn(async () =>
+            structuredClone(medicationClinicalReportExportFixture()),
+          ),
+        },
+      },
+    };
+    const { container } = render(<MedicationClinicalReport available />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Build report" }));
+    await screen.findByText("Adherence summary", undefined, { timeout: 5_000 });
+    expect(getReport).toHaveBeenLastCalledWith(expect.objectContaining({ orientation: "24h" }));
+    fireEvent.change(screen.getByLabelText("Each row"), { target: { value: "48h" } });
+    fireEvent.click(screen.getByRole("button", { name: "Regenerate preview" }));
+    await waitFor(() =>
+      expect(getReport).toHaveBeenLastCalledWith(expect.objectContaining({ orientation: "48h" })),
+    );
+
+    const chart = container.querySelector(".clinical-actogram");
+    expect(chart).toHaveAttribute("data-orientation", "48h");
+    expect(screen.getByText(/anchor, double plot/)).toBeInTheDocument();
+    // Nine hours, the first at the row's start and the last at its end.
+    const ticks = [...container.querySelectorAll<HTMLElement>(".clinical-actogram-ticks span")];
+    expect(ticks.map((tick) => tick.style.left)).toEqual([
+      "0%",
+      "12.5%",
+      "25%",
+      "37.5%",
+      "50%",
+      "62.5%",
+      "75%",
+      "87.5%",
+      "100%",
+    ]);
+    // Row one draws its own night and the next; its text names only its own.
+    expect(
+      container
+        .querySelectorAll(".clinical-actogram-row")[0]!
+        .querySelectorAll(".clinical-sleep-segment"),
+    ).toHaveLength(2);
+    const table = screen.getByRole("table", { name: /sleep and timing details/i });
+    const firstRow = within(table).getAllByRole("row")[1]!;
+    expect(firstRow.textContent?.match(/Observed sleep/g)).toHaveLength(1);
   });
 
   it("marks changed controls stale and gates local HTML export behind exact confirmation", async () => {
