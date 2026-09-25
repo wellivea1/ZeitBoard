@@ -540,3 +540,17 @@ row a day from 6 PM to 6 PM, matching the chart, for nights kept on paper.
 **Next C7 work:** keyboard and nonvisual equivalents for the new layouts, and
 compact Android layouts. Direct PDF/PNG output remains a refinement; printing
 the exported HTML is the PDF path.
+
+### C7 the Week board without sight — 2026-09-25
+
+The Week board drew sleep only in paint. A screen reader heard the blocks
+without their day and the sleep bands without their times, and a short band
+said nothing at all. Each day is now a group named by its date ("Friday,
+September 25, today"). Every recorded or forecast band says what it is and
+when ("Likely asleep, 7:45 AM to 2:00 PM"), as do doses and the point past
+which nothing is forecast. The drawing is unchanged. Keyboard use already
+worked, since every block is a button under the app's focus ring; the Android
+dial already carries a spoken description beside its sentence.
+
+**Next C7 work:** compact Android layouts, and a screen-reader pass of the
+new layouts on real assistive technology.

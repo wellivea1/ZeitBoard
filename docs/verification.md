@@ -1662,3 +1662,14 @@ landscape page: a month and a time zone to write in, one line of instructions,
 31 rows of 24 hours from 6 PM, and a notes column. Tests pin its hours, rows,
 heavier midnight and noon rules, the absence of scripts and network references,
 and its content-security policy.
+
+## The Week board without sight — 2026-09-25
+
+In the running app (disposable profile with an estimate), the Week board's
+accessibility tree named each day column ("Saturday, September 26") and
+gave its bands as time ranges: "Sleep may begin, 6:15 AM to 7:45 AM",
+"Likely asleep, 7:45 AM to 2:00 PM", "Waking likely, 2:00 PM to 4:00 PM",
+and today's "Recorded · 8 hours, 6:00 AM to 2:00 PM". Tests pin the clock
+wording (midnight and noon named), the spoken dates, a suggestion's buttons
+found inside today's group, and the bands' spoken ranges (462 desktop + 6
+prototype tests). Not verified here: NVDA or Narrator reading the board.

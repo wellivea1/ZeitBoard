@@ -116,6 +116,8 @@ export interface WeekColumn {
   civilDate: string;
   weekday: string;
   dayNumber: string;
+  /** The day in words for assistive technology: "Friday 25 September, today". */
+  spokenDate: string;
   isToday: boolean;
   isPast: boolean;
   bands: WeekBand[];
@@ -328,6 +330,7 @@ export function weekColumns({ calendar, suggestions, sleep, medications, now }: 
       civilDate: date,
       weekday: noon.toLocaleDateString(undefined, { weekday: "short" }),
       dayNumber: String(noon.getDate()),
+      spokenDate: `${noon.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}${isToday ? ", today" : ""}`,
       isToday,
       isPast,
       bands,
@@ -352,6 +355,14 @@ export function weekTitle(first: string, last: string) {
 }
 
 /** "3 AM", "Noon", "9 PM": the gutter's labels. */
+/** A minute of the day as a clock time, with the day's edges named. */
+export function minuteClock(minute: number) {
+  if (minute <= 0 || minute >= DAY_MINUTES) return "midnight";
+  if (minute === 12 * 60) return "noon";
+  const hour = Math.floor(minute / 60);
+  return `${((hour + 11) % 12) + 1}:${String(minute % 60).padStart(2, "0")} ${hour < 12 ? "AM" : "PM"}`;
+}
+
 export function hourLabel(hour: number) {
   if (hour === 12) return "Noon";
   if (hour === 0 || hour === 24) return "Midnight";

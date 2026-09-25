@@ -101,6 +101,16 @@ describe("Plan › Week", () => {
       ).toHaveLength(1);
       expect(screen.getAllByRole("button", { name: /^Deep work, suggested for/ })).toHaveLength(1);
 
+      // Each day is a group named by its date, so a block is heard with its day.
+      const today = screen.getByRole("group", { name: /, today$/ });
+      expect(
+        within(today).getByRole("button", { name: "Accept the suggested time for Deep work" }),
+      ).toBeVisible();
+      // The forecast bands say what they are and when, not only in paint.
+      expect(
+        [...container.querySelectorAll(".week-band .sr-only")].map((node) => node.textContent),
+      ).toContainEqual(expect.stringMatching(/^Likely asleep, .+ to .+/));
+
       // The half hour after midnight is drawn in the next day, without controls.
       const rest = container.querySelector(".week-block[data-continued]");
       expect(rest).toHaveTextContent("Deep work");
