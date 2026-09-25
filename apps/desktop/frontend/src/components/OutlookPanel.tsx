@@ -140,6 +140,7 @@ function OpportunityList({ data }: { data: OutlookData }) {
         <span className="overview-row-label">Suggestions only</span>
         <h4 id="outlook-opportunities-title">Where your tasks could go</h4>
         <small>Nothing here is scheduled; every placement needs your approval.</small>
+        <a href="#/plan/approvals">Review proposals</a>
       </div>
       <ul>
         {data.opportunities.map((opportunity) => (
@@ -171,7 +172,7 @@ function OutlookNotice({ data }: { data: OutlookData }) {
             : "Not enough history to look ahead yet"}
         </strong>
         <small>{data.withheldMessage ?? data.refusal?.message ?? data.freshness.explanation}</small>
-        {withheld && (
+        {data.status === "withheld" && (
           <small>
             A forecast is anchored to where you are in your cycle right now. Without a recent record
             there is nothing to anchor it to, so office windows drawn over it would be arithmetic
@@ -179,8 +180,11 @@ function OutlookNotice({ data }: { data: OutlookData }) {
           </small>
         )}
       </span>
-      <a className="button secondary" href="#/log/sleep">
-        Add sleep entry
+      <a
+        className="button secondary"
+        href={data.status === "unavailable" ? "#/data-sources" : "#/log/sleep"}
+      >
+        {data.status === "unavailable" ? "Check Data Sources" : "Add sleep entry"}
       </a>
     </div>
   );

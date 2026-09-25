@@ -40,28 +40,29 @@ const (
 )
 
 var (
-	user32               = syscall.NewLazyDLL("user32.dll")
-	shell32              = syscall.NewLazyDLL("shell32.dll")
-	kernel32             = syscall.NewLazyDLL("kernel32.dll")
-	procRegisterClassEx  = user32.NewProc("RegisterClassExW")
-	procCreateWindowEx   = user32.NewProc("CreateWindowExW")
-	procDefWindowProc    = user32.NewProc("DefWindowProcW")
-	procDestroyWindow    = user32.NewProc("DestroyWindow")
-	procGetMessage       = user32.NewProc("GetMessageW")
-	procTranslateMessage = user32.NewProc("TranslateMessage")
-	procDispatchMessage  = user32.NewProc("DispatchMessageW")
-	procPostMessage      = user32.NewProc("PostMessageW")
-	procPostQuitMessage  = user32.NewProc("PostQuitMessage")
-	procLoadIcon         = user32.NewProc("LoadIconW")
-	procLoadCursor       = user32.NewProc("LoadCursorW")
-	procCreatePopupMenu  = user32.NewProc("CreatePopupMenu")
-	procAppendMenu       = user32.NewProc("AppendMenuW")
-	procTrackPopupMenu   = user32.NewProc("TrackPopupMenu")
-	procSetForeground    = user32.NewProc("SetForegroundWindow")
-	procGetCursorPos     = user32.NewProc("GetCursorPos")
-	procDestroyMenu      = user32.NewProc("DestroyMenu")
-	procShellNotifyIcon  = shell32.NewProc("Shell_NotifyIconW")
-	procGetModuleHandle  = kernel32.NewProc("GetModuleHandleW")
+	user32                    = syscall.NewLazyDLL("user32.dll")
+	shell32                   = syscall.NewLazyDLL("shell32.dll")
+	kernel32                  = syscall.NewLazyDLL("kernel32.dll")
+	procRegisterClassEx       = user32.NewProc("RegisterClassExW")
+	procCreateWindowEx        = user32.NewProc("CreateWindowExW")
+	procDefWindowProc         = user32.NewProc("DefWindowProcW")
+	procDestroyWindow         = user32.NewProc("DestroyWindow")
+	procGetMessage            = user32.NewProc("GetMessageW")
+	procTranslateMessage      = user32.NewProc("TranslateMessage")
+	procDispatchMessage       = user32.NewProc("DispatchMessageW")
+	procPostMessage           = user32.NewProc("PostMessageW")
+	procPostQuitMessage       = user32.NewProc("PostQuitMessage")
+	procLoadIcon              = user32.NewProc("LoadIconW")
+	procLoadCursor            = user32.NewProc("LoadCursorW")
+	procCreatePopupMenu       = user32.NewProc("CreatePopupMenu")
+	procAppendMenu            = user32.NewProc("AppendMenuW")
+	procTrackPopupMenu        = user32.NewProc("TrackPopupMenu")
+	procSetForeground         = user32.NewProc("SetForegroundWindow")
+	procGetCursorPos          = user32.NewProc("GetCursorPos")
+	procDestroyMenu           = user32.NewProc("DestroyMenu")
+	procShellNotifyIcon       = shell32.NewProc("Shell_NotifyIconW")
+	procGetModuleHandle       = kernel32.NewProc("GetModuleHandleW")
+	procRegisterWindowMessage = user32.NewProc("RegisterWindowMessageW")
 )
 
 type point struct{ X, Y int32 }
@@ -111,11 +112,13 @@ type notifyIconData struct {
 }
 
 type windowsController struct {
-	mu        sync.Mutex
-	window    uintptr
-	callbacks Callbacks
-	ready     chan error
-	done      chan struct{}
+	mu             sync.Mutex
+	window         uintptr
+	callbacks      Callbacks
+	ready          chan error
+	done           chan struct{}
+	icon           uintptr
+	taskbarCreated uint32
 }
 
 func newPlatformController() Controller {
@@ -182,11 +185,27 @@ func (controller *windowsController) run() {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	defer close(controller.done)
+	defer func() {
+		controller.mu.Lock()
+		controller.window = 0
+		controller.mu.Unlock()
+		if controller.callbacks.AvailabilityChanged != nil {
+			controller.callbacks.AvailabilityChanged(false)
+		}
+	}()
+	taskbarName, _ := syscall.UTF16PtrFromString("TaskbarCreated")
+	taskbarMessage, _, _ := procRegisterWindowMessage.Call(uintptr(unsafe.Pointer(taskbarName)))
+	if taskbarMessage == 0 {
+		controller.ready <- errors.New("Windows tray recovery messages are unavailable")
+		return
+	}
+	controller.taskbarCreated = uint32(taskbarMessage)
 
 	instance, _, _ := procGetModuleHandle.Call(0)
 	className, _ := syscall.UTF16PtrFromString("Non24PlannerTrayWindow")
 	windowProc := syscall.NewCallback(controller.windowProc)
 	icon, _, _ := procLoadIcon.Call(0, idiApplication)
+	controller.icon = icon
 	cursor, _, _ := procLoadCursor.Call(0, 32512)
 	class := windowClassEx{
 		Size: uint32(unsafe.Sizeof(windowClassEx{})), WindowProc: windowProc,
@@ -205,12 +224,13 @@ func (controller *windowsController) run() {
 	controller.window = window
 	controller.mu.Unlock()
 
-	data := notifyIconData{Size: uint32(unsafe.Sizeof(notifyIconData{})), Window: window, ID: 1, Flags: nifMessage | nifIcon | nifTip, Callback: wmTray, Icon: icon}
-	copy(data.Tip[:], syscall.StringToUTF16("ZeitBoard - double-click to open"))
-	if result, _, callErr := procShellNotifyIcon.Call(nimAdd, uintptr(unsafe.Pointer(&data))); result == 0 {
-		controller.ready <- errors.New("add Windows tray icon: " + callErr.Error())
+	if err := addWindowsTrayIcon(window, icon); err != nil {
+		controller.ready <- err
 		procDestroyWindow.Call(window)
 		return
+	}
+	if controller.callbacks.AvailabilityChanged != nil {
+		controller.callbacks.AvailabilityChanged(true)
 	}
 	controller.ready <- nil
 
@@ -223,13 +243,27 @@ func (controller *windowsController) run() {
 		procTranslateMessage.Call(uintptr(unsafe.Pointer(&msg)))
 		procDispatchMessage.Call(uintptr(unsafe.Pointer(&msg)))
 	}
+	data := notifyIconData{Size: uint32(unsafe.Sizeof(notifyIconData{})), Window: window, ID: 1}
 	procShellNotifyIcon.Call(nimDelete, uintptr(unsafe.Pointer(&data)))
-	controller.mu.Lock()
-	controller.window = 0
-	controller.mu.Unlock()
+}
+
+var addWindowsTrayIcon = func(window, icon uintptr) error {
+	data := notifyIconData{Size: uint32(unsafe.Sizeof(notifyIconData{})), Window: window, ID: 1, Flags: nifMessage | nifIcon | nifTip, Callback: wmTray, Icon: icon}
+	copy(data.Tip[:], syscall.StringToUTF16("ZeitBoard - double-click to open"))
+	if result, _, err := procShellNotifyIcon.Call(nimAdd, uintptr(unsafe.Pointer(&data))); result == 0 {
+		return errors.New("add Windows tray icon: " + err.Error())
+	}
+	return nil
 }
 
 func (controller *windowsController) windowProc(window uintptr, message uint32, wParam, lParam uintptr) uintptr {
+	if controller.taskbarCreated != 0 && message == controller.taskbarCreated {
+		err := addWindowsTrayIcon(window, controller.icon)
+		if controller.callbacks.AvailabilityChanged != nil {
+			controller.callbacks.AvailabilityChanged(err == nil)
+		}
+		return 0
+	}
 	switch message {
 	case wmTray:
 		switch uint32(lParam) {

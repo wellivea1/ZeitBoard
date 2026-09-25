@@ -5,7 +5,7 @@ import {
   type RhythmSleepBandFixture,
 } from "./phaseTwo";
 import type { ConfidenceLevel } from "./overview";
-import { findWailsMethod, type WailsRoot } from "./wailsBridge";
+import { findWailsMethod, hasDesktopBridge, type WailsRoot } from "./wailsBridge";
 
 export type RhythmSource = "local" | "synced" | "fixture";
 
@@ -42,6 +42,27 @@ export interface RhythmResult {
   data: RhythmData;
   source: RhythmSource;
 }
+
+export const rhythmUnavailable: RhythmData = {
+  fixtureMode: false,
+  status: "unavailable",
+  message: "The desktop service could not load your rhythm. Refresh to try again.",
+  actogram: {
+    summary: "Rhythm unavailable",
+    observedRows: [],
+    forecastRows: [],
+    now: { label: "", day: "", civilDate: "", hour: 0 },
+  },
+  drift: {
+    title: "Sleep-onset drift",
+    slopeLabel: "Unavailable",
+    confidence: "Low",
+    summary: "No estimate available",
+    yMinHour: 0,
+    yMaxHour: 48,
+    points: [],
+  },
+};
 
 // The fixture is repackaged from the shared phaseTwo data so the offline shell
 // renders the same shape the backend supplies, and the two never diverge.
@@ -286,10 +307,10 @@ export async function loadRhythm(
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<RhythmResult> {
   const method = findWailsMethod(root, methodNames);
-  if (!method) return { data: rhythmFixture, source: "fixture" };
+  if (!method && !hasDesktopBridge(root)) return { data: rhythmFixture, source: "fixture" };
 
   try {
-    const result = await method();
+    const result = await method?.();
     const rhythm = normalizeRhythm(result);
     if (rhythm)
       return {
@@ -299,8 +320,8 @@ export async function loadRhythm(
           : source(undefined, rhythm.fixtureMode),
       };
   } catch {
-    // Fixture mode keeps the Rhythm screen usable before the Wails service is ready.
+    // Unreadable desktop data must not turn into a sample chart.
   }
 
-  return { data: rhythmFixture, source: "fixture" };
+  return { data: rhythmUnavailable, source: "local" };
 }

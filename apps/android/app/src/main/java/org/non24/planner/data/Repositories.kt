@@ -37,6 +37,7 @@ interface SettingsRepository {
 }
 
 interface HealthConnectRepository : SleepRepository {
+    val backgroundReadState: StateFlow<org.non24.planner.domain.BackgroundReadState>
     val availability: StateFlow<HealthConnectAvailability>
     val permissionState: StateFlow<HealthPermissionState>
     val requiredPermissions: Set<String>

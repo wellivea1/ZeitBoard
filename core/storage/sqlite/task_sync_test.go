@@ -98,7 +98,7 @@ func TestTaskRevisionsFlowThroughSyncBookkeeping(t *testing.T) {
 	}
 }
 
-func TestNeverPushedTaskDeletesWithoutErasures(t *testing.T) {
+func TestUnacknowledgedTaskDeleteStillQueuesErasure(t *testing.T) {
 	store, ctx := newTaskSyncStore(t)
 	created := time.Date(2026, 7, 1, 12, 0, 0, 0, time.UTC)
 	if err := store.AddTask(ctx, TaskRecord{TaskID: "task_local_only", Title: "Never synced", DurationMinutes: 30, Status: TaskStatusOpen, CreatedAt: created}); err != nil {
@@ -111,8 +111,8 @@ func TestNeverPushedTaskDeletesWithoutErasures(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(pending) != 0 {
-		t.Fatalf("never-pushed task must not enqueue erasures: %v", pending)
+	if len(pending) != 1 || pending[0] != "task_local_only_r1" {
+		t.Fatalf("unacknowledged task must enqueue erasure: %v", pending)
 	}
 }
 

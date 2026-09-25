@@ -1,0 +1,47 @@
+{
+  "schema_version": "v1",
+  "cursor": 2,
+  "records": [
+    {
+      "seq": 1,
+      "recordId": "hc-18a9d62fc1ee92e8a9435e8e",
+      "kind": "observation",
+      "deviceId": "device_android_synthetic",
+      "createdAt": "2026-09-02T11:01:00Z",
+      "payload": {
+        "end_at": "2026-09-02T10:00:00Z",
+        "kind": "sleep_episode",
+        "observation_id": "hc-18a9d62fc1ee92e8a9435e8e",
+        "provenance": {
+          "acquisition_method": "health_connect",
+          "evidence_status": "directly_observed",
+          "recorded_at": "2026-09-02T11:00:00.123456789Z",
+          "source_record_id": "sleep-1"
+        },
+        "sleep": {
+          "classification": "principal"
+        },
+        "start_at": "2026-09-02T02:00:00Z",
+        "zone_id": "UTC"
+      }
+    },
+    {
+      "seq": 2,
+      "recordId": "cor-5dde5096ea7a1d4f459dde8b",
+      "kind": "correction",
+      "deviceId": "device_android_synthetic",
+      "createdAt": "2026-09-02T11:02:00Z",
+      "payload": {
+        "acquisition_method": "health_connect",
+        "changes": {
+          "end_at": "2026-09-02T10:00:00Z",
+          "start_at": "2026-09-02T02:02:00Z"
+        },
+        "correction_id": "cor-5dde5096ea7a1d4f459dde8b",
+        "created_at": "2026-09-02T11:00:00.123456790Z",
+        "reason": "source_conflict",
+        "target_observation_id": "hc-18a9d62fc1ee92e8a9435e8e"
+      }
+    }
+  ]
+}

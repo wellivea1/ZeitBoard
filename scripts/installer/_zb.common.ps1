@@ -1308,47 +1308,44 @@ function Remove-ZbShortcutIfOwned {
 }
 
 function Set-ZbStartupEntry {
-    # HKCU Run key add/remove. The app starts to tray (matches its tray Start/
-    # Quit controls). Idempotent both ways. -RunKey is overridable so tests can
-    # exercise the round-trip against a sandbox key.
+    # One current command shared with the app: quoted executable, optionally
+    # --background. Installer startup always chooses the tray; the app also
+    # supports an explicitly visible login launch. Tests use a non-startup key.
     param(
         [Parameter(Mandatory)][string]$TargetPath,
         [bool]$Enabled = $true,
         [string]$RunKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
     )
-    $runKey = $RunKey
-    $name = 'ZeitBoard'
-    if ($Enabled) {
-        if (-not (Test-Path $runKey)) { New-Item -Path $runKey -Force | Out-Null }
-        $properties = Get-ItemProperty -Path $runKey -Name $name -ErrorAction SilentlyContinue
-        if ($properties) {
-            $current = [string]$properties.$name
-            $expectedQuoted = "`"$TargetPath`""
-            $owned = [string]::Equals($current, $expectedQuoted, [StringComparison]::OrdinalIgnoreCase) -or
-                [string]::Equals($current, $TargetPath, [StringComparison]::OrdinalIgnoreCase)
-            if (-not $owned) {
-                Write-ZbLog -Level warn -Message 'startup entry named ZeitBoard points elsewhere and was preserved'
-                return
-            }
-        }
-        Set-ItemProperty -Path $runKey -Name $name -Value "`"$TargetPath`"" -Force
-        Write-ZbLog -Level ok -Message 'startup launch enabled (HKCU Run)'
+    $entryName = 'ZeitBoard'
+    $visibleCommand = "`"$TargetPath`""
+    $backgroundCommand = "$visibleCommand --background"
+    if ($Enabled -and ((-not [IO.Path]::IsPathRooted($TargetPath)) -or
+            $TargetPath -match '["\r\n\x00]' -or
+            (-not $TargetPath.EndsWith('.exe', [StringComparison]::OrdinalIgnoreCase)) -or
+            $backgroundCommand.Length -gt 260)) {
+        throw 'Windows login startup requires a quoted absolute executable path within its 260-character command limit.'
     }
-    else {
-        if (-not (Test-Path $runKey)) { return }
-        $properties = Get-ItemProperty -Path $runKey -Name $name -ErrorAction SilentlyContinue
-        if ($properties) {
-            $current = [string]$properties.$name
-            $expectedQuoted = "`"$TargetPath`""
-            $owned = [string]::Equals($current, $expectedQuoted, [StringComparison]::OrdinalIgnoreCase) -or
-                [string]::Equals($current, $TargetPath, [StringComparison]::OrdinalIgnoreCase)
-            if (-not $owned) {
-                Write-ZbLog -Level warn -Message 'startup entry named ZeitBoard points elsewhere and was preserved'
-                return
-            }
-            Remove-ItemProperty -Path $runKey -Name $name -Force
-            Write-ZbLog -Level ok -Message 'startup launch disabled'
+    if (-not (Test-Path -LiteralPath $RunKey)) {
+        if (-not $Enabled) { return }
+        New-Item -Path $RunKey -Force | Out-Null
+    }
+    $properties = Get-ItemProperty -LiteralPath $RunKey -Name $entryName -ErrorAction SilentlyContinue
+    if ($properties) {
+        $current = [string]$properties.$entryName
+        $owned = [string]::Equals($current, $visibleCommand, [StringComparison]::OrdinalIgnoreCase) -or
+            [string]::Equals($current, $backgroundCommand, [StringComparison]::OrdinalIgnoreCase)
+        if (-not $owned) {
+            Write-ZbLog -Level warn -Message 'startup entry named ZeitBoard points elsewhere and was preserved'
+            return
         }
+    }
+    if ($Enabled) {
+        Set-ItemProperty -LiteralPath $RunKey -Name $entryName -Value $backgroundCommand -Force
+        Write-ZbLog -Level ok -Message 'startup launch registered to tray (HKCU Run)'
+    }
+    elseif ($properties) {
+        Remove-ItemProperty -LiteralPath $RunKey -Name $entryName -Force
+        Write-ZbLog -Level ok -Message 'startup launch disabled'
     }
 }
 

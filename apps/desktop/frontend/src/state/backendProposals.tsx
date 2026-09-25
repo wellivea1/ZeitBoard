@@ -17,8 +17,11 @@ import {
 } from "../data/backendProposals";
 import { createCoalescedRefresh, type CoalescedRefresh } from "../utils/coalescedRefresh";
 
+import { emptyReviewSummary, reviewIsPending } from "../data/reviewQueue";
+
 const proposalFreshnessMs = 5_000;
 const initialData: BackendProposalsData = {
+  ...emptyReviewSummary,
   status: "off",
   proposals: [],
   pagination: { nextCursor: "", hasMore: false },
@@ -26,11 +29,13 @@ const initialData: BackendProposalsData = {
 
 interface BackendProposalsContextValue {
   data: BackendProposalsData;
+  ready: boolean;
+  decisionError: string;
   loading: boolean;
   loadingOlder: boolean;
   loadOlderError: string;
   busyProposalId: string | null;
-  refresh: () => void;
+  refresh: (force?: boolean) => void;
   loadOlder: () => Promise<void>;
   ingest: (proposals: BackendProposal[]) => void;
   decide: (
@@ -45,8 +50,14 @@ function retainKnownProposals(
   current: BackendProposalsData,
   loaded: BackendProposalsData,
 ): BackendProposalsData {
-  if (loaded.status !== "error" || current.status !== "ok") return loaded;
-  return { ...loaded, proposals: current.proposals, pagination: current.pagination };
+  if (loaded.status !== "error") return loaded;
+  return {
+    ...loaded,
+    proposals: current.proposals,
+    pagination: current.pagination,
+    pendingCount: current.pendingCount,
+    nextExpiryAt: current.nextExpiryAt,
+  };
 }
 
 function mergeOlderProposals(
@@ -68,7 +79,7 @@ function withRecordedDecision(
   proposal: BackendProposal,
   decision: "approved" | "rejected",
 ): BackendProposalsData {
-  if (loaded.status !== "ok") return loaded;
+  if (loaded.status !== "ok" && !loaded.decisionRecorded) return loaded;
   const decided = { ...proposal, status: decision, decisionToken: undefined };
   const proposals = loaded.proposals.some((item) => item.proposalId === proposal.proposalId)
     ? loaded.proposals.map((item) => (item.proposalId === proposal.proposalId ? decided : item))
@@ -78,6 +89,8 @@ function withRecordedDecision(
 
 export function BackendProposalsProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<BackendProposalsData>(initialData);
+  const [ready, setReady] = useState(false);
+  const [decisionError, setDecisionError] = useState("");
   const [loading, setLoading] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [loadOlderError, setLoadOlderError] = useState("");
@@ -94,6 +107,7 @@ export function BackendProposalsProvider({ children }: { children: ReactNode }) 
   const activeRef = useRef(true);
 
   const publish = useCallback((next: BackendProposalsData) => {
+    setReady(true);
     dataRef.current = next;
     setData(next);
   }, []);
@@ -116,6 +130,7 @@ export function BackendProposalsProvider({ children }: { children: ReactNode }) 
           loadingRef.current = false;
           setLoading(false);
           publish({
+            ...dataRef.current,
             status: "error",
             message: "Could not reach the synced backend.",
             proposals: dataRef.current.proposals,
@@ -137,21 +152,28 @@ export function BackendProposalsProvider({ children }: { children: ReactNode }) 
       olderRequestRef.current = null;
       olderRequestTokenRef.current = null;
       loadingOlderRef.current = false;
+      loadingRef.current = false;
     };
   }, []);
 
-  const refresh = useCallback(() => {
-    if (
-      loadingRef.current ||
-      (lastLoadedAtRef.current > 0 && Date.now() - lastLoadedAtRef.current < proposalFreshnessMs)
-    ) {
-      return;
-    }
-    invalidateOlderPages();
-    loadingRef.current = true;
-    setLoading(true);
-    ensureRefreshQueue().request();
-  }, [ensureRefreshQueue, invalidateOlderPages]);
+  const refresh = useCallback(
+    (force = false) => {
+      if (
+        busyRef.current ||
+        (!force && loadingRef.current) ||
+        (!force &&
+          lastLoadedAtRef.current > 0 &&
+          Date.now() - lastLoadedAtRef.current < proposalFreshnessMs)
+      ) {
+        return;
+      }
+      invalidateOlderPages();
+      loadingRef.current = true;
+      setLoading(true);
+      ensureRefreshQueue().request();
+    },
+    [ensureRefreshQueue, invalidateOlderPages],
+  );
 
   const ingest = useCallback(
     (proposals: BackendProposal[]) => {
@@ -164,7 +186,25 @@ export function BackendProposalsProvider({ children }: { children: ReactNode }) 
       const current = dataRef.current;
       const byID = new Map(current.proposals.map((proposal) => [proposal.proposalId, proposal]));
       for (const proposal of proposals) byID.set(proposal.proposalId, proposal);
-      publish({ status: "ok", proposals: [...byID.values()], pagination: current.pagination });
+      publish({
+        ...current,
+        status: "ok",
+        proposals: [...byID.values()],
+        pendingCount:
+          current.pendingCount +
+          proposals.filter(
+            (item) =>
+              reviewIsPending(item) &&
+              !current.proposals.some((known) => known.proposalId === item.proposalId),
+          ).length,
+        nextExpiryAt:
+          [
+            current.nextExpiryAt,
+            ...proposals.filter((item) => reviewIsPending(item)).map((item) => item.expiresAt),
+          ]
+            .filter(Boolean)
+            .sort((a, b) => Date.parse(a) - Date.parse(b))[0] ?? "",
+      });
     },
     [ensureRefreshQueue, invalidateOlderPages, publish],
   );
@@ -212,7 +252,7 @@ export function BackendProposalsProvider({ children }: { children: ReactNode }) 
 
         const latest = dataRef.current;
         publish({
-          ...latest,
+          ...loaded,
           proposals: mergeOlderProposals(latest.proposals, loaded.proposals),
           pagination: loaded.pagination,
         });
@@ -240,9 +280,15 @@ export function BackendProposalsProvider({ children }: { children: ReactNode }) 
       proposal: BackendProposal,
       decision: "approved" | "rejected",
     ): Promise<BackendProposalsData> => {
-      if (!proposal.decisionToken) return dataRef.current;
+      if (dataRef.current.status !== "ok" || !reviewIsPending(proposal))
+        return {
+          ...dataRef.current,
+          status: "error",
+          message: "This proposal expired or cannot be decided. Refresh the queue.",
+        };
       if (busyRef.current) {
         return {
+          ...dataRef.current,
           status: "error",
           message: "Another proposal decision is already in progress.",
           proposals: dataRef.current.proposals,
@@ -250,6 +296,7 @@ export function BackendProposalsProvider({ children }: { children: ReactNode }) 
         };
       }
       invalidateOlderPages();
+      setDecisionError("");
       busyRef.current = proposal.proposalId;
       setBusyProposalId(proposal.proposalId);
       ensureRefreshQueue().supersede();
@@ -259,12 +306,15 @@ export function BackendProposalsProvider({ children }: { children: ReactNode }) 
         const loaded = await decideBackendProposal({
           proposalId: proposal.proposalId,
           decision,
-          token: proposal.decisionToken,
+          token: proposal.decisionToken!,
         });
-        const next =
-          loaded.status === "error"
-            ? retainKnownProposals(dataRef.current, loaded)
-            : withRecordedDecision(loaded, proposal, decision);
+        if (loaded.status === "error")
+          setDecisionError(loaded.message ?? "The decision could not be recorded.");
+        const retained =
+          loaded.status === "error" ? retainKnownProposals(dataRef.current, loaded) : loaded;
+        if (loaded.decisionRecorded && loaded.status === "error")
+          retained.pendingCount = Math.max(0, retained.pendingCount - 1);
+        const next = withRecordedDecision(retained, proposal, decision);
         lastLoadedAtRef.current = Date.now();
         publish(next);
         return next;
@@ -280,6 +330,8 @@ export function BackendProposalsProvider({ children }: { children: ReactNode }) 
     <BackendProposalsContext.Provider
       value={{
         data,
+        ready,
+        decisionError,
         loading,
         loadingOlder,
         loadOlderError,

@@ -1,0 +1,89 @@
+.task-workspace {
+  display: grid;
+  gap: var(--space-5);
+}
+.task-workspace > section {
+  min-width: 0;
+  padding: var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  background: var(--paper);
+}
+.task-editor h2 {
+  margin: 0 0 var(--space-4);
+}
+.task-editor {
+  padding-bottom: var(--space-5);
+  margin-bottom: var(--space-5);
+  border-bottom: 1px solid var(--line);
+}
+.task-editor > form {
+  grid-template-columns: minmax(0, 1fr) 10rem;
+}
+.task-timing .sleep-entry-fields {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.task-timing,
+.task-editor-actions,
+.task-feedback {
+  grid-column: 1 / -1;
+}
+.task-timing summary {
+  cursor: pointer;
+  padding-block: var(--space-3);
+  font-weight: 600;
+}
+.task-timing p,
+.task-feedback {
+  color: var(--muted);
+}
+.task-feedback:empty {
+  display: none;
+}
+.task-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* The old compact table hid its action column. Task controls stay available
+   at every width, including when the assistant rail is open. */
+.task-workspace .task-row > span:nth-child(3),
+.task-workspace .task-row > span:nth-child(4) {
+  display: flex;
+}
+.task-delete-confirmation {
+  padding: var(--space-4);
+  margin-block: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--panel-alt);
+}
+.task-workspace .task-row {
+  grid-template-columns: minmax(10rem, 1.2fr) minmax(10rem, 1.6fr) 4rem minmax(9rem, auto);
+  gap: var(--space-3);
+}
+.task-row > span {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+@media (max-width: 1000px) {
+  .task-workspace .task-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .task-workspace .task-head {
+    display: none;
+  }
+}
+@media (max-width: 560px) {
+  .task-editor > form,
+  .task-timing .sleep-entry-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .task-workspace > section {
+    padding: var(--space-4);
+  }
+  .task-workspace .task-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

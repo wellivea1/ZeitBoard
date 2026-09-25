@@ -8,6 +8,9 @@
   and its own freshness decision does not take effect without one.
 - Corrects the materialization behaviour recorded in
   [ADR-0029](0029-availability-portal-foundation.md) §5.
+- Desktop background consumption and shared worker ownership are subsequently
+  delivered by [ADR-0044](0044-desktop-background-analysis.md). The desktop
+  limitations below describe this ADR's original increment.
 
 ## Context
 

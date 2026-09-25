@@ -40,10 +40,9 @@ commit operations:
 - `source_record_id` is the idempotency key. An unchanged sleep/provenance
   payload is reported as an exact duplicate; changed timing, classification,
   evidence, or `recorded_at` is a conflict. Conflicts block the batch. A partial
-  SQLite insert trigger enforces the same rule for new `file_import` records
-  without making migration fail on a legacy store that already has duplicates.
-  Such a legacy ambiguity is surfaced and blocks import until the user suppresses
-  or erases the duplicate.
+  SQLite unique index enforces the same rule for `file_import` records.
+  ADR-0039/0042 removes historical duplicate-tolerating migrations under the
+  owner's pre-release direction; current deduplication and erasure remain.
 - Imported observations use the existing immutable local observation table.
   Existing correction, export, sync, per-record erasure, and erase-all paths
   therefore apply without a second storage model.

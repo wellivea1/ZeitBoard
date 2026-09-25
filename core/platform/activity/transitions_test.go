@@ -51,7 +51,7 @@ func TestSteadyStateProducesNoTransitions(t *testing.T) {
 
 	for i := 2; i < 60; i++ {
 		at := base.Add(time.Duration(i) * time.Minute)
-		if got := m.Observe(Sample{At: at, IdleFor: 30 * time.Second, IdleKnown: true}); len(got) != 0 {
+		if got := m.Observe(Sample{At: at, IdleFor: 30 * time.Second, IdleKnown: true, LockedKnown: true}); len(got) != 0 {
 			t.Fatalf("minute %d produced %v; steady use must be silent", i, states(got))
 		}
 	}

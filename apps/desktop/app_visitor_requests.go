@@ -11,17 +11,16 @@ import (
 )
 
 // Visitor time requests (ADR-0030) reach the owner through the synced backend,
-// not the local store: the portal runs on the self-hosted instance. They are
-// deliberately kept off the generic proposals surface, because approving one
-// requires choosing an exact block and the generic decision route refuses
-// them for that reason.
-
-const visitorRequestLocalLayout = "2006-01-02T15:04"
+// not the local store: the portal runs on the self-hosted instance. They share the
+// review queue with other proposals, but use a dedicated decision route because
+// approval requires an exact reviewed block.
 
 // BackendVisitorRequestDTO is what the Approvals screen renders. It carries
 // the visitor's own words, which stay inside the owner's trust zone: this DTO
 // is never projected back to the portal or to any agent surface.
 type BackendVisitorRequestDTO struct {
+	Status     string `json:"status"`
+	ExpiresAt  string `json:"expiresAt"`
 	ProposalID string `json:"proposalId"`
 	LinkLabel  string `json:"linkLabel"`
 	Handle     string `json:"handle,omitempty"`
@@ -30,11 +29,10 @@ type BackendVisitorRequestDTO struct {
 	WindowLabel   string `json:"windowLabel"`
 	DurationLabel string `json:"durationLabel,omitempty"`
 
-	// Local bounds for the owner's block picker, in the desktop's own time
-	// zone. The visitor asked in theirs; the owner decides in theirs.
-	WindowStartLocal string `json:"windowStartLocal"`
-	WindowEndLocal   string `json:"windowEndLocal"`
-	DurationMinutes  int    `json:"durationMinutes"`
+	// Exact bounds are rendered in the owner's selected local zone.
+	WindowStartAt   string `json:"windowStartAt"`
+	WindowEndAt     string `json:"windowEndAt"`
+	DurationMinutes int    `json:"durationMinutes"`
 
 	BeyondHorizon      bool   `json:"beyondHorizon"`
 	BeyondHorizonNote  string `json:"beyondHorizonNote,omitempty"`
@@ -45,9 +43,13 @@ type BackendVisitorRequestDTO struct {
 }
 
 type BackendVisitorRequestsDTO struct {
-	Status   string                     `json:"status"`
-	Message  string                     `json:"message,omitempty"`
-	Requests []BackendVisitorRequestDTO `json:"requests"`
+	DecisionRecorded bool                         `json:"decisionRecorded,omitempty"`
+	PendingCount     int                          `json:"pendingCount"`
+	NextExpiryAt     string                       `json:"nextExpiryAt"`
+	Pagination       BackendProposalPaginationDTO `json:"pagination"`
+	Status           string                       `json:"status"`
+	Message          string                       `json:"message,omitempty"`
+	Requests         []BackendVisitorRequestDTO   `json:"requests"`
 }
 
 type backendVisitorRequestRecord struct {
@@ -69,33 +71,59 @@ type backendVisitorRequestRecord struct {
 }
 
 type backendVisitorRequestListResponse struct {
-	Requests []backendVisitorRequestRecord `json:"requests"`
+	SchemaVersion string                        `json:"schema_version"`
+	PendingCount  int                           `json:"pendingCount"`
+	NextExpiryAt  string                        `json:"nextExpiryAt"`
+	Pagination    backendProposalPagination     `json:"pagination"`
+	Requests      []backendVisitorRequestRecord `json:"requests"`
 }
 
-// DecideBackendVisitorRequestInput carries the owner's answer. StartLocal and
-// EndLocal are `2006-01-02T15:04` in the desktop's local zone and are required
+// DecideBackendVisitorRequestInput carries the owner's answer. StartAt and
+// EndAt are exact RFC3339 instants selected in the owner's local zone and are required
 // only for an approval.
 type DecideBackendVisitorRequestInput struct {
 	ProposalID string `json:"proposalId"`
 	Decision   string `json:"decision"`
 	Token      string `json:"token"`
-	StartLocal string `json:"startLocal"`
-	EndLocal   string `json:"endLocal"`
+	StartAt    string `json:"startAt"`
+	EndAt      string `json:"endAt"`
 }
 
-// GetBackendVisitorRequests lists open requests from share links.
+// GetBackendVisitorRequests lists pending requests and history from share links.
 func (a *App) GetBackendVisitorRequests() (BackendVisitorRequestsDTO, error) {
+	return a.getBackendVisitorRequestPage("")
+}
+
+func (a *App) GetBackendVisitorRequestPage(input BackendProposalPageInput) (BackendVisitorRequestsDTO, error) {
+	if len(input.Cursor) == 0 || len(input.Cursor) > 512 {
+		return BackendVisitorRequestsDTO{}, errors.New("visitor request cursor is invalid")
+	}
+	return a.getBackendVisitorRequestPage(input.Cursor)
+}
+
+func (a *App) getBackendVisitorRequestPage(cursor string) (BackendVisitorRequestsDTO, error) {
 	cfg, token, err := a.requireBackendSync()
 	if err != nil {
+		if cfg.Enabled {
+			return BackendVisitorRequestsDTO{Status: "error", Message: sanitizeBackendError(err), Requests: []BackendVisitorRequestDTO{}}, nil
+		}
 		return BackendVisitorRequestsDTO{Status: "off", Requests: []BackendVisitorRequestDTO{}}, nil
 	}
-	return a.fetchBackendVisitorRequests(a.applicationContext(), cfg, token), nil
+	return a.fetchBackendVisitorRequestPage(a.applicationContext(), cfg, token, cursor), nil
 }
 
 func (a *App) fetchBackendVisitorRequests(ctx context.Context, cfg backendSyncConfig, token string) BackendVisitorRequestsDTO {
+	return a.fetchBackendVisitorRequestPage(ctx, cfg, token, "")
+}
+
+func (a *App) fetchBackendVisitorRequestPage(ctx context.Context, cfg backendSyncConfig, token, cursor string) BackendVisitorRequestsDTO {
 	client := a.newDesktopBackendClient(cfg, token)
 	var response backendVisitorRequestListResponse
-	if err := client.getJSON(ctx, "/v1/portal/requests", &response); err != nil {
+	path := "/v1/portal/requests"
+	if cursor != "" {
+		path += "?" + url.Values{"cursor": []string{cursor}}.Encode()
+	}
+	if err := client.getJSON(ctx, path, &response); err != nil {
 		// A backend without the portal enabled has no such route. That is a
 		// normal configuration, not an error worth alarming the user about.
 		if isBackendRouteAbsent(err) {
@@ -109,12 +137,10 @@ func (a *App) fetchBackendVisitorRequests(ctx context.Context, cfg backendSyncCo
 	}
 	requests := make([]BackendVisitorRequestDTO, 0, len(response.Requests))
 	for _, record := range response.Requests {
-		if record.Status != "pending" {
-			continue
-		}
 		requests = append(requests, backendVisitorRequestDTO(record))
 	}
-	return BackendVisitorRequestsDTO{Status: "ok", Requests: requests}
+	return BackendVisitorRequestsDTO{Status: "ok", Requests: requests, PendingCount: response.PendingCount, NextExpiryAt: response.NextExpiryAt,
+		Pagination: BackendProposalPaginationDTO{Limit: response.Pagination.Limit, HasMore: response.Pagination.HasMore, NextCursor: response.Pagination.NextCursor}}
 }
 
 func backendVisitorRequestDTO(record backendVisitorRequestRecord) BackendVisitorRequestDTO {
@@ -123,13 +149,15 @@ func backendVisitorRequestDTO(record backendVisitorRequestRecord) BackendVisitor
 		label = "An unnamed link"
 	}
 	dto := BackendVisitorRequestDTO{
+		Status:             record.Status,
+		ExpiresAt:          record.ExpiresAt.UTC().Format(time.RFC3339Nano),
 		ProposalID:         record.ProposalID,
 		LinkLabel:          label,
 		Handle:             record.Handle,
 		Message:            record.Message,
 		WindowLabel:        civilWindow(record.WindowStartAt, record.WindowEndAt, record.ZoneID),
-		WindowStartLocal:   record.WindowStartAt.Local().Format(visitorRequestLocalLayout),
-		WindowEndLocal:     record.WindowEndAt.Local().Format(visitorRequestLocalLayout),
+		WindowStartAt:      record.WindowStartAt.UTC().Format(time.RFC3339Nano),
+		WindowEndAt:        record.WindowEndAt.UTC().Format(time.RFC3339Nano),
 		DurationMinutes:    record.DurationMinutes,
 		BeyondHorizon:      record.BeyondHorizon,
 		CreatedLabel:       "Asked " + record.CreatedAt.Local().Format("Jan 2, 3:04 PM"),
@@ -160,7 +188,7 @@ func (a *App) DecideBackendVisitorRequest(input DecideBackendVisitorRequestInput
 	}
 	payload := map[string]any{"decision": input.Decision, "token": input.Token}
 	if input.Decision == "approved" {
-		start, end, parseErr := parseVisitorSlot(input.StartLocal, input.EndLocal)
+		start, end, parseErr := parseVisitorSlot(input.StartAt, input.EndAt)
 		if parseErr != nil {
 			return BackendVisitorRequestsDTO{
 				Status:   "error",
@@ -168,8 +196,8 @@ func (a *App) DecideBackendVisitorRequest(input DecideBackendVisitorRequestInput
 				Requests: []BackendVisitorRequestDTO{},
 			}, nil
 		}
-		payload["startAt"] = start.Format(time.RFC3339)
-		payload["endAt"] = end.Format(time.RFC3339)
+		payload["startAt"] = start.Format(time.RFC3339Nano)
+		payload["endAt"] = end.Format(time.RFC3339Nano)
 	}
 
 	ctx := a.applicationContext()
@@ -182,24 +210,25 @@ func (a *App) DecideBackendVisitorRequest(input DecideBackendVisitorRequestInput
 		result.Message = sanitizeBackendError(err)
 		return result, nil
 	}
-	return a.fetchBackendVisitorRequests(ctx, cfg, token), nil
+	result := a.fetchBackendVisitorRequests(ctx, cfg, token)
+	result.DecisionRecorded = true
+	if result.Status != "ok" {
+		result.Status = "error"
+		result.Message = "Decision recorded. The queue could not be refreshed; refresh it before another decision."
+	}
+	return result, nil
 }
 
-// parseVisitorSlot reads the owner's chosen block in the desktop's own zone. A
-// local time that does not exist on that date is refused rather than nudged,
-// for the same reason the public form refuses one.
-func parseVisitorSlot(startLocal, endLocal string) (time.Time, time.Time, error) {
-	start, err := time.ParseInLocation(visitorRequestLocalLayout, strings.TrimSpace(startLocal), time.Local)
+// The picker sends exact instants after resolving civil-time gaps and repeated
+// hours. No host-zone guess can change a block the owner has reviewed.
+func parseVisitorSlot(startValue, endValue string) (time.Time, time.Time, error) {
+	start, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(startValue))
 	if err != nil {
-		return time.Time{}, time.Time{}, errors.New("Choose a start time for the block.")
+		return time.Time{}, time.Time{}, errors.New("Choose an exact start time for the block.")
 	}
-	end, err := time.ParseInLocation(visitorRequestLocalLayout, strings.TrimSpace(endLocal), time.Local)
+	end, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(endValue))
 	if err != nil {
-		return time.Time{}, time.Time{}, errors.New("Choose an end time for the block.")
-	}
-	if start.Format(visitorRequestLocalLayout) != strings.TrimSpace(startLocal) ||
-		end.Format(visitorRequestLocalLayout) != strings.TrimSpace(endLocal) {
-		return time.Time{}, time.Time{}, errors.New("That local time does not exist on that date.")
+		return time.Time{}, time.Time{}, errors.New("Choose an exact end time for the block.")
 	}
 	if !end.After(start) {
 		return time.Time{}, time.Time{}, errors.New("The block must end after it starts.")

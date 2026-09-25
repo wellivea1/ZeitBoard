@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -11,6 +12,13 @@ import (
 // writePrivateFileAtomic keeps a previously valid destination intact until a
 // complete, flushed replacement is ready in the same directory.
 func writePrivateFileAtomic(path string, data []byte) error {
+	return writePrivateStreamAtomic(path, func(out io.Writer) error {
+		_, err := out.Write(data)
+		return err
+	})
+}
+
+func writePrivateStreamAtomic(path string, write func(io.Writer) error) error {
 	temp, err := os.CreateTemp(filepath.Dir(path), ".zeitboard-export-*.tmp")
 	if err != nil {
 		return fmt.Errorf("create staged file: %w", err)
@@ -33,7 +41,7 @@ func writePrivateFileAtomic(path string, data []byte) error {
 	if err := privatefile.Restrict(tempPath); err != nil {
 		return fmt.Errorf("restrict staged file: %w", err)
 	}
-	if _, err := temp.Write(data); err != nil {
+	if err := write(temp); err != nil {
 		return fmt.Errorf("write staged file: %w", err)
 	}
 	if err := temp.Sync(); err != nil {

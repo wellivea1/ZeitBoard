@@ -1,4 +1,10 @@
 import {
+  resolveTaskConflict as recordTaskResolution,
+  type TaskConflict,
+  type TaskConflictHistory,
+} from "../data/taskConflicts";
+import { notifySleepDataChanged } from "../data/sleepDataEvents";
+import {
   createContext,
   useCallback,
   useContext,
@@ -20,6 +26,7 @@ import {
 } from "../data/proposals";
 import { notifyCalendarDataChanged } from "../data/calendar";
 import { sleepDataChangedEvent } from "../data/sleepDataEvents";
+import { subscribeProjectionRefresh } from "../utils/projectionRefresh";
 
 export type ProposalDecision = "approved" | "rejected";
 export type ProposalStatus = "pending" | ProposalDecision;
@@ -35,6 +42,9 @@ interface LastDecision {
 }
 
 interface ApprovalsContextValue {
+  taskConflicts: TaskConflict[];
+  taskConflictHistory: TaskConflictHistory[];
+  resolveTaskConflict: (conflict: TaskConflict, choiceId: string) => Promise<void>;
   proposals: DecidedProposal[];
   pending: DecidedProposal[];
   decided: DecidedProposal[];
@@ -47,8 +57,10 @@ interface ApprovalsContextValue {
   lastDecision: LastDecision | null;
   busyProposalId: string | null;
   error: string;
+  loadError: string;
   ready: boolean;
   dismissError: () => void;
+  refresh: () => Promise<void>;
 }
 
 const ApprovalsContext = createContext<ApprovalsContextValue | null>(null);
@@ -63,6 +75,8 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
   const [proposals, setProposals] = useState<DecidedProposal[]>(() =>
     localServicePresent ? [] : proposalsFixture.proposals.map(withStatus),
   );
+  const [taskConflicts, setTaskConflicts] = useState<TaskConflict[]>([]);
+  const [taskConflictHistory, setTaskConflictHistory] = useState<TaskConflictHistory[]>([]);
   const [unplaced, setUnplaced] = useState<UnplacedProposal[]>(
     localServicePresent ? [] : proposalsFixture.unplaced,
   );
@@ -71,11 +85,14 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
   const [lastDecision, setLastDecision] = useState<LastDecision | null>(null);
   const [busyProposalId, setBusyProposalId] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [decisionError, setDecisionError] = useState("");
   const mounted = useRef(false);
   const requestVersion = useRef(0);
   const busyRef = useRef<string | null>(null);
 
   const applyResult = useCallback((result: ProposalsResult) => {
+    setTaskConflicts(result.data.taskConflicts);
+    setTaskConflictHistory(result.data.taskConflictHistory);
     setSource(result.source);
     setUnplaced(result.data.unplaced);
     setProposals(result.data.proposals.map(withStatus));
@@ -91,6 +108,8 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
       setError("");
     } catch (reason) {
       if (!mounted.current || version !== requestVersion.current) return;
+      setProposals([]);
+      setUnplaced([]);
       setReady(true);
       setError(reason instanceof Error ? reason.message : "Proposal queue could not be loaded.");
     }
@@ -98,14 +117,13 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     mounted.current = true;
-    void Promise.resolve().then(refresh);
     const onSleepChanged = () => {
       if (busyRef.current === null) void refresh();
     };
-    window.addEventListener(sleepDataChangedEvent, onSleepChanged);
+    const unsubscribe = subscribeProjectionRefresh(onSleepChanged, sleepDataChangedEvent);
     return () => {
       mounted.current = false;
-      window.removeEventListener(sleepDataChangedEvent, onSleepChanged);
+      unsubscribe();
     };
   }, [refresh]);
 
@@ -126,7 +144,7 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
 
     busyRef.current = id;
     setBusyProposalId(id);
-    setError("");
+    setDecisionError("");
     void decideLocalProposal(id, decision).then(
       async () => {
         if (decision === "approved") notifyCalendarDataChanged();
@@ -140,7 +158,7 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
         busyRef.current = null;
         if (!mounted.current) return;
         setBusyProposalId(null);
-        setError(reason instanceof Error ? reason.message : "Proposal decision failed.");
+        setDecisionError(reason instanceof Error ? reason.message : "Proposal decision failed.");
         void refresh();
       },
     );
@@ -163,7 +181,7 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
 
     busyRef.current = id;
     setBusyProposalId(id);
-    setError("");
+    setDecisionError("");
     void undoLocalProposalDecision(id).then(
       async () => {
         notifyCalendarDataChanged();
@@ -177,10 +195,45 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
         busyRef.current = null;
         if (!mounted.current) return;
         setBusyProposalId(null);
-        setError(reason instanceof Error ? reason.message : "Proposal undo failed.");
+        setDecisionError(reason instanceof Error ? reason.message : "Proposal undo failed.");
         void refresh();
       },
     );
+  };
+
+  const resolveTaskConflict = async (conflict: TaskConflict, choiceId: string) => {
+    if (busyRef.current || !ready || error) return;
+    busyRef.current = conflict.taskId;
+    setBusyProposalId(conflict.taskId);
+    setDecisionError("");
+    ++requestVersion.current;
+    try {
+      const confirmed = await recordTaskResolution({
+        taskId: conflict.taskId,
+        reviewToken: conflict.reviewToken,
+        choiceId,
+      });
+      if (!mounted.current) return;
+      setTaskConflicts((current) => current.filter((item) => item.taskId !== conflict.taskId));
+      setTaskConflictHistory((current) =>
+        [confirmed, ...current.filter((item) => item.reviewToken !== confirmed.reviewToken)].slice(
+          0,
+          50,
+        ),
+      );
+      notifySleepDataChanged();
+      await refresh();
+    } catch (reason) {
+      if (mounted.current) {
+        setDecisionError(
+          reason instanceof Error ? reason.message : "The task review could not be confirmed.",
+        );
+        await refresh();
+      }
+    } finally {
+      busyRef.current = null;
+      if (mounted.current) setBusyProposalId(null);
+    }
   };
 
   const undoLast = () => {
@@ -188,14 +241,17 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
   };
 
   const dismiss = useCallback(() => setLastDecision(null), []);
-  const dismissError = useCallback(() => setError(""), []);
+  const dismissError = useCallback(() => setDecisionError(""), []);
   const pending = proposals.filter((proposal) => proposal.status === "pending");
   const decided = proposals.filter((proposal) => proposal.status !== "pending");
   const value: ApprovalsContextValue = {
     proposals,
     pending,
     decided,
-    pendingCount: pending.length,
+    taskConflicts,
+    taskConflictHistory,
+    resolveTaskConflict,
+    pendingCount: pending.length + taskConflicts.length,
     unplaced,
     source,
     decide,
@@ -203,13 +259,15 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
     undoLast,
     lastDecision,
     busyProposalId,
-    error,
+    error: decisionError || error,
+    loadError: error,
     ready,
     dismissError,
+    refresh,
   };
 
   return (
-    <PendingApprovalsCountContext.Provider value={pending.length}>
+    <PendingApprovalsCountContext.Provider value={pending.length + taskConflicts.length}>
       <ApprovalsContext.Provider value={value}>
         {children}
         {lastDecision && (
@@ -265,10 +323,10 @@ export function useApprovals(): ApprovalsContextValue {
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
-export function usePendingApprovalsCount(): number {
+export function useLocalPendingApprovalsCount(): number {
   const context = useContext(PendingApprovalsCountContext);
   if (context === null) {
-    throw new Error("usePendingApprovalsCount must be used within ApprovalsProvider");
+    throw new Error("useLocalPendingApprovalsCount must be used within ApprovalsProvider");
   }
   return context;
 }

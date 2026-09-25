@@ -81,6 +81,7 @@ type ProposalRecord struct {
 }
 
 type ProposalPageCursor struct {
+	Scope        ProposalScope
 	AfterRowID   int64
 	ThroughRowID int64
 	Active       bool
@@ -88,10 +89,20 @@ type ProposalPageCursor struct {
 }
 
 type ProposalPage struct {
-	Records    []ProposalRecord
-	NextCursor ProposalPageCursor
-	HasMore    bool
+	PendingCount int
+	NextExpiryAt string
+	Records      []ProposalRecord
+	NextCursor   ProposalPageCursor
+	HasMore      bool
 }
+
+type ProposalScope uint8
+
+const (
+	ProposalScopeAll ProposalScope = iota
+	ProposalScopeBackend
+	ProposalScopeVisitor
+)
 
 type approvalClaims struct {
 	ProposalID string `json:"proposalId"`
@@ -179,6 +190,11 @@ func (s *Store) Migrate(ctx context.Context) error {
 			device_id TEXT NOT NULL,
 			erased_at TEXT NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS sync_correction_targets (
+			record_id TEXT PRIMARY KEY REFERENCES sync_records(record_id) ON DELETE CASCADE,
+			observation_id TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_sync_correction_observation ON sync_correction_targets(observation_id)`,
 		`CREATE TABLE IF NOT EXISTS proposals (
 			id TEXT PRIMARY KEY,
 			action_id TEXT NOT NULL,
@@ -263,39 +279,10 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("migrate server sqlite: %w", err)
 		}
 	}
-	if err := s.ensureColumn(ctx, "devices", "revoked_at", `TEXT NOT NULL DEFAULT ''`); err != nil {
-		return err
-	}
 	_, err := s.db.ExecContext(ctx,
 		`INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES(1, ?)`,
 		time.Now().UTC().Format(time.RFC3339Nano),
 	)
-	return err
-}
-
-func (s *Store) ensureColumn(ctx context.Context, table, column, definition string) error {
-	rows, err := s.db.QueryContext(ctx, `PRAGMA table_info(`+table+`)`)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var cid int
-		var name, typ string
-		var notNull int
-		var defaultValue any
-		var pk int
-		if err := rows.Scan(&cid, &name, &typ, &notNull, &defaultValue, &pk); err != nil {
-			return err
-		}
-		if name == column {
-			return nil
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-	_, err = s.db.ExecContext(ctx, `ALTER TABLE `+table+` ADD COLUMN `+column+` `+definition)
 	return err
 }
 
@@ -393,6 +380,7 @@ func (s *Store) Append(ctx context.Context, deviceID string, records []syncmodel
 
 	accepted := 0
 	for _, record := range records {
+		var correctionTarget string
 		// A tombstoned record id can never be resurrected: a stale device
 		// re-pushing an erased record is a silent no-op, not a conflict.
 		var tombstoned int
@@ -404,6 +392,25 @@ func (s *Store) Append(ctx context.Context, deviceID string, records []syncmodel
 		}
 		if !errors.Is(err, sql.ErrNoRows) {
 			return 0, 0, err
+		}
+		if record.Kind == syncmodel.KindCorrection {
+			var correction struct {
+				TargetObservationID string `json:"target_observation_id"`
+			}
+			if err := json.Unmarshal(record.Payload, &correction); err != nil {
+				return 0, 0, errors.New("invalid correction payload")
+			}
+			correctionTarget = correction.TargetObservationID
+			// A provider can revise sleep while this device is offline. Erasing
+			// the original must also block new correction IDs that would retain
+			// its behavioral timestamps after the erasure.
+			err := tx.QueryRowContext(ctx, `SELECT 1 FROM sync_tombstones WHERE record_id = ?`, correction.TargetObservationID).Scan(&tombstoned)
+			if err == nil {
+				continue
+			}
+			if !errors.Is(err, sql.ErrNoRows) {
+				return 0, 0, err
+			}
 		}
 		if record.Kind == syncmodel.KindTask {
 			taskID, ok := taskIDFromRevisionRecordID(record.RecordID)
@@ -454,6 +461,11 @@ func (s *Store) Append(ctx context.Context, deviceID string, records []syncmodel
 			return 0, 0, err
 		}
 		accepted++
+		if correctionTarget != "" {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO sync_correction_targets(record_id, observation_id) VALUES(?, ?)`, record.RecordID, correctionTarget); err != nil {
+				return 0, 0, err
+			}
+		}
 	}
 
 	cursor, err := maxCursor(ctx, tx)
@@ -588,8 +600,25 @@ func expandTaskErasureTargets(
 
 	for _, recordID := range recordIDs {
 		appendID(recordID)
+		dependent, err := tx.QueryContext(ctx, `SELECT record_id FROM sync_correction_targets WHERE observation_id = ? ORDER BY record_id`, recordID)
+		if err != nil {
+			return nil, err
+		}
+		for dependent.Next() {
+			var id string
+			if err := dependent.Scan(&id); err != nil {
+				dependent.Close()
+				return nil, err
+			}
+			appendID(id)
+		}
+		if err := dependent.Err(); err != nil {
+			dependent.Close()
+			return nil, err
+		}
+		dependent.Close()
 		var kind string
-		err := tx.QueryRowContext(ctx,
+		err = tx.QueryRowContext(ctx,
 			`SELECT kind FROM sync_records WHERE record_id = ? AND kind != ?`,
 			recordID, string(syncmodel.KindTombstone),
 		).Scan(&kind)
@@ -670,6 +699,8 @@ func (s *Store) CreateProposal(ctx context.Context, input ProposalInput) (Propos
 	if input.CreatedAt.IsZero() {
 		input.CreatedAt = time.Now().UTC()
 	}
+	// Approval claims use Unix seconds; storage and queue expiry use the same boundary.
+	input.ExpiresAt = input.ExpiresAt.UTC().Truncate(time.Second)
 	if input.ExpiresAt.IsZero() || !input.ExpiresAt.After(input.CreatedAt) {
 		return ProposalRecord{}, errors.New("proposal expiry must be after creation")
 	}
@@ -744,6 +775,9 @@ func (s *Store) CreateProposal(ctx context.Context, input ProposalInput) (Propos
 
 // ListProposalPage returns active proposals before bounded newest-first history. A high-water row and snapshot time keep continuation pages stable.
 func (s *Store) ListProposalPage(ctx context.Context, cursor ProposalPageCursor, limit int, now time.Time) (ProposalPage, error) {
+	if cursor.Scope > ProposalScopeVisitor {
+		return ProposalPage{}, errors.New("invalid proposal scope")
+	}
 	if limit <= 0 || limit > MaxProposalPageLimit {
 		return ProposalPage{}, errors.New("proposal page limit is out of range")
 	}
@@ -752,6 +786,11 @@ func (s *Store) ListProposalPage(ctx context.Context, cursor ProposalPageCursor,
 	}
 
 	requestTime := now.UTC()
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return ProposalPage{}, err
+	}
+	defer tx.Rollback()
 	if cursor.AfterRowID < 0 || cursor.ThroughRowID < 0 {
 		return ProposalPage{}, errors.New("proposal cursor must not be negative")
 	}
@@ -759,7 +798,7 @@ func (s *Store) ListProposalPage(ctx context.Context, cursor ProposalPageCursor,
 		if cursor.ThroughRowID != 0 || cursor.Active || !cursor.AsOf.IsZero() {
 			return ProposalPage{}, errors.New("initial proposal cursor must be empty")
 		}
-		if err := s.db.QueryRowContext(ctx, `SELECT COALESCE(MAX(rowid), 0) FROM proposals`).Scan(&cursor.ThroughRowID); err != nil {
+		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(rowid), 0) FROM proposals`).Scan(&cursor.ThroughRowID); err != nil {
 			return ProposalPage{}, err
 		}
 		cursor.AsOf = requestTime
@@ -770,9 +809,11 @@ func (s *Store) ListProposalPage(ctx context.Context, cursor ProposalPageCursor,
 		return ProposalPage{Records: []ProposalRecord{}}, nil
 	}
 
-	requestTimeText := requestTime.Format(time.RFC3339Nano)
+	// RFC3339Nano strings are not lexically ordered within a second. Compare
+	// whole UTC seconds, matching signed approval-token expiry exactly.
+	requestSecond := requestTime.Unix()
 	snapshotTime := cursor.AsOf.UTC()
-	snapshotTimeText := snapshotTime.Format(time.RFC3339Nano)
+	snapshotSecond := snapshotTime.Unix()
 	query := `SELECT p.rowid, p.id, p.action_id, p.device_id, p.status,
 			p.created_at, p.updated_at, p.expires_at, p.nonce, p.ciphertext,
 			approval.nonce
@@ -780,34 +821,45 @@ func (s *Store) ListProposalPage(ctx context.Context, cursor ProposalPageCursor,
 		 LEFT JOIN approval_nonces AS approval
 		   ON approval.proposal_id = p.id
 		  AND approval.used_at = ''
-		  AND approval.expires_at > ?
+		  AND unixepoch(substr(approval.expires_at,1,19)||'Z') > ?
 		  AND p.status = ?
-		  AND p.expires_at > ?
+		  AND unixepoch(substr(p.expires_at,1,19)||'Z') > ?
 		 WHERE p.rowid <= ?`
-	args := []any{requestTimeText, string(ProposalPending), requestTimeText, cursor.ThroughRowID}
+	args := []any{requestSecond, string(ProposalPending), requestSecond, cursor.ThroughRowID}
+	scopeClause := ""
+	if cursor.Scope == ProposalScopeBackend {
+		scopeClause = " AND p.action_id <> ?"
+	}
+	if cursor.Scope == ProposalScopeVisitor {
+		scopeClause = " AND p.action_id = ?"
+	}
+	query += scopeClause
+	if scopeClause != "" {
+		args = append(args, ActionVisitorRequest)
+	}
 	if cursor.AfterRowID > 0 {
 		if cursor.Active {
 			query += ` AND (
-				(p.status = ? AND p.expires_at > ? AND p.rowid < ?)
-				OR NOT (p.status = ? AND p.expires_at > ?)
+				(p.status = ? AND unixepoch(substr(p.expires_at,1,19)||'Z') > ? AND p.rowid < ?)
+				OR NOT (p.status = ? AND unixepoch(substr(p.expires_at,1,19)||'Z') > ?)
 			)`
 			args = append(args,
-				string(ProposalPending), snapshotTimeText, cursor.AfterRowID,
-				string(ProposalPending), snapshotTimeText,
+				string(ProposalPending), snapshotSecond, cursor.AfterRowID,
+				string(ProposalPending), snapshotSecond,
 			)
 		} else {
-			query += ` AND NOT (p.status = ? AND p.expires_at > ?)
+			query += ` AND NOT (p.status = ? AND unixepoch(substr(p.expires_at,1,19)||'Z') > ?)
 				AND p.rowid < ?`
-			args = append(args, string(ProposalPending), snapshotTimeText, cursor.AfterRowID)
+			args = append(args, string(ProposalPending), snapshotSecond, cursor.AfterRowID)
 		}
 	}
 	query += ` ORDER BY
-			CASE WHEN p.status = ? AND p.expires_at > ? THEN 0 ELSE 1 END,
+			CASE WHEN p.status = ? AND unixepoch(substr(p.expires_at,1,19)||'Z') > ? THEN 0 ELSE 1 END,
 			p.rowid DESC
 		LIMIT ?`
-	args = append(args, string(ProposalPending), snapshotTimeText, limit+1)
+	args = append(args, string(ProposalPending), snapshotSecond, limit+1)
 
-	rows, err := s.db.QueryContext(ctx, query, args...)
+	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return ProposalPage{}, err
 	}
@@ -824,6 +876,9 @@ func (s *Store) ListProposalPage(ctx context.Context, cursor ProposalPageCursor,
 	if err := rows.Err(); err != nil {
 		return ProposalPage{}, err
 	}
+	if err := rows.Close(); err != nil {
+		return ProposalPage{}, err
+	}
 
 	page := ProposalPage{Records: make([]ProposalRecord, 0, min(len(listed), limit))}
 	if len(listed) > limit {
@@ -831,6 +886,7 @@ func (s *Store) ListProposalPage(ctx context.Context, cursor ProposalPageCursor,
 		listed = listed[:limit]
 		last := listed[len(listed)-1]
 		page.NextCursor = ProposalPageCursor{
+			Scope:        cursor.Scope,
 			AfterRowID:   last.rowID,
 			ThroughRowID: cursor.ThroughRowID,
 			Active:       proposalIsActiveAt(last.record, snapshotTime),
@@ -855,11 +911,20 @@ func (s *Store) ListProposalPage(ctx context.Context, cursor ProposalPageCursor,
 		}
 		page.Records = append(page.Records, record)
 	}
-	return page, nil
+	countQuery := `SELECT COUNT(*),COALESCE(MIN(substr(p.expires_at,1,19)||'Z'),'') FROM proposals p WHERE p.status=? AND unixepoch(substr(p.expires_at,1,19)||'Z')>?
+		AND EXISTS(SELECT 1 FROM approval_nonces n WHERE n.proposal_id=p.id AND n.used_at='' AND unixepoch(substr(n.expires_at,1,19)||'Z')>?)` + scopeClause
+	countArgs := []any{string(ProposalPending), requestSecond, requestSecond}
+	if scopeClause != "" {
+		countArgs = append(countArgs, ActionVisitorRequest)
+	}
+	if err := tx.QueryRowContext(ctx, countQuery, countArgs...).Scan(&page.PendingCount, &page.NextExpiryAt); err != nil {
+		return ProposalPage{}, err
+	}
+	return page, tx.Commit()
 }
 
 func proposalIsActiveAt(record ProposalRecord, at time.Time) bool {
-	return record.Status == ProposalPending && record.ExpiresAt.After(at.UTC())
+	return record.Status == ProposalPending && record.ExpiresAt.Unix() > at.UTC().Unix()
 }
 
 // decideHook runs inside the decision transaction, after the proposal row is
@@ -883,7 +948,7 @@ func (s *Store) decideProposal(ctx context.Context, proposalID, deviceID string,
 	if claims.ProposalID != proposalID {
 		return ProposalRecord{}, ErrInvalidApprovalToken
 	}
-	if time.Unix(claims.ExpiresAt, 0).Before(decidedAt.UTC()) {
+	if !time.Unix(claims.ExpiresAt, 0).After(decidedAt.UTC()) {
 		return ProposalRecord{}, ErrExpiredApprovalToken
 	}
 
@@ -1033,7 +1098,7 @@ func (s *Store) decodeProposal(record ProposalRecord, status, createdAt, updated
 	record.Status = ProposalStatus(status)
 	record.CreatedAt = created.UTC()
 	record.UpdatedAt = updated.UTC()
-	record.ExpiresAt = expires.UTC()
+	record.ExpiresAt = expires.UTC().Truncate(time.Second)
 	record.Payload = append(json.RawMessage(nil), payload...)
 	return record, nil
 }
@@ -1162,6 +1227,8 @@ func (s *Store) scanSyncRows(rows *sql.Rows, cursor int64) ([]syncmodel.Envelope
 	return records, cursor, nil
 }
 
+var ErrSyncCursorAhead = errors.New("sync cursor is ahead of the server history")
+
 func (s *Store) Pull(ctx context.Context, since int64, limit int) ([]syncmodel.Envelope, int64, error) {
 	if since < 0 {
 		return nil, 0, errors.New("cursor must not be negative")
@@ -1169,7 +1236,19 @@ func (s *Store) Pull(ctx context.Context, since int64, limit int) ([]syncmodel.E
 	if limit <= 0 || limit > syncmodel.MaxPullRecords {
 		limit = syncmodel.MaxPullRecords
 	}
-	rows, err := s.db.QueryContext(ctx,
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return nil, 0, err
+	}
+	defer tx.Rollback()
+	head, err := maxCursor(ctx, tx)
+	if err != nil {
+		return nil, 0, err
+	}
+	if since > head {
+		return nil, head, ErrSyncCursorAhead
+	}
+	rows, err := tx.QueryContext(ctx,
 		`SELECT seq, record_id, kind, device_id, created_at, nonce, ciphertext
 		 FROM sync_records
 		 WHERE seq > ?
@@ -1182,7 +1261,14 @@ func (s *Store) Pull(ctx context.Context, since int64, limit int) ([]syncmodel.E
 	}
 	defer rows.Close()
 
-	return s.scanSyncRows(rows, since)
+	records, cursor, err := s.scanSyncRows(rows, since)
+	if err != nil {
+		return nil, 0, err
+	}
+	if err := rows.Close(); err != nil {
+		return nil, 0, err
+	}
+	return records, cursor, tx.Commit()
 }
 
 func (s *Store) CountRecords(ctx context.Context) (int, error) {

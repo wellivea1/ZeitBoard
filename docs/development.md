@@ -51,6 +51,27 @@ Components are discovered conservatively: missing application subtrees are
 reported and skipped, and a present component that fails its command causes
 the script to fail.
 
+## Driving the real app from a browser
+
+`.\scripts\dev.ps1 -Action dev -Component desktop` runs `wails dev`: the native
+window, plus the same app with its Go bindings at <http://localhost:34115> for a
+browser (Vite itself serves on 5173 and must not take 34115). Run it with
+`APPDATA` and `LOCALAPPDATA` pointed at a disposable directory, so the store,
+settings and WebView profile are created there and never in your real profile:
+
+```powershell
+$env:GOCACHE = (go env GOCACHE)   # first: keep the real build cache
+$env:APPDATA = "$PWD\.cache\dev-profile\Roaming"
+$env:LOCALAPPDATA = "$PWD\.cache\dev-profile\Local"
+.\scripts\dev.ps1 -Action dev -Component desktop
+```
+
+Seed it through the app's own methods from the browser console — for example
+`go.main.App.ImportSleepData({FileName, Contents})` with a synthetic v1
+observation set, `AddTask`, `ImportCalendarFile`, `AddMedication`. Plain
+`npm run dev` is still useful for layout work, but it has no bindings and shows
+sample fixtures, so it cannot reveal a defect that only appears with real data.
+
 ## Fixture and contract checks
 
 The contract and fixture tooling is a Go module under `tools/`. From `tools/`,

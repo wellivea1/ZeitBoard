@@ -4,6 +4,11 @@ export interface WailsRoot {
   go?: unknown;
 }
 
+// A missing method in a desktop build is a service failure, not preview mode.
+export function hasDesktopBridge(root: WailsRoot = globalThis as WailsRoot): boolean {
+  return root.go !== undefined;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }

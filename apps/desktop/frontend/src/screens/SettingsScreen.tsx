@@ -17,6 +17,8 @@ import {
 import { notifySleepDataChanged } from "../data/sleepDataEvents";
 import { deleteAllSleepData } from "../data/sleepEntries";
 import { AppearanceSettings } from "./settings/AppearanceSettings";
+import { ActivityCollectionSettings } from "./settings/ActivityCollectionSettings";
+import { StartupSettings } from "./settings/StartupSettings";
 import { BackendSyncSettings } from "./settings/BackendSyncSettings";
 import { LocalAgentSettings } from "./settings/LocalAgentSettings";
 import { ReachingHoursSettings } from "./settings/ReachingHoursSettings";
@@ -32,6 +34,9 @@ const initialBackendSyncStatus: BackendSyncStatus = {
   lastSyncLabel: "Not synced yet",
   lastError: "",
   pendingPushCount: 0,
+  pendingErasureCount: 0,
+  waitingCorrectionCount: 0,
+  taskConflictCount: 0,
   pushedCount: 0,
   pulledCount: 0,
   cursor: 0,
@@ -220,6 +225,8 @@ export function SettingsScreen() {
       />
       <section className="settings-stack">
         <AppearanceSettings />
+        <StartupSettings />
+        <ActivityCollectionSettings />
         <section className="settings-section">
           <div>
             <p className="section-kicker">Estimates</p>

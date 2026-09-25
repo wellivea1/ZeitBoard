@@ -2,7 +2,15 @@
 // lists the self-hosted backend's assistant/agent proposals and decides them
 // with the one-use token. With sync off this whole surface is absent.
 
-import { findWailsMethod, type WailsRoot } from "./wailsBridge";
+import {
+  emptyReviewSummary,
+  terminalReviewPage,
+  normalizeReviewSummary,
+  normalizeReviewPagination,
+  type ReviewQueueSummary,
+} from "./reviewQueue";
+
+import { findWailsMethod, hasDesktopBridge, type WailsRoot } from "./wailsBridge";
 
 export type BackendProposalStatus = "pending" | "approved" | "rejected";
 
@@ -17,6 +25,7 @@ export interface BackendProposal {
   answer?: string;
   createdLabel: string;
   expiresLabel: string;
+  expiresAt: string;
   decisionToken?: string;
 }
 
@@ -25,7 +34,8 @@ export interface BackendProposalPagination {
   hasMore: boolean;
 }
 
-export interface BackendProposalsData {
+export interface BackendProposalsData extends ReviewQueueSummary {
+  decisionRecorded?: boolean;
   status: "off" | "ok" | "error";
   message?: string;
   proposals: BackendProposal[];
@@ -54,22 +64,6 @@ function proposalStatus(value: unknown): BackendProposalStatus | undefined {
   return undefined;
 }
 
-function terminalPagination(): BackendProposalPagination {
-  return { nextCursor: "", hasMore: false };
-}
-
-function normalizePagination(
-  value: unknown,
-  required: boolean,
-): BackendProposalPagination | undefined {
-  if (value === undefined && !required) return terminalPagination();
-  if (!isRecord(value)) return undefined;
-  const { nextCursor, hasMore } = value;
-  if (typeof nextCursor !== "string" || typeof hasMore !== "boolean") return undefined;
-  if (hasMore !== nextCursor.length > 0) return undefined;
-  return { nextCursor, hasMore };
-}
-
 export function normalizeProposal(value: unknown): BackendProposal | undefined {
   if (!isRecord(value)) return undefined;
   const proposalId = str(value.proposalId);
@@ -79,7 +73,18 @@ export function normalizeProposal(value: unknown): BackendProposal | undefined {
   const window = str(value.window);
   const createdLabel = str(value.createdLabel);
   const expiresLabel = str(value.expiresLabel);
-  if (!proposalId || !action || !status || !title || !window || !createdLabel || !expiresLabel) {
+  const expiresAt = str(value.expiresAt);
+  if (
+    !proposalId ||
+    !action ||
+    !status ||
+    !title ||
+    !window ||
+    !createdLabel ||
+    !expiresLabel ||
+    !expiresAt ||
+    !Number.isFinite(Date.parse(expiresAt))
+  ) {
     return undefined;
   }
   const reasonLabels = Array.isArray(value.reasonLabels)
@@ -98,21 +103,21 @@ export function normalizeProposal(value: unknown): BackendProposal | undefined {
     ...(answer ? { answer } : {}),
     createdLabel,
     expiresLabel,
+    expiresAt,
     ...(decisionToken ? { decisionToken } : {}),
   };
 }
 
-function normalizeBackendProposalData(
-  value: unknown,
-  paginationRequired: boolean,
-): BackendProposalsData | undefined {
+export function normalizeBackendProposals(value: unknown): BackendProposalsData | undefined {
   if (!isRecord(value)) return undefined;
   const status = value.status;
   if (status !== "off" && status !== "ok" && status !== "error") return undefined;
-  const pagination = normalizePagination(value.pagination, paginationRequired);
-  if (!pagination) return undefined;
+  const pagination = normalizeReviewPagination(value.pagination);
+  const summary = normalizeReviewSummary(value);
+  if (!pagination || !summary) return undefined;
+  if (!Array.isArray(value.proposals)) return undefined;
   const proposals: BackendProposal[] = [];
-  if (Array.isArray(value.proposals)) {
+  {
     for (const item of value.proposals) {
       const proposal = normalizeProposal(item);
       if (!proposal) return undefined;
@@ -120,28 +125,35 @@ function normalizeBackendProposalData(
     }
   }
   const message = str(value.message);
-  return { status, ...(message ? { message } : {}), proposals, pagination };
-}
-
-export function normalizeBackendProposals(value: unknown): BackendProposalsData | undefined {
-  return normalizeBackendProposalData(value, false);
-}
-
-export function normalizeBackendProposalPage(value: unknown): BackendProposalsData | undefined {
-  return normalizeBackendProposalData(value, true);
+  return {
+    ...(value.decisionRecorded === true ? { decisionRecorded: true } : {}),
+    ...summary,
+    status,
+    ...(message ? { message } : {}),
+    proposals,
+    pagination,
+  };
 }
 
 const offline: BackendProposalsData = {
+  ...emptyReviewSummary,
   status: "off",
   proposals: [],
-  pagination: terminalPagination(),
+  pagination: terminalReviewPage(),
 };
 
 export async function loadBackendProposals(
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<BackendProposalsData> {
   const method = findWailsMethod(root, ["GetBackendProposals"]);
-  if (!method) return offline;
+  if (!method)
+    return hasDesktopBridge(root)
+      ? {
+          ...offline,
+          status: "error",
+          message: "The desktop review service is unavailable. Restart the app to retry.",
+        }
+      : offline;
   try {
     const normalized = normalizeBackendProposals(await method());
     if (normalized) return normalized;
@@ -149,10 +161,11 @@ export async function loadBackendProposals(
     // Treat a failing bridge like an unreachable backend below.
   }
   return {
+    ...emptyReviewSummary,
     status: "error",
     message: "Could not reach the synced backend.",
     proposals: [],
-    pagination: terminalPagination(),
+    pagination: terminalReviewPage(),
   };
 }
 
@@ -161,16 +174,17 @@ export async function loadBackendProposalPage(
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<BackendProposalsData> {
   const unavailable: BackendProposalsData = {
+    ...emptyReviewSummary,
     status: "error",
     message: "Could not load older synced proposals.",
     proposals: [],
-    pagination: terminalPagination(),
+    pagination: terminalReviewPage(),
   };
   if (cursor.length === 0) return unavailable;
   const method = findWailsMethod(root, ["GetBackendProposalPage"]);
   if (!method) return unavailable;
   try {
-    const normalized = normalizeBackendProposalPage(await method({ cursor }));
+    const normalized = normalizeBackendProposals(await method({ cursor }));
     if (normalized) return normalized;
   } catch {
     // Fall through to the non-destructive page error below.
@@ -182,7 +196,14 @@ export async function decideBackendProposal(
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<BackendProposalsData> {
   const method = findWailsMethod(root, ["DecideBackendProposal"]);
-  if (!method) return offline;
+  if (!method)
+    return hasDesktopBridge(root)
+      ? {
+          ...offline,
+          status: "error",
+          message: "The desktop review service is unavailable. Restart the app to retry.",
+        }
+      : offline;
   try {
     const normalized = normalizeBackendProposals(await method(input));
     if (normalized) return normalized;
@@ -191,9 +212,10 @@ export async function decideBackendProposal(
     // backend actually consumes it.
   }
   return {
+    ...emptyReviewSummary,
     status: "error",
-    message: "The decision could not be recorded.",
+    message: "Could not confirm the decision. Refresh the queue before retrying.",
     proposals: [],
-    pagination: terminalPagination(),
+    pagination: terminalReviewPage(),
   };
 }

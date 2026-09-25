@@ -116,7 +116,7 @@ describe("loadOverview", () => {
     });
   });
 
-  it("falls back when the backend rejects", async () => {
+  it("withholds the forecast when the backend rejects", async () => {
     const result = await loadOverview({
       go: {
         service: {
@@ -127,7 +127,9 @@ describe("loadOverview", () => {
       },
     });
 
-    expect(result.source).toBe("fixture");
+    expect(result.source).toBe("local");
+    expect(result.data.status).toBe("unavailable");
+    expect(result.data.fixtureMode).toBe(false);
   });
 });
 

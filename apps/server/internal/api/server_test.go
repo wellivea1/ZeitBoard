@@ -111,6 +111,15 @@ func TestSyncRequiresAuthAndRegisteredDeviceCanPushAndPull(t *testing.T) {
 	}
 }
 
+func TestPullRejectsCursorAheadOfRestoredHistory(t *testing.T) {
+	h := newTestHarness(t)
+	token := h.registerDevice(t, "desktop")
+	status, body := h.request(t, http.MethodGet, "/v1/sync/pull?since=41", token, "")
+	if status != http.StatusConflict || !bytes.Contains(body, []byte("re-enroll")) {
+		t.Fatalf("restored-history response = %d %s", status, body)
+	}
+}
+
 func TestPushIsIdempotentByRecordID(t *testing.T) {
 	h := newTestHarness(t)
 	token := h.registerDevice(t, "desktop")

@@ -72,7 +72,7 @@ func newPortalHarness(t *testing.T) (*testHarness, *portal.Store) {
 				Private: s.store,
 				Now:     func() time.Time { return portalTestNow },
 			},
-			Recompute: &analysis.Worker{
+			Recompute: &recompute.Worker{
 				Orchestrator: recompute.Orchestrator{
 					Analysis: analysis.Portal{Materializer: materializer},
 					Journal:  store.RecomputeJournal{Store: s.store},
@@ -356,5 +356,51 @@ func TestVisitorRequestApprovalRoundTrip(t *testing.T) {
 	// The token is one-use, on this route too.
 	if status, _ := h.request(t, http.MethodPost, "/v1/portal/requests/"+entry.ProposalID+"/decision", token, inside); status != http.StatusConflict {
 		t.Errorf("replayed decision returned %d, want 409", status)
+	}
+}
+
+func TestReviewRoutesScopeBeforePagingAndRejectForeignCursors(t *testing.T) {
+	h, _ := newPortalHarness(t)
+	device := h.registerDeviceFull(t, "desktop")
+	for i := 0; i < 3; i++ {
+		_, err := h.st.CreateVisitorProposal(t.Context(), store.VisitorRequestInput{PortalRequestID: fmt.Sprintf("request-%d", i), ProfileID: "synthetic-family", DeviceID: device.DeviceID, WindowStart: portalTestNow.Add(time.Hour), WindowEnd: portalTestNow.Add(3 * time.Hour), ZoneID: "UTC", CreatedAt: portalTestNow, ExpiresAt: portalTestNow.Add(2 * time.Hour)})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 105; i++ {
+		_, err := h.st.CreateProposal(t.Context(), store.ProposalInput{ID: fmt.Sprintf("assistant_%d", i), ActionID: "propose_place_task", DeviceID: device.DeviceID, CreatedAt: portalTestNow, ExpiresAt: portalTestNow.Add(time.Hour), Payload: json.RawMessage(`{"synthetic":true}`), Audit: json.RawMessage(`{"source":"test"}`)})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	status, body := h.request(t, http.MethodGet, "/v1/portal/requests?limit=2", device.Token, "")
+	var first visitorRequestListResponse
+	if status != http.StatusOK || json.Unmarshal(body, &first) != nil {
+		t.Fatal("visitor list failed")
+	}
+	if len(first.Requests) != 2 || first.PendingCount != 3 || !first.Pagination.HasMore || first.NextExpiryAt == "" {
+		t.Fatalf("visitor scope/pagination/count incorrect: %+v", first)
+	}
+	status, body = h.request(t, http.MethodGet, "/v1/portal/requests?limit=2&cursor="+first.Pagination.NextCursor, device.Token, "")
+	var second visitorRequestListResponse
+	if status != http.StatusOK || json.Unmarshal(body, &second) != nil || len(second.Requests) != 1 || second.Pagination.HasMore || second.PendingCount != 3 {
+		t.Fatal("visitor continuation failed")
+	}
+	status, body = h.request(t, http.MethodGet, "/v1/proposals?limit=2", device.Token, "")
+	var backend proposalListResponse
+	if status != http.StatusOK || json.Unmarshal(body, &backend) != nil || backend.PendingCount != 105 || len(backend.Proposals) != 2 {
+		t.Fatal("backend scope/count failed")
+	}
+	for _, record := range backend.Proposals {
+		if record.ActionID == store.ActionVisitorRequest {
+			t.Fatal("visitor leaked to generic queue")
+		}
+	}
+	for _, path := range []string{"/v1/proposals?cursor=" + first.Pagination.NextCursor, "/v1/portal/requests?cursor=" + backend.Pagination.NextCursor} {
+		status, _ := h.request(t, http.MethodGet, path, device.Token, "")
+		if status != http.StatusBadRequest {
+			t.Fatalf("foreign cursor accepted: %d", status)
+		}
 	}
 }

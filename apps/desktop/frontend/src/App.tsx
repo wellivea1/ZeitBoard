@@ -1,8 +1,12 @@
-import { lazy, Suspense, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import { AppShell, useScreenNavigation } from "./components/AppShell";
 import { ApprovalsProvider } from "./state/approvals";
+import { VisitorRequestsProvider } from "./state/visitorRequests";
+import { ApprovalQueueProvider } from "./state/approvalQueue";
 import { BackendProposalsProvider } from "./state/backendProposals";
 import { HomeScreen } from "./screens/HomeScreen";
+import { ScreenErrorBoundary } from "./components/ScreenErrorBoundary";
+import { subscribeAnalysisUpdates } from "./data/sleepDataEvents";
 
 const PlanScreen = lazy(() =>
   import("./screens/PlanScreen").then((module) => ({ default: module.PlanScreen })),
@@ -33,6 +37,7 @@ function ScreenLoading() {
 
 export default function App() {
   const { route, selectPlanTab, selectLogTab } = useScreenNavigation();
+  useEffect(subscribeAnalysisUpdates, []);
 
   const content: ReactNode = {
     home: <HomeScreen />,
@@ -47,12 +52,25 @@ export default function App() {
   return (
     <ApprovalsProvider>
       <BackendProposalsProvider>
-        <a className="skip-link" href="#main-content">
-          Skip to content
-        </a>
-        <AppShell screen={route.screen}>
-          <Suspense fallback={<ScreenLoading />}>{content}</Suspense>
-        </AppShell>
+        <VisitorRequestsProvider>
+          <ApprovalQueueProvider>
+            <a
+              className="skip-link"
+              href="#main-content"
+              onClick={(event) => {
+                event.preventDefault();
+                document.getElementById("main-content")?.focus();
+              }}
+            >
+              Skip to content
+            </a>
+            <AppShell screen={route.screen}>
+              <ScreenErrorBoundary key={`${route.screen}/${route.planTab}/${route.logTab}`}>
+                <Suspense fallback={<ScreenLoading />}>{content}</Suspense>
+              </ScreenErrorBoundary>
+            </AppShell>
+          </ApprovalQueueProvider>
+        </VisitorRequestsProvider>
       </BackendProposalsProvider>
     </ApprovalsProvider>
   );

@@ -1,0 +1,212 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Authenticated private companion projection v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source_cursor",
+    "generated_at",
+    "valid_until",
+    "algorithm_version",
+    "provenance",
+    "status",
+    "freshness",
+    "forecasts",
+    "sleep",
+    "contains_synthetic_data"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "v2"
+    },
+    "source_cursor": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "generated_at": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "valid_until": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "algorithm_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "provenance": {
+      "const": "self_hosted_synced_sleep"
+    },
+    "status": {
+      "enum": ["estimated", "refused"]
+    },
+    "refusal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": {
+          "enum": [
+            "insufficient_data",
+            "ambiguous_cycle_index",
+            "conflicting_observations",
+            "unsupported_input",
+            "correction_review_required",
+            "history_limit"
+          ]
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        }
+      }
+    },
+    "confidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "reasons"],
+      "properties": {
+        "level": {
+          "enum": ["low", "medium", "high"]
+        },
+        "reasons": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          }
+        }
+      }
+    },
+    "freshness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "reason", "explanation"],
+      "properties": {
+        "state": {
+          "enum": ["current", "stale", "withheld"]
+        },
+        "reason": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "explanation": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 400
+        }
+      }
+    },
+    "forecasts": {
+      "type": "array",
+      "maxItems": 14,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["predicted_sleep_window", "predicted_waking_window"],
+        "properties": {
+          "predicted_sleep_window": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["start_at", "end_at", "zone_id"],
+            "properties": {
+              "start_at": {
+                "$ref": "common.schema.json#/$defs/timestamp"
+              },
+              "end_at": {
+                "$ref": "common.schema.json#/$defs/timestamp"
+              },
+              "zone_id": {
+                "$ref": "common.schema.json#/$defs/zoneId"
+              }
+            }
+          },
+          "predicted_waking_window": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["start_at", "end_at", "zone_id"],
+            "properties": {
+              "start_at": {
+                "$ref": "common.schema.json#/$defs/timestamp"
+              },
+              "end_at": {
+                "$ref": "common.schema.json#/$defs/timestamp"
+              },
+              "zone_id": {
+                "$ref": "common.schema.json#/$defs/zoneId"
+              }
+            }
+          }
+        }
+      }
+    },
+    "sleep": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["row_id", "start_at", "end_at", "zone_id", "classification", "corrected"],
+        "properties": {
+          "row_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          },
+          "start_at": {
+            "$ref": "common.schema.json#/$defs/timestamp"
+          },
+          "end_at": {
+            "$ref": "common.schema.json#/$defs/timestamp"
+          },
+          "zone_id": {
+            "$ref": "common.schema.json#/$defs/zoneId"
+          },
+          "classification": {
+            "enum": ["principal", "nap", "unknown"]
+          },
+          "corrected": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "contains_synthetic_data": {
+      "type": "boolean"
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "status": {
+          "const": "estimated"
+        },
+        "forecasts": {
+          "minItems": 1
+        }
+      },
+      "required": ["confidence"],
+      "not": {
+        "required": ["refusal"]
+      }
+    },
+    {
+      "properties": {
+        "status": {
+          "const": "refused"
+        },
+        "forecasts": {
+          "maxItems": 0
+        }
+      },
+      "required": ["refusal"],
+      "not": {
+        "required": ["confidence"]
+      }
+    }
+  ]
+}

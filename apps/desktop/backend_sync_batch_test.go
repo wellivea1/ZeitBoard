@@ -42,7 +42,7 @@ func TestSyncPushBatchesTaskAndSleepRecordsByCount(t *testing.T) {
 				Accepted:      len(req.Records),
 			})
 		case "/v1/sync/pull":
-			_ = json.NewEncoder(w).Encode(syncPullResponse{
+			writePullFixture(t, w, r, syncPullResponse{
 				SchemaVersion: "v1",
 				Cursor:        int64(len(batches)),
 				Records:       []syncEnvelope{},
@@ -212,7 +212,7 @@ func TestTaskPushRetainsProgressAfterLaterBatchFails(t *testing.T) {
 				Accepted:      len(req.Records),
 			})
 		case "/v1/sync/pull":
-			_ = json.NewEncoder(w).Encode(syncPullResponse{
+			writePullFixture(t, w, r, syncPullResponse{
 				SchemaVersion: "v1",
 				Cursor:        int64(len(acceptedIDs)),
 				Records:       []syncEnvelope{},

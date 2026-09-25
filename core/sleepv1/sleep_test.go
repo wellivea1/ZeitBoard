@@ -47,6 +47,110 @@ func TestFoldUsesTargetZoneAndPreservesUnknownClassification(t *testing.T) {
 	}
 }
 
+func TestProviderRevisionNeverClaimsHumanConfirmation(t *testing.T) {
+	start := time.Date(2026, 9, 1, 4, 0, 0, 0, time.UTC)
+	observation := testObservation("hc_synthetic", start, start.Add(8*time.Hour), ClassificationPrincipal)
+	observation.Provenance.AcquisitionMethod = AcquisitionHealthConnect
+	observation.Provenance.EvidenceStatus = EvidenceDirectlyObserved
+	revised := start.Add(20 * time.Minute)
+	for _, author := range []string{AcquisitionHealthConnect, "", AcquisitionManual} {
+		t.Run("author_"+author, func(t *testing.T) {
+			correction := Correction{
+				CorrectionID: "cor_synthetic", TargetObservationID: observation.ObservationID,
+				CreatedAt: start.Add(9 * time.Hour), Reason: CorrectionSourceConflict,
+				AcquisitionMethod: author, Changes: CorrectionChanges{StartAt: &revised},
+			}
+			sessions, err := Fold([]Observation{observation}, []Correction{correction})
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := sessions[0].Intervals[0].StartEvidence
+			if author != AcquisitionHealthConnect {
+				if got.Status != domain.StatusUserConfirmed {
+					t.Fatal("manual correction lost confirmation")
+				}
+			} else {
+				if got.Status != domain.StatusObserved || got.Acquisition != domain.AcquisitionImported || !got.RecordedAt.Equal(correction.CreatedAt) {
+					t.Fatalf("provider revision invented human confirmation or lost its revision provenance: %#v", got)
+				}
+			}
+			if !observation.StartAt.Equal(start) {
+				t.Fatal("source evidence was mutated")
+			}
+		})
+	}
+}
+
+func TestProviderRevisionCannotImpersonateManualCorrectionOrAnotherSource(t *testing.T) {
+	start := time.Date(2026, 9, 1, 4, 0, 0, 0, time.UTC)
+	changed := start.Add(15 * time.Minute)
+	correction := Correction{CorrectionID: "cor_synthetic", TargetObservationID: "obs_synthetic", CreatedAt: start.Add(9 * time.Hour),
+		Reason: CorrectionSourceConflict, AcquisitionMethod: AcquisitionHealthConnect, Changes: CorrectionChanges{StartAt: &changed}}
+	observation := testObservation("obs_synthetic", start, start.Add(8*time.Hour), ClassificationPrincipal)
+	observation.Provenance.AcquisitionMethod = AcquisitionManual
+	if _, err := Fold([]Observation{observation}, []Correction{correction}); err == nil {
+		t.Fatal("provider revision rewrote another acquisition source")
+	}
+	excluded := true
+	correction.Changes.Excluded = &excluded
+	if err := ValidateCorrection(correction); err == nil {
+		t.Fatal("provider revision performed user exclusion")
+	}
+	correction.Changes.Excluded = nil
+	correction.Reason = CorrectionUserEdit
+	if err := ValidateCorrection(correction); err == nil {
+		t.Fatal("provider revision claimed to be a user edit")
+	}
+}
+
+func TestNewSourceRevisionCannotSilentlyOverrideAnOlderUserCorrection(t *testing.T) {
+	start := time.Date(2026, 9, 1, 4, 0, 0, 0, time.UTC)
+	observation := testObservation("hc_synthetic", start, start.Add(8*time.Hour), ClassificationPrincipal)
+	observation.Provenance.AcquisitionMethod = AcquisitionHealthConnect
+	userStart, providerStart := start.Add(20*time.Minute), start.Add(40*time.Minute)
+	user := Correction{CorrectionID: "cor_user", TargetObservationID: observation.ObservationID, CreatedAt: start.Add(9 * time.Hour),
+		Reason: CorrectionUserEdit, AcquisitionMethod: AcquisitionManual, Changes: CorrectionChanges{StartAt: &userStart}}
+	provider := Correction{CorrectionID: "cor_provider", TargetObservationID: observation.ObservationID, CreatedAt: start.Add(10 * time.Hour),
+		Reason: CorrectionSourceConflict, AcquisitionMethod: AcquisitionHealthConnect, Changes: CorrectionChanges{StartAt: &providerStart}}
+	if _, err := Fold([]Observation{observation}, []Correction{user, provider}); err == nil {
+		t.Fatal("new source revision silently overrode an existing user correction")
+	}
+	user.CreatedAt = start.Add(11 * time.Hour)
+	if _, err := Fold([]Observation{observation}, []Correction{user, provider}); err == nil {
+		t.Fatal("a later save time was mistaken for review of the new source")
+	}
+	user.BasedOnSourceRevision = &provider.CreatedAt
+	sessions, err := Fold([]Observation{observation}, []Correction{user, provider})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !sessions[0].Intervals[0].Interval.Start.UTC.Equal(userStart) {
+		t.Fatal("reviewed user correction was not applied")
+	}
+}
+
+func TestManualOverlayRetainsProviderEndpointWhenSupersedingAProviderRevision(t *testing.T) {
+	start := time.Date(2026, 9, 1, 4, 0, 0, 0, time.UTC)
+	observation := testObservation("hc_overlay", start, start.Add(8*time.Hour), ClassificationPrincipal)
+	observation.Provenance.AcquisitionMethod = AcquisitionHealthConnect
+	providerStart, providerEnd, userStart := start.Add(10*time.Minute), start.Add(9*time.Hour), start.Add(20*time.Minute)
+	provider := Correction{CorrectionID: "cor_provider", TargetObservationID: observation.ObservationID, CreatedAt: start.Add(10 * time.Hour), Reason: CorrectionSourceConflict,
+		AcquisitionMethod: AcquisitionHealthConnect, Changes: CorrectionChanges{StartAt: &providerStart, EndAt: &providerEnd}}
+	user := Correction{CorrectionID: "cor_user", TargetObservationID: observation.ObservationID, SupersedesCorrectionIDs: []string{provider.CorrectionID}, BasedOnSourceRevision: &provider.CreatedAt,
+		CreatedAt: start.Add(11 * time.Hour), Reason: CorrectionUserEdit, Changes: CorrectionChanges{StartAt: &userStart}}
+	sessions, err := Fold([]Observation{observation}, []Correction{user, provider})
+	if err != nil {
+		t.Fatal(err)
+	}
+	interval := sessions[0].Intervals[0]
+	if !interval.Interval.Start.UTC.Equal(userStart) || !interval.Interval.End.UTC.Equal(providerEnd) {
+		t.Fatal("manual overlay lost the unedited provider endpoint")
+	}
+	if !interval.StartEvidence.RecordedAt.Equal(user.CreatedAt) {
+		t.Fatal("correction timestamp was not preserved as evidence")
+	}
+}
+
 func TestFoldAppliesOnlyActiveCorrectionLeafAndPreservesSuppression(t *testing.T) {
 	start := time.Date(2026, 3, 2, 5, 0, 0, 0, time.UTC)
 	firstStart := start.Add(15 * time.Minute)
@@ -62,11 +166,11 @@ func TestFoldAppliesOnlyActiveCorrectionLeafAndPreservesSuppression(t *testing.T
 			Changes:             CorrectionChanges{StartAt: &firstStart},
 		},
 		{
-			CorrectionID:           "cor_sleep_03",
-			TargetObservationID:    "obs_sleep_02",
-			SupersedesCorrectionID: "cor_sleep_02",
-			CreatedAt:              start.Add(10 * time.Hour),
-			Reason:                 CorrectionUserEdit,
+			CorrectionID:            "cor_sleep_03",
+			TargetObservationID:     "obs_sleep_02",
+			SupersedesCorrectionIDs: []string{"cor_sleep_02"},
+			CreatedAt:               start.Add(10 * time.Hour),
+			Reason:                  CorrectionUserEdit,
 			Changes: CorrectionChanges{
 				StartAt:  &finalStart,
 				Excluded: &excluded,

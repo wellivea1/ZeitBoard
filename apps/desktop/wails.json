@@ -4,7 +4,7 @@
   "outputfilename": "ZeitBoard",
   "frontend:install": "npm --prefix ../../.. ci",
   "frontend:build": "npm --prefix ../../.. run build --workspace @zeitboard/desktop-frontend",
-  "frontend:dev:watcher": "npm --prefix frontend run dev -- --host 127.0.0.1",
+  "frontend:dev:watcher": "npm run dev -- --host 127.0.0.1",
   "frontend:dev:serverUrl": "auto",
   "author": {
     "name": "ZeitBoard contributors",

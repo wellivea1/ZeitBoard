@@ -29,20 +29,27 @@ class SharedPreferencesSyncConfigStore(
         val baseUrl = preferences.getString(KEY_BASE_URL, null) ?: return null
         val token = preferences.getString(KEY_TOKEN, null) ?: return null
         val zone = preferences.getString(KEY_HOME_ZONE, null) ?: return null
-        if (baseUrl.isBlank() || token.isBlank() || zone.isBlank()) return null
-        return SyncConfig(baseUrl = baseUrl, token = token, homeZoneId = zone)
+        val scope = preferences.getString(KEY_SCOPE, null) ?: return null
+        if (baseUrl.isBlank() || token.isBlank() || zone.isBlank() || scope.isBlank()) return null
+        return SyncConfig(
+            baseUrl = baseUrl,
+            token = token,
+            homeZoneId = zone,
+            queueScope = scope,
+        )
     }
 
     override fun save(config: SyncConfig) {
-        preferences.edit()
-            .putString(KEY_BASE_URL, config.baseUrl)
-            .putString(KEY_TOKEN, config.token)
-            .putString(KEY_HOME_ZONE, config.homeZoneId)
-            .apply()
+        check(preferences.commitDurably {
+            putString(KEY_BASE_URL, config.baseUrl)
+            putString(KEY_TOKEN, config.token)
+            putString(KEY_HOME_ZONE, config.homeZoneId)
+            putString(KEY_SCOPE, config.queueScope)
+        }) { "Enrollment could not be saved on this device." }
     }
 
     override fun clear() {
-        preferences.edit().clear().apply()
+        check(preferences.commitDurably { clear() }) { "Enrollment could not be removed from this device." }
     }
 
     companion object {
@@ -50,5 +57,6 @@ class SharedPreferencesSyncConfigStore(
         private const val KEY_BASE_URL = "base_url"
         private const val KEY_TOKEN = "token"
         private const val KEY_HOME_ZONE = "home_zone"
+        private const val KEY_SCOPE = "queue_scope"
     }
 }

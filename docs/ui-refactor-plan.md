@@ -410,11 +410,10 @@ tabindex and the arrow/Home/End handling that three hand-rolled copies would
 have drifted on. Tabs are part of the address (`#/plan/tasks`, `#/log/markers`),
 so a reload or a bookmark lands where it did.
 
-**Every old hash still works.** `#/overview`, `#/calendar`, `#/tasks`,
-`#/approvals`, `#/medications` and `#/timeline` redirect to their new home and
-tab. They are written down in this app's own links, in the runbook, and in
-whatever the user bookmarked; a dead link is a worse answer than six lines of
-redirect. The lint requires them to stay.
+**Current routes only (2026-09-21).** Following the owner's pre-release direction,
+ADR-0046 removes the six old destination aliases and their lint requirement. Use
+`#/home`, `#/rhythm`, `#/plan/calendar`, `#/plan/tasks`, `#/plan/approvals`, and
+`#/log/medications`; unknown routes fall back to Home.
 
 **A screen inside a tab gives up its heading and keeps its controls.**
 `PageHeader` gained a `panel` level: the tab already names the view and labels

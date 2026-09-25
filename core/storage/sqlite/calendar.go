@@ -274,6 +274,9 @@ func (s *Store) DecideProposal(ctx context.Context, input ProposalDecisionInput,
 		}
 		return ProposalDecisionRecord{}, err
 	}
+	if err := requireTaskReviewed(ctx, tx, input.TaskID); err != nil {
+		return ProposalDecisionRecord{}, err
+	}
 	if task.Status != TaskStatusOpen || effectiveRevision(task) != input.TaskRevision {
 		return ProposalDecisionRecord{}, ErrStaleProposal
 	}

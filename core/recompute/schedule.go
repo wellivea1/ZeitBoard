@@ -2,9 +2,8 @@ package recompute
 
 import "time"
 
-// Default schedule parameters. They are deliberately unexciting: the work is
-// cheap, nobody is watching it, and the cost of being a minute late is nil while
-// the cost of thrashing a laptop's disk is not.
+// Default schedule parameters coalesce evidence bursts without delaying an
+// expired result. Failed refreshes back off rather than thrashing storage.
 const (
 	// DefaultDebounce is how long a burst is allowed to settle. A device sync
 	// arrives as a run of pushes, and recomputing after each one would repeat
@@ -133,6 +132,9 @@ type Claim struct {
 // have read its inputs before the change they are reporting landed.
 func (s *Schedule) Begin(now time.Time) (Claim, bool) {
 	now = now.UTC()
+	if !s.lastRun.IsZero() && now.Before(s.lastRun) {
+		return Claim{Reason: ReasonHeartbeat}, true
+	}
 	if s.pending && !now.Before(s.dueAt) {
 		claim := Claim{Reason: s.reason, Coalesced: s.coalesced}
 		s.pending = false
@@ -140,7 +142,10 @@ func (s *Schedule) Begin(now time.Time) (Claim, bool) {
 		s.coalesced = 0
 		return claim, true
 	}
-	if !s.validUntil.IsZero() && !now.Before(s.validUntil) && s.pastFloor(now) {
+	if s.pending && s.failures > 0 {
+		return Claim{}, false
+	}
+	if !s.validUntil.IsZero() && !now.Before(s.validUntil) {
 		return Claim{Reason: ReasonFreshnessExpiry}, true
 	}
 	if !s.lastRun.IsZero() && now.Sub(s.lastRun) >= s.heartbeat() {
@@ -149,15 +154,14 @@ func (s *Schedule) Begin(now time.Time) (Claim, bool) {
 	return Claim{}, false
 }
 
-func (s *Schedule) pastFloor(now time.Time) bool {
-	return s.lastRun.IsZero() || !now.Before(s.lastRun.Add(s.minInterval()))
-}
-
 // NextWake reports when Due could next become true, so a caller can sleep
 // exactly that long instead of polling. The second return is false when nothing
 // is scheduled at all.
 func (s *Schedule) NextWake(now time.Time) (time.Time, bool) {
 	now = now.UTC()
+	if !s.lastRun.IsZero() && now.Before(s.lastRun) {
+		return now, true
+	}
 	var next time.Time
 	consider := func(candidate time.Time) {
 		if candidate.IsZero() {
@@ -172,13 +176,12 @@ func (s *Schedule) NextWake(now time.Time) (time.Time, bool) {
 	}
 	if s.pending {
 		consider(s.dueAt)
+		if s.failures > 0 {
+			return next, true
+		}
 	}
 	if !s.validUntil.IsZero() {
-		floor := s.validUntil
-		if !s.lastRun.IsZero() && floor.Before(s.lastRun.Add(s.minInterval())) {
-			floor = s.lastRun.Add(s.minInterval())
-		}
-		consider(floor)
+		consider(s.validUntil)
 	}
 	if !s.lastRun.IsZero() {
 		consider(s.lastRun.Add(s.heartbeat()))
@@ -199,6 +202,9 @@ func (s *Schedule) Succeeded(now time.Time) {
 func (s *Schedule) Failed(now time.Time) time.Duration {
 	now = now.UTC()
 	s.failures++
+	// An expired result is already unusable. Retry backoff, rather than the
+	// expired timer, controls recovery after a failure.
+	s.validUntil = time.Time{}
 	s.lastRun = now
 	delay := s.retryBase()
 	for i := 1; i < s.failures; i++ {

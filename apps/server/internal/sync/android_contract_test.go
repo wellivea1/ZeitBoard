@@ -2,10 +2,49 @@ package syncmodel
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"non24.app/core/domain"
+	"non24.app/core/sleepv1"
 )
+
+func TestSharedAndroidFixtureValidatesAndReplaysWithoutHumanConfirmation(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "testdata", "v1", "sync-android-source-revision.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pulled PullResponse
+	if err := json.Unmarshal(data, &pulled); err != nil {
+		t.Fatal(err)
+	}
+	request := PushRequest{SchemaVersion: pulled.SchemaVersion}
+	for _, envelope := range pulled.Records {
+		request.Records = append(request.Records, PushRecord{RecordID: envelope.RecordID, Kind: envelope.Kind, CreatedAt: envelope.CreatedAt, Payload: envelope.Payload})
+	}
+	if err := ValidatePushRequest(&request); err != nil {
+		t.Fatal(err)
+	}
+	observation, err := sleepv1.DecodeObservation(request.Records[0].Payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	correction, err := sleepv1.DecodeCorrection(request.Records[1].Payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sessions, err := sleepv1.Fold([]sleepv1.Observation{observation}, []sleepv1.Correction{correction})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sessions) != 1 || sessions[0].Intervals[0].StartEvidence.Status != domain.StatusObserved ||
+		!sessions[0].Intervals[0].Interval.Start.UTC.Equal(time.Date(2026, 9, 2, 2, 2, 0, 0, time.UTC)) {
+		t.Fatal("Android revision duplicated sleep, lost the corrected instant, or invented human confirmation")
+	}
+}
 
 // The Android companion builds these payloads by hand in Kotlin, in
 // apps/android/.../data/SyncContract.kt. Nothing in the Go build imports that
@@ -24,8 +63,8 @@ const androidObservationPayload = `{"observation_id":"hc-6735800bfc6c2f403e72d70
 
 const androidCorrectionPayload = `{"correction_id":"cor-c5f66660febe533547745cd3",` +
 	`"target_observation_id":"hc-6735800bfc6c2f403e72d700",` +
-	`"supersedes_correction_id":"cor-1111111111111111aaaaaaaa",` +
 	`"created_at":"2026-08-04T13:00:00Z","reason":"source_conflict",` +
+	`"acquisition_method":"health_connect",` +
 	`"changes":{"start_at":"2026-08-04T04:30:00Z","end_at":"2026-08-04T12:00:00Z"}}`
 
 func androidBatch(t *testing.T) *PushRequest {

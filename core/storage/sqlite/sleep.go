@@ -211,9 +211,9 @@ func (s *Store) AppendSleepCorrection(ctx context.Context, record SleepCorrectio
 		return err
 	}
 	_, err = s.db.ExecContext(ctx, `INSERT INTO local_sleep_corrections(
-		correction_id, target_observation_id, supersedes_correction_id, created_at, reason, changes_json, payload_json
-	) VALUES(?, ?, ?, ?, ?, ?, ?)`,
-		record.CorrectionID, record.TargetObservationID, record.SupersedesCorrectionID,
+		correction_id, target_observation_id, created_at, reason, changes_json, payload_json
+	) VALUES(?, ?, ?, ?, ?, ?)`,
+		record.CorrectionID, record.TargetObservationID,
 		formatSQLiteTime(record.CreatedAt), record.Reason, changes, encoded,
 	)
 	return err
@@ -625,18 +625,12 @@ func (s *Store) DeleteSleepObservation(ctx context.Context, observationID string
 	if err != nil {
 		return err
 	}
-	// Records that already reached the synced backend need server-side erasure
-	// too (ADR-0017): enqueue them in the erasure outbox before their tracking
-	// rows disappear. Never-pushed records never left this device, so they
-	// need no tombstone.
+	// An upload may have reached the server before its acknowledgment was saved.
+	// Queue every deleted record, not only records with local acknowledgments.
 	erasedAt := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO local_sleep_erasures(record_id, erased_at)
-		SELECT record_id, ? FROM local_sleep_sync_records
-		WHERE pushed_at != ''
-			AND (record_id = ?
-				OR record_id IN (
-					SELECT correction_id FROM local_sleep_corrections WHERE target_observation_id = ?
-				))`, erasedAt, observationID, observationID); err != nil {
+		SELECT observation_id, ? FROM local_sleep_observations WHERE observation_id=?
+		UNION ALL SELECT correction_id, ? FROM local_sleep_corrections WHERE target_observation_id=?`, erasedAt, observationID, erasedAt, observationID); err != nil {
 		_ = tx.Rollback()
 		return err
 	}
@@ -679,11 +673,14 @@ func (s *Store) DeleteAllSleepData(ctx context.Context) error {
 	}
 	erasedAt := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO local_sleep_erasures(record_id, erased_at)
-		SELECT record_id, ? FROM local_sleep_sync_records WHERE pushed_at != ''`, erasedAt); err != nil {
+		SELECT observation_id, ? FROM local_sleep_observations
+		UNION ALL SELECT correction_id, ? FROM local_sleep_corrections`, erasedAt, erasedAt); err != nil {
 		_ = tx.Rollback()
 		return err
 	}
 	for _, table := range []string{
+		"local_sleep_analysis", "local_recompute_runs",
+		"local_sync_deferred_corrections",
 		"local_sleep_sync_records",
 		"local_sleep_corrections",
 		"local_sleep_observations",
@@ -723,6 +720,12 @@ func (s *Store) PendingSyncErasures(ctx context.Context) ([]string, error) {
 	return ids, rows.Err()
 }
 
+func (s *Store) PendingSyncErasureCount(ctx context.Context) (int, error) {
+	var count int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM local_sleep_erasures`).Scan(&count)
+	return count, err
+}
+
 // ClearSyncErasures removes outbox entries once the backend confirmed their
 // tombstones.
 func (s *Store) ClearSyncErasures(ctx context.Context, recordIDs []string) error {
@@ -731,6 +734,10 @@ func (s *Store) ClearSyncErasures(ctx context.Context, recordIDs []string) error
 		return err
 	}
 	for _, id := range recordIDs {
+		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO local_sync_tombstones VALUES(?,'')`, id); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM local_sleep_erasures WHERE record_id = ?`, id); err != nil {
 			_ = tx.Rollback()
 			return err
@@ -763,19 +770,6 @@ func (s *Store) EraseSyncedSleepRecord(ctx context.Context, recordID string) (bo
 		return false, nil
 	}
 	return true, s.compactDeletedData(ctx)
-}
-
-func (s *Store) LatestSleepCorrectionID(ctx context.Context, targetObservationID string) (string, error) {
-	var id string
-	err := s.db.QueryRowContext(ctx, `SELECT correction_id
-		FROM local_sleep_corrections
-		WHERE target_observation_id = ?
-		ORDER BY created_at DESC, correction_id DESC
-		LIMIT 1`, targetObservationID).Scan(&id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
-	}
-	return id, err
 }
 
 func (s *Store) RawSleepSessions(ctx context.Context) ([]domain.SleepSession, error) {

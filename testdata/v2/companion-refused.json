@@ -1,0 +1,30 @@
+{
+  "algorithm_version": "theil-sen-sleep-start/v1",
+  "contains_synthetic_data": true,
+  "forecasts": [],
+  "freshness": {
+    "explanation": "More usable sleep history is needed.",
+    "reason": "insufficient_data",
+    "state": "withheld"
+  },
+  "generated_at": "2026-09-02T12:00:00Z",
+  "provenance": "self_hosted_synced_sleep",
+  "refusal": {
+    "code": "insufficient_data",
+    "message": "More usable sleep history is needed."
+  },
+  "schema_version": "v2",
+  "sleep": [
+    {
+      "classification": "principal",
+      "corrected": true,
+      "end_at": "2026-09-02T10:00:00Z",
+      "row_id": "sleep_synthetic",
+      "start_at": "2026-09-02T02:02:00Z",
+      "zone_id": "UTC"
+    }
+  ],
+  "source_cursor": 2,
+  "status": "refused",
+  "valid_until": "2026-09-02T12:15:00Z"
+}

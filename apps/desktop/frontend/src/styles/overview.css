@@ -357,8 +357,7 @@
 }
 
 .overview-learning {
-  min-height: 300px;
-  padding: var(--space-8) var(--space-6);
+  padding: var(--space-6);
   display: flex;
   align-items: center;
   justify-content: space-between;

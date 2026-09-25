@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { loadProposals, normalizeProposals, proposalsFixture } from "./proposals";
 
 const backendProposals = {
+  taskConflicts: [],
+  taskConflictHistory: [],
   fixtureMode: false,
   status: "estimated",
   proposals: [
@@ -89,8 +91,17 @@ describe("loadProposals", () => {
 
   it("accepts a valid empty plan", () => {
     expect(
-      normalizeProposals({ fixtureMode: true, status: "estimated", proposals: [], unplaced: [] }),
+      normalizeProposals({
+        taskConflicts: [],
+        taskConflictHistory: [],
+        fixtureMode: true,
+        status: "estimated",
+        proposals: [],
+        unplaced: [],
+      }),
     ).toEqual({
+      taskConflicts: [],
+      taskConflictHistory: [],
       fixtureMode: true,
       status: "estimated",
       proposals: [],
@@ -101,6 +112,8 @@ describe("loadProposals", () => {
   it("accepts estimate-unavailable unplaced tasks from the local app", () => {
     expect(
       normalizeProposals({
+        taskConflicts: [],
+        taskConflictHistory: [],
         fixtureMode: false,
         status: "empty",
         refusal: { code: "estimate_unavailable", message: "Add sleep entries." },

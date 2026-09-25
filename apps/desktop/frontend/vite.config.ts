@@ -31,8 +31,11 @@ export default defineConfig({
   build: {
     target: "es2022",
   },
+  // 34115 belongs to `wails dev`, which serves the app with its Go bindings on
+  // that port and proxies assets from here. Sharing it made the two servers
+  // fight over the socket, so browser access to the real app never started.
   server: {
-    port: 34115,
+    port: 5173,
     strictPort: true,
   },
   test: {

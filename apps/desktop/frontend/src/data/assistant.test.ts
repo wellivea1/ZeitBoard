@@ -16,6 +16,7 @@ const proposal = {
   confidence: "Medium",
   reasonLabels: ["Fits the predicted waking window"],
   createdLabel: "Proposed Jul 10, 8:00 AM",
+  expiresAt: "2099-01-01T00:00:00Z",
   expiresLabel: "expires Jul 10, 8:15 AM",
   decisionToken: "one-use-token",
 };

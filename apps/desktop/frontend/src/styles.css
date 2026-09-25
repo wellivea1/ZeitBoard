@@ -732,6 +732,10 @@ button {
 }
 .page-actions {
   padding-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
 }
 .status-cluster {
   display: grid;
@@ -746,6 +750,11 @@ button {
   margin-top: 2px;
   color: var(--subtle);
   font-size: 10px;
+}
+.status-cluster > .button {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  margin-left: var(--space-2);
 }
 .sync-dot {
   width: 7px;
@@ -881,6 +890,12 @@ button {
   cursor: pointer;
   font-size: 12px;
   font-weight: 750;
+}
+a.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
 }
 .button.primary {
   color: var(--button-primary-text);
@@ -2781,8 +2796,29 @@ button {
 
 /* Visitor time requests (ADR-0030). A request is not a yes/no proposal: the
    owner narrows a window to a block, so the card carries its own controls. */
-.visitor-requests-panel .proposal-card[data-origin="visitor"] {
-  border-left: 3px solid var(--assistant);
+.proposal-card[data-origin="visitor"] {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.proposal-card[data-origin="visitor"]::before {
+  background: var(--assistant);
+}
+.proposal-card[data-origin="visitor"] .proposal-header {
+  grid-template-columns: 60px minmax(0, 1fr);
+}
+.proposal-card[data-origin="visitor"] h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.proposal-card[data-origin="visitor"] .proposal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+.visitor-requests-panel {
+  padding: var(--space-4) var(--space-5);
 }
 
 .visitor-message {
@@ -2813,8 +2849,9 @@ button {
   color: var(--muted);
 }
 
-.visitor-slot-field input {
-  min-height: 2.25rem;
+.visitor-slot-field input,
+.visitor-slot-field select {
+  min-height: 44px;
   padding: 0.35rem 0.5rem;
   border: 1px solid var(--line);
   border-radius: 6px;
@@ -2882,4 +2919,138 @@ button {
 .overview-calibration-note {
   color: var(--muted);
   max-width: 62ch;
+}
+
+.approval-filter {
+  flex-wrap: wrap;
+  padding-block: 8px;
+}
+.approval-filter button[aria-pressed="true"] {
+  background: var(--paper);
+  box-shadow: inset 0 -2px currentColor;
+}
+.visitor-slot select {
+  max-width: 100%;
+}
+
+.approval-filter button {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid transparent;
+}
+.approval-filter button[aria-pressed="true"] {
+  color: var(--ink);
+  border-color: var(--line);
+}
+.approval-screen > p {
+  grid-column: 1 / -1;
+}
+
+.approval-history-panel > h2 {
+  margin: 0;
+  padding: 16px 16px 0;
+  font-size: 16px;
+}
+.approval-history-panel > p {
+  padding: 0 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.approval-screen > .synced-proposal-pagination {
+  grid-column: 1 / -1;
+  flex-wrap: wrap;
+}
+
+.proposal-card.task-conflict-card {
+  display: block;
+}
+.task-conflict-card > h2 {
+  font-size: 16px;
+  margin: 6px 0;
+}
+.task-conflict-card > p {
+  font-size: 12px;
+  color: var(--muted);
+}
+.task-conflict-card fieldset {
+  border: 0;
+  margin: 16px 0;
+  padding: 0;
+  min-width: 0;
+}
+.task-conflict-card legend {
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+.task-conflict-versions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 12px;
+}
+.task-conflict-version,
+.task-conflict-versions > section {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  min-width: 0;
+}
+.task-conflict-version:has(input:checked) {
+  border-color: var(--sage);
+  background: var(--sage-soft);
+}
+.task-conflict-version {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 10px;
+  align-items: center;
+}
+.task-conflict-version > label {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-weight: 700;
+  cursor: pointer;
+}
+.task-conflict-version > .task-version-details {
+  grid-column: 1 / -1;
+}
+.task-version-edited dt,
+.task-version-edited dd {
+  color: var(--muted);
+}
+.task-conflict-same {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.task-version-details {
+  margin: 8px 0 0;
+  font-size: 12px;
+}
+.task-version-details > div {
+  display: grid;
+  grid-template-columns: 100px minmax(0, 1fr);
+  gap: 8px;
+  margin: 8px 0;
+}
+.task-version-details dt {
+  color: var(--muted);
+}
+.task-version-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.task-review-history {
+  padding: 16px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+}
+.task-review-history summary {
+  cursor: pointer;
+  min-height: 44px;
+}
+.task-review-history h3 {
+  font-size: 13px;
 }

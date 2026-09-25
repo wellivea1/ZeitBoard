@@ -75,7 +75,9 @@ function Invoke-Core {
     Push-Location $Root
     try {
         if ($Action -in @("check", "test")) {
-            $goFiles = Get-ChildItem -Path @("core", "apps\desktop") -Filter "*.go" -Recurse -File -ErrorAction SilentlyContinue
+            $goFiles = Get-ChildItem -Path @("core", "apps\desktop") -Filter "*.go" -Recurse -File -ErrorAction SilentlyContinue |
+                # Go tooling ignores directories named with a leading "." or "_", so untracked scratch in an ignored cache must not fail the format check either.
+                Where-Object { $_.FullName -notmatch '[\\/][._][^\\/]*[\\/]' }
             $unformatted = @()
             foreach ($file in $goFiles) {
                 $result = gofmt -l $file.FullName
@@ -126,7 +128,9 @@ function Invoke-Server {
     Push-Location $serverRoot
     try {
         if ($Action -eq "check") {
-            $goFiles = Get-ChildItem -Path $serverRoot -Filter "*.go" -Recurse -File -ErrorAction SilentlyContinue
+            $goFiles = Get-ChildItem -Path $serverRoot -Filter "*.go" -Recurse -File -ErrorAction SilentlyContinue |
+                # Go tooling ignores directories named with a leading "." or "_", so untracked scratch in an ignored cache must not fail the format check either.
+                Where-Object { $_.FullName -notmatch '[\\/][._][^\\/]*[\\/]' }
             $unformatted = @()
             foreach ($file in $goFiles) {
                 $result = gofmt -l $file.FullName

@@ -67,10 +67,14 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -83,6 +87,13 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import org.non24.planner.domain.Confidence
 import org.non24.planner.data.DurableLocalDataState
+import org.non24.planner.data.SyncState
+import org.non24.planner.data.CompanionState
+import org.non24.planner.data.SleepReview
+import org.non24.planner.data.SleepReviewState
+import org.non24.planner.data.formatReviewInput
+import kotlinx.coroutines.delay
+import org.non24.planner.domain.BackgroundReadState
 import org.non24.planner.domain.DataMode
 import org.non24.planner.domain.EffectiveSleepEpisode
 import org.non24.planner.domain.HealthConnectAvailability
@@ -98,6 +109,7 @@ private enum class Destination(
 ) {
     STATUS("status", "Status", DestinationIcon.STATUS),
     CORRECT("correct", "Correct", DestinationIcon.CORRECT),
+    TASKS("tasks", "Tasks", DestinationIcon.TASKS),
     MEDICATION("medication", "Medication", DestinationIcon.MEDICATION),
     SETTINGS("settings", "Settings", DestinationIcon.SETTINGS),
 }
@@ -105,6 +117,7 @@ private enum class Destination(
 private enum class DestinationIcon {
     STATUS,
     CORRECT,
+    TASKS,
     MEDICATION,
     SETTINGS,
 }
@@ -115,14 +128,26 @@ fun Non24App(
     requiredHealthPermissions: Set<String>,
     onRequestHealthPermissions: (Set<String>) -> Unit,
     onOpenHealthConnectListing: () -> Unit,
+    onRequestBackgroundPermission: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val companion by viewModel.companion.collectAsStateWithLifecycle()
+    val sleepReview by viewModel.sleepReview.collectAsStateWithLifecycle()
+    val syncBusy by viewModel.syncBusy.collectAsStateWithLifecycle()
+    val syncStatus by viewModel.syncStatus.collectAsStateWithLifecycle()
+    var now by remember { mutableStateOf(Instant.now()) }
+    LaunchedEffect(Unit) { while (true) { now = Instant.now(); delay(30_000) } }
     val message by viewModel.message.collectAsStateWithLifecycle()
     val medicationSaveState by viewModel.medicationSaveState.collectAsStateWithLifecycle()
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route ?: Destination.STATUS.route
     val snackbarHostState = remember { SnackbarHostState() }
+
+    LifecycleResumeEffect(viewModel) {
+        viewModel.onForeground()
+        onPauseOrDispose { viewModel.onBackground() }
+    }
 
     LaunchedEffect(message) {
         message?.let {
@@ -174,7 +199,11 @@ fun Non24App(
             ) {
                 composable(Destination.STATUS.route) {
                     StatusScreen(
-                        state = uiState,
+                        state = if (uiState.settings.dataMode == DataMode.FIXTURE) uiState else
+                            uiState.copy(estimate = companion.projection?.estimate(now)),
+                        companion = companion,
+                        connected = syncStatus.state != SyncState.OFF,
+                        now = now,
                         onRetryLocalData = viewModel::retryLocalData,
                         onUseHealthConnect = { viewModel.setDataMode(DataMode.HEALTH_CONNECT) },
                         onRequestPermission = { onRequestHealthPermissions(requiredHealthPermissions) },
@@ -183,10 +212,12 @@ fun Non24App(
                     )
                 }
                 composable(Destination.CORRECT.route) {
-                    CorrectionScreen(
+                    if (uiState.settings.dataMode != DataMode.FIXTURE && syncStatus.state != SyncState.OFF) {
+                        ServerSleepReviewScreen(companion, sleepReview, syncBusy, viewModel::loadSleepReview, viewModel::saveServerSleepCorrection, viewModel::uploadNow)
+                    } else CorrectionScreen(
                         state = uiState,
                         onRetryLocalData = viewModel::retryLocalData,
-                        onSave = viewModel::saveLatestSleepCorrection,
+                        onSave = viewModel::saveLocalSleepCorrection,
                     )
                 }
                 composable(Destination.MEDICATION.route) {
@@ -198,9 +229,14 @@ fun Non24App(
                         onSaveResultConsumed = viewModel::consumeMedicationSaveResult,
                     )
                 }
+                composable(Destination.TASKS.route) {
+                    SyncedTasksScreen(companion, uiState, syncStatus.state == SyncState.SYNCING, viewModel::uploadNow)
+                }
                 composable(Destination.SETTINGS.route) {
                     SettingsScreen(
                         state = uiState,
+                        viewModel = viewModel,
+                        onRequestBackgroundPermission = onRequestBackgroundPermission,
                         onDataModeChanged = viewModel::setDataMode,
                         onUse24HourChanged = viewModel::setUse24HourTime,
                     )
@@ -213,6 +249,9 @@ fun Non24App(
 @Composable
 private fun StatusScreen(
     state: AppUiState,
+    companion: CompanionState,
+    connected: Boolean,
+    now: Instant,
     onRetryLocalData: () -> Unit,
     onUseHealthConnect: () -> Unit,
     onRequestPermission: () -> Unit,
@@ -228,16 +267,31 @@ private fun StatusScreen(
 
         DurableLocalDataNotice(state.localDataState, onRetryLocalData)
 
+        if (state.settings.dataMode != DataMode.FIXTURE) {
+            companion.error?.let { InfoStrip(it) }
+            companion.projection?.let { projection ->
+                if (projection.containsSyntheticData) InfoStrip("Your server's history includes synthetic data. This is a sample estimate.")
+                val qualification = when {
+                    projection.status == "refused" -> projection.refusal ?: "A forecast is not available."
+                    !projection.isCurrentSnapshot(now) -> "Cached forecast. Its current-state assessment has expired or the server clock differs; connect to refresh."
+                    projection.freshness != "current" -> projection.freshnessExplanation
+                    else -> "Server estimate based on recent synced sleep."
+                }
+                InfoStrip(qualification)
+                Text("Server snapshot: " + formatDisplay(projection.generatedAt, null, null, state.settings.use24HourTime), style = MaterialTheme.typography.bodySmall)
+            }
+        }
+
         if (state.localDataState != DurableLocalDataState.Loading) {
             if (state.estimate != null) {
                 StatusEstimatePanel(state)
             } else if (state.localDataState == DurableLocalDataState.Ready) {
-                EmptyEstimatePanel()
+                EmptyEstimatePanel(connected)
             }
 
             if (
                 state.latestSleepEpisode != null ||
-                state.localDataState == DurableLocalDataState.Ready
+                (state.localDataState == DurableLocalDataState.Ready && companion.projection?.sleep.isNullOrEmpty())
             ) {
                 LatestSleepPanel(
                     episode = state.latestSleepEpisode,
@@ -253,6 +307,16 @@ private fun StatusScreen(
             }
         }
 
+        if (state.settings.dataMode != DataMode.FIXTURE && companion.projection?.sleep?.isNotEmpty() == true) {
+            SectionHeading("Latest synced sleep")
+            val sleep = companion.projection.sleep.first()
+            RuledSection {
+                DataRow("Sleep", formatDisplay(sleep.start, sleep.zoneId, null, state.settings.use24HourTime))
+                DataRow("Wake", formatDisplay(sleep.end, sleep.zoneId, null, state.settings.use24HourTime))
+                InlineStatus(if (sleep.corrected) "Corrections applied by your server" else "Synced observation")
+                Text("This downloaded view includes corrections from your other devices.", style = MaterialTheme.typography.bodySmall)
+            }
+        }
         SectionHeading("Health Connect")
         HealthConnectPanel(
             state = state,
@@ -343,7 +407,7 @@ private fun StatusEstimatePanel(state: AppUiState) {
 }
 
 @Composable
-private fun EmptyEstimatePanel() {
+private fun EmptyEstimatePanel(connected: Boolean) {
     RuledSection {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -353,8 +417,8 @@ private fun EmptyEstimatePanel() {
             Text("Estimate unavailable", style = MaterialTheme.typography.titleMedium)
         }
         Text(
-            "Health Connect imports sleep sessions only. Predicted windows require an " +
-                "estimate supplied through the shared repository contract.",
+            if (connected) "No current forecast is available. Sync recent sleep records, or open Correct to review conflicting edits."
+            else "Connect to your server in Settings to download an estimate from your sleep history.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -492,14 +556,85 @@ private fun HealthConnectPanel(
 }
 
 @Composable
+private fun ServerSleepReviewScreen(
+    companion: CompanionState, state: SleepReviewState, busy: Boolean,
+    onReview: (String) -> Unit, onSave: (SleepReview, String, String, String, Boolean) -> Unit, onSync: () -> Unit,
+) {
+    var visibleCount by remember { mutableStateOf(15) }
+    val review = state.context
+    var start by remember(review) { mutableStateOf(review?.let { formatReviewInput(it.effective.start, it.effective.zoneId) }.orEmpty()) }
+    var end by remember(review) { mutableStateOf(review?.let { formatReviewInput(it.effective.end, it.effective.zoneId) }.orEmpty()) }
+    var classification by remember(review) { mutableStateOf(review?.classification ?: "principal") }
+    var excluded by remember(review) { mutableStateOf(review?.excluded ?: false) }
+    ScreenColumn {
+        ScreenHeader("Your records", "Correct sleep", "Review a synced observation and save a separate correction.")
+        state.error?.let { InfoStrip(it) }
+        if (state.pending) InfoStrip("Correction saved on this phone. Sync must finish before you edit this source again.")
+        if (state.loading) InfoStrip("Loading the source and its manual edits…")
+        if (state.stale) InfoStrip("This source changed while the form was open. Your draft is still here. Reloading replaces it with the latest review.")
+        if (review != null) {
+            RuledSection {
+                Text("Review in ${review.effective.zoneId}", style = MaterialTheme.typography.titleMedium)
+                Text("Source: ${formatReviewInput(review.source.start, review.source.zoneId)} → ${formatReviewInput(review.source.end, review.source.zoneId)}", style = MaterialTheme.typography.bodySmall)
+                Text("Snapshot: ${DateTimeFormatter.ofPattern("MMM d, HH:mm z").format(review.generatedAt.atZone(ZoneId.of(review.source.zoneId)))}", style = MaterialTheme.typography.labelSmall)
+                if (review.needsReview) InfoStrip("The source or manual edits disagree. Forecasts are withheld until you review all changes and save a resolution.")
+                review.edits.forEachIndexed { index, edit ->
+                    val values = buildList {
+                        edit.start?.let { add("Sleep: ${formatReviewInput(it, review.source.zoneId)}") }
+                        edit.end?.let { add("Wake: ${formatReviewInput(it, review.source.zoneId)}") }
+                        edit.classification?.let { add("Type: $it") }
+                        edit.excluded?.let { add(if (it) "Excluded from estimates" else "Included in estimates") }
+                    }
+                    Text("Edit ${index + 1} · ${formatReviewInput(edit.createdAt, review.source.zoneId)}\n${values.joinToString("\n")}", style = MaterialTheme.typography.bodySmall)
+                    SecondaryButton("Use edit ${index + 1}", {
+                        start = formatReviewInput(edit.start ?: review.source.start, review.source.zoneId)
+                        end = formatReviewInput(edit.end ?: review.source.end, review.source.zoneId)
+                        classification = edit.classification ?: review.classification
+                        excluded = edit.excluded ?: review.excluded
+                    }, enabled = !busy && !state.stale)
+                }
+                DenseTextField(start, { start = it }, "Sleep time", helper = "yyyy-MM-dd HH:mm:ss with UTC offset", imeAction = ImeAction.Next)
+                DenseTextField(end, { end = it }, "Wake time", helper = "The offset identifies repeated clock times", imeAction = ImeAction.Done)
+                Row(Modifier.fillMaxWidth().selectableGroup()) {
+                    listOf("principal", "nap", "unknown").forEach { value ->
+                        Text((if (classification == value) "● " else "○ ") + value.replaceFirstChar { it.uppercase() },
+                            modifier = Modifier.weight(1f).selectable(classification == value, role = Role.RadioButton) { classification = value }.padding(vertical = 12.dp))
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("Exclude from estimates", modifier = Modifier.weight(1f))
+                    CompactSwitch(checked = excluded, onCheckedChange = { excluded = it }, label = "Exclude from estimates")
+                }
+                PrimaryButton(if (review.needsReview) "Save reviewed resolution" else "Save correction", { onSave(review, start, end, classification, excluded) }, enabled = !busy && !state.loading && !state.stale && !state.pending)
+            }
+        }
+        state.selectedId?.let { id -> SecondaryButton(if (review == null) "Open saved review" else "Reload review (replace draft)", { onReview(id) }, enabled = !busy && !state.pending) }
+        SecondaryButton("Sync records", onSync, enabled = !busy)
+        SectionHeading("Choose a source")
+        Text("Original observations, most recently synced first. Open a source to see its current corrections. Selecting another source replaces the open draft.", style = MaterialTheme.typography.bodySmall)
+        if (companion.sleepSources.isEmpty()) InfoStrip("No downloaded sleep observations. Sync records from your other devices or import permitted Health Connect sleep.")
+        companion.sleepSources.take(visibleCount).forEach { source ->
+            SecondaryButton("${formatReviewInput(source.start, source.zoneId)} → ${formatReviewInput(source.end, source.zoneId)}", { onReview(source.id) }, enabled = !busy)
+        }
+        if (visibleCount < companion.sleepSources.size) SecondaryButton("Show more sources", { visibleCount += 15 })
+        if (companion.totalSleepSourceCount > companion.sleepSources.size) InfoStrip("Showing the latest ${companion.sleepSources.size} of ${companion.totalSleepSourceCount} sources. Older records remain available on desktop.")
+    }
+}
+
+@Composable
 private fun CorrectionScreen(
     state: AppUiState,
     onRetryLocalData: () -> Unit,
-    onSave: (String, String) -> Unit,
+    onSave: (EffectiveSleepEpisode, String, String) -> Unit,
 ) {
     val canDisplaySnapshot = state.localDataState != DurableLocalDataState.Loading
-    val canSave = state.localDataState == DurableLocalDataState.Ready
-    val latest = state.latestSleepEpisode
+    var selected by remember(state.settings.dataMode) { mutableStateOf(state.latestSleepEpisode) }
+    LaunchedEffect(state.latestSleepEpisode) {
+        if (selected == null || state.latestSleepEpisode == null) selected = state.latestSleepEpisode
+    }
+    val latest = selected
+    val stale = latest != state.latestSleepEpisode
+    val canSave = state.localDataState == DurableLocalDataState.Ready && !stale
     val startZone = resolveTemporalZone(latest?.ianaTimeZoneId, latest?.startZoneOffset)
     val endZone = resolveTemporalZone(latest?.ianaTimeZoneId, latest?.endZoneOffset)
     val usesDeviceZoneFallback = latest != null && latest.ianaTimeZoneId == null &&
@@ -512,10 +647,10 @@ private fun CorrectionScreen(
     val zoneLabel = endpointZoneLabel + if (usesDeviceZoneFallback) " / device fallback" else ""
 
     var startText by remember(latest?.source?.id, latest?.start, startZone) {
-        mutableStateOf(latest?.start?.let { formatForInput(it, startZone) }.orEmpty())
+        mutableStateOf(latest?.start?.let { formatReviewInput(it, startZone.id) }.orEmpty())
     }
     var endText by remember(latest?.source?.id, latest?.end, endZone) {
-        mutableStateOf(latest?.end?.let { formatForInput(it, endZone) }.orEmpty())
+        mutableStateOf(latest?.end?.let { formatReviewInput(it, endZone.id) }.orEmpty())
     }
 
     ScreenColumn {
@@ -526,6 +661,10 @@ private fun CorrectionScreen(
         )
         DurableLocalDataNotice(state.localDataState, onRetryLocalData)
         InfoStrip("Imported observations stay unchanged. Corrections remain a separate history.")
+        if (stale) {
+            InfoStrip("The source or its correction changed. Your draft is retained; reload to edit the current record.")
+            SecondaryButton("Reload current record (replace draft)", { selected = state.latestSleepEpisode })
+        }
 
         if (canDisplaySnapshot && latest == null && canSave) {
             RuledSection {
@@ -566,7 +705,7 @@ private fun CorrectionScreen(
                 ) {
                     PrimaryButton(
                         text = "Save correction",
-                        onClick = { onSave(startText, endText) },
+                        onClick = { latest?.let { onSave(it, startText, endText) } },
                         enabled = canSave,
                         modifier = Modifier.widthIn(min = 150.dp),
                     )
@@ -624,6 +763,39 @@ private fun CorrectionScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SyncedTasksScreen(companion: CompanionState, state: AppUiState, syncing: Boolean, onSync: () -> Unit) {
+    var visibleCount by remember { mutableStateOf(25) }
+    ScreenColumn {
+        ScreenHeader("From your server", "Tasks", "Downloaded task state, including edits and completion on your other devices.")
+        if (state.settings.dataMode == DataMode.FIXTURE) {
+            InfoStrip("Select My data in Settings and connect to your server to see your tasks.")
+            return@ScreenColumn
+        }
+        companion.error?.let { InfoStrip(it) }
+        Text(companion.downloadedAt?.let { "Last download: " + formatDisplay(it, null, null, state.settings.use24HourTime) }
+            ?: "No task records have been downloaded yet.", style = MaterialTheme.typography.bodySmall)
+        SecondaryButton(if (syncing) "Syncing…" else "Sync now", onSync, enabled = !syncing)
+        if (companion.tasks.isEmpty()) InfoStrip("No downloaded tasks. Create a task on the desktop and sync both devices.")
+        companion.tasks.take(visibleCount).forEach { task ->
+            RuledSection {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(task.title, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                    Text(if (task.status == "done") "Done" else "Open", style = MaterialTheme.typography.labelMedium)
+                }
+                Text("${task.durationMinutes} min · revision ${task.revision}", style = MaterialTheme.typography.bodySmall)
+                task.earliestStart?.let { DataRow("Earliest", formatDisplay(it, null, null, state.settings.use24HourTime)) }
+                task.deadline?.let { DataRow("Finish by", formatDisplay(it, null, null, state.settings.use24HourTime)) }
+                task.preferredAfterWakeMinutes?.let { Text("Preferred $it min after waking", style = MaterialTheme.typography.bodySmall) }
+                task.minimumConfidence?.let { DataRow("Minimum confidence", it.replaceFirstChar(Char::uppercase)) }
+            }
+        }
+        if (visibleCount < companion.tasks.size) SecondaryButton("Show more tasks", { visibleCount += 25 })
+        if (companion.totalTaskCount > companion.tasks.size) InfoStrip("Showing ${companion.tasks.size} of ${companion.totalTaskCount} downloaded tasks, with open tasks first. The full history is available on desktop.")
+        Text("Edit or place tasks on your desktop. Changes appear here after sync.", style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -715,6 +887,8 @@ private fun MedicationScreen(
 @Composable
 private fun SettingsScreen(
     state: AppUiState,
+    viewModel: AppViewModel,
+    onRequestBackgroundPermission: () -> Unit,
     onDataModeChanged: (DataMode) -> Unit,
     onUse24HourChanged: (Boolean) -> Unit,
 ) {
@@ -722,7 +896,7 @@ private fun SettingsScreen(
         ScreenHeader(
             kicker = "Device",
             title = "Settings",
-            description = "Local data source, display, and privacy controls.",
+            description = "Data source, your server, background refresh, and display.",
         )
 
         SectionHeading("Data source")
@@ -734,10 +908,12 @@ private fun SettingsScreen(
             )
             SegmentedDataMode(
                 selected = state.settings.dataMode,
-                healthConnectEnabled = state.healthAvailability == HealthConnectAvailability.AVAILABLE,
+                healthConnectEnabled = true,
                 onSelected = onDataModeChanged,
             )
         }
+
+        BackendConnectionSection(viewModel, state, onRequestBackgroundPermission)
 
         SectionHeading("Display")
         RuledSection {
@@ -766,13 +942,148 @@ private fun SettingsScreen(
 
         SectionHeading("Privacy")
         RuledSection {
-            Text("Local-first companion", style = MaterialTheme.typography.titleMedium)
+            Text("Your device and your server", style = MaterialTheme.typography.titleMedium)
             PrivacyLine(
                 "Imported sleep snapshots, corrections, and medication events are stored " +
                     "in ZeitBoard's app-private database.",
             )
-            PrivacyLine("No analytics, telemetry, tracking SDKs, or health-data upload.")
+            PrivacyLine("No analytics, telemetry or tracking SDKs. Connecting explicitly enables sleep uploads to your own server over TLS.")
+            PrivacyLine("Health Connect sleep, provider revisions and saved sleep corrections upload, including corrections made before enrollment and their source observations. Sample records and medication events stay on this device.")
             PrivacyLine("Medication labels and exact behavioral timestamps are never logged.")
+        }
+    }
+}
+
+@Composable
+private fun BackendConnectionSection(
+    viewModel: AppViewModel,
+    state: AppUiState,
+    onRequestBackgroundPermission: () -> Unit,
+) {
+    val status by viewModel.syncStatus.collectAsStateWithLifecycle()
+    val busy by viewModel.syncBusy.collectAsStateWithLifecycle()
+    val error by viewModel.syncError.collectAsStateWithLifecycle()
+    val backgroundAccess by viewModel.backgroundReadState.collectAsStateWithLifecycle()
+    val enrollmentRevision by viewModel.enrollmentRevision.collectAsStateWithLifecycle()
+    val connected = status.state != SyncState.OFF
+    var editing by remember { mutableStateOf(false) }
+    var disconnecting by remember { mutableStateOf(false) }
+    var address by remember { mutableStateOf("") }
+    // Secrets deliberately use remember, never rememberSaveable or persistent UI state.
+    var secret by remember { mutableStateOf("") }
+    var homeZone by remember { mutableStateOf(ZoneId.systemDefault().id) }
+
+    LaunchedEffect(status.serverUrl) {
+        if (address.isBlank()) address = status.serverUrl.orEmpty()
+    }
+    LaunchedEffect(enrollmentRevision) {
+        if (enrollmentRevision > 0) {
+            secret = ""
+            editing = false
+        }
+    }
+
+    SectionHeading("Your server")
+    RuledSection {
+        Text(
+            when (status.state) {
+                SyncState.OFF -> "Not connected"
+                SyncState.READY -> "Connected"
+                SyncState.QUEUED -> "Sync pending"
+                SyncState.SYNCING -> "Syncing records"
+                SyncState.SYNCED -> "Sleep upload recorded"
+                SyncState.ERROR -> "Sync needs attention"
+            },
+            style = MaterialTheme.typography.titleMedium,
+        )
+        status.serverUrl?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        if (connected) {
+            DataRow("Queued", status.queuedCount.toString())
+            DataRow("Held on device", status.heldCount.toString())
+            if (status.heldLocalCorrectionCount > 0) DataRow("Held local corrections", status.heldLocalCorrectionCount.toString())
+            Text(
+                status.lastSyncedAt?.let {
+                    "Last upload: " + DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+                        .withZone(ZoneId.systemDefault()).format(it)
+                } ?: "No successful upload is recorded on this device.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (status.heldCount > 0 || status.heldLocalCorrectionCount > 0) InfoStrip(
+                "Held records lack offsets or disagree with the configured home zone. " +
+                    "Travel zones are never guessed; these records remain local.",
+            )
+            Text(
+                "Uploads, downloaded records and cached forecasts are separate. See Status for forecast age and uncertainty, and Tasks for downloaded task state.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        (error ?: status.lastError)?.let { InfoStrip(it) }
+        if (!connected || editing) {
+            Text(
+                "Connect to download your server's forecasts and tasks, and upload permitted recent Health Connect sleep and provider revisions. " +
+                    "Saved sleep corrections also upload, including those made before enrollment and their original source observations. Sample records and medication events are excluded from uploads.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (connected) InfoStrip(
+                "Changing server replaces the previous server's upload queue. " +
+                    "Your permitted current sleep snapshot will be queued for the new server after connection succeeds.",
+            )
+            DenseTextField(address, { address = it }, "Server address", placeholder = "https://zeitboard.example", imeAction = ImeAction.Next)
+            DenseTextField(secret, { secret = it }, "Enrollment secret", imeAction = ImeAction.Next, secret = true)
+            DenseTextField(homeZone, { homeZone = it }, "Home time zone", helper = "IANA zone, for example America/New_York", imeAction = ImeAction.Done)
+            PrimaryButton(
+                text = if (busy) "Connecting…" else "Connect and sync",
+                onClick = { viewModel.enrollBackend(address, secret, homeZone) },
+                enabled = !busy && address.isNotBlank() && secret.isNotBlank() && homeZone.isNotBlank(),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            if (connected) SecondaryButton("Cancel", { editing = false; secret = "" }, enabled = !busy)
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                PrimaryButton("Sync now", viewModel::uploadNow, enabled = !busy && state.settings.dataMode == DataMode.HEALTH_CONNECT)
+                SecondaryButton("Change server", { editing = true }, enabled = !busy)
+            }
+            if (disconnecting) {
+                InfoStrip("Disconnecting cancels jobs and removes this upload queue, downloaded cache and device token. Phone-authored records remain. It does not erase records already on your server.")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SecondaryButton("Disconnect", { viewModel.disableBackend(); disconnecting = false }, enabled = !busy)
+                    SecondaryButton("Keep connection", { disconnecting = false }, enabled = !busy)
+                }
+            } else SecondaryButton("Disconnect…", { disconnecting = true }, enabled = !busy)
+        }
+    }
+
+    if (connected) {
+        SectionHeading("Automatic refresh")
+        RuledSection {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Refresh in background", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                CompactSwitch(
+                    checked = state.settings.backgroundSyncEnabled,
+                    onCheckedChange = viewModel::setBackgroundSyncEnabled,
+                    enabled = !busy,
+                    label = "Refresh in background",
+                )
+            }
+            Text(
+                "Off by default. When enabled, Android attempts hourly sync, including permitted sleep imports. " +
+                    "Battery settings can delay jobs; force-stopping pauses them until you reopen ZeitBoard. " +
+                    "Uploads already queued can finish while the app is closed. Disconnect to cancel them.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (state.settings.dataMode == DataMode.FIXTURE) InfoStrip("Automatic import is paused in sample mode. Select My data above to resume.")
+            Text(
+                when (backgroundAccess) {
+                    BackgroundReadState.GRANTED -> "Background Health Connect access granted."
+                    BackgroundReadState.REQUIRED -> "Background Health Connect access is required for new imports while the app is closed."
+                    BackgroundReadState.UNAVAILABLE -> "This Health Connect version cannot import in background. Open ZeitBoard to refresh; saved uploads can still finish."
+                    BackgroundReadState.UNKNOWN -> "Background Health Connect access could not be checked. Open or refresh the app to retry."
+                },
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (backgroundAccess == BackgroundReadState.REQUIRED) SecondaryButton(
+                "Allow background sleep access", onRequestBackgroundPermission, enabled = !busy,
+            )
         }
     }
 }
@@ -913,7 +1224,7 @@ private fun SegmentedDataMode(
             )
             Box(modifier = Modifier.fillMaxHeight().width(1.dp).background(Line))
             DataModeOption(
-                text = "Health Connect",
+                text = "My data",
                 selected = selected == DataMode.HEALTH_CONNECT,
                 enabled = healthConnectEnabled,
                 onClick = { onSelected(DataMode.HEALTH_CONNECT) },
@@ -961,6 +1272,7 @@ private fun DenseTextField(
     helper: String? = null,
     placeholder: String = "",
     imeAction: ImeAction,
+    secret: Boolean = false,
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
@@ -984,7 +1296,12 @@ private fun DenseTextField(
             textStyle = MaterialTheme.typography.bodyMedium.copy(color = Ink),
             singleLine = true,
             interactionSource = interactionSource,
-            keyboardOptions = KeyboardOptions(imeAction = imeAction),
+            keyboardOptions = KeyboardOptions(
+                imeAction = imeAction,
+                keyboardType = if (secret) KeyboardType.Password else KeyboardType.Text,
+                autoCorrectEnabled = !secret,
+            ),
+            visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
             cursorBrush = SolidColor(SageDark),
             decorationBox = { innerTextField ->
                 Row(
@@ -1047,9 +1364,11 @@ private fun SecondaryButton(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
 ) {
     OutlinedButton(
         onClick = onClick,
+        enabled = enabled,
         modifier = modifier.heightIn(min = 44.dp),
         shape = MaterialTheme.shapes.small,
         border = BorderStroke(1.dp, Color(0xFFCFD5D0)),
@@ -1064,11 +1383,15 @@ private fun SecondaryButton(
 private fun CompactSwitch(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true,
+    label: String = "24-hour time",
 ) {
     Box(
         modifier = Modifier
             .size(48.dp)
+            .semantics { contentDescription = label }
             .toggleable(
+                enabled = enabled,
                 value = checked,
                 role = Role.Switch,
                 onValueChange = onCheckedChange,
@@ -1380,6 +1703,13 @@ private fun DestinationGlyph(icon: DestinationIcon, color: Color) {
                 drawLine(color, Offset(size.width * 0.12f, size.height * 0.72f), Offset(size.width * 0.88f, size.height * 0.72f), stroke, StrokeCap.Round)
                 drawCircle(color, size.width * 0.10f, Offset(size.width * 0.35f, size.height * 0.28f))
                 drawCircle(color, size.width * 0.10f, Offset(size.width * 0.66f, size.height * 0.72f))
+            }
+            DestinationIcon.TASKS -> {
+                repeat(3) { row ->
+                    val y = size.height * (0.2f + row * 0.3f)
+                    drawCircle(color, size.width * 0.04f, Offset(size.width * 0.12f, y))
+                    drawLine(color, Offset(size.width * 0.3f, y), Offset(size.width * 0.9f, y), stroke, StrokeCap.Round)
+                }
             }
             DestinationIcon.MEDICATION -> {
                 rotate(-38f) {

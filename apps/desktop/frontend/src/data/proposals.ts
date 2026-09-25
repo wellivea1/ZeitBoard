@@ -1,11 +1,17 @@
 import {
+  normalizeTaskConflict,
+  normalizeTaskConflictHistory,
+  type TaskConflict,
+  type TaskConflictHistory,
+} from "./taskConflicts";
+import {
   proposalFixtures,
   unplacedTaskFixture,
   type ChangeProposalFixture,
   type ProposalOrigin,
 } from "./phaseTwo";
 import type { ConfidenceLevel } from "./overview";
-import { findWailsMethod, type WailsRoot } from "./wailsBridge";
+import { findWailsMethod, hasDesktopBridge, type WailsRoot } from "./wailsBridge";
 
 export interface UnplacedProposal {
   title: string;
@@ -23,6 +29,8 @@ export interface ProposalRecord extends ChangeProposalFixture {
 }
 
 export interface ProposalsData {
+  taskConflicts: TaskConflict[];
+  taskConflictHistory: TaskConflictHistory[];
   fixtureMode: boolean;
   status: "estimated" | "empty" | "refused" | "unavailable";
   refusal?: {
@@ -41,6 +49,8 @@ export interface ProposalsResult {
 // Repackaged from the shared phaseTwo data so the offline shell renders the same
 // shape the scheduler supplies.
 export const proposalsFixture: ProposalsData = {
+  taskConflicts: [],
+  taskConflictHistory: [],
   fixtureMode: true,
   status: "estimated",
   proposals: proposalFixtures.map((proposal) => ({
@@ -59,12 +69,12 @@ export const proposalsFixture: ProposalsData = {
 
 type UnknownRecord = Record<string, unknown>;
 
-const methodNames = ["GetProposals", "Proposals"] as const;
+const methodNames = ["GetProposals"] as const;
 
 export function hasLocalProposalService(
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): boolean {
-  return Boolean(findWailsMethod(root, methodNames));
+  return hasDesktopBridge(root);
 }
 
 function isRecord(value: unknown): value is UnknownRecord {
@@ -190,8 +200,12 @@ export function normalizeProposals(value: unknown): ProposalsData | undefined {
   if (!isRecord(value)) return undefined;
   const proposals = mapAll(value.proposals, proposal);
   const unplacedList = mapAll(value.unplaced, unplaced);
-  if (!proposals || !unplacedList) return undefined;
+  const taskConflicts = mapAll(value.taskConflicts, normalizeTaskConflict);
+  const taskConflictHistory = mapAll(value.taskConflictHistory, normalizeTaskConflictHistory);
+  if (!proposals || !unplacedList || !taskConflicts || !taskConflictHistory) return undefined;
   return {
+    taskConflicts,
+    taskConflictHistory,
     fixtureMode: value.fixtureMode === true,
     status: status(value.status),
     ...(refusal(value.refusal) ? { refusal: refusal(value.refusal) } : {}),
@@ -204,7 +218,8 @@ export async function loadProposals(
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<ProposalsResult> {
   const method = findWailsMethod(root, methodNames);
-  if (!method) return { data: proposalsFixture, source: "fixture" };
+  if (!method && !hasDesktopBridge(root)) return { data: proposalsFixture, source: "fixture" };
+  if (!method) throw new Error("The desktop proposal service is unavailable. Refresh to retry.");
   const result = await method();
   const proposals = normalizeProposals(result);
   if (!proposals) throw new Error("Proposal service returned an invalid response.");

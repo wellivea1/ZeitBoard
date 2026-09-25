@@ -1,10 +1,12 @@
 import { notifySleepDataChanged } from "./sleepDataEvents";
-import { findWailsMethod, type WailsRoot } from "./wailsBridge";
+import { findWailsMethod, hasDesktopBridge, type WailsRoot } from "./wailsBridge";
 
 // User-owned flexible tasks (ADR-0018): real planning items the scheduler
 // proposes windows for. Titles are private user text and stay local.
 
 export interface Task {
+  needsReview: boolean;
+  updatedAt: string;
   taskId: string;
   revision: number;
   title: string;
@@ -14,6 +16,11 @@ export interface Task {
   windowLabel?: string;
   afterWakeLabel?: string;
   createdLabel: string;
+  earliestStartAt?: string;
+  latestFinishAt?: string;
+  preferredAfterWakeMinutes?: number;
+  minimumConfidence?: string;
+  editable: boolean;
 }
 
 export interface TasksData {
@@ -29,6 +36,8 @@ export interface TaskInput {
   durationMinutes: number;
   earliestStartLocal?: string;
   latestFinishLocal?: string;
+  earliestStartAt?: string;
+  latestFinishAt?: string;
   zoneId?: string;
   preferredAfterWakeMinutes?: number;
   minimumConfidence?: string;
@@ -54,7 +63,7 @@ function positiveInteger(value: unknown): number | undefined {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0 ? value : undefined;
 }
 
-function normalizeTask(value: unknown): Task | undefined {
+export function normalizeTask(value: unknown): Task | undefined {
   if (!isRecord(value)) return undefined;
   const taskId = str(value.taskId);
   const title = str(value.title);
@@ -79,7 +88,34 @@ function normalizeTask(value: unknown): Task | undefined {
   }
   const windowLabel = str(value.windowLabel);
   const afterWakeLabel = str(value.afterWakeLabel);
+  const earliestStartAt = str(value.earliestStartAt);
+  const latestFinishAt = str(value.latestFinishAt);
+  if (
+    [earliestStartAt, latestFinishAt].some((time) => time && !Number.isFinite(Date.parse(time)))
+  ) {
+    return undefined;
+  }
+  const preferredAfterWakeMinutes =
+    typeof value.preferredAfterWakeMinutes === "number" &&
+    Number.isInteger(value.preferredAfterWakeMinutes) &&
+    value.preferredAfterWakeMinutes >= 0 &&
+    value.preferredAfterWakeMinutes <= 1440
+      ? value.preferredAfterWakeMinutes
+      : undefined;
+  const updatedAt = str(value.updatedAt);
+  if (
+    !updatedAt ||
+    !Number.isFinite(Date.parse(updatedAt)) ||
+    typeof value.needsReview !== "boolean" ||
+    preferredAfterWakeMinutes === undefined
+  )
+    return undefined;
+  const minimumConfidence =
+    typeof value.minimumConfidence === "string" ? value.minimumConfidence : undefined;
+  if (minimumConfidence === undefined) return undefined;
   return {
+    needsReview: value.needsReview,
+    updatedAt,
     taskId,
     revision,
     title,
@@ -89,6 +125,12 @@ function normalizeTask(value: unknown): Task | undefined {
     ...(windowLabel ? { windowLabel } : {}),
     ...(afterWakeLabel ? { afterWakeLabel } : {}),
     createdLabel,
+    ...(earliestStartAt ? { earliestStartAt } : {}),
+    ...(latestFinishAt ? { latestFinishAt } : {}),
+    preferredAfterWakeMinutes,
+    minimumConfidence,
+    // Conflicted task constraints are frozen until the owner reviews both versions.
+    editable: !value.needsReview,
   };
 }
 
@@ -110,14 +152,19 @@ export async function loadTasks(
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<TasksData> {
   const method = findWailsMethod(root, ["ListTasks"]);
-  if (!method) return unavailable;
+  if (!method && !hasDesktopBridge(root)) return unavailable;
   try {
-    const normalized = normalizeTasks(await method());
+    const normalized = normalizeTasks(await method?.());
     if (normalized) return normalized;
   } catch {
     // fall through to unavailable
   }
-  return unavailable;
+  return {
+    status: "unavailable",
+    tasks: [],
+    message:
+      "Your tasks could not be loaded. Refresh to try again; saved tasks have not been changed.",
+  };
 }
 
 async function mutateTasks(
@@ -130,7 +177,7 @@ async function mutateTasks(
   if (!method) throw new Error("Task planning needs the ZeitBoard desktop app.");
   const result = await method(input);
   const normalized = normalizeTasks(result);
-  if (!normalized) throw new Error(failure);
+  if (!normalized || normalized.status !== "ok") throw new Error(failure);
   notifySleepDataChanged(); // proposals depend on open tasks; refresh projections
   return normalized;
 }

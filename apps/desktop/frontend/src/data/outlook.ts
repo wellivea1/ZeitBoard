@@ -1,4 +1,4 @@
-import { findWailsMethod, type WailsRoot } from "./wailsBridge";
+import { findWailsMethod, hasDesktopBridge, type WailsRoot } from "./wailsBridge";
 
 // The 48-72 hour operational view (ADR-0034). Everything here is computed in
 // the shared Go core; this module only validates the shape that crosses the
@@ -106,7 +106,7 @@ export const outlookUnavailable: OutlookData = {
   status: "unavailable",
   freshness: {
     state: "withheld",
-    explanation: "This browser preview cannot read your records.",
+    explanation: "The outlook is unavailable until your records can be read.",
     trusted: false,
   },
   horizonLabel: "Next 72 hours",
@@ -302,8 +302,7 @@ export function normalizeOutlook(value: unknown): OutlookData | undefined {
 }
 
 /**
- * Loads the view, falling back to `fallback` when the desktop bridge is absent
- * or answers with a shape this build does not recognise.
+ * The supplied preview is used only when no desktop bridge is present.
  *
  * A half-understood payload is treated as no payload. A timeline is read as a
  * plan, and a plan assembled from the fields that happened to parse is worse
@@ -314,12 +313,12 @@ export async function loadOutlook(
   fallback: OutlookData = outlookUnavailable,
 ): Promise<OutlookData> {
   const method = findWailsMethod(root, ["GetOutlook"]);
-  if (!method) return fallback;
+  if (!method && !hasDesktopBridge(root)) return fallback;
   try {
-    const normalized = normalizeOutlook(await method());
+    const normalized = normalizeOutlook(await method?.());
     if (normalized) return normalized;
   } catch {
     // fall through to the fallback
   }
-  return fallback;
+  return outlookUnavailable;
 }

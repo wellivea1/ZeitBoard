@@ -119,11 +119,13 @@ describe("loadRhythm", () => {
     });
   });
 
-  it("falls back when the backend rejects", async () => {
+  it("withholds the chart when the backend rejects", async () => {
     const result = await loadRhythm({
       go: { service: { AppService: { GetRhythm: async () => Promise.reject(new Error("nope")) } } },
     });
-    expect(result.source).toBe("fixture");
+    expect(result.source).toBe("local");
+    expect(result.data.status).toBe("unavailable");
+    expect(result.data.actogram.observedRows).toEqual([]);
   });
 
   it("accepts an empty local projection without chart rows", () => {

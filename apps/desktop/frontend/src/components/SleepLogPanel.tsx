@@ -1,3 +1,4 @@
+import { SleepEntryForm } from "./SleepEntryForm";
 import { useEffect, useState } from "react";
 import { Icon } from "./Icon";
 import { deleteConfirmationToken } from "../data/sleepDataControl";
@@ -8,7 +9,6 @@ import {
   deleteSleepObservation,
   loadSleepEntries,
   suppressSleepEntry,
-  type SleepClassification,
   type SleepCorrectionInput,
   type SleepEntriesData,
   type SleepEntry,
@@ -44,71 +44,6 @@ function endAfterStart(input: SleepEntryInput) {
   return new Date(input.endLocal).getTime() > new Date(input.startLocal).getTime();
 }
 
-function SleepEntryForm({
-  form,
-  onChange,
-  submitLabel,
-  disabled,
-}: {
-  form: SleepEntryInput;
-  onChange: (form: SleepEntryInput) => void;
-  submitLabel: string;
-  disabled: boolean;
-}) {
-  return (
-    <div className="sleep-entry-fields">
-      <label>
-        Sleep start
-        <input
-          type="datetime-local"
-          value={form.startLocal}
-          disabled={disabled}
-          onChange={(event) => onChange({ ...form, startLocal: event.target.value })}
-          required
-        />
-      </label>
-      <label>
-        Wake time
-        <input
-          type="datetime-local"
-          value={form.endLocal}
-          disabled={disabled}
-          onChange={(event) => onChange({ ...form, endLocal: event.target.value })}
-          required
-        />
-      </label>
-      <label>
-        Time zone
-        <input
-          type="text"
-          value={form.zoneId}
-          disabled={disabled}
-          onChange={(event) => onChange({ ...form, zoneId: event.target.value })}
-          required
-        />
-      </label>
-      <label>
-        Classification
-        <select
-          value={form.classification}
-          disabled={disabled}
-          onChange={(event) =>
-            onChange({ ...form, classification: event.target.value as SleepClassification })
-          }
-        >
-          <option value="principal">Principal sleep</option>
-          <option value="nap">Nap</option>
-        </select>
-      </label>
-      <div className="sleep-entry-submit">
-        <button className="button primary" type="submit" disabled={disabled}>
-          {submitLabel}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function SleepEntryCard({
   entry,
   editing,
@@ -120,6 +55,8 @@ function SleepEntryCard({
   onCancelEdit,
   onEditChange,
   onSaveEdit,
+  editExcluded,
+  onEditExcluded,
   onSuppress,
   onBeginDelete,
   onCancelDelete,
@@ -136,6 +73,8 @@ function SleepEntryCard({
   onCancelEdit: () => void;
   onEditChange: (form: SleepEntryInput) => void;
   onSaveEdit: () => void;
+  editExcluded: boolean;
+  onEditExcluded: (value: boolean) => void;
   onSuppress: () => void;
   onBeginDelete: () => void;
   onCancelDelete: () => void;
@@ -174,9 +113,35 @@ function SleepEntryCard({
           )}
         </div>
         <span className={`source-status ${entry.suppressed ? "" : "connected"}`}>
-          {entry.suppressed ? "Suppressed" : corrected ? "Corrected" : "Active"}
+          {entry.needsReview
+            ? "Review required"
+            : entry.suppressed
+              ? "Suppressed"
+              : corrected
+                ? "Corrected"
+                : "Active"}
         </span>
       </div>
+
+      {entry.needsReview && (
+        <div role="status" className="form-status">
+          <p>
+            The source or manual edits disagree. Forecasts are withheld. The form starts from the
+            source window: {entry.sourceWindowLabel}.
+          </p>
+          <ul>
+            {entry.activeEdits.map((edit) => (
+              <li key={edit.correctionId}>
+                {edit.createdLabel}: {edit.summary}
+              </li>
+            ))}
+          </ul>
+          <p>
+            Review every competing edit, enter the intended result, and save a new correction to
+            resolve them.
+          </p>
+        </div>
+      )}
 
       {editing ? (
         <form
@@ -191,6 +156,9 @@ function SleepEntryCard({
             onChange={onEditChange}
             submitLabel="Save correction"
             disabled={busy}
+            editing
+            excluded={editExcluded}
+            onExcludedChange={onEditExcluded}
           />
           <button className="button secondary" type="button" onClick={onCancelEdit} disabled={busy}>
             Cancel
@@ -205,7 +173,7 @@ function SleepEntryCard({
             className="button secondary"
             type="button"
             onClick={onSuppress}
-            disabled={entry.suppressed || busy}
+            disabled={entry.suppressed || entry.needsReview || busy}
           >
             Suppress from estimates
           </button>
@@ -326,6 +294,8 @@ export function SleepLogPanel() {
   });
   const [form, setForm] = useState<SleepEntryInput>(initialSleepForm);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingSnapshot, setEditingSnapshot] = useState<SleepEntry | null>(null);
+  const [editExcluded, setEditExcluded] = useState(false);
   const [editForm, setEditForm] = useState<SleepEntryInput>(initialSleepForm);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
@@ -380,6 +350,8 @@ export function SleepLogPanel() {
   };
 
   const beginEdit = (entry: SleepEntry) => {
+    setEditingSnapshot(entry);
+    setEditExcluded(entry.suppressed);
     setEditingId(entry.observationId);
     setDeletingId(null);
     setDeleteConfirmation("");
@@ -393,7 +365,7 @@ export function SleepLogPanel() {
   };
 
   const saveEdit = async () => {
-    if (!editingId) return;
+    if (!editingId || !editingSnapshot) return;
     setFormError("");
     if (!endAfterStart(editForm)) {
       setFormError("Wake time must be after sleep start.");
@@ -401,7 +373,12 @@ export function SleepLogPanel() {
     }
     setBusy(true);
     try {
-      const correction: SleepCorrectionInput = { observationId: editingId, ...editForm };
+      const correction: SleepCorrectionInput = {
+        observationId: editingId,
+        reviewToken: editingSnapshot.reviewToken,
+        excluded: editExcluded,
+        ...editForm,
+      };
       await correctSleepEntry(correction);
       notifySleepDataChanged();
       setStatusMessage("Correction appended locally.");
@@ -419,7 +396,7 @@ export function SleepLogPanel() {
     setFormError("");
     setDeletingId(null);
     try {
-      await suppressSleepEntry(entry.observationId);
+      await suppressSleepEntry(entry.observationId, entry.reviewToken);
       notifySleepDataChanged();
       setStatusMessage("Sleep entry suppressed from estimates.");
       await refreshEntries();
@@ -505,6 +482,25 @@ export function SleepLogPanel() {
             <h2 id="sleep-log-title">Sleep log</h2>
           </div>
           <p>Corrections append history; suppression and permanent erasure remain distinct.</p>
+          <button
+            type="button"
+            className="button secondary"
+            disabled={busy}
+            onClick={() => {
+              setEditingId(null);
+              setEditingSnapshot(null);
+              setBusy(true);
+              void refreshEntries()
+                .catch(() =>
+                  setFormError(
+                    "Sleep log could not refresh. Retry when local storage is available.",
+                  ),
+                )
+                .finally(() => setBusy(false));
+            }}
+          >
+            {editingId ? "Reload log (close draft)" : "Refresh log"}
+          </button>
         </div>
         {entriesData.entries.length === 0 ? (
           <div className="empty-state sleep-log-empty">
@@ -556,6 +552,8 @@ export function SleepLogPanel() {
                   onCancelEdit={() => setEditingId(null)}
                   onEditChange={setEditForm}
                   onSaveEdit={saveEdit}
+                  editExcluded={editExcluded}
+                  onEditExcluded={setEditExcluded}
                   onSuppress={() => void suppressEntry(entry)}
                   onBeginDelete={() => beginDelete(entry)}
                   onCancelDelete={() => {

@@ -254,3 +254,135 @@ func containsString(values []string, target string) bool {
 	}
 	return false
 }
+
+// Found by using the app: with three open tasks, three suggestions landed on
+// the same minute, because each task was placed as if it were the only one.
+// Accepting them all would have triple-booked that time. The pending set is a
+// plan, and a plan does not overlap itself.
+func TestPendingSuggestionsDoNotOverlapEachOther(t *testing.T) {
+	app := newTestApp(t)
+	fixedNow := time.Now().UTC().Truncate(localProposalTTL).Add(11 * time.Minute)
+	app.nowFn = func() time.Time { return fixedNow }
+	seedSleepEntries(t, app, 12)
+	for _, task := range []TaskInput{
+		{Title: "Renew prescription", DurationMinutes: 20},
+		{Title: "Email landlord", DurationMinutes: 15},
+		{Title: "Deep work", DurationMinutes: 90},
+	} {
+		if _, err := app.AddTask(task); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	built, err := app.buildLocalProposals(fixedNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(built.pending) != 3 {
+		t.Fatalf("%d pending suggestions, want 3", len(built.pending))
+	}
+	windows := make([]string, 0, len(built.pending))
+	for id, left := range built.pending {
+		windows = append(windows, left.task.Title+" "+left.proposal.Window.Start.UTC.Format(time.Kitchen))
+		for otherID, right := range built.pending {
+			if id < otherID && left.proposal.Window.Overlaps(right.proposal.Window) {
+				t.Errorf("%q and %q were suggested for overlapping times", left.task.Title, right.task.Title)
+			}
+		}
+		// Another suggestion is not a fixed event, so avoiding one must not be
+		// described as avoiding a fixed event.
+		if containsString(left.proposal.ExplanationCodes, scheduling.CodeAvoidsFixedEvent) {
+			t.Errorf("%q claims to avoid a fixed event, and there are none", left.task.Title)
+		}
+	}
+	if t.Failed() {
+		t.Logf("suggested: %v", windows)
+	}
+}
+
+// Also found by using the app: at 10:41 the planner suggested, and accepted, a
+// block from 10:30. The snapshot is pinned to the start of a 30-minute bucket
+// so proposals keep their identity while someone reads them; suggestions have
+// to start when that bucket ends, not when it began.
+func TestSuggestionsNeverStartInThePast(t *testing.T) {
+	app := newTestApp(t)
+	fixedNow := time.Now().UTC().Truncate(localProposalTTL).Add(11 * time.Minute)
+	app.nowFn = func() time.Time { return fixedNow }
+	seedSleepEntries(t, app, 12)
+	if _, err := app.AddTask(TaskInput{Title: "Email landlord", DurationMinutes: 15}); err != nil {
+		t.Fatal(err)
+	}
+
+	built, err := app.buildLocalProposals(fixedNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, candidate := onlyPendingCandidate(t, built)
+	if candidate.proposal.Window.Start.UTC.Before(fixedNow) {
+		t.Fatalf("suggested %v, which began before now (%v)", candidate.proposal.Window.Start.UTC, fixedNow)
+	}
+
+	// The same proposal is still decidable for the rest of its bucket, which
+	// is what the pinned snapshot exists for.
+	later := fixedNow.Add(15 * time.Minute)
+	app.nowFn = func() time.Time { return later }
+	if _, err := app.DecideLocalProposal(LocalProposalDecisionInput{ProposalID: id, Decision: storage.ProposalApproved}); err != nil {
+		t.Fatalf("a suggestion could not be accepted within its own refresh window: %v", err)
+	}
+}
+
+// Greedy placement gives the earliest free time to whoever is placed first. A
+// task with a deadline has to be placed before one without, or a long open-ended
+// task can take the only time before that deadline and leave it unplaced.
+func TestADeadlineTaskIsPlannedBeforeAnOpenEndedOne(t *testing.T) {
+	app := newTestApp(t)
+	fixedNow := time.Now().UTC().Truncate(localProposalTTL).Add(11 * time.Minute)
+	app.nowFn = func() time.Time { return fixedNow }
+	seedSleepEntries(t, app, 12)
+
+	probe, err := app.AddTask(TaskInput{Title: "Probe", DurationMinutes: 30})
+	if err != nil {
+		t.Fatal(err)
+	}
+	built, err := app.buildLocalProposals(fixedNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, first := onlyPendingCandidate(t, built)
+	firstStart := first.proposal.Window.Start.UTC
+	if _, err := app.DeleteTask(TaskActionInput{TaskID: probe.Tasks[0].TaskID, Revision: probe.Tasks[0].Revision}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Stored first, open-ended and long: in stored order it would take the
+	// earliest time.
+	if _, err := app.AddTask(TaskInput{Title: "Long open-ended task", DurationMinutes: 120}); err != nil {
+		t.Fatal(err)
+	}
+	location, _ := time.LoadLocation(defaultZoneID)
+	deadline := firstStart.Add(45 * time.Minute).In(location).Format("2006-01-02T15:04")
+	if _, err := app.AddTask(TaskInput{Title: "Due soon", DurationMinutes: 30, LatestFinishLocal: deadline, ZoneID: defaultZoneID}); err != nil {
+		t.Fatal(err)
+	}
+
+	built, err = app.buildLocalProposals(fixedNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var dueSoon *localProposalCandidate
+	for _, candidate := range built.pending {
+		if candidate.task.Title == "Due soon" {
+			value := candidate
+			dueSoon = &value
+		}
+	}
+	if dueSoon == nil {
+		for _, unplaced := range built.dto.Unplaced {
+			t.Logf("unplaced: %s (%s)", unplaced.Title, unplaced.Reason)
+		}
+		t.Fatal("the task with a deadline was left unplaced behind an open-ended one")
+	}
+	if !dueSoon.proposal.Window.Start.UTC.Equal(firstStart) {
+		t.Errorf("the deadline task starts at %v, want the earliest free time %v", dueSoon.proposal.Window.Start.UTC, firstStart)
+	}
+}

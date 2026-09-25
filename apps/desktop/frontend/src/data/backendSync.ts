@@ -1,3 +1,4 @@
+import { notifyReviewQueueChanged } from "./reviewQueue";
 import { findWailsMethod, type WailsRoot } from "./wailsBridge";
 
 export interface BackendSyncInput {
@@ -17,6 +18,9 @@ export interface BackendSyncStatus {
   lastSyncLabel: string;
   lastError: string;
   pendingPushCount: number;
+  pendingErasureCount: number;
+  waitingCorrectionCount: number;
+  taskConflictCount: number;
   pushedCount: number;
   pulledCount: number;
   cursor: number;
@@ -32,6 +36,9 @@ const unavailableStatus: BackendSyncStatus = {
   lastSyncLabel: "Not synced yet",
   lastError: "",
   pendingPushCount: 0,
+  pendingErasureCount: 0,
+  waitingCorrectionCount: 0,
+  taskConflictCount: 0,
   pushedCount: 0,
   pulledCount: 0,
   cursor: 0,
@@ -67,6 +74,9 @@ export function normalizeBackendSyncStatus(value: unknown): BackendSyncStatus | 
     lastSyncLabel: str(value.lastSyncLabel) || "Not synced yet",
     lastError: str(value.lastError),
     pendingPushCount: count(value.pendingPushCount),
+    pendingErasureCount: count(value.pendingErasureCount),
+    waitingCorrectionCount: count(value.waitingCorrectionCount),
+    taskConflictCount: count(value.taskConflictCount),
     pushedCount: count(value.pushedCount),
     pulledCount: count(value.pulledCount),
     cursor: count(value.cursor),
@@ -91,6 +101,7 @@ export async function configureBackendSync(
   const result = await method(input);
   const status = normalizeBackendSyncStatus(result);
   if (!status) throw new Error("Backend sync service returned an invalid status.");
+  notifyReviewQueueChanged();
   return status;
 }
 
@@ -102,6 +113,7 @@ export async function disableBackendSync(
   const result = await method();
   const status = normalizeBackendSyncStatus(result);
   if (!status) throw new Error("Backend sync service returned an invalid status.");
+  notifyReviewQueueChanged();
   return status;
 }
 
@@ -113,5 +125,6 @@ export async function syncNow(
   const result = await method();
   const status = normalizeBackendSyncStatus(result);
   if (!status) throw new Error("Backend sync service returned an invalid status.");
+  notifyReviewQueueChanged();
   return status;
 }

@@ -35,10 +35,23 @@ export function BackendSyncSettings({
         <p className="section-kicker">Backend sync</p>
         <h2>Self-hosted server</h2>
         <p className="settings-copy">
-          Sync is off by default. When enabled, only v1 sleep observations, corrections, and your
-          task list are sent to your enrolled self-hosted backend. Deleting a task or erasing sleep
-          data propagates the deletion to the server and every synced device. Overview and Rhythm
-          clearly label synced server estimates.
+          Sync is off by default. When enabled, sleep observations, corrections, and your task list
+          are sent to your enrolled self-hosted backend. Deleting a task or erasing sleep data
+          propagates the deletion to the server and every synced device. Overview and Rhythm clearly
+          label synced server estimates.
+        </p>
+        <p className="settings-copy">
+          Sync runs automatically after enrollment, when ZeitBoard starts, and about every minute
+          while the app is running, including when its window is hidden. Interrupted exchanges retry
+          from saved records. Quit stops background sync. Activity and medication records remain
+          local.
+        </p>
+        <p className="settings-copy">
+          Re-enrolling downloads the server history before replaying missing saved records. A failed
+          connection attempt keeps your previous enrollment. Retained deletion markers prevent
+          erased records from returning after a restore. Changing servers sends this profile's saved
+          sleep records, tasks and deletion markers to the new server; it does not delete the old
+          server's copies.
         </p>
       </div>
       <div className="data-control-grid">
@@ -50,7 +63,8 @@ export function BackendSyncSettings({
             <h3 id="backend-sync-connect-title">Connect backend</h3>
             <p>
               Use an HTTPS URL and enrollment secret from your own server. The device token is
-              stored outside the editable config and is never shown here.
+              stored with enrollment in your account-protected local database and is never shown
+              here.
             </p>
           </div>
           <form
@@ -146,6 +160,26 @@ export function BackendSyncSettings({
             <div>
               <dt>Pending push</dt>
               <dd>{status.pendingPushCount}</dd>
+            </div>
+            <div>
+              <dt>Pending deletions</dt>
+              <dd>{status.pendingErasureCount}</dd>
+            </div>
+            <div>
+              <dt>Corrections waiting for sources</dt>
+              <dd>{status.waitingCorrectionCount}</dd>
+            </div>
+            <div>
+              <dt>Tasks needing review</dt>
+              <dd>
+                {status.taskConflictCount}
+                {status.taskConflictCount > 0 && (
+                  <>
+                    {" "}
+                    · <a href="#/plan/approvals">Review conflicting edits</a>
+                  </>
+                )}
+              </dd>
             </div>
             <div>
               <dt>Last sync</dt>

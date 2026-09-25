@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -132,19 +130,19 @@ func TestConfigureBackendSyncStoresTokenOutsideConfig(t *testing.T) {
 	if !status.Enabled || status.Status != "connected" || status.DeviceID != "device_desktop" {
 		t.Fatalf("unexpected configured status: %#v", status)
 	}
-	config, err := os.ReadFile(filepath.Join(app.configDir, backendSyncConfigFile))
+	config, savedToken, err := app.store.LoadSyncConnection(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(string(config), token) {
-		t.Fatal("backend token was written to sync config")
-	}
-	tokenData, err := os.ReadFile(filepath.Join(app.configDir, backendSyncTokenFile))
+	encoded, err := json.Marshal(config)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.TrimSpace(string(tokenData)) != token {
-		t.Fatal("backend token was not stored in the restricted token file")
+	if strings.Contains(string(encoded), token) {
+		t.Fatal("token leaked into serializable settings")
+	}
+	if savedToken != token {
+		t.Fatal("backend token was not stored atomically with enrollment")
 	}
 	if strings.Contains(status.LastError, token) {
 		t.Fatal("backend token leaked into sync status")
@@ -170,9 +168,11 @@ func TestConfigureBackendSyncWrongSecretFailsClosed(t *testing.T) {
 	if status.Enabled || status.Status != "off" {
 		t.Fatalf("failed enrollment should not enable sync: %#v", status)
 	}
-	if _, err := os.Stat(filepath.Join(app.configDir, backendSyncTokenFile)); !os.IsNotExist(err) {
-		t.Fatalf("failed enrollment should not store token, stat err = %v", err)
+	_, savedToken, err := app.store.LoadSyncConnection(context.Background())
+	if err != nil || savedToken != "" {
+		t.Fatal("failed enrollment persisted a credential")
 	}
+
 }
 
 func TestConfigureBackendSyncRejectsInsecureRemoteTLS(t *testing.T) {
@@ -217,7 +217,7 @@ func TestSyncNowPushesLocalRecordsOnceAndUsesBearerToken(t *testing.T) {
 			}
 			_ = json.NewEncoder(w).Encode(syncPushResponse{SchemaVersion: "v1", Cursor: int64(pushes), Accepted: len(req.Records)})
 		case "/v1/sync/pull":
-			_ = json.NewEncoder(w).Encode(syncPullResponse{SchemaVersion: "v1", Cursor: 1, Records: []syncEnvelope{}})
+			writePullFixture(t, w, r, syncPullResponse{SchemaVersion: "v1", Cursor: 1, Records: []syncEnvelope{}})
 		default:
 			http.NotFound(w, r)
 		}
@@ -249,6 +249,8 @@ func TestSyncNowSurfacesPushConflictWithoutCrashing(t *testing.T) {
 		case "/v1/devices":
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(registerDeviceResponse{SchemaVersion: "v1", DeviceID: "device_desktop", Token: "conflict-token"})
+		case "/v1/sync/pull":
+			writePullFixture(t, w, r, syncPullResponse{})
 		case "/v1/sync/push":
 			http.Error(w, "record id conflict", http.StatusConflict)
 		default:
@@ -267,7 +269,7 @@ func TestSyncNowSurfacesPushConflictWithoutCrashing(t *testing.T) {
 	}
 }
 
-func TestSyncNowPullsRemoteRecordsAndDedupesOwnRecords(t *testing.T) {
+func TestSyncNowRecoversOwnAndRemoteRecordsWithoutEchoUploads(t *testing.T) {
 	app := newTestApp(t)
 	start := time.Date(2026, 3, 10, 5, 0, 0, 0, time.UTC)
 	remoteObservation := testSyncObservation("obs_sleep_10", start)
@@ -285,7 +287,7 @@ func TestSyncNowPullsRemoteRecordsAndDedupesOwnRecords(t *testing.T) {
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(registerDeviceResponse{SchemaVersion: "v1", DeviceID: "device_desktop", Token: "pull-token"})
 		case "/v1/sync/pull":
-			_ = json.NewEncoder(w).Encode(syncPullResponse{
+			writePullFixture(t, w, r, syncPullResponse{
 				SchemaVersion: "v1",
 				Cursor:        10,
 				Records: []syncEnvelope{
@@ -305,7 +307,7 @@ func TestSyncNowPullsRemoteRecordsAndDedupesOwnRecords(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if first.Status != "connected" || first.PulledCount != 2 || first.Cursor != 10 {
+	if first.Status != "connected" || first.PulledCount != 3 || first.Cursor != 3 {
 		t.Fatalf("unexpected first pull status: %#v", first)
 	}
 	store, err := app.requireStore()
@@ -320,7 +322,7 @@ func TestSyncNowPullsRemoteRecordsAndDedupesOwnRecords(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(observations) != 1 || observations[0].ObservationID != remoteObservation.ObservationID || len(corrections) != 1 {
+	if len(observations) != 2 || observations[0].ObservationID != remoteObservation.ObservationID || len(corrections) != 1 {
 		t.Fatalf("pulled records not inserted/deduped as expected: observations=%#v corrections=%#v", observations, corrections)
 	}
 	second, err := app.SyncNow()
@@ -332,7 +334,7 @@ func TestSyncNowPullsRemoteRecordsAndDedupesOwnRecords(t *testing.T) {
 	}
 }
 
-func TestPullSkipsOrphanCorrectionWithoutWedgingCursor(t *testing.T) {
+func TestPullRetainsOrphanCorrectionAndReportsWaitingForSource(t *testing.T) {
 	app := newTestApp(t)
 	start := time.Date(2026, 3, 12, 4, 0, 0, 0, time.UTC)
 	// A correction whose target observation is absent everywhere (e.g. the user
@@ -354,10 +356,10 @@ func TestPullSkipsOrphanCorrectionWithoutWedgingCursor(t *testing.T) {
 		case "/v1/sync/pull":
 			pulls++
 			if r.URL.Query().Get("since") != "0" && pulls > 1 {
-				_ = json.NewEncoder(w).Encode(syncPullResponse{SchemaVersion: "v1", Cursor: 7, Records: []syncEnvelope{}})
+				writePullFixture(t, w, r, syncPullResponse{SchemaVersion: "v1", Cursor: 7, Records: []syncEnvelope{}})
 				return
 			}
-			_ = json.NewEncoder(w).Encode(syncPullResponse{
+			writePullFixture(t, w, r, syncPullResponse{
 				SchemaVersion: "v1",
 				Cursor:        7,
 				Records: []syncEnvelope{
@@ -376,8 +378,8 @@ func TestPullSkipsOrphanCorrectionWithoutWedgingCursor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status.Status != "connected" || status.LastError != "" {
-		t.Fatalf("orphan correction must not fail the sync: %#v", status)
+	if status.Status != "error" || !strings.Contains(status.LastError, "waiting for their source") {
+		t.Fatalf("orphan correction must remain visible as waiting: %#v", status)
 	}
 	if status.PulledCount != 1 || status.SkippedCount != 1 {
 		t.Fatalf("expected 1 pulled + 1 skipped, got %#v", status)
@@ -390,7 +392,7 @@ func TestPullSkipsOrphanCorrectionWithoutWedgingCursor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if second.Status != "connected" || second.SkippedCount != 0 || second.Cursor != 7 {
+	if second.Status != "error" || second.SkippedCount != 0 || second.Cursor != 7 {
 		t.Fatalf("second sync should be clean: %#v", second)
 	}
 }
@@ -558,7 +560,7 @@ func TestLocalHardDeletePropagatesErasureToBackend(t *testing.T) {
 			eraseRequests = append(eraseRequests, req)
 			_ = json.NewEncoder(w).Encode(syncEraseResponse{SchemaVersion: "v1", Erased: len(req.RecordIDs), Tombstones: len(req.RecordIDs), Cursor: 5})
 		case "/v1/sync/pull":
-			_ = json.NewEncoder(w).Encode(syncPullResponse{SchemaVersion: "v1", Cursor: 5, Records: []syncEnvelope{}})
+			writePullFixture(t, w, r, syncPullResponse{SchemaVersion: "v1", Cursor: 5, Records: []syncEnvelope{}})
 		default:
 			http.NotFound(w, r)
 		}
@@ -621,12 +623,12 @@ func TestPulledTombstoneErasesLocalCopy(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(registerDeviceResponse{SchemaVersion: "v1", DeviceID: "device_desktop", Token: "tombstone-token"})
 		case "/v1/sync/pull":
 			if phase == 0 {
-				_ = json.NewEncoder(w).Encode(syncPullResponse{SchemaVersion: "v1", Cursor: 1, Records: []syncEnvelope{
+				writePullFixture(t, w, r, syncPullResponse{SchemaVersion: "v1", Cursor: 1, Records: []syncEnvelope{
 					{Seq: 1, RecordID: remoteObservation.ObservationID, Kind: storage.SleepSyncKindObservation, DeviceID: "phone_device", CreatedAt: remoteObservation.Provenance.RecordedAt, Payload: mustJSON(t, remoteObservation)},
 				}})
 				return
 			}
-			_ = json.NewEncoder(w).Encode(syncPullResponse{SchemaVersion: "v1", Cursor: 2, Records: []syncEnvelope{
+			writePullFixture(t, w, r, syncPullResponse{SchemaVersion: "v1", Cursor: 2, Records: []syncEnvelope{
 				{Seq: 2, RecordID: remoteObservation.ObservationID, Kind: "tombstone", DeviceID: "phone_device", CreatedAt: start.Add(20 * time.Hour), Payload: tombstonePayload},
 			}})
 		default:
@@ -853,7 +855,7 @@ func TestTaskEditsPushRevisionsAndDeletePropagatesErasure(t *testing.T) {
 			eraseRequests = append(eraseRequests, req)
 			_ = json.NewEncoder(w).Encode(syncEraseResponse{SchemaVersion: "v1", Erased: len(req.RecordIDs), Tombstones: len(req.RecordIDs), Cursor: 2})
 		case "/v1/sync/pull":
-			_ = json.NewEncoder(w).Encode(syncPullResponse{SchemaVersion: "v1", Cursor: 2, Records: []syncEnvelope{}})
+			writePullFixture(t, w, r, syncPullResponse{SchemaVersion: "v1", Cursor: 2, Records: []syncEnvelope{}})
 		default:
 			http.NotFound(w, r)
 		}
@@ -929,13 +931,13 @@ func TestPulledTaskRevisionsApplyLWWAndTombstoneDeletes(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(registerDeviceResponse{SchemaVersion: "v1", DeviceID: "device_desktop", Token: "task-pull-token"})
 		case "/v1/sync/pull":
 			if phase == 0 {
-				_ = json.NewEncoder(w).Encode(syncPullResponse{SchemaVersion: "v1", Cursor: 2, Records: []syncEnvelope{
+				writePullFixture(t, w, r, syncPullResponse{SchemaVersion: "v1", Cursor: 2, Records: []syncEnvelope{
 					{Seq: 1, RecordID: "phone_task_r2", Kind: "task", DeviceID: "phone_device", CreatedAt: remote.UpdatedAt, Payload: mustJSON(t, remote)},
 					{Seq: 2, RecordID: "phone_task_r1", Kind: "task", DeviceID: "phone_device", CreatedAt: created, Payload: mustJSON(t, stale)},
 				}})
 				return
 			}
-			_ = json.NewEncoder(w).Encode(syncPullResponse{SchemaVersion: "v1", Cursor: 3, Records: []syncEnvelope{
+			writePullFixture(t, w, r, syncPullResponse{SchemaVersion: "v1", Cursor: 3, Records: []syncEnvelope{
 				{Seq: 3, RecordID: "phone_task_r2", Kind: "tombstone", DeviceID: "phone_device", CreatedAt: created.Add(2 * time.Hour), Payload: tombstonePayload},
 			}})
 		default:

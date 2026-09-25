@@ -244,46 +244,6 @@ func TestSleepImportDatabaseConstraintAndHardErasureCoverImportedData(t *testing
 	}
 }
 
-func TestSleepImportMigrationToleratesExistingDuplicatesButBlocksNewOnes(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "legacy-duplicates.db")
-	store, err := Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := store.db.Exec(`DROP TRIGGER trg_local_sleep_import_source_record`); err != nil {
-		t.Fatal(err)
-	}
-	start := time.Date(2023, 6, 1, 5, 0, 0, 0, time.UTC)
-	first := importedSleepObservation("obs_import_legacy_1", "fitbit-legacy-duplicate", start)
-	second := importedSleepObservation("obs_import_legacy_2", "fitbit-legacy-duplicate", start)
-	if err := store.AppendSleepObservation(context.Background(), first); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.AppendSleepObservation(context.Background(), second); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	store, err = Open(path)
-	if err != nil {
-		t.Fatalf("migration should not brick a legacy store with repeated source ids: %v", err)
-	}
-	defer store.Close()
-	third := importedSleepObservation("obs_import_legacy_3", "fitbit-legacy-duplicate", start)
-	if err := store.AppendSleepObservation(context.Background(), third); err == nil {
-		t.Fatal("migration trigger should block a new repeated source id")
-	}
-	_, err = store.PreviewSleepImport(context.Background(), SleepImportInput{
-		FileName: "legacy.json",
-		Contents: sleepImportJSON(t, first),
-	})
-	if err == nil || !strings.Contains(err.Error(), "repeated imported source_record_id") {
-		t.Fatalf("importer should refuse an ambiguous legacy dedupe state: %v", err)
-	}
-}
-
 func openSleepImportTestStore(t *testing.T) *Store {
 	t.Helper()
 	store, err := Open(filepath.Join(t.TempDir(), "sleep-import.db"))

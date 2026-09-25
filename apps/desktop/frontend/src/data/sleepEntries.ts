@@ -1,6 +1,6 @@
 import { findWailsMethod, type WailsRoot } from "./wailsBridge";
 
-export type SleepClassification = "principal" | "nap";
+export type SleepClassification = "principal" | "nap" | "unknown";
 
 export interface SleepEntryInput {
   startLocal: string;
@@ -11,9 +11,15 @@ export interface SleepEntryInput {
 
 export interface SleepCorrectionInput extends SleepEntryInput {
   observationId: string;
+  reviewToken: string;
+  excluded: boolean;
 }
 
 export interface SleepEntry {
+  reviewToken: string;
+  needsReview: boolean;
+  sourceWindowLabel: string;
+  activeEdits: SleepCorrection[];
   observationId: string;
   startLocal: string;
   endLocal: string;
@@ -35,7 +41,7 @@ export interface SleepEntry {
 
 export interface SleepCorrection {
   correctionId: string;
-  supersedesCorrectionId?: string;
+  supersedesCorrectionIds?: string[];
   createdLabel: string;
   reason: string;
   summary: string;
@@ -117,7 +123,7 @@ function str(value: unknown): string | undefined {
 }
 
 function classification(value: unknown): SleepClassification | undefined {
-  return value === "principal" || value === "nap" ? value : undefined;
+  return value === "principal" || value === "nap" || value === "unknown" ? value : undefined;
 }
 
 function nonNegativeInteger(value: unknown): number | undefined {
@@ -131,10 +137,12 @@ function normalizeCorrection(value: unknown): SleepCorrection | undefined {
   const reason = str(value.reason);
   const summary = str(value.summary);
   if (!correctionId || !createdLabel || !reason || !summary) return undefined;
-  const supersedesCorrectionId = str(value.supersedesCorrectionId);
+  const supersedesCorrectionIds = Array.isArray(value.supersedesCorrectionIds)
+    ? value.supersedesCorrectionIds.filter((id): id is string => typeof id === "string")
+    : [];
   return {
     correctionId,
-    ...(supersedesCorrectionId ? { supersedesCorrectionId } : {}),
+    ...(supersedesCorrectionIds.length ? { supersedesCorrectionIds } : {}),
     createdLabel,
     reason,
     summary,
@@ -143,6 +151,17 @@ function normalizeCorrection(value: unknown): SleepCorrection | undefined {
 
 function normalizeEntry(value: unknown): SleepEntry | undefined {
   if (!isRecord(value)) return undefined;
+  const reviewToken = str(value.reviewToken);
+  const sourceWindowLabel = str(value.sourceWindowLabel);
+  if (
+    !reviewToken ||
+    !sourceWindowLabel ||
+    typeof value.needsReview !== "boolean" ||
+    !Array.isArray(value.activeEdits)
+  )
+    return undefined;
+  const activeEdits = value.activeEdits.map(normalizeCorrection);
+  if (activeEdits.some((edit) => !edit)) return undefined;
   const observationId = str(value.observationId);
   const startLocal = str(value.startLocal);
   const endLocal = str(value.endLocal);
@@ -187,6 +206,10 @@ function normalizeEntry(value: unknown): SleepEntry | undefined {
   }
   return {
     observationId,
+    reviewToken,
+    sourceWindowLabel,
+    needsReview: value.needsReview,
+    activeEdits: activeEdits as SleepCorrection[],
     startLocal,
     endLocal,
     startLabel,
@@ -314,11 +337,12 @@ export async function correctSleepEntry(
 
 export async function suppressSleepEntry(
   observationId: string,
+  reviewToken: string,
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<SleepEntry> {
   const method = findWailsMethod(root, ["SuppressSleepEntry"]);
   if (!method) throw new Error("Manual sleep suppression service is unavailable.");
-  const result = await method({ observationId });
+  const result = await method({ observationId, reviewToken });
   const entry = normalizeEntry(result);
   if (!entry) throw new Error("Manual sleep suppression service returned an invalid entry.");
   return entry;

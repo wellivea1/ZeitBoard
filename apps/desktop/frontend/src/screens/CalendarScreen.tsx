@@ -1,3 +1,4 @@
+import { VisitorRequestsPanel } from "../components/VisitorRequestsPanel";
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader, PlaceholderNotice } from "../components/AppShell";
 import { CalendarBoard } from "../components/CalendarBoard";
@@ -199,6 +200,7 @@ export function CalendarScreen({ embedded }: { embedded?: boolean } = {}) {
           )}
         </div>
       </section>
+      <VisitorRequestsPanel />
     </>
   );
 }

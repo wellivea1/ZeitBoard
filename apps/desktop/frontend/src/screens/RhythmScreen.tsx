@@ -11,14 +11,22 @@ import {
   sourceConflictFixtures,
   type SourceConflictFixture,
 } from "../data/phaseTwo";
-import { loadRhythm, rhythmFixture, type RhythmData, type RhythmSource } from "../data/rhythm";
+import {
+  loadRhythm,
+  rhythmFixture,
+  rhythmUnavailable,
+  type RhythmData,
+  type RhythmSource,
+} from "../data/rhythm";
+import { hasDesktopBridge } from "../data/wailsBridge";
+import { subscribeProjectionRefresh } from "../utils/projectionRefresh";
 import {
   latestCorrectedEntry,
   loadSleepEntries,
   summarizeSleepSources,
   type SleepEntriesData,
 } from "../data/sleepEntries";
-import { sleepDataChangedEvent } from "../data/sleepDataEvents";
+import { sleepDataChangedEvent, notifySleepDataChanged } from "../data/sleepDataEvents";
 import { createCoalescedRefresh } from "../utils/coalescedRefresh";
 
 function SourceConflictList({
@@ -134,7 +142,7 @@ function LocalSourcesPanel({ rhythm }: { rhythm: RhythmData }) {
             </h2>
           </div>
           <a href="#/log/sleep">
-            Edit in Data Sources <Icon name="chevron" />
+            Edit sleep log <Icon name="chevron" />
           </a>
         </div>
         {corrected && latestChange ? (
@@ -219,15 +227,22 @@ function RhythmUnavailablePanel({ rhythm }: { rhythm: RhythmData }) {
     <section className="panel empty-state rhythm-empty-state" aria-labelledby="rhythm-empty-title">
       <p className="section-kicker">{rhythm.refusal?.code ?? rhythm.status}</p>
       <h2 id="rhythm-empty-title">
-        {rhythm.status === "empty" ? "Add sleep entries to draw rhythm" : "Need more usable data"}
+        {rhythm.status === "unavailable"
+          ? "Rhythm unavailable"
+          : rhythm.status === "empty"
+            ? "Add sleep entries to draw rhythm"
+            : "Need more usable data"}
       </h2>
       <p>
         {rhythm.message ??
           rhythm.refusal?.message ??
           "The local estimator has no chart to show yet."}
       </p>
-      <a className="button primary" href="#/log/sleep">
-        Add sleep entry
+      <a
+        className="button primary"
+        href={rhythm.status === "unavailable" ? "#/data-sources" : "#/log/sleep"}
+      >
+        {rhythm.status === "unavailable" ? "Check Data Sources" : "Add sleep entry"}
       </a>
     </section>
   );
@@ -235,8 +250,9 @@ function RhythmUnavailablePanel({ rhythm }: { rhythm: RhythmData }) {
 
 export function RhythmScreen() {
   const [tab, setTab] = useState<RhythmTab>("actogram");
-  const [rhythm, setRhythm] = useState(rhythmFixture);
-  const [mode, setMode] = useState<RhythmSource>("fixture");
+  const desktop = hasDesktopBridge();
+  const [rhythm, setRhythm] = useState(desktop ? rhythmUnavailable : rhythmFixture);
+  const [mode, setMode] = useState<RhythmSource>(desktop ? "local" : "fixture");
   // Markers are recorded in Log and *read* here: they are the context that
   // explains a jump in the actogram, so the chart would be misleading without
   // them even though nothing on this screen edits them.
@@ -247,10 +263,9 @@ export function RhythmScreen() {
       setMode(result.source);
     });
     const request = () => refresh.request();
-    request();
-    window.addEventListener(sleepDataChangedEvent, request);
+    const unsubscribe = subscribeProjectionRefresh(request, sleepDataChangedEvent);
     return () => {
-      window.removeEventListener(sleepDataChangedEvent, request);
+      unsubscribe();
       refresh.dispose();
     };
   }, []);
@@ -276,19 +291,26 @@ export function RhythmScreen() {
           <div className="status-cluster">
             <span className="sync-dot" data-mode={mode} aria-hidden="true" />
             <span>{sourceLabel}</span>
+            {mode !== "fixture" && (
+              <button className="button secondary" type="button" onClick={notifySleepDataChanged}>
+                Refresh
+              </button>
+            )}
           </div>
         }
       />
       <p className="screen-context">
-        {mode === "synced" && hasRhythm
-          ? "The actogram, drift fit, and forecast below are computed by the synced server estimate."
-          : mode === "synced"
-            ? "The synced server estimator is waiting for enough sleep data before drawing rhythm charts."
-            : mode === "local" && hasRhythm
-              ? "The actogram, drift fit, and forecast below are computed by the local estimation engine."
-              : mode === "local"
-                ? "The local estimator is waiting for enough manually entered sleep data before drawing rhythm charts."
-                : "This read-only preview distinguishes imported, estimated, corrected, and incomplete observations."}
+        {rhythm.status === "unavailable"
+          ? "Your records could not be read. Refresh to retry; saved observations have not been changed."
+          : mode === "synced" && hasRhythm
+            ? "The actogram, drift fit, and forecast below are computed by the synced server estimate."
+            : mode === "synced"
+              ? "The synced server estimator is waiting for enough sleep data before drawing rhythm charts."
+              : mode === "local" && hasRhythm
+                ? "The actogram, drift fit, and forecast below are computed by the local estimation engine."
+                : mode === "local"
+                  ? "The local estimator is waiting for enough sleep observations before drawing rhythm charts."
+                  : "This read-only preview distinguishes imported, estimated, corrected, and incomplete observations."}
       </p>
       <section className="rhythm-screen" aria-label="Rhythm review">
         <ScreenTabs

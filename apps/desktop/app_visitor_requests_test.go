@@ -1,7 +1,11 @@
 package main
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -68,12 +72,10 @@ func TestVisitorRequestDTORendersOwnerContext(t *testing.T) {
 	if dto.ApprovalDisclosure == "" {
 		t.Error("the approval disclosure is missing")
 	}
-	// The picker bounds must be local wall-clock strings the input accepts.
-	for _, value := range []string{dto.WindowStartLocal, dto.WindowEndLocal} {
-		if _, err := time.ParseInLocation(visitorRequestLocalLayout, value, time.Local); err != nil {
-			t.Errorf("picker bound %q is not a local datetime value: %v", value, err)
-		}
+	if dto.WindowStartAt != start.Format(time.RFC3339Nano) || dto.WindowEndAt != start.Add(4*time.Hour).Format(time.RFC3339Nano) {
+		t.Fatal("picker lost exact bounds")
 	}
+
 }
 
 func TestVisitorRequestDTONamesAnUnlabelledLink(t *testing.T) {
@@ -101,8 +103,8 @@ func TestVisitorRequestDTOWarnsBeyondTheHorizon(t *testing.T) {
 }
 
 func TestParseVisitorSlotRules(t *testing.T) {
-	valid := "2026-08-04T09:00"
-	validEnd := "2026-08-04T10:00"
+	valid := "2026-08-04T09:00:00-04:00"
+	validEnd := "2026-08-04T10:00:00-04:00"
 
 	start, end, err := parseVisitorSlot(valid, validEnd)
 	if err != nil {
@@ -116,6 +118,7 @@ func TestParseVisitorSlotRules(t *testing.T) {
 	}
 
 	cases := map[string][2]string{
+		"no offset":        {"2026-08-04T09:00", validEnd},
 		"empty start":      {"", validEnd},
 		"empty end":        {valid, ""},
 		"unparsable":       {"tomorrow morning", validEnd},
@@ -126,5 +129,63 @@ func TestParseVisitorSlotRules(t *testing.T) {
 		if _, _, err := parseVisitorSlot(pair[0], pair[1]); err == nil {
 			t.Errorf("%s was accepted", name)
 		}
+	}
+}
+
+func TestVisitorSlotPreservesChosenOccurrence(t *testing.T) {
+	start, end, err := parseVisitorSlot("2026-11-01T01:15:00.123456789-04:00", "2026-11-01T01:15:00.123456789-05:00")
+	if err != nil || end.Sub(start) != time.Hour || start.Nanosecond() != 123456789 {
+		t.Fatalf("repeated-hour block changed: %v", err)
+	}
+}
+
+func TestVisitorQueueCurrentWireContractAndConfirmedDecision(t *testing.T) {
+	app := newTestApp(t)
+	var decided atomic.Bool
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/devices":
+			w.WriteHeader(http.StatusCreated)
+			json.NewEncoder(w).Encode(registerDeviceResponse{SchemaVersion: "v1", DeviceID: "device_desktop", Token: "synthetic-token"})
+		case "/v1/portal/requests":
+			if decided.Load() {
+				http.Error(w, "synthetic unavailable", http.StatusServiceUnavailable)
+				return
+			}
+			if cursor := r.URL.Query().Get("cursor"); cursor != "" && cursor != "opaque visitor cursor" {
+				t.Error("cursor changed")
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"schema_version":"v1","pendingCount":5,"nextExpiryAt":"2099-01-01T00:00:00Z","requests":[{"proposalId":"visitor-1","profileId":"family","label":"Family","status":"pending","windowStartAt":"2026-11-01T05:00:00Z","windowEndAt":"2026-11-01T07:00:00Z","zoneId":"America/New_York","durationMinutes":30,"beyondHorizon":false,"handle":"Sam","message":"Synthetic request","createdAt":"2026-10-31T12:00:00Z","expiresAt":"2099-01-01T00:00:00Z","decisionToken":"synthetic-decision-token","disclosure":"Exact accepted time is shared."}],"pagination":{"limit":50,"hasMore":false}}`))
+		case "/v1/portal/requests/visitor-1/decision":
+			var payload map[string]string
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Error(err)
+			}
+			if payload["startAt"] != "2026-11-01T05:30:00Z" || payload["endAt"] != "2026-11-01T06:30:00Z" {
+				t.Error("chosen repeated-hour block changed")
+			}
+			decided.Store(true)
+			w.Write([]byte(`{"schema_version":"v1"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	configureBackendForTest(t, app, server.URL)
+	list, err := app.GetBackendVisitorRequestPage(BackendProposalPageInput{Cursor: "opaque visitor cursor"})
+	if err != nil || list.Status != "ok" || list.PendingCount != 5 || len(list.Requests) != 1 {
+		t.Fatalf("current visitor response rejected: %v / %s", err, list.Message)
+	}
+	encoded, err := json.Marshal(list)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(encoded), `"nextCursor":""`) || !strings.Contains(string(encoded), `"status":"pending"`) {
+		t.Fatal("terminal pagination or history status omitted")
+	}
+	result, err := app.DecideBackendVisitorRequest(DecideBackendVisitorRequestInput{ProposalID: "visitor-1", Decision: "approved", Token: "synthetic-decision-token", StartAt: "2026-11-01T01:30:00-04:00", EndAt: "2026-11-01T01:30:00-05:00"})
+	if err != nil || !result.DecisionRecorded || result.Status != "error" || !strings.Contains(result.Message, "Decision recorded") {
+		t.Fatalf("confirmed decision lost to failed refresh: %v", err)
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -308,16 +309,30 @@ type visitorRequestDTO struct {
 const approvalDisclosure = "Approving tells them the exact time you pick. Declining tells them only that the time did not work — never why."
 
 type visitorRequestListResponse struct {
-	SchemaVersion string              `json:"schema_version"`
-	Requests      []visitorRequestDTO `json:"requests"`
+	PendingCount  int                    `json:"pendingCount"`
+	NextExpiryAt  string                 `json:"nextExpiryAt"`
+	Pagination    proposalListPagination `json:"pagination"`
+	SchemaVersion string                 `json:"schema_version"`
+	Requests      []visitorRequestDTO    `json:"requests"`
 }
 
-// handleListVisitorRequests returns open visitor requests with the private
+// handleListVisitorRequests returns visitor requests and history with the private
 // handle and message the owner needs to judge them. This is an owner-side,
 // device-authenticated route; none of this text is public.
 func (s *Server) handleListVisitorRequests(w http.ResponseWriter, r *http.Request) {
 	now := s.now()
-	page, err := s.store.ListProposalPage(r.Context(), store.ProposalPageCursor{}, store.MaxProposalPageLimit, now)
+	query, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid visitor request query")
+		return
+	}
+	cursor, limit, err := parseProposalListQuery(query)
+	if err != nil || (cursor.AfterRowID > 0 && cursor.Scope != store.ProposalScopeVisitor) {
+		writeError(w, http.StatusBadRequest, "invalid visitor request cursor")
+		return
+	}
+	cursor.Scope = store.ProposalScopeVisitor
+	page, err := s.store.ListProposalPage(r.Context(), cursor, limit, now)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "visitor request list failed")
 		return
@@ -356,7 +371,14 @@ func (s *Server) handleListVisitorRequests(w http.ResponseWriter, r *http.Reques
 			Disclosure:      approvalDisclosure,
 		})
 	}
+	pagination := proposalListPagination{Limit: limit, HasMore: page.HasMore}
+	if page.HasMore {
+		pagination.NextCursor = encodeProposalCursor(page.NextCursor)
+	}
 	writeJSON(w, http.StatusOK, visitorRequestListResponse{
+		PendingCount:  page.PendingCount,
+		NextExpiryAt:  page.NextExpiryAt,
+		Pagination:    pagination,
 		SchemaVersion: syncmodel.SchemaVersion,
 		Requests:      requests,
 	})

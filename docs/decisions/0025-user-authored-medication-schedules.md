@@ -1,5 +1,7 @@
 # ADR-0025: User-authored medication schedules and local reminders
 
+> [ADR-0039](0039-pre-release-contracts-and-streamlining.md) supersedes the prototype-compatibility notes below: only the current v2 medication contracts are maintained. There are no packaged releases or deployed v1 consumers.
+
 - Status: accepted
 - Date: 2026-07-22
 

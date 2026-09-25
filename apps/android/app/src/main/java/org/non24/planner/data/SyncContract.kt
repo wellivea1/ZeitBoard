@@ -4,6 +4,10 @@ import java.security.MessageDigest
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.JsonObject
+import org.non24.planner.domain.AcquisitionMethod
+import org.non24.planner.domain.EvidenceStatus
 import org.non24.planner.domain.SleepEpisode
 
 /**
@@ -25,8 +29,8 @@ import org.non24.planner.domain.SleepEpisode
  * observation requires an IANA zone. Rather than inventing one, an episode
  * syncs only when its stored offset matches the configured home zone at that
  * instant. Episodes that disagree — typically travel — are held back and
- * reported rather than guessed at or silently dropped. Carrying true offsets
- * end to end needs a v2 observation contract.
+ * reported rather than guessed at or silently dropped. Extending offset support
+ * must update the current observation contract and its consumers together.
  */
 object SyncContract {
 
@@ -39,6 +43,7 @@ object SyncContract {
 
     /** Why an episode cannot be represented in the v1 contract. */
     enum class HoldReason {
+        UNSUPPORTED_SOURCE,
         /** The stored offset disagrees with the configured home zone. */
         ZONE_OFFSET_MISMATCH,
 
@@ -64,7 +69,7 @@ object SyncContract {
     fun map(
         episodes: List<SleepEpisode>,
         homeZone: ZoneId,
-        alreadySynced: Map<String, Instant>,
+        alreadySynced: Map<String, SourceSyncRevision>,
         now: Instant,
     ): Mapping {
         val records = mutableListOf<OutboxRecord>()
@@ -84,8 +89,8 @@ object SyncContract {
                 syncedRevision == null ->
                     records += observationRecord(recordId, episode, homeZone, revision, now)
 
-                revision.isAfter(syncedRevision) ->
-                    records += correctionRecord(recordId, episode, revision, syncedRevision, now)
+                revision.isAfter(syncedRevision.revision) ->
+                    records += sourceCorrection(recordId, episode.start, episode.end, revision, now)
 
                 else -> Unit // Already current; pushing again would be noise.
             }
@@ -95,6 +100,9 @@ object SyncContract {
 
     /** Reports why an episode cannot be placed in civil time, or null. */
     fun holdReason(episode: SleepEpisode, homeZone: ZoneId): HoldReason? {
+        if (episode.provenance.acquisitionMethod != AcquisitionMethod.HEALTH_CONNECT ||
+            episode.provenance.evidenceStatus != EvidenceStatus.IMPORTED
+        ) return HoldReason.UNSUPPORTED_SOURCE
         val startOffset = episode.startZoneOffset ?: return HoldReason.MISSING_OFFSET
         val endOffset = episode.endZoneOffset ?: return HoldReason.MISSING_OFFSET
         val homeStart = homeZone.rules.getOffset(episode.start)
@@ -147,11 +155,11 @@ object SyncContract {
         )
     }
 
-    private fun correctionRecord(
+    internal fun sourceCorrection(
         observationRecordId: String,
-        episode: SleepEpisode,
+        start: Instant,
+        end: Instant,
         revision: Instant,
-        supersedes: Instant,
         now: Instant,
     ): OutboxRecord {
         val id = correctionId(observationRecordId, revision)
@@ -159,16 +167,17 @@ object SyncContract {
             append("{")
             append("\"correction_id\":").append(quote(id)).append(",")
             append("\"target_observation_id\":").append(quote(observationRecordId)).append(",")
-            append("\"supersedes_correction_id\":")
-                .append(quote(correctionId(observationRecordId, supersedes))).append(",")
+            // A provider revision is a full timestamp replacement. Its payload
+            // must not depend on which earlier revisions this phone happened to see.
             append("\"created_at\":").append(quote(RFC3339.format(revision))).append(",")
             // The source revised its own record, so what is stored and what the
             // source now reports disagree. `source_conflict` is the closest of
             // the four contract reasons; none of them says "source revision".
             append("\"reason\":\"source_conflict\",")
+            append("\"acquisition_method\":\"health_connect\",")
             append("\"changes\":{")
-            append("\"start_at\":").append(quote(RFC3339.format(episode.start))).append(",")
-            append("\"end_at\":").append(quote(RFC3339.format(episode.end)))
+            append("\"start_at\":").append(quote(RFC3339.format(start))).append(",")
+            append("\"end_at\":").append(quote(RFC3339.format(end)))
             append("}}")
         }
         return OutboxRecord(
@@ -202,10 +211,7 @@ object SyncContract {
         return builder.toString()
     }
 
-    private fun quote(value: String): String {
-        val escaped = value.replace("\\", "\\\\").replace("\"", "\\\"")
-        return "\"" + escaped + "\""
-    }
+    private fun quote(value: String): String = JsonPrimitive(value).toString()
 
     /** Guards every id this object mints against the server rule. */
     fun isValidIdentifier(value: String): Boolean = IDENTIFIER.matches(value)

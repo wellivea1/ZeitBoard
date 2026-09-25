@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"non24.app/core/quicklog"
+	"non24.app/core/recompute"
 	storage "non24.app/core/storage/sqlite"
 )
 
@@ -156,6 +157,7 @@ func (a *App) DiscardQuickSleep() (QuickLogResultDTO, error) {
 // CompleteQuickSleep is "I woke up". It records the night when the pair is
 // plausible and returns a question when it is not.
 func (a *App) CompleteQuickSleep() (QuickLogResultDTO, error) {
+	defer a.requestLocalAnalysis(recompute.ReasonEvidence)
 	store, err := a.requireStore()
 	if err != nil {
 		return QuickLogResultDTO{
@@ -217,6 +219,7 @@ func (a *App) CompleteQuickSleep() (QuickLogResultDTO, error) {
 // ConfirmQuickSleep records the night a person supplied after the app declined
 // to guess it.
 func (a *App) ConfirmQuickSleep(input ConfirmQuickSleepInput) (QuickLogResultDTO, error) {
+	defer a.requestLocalAnalysis(recompute.ReasonEvidence)
 	store, err := a.requireStore()
 	if err != nil {
 		return QuickLogResultDTO{

@@ -7,6 +7,7 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import java.time.Instant
 import java.time.ZoneOffset
+import kotlinx.serialization.json.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.non24.planner.domain.AcquisitionMethod
@@ -23,6 +24,9 @@ internal class SQLiteLocalUserDataStore(
     override fun onConfigure(db: SQLiteDatabase) {
         super.onConfigure(db)
         db.setForeignKeyConstraintsEnabled(true)
+        db.rawQuery("PRAGMA secure_delete=ON", null).use { cursor ->
+            check(cursor.moveToFirst() && cursor.getInt(0) == 1)
+        }
     }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -36,39 +40,12 @@ internal class SQLiteLocalUserDataStore(
         db.execSQL(MEDICATION_OCCURRED_INDEX)
         db.execSQL(SQLiteSyncOutboxStore.CREATE_OUTBOX_TABLE)
         db.execSQL(SQLiteSyncOutboxStore.CREATE_OUTBOX_PENDING_INDEX)
+        SQLiteSyncReplicaStore.createSchema(db)
+        db.execSQL("CREATE INDEX idx_health_sync_id ON health_sleep_episodes(sync_observation_id)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        var version = oldVersion
-        if (version == 1 && newVersion >= 2) {
-            db.execSQL(
-                "ALTER TABLE $HEALTH_EPISODES_TABLE ADD COLUMN " +
-                    "logical_source_id TEXT NOT NULL DEFAULT ''",
-            )
-            db.execSQL(BACKFILL_HEALTH_LOGICAL_SOURCE)
-            db.execSQL(
-                "ALTER TABLE $CORRECTIONS_TABLE ADD COLUMN " +
-                    "target_logical_source_id TEXT NOT NULL DEFAULT ''",
-            )
-            db.execSQL(BACKFILL_CORRECTION_LOGICAL_SOURCE)
-            db.execSQL(HEALTH_LOGICAL_SOURCE_INDEX)
-            db.execSQL("DROP INDEX IF EXISTS idx_sleep_corrections_target_created")
-            db.execSQL(CORRECTIONS_TARGET_INDEX)
-            db.execSQL(CORRECTIONS_LOGICAL_SOURCE_INDEX)
-            version = 2
-        }
-        if (version == 2 && newVersion >= 3) {
-            // The sync outbox arrives empty. Nothing is backfilled: a record
-            // that was never queued was never owed to the server, and
-            // inventing queue entries from existing episodes would push a
-            // year of history the moment the user enrols.
-            db.execSQL(SQLiteSyncOutboxStore.CREATE_OUTBOX_TABLE)
-            db.execSQL(SQLiteSyncOutboxStore.CREATE_OUTBOX_PENDING_INDEX)
-            version = 3
-        }
-        check(version == newVersion) {
-            "No ZeitBoard Android database migration exists from $oldVersion to $newVersion."
-        }
+        error("Development database schema $oldVersion is obsolete. Reset the development profile to use schema $newVersion.")
     }
 
     override fun onDowngrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -95,7 +72,10 @@ internal class SQLiteLocalUserDataStore(
             val db = writableDatabase
             db.beginTransaction()
             try {
-                episodes.forEach { episode ->
+                val permitted = episodes.filterNot { episode ->
+                    db.rawQuery("SELECT 1 FROM erased_health_sources WHERE observation_id = ?", arrayOf(SyncContract.observationId(episode.logicalSourceId))).use { it.moveToFirst() }
+                }
+                permitted.forEach { episode ->
                     val inserted = db.insertWithOnConflict(
                         HEALTH_EPISODES_TABLE,
                         null,
@@ -110,7 +90,7 @@ internal class SQLiteLocalUserDataStore(
                 }
 
                 db.delete(HEALTH_SNAPSHOT_TABLE, null, null)
-                episodes.forEach { episode ->
+                permitted.forEach { episode ->
                     val values = ContentValues().apply {
                         put("episode_id", episode.id)
                     }
@@ -173,13 +153,7 @@ internal class SQLiteLocalUserDataStore(
                     SELECT 1
                     FROM $CORRECTIONS_TABLE AS newer
                     WHERE newer.$keyColumn = c.$keyColumn
-                      AND (
-                        newer.created_epoch_second > c.created_epoch_second OR
-                        (newer.created_epoch_second = c.created_epoch_second AND
-                         newer.created_nano > c.created_nano) OR
-                        (newer.created_epoch_second = c.created_epoch_second AND
-                         newer.created_nano = c.created_nano AND newer.id > c.id)
-                      )
+                      AND newer.sequence > c.sequence
                   )
                 ORDER BY c.created_epoch_second, c.created_nano, c.id
                 """.trimIndent(),
@@ -191,17 +165,26 @@ internal class SQLiteLocalUserDataStore(
     override suspend fun appendSleepCorrection(correction: SleepCorrection) {
         withContext(Dispatchers.IO) {
             val db = writableDatabase
-            val inserted = db.insertWithOnConflict(
-                CORRECTIONS_TABLE,
-                null,
-                correction.toContentValues(),
-                SQLiteDatabase.CONFLICT_IGNORE,
-            )
-            if (inserted == -1L) {
-                require(db.sleepCorrectionById(correction.id) == correction) {
-                    "Sleep correction ${correction.id} already exists with different content."
+            db.beginTransaction()
+            try {
+                val existing = db.sleepCorrectionById(correction.id)
+                if (existing != null) {
+                    require(existing == correction) { "An immutable correction changed." }
+                    db.setTransactionSuccessful()
+                    return@withContext
                 }
-            }
+                val source = db.sleepEpisodeById(correction.targetEpisodeId)
+                if (source != null) {
+                    require(source.logicalSourceId == correction.targetLogicalSourceId)
+                    require(validSyncId(correction.id) && correction.supersedesCorrectionIds.all(::validSyncId))
+                }
+                val current = db.rawQuery("SELECT id FROM sleep_corrections WHERE target_episode_id = ? ORDER BY sequence DESC LIMIT 1", arrayOf(correction.targetEpisodeId)).use { if (it.moveToFirst()) it.getString(0) else null }
+                require(correction.supersedesCorrectionIds == listOfNotNull(current)) { "Review the latest local correction before saving." }
+                val erased = db.rawQuery("SELECT 1 FROM erased_health_sources WHERE observation_id = ?", arrayOf(SyncContract.observationId(correction.targetLogicalSourceId))).use { it.moveToFirst() }
+                check(!erased) { "The source was erased." }
+                db.insertOrThrow(CORRECTIONS_TABLE, null, correction.toContentValues())
+                db.setTransactionSuccessful()
+            } finally { db.endTransaction() }
         }
     }
 
@@ -250,6 +233,7 @@ internal class SQLiteLocalUserDataStore(
             .use { cursor -> if (cursor.moveToFirst()) readMedicationEvent(cursor) else null }
 
     private fun SleepEpisode.toContentValues(): ContentValues = ContentValues().apply {
+        put("sync_observation_id", SyncContract.observationId(logicalSourceId))
         put("id", id)
         put("logical_source_id", logicalSourceId)
         putInstant("start", start)
@@ -264,6 +248,7 @@ internal class SQLiteLocalUserDataStore(
         put("id", id)
         put("target_episode_id", targetEpisodeId)
         put("target_logical_source_id", targetLogicalSourceId)
+        put("supersedes_ids", JsonArray(supersedesCorrectionIds.map(::JsonPrimitive)).toString())
         putInstant("corrected_start", correctedStart)
         putInstant("corrected_end", correctedEnd)
         putNullableString("iana_zone_id", ianaTimeZoneId)
@@ -290,35 +275,6 @@ internal class SQLiteLocalUserDataStore(
         putNullableInstant("source_updated", provenance.sourceUpdatedAt)
     }
 
-    private fun readSleepEpisode(cursor: Cursor): SleepEpisode {
-        val start = cursor.instant("start")
-        val end = cursor.instant("end")
-        val provenance = cursor.provenance()
-        return SleepEpisode(
-            id = cursor.requiredString("id"),
-            logicalSourceId = cursor.requiredString("logical_source_id"),
-            start = start,
-            end = end,
-            ianaTimeZoneId = cursor.optionalString("iana_zone_id"),
-            startZoneOffset = cursor.optionalZoneOffset("start_offset_seconds"),
-            endZoneOffset = cursor.optionalZoneOffset("end_offset_seconds"),
-            provenance = provenance,
-        )
-    }
-
-    private fun readSleepCorrection(cursor: Cursor): SleepCorrection = SleepCorrection(
-        id = cursor.requiredString("id"),
-        targetEpisodeId = cursor.requiredString("target_episode_id"),
-        targetLogicalSourceId = cursor.requiredString("target_logical_source_id"),
-        correctedStart = cursor.instant("corrected_start"),
-        correctedEnd = cursor.instant("corrected_end"),
-        ianaTimeZoneId = cursor.optionalString("iana_zone_id"),
-        startZoneOffset = cursor.optionalZoneOffset("start_offset_seconds"),
-        endZoneOffset = cursor.optionalZoneOffset("end_offset_seconds"),
-        createdAt = cursor.instant("created"),
-        provenance = cursor.provenance(),
-    )
-
     private fun readMedicationEvent(cursor: Cursor): MedicationEvent = MedicationEvent(
         id = cursor.requiredString("id"),
         displayName = cursor.requiredString("display_name"),
@@ -328,17 +284,9 @@ internal class SQLiteLocalUserDataStore(
         provenance = cursor.provenance(),
     )
 
-    private fun Cursor.provenance(): Provenance = Provenance(
-        acquisitionMethod = AcquisitionMethod.valueOf(requiredString("acquisition_method")),
-        evidenceStatus = EvidenceStatus.valueOf(requiredString("evidence_status")),
-        sourceId = requiredString("source_id"),
-        sourceRecordId = optionalString("source_record_id"),
-        sourceUpdatedAt = optionalInstant("source_updated"),
-    )
-
     private companion object {
         const val DATABASE_NAME = "zeitboard_local.db"
-        const val DATABASE_VERSION = 3
+        const val DATABASE_VERSION = 5
         const val SQL_KEY_CHUNK_SIZE = 800
         const val HEALTH_EPISODES_TABLE = "health_sleep_episodes"
         const val HEALTH_SNAPSHOT_TABLE = "health_sleep_snapshot"
@@ -347,6 +295,7 @@ internal class SQLiteLocalUserDataStore(
 
         val HEALTH_EPISODES_SCHEMA = """
             CREATE TABLE $HEALTH_EPISODES_TABLE (
+                sync_observation_id TEXT NOT NULL,
                 id TEXT PRIMARY KEY NOT NULL CHECK(length(id) > 0),
                 logical_source_id TEXT NOT NULL CHECK(length(logical_source_id) > 0),
                 start_epoch_second INTEGER NOT NULL,
@@ -382,9 +331,12 @@ internal class SQLiteLocalUserDataStore(
 
         val CORRECTIONS_SCHEMA = """
             CREATE TABLE $CORRECTIONS_TABLE (
-                id TEXT PRIMARY KEY NOT NULL CHECK(length(id) > 0),
+                sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                id TEXT UNIQUE NOT NULL CHECK(length(id) > 0),
                 target_episode_id TEXT NOT NULL CHECK(length(target_episode_id) > 0),
                 target_logical_source_id TEXT NOT NULL CHECK(length(target_logical_source_id) > 0),
+                supersedes_ids TEXT NOT NULL,
+                sync_hold_zone TEXT,
                 corrected_start_epoch_second INTEGER NOT NULL,
                 corrected_start_nano INTEGER NOT NULL CHECK(corrected_start_nano BETWEEN 0 AND 999999999),
                 corrected_end_epoch_second INTEGER NOT NULL,
@@ -437,39 +389,17 @@ internal class SQLiteLocalUserDataStore(
             "CREATE INDEX idx_health_sleep_logical_source " +
                 "ON $HEALTH_EPISODES_TABLE(logical_source_id)"
         val CORRECTIONS_TARGET_INDEX =
-            "CREATE INDEX idx_sleep_corrections_target_created " +
+            "CREATE INDEX idx_sleep_corrections_target_sequence " +
                 "ON $CORRECTIONS_TABLE(" +
-                "target_episode_id, created_epoch_second DESC, created_nano DESC, id DESC)"
+                "target_episode_id, sequence DESC)"
         val CORRECTIONS_LOGICAL_SOURCE_INDEX =
-            "CREATE INDEX idx_sleep_corrections_logical_created " +
+            "CREATE INDEX idx_sleep_corrections_logical_sequence " +
                 "ON $CORRECTIONS_TABLE(" +
-                "target_logical_source_id, created_epoch_second DESC, created_nano DESC, id DESC)"
+                "target_logical_source_id, sequence DESC)"
         val MEDICATION_OCCURRED_INDEX =
             "CREATE INDEX idx_medication_events_occurred " +
                 "ON $MEDICATION_EVENTS_TABLE(occurred_epoch_second DESC, occurred_nano DESC)"
-        val BACKFILL_HEALTH_LOGICAL_SOURCE = """
-            UPDATE $HEALTH_EPISODES_TABLE
-            SET logical_source_id = source_id || char(31) ||
-                CASE
-                    WHEN source_record_id IS NOT NULL AND length(source_record_id) > 0
-                        THEN source_record_id
-                    ELSE start_epoch_second || ':' || start_nano || char(31) ||
-                        end_epoch_second || ':' || end_nano
-                END
-            WHERE logical_source_id = ''
-        """.trimIndent()
-        val BACKFILL_CORRECTION_LOGICAL_SOURCE = """
-            UPDATE $CORRECTIONS_TABLE
-            SET target_logical_source_id = COALESCE(
-                (
-                    SELECT e.logical_source_id
-                    FROM $HEALTH_EPISODES_TABLE AS e
-                    WHERE e.id = $CORRECTIONS_TABLE.target_episode_id
-                ),
-                target_episode_id
-            )
-            WHERE target_logical_source_id = ''
-        """.trimIndent()
+
     }
 }
 
@@ -525,3 +455,42 @@ private fun Cursor.optionalZoneOffset(column: String): ZoneOffset? {
     val index = getColumnIndexOrThrow(column)
     return if (isNull(index)) null else ZoneOffset.ofTotalSeconds(getInt(index))
 }
+
+internal fun readSleepEpisode(cursor: Cursor): SleepEpisode {
+    val start = cursor.instant("start")
+    val end = cursor.instant("end")
+    val provenance = cursor.provenance()
+    return SleepEpisode(
+        id = cursor.requiredString("id"),
+        logicalSourceId = cursor.requiredString("logical_source_id"),
+        start = start,
+        end = end,
+        ianaTimeZoneId = cursor.optionalString("iana_zone_id"),
+        startZoneOffset = cursor.optionalZoneOffset("start_offset_seconds"),
+        endZoneOffset = cursor.optionalZoneOffset("end_offset_seconds"),
+        provenance = provenance,
+    )
+}
+
+internal fun readSleepCorrection(cursor: Cursor): SleepCorrection = SleepCorrection(
+    id = cursor.requiredString("id"),
+    targetEpisodeId = cursor.requiredString("target_episode_id"),
+    targetLogicalSourceId = cursor.requiredString("target_logical_source_id"),
+    supersedesCorrectionIds = Json.parseToJsonElement(cursor.requiredString("supersedes_ids")).jsonArray.map { it.jsonPrimitive.content },
+    correctedStart = cursor.instant("corrected_start"),
+    correctedEnd = cursor.instant("corrected_end"),
+    ianaTimeZoneId = cursor.optionalString("iana_zone_id"),
+    startZoneOffset = cursor.optionalZoneOffset("start_offset_seconds"),
+    endZoneOffset = cursor.optionalZoneOffset("end_offset_seconds"),
+    createdAt = cursor.instant("created"),
+    provenance = cursor.provenance(),
+)
+
+
+private fun Cursor.provenance(): Provenance = Provenance(
+    acquisitionMethod = AcquisitionMethod.valueOf(requiredString("acquisition_method")),
+    evidenceStatus = EvidenceStatus.valueOf(requiredString("evidence_status")),
+    sourceId = requiredString("source_id"),
+    sourceRecordId = optionalString("source_record_id"),
+    sourceUpdatedAt = optionalInstant("source_updated"),
+)

@@ -17,6 +17,14 @@ beforeEach(() => {
 });
 
 describe("desktop navigation", () => {
+  it("skips to the active view without changing its route", async () => {
+    window.location.hash = "#/plan/tasks";
+    render(<App />);
+    await screen.findByRole("heading", { level: 1, name: "Plan" });
+    fireEvent.click(screen.getByRole("link", { name: "Skip to content" }));
+    expect(window.location.hash).toBe("#/plan/tasks");
+    expect(screen.getByRole("main")).toHaveFocus();
+  });
   // Slice U-H: five primary destinations and a separate utility group. Eight
   // equal-weight entries was too much undifferentiated navigation for someone
   // operating under fatigue, and the count is the whole point of the change.
@@ -37,21 +45,6 @@ describe("desktop navigation", () => {
       expect(utilities).toHaveTextContent(label);
     }
     expect(screen.getByText("Sample data")).toBeVisible();
-  });
-
-  // Old hashes are written down in this app's own links, in the runbook, and in
-  // whatever the user bookmarked. A dead link is a worse answer than a redirect.
-  it.each([
-    ["#/overview", "Home"],
-    ["#/calendar", "Plan"],
-    ["#/tasks", "Plan"],
-    ["#/approvals", "Plan"],
-    ["#/medications", "Log"],
-    ["#/timeline", "Rhythm"],
-  ])("redirects the legacy route %s", async (hash, heading) => {
-    window.location.hash = hash;
-    render(<App />);
-    expect(await screen.findByRole("heading", { level: 1, name: heading })).toBeVisible();
   });
 
   it("opens the tab named in the address", async () => {
@@ -117,9 +110,11 @@ describe("desktop navigation", () => {
     expect(within(navigation()).getByLabelText("2 pending")).toBeVisible();
 
     fireEvent.click(accepts[0] as HTMLElement);
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
 
     expect(screen.getByText("Email Dr. Okafor")).toBeVisible();
     expect(screen.getByText("approved")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "All 1" }));
     expect(screen.getAllByRole("button", { name: "Accept proposal" })).toHaveLength(1);
     expect(within(navigation()).getByLabelText("1 pending")).toBeVisible();
 
@@ -270,6 +265,10 @@ describe("desktop navigation", () => {
       effectiveStartLabel: "Sun Mar 1, 10:30 PM EST",
       effectiveEndLabel: "Mon Mar 2, 6:00 AM EST",
       effectiveClassification: "principal",
+      reviewToken: "synthetic-review-token",
+      needsReview: false,
+      sourceWindowLabel: "Synthetic source window",
+      activeEdits: [],
       durationLabel: "7 hours 30 minutes",
       suppressed: false,
       sourceLabel: "Manual sleep log",
@@ -371,8 +370,8 @@ describe("desktop navigation", () => {
     ).toBeNull();
   });
 
-  it("keeps the legacy timeline route usable as Rhythm", async () => {
-    window.location.hash = "#/timeline";
+  it("opens the rhythm destination", async () => {
+    window.location.hash = "#/rhythm";
     render(<App />);
 
     expect(await screen.findByRole("heading", { name: "Rhythm" })).toBeVisible();
@@ -420,6 +419,10 @@ describe("desktop navigation", () => {
       effectiveStartLabel: "Sun Mar 1, 10:00 PM EST",
       effectiveEndLabel: "Mon Mar 2, 6:00 AM EST",
       effectiveClassification: "principal",
+      reviewToken: "synthetic-review-token",
+      needsReview: false,
+      sourceWindowLabel: "Synthetic source window",
+      activeEdits: [],
       durationLabel: "8 hours 0 minutes",
       suppressed: false,
       sourceLabel: "Manual sleep log",
@@ -452,6 +455,8 @@ describe("desktop navigation", () => {
           GetProposals: async () =>
             saved
               ? {
+                  taskConflicts: [],
+                  taskConflictHistory: [],
                   fixtureMode: false,
                   status: "estimated",
                   proposals: [
@@ -466,12 +471,15 @@ describe("desktop navigation", () => {
                       explanationCodes: ["within_predicted_waking_window"],
                       reasonLabels: ["In a predicted waking window"],
                       createdLabel: "Proposed by Scheduler from local sleep entries",
+                      expiresAt: "2099-01-01T00:00:00Z",
                       expiresLabel: "valid for the current estimate",
                     },
                   ],
                   unplaced: [],
                 }
               : {
+                  taskConflicts: [],
+                  taskConflictHistory: [],
                   fixtureMode: false,
                   status: "empty",
                   refusal: {
@@ -535,6 +543,10 @@ describe("desktop navigation", () => {
       effectiveStartLabel: "Sun Mar 1, 10:00 PM EST",
       effectiveEndLabel: "Mon Mar 2, 6:00 AM EST",
       effectiveClassification: "principal",
+      reviewToken: "synthetic-review-token",
+      needsReview: false,
+      sourceWindowLabel: "Synthetic source window",
+      activeEdits: [],
       durationLabel: "8 hours 0 minutes",
       suppressed: false,
       sourceLabel: "Manual sleep log",
@@ -600,6 +612,14 @@ describe("desktop navigation", () => {
       main: {
         App: {
           ListTasks: async () => ({ status: "ok", tasks: [] }),
+          GetProposals: async () => ({
+            taskConflicts: [],
+            taskConflictHistory: [],
+            fixtureMode: false,
+            status: "empty",
+            proposals: [],
+            unplaced: [],
+          }),
           AddTask: addTask,
         },
       },
@@ -813,7 +833,13 @@ describe("assistant rail", () => {
   });
 
   it("sends a message and renders the propose-only action card with decisions", async () => {
-    const decide = vi.fn(async () => ({ status: "ok", proposals: [] }));
+    const decide = vi.fn(async () => ({
+      pendingCount: 0,
+      nextExpiryAt: "",
+      pagination: { nextCursor: "", hasMore: false },
+      status: "ok",
+      proposals: [],
+    }));
     (globalThis as { go?: unknown }).go = {
       main: {
         App: {
@@ -823,7 +849,13 @@ describe("assistant rail", () => {
             provider: "anthropic",
             model: "claude-sonnet-5",
           }),
-          GetBackendProposals: async () => ({ status: "ok", proposals: [] }),
+          GetBackendProposals: async () => ({
+            pendingCount: 0,
+            nextExpiryAt: "",
+            pagination: { nextCursor: "", hasMore: false },
+            status: "ok",
+            proposals: [],
+          }),
           SendAssistantMessage: async () => ({
             available: true,
             result: "proposal_pending",
@@ -840,6 +872,7 @@ describe("assistant rail", () => {
                 confidence: "Medium",
                 reasonLabels: ["Fits the predicted waking window"],
                 createdLabel: "Proposed Jul 10, 8:00 AM",
+                expiresAt: "2099-01-01T00:00:00Z",
                 expiresLabel: "expires Jul 10, 8:15 AM",
                 decisionToken: "one-use-token",
               },

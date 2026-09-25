@@ -56,3 +56,25 @@ export interface OverviewResult {
   data: OverviewData;
   source: OverviewSource;
 }
+
+export const overviewUnavailable: OverviewData = {
+  fixtureMode: false,
+  status: "unavailable",
+  empty: false,
+  state: "Estimate unavailable",
+  stateDetail: "Your records could not be read",
+  timeSinceWake: "Unavailable",
+  nextSleepWindow: { label: "Unavailable", uncertainty: "" },
+  drift: { label: "Unavailable", direction: "" },
+  confidence: { level: "Low", reason: "The desktop service could not load this view." },
+  freshness: {
+    state: "withheld",
+    reason: "service_unavailable",
+    explanation: "No current state is claimed until your records can be read again.",
+    ageLabel: "",
+    trusted: false,
+  },
+  usefulTaskWindow: { label: "Unavailable", detail: "" },
+  sharingStatus: { active: false, label: "Sharing status unavailable", detail: "" },
+  updatedLabel: "Refresh to try again",
+};

@@ -1,3 +1,4 @@
+import { civilMinute } from "../utils/civilTime";
 import { describe, expect, it } from "vitest";
 import {
   decideVisitorRequest,
@@ -8,15 +9,22 @@ import {
   type VisitorRequest,
 } from "./visitorRequests";
 
+const summary = {
+  pendingCount: 0,
+  nextExpiryAt: "",
+  pagination: { nextCursor: "", hasMore: false },
+};
 const raw = {
+  status: "pending",
+  expiresAt: "2099-01-01T00:00:00Z",
+  windowStartAt: "2026-08-04T10:00:00Z",
+  windowEndAt: "2026-08-04T14:00:00Z",
   proposalId: "visitor-1",
   linkLabel: "Mum",
   handle: "Sam",
   message: "coffee?",
   windowLabel: "Tue, Aug 4, 10:00 AM to 2:00 PM",
   durationLabel: "45 minutes",
-  windowStartLocal: "2026-08-04T10:00",
-  windowEndLocal: "2026-08-04T14:00",
   durationMinutes: 45,
   beyondHorizon: false,
   createdLabel: "Asked Aug 3, 9:00 AM",
@@ -44,18 +52,23 @@ describe("visitor request normalization", () => {
 
   it("rejects records missing the picker bounds", () => {
     const withoutStart: Record<string, unknown> = { ...raw };
-    delete withoutStart.windowStartLocal;
+    delete withoutStart.windowStartAt;
     expect(normalizeVisitorRequest(withoutStart)).toBeUndefined();
   });
 
   it("rejects the whole payload when one request is malformed", () => {
     expect(
-      normalizeVisitorRequests({ status: "ok", requests: [raw, { proposalId: "broken" }] }),
+      normalizeVisitorRequests({
+        ...summary,
+        status: "ok",
+        requests: [raw, { proposalId: "broken" }],
+      }),
     ).toBeUndefined();
   });
 
   it("accepts an empty list and unknown statuses are refused", () => {
-    expect(normalizeVisitorRequests({ status: "ok", requests: [] })).toEqual({
+    expect(normalizeVisitorRequests({ ...summary, status: "ok", requests: [] })).toEqual({
+      ...summary,
       status: "ok",
       requests: [],
     });
@@ -67,8 +80,10 @@ describe("defaultSlot", () => {
   it("offers the requested length from the window start", () => {
     const request = normalizeVisitorRequest(raw) as VisitorRequest;
     expect(defaultSlot(request)).toEqual({
-      start: "2026-08-04T10:00",
-      end: "2026-08-04T10:45",
+      start: civilMinute(raw.windowStartAt),
+      startAt: "2026-08-04T10:00:00.000Z",
+      end: civilMinute("2026-08-04T10:45:00Z"),
+      endAt: "2026-08-04T10:45:00.000Z",
     });
   });
 
@@ -79,15 +94,21 @@ describe("defaultSlot", () => {
       durationLabel: undefined,
     }) as VisitorRequest;
     expect(defaultSlot(request)).toEqual({
-      start: "2026-08-04T10:00",
-      end: "2026-08-04T14:00",
+      start: civilMinute(raw.windowStartAt),
+      startAt: "2026-08-04T10:00:00.000Z",
+      end: civilMinute(raw.windowEndAt),
+      endAt: "2026-08-04T14:00:00.000Z",
     });
   });
 });
 
 describe("bridge behaviour", () => {
   it("is absent rather than broken when the binding does not exist", async () => {
-    await expect(loadVisitorRequests({})).resolves.toEqual({ status: "off", requests: [] });
+    await expect(loadVisitorRequests({})).resolves.toEqual({
+      ...summary,
+      status: "off",
+      requests: [],
+    });
   });
 
   it("reports an error without inventing an empty request list state", async () => {
@@ -116,7 +137,7 @@ describe("bridge behaviour", () => {
           App: {
             DecideBackendVisitorRequest: async (input: unknown) => {
               sent.push(input);
-              return { status: "ok", requests: [] };
+              return { ...summary, status: "ok", requests: [] };
             },
           },
         },
@@ -128,8 +149,8 @@ describe("bridge behaviour", () => {
         proposalId: "visitor-1",
         decision: "approved",
         token: "token",
-        startLocal: "2026-08-04T11:00",
-        endLocal: "2026-08-04T11:45",
+        startAt: "2026-08-04T11:00:00Z",
+        endAt: "2026-08-04T11:45:00Z",
       },
       root,
     );
@@ -140,10 +161,10 @@ describe("bridge behaviour", () => {
 
     expect(sent[0]).toMatchObject({
       decision: "approved",
-      startLocal: "2026-08-04T11:00",
-      endLocal: "2026-08-04T11:45",
+      startAt: "2026-08-04T11:00:00Z",
+      endAt: "2026-08-04T11:45:00Z",
     });
     // Declining carries no block: there is nothing to reveal.
-    expect(sent[1]).toMatchObject({ decision: "rejected", startLocal: "", endLocal: "" });
+    expect(sent[1]).toMatchObject({ decision: "rejected", startAt: "", endAt: "" });
   });
 });

@@ -4,12 +4,75 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
 	syncmodel "non24.app/server/internal/sync"
 )
+
+func TestErasingObservationRemovesItsRetainedCorrectionPayloads(t *testing.T) {
+	ctx := context.Background()
+	st, err := Open(t.TempDir()+"/synthetic.db", bytes.Repeat([]byte{7}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	now := time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)
+	if err := st.RegisterDevice(ctx, "device_synthetic", "synthetic", bytes.Repeat([]byte{1}, 32), now); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = st.Append(ctx, "device_synthetic", []syncmodel.PushRecord{
+		{RecordID: "obs_synthetic", Kind: syncmodel.KindObservation, CreatedAt: now, Payload: json.RawMessage(`{"kind":"sleep_episode"}`)},
+		{RecordID: "cor_synthetic", Kind: syncmodel.KindCorrection, CreatedAt: now, Payload: json.RawMessage(`{"target_observation_id":"obs_synthetic","reason":"user_edit"}`)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	erased, tombstones, _, err := st.EraseSyncRecords(ctx, "device_synthetic", []string{"obs_synthetic"}, now)
+	if err != nil || erased != 2 || tombstones != 2 {
+		t.Fatalf("dependent erasure: erased=%d tombstones=%d err=%v", erased, tombstones, err)
+	}
+	var remaining int
+	if err := st.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sync_records WHERE kind != 'tombstone'`).Scan(&remaining); err != nil || remaining != 0 {
+		t.Fatal("private correction payload remained")
+	}
+}
+
+func TestErasedObservationRejectsLaterProviderRevisionIDs(t *testing.T) {
+	ctx := context.Background()
+	st, err := Open(t.TempDir()+"/server.db", bytes.Repeat([]byte{7}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	now := time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)
+	if err := st.RegisterDevice(ctx, "device_synthetic", "synthetic", bytes.Repeat([]byte{1}, 32), now); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := st.EraseSyncRecords(ctx, "device_synthetic", []string{"hc_erased_synthetic"}, now); err != nil {
+		t.Fatal(err)
+	}
+	_, accepted, err := st.Append(ctx, "device_synthetic", []syncmodel.PushRecord{{
+		RecordID: "cor_new_provider_revision", Kind: syncmodel.KindCorrection, CreatedAt: now,
+		Payload: json.RawMessage(`{"correction_id":"cor_new_provider_revision","target_observation_id":"hc_erased_synthetic","created_at":"2026-09-02T11:00:00Z","reason":"source_conflict","acquisition_method":"health_connect","changes":{"start_at":"2026-09-02T02:02:00Z"}}`),
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if accepted != 0 {
+		t.Fatal("new provider revision retained erased behavioral timestamps")
+	}
+	var corrections int
+	if err := st.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sync_records WHERE kind = 'correction'`).Scan(&corrections); err != nil {
+		t.Fatal(err)
+	}
+	if corrections != 0 {
+		t.Fatal("erased target acquired another correction payload")
+	}
+}
 
 func TestPullKindThroughFiltersAndHonorsHighWater(t *testing.T) {
 	ctx := context.Background()
@@ -303,4 +366,97 @@ func createProposalForStoreTest(t *testing.T, st *Store, id string, createdAt, e
 		t.Fatal(err)
 	}
 	return record
+}
+
+func TestProposalScopesCountAllPendingBeforePagination(t *testing.T) {
+	ctx := t.Context()
+	st, err := Open(t.TempDir()+"/scope.db", bytes.Repeat([]byte{9}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	now := time.Date(2026, 9, 21, 12, 0, 0, 0, time.UTC)
+	if err := st.RegisterDevice(ctx, "device_agent", "agent", bytes.Repeat([]byte{1}, 32), now.Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	create := func(id, action string, expires time.Time) ProposalRecord {
+		record, err := st.CreateProposal(ctx, ProposalInput{ID: id, ActionID: action, DeviceID: "device_agent", CreatedAt: now.Add(-time.Hour), ExpiresAt: expires, Payload: json.RawMessage(`{"synthetic":true}`), Audit: json.RawMessage(`{"source":"test"}`)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return record
+	}
+	create("visitor_old", ActionVisitorRequest, now.Add(time.Hour))
+	create("visitor_older", ActionVisitorRequest, now.Add(2*time.Hour))
+	for i := 0; i < 105; i++ {
+		create(fmt.Sprintf("backend_%03d", i), "propose_place_task", now.Add(3*time.Hour))
+	}
+	create("visitor_expired", ActionVisitorRequest, now.Add(-time.Minute))
+	consumed := create("visitor_consumed", ActionVisitorRequest, now.Add(time.Hour))
+	if _, err := st.db.ExecContext(ctx, `UPDATE approval_nonces SET used_at=? WHERE proposal_id=?`, now.Format(time.RFC3339Nano), consumed.ID); err != nil {
+		t.Fatal(err)
+	}
+	page, err := st.ListProposalPage(ctx, ProposalPageCursor{Scope: ProposalScopeVisitor}, 1, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.PendingCount != 2 || page.NextExpiryAt != now.Add(time.Hour).Format(time.RFC3339Nano) || !page.HasMore || page.NextCursor.Scope != ProposalScopeVisitor {
+		t.Fatalf("visitor summary = %+v", page)
+	}
+	seen := map[string]bool{}
+	for {
+		for _, record := range page.Records {
+			if record.ActionID != ActionVisitorRequest || seen[record.ID] {
+				t.Fatal("scope or pagination leaked")
+			}
+			seen[record.ID] = true
+		}
+		if !page.HasMore {
+			break
+		}
+		page, err = st.ListProposalPage(ctx, page.NextCursor, 1, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(seen) != 4 {
+		t.Fatalf("visitor pages contained %d records", len(seen))
+	}
+	backend, err := st.ListProposalPage(ctx, ProposalPageCursor{Scope: ProposalScopeBackend}, 1, now)
+	if err != nil || backend.PendingCount != 105 || len(backend.Records) != 1 || backend.Records[0].ActionID == ActionVisitorRequest {
+		t.Fatalf("backend count/scope failed: %v", err)
+	}
+	expired, err := st.ListProposalPage(ctx, ProposalPageCursor{Scope: ProposalScopeVisitor}, 10, now.Add(4*time.Hour))
+	if err != nil || expired.PendingCount != 0 || expired.NextExpiryAt != "" {
+		t.Fatalf("expiry summary incorrect: %v", err)
+	}
+}
+
+func TestProposalExpiryMatchesTokenAtSubsecondBoundary(t *testing.T) {
+	st, err := Open(t.TempDir()+"/expiry.db", bytes.Repeat([]byte{8}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	now := time.Date(2026, 9, 21, 12, 0, 0, 0, time.UTC)
+	if err := st.RegisterDevice(t.Context(), "device_agent", "agent", bytes.Repeat([]byte{1}, 32), now.Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	record := createProposalForStoreTest(t, st, "expiry", now.Add(-time.Hour), now.Add(123*time.Millisecond))
+	for _, at := range []time.Time{now.Add(-time.Nanosecond), now, now.Add(time.Nanosecond), now.Add(500 * time.Millisecond)} {
+		page, err := st.ListProposalPage(t.Context(), ProposalPageCursor{}, 10, at)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := 0
+		if at.Before(now) {
+			want = 1
+		}
+		if page.PendingCount != want || (page.Records[0].DecisionToken != "") != (want == 1) {
+			t.Fatalf("pending count/token at %s = %d", at.Format(time.RFC3339Nano), page.PendingCount)
+		}
+	}
+	if _, err := st.DecideProposal(t.Context(), record.ID, "device_agent", ProposalApproved, record.DecisionToken, now, json.RawMessage(`{"source":"test"}`)); !errors.Is(err, ErrExpiredApprovalToken) {
+		t.Fatalf("boundary decision was not expired: %v", err)
+	}
 }

@@ -74,6 +74,8 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("GET /v1/overview", s.requireDevice(http.HandlerFunc(s.handleOverview)))
 	mux.Handle("GET /v1/rhythm", s.requireDevice(http.HandlerFunc(s.handleRhythm)))
 	mux.Handle("GET /v1/accuracy", s.requireDevice(http.HandlerFunc(s.handleAccuracy)))
+	mux.Handle("GET /v2/companion", s.requireDevice(http.HandlerFunc(s.handleCompanion)))
+	mux.Handle("GET /v1/sleep/{id}/review", s.requireDevice(http.HandlerFunc(s.handleSleepReview)))
 	mux.Handle("POST /v1/sync/push", s.requireDevice(http.HandlerFunc(s.handlePush)))
 	mux.Handle("GET /v1/sync/pull", s.requireDevice(http.HandlerFunc(s.handlePull)))
 	mux.Handle("POST /v1/sync/erase", s.requireDevice(http.HandlerFunc(s.handleErase)))
@@ -149,6 +151,8 @@ type proposalListPagination struct {
 }
 
 type proposalListResponse struct {
+	PendingCount  int                    `json:"pendingCount"`
+	NextExpiryAt  string                 `json:"nextExpiryAt"`
 	SchemaVersion string                 `json:"schema_version"`
 	Proposals     []store.ProposalRecord `json:"proposals"`
 	Pagination    proposalListPagination `json:"pagination"`
@@ -165,6 +169,11 @@ func (s *Server) handleListProposals(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid proposal list query")
 		return
 	}
+	if cursor.AfterRowID > 0 && cursor.Scope != store.ProposalScopeBackend {
+		writeError(w, http.StatusBadRequest, "proposal cursor belongs to a different queue")
+		return
+	}
+	cursor.Scope = store.ProposalScopeBackend
 	listTime := s.now().UTC()
 	if cursor.AfterRowID > 0 && cursor.AsOf.After(listTime) {
 		writeError(w, http.StatusBadRequest, "invalid proposal list query")
@@ -180,6 +189,8 @@ func (s *Server) handleListProposals(w http.ResponseWriter, r *http.Request) {
 		pagination.NextCursor = encodeProposalCursor(page.NextCursor)
 	}
 	writeJSON(w, http.StatusOK, proposalListResponse{
+		PendingCount:  page.PendingCount,
+		NextExpiryAt:  page.NextExpiryAt,
 		SchemaVersion: syncmodel.SchemaVersion,
 		Proposals:     page.Records,
 		Pagination:    pagination,
@@ -225,8 +236,9 @@ func parseProposalListQuery(query map[string][]string) (store.ProposalPageCursor
 }
 
 func encodeProposalCursor(cursor store.ProposalPageCursor) string {
-	var raw [26]byte
+	var raw [27]byte
 	raw[0] = proposalCursorVersion
+	raw[26] = byte(cursor.Scope)
 	if cursor.Active {
 		raw[1] = 1
 	}
@@ -237,11 +249,11 @@ func encodeProposalCursor(cursor store.ProposalPageCursor) string {
 }
 
 func decodeProposalCursor(encoded string) (store.ProposalPageCursor, error) {
-	if len(encoded) != base64.RawURLEncoding.EncodedLen(26) {
+	if len(encoded) != base64.RawURLEncoding.EncodedLen(27) {
 		return store.ProposalPageCursor{}, errors.New("invalid proposal cursor")
 	}
 	raw, err := base64.RawURLEncoding.DecodeString(encoded)
-	if err != nil || len(raw) != 26 || raw[0] != proposalCursorVersion || raw[1] > 1 {
+	if err != nil || len(raw) != 27 || raw[0] != proposalCursorVersion || raw[1] > 1 || raw[26] > byte(store.ProposalScopeVisitor) {
 		return store.ProposalPageCursor{}, errors.New("invalid proposal cursor")
 	}
 	afterRowID := binary.BigEndian.Uint64(raw[2:10])
@@ -251,6 +263,7 @@ func decodeProposalCursor(encoded string) (store.ProposalPageCursor, error) {
 		return store.ProposalPageCursor{}, errors.New("invalid proposal cursor")
 	}
 	return store.ProposalPageCursor{
+		Scope:        store.ProposalScope(raw[26]),
 		AfterRowID:   int64(afterRowID),
 		ThroughRowID: int64(throughRowID),
 		Active:       raw[1] == 1,
@@ -500,6 +513,7 @@ func (s *Server) handleErase(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePull(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
 	since := int64(0)
 	if raw := r.URL.Query().Get("since"); raw != "" {
 		parsed, err := strconv.ParseInt(raw, 10, 64)
@@ -509,7 +523,20 @@ func (s *Server) handlePull(w http.ResponseWriter, r *http.Request) {
 		}
 		since = parsed
 	}
-	records, cursor, err := s.store.Pull(r.Context(), since, syncmodel.MaxPullRecords)
+	limit := syncmodel.MaxPullRecords
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		parsed, err := strconv.Atoi(raw)
+		if err != nil || parsed < 1 || parsed > syncmodel.MaxPullRecords {
+			writeError(w, http.StatusBadRequest, "invalid page limit")
+			return
+		}
+		limit = parsed
+	}
+	records, cursor, err := s.store.Pull(r.Context(), since, limit)
+	if errors.Is(err, store.ErrSyncCursorAhead) {
+		writeError(w, http.StatusConflict, "server history changed after a restore; re-enroll to reconcile records")
+		return
+	}
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "sync pull failed")
 		return

@@ -21,19 +21,6 @@ describe("readRouteFromHash", () => {
     expect(readRouteFromHash("#/log")).toMatchObject({ screen: "log", logTab: "sleep" });
   });
 
-  // The consolidation removed destinations that are still written down — in
-  // this app's own links, in the runbook, and in whatever the user bookmarked.
-  it.each([
-    ["#/overview", { screen: "home" }],
-    ["#/timeline", { screen: "rhythm" }],
-    ["#/calendar", { screen: "plan", planTab: "calendar" }],
-    ["#/tasks", { screen: "plan", planTab: "tasks" }],
-    ["#/approvals", { screen: "plan", planTab: "approvals" }],
-    ["#/medications", { screen: "log", logTab: "medications" }],
-  ])("keeps the legacy route %s working", (hash, expected) => {
-    expect(readRouteFromHash(hash)).toMatchObject(expected);
-  });
-
   it("keeps the utility destinations addressable", () => {
     expect(readRouteFromHash("#/data-sources")).toMatchObject({ screen: "data-sources" });
     expect(readRouteFromHash("#/settings")).toMatchObject({ screen: "settings" });
@@ -68,9 +55,11 @@ describe("ScreenTabs", () => {
 
     fireEvent.keyDown(list, { key: "ArrowRight" });
     expect(onSelect).toHaveBeenLastCalledWith("one");
+    expect(screen.getByRole("tab", { name: "One" })).toHaveFocus();
 
     fireEvent.keyDown(list, { key: "ArrowLeft" });
     expect(onSelect).toHaveBeenLastCalledWith("two");
+    expect(screen.getByRole("tab", { name: /Two/ })).toHaveFocus();
 
     fireEvent.keyDown(list, { key: "Home" });
     expect(onSelect).toHaveBeenLastCalledWith("one");

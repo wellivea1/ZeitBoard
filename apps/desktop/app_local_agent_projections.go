@@ -84,6 +84,7 @@ type agentTasksDTO struct {
 }
 
 type agentTaskDTO struct {
+	NeedsReview               bool   `json:"needsReview"`
 	TaskID                    string `json:"task_id"`
 	DurationMinutes           int    `json:"duration_minutes"`
 	Status                    string `json:"status"`
@@ -285,6 +286,10 @@ func (a *App) agentTaskProjection(ctx context.Context) (agentTasksDTO, error) {
 	if err != nil {
 		return agentTasksDTO{}, localAgentProjectionError("task", err)
 	}
+	conflicts, err := store.TaskSyncConflictIDs(ctx)
+	if err != nil {
+		return agentTasksDTO{}, localAgentProjectionError("task", err)
+	}
 	projection := agentTasksDTO{
 		SchemaVersion: "v1",
 		Count:         len(records),
@@ -298,7 +303,7 @@ func (a *App) agentTaskProjection(ctx context.Context) (agentTasksDTO, error) {
 	}
 	for _, record := range records[:limit] {
 		projection.Tasks = append(projection.Tasks, agentTaskDTO{
-			TaskID: record.TaskID, DurationMinutes: record.DurationMinutes, Status: record.Status,
+			NeedsReview: conflicts[record.TaskID], TaskID: record.TaskID, DurationMinutes: record.DurationMinutes, Status: record.Status,
 			EarliestStartAt:           formatOptionalAgentTime(record.EarliestStartAt),
 			LatestFinishAt:            formatOptionalAgentTime(record.LatestFinishAt),
 			PreferredAfterWakeMinutes: record.PreferredAfterWakeMinutes,

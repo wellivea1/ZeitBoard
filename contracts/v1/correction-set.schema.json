@@ -23,14 +23,52 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["correction_id", "target_observation_id", "created_at", "reason", "changes"],
+      "allOf": [
+        {
+          "if": {
+            "required": ["acquisition_method"],
+            "properties": {
+              "acquisition_method": {
+                "const": "health_connect"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reason": {
+                "const": "source_conflict"
+              },
+              "changes": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": ["excluded"]
+                    },
+                    {
+                      "required": ["sleep_classification"]
+                    }
+                  ]
+                }
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": ["based_on_source_revision"]
+                },
+                {
+                  "required": ["supersedes_correction_ids"]
+                }
+              ]
+            }
+          }
+        }
+      ],
       "properties": {
         "correction_id": {
           "$ref": "common.schema.json#/$defs/identifier"
         },
         "target_observation_id": {
-          "$ref": "common.schema.json#/$defs/identifier"
-        },
-        "supersedes_correction_id": {
           "$ref": "common.schema.json#/$defs/identifier"
         },
         "created_at": {
@@ -39,6 +77,11 @@
         "reason": {
           "type": "string",
           "enum": ["user_edit", "duplicate", "invalid_range", "source_conflict"]
+        },
+        "acquisition_method": {
+          "type": "string",
+          "enum": ["manual", "health_connect"],
+          "description": "Correction author; omitted means manual. Health Connect provider revisions explicitly identify their source."
         },
         "changes": {
           "type": "object",
@@ -59,6 +102,17 @@
               "type": "boolean"
             }
           }
+        },
+        "supersedes_correction_ids": {
+          "type": "array",
+          "maxItems": 256,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "common.schema.json#/$defs/identifier"
+          }
+        },
+        "based_on_source_revision": {
+          "$ref": "common.schema.json#/$defs/timestamp"
         }
       }
     }

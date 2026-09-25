@@ -111,6 +111,9 @@ func (s *Store) UpdateTask(ctx context.Context, record TaskRecord, expectedRevis
 	if err != nil {
 		return err
 	}
+	if err := requireTaskReviewed(ctx, tx, record.TaskID); err != nil {
+		return err
+	}
 	if effectiveRevision(existing) != expectedRevision {
 		return ErrTaskRevisionConflict
 	}
@@ -153,6 +156,9 @@ func (s *Store) SetTaskStatus(ctx context.Context, taskID, status string, expect
 	defer tx.Rollback()
 	record, err := taskByIDFrom(ctx, tx, taskID)
 	if err != nil {
+		return err
+	}
+	if err := requireTaskReviewed(ctx, tx, taskID); err != nil {
 		return err
 	}
 	if effectiveRevision(record) != expectedRevision {
@@ -208,12 +214,13 @@ func (s *Store) DeleteTask(ctx context.Context, taskID string, expectedRevision 
 	if currentRevision != expectedRevision {
 		return ErrTaskRevisionConflict
 	}
-	// Revisions that already reached the synced backend need server-side
-	// erasure too (ADR-0017): enqueue every pushed revision before its
-	// bookkeeping disappears. Never-pushed tasks never left this device.
+	// Include the current revision even without an acknowledgment: its upload
+	// may have completed remotely before a local interruption.
 	erasedAt := time.Now().UTC().Format(time.RFC3339Nano)
 	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO local_sleep_erasures(record_id, erased_at)
-		SELECT record_id, ? FROM local_task_sync_records WHERE task_id = ?`, erasedAt, taskID); err != nil {
+		SELECT record_id, ? FROM local_task_sync_records WHERE task_id = ?
+        UNION SELECT record_id, ? FROM local_task_sync_conflicts WHERE task_id=?
+		UNION SELECT task_id || '_r' || revision, ? FROM local_tasks WHERE task_id=?`, erasedAt, taskID, erasedAt, taskID, erasedAt, taskID); err != nil {
 		_ = tx.Rollback()
 		return err
 	}
@@ -270,10 +277,14 @@ func (s *Store) OpenDomainTasks(ctx context.Context, zoneID string) ([]domain.Fl
 	if err != nil {
 		return nil, nil, err
 	}
+	conflicts, err := s.TaskSyncConflictIDs(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
 	var tasks []domain.FlexibleTask
 	var open []TaskRecord
 	for _, record := range records {
-		if record.Status != TaskStatusOpen {
+		if record.Status != TaskStatusOpen || conflicts[record.TaskID] {
 			continue
 		}
 		task, err := domainTaskFromRecord(record, zoneID)
@@ -344,7 +355,7 @@ func validateTask(record TaskRecord) error {
 	if record.CreatedAt.IsZero() {
 		return errors.New("created_at is required")
 	}
-	if record.Revision < 1 {
+	if record.Revision < 1 || int64(record.Revision) > 9007199254740991 {
 		return errors.New("revision must be at least 1")
 	}
 	if record.UpdatedAt.IsZero() {

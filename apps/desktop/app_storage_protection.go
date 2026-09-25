@@ -59,9 +59,8 @@ func (a *App) GetStorageProtection() (StorageProtectionDTO, error) {
 
 	candidates := []struct{ name, path string }{
 		{"Data folder", dir},
-		{"Sleep database", filepath.Join(dir, desktopDatabaseFile)},
+		{"Local database and backend credential", filepath.Join(dir, desktopDatabaseFile)},
 		{"Write-ahead log", filepath.Join(dir, desktopDatabaseFile+"-wal")},
-		{"Backend token", filepath.Join(dir, backendSyncTokenFile)},
 		{"Display settings", filepath.Join(dir, appearanceFileName)},
 		{"Reaching hours", filepath.Join(dir, reachingFileName)},
 	}
@@ -76,8 +75,7 @@ func (a *App) GetStorageProtection() (StorageProtectionDTO, error) {
 	for _, candidate := range candidates {
 		access, describeErr := privatefile.Describe(candidate.path)
 		if describeErr != nil {
-			// Absent is not a failure: the token exists only once sync is on,
-			// and the settings files only once something is saved.
+			// Absent settings files are expected until something is saved.
 			continue
 		}
 		checked++
