@@ -73,7 +73,6 @@ export function CalendarSourcesPanel({
         <ul className="calendar-source-list">
           {sources.map((source) => (
             <li className="calendar-source-row" data-kind={source.kind} key={source.sourceId}>
-              <span className="calendar-source-mark" aria-hidden="true" />
               <div>
                 <strong>{source.label}</strong>
                 <span>

@@ -1,5 +1,4 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
-import { Icon, type IconName } from "./Icon";
 import { usePendingApprovalsCount } from "../state/approvalQueue";
 import type { LogTab, PlanTab, ScreenId, SettingsTab } from "../types";
 
@@ -10,7 +9,6 @@ const AssistantRail = lazy(() =>
 interface NavItem {
   id: ScreenId;
   label: string;
-  icon: IconName;
   badge?: string;
 }
 
@@ -18,18 +16,18 @@ interface NavItem {
 // much undifferentiated navigation for someone operating under fatigue, which
 // is the condition this product is for.
 const primaryNavigation: NavItem[] = [
-  { id: "home", label: "Home", icon: "overview" },
-  { id: "plan", label: "Plan", icon: "calendar" },
-  { id: "rhythm", label: "Rhythm", icon: "timeline" },
-  { id: "log", label: "Log", icon: "sources" },
-  { id: "sharing", label: "Sharing", icon: "sharing" },
+  { id: "home", label: "Home" },
+  { id: "plan", label: "Plan" },
+  { id: "rhythm", label: "Rhythm" },
+  { id: "log", label: "Log" },
+  { id: "sharing", label: "Sharing" },
 ];
 
 // The utility group: things you configure once and revisit rarely. They stay
 // reachable, and they stop competing with the five you use daily.
 const utilityNavigation: NavItem[] = [
-  { id: "data-sources", label: "Data Sources", icon: "medications" },
-  { id: "settings", label: "Settings", icon: "settings" },
+  { id: "data-sources", label: "Data Sources" },
+  { id: "settings", label: "Settings" },
 ];
 
 const screenIds = new Set<ScreenId>([
@@ -44,7 +42,7 @@ export interface Route {
   settingsTab: SettingsTab;
 }
 
-const planTabs = new Set<PlanTab>(["tasks", "calendar"]);
+const planTabs = new Set<PlanTab>(["tasks", "week"]);
 const logTabs = new Set<LogTab>(["sleep", "medications", "markers"]);
 const settingsTabs = new Set<SettingsTab>(["display", "reaching", "sync", "computer", "data"]);
 
@@ -55,7 +53,7 @@ const settingsTabs = new Set<SettingsTab>(["display", "reaching", "sync", "compu
 const legacyRoutes: Record<string, Partial<Route> & { screen: ScreenId }> = {
   overview: { screen: "home" },
   timeline: { screen: "rhythm" },
-  calendar: { screen: "plan", planTab: "calendar" },
+  calendar: { screen: "plan", planTab: "week" },
   tasks: { screen: "plan", planTab: "tasks" },
   approvals: { screen: "plan", planTab: "tasks" },
   medications: { screen: "log", logTab: "medications" },
@@ -82,6 +80,10 @@ export function readRouteFromHash(hash: string): Route {
 
   if (screen === "plan" && planTabs.has(second as PlanTab)) {
     return { ...defaultRoute, screen, planTab: second as PlanTab };
+  }
+  // Plan › Calendar became Plan › Week when the board turned calendar-native.
+  if (screen === "plan" && second === "calendar") {
+    return { ...defaultRoute, screen, planTab: "week" };
   }
   if (screen === "log" && logTabs.has(second as LogTab)) {
     return { ...defaultRoute, screen, logTab: second as LogTab };
@@ -125,12 +127,10 @@ function NavigationLink({ item, active }: { item: NavItem; active: boolean }) {
       href={`#/${item.id}`}
       aria-label={item.badge ? `${item.label}, ${item.badge} pending` : item.label}
       aria-current={active ? "page" : undefined}
-      title={item.label}
     >
-      <Icon name={item.icon} />
-      <span>{item.label}</span>
+      {item.label}
       {item.badge && (
-        <span className="nav-badge" aria-label={`${item.badge} pending`}>
+        <span className="nav-badge" aria-hidden="true">
           {item.badge}
         </span>
       )}
@@ -138,8 +138,18 @@ function NavigationLink({ item, active }: { item: NavItem; active: boolean }) {
   );
 }
 
+function useToday() {
+  const [today, setToday] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setToday(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  return today.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+}
+
 export function AppShell({ screen, children }: { screen: ScreenId; children: ReactNode }) {
   const pendingCount = usePendingApprovalsCount();
+  const today = useToday();
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantLoaded, setAssistantLoaded] = useState(false);
 
@@ -150,17 +160,14 @@ export function AppShell({ screen, children }: { screen: ScreenId; children: Rea
 
   return (
     <div className="app-shell" data-assistant-open={assistantOpen || undefined}>
-      <aside className="sidebar">
-        <a className="brand" href="#/home" aria-label="ZeitBoard home">
-          <span className="brand-mark" aria-hidden="true">
-            <span />
-          </span>
-          <span>
-            <strong>ZeitBoard</strong>
-            <small>Planner</small>
-          </span>
+      {/* A masthead over one sheet: the name, the day, and the destinations in
+          small capitals. The sidebar it replaces spent a fixed column on seven
+          links and a privacy blurb. */}
+      <header className="masthead">
+        <a className="wordmark" href="#/home" aria-label="ZeitBoard home">
+          ZeitBoard
         </a>
-
+        <span className="masthead-date">{today}</span>
         <nav className="primary-nav" aria-label="Primary navigation">
           {primaryNavigation.map((item) => (
             <NavigationLink
@@ -174,34 +181,23 @@ export function AppShell({ screen, children }: { screen: ScreenId; children: Rea
             />
           ))}
         </nav>
-
-        <div className="sidebar-footer">
-          <nav className="utility-nav" aria-label="Settings and sources">
-            {utilityNavigation.map((item) => (
-              <NavigationLink key={item.id} item={item} active={screen === item.id} />
-            ))}
-          </nav>
-          <div className="privacy-note">
-            <Icon name="shield" />
-            <span>
-              <strong>Private by design</strong>
-              <small>Data stays local; syncs only to your own server if you turn sync on.</small>
-            </span>
-          </div>
-        </div>
-      </aside>
+        <nav className="utility-nav" aria-label="Settings and sources">
+          {utilityNavigation.map((item) => (
+            <NavigationLink key={item.id} item={item} active={screen === item.id} />
+          ))}
+          <button
+            className="assistant-toggle"
+            type="button"
+            data-active={assistantOpen || undefined}
+            aria-pressed={assistantOpen}
+            onClick={toggleAssistant}
+          >
+            Assistant
+          </button>
+        </nav>
+      </header>
 
       <main className="main-content" id="main-content" tabIndex={-1}>
-        <button
-          className="assistant-toggle"
-          type="button"
-          data-active={assistantOpen || undefined}
-          aria-pressed={assistantOpen}
-          onClick={toggleAssistant}
-        >
-          <Icon name="sparkle" />
-          <span>Assistant</span>
-        </button>
         {children}
       </main>
 

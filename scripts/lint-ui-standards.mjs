@@ -96,7 +96,7 @@ for (const legacy of ["overview", "calendar", "tasks", "approvals", "medications
 // Plan and Log are tab hosts, not new monoliths: they compose the screens they
 // absorbed rather than copying them.
 for (const [name, required] of [
-  ["PlanScreen.tsx", ["CalendarScreen", "TasksScreen", "ScreenTabs"]],
+  ["PlanScreen.tsx", ["WeekScreen", "TasksScreen", "ScreenTabs"]],
   ["LogScreen.tsx", ["SleepLogPanel", "MedicationsScreen", "RhythmMarkersPanel", "ScreenTabs"]],
 ]) {
   const path = join(frontend, "screens", name);
@@ -247,16 +247,18 @@ if (
   );
 }
 
-// Hiding the sidebar footer on a narrow window used to be harmless because
-// Data Sources was a primary destination. After slice U-H it lives in the
-// utility group, and hiding the footer would strand it and Settings with it.
+// The utility group (Data Sources, Settings, the assistant) sits in the
+// masthead beside the five destinations. A narrow window sets it on its own
+// line; hiding it there would strand Data Sources and Settings.
 const shellStyles = readFileSync(join(frontend, "styles.css"), "utf8");
-const narrow = shellStyles.slice(shellStyles.indexOf("@media (max-width: 700px)"));
-if (/\.sidebar-footer,?[^{]*\{[^}]*display:\s*none/.test(narrow)) {
-  fail(
-    join(frontend, "styles.css"),
-    "The utility group must stay reachable on a narrow window; do not hide .sidebar-footer.",
-  );
+for (const match of shellStyles.matchAll(/@media \(max-width: \d+px\)\s*\{/g)) {
+  const block = shellStyles.slice(match.index, shellStyles.indexOf("\n}\n", match.index));
+  if (/\.utility-nav,?[^{]*\{[^}]*display:\s*none/.test(block)) {
+    fail(
+      join(frontend, "styles.css"),
+      "The utility group must stay reachable on a narrow window; do not hide .utility-nav.",
+    );
+  }
 }
 
 // One content column on the Home surface. Every section there carries a
@@ -278,13 +280,51 @@ for (const name of ["overview.css", "outlook.css"]) {
     });
 }
 
-// The assistant toggle is absolutely positioned over the top-right of the
-// content pane, which is where every page header puts its status and controls.
-if (!/\.page-header\s*\{[^}]*padding-inline-end/s.test(shellStyles)) {
-  fail(
-    join(frontend, "styles.css"),
-    "The page header must reserve room for the floating assistant toggle.",
+// The assistant toggle is a masthead link like Settings. It used to float over
+// the top-right of the content, where every page header puts its controls,
+// and each header had to reserve room for it.
+const masthead = shell.match(/<header className="masthead">([\s\S]*?)<\/header>/)?.[1] ?? "";
+if (!masthead.includes('className="assistant-toggle"')) {
+  fail(shellPath, "The assistant toggle belongs in the masthead, not floating over the page.");
+}
+
+// The Almanac redesign (ui-refactor-plan.md §14): no coloured side stripes and
+// no pills. A 3px bar down the left of a block and a rounded tinted capsule
+// around a word were the two habits that made every screen look generated;
+// a rule across the page and the word itself do the same work. Hairlines of
+// 1px (dividers, ticks, a now line) are allowed; anything heavier on one side
+// is a stripe.
+const stripe =
+  /border-(?:left|right|inline-start|inline-end)(?:-width)?\s*:\s*(?:\d*\.)?\d+px/;
+for (const path of [join(frontend, "styles.css"), ...filesUnder(join(frontend, "styles"), ".css")]) {
+  const source = readFileSync(path, "utf8").replace(/\/\*[\s\S]*?\*\//g, (comment) =>
+    comment.replace(/[^\n]/g, " "),
   );
+  source.split(/\r?\n/).forEach((line, index) => {
+    const side = line.match(stripe);
+    const width = side ? Number.parseFloat(side[0].split(":")[1]) : 0;
+    if (width > 1.5) {
+      fail(path, `line ${index + 1} draws a ${width}px side stripe; divide with a rule instead.`);
+    }
+    const inset = line.match(/inset\s+(-?(?:\d*\.)?\d+)px\s+0\s+0/);
+    if (inset && Math.abs(Number.parseFloat(inset[1])) > 1.5) {
+      fail(path, `line ${index + 1} draws a side stripe with an inset shadow.`);
+    }
+    if (/--radius-pill|border-radius:\s*999/.test(line)) {
+      fail(path, `line ${index + 1} rounds a pill; set the word on the page instead.`);
+    }
+  });
+  // A pseudo-element painted as a narrow full-height bar is the same stripe.
+  for (const rule of source.matchAll(/([^{}]*::?(?:before|after)[^{}]*)\{([^}]*)\}/g)) {
+    const body = rule[2];
+    const narrow = body.match(/(?:^|[\s;])width:\s*((?:\d*\.)?\d+)px/);
+    const tall = /inset:\s*0 auto 0 0|inset-block:\s*0|top:\s*0;[\s\S]*bottom:\s*0|height:\s*100%/.test(
+      body,
+    );
+    if (narrow && Number.parseFloat(narrow[1]) > 1.5 && Number.parseFloat(narrow[1]) <= 8 && tall) {
+      fail(path, `${rule[1].trim()} paints a side stripe.`);
+    }
+  }
 }
 
 const componentStyles = filesUnder(join(frontend, "styles"), ".css");
@@ -310,6 +350,8 @@ for (const token of [
   "--radius-card",
   "--radius-overlay",
   "--type-data-large",
+  "--font-serif",
+  "--accent",
 ]) {
   if (!tokenSource.includes(`${token}:`)) {
     fail(join(frontend, "styles.css"), `Required UI token ${token} is missing.`);

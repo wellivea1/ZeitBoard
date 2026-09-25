@@ -11,6 +11,9 @@ vi.mock("../state/approvalQueue", () => ({
     breakdown: { suggestions: 0, conflicts: 0, assistant: 0, requests: 0 },
   }),
 }));
+vi.mock("../state/approvals", () => ({
+  useApprovals: () => ({ pending: [], busyProposalId: null, decide: vi.fn() }),
+}));
 
 // The forecast puts now inside a sleep: three hours asleep, then the waking
 // boundary. There is no onset ahead, only this sleep's end.
@@ -39,12 +42,12 @@ vi.mock("../data/fixture", async (importOriginal) => {
   };
 });
 
-describe("Home's sleep panel", () => {
+describe("Home's lead sentence", () => {
   // Found by using the app at 3 AM: the panel was titled "Next sleep" and
   // showed only a waking window.
-  it("leads with waking when the forecast already has you asleep", async () => {
+  it("gives the end of the sleep the forecast already has you in", async () => {
     render(<HomeScreen />);
-    expect(await screen.findByText("Likely waking")).toBeVisible();
-    expect(screen.queryByText("Next sleep")).toBeNull();
+    expect(await screen.findByText(/This sleep is likely to end between/)).toBeVisible();
+    expect(screen.queryByText(/Sleep is likely to begin/)).toBeNull();
   });
 });

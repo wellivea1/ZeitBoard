@@ -29,9 +29,9 @@ const SharingScreen = lazy(() =>
 
 function ScreenLoading() {
   return (
-    <div className="panel empty-state" role="status">
-      Loading view...
-    </div>
+    <p className="screen-loading" role="status">
+      Opening…
+    </p>
   );
 }
 

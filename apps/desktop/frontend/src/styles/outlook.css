@@ -1,97 +1,104 @@
-/* The 48-72 hour operational view (ADR-0034), drawn as one timeline with a
- * row each for the rhythm, reachable hours and fixed events.
- *
- * The three presence states reuse the existing semantic state tokens, so the
- * timeline means the same thing here as the actogram does on Rhythm and follows
- * every theme, including amber and high contrast, without a second palette. */
+/* The next three days (ADR-0034) as Home's figure: one axis, a row each for
+ * the rhythm, reachable hours and fixed events, set between hairlines like a
+ * printed chart. Colour carries only what the rhythm means: likely asleep in
+ * ink blue, the uncertain boundary hatched, likely awake left as paper. */
 
 .outlook {
+  margin-top: 34px;
   display: grid;
-  gap: var(--space-4);
-  padding: var(--space-5) var(--space-6);
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-card);
+  gap: 12px;
 }
 
 .outlook-head {
   display: flex;
-  gap: var(--space-3);
+  flex-wrap: wrap;
+  gap: 6px 16px;
   align-items: baseline;
   justify-content: space-between;
 }
 
-.outlook-head h3 {
+.outlook-head h2 {
   margin: 0;
-  font-size: var(--type-section);
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-style: italic;
+  font-weight: 400;
+}
+
+.figure-number {
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .outlook-head a {
-  color: var(--sage-dark);
   font-size: var(--type-label);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .outlook-timeline {
   display: grid;
-  gap: var(--space-3);
+  gap: 10px;
   margin: 0;
 }
 
 /* Row labels sit in a narrow gutter so every track shares one time axis. */
 .outlook-grid {
   display: grid;
-  grid-template-columns: 76px minmax(0, 1fr);
+  grid-template-columns: 88px minmax(0, 1fr);
   align-items: center;
-  gap: var(--space-2) var(--space-3);
+  gap: 8px 14px;
 }
 
 .outlook-row-label {
   color: var(--muted);
-  font-size: var(--type-label);
-  font-weight: 600;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .outlook-track {
   position: relative;
-  height: 26px;
-  overflow: hidden;
-  border-radius: var(--radius-control);
-  background: var(--panel-alt);
+  height: 20px;
+  box-shadow:
+    inset 0 1px 0 var(--divider),
+    inset 0 -1px 0 var(--divider);
 }
 
 .outlook-track-thin {
-  height: 12px;
+  height: 6px;
+  box-shadow: none;
 }
 
 .outlook-track-events {
-  height: 16px;
-  overflow: visible;
-  background: transparent;
-  border-block: 1px dashed var(--divider);
+  height: 12px;
+  box-shadow: none;
 }
 
 /* The uncertain band is hatched rather than solid, and that is the point
- * rather than decoration. Awake, uncertain and asleep are separated by hue in
- * this palette but sit close in luminance, so three solid blocks are hard to
- * tell apart in greyscale, in the amber-glasses theme, or for a reader with a
- * colour vision deficiency. Stripes read as "not solid knowledge" against two
- * filled neighbours in any theme, which is exactly what the band means: the
- * model declines to say which side of the boundary this is. The actogram uses
- * the same repeating-gradient language for forecast rows. */
+ * rather than decoration: stripes read as "not solid knowledge" against a
+ * filled neighbour in any theme, greyscale and amber included, which is what
+ * the band means. The model declines to say which side of the boundary this
+ * is. */
 .outlook-band {
   position: absolute;
   inset-block: 0;
-  background-color: transparent;
   background-image: repeating-linear-gradient(
     135deg,
-    var(--state-uncertain) 0 5px,
-    transparent 5px 10px
+    var(--state-uncertain-fill) 0 1.5px,
+    transparent 1.5px 5px
   );
 }
 
 .outlook-band[data-presence="awake"] {
-  background-color: var(--state-awake);
   background-image: none;
 }
 
@@ -101,193 +108,182 @@
 }
 
 .outlook-band[data-presence="unknown"] {
-  background-color: var(--meter-muted);
+  background-color: var(--panel-alt);
   background-image: none;
 }
 
-/* A recorded episode is evidence, not a forecast, and reads as outlined
- * against the prediction rather than as a different colour. */
+/* A recorded episode is evidence, not a forecast: outlined in ink. */
 .outlook-band[data-observed] {
-  box-shadow: inset 0 0 0 2px var(--ink);
+  box-shadow: inset 0 0 0 1.5px var(--ink);
 }
 
 .outlook-day-mark {
   position: absolute;
   inset-block: 0;
+  width: 1px;
   display: block;
-  border-left: 1px solid var(--paper);
+  background: var(--divider);
 }
 
 .outlook-now {
   position: absolute;
-  inset-block: 0;
+  z-index: 1;
+  top: -5px;
+  bottom: -5px;
   left: 0;
-  width: 3px;
-  background: var(--ink);
+  width: 1.5px;
+  background: var(--accent);
 }
 
-/* Reachable hours: solid where the person is predicted awake for part of the
- * window, hatched where the only overlap sits on an uncertain boundary, and
- * faint where they are predicted asleep for all of it. */
+/* Reachable hours: ink where the person is predicted awake for part of the
+ * window, hatched where the only overlap is an uncertain boundary, faint where
+ * they are predicted asleep for all of it. */
 .outlook-reach {
   position: absolute;
   inset-block: 0;
-  border-radius: var(--radius-control);
-  background: var(--sage);
+  background: var(--muted);
 }
 
 .outlook-reach[data-status="partial"] {
-  background: repeating-linear-gradient(135deg, var(--state-uncertain) 0 4px, transparent 4px 8px);
-  box-shadow: inset 0 0 0 1px var(--state-uncertain);
+  background: repeating-linear-gradient(
+    135deg,
+    var(--state-uncertain-fill) 0 2px,
+    transparent 2px 5px
+  );
 }
 
 .outlook-reach[data-status="unreachable"] {
-  background: var(--meter-muted);
+  background: var(--divider);
 }
 
 .outlook-event {
   position: absolute;
-  inset-block: 2px;
-  min-width: 8px;
-  border-radius: var(--radius-control);
+  inset-block: 1px;
+  min-width: 3px;
   background: var(--ink);
 }
 
-/* An event that lands in or against predicted sleep is the most useful thing
- * this view can point at, so it is the one mark that is not neutral. */
 .outlook-event[data-conflict] {
-  background: var(--danger-action-bg);
-  box-shadow: 0 0 0 2px var(--danger-bg);
+  background: var(--canvas);
+  box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 
-/* The labels sit outside the tracks: inside them the overflow that keeps the
-   bands square-cut clipped them away entirely. */
 .outlook-axis {
   position: relative;
-  height: var(--space-4);
+  height: 16px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .outlook-axis small {
   position: absolute;
-  inset-block-start: 0;
-  padding-inline-start: var(--space-1);
-  color: var(--muted);
-  font-size: var(--type-label);
+  top: 0;
+  padding-left: 5px;
+  font-size: inherit;
   white-space: nowrap;
+  box-shadow: inset 1px 0 0 var(--divider);
 }
 
 .outlook-axis .outlook-axis-now {
   left: 0;
-  padding-inline-start: 0;
-  color: var(--ink);
-  font-weight: 700;
+  padding-left: 0;
+  color: var(--accent);
+  font-family: var(--font-serif);
+  font-size: 13px;
+  font-style: italic;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  box-shadow: none;
 }
 
 .outlook-legend {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-1) var(--space-4);
+  gap: 6px 18px;
   align-items: center;
-  margin: 0;
+  padding-left: 102px;
   color: var(--muted);
   font-size: var(--type-label);
 }
 
 .outlook-legend span {
   display: inline-flex;
-  gap: var(--space-1);
+  gap: 6px;
   align-items: center;
 }
 
-/* The legend swatches carry the same fill as the marks, hatching included, so
- * the key and the timeline cannot drift apart. */
 .outlook-legend span::before {
   content: "";
-  width: var(--space-3);
-  height: var(--space-2);
-  border-radius: var(--radius-control);
-  background-color: var(--panel-alt);
-  background-image: repeating-linear-gradient(
-    135deg,
-    var(--state-uncertain) 0 3px,
-    transparent 3px 6px
-  );
-}
-
-.outlook-legend span[data-presence="awake"]::before {
-  background-color: var(--state-awake);
-  background-image: none;
+  width: 12px;
+  height: 8px;
+  box-shadow: inset 0 0 0 1px var(--divider);
 }
 
 .outlook-legend span[data-presence="asleep"]::before {
-  background-color: var(--state-asleep);
-  background-image: none;
+  background: var(--state-asleep);
+  box-shadow: none;
+}
+
+.outlook-legend span[data-presence="uncertain"]::before {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--state-uncertain-fill) 0 1.5px,
+    transparent 1.5px 4px
+  );
 }
 
 .outlook-legend span[data-legend="reach"]::before {
-  height: 5px;
-  background-color: var(--sage);
-  background-image: none;
+  height: 4px;
+  background: var(--muted);
+  box-shadow: none;
 }
 
 .outlook-legend span[data-legend="event"]::before {
-  width: var(--space-2);
-  background-color: var(--ink);
-  background-image: none;
+  width: 4px;
+  background: var(--ink);
+  box-shadow: none;
 }
 
 .outlook-legend small {
-  margin-inline-start: auto;
-  font-size: var(--type-label);
+  font-size: inherit;
 }
 
 .outlook-notice {
   display: flex;
-  gap: var(--space-4);
-  align-items: center;
-  justify-content: space-between;
-  color: var(--muted);
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  align-items: baseline;
+  padding: 12px 0;
+  border-block: 1px solid var(--divider);
 }
 
-.outlook-notice > svg {
-  color: var(--state-uncertain);
-}
-
-.outlook-notice > span {
-  display: grid;
-  flex: 1;
-  gap: var(--space-1);
+.outlook-notice svg {
+  display: none;
 }
 
 .outlook-notice strong {
-  color: var(--ink);
-  font-size: var(--type-body-strong);
+  display: block;
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 500;
 }
 
 .outlook-notice small {
+  color: var(--muted);
   font-size: var(--type-body);
 }
 
-@media (max-width: 700px) {
-  .outlook {
-    padding-inline: var(--space-4);
-  }
-
+@media (max-width: 760px) {
   .outlook-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: 60px minmax(0, 1fr);
+    gap: 6px 10px;
   }
 
-  .outlook-row-label:empty {
-    display: none;
-  }
-
-  .outlook-legend small {
-    margin-inline-start: 0;
-    flex-basis: 100%;
-  }
-
-  .outlook-notice {
-    flex-direction: column;
-    align-items: flex-start;
+  .outlook-legend {
+    padding-left: 0;
   }
 }

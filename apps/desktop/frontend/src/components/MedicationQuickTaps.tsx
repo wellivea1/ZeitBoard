@@ -24,11 +24,47 @@ function browserZone() {
 function lastEventWording(event: MedicationLog | undefined, now: Date) {
   if (!event) return "";
   const at = new Date(event.doseLocal.slice(0, 16));
-  if (Number.isNaN(at.getTime())) return `last ${event.status} ${event.civilTime}`;
+  const status = event.status === "taken" ? "Last taken" : "Last skipped";
+  if (Number.isNaN(at.getTime())) return `${status} ${event.civilTime}`;
   const day = relativeDay(at, now);
   // "yesterday", but "Monday" and "Tue, Jul 21" keep their capitals.
   const phrase = ["Today", "Tonight", "Yesterday"].includes(day) ? day.toLowerCase() : day;
-  return `last ${event.status} ${phrase} ${clockTime(at)}`;
+  return `${status} ${phrase} at ${clockTime(at)}`;
+}
+
+/** "10:00 PM" from a schedule's "22:00". */
+function civilClock(value: string) {
+  const [hour, minute] = value.split(":").map(Number);
+  if (hour === undefined || minute === undefined || !Number.isFinite(hour + minute)) return value;
+  return clockTime(new Date(2000, 0, 1, hour, minute));
+}
+
+function usualWording(medication: MedicationDefinition) {
+  const schedule = medication.schedule;
+  if (!schedule) return "";
+  if (schedule.kind === "as_needed") return "As needed";
+  const times = schedule.civilTimes.map(civilClock);
+  if (times.length === 0) return schedule.summary;
+  const list =
+    times.length === 1 ? times[0] : `${times.slice(0, -1).join(", ")} and ${times.at(-1)}`;
+  const cycle =
+    schedule.kind === "cycling" && schedule.daysOn && schedule.daysOff
+      ? `, ${schedule.daysOn} days on and ${schedule.daysOff} off`
+      : "";
+  return `Usually at ${list}${cycle}`;
+}
+
+/** "Tablet, 5 mg. Usually at 10:00 PM. Last taken yesterday at 10:05 PM." */
+function doseSentence(medication: MedicationDefinition, last: MedicationLog | undefined) {
+  const form = medication.detailLabel.replace(/ · /g, ", ");
+  return [
+    form && form.charAt(0).toUpperCase() + form.slice(1),
+    usualWording(medication),
+    lastEventWording(last, new Date()),
+  ]
+    .filter(Boolean)
+    .map((part) => `${part}.`)
+    .join(" ");
 }
 
 export function MedicationQuickTaps({
@@ -52,7 +88,6 @@ export function MedicationQuickTaps({
       </p>
     );
   }
-  const now = new Date();
   const record = (medication: MedicationDefinition, status: MedicationEventStatus) =>
     void onLog({
       medicationId: medication.medicationId,
@@ -69,20 +104,16 @@ export function MedicationQuickTaps({
         const last = events
           .filter((event) => event.medicationId === medication.medicationId)
           .sort((a, b) => b.doseLocal.localeCompare(a.doseLocal))[0];
-        const details = [
-          medication.detailLabel,
-          medication.schedule ? medication.schedule.summary : "",
-          lastEventWording(last, now),
-        ].filter(Boolean);
+        const details = doseSentence(medication, last);
         return (
           <li key={medication.medicationId}>
             <div>
               <strong>{medication.label}</strong>
-              {details.length > 0 && <small>{details.join(" · ")}</small>}
+              {details && <small>{details}</small>}
             </div>
             <div className="medication-tap-actions">
               <button
-                className="button primary compact"
+                className="button ghost"
                 type="button"
                 disabled={!available || busy}
                 aria-label={`Record ${medication.label} taken now`}
@@ -91,8 +122,9 @@ export function MedicationQuickTaps({
                 Taken
               </button>
               <button
-                className="button secondary compact"
+                className="button ghost"
                 type="button"
+                data-quiet
                 disabled={!available || busy}
                 aria-label={`Record ${medication.label} skipped now`}
                 onClick={() => record(medication, "skipped")}

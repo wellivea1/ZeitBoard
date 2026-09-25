@@ -1,9 +1,11 @@
+/* A line of context under a page title, in the reading face. */
 .screen-context {
+  max-width: 70ch;
   margin: 0 0 var(--space-5);
-  padding: var(--space-2) 0 var(--space-2) var(--space-4);
   color: var(--muted);
-  border-left: 2px solid var(--state-asleep);
-  font-size: var(--type-body);
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-style: italic;
   line-height: 1.5;
 }
 
@@ -13,33 +15,18 @@
 }
 
 /* Shared by Plan, Log and Rhythm since slice U-H. One tablist, one look; three
- * copies would have drifted apart the first time one of them was adjusted. */
+ * copies would have drifted apart the first time one of them was adjusted.
+ * Small capitals, the chosen one underlined, as the masthead marks its page. */
 .screen-tabs {
-  min-height: 52px;
-  padding: 0;
+  min-height: 44px;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  border-radius: 0;
-}
-
-.screen-tabs .filter {
-  min-height: 44px;
-  border-bottom: 2px solid transparent;
-  border-radius: 0;
-}
-
-.screen-tabs .filter.active {
-  color: var(--ink);
-  background: transparent;
-  border-bottom-color: var(--state-asleep);
+  gap: 26px;
+  border-bottom: 1px solid var(--divider);
 }
 
 .screen-tab-panel {
-  margin-top: var(--space-2);
+  margin-top: 22px;
 }
 
 /* A tabbed screen is one surface, like .rhythm-screen: the tabs change what is
@@ -49,19 +36,18 @@
   overflow-x: clip;
 }
 
-/* The count on the Plan tab. Absent when nothing is pending — a badge that is
- * always there is a badge nobody reads. */
+/* The count on the Plan tab, set like every count: an italic numeral in the
+ * accent. Absent when nothing is pending — a badge that is always there is a
+ * badge nobody reads. */
 .screen-tab-badge {
-  min-width: 18px;
-  margin-inline-start: var(--space-2);
-  padding: 0 var(--space-1);
-  display: inline-block;
-  color: var(--paper);
-  background: var(--state-uncertain);
-  border-radius: var(--radius-control);
-  font-size: var(--type-label);
-  font-variant-numeric: tabular-nums;
-  text-align: center;
+  margin-inline-start: 6px;
+  color: var(--accent);
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-style: italic;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
 }
 
 /* A screen rendered inside a tab keeps its description and its controls and
@@ -80,19 +66,17 @@
 }
 
 .panel-header p {
-  max-width: 690px;
+  max-width: 70ch;
   margin: 0;
   color: var(--muted);
-  font-size: var(--type-body);
+  font-family: var(--font-serif);
+  font-size: 16px;
   line-height: 1.5;
 }
 
 .rhythm-visual-surface {
   min-width: 0;
   padding: var(--space-6) 0 0;
-  background: transparent;
-  border: 0;
-  border-radius: 0;
 }
 
 .rhythm-visual-surface .panel-heading {
@@ -122,12 +106,6 @@
 
 .actogram-visual-axis span:last-child {
   transform: translateX(-100%);
-}
-
-.actogram-visual-track,
-.actogram-band,
-.actogram-footer i {
-  border-radius: var(--radius-control);
 }
 
 .actogram-footer {

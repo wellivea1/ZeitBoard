@@ -1,4 +1,3 @@
-import { Icon } from "./Icon";
 import { isCommitmentConflict } from "../data/outlook";
 import type { OutlookData, OutlookSegment, Presence } from "../data/outlook";
 
@@ -28,9 +27,13 @@ function percent(hours: number, horizonHours: number) {
   return `${Math.max(0, Math.min(100, (hours / horizonHours) * 100))}%`;
 }
 
+const DAY_WORDS = ["", "one", "two", "three", "four", "five", "six", "seven"];
+
 function horizonTitle(hours: number) {
   const days = Math.round(hours / 24);
-  return days >= 2 ? `Next ${days} days` : `Next ${Math.round(hours)} hours`;
+  return days >= 2
+    ? `The next ${DAY_WORDS[days] ?? days} days`
+    : `The next ${Math.round(hours)} hours`;
 }
 
 function segmentTitle(segment: OutlookSegment) {
@@ -166,23 +169,28 @@ function OutlookTimeline({ data }: { data: OutlookData }) {
 }
 
 function OutlookNotice({ data }: { data: OutlookData }) {
-  const withheld = data.status === "withheld" || data.status === "unavailable";
+  // Home's lead sentence already says why the state is unknown, so a withheld
+  // figure says what brings it back rather than repeating the reason.
+  const withheld = data.status === "withheld";
+  const unavailable = data.status === "unavailable";
+  const title = withheld
+    ? "The next three days are not drawn"
+    : unavailable
+      ? "The next three days could not be read"
+      : "Not enough history to look ahead yet";
+  const detail = withheld
+    ? "A forecast starts from where you are in the cycle. Record your last sleep or waking and it returns."
+    : unavailable
+      ? (data.withheldMessage ?? "Nothing saved has changed.")
+      : (data.refusal?.message ?? data.freshness.explanation);
   return (
     <div className="outlook-notice" data-status={data.status}>
-      <Icon name={withheld ? "clock" : "focus"} />
       <span>
-        <strong>
-          {withheld
-            ? "The next three days are not being shown"
-            : "Not enough history to look ahead yet"}
-        </strong>
-        <small>{data.withheldMessage ?? data.refusal?.message ?? data.freshness.explanation}</small>
+        <strong>{title}</strong>
+        <small>{detail}</small>
       </span>
-      <a
-        className="button secondary"
-        href={data.status === "unavailable" ? "#/data-sources" : "#/log/sleep"}
-      >
-        {data.status === "unavailable" ? "Check Data Sources" : "Log sleep"}
+      <a className="button secondary" href={unavailable ? "#/data-sources" : "#/log/sleep"}>
+        {unavailable ? "Check Data Sources" : "Log sleep"}
       </a>
     </div>
   );
@@ -192,7 +200,10 @@ export function OutlookPanel({ data }: { data: OutlookData }) {
   return (
     <section className="outlook" aria-labelledby="outlook-title">
       <header className="outlook-head">
-        <h3 id="outlook-title">{horizonTitle(data.horizonHours)}</h3>
+        <h2 id="outlook-title">
+          <span className="figure-number">Fig. 1</span>
+          {horizonTitle(data.horizonHours)}
+        </h2>
         <a href="#/rhythm">Full rhythm</a>
       </header>
       {data.status === "available" ? (

@@ -53,6 +53,25 @@ export function clockRange(start: Date, end: Date) {
   return `${clockTime(start)} – ${clockTime(end)}`;
 }
 
+/**
+ * The two ends of a range for a sentence's "between A and B": ["7:15", "10:10
+ * AM"] when the halves of the day agree, else ["11:30 PM", "1:35 AM"].
+ */
+export function betweenClocks(start: Date, end: Date): [string, string] {
+  const a = clockParts(start);
+  const b = clockParts(end);
+  if (a.dayPeriod && a.dayPeriod === b.dayPeriod) return [a.clock, `${b.clock} ${b.dayPeriod}`];
+  return [clockTime(start), clockTime(end)];
+}
+
+/** "tonight", "tomorrow", "on Saturday": the day a moment falls on, for a sentence. */
+export function dayInSentence(date: Date, now: Date) {
+  const day = relativeDay(date, now);
+  return ["Today", "Tonight", "Tomorrow", "Yesterday"].includes(day)
+    ? day.toLowerCase()
+    : `on ${day}`;
+}
+
 /** "Tonight 11:30 PM – 1:35 AM", named by the day the range begins. */
 export function relativeRange(start: Date, end: Date, now: Date) {
   return `${relativeDay(start, now)} ${clockRange(start, end)}`;

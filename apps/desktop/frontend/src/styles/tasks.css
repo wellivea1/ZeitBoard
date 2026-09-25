@@ -1,56 +1,49 @@
 /* Plan > Tasks: add a task, decide its suggested time, see the list, look back.
-   Four cards with space between them, in the order the work happens. */
+   Four sections of one page in the order the work happens, each under a
+   small-capital title and a rule; nothing is boxed. */
 .task-workspace {
   display: grid;
-  gap: var(--space-4);
+  gap: 40px;
 }
 .task-workspace > section,
 .task-workspace > details {
   min-width: 0;
-  padding: var(--space-5);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-card);
-  background: var(--paper);
 }
 
 .plan-section-head {
+  margin-bottom: 4px;
+  padding-bottom: 8px;
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2) var(--space-3);
+  gap: 4px 16px;
   align-items: baseline;
   justify-content: space-between;
-  margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--ink);
 }
 .plan-section-head h2 {
   margin: 0;
   display: inline-flex;
-  gap: var(--space-2);
-  align-items: center;
-  font-size: var(--type-section);
+  gap: 10px;
+  align-items: baseline;
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 .plan-section-head small {
   color: var(--muted);
-  font-size: var(--type-label);
-}
-
-/* A count beside a heading: quiet when zero is not shown at all. */
-.count {
-  min-width: 22px;
-  height: 22px;
-  padding: 0 7px;
-  display: inline-grid;
-  place-items: center;
-  border-radius: var(--radius-pill);
-  color: var(--confidence-medium-text);
-  background: var(--confidence-medium-bg);
-  font-size: var(--type-label);
-  font-weight: 700;
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-style: italic;
 }
 
 .plan-empty {
-  margin: 0;
+  margin: 12px 0 0;
   color: var(--muted);
-  font-size: var(--type-body);
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-style: italic;
 }
 
 .decision-queue .proposal-stack {
@@ -61,24 +54,32 @@
 }
 
 .decision-history > summary {
+  padding-bottom: 8px;
   cursor: pointer;
   display: flex;
-  gap: var(--space-2);
-  align-items: center;
-  font-size: var(--type-body-strong);
+  gap: 10px;
+  align-items: baseline;
+  border-bottom: 1px solid var(--divider);
+  font-size: 11.5px;
   font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 .decision-history[open] > summary {
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--space-2);
 }
 .decision-history .count {
   color: var(--muted);
-  background: var(--panel-alt);
 }
 
 .task-editor h2 {
-  margin: 0 0 var(--space-4);
-  font-size: var(--type-section);
+  margin: 0 0 var(--space-3);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--ink);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 /* One row to add a task: name, minutes, Add. Timing constraints are optional
    and fold out underneath. */
@@ -108,6 +109,8 @@
 }
 .task-feedback {
   margin: var(--space-3) 0 0;
+  font-family: var(--font-serif);
+  font-size: 15px;
 }
 .task-feedback:empty {
   display: none;
@@ -119,15 +122,14 @@
 }
 
 .task-delete-confirmation {
-  padding: var(--space-4);
   margin-block: 0 var(--space-4);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  background: var(--panel-alt);
+  padding: 12px 0;
+  border-block: 1px solid var(--danger-border);
+  font-family: var(--font-serif);
 }
 
 /* The task list: done box, what and when, then its two actions on the same
-   line at every width the sidebar leaves room for. */
+   line at every width. */
 .task-list {
   margin: 0;
   padding: 0;
@@ -138,40 +140,37 @@
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: var(--space-3);
   align-items: center;
-  padding-block: var(--space-3);
-  border-top: 1px solid var(--divider);
-}
-.task-item:first-child {
-  padding-top: 0;
-  border-top: 0;
-}
-.task-item:last-child {
-  padding-bottom: 0;
+  padding-block: 12px;
+  border-bottom: 1px solid var(--divider);
 }
 .task-item input[type="checkbox"] {
   width: 18px;
   height: 18px;
   margin: 0;
-  accent-color: var(--sage);
+  accent-color: var(--ink);
 }
 .task-item-text {
   min-width: 0;
   display: grid;
-  gap: 2px;
+  gap: 3px;
 }
 .task-item-text strong {
   color: var(--ink);
-  font-size: var(--type-body);
-  font-weight: 650;
+  font-family: var(--font-serif);
+  font-size: 19px;
+  font-weight: 500;
+  line-height: 1.25;
   overflow-wrap: anywhere;
 }
 .task-item-text > span {
   color: var(--muted);
-  font-size: var(--type-label);
+  font-family: var(--font-serif);
+  font-size: 15px;
 }
 .task-scheduled {
-  color: var(--sage-dark);
-  font-weight: 700;
+  color: var(--ink);
+  font-weight: 600;
+  font-variant-numeric: lining-nums tabular-nums;
 }
 .task-item-text .task-chip {
   justify-self: start;
@@ -179,11 +178,10 @@
 }
 .task-item[data-status="done"] .task-item-text strong {
   color: var(--muted);
-  font-weight: 500;
   text-decoration: line-through;
 }
 .task-item .task-actions {
-  gap: var(--space-1);
+  gap: var(--space-1) var(--space-4);
 }
 @media (max-width: 560px) {
   .task-editor > form,
@@ -193,10 +191,6 @@
   .task-editor > form > .task-editor-actions {
     grid-column: 1;
     grid-row: auto;
-  }
-  .task-workspace > section,
-  .task-workspace > details {
-    padding: var(--space-4);
   }
   .task-item {
     grid-template-columns: auto minmax(0, 1fr);
