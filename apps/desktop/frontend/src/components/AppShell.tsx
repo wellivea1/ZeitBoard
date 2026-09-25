@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { Icon, type IconName } from "./Icon";
 import { usePendingApprovalsCount } from "../state/approvalQueue";
-import type { LogTab, PlanTab, ScreenId } from "../types";
+import type { LogTab, PlanTab, ScreenId, SettingsTab } from "../types";
 
 const AssistantRail = lazy(() =>
   import("./AssistantRail").then((module) => ({ default: module.AssistantRail })),
@@ -41,10 +41,12 @@ export interface Route {
   screen: ScreenId;
   planTab: PlanTab;
   logTab: LogTab;
+  settingsTab: SettingsTab;
 }
 
 const planTabs = new Set<PlanTab>(["tasks", "calendar"]);
 const logTabs = new Set<LogTab>(["sleep", "medications", "markers"]);
+const settingsTabs = new Set<SettingsTab>(["display", "reaching", "sync", "computer", "data"]);
 
 // Routes that existed before the consolidation. They are still written down,
 // in the verification record and in whatever was bookmarked, and a dead link is
@@ -61,7 +63,12 @@ const legacyRoutes: Record<string, Partial<Route> & { screen: ScreenId }> = {
 
 // Plan opens on Tasks: it carries the pending count, so the badge on Plan and
 // the page it opens agree about what needs you.
-const defaultRoute: Route = { screen: "home", planTab: "tasks", logTab: "sleep" };
+const defaultRoute: Route = {
+  screen: "home",
+  planTab: "tasks",
+  logTab: "sleep",
+  settingsTab: "display",
+};
 
 export function readRouteFromHash(hash: string): Route {
   const path = hash.replace(/^#\/?/, "");
@@ -78,6 +85,9 @@ export function readRouteFromHash(hash: string): Route {
   }
   if (screen === "log" && logTabs.has(second as LogTab)) {
     return { ...defaultRoute, screen, logTab: second as LogTab };
+  }
+  if (screen === "settings" && settingsTabs.has(second as SettingsTab)) {
+    return { ...defaultRoute, screen, settingsTab: second as SettingsTab };
   }
   return { ...defaultRoute, screen };
 }
@@ -100,8 +110,11 @@ export function useScreenNavigation() {
   const selectLogTab = (logTab: LogTab) => {
     window.location.hash = `#/log/${logTab}`;
   };
+  const selectSettingsTab = (settingsTab: SettingsTab) => {
+    window.location.hash = `#/settings/${settingsTab}`;
+  };
 
-  return { route, selectPlanTab, selectLogTab };
+  return { route, selectPlanTab, selectLogTab, selectSettingsTab };
 }
 
 function NavigationLink({ item, active }: { item: NavItem; active: boolean }) {

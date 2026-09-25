@@ -87,19 +87,21 @@ export function ActivityCollectionSettings() {
   return (
     <section className="settings-section" aria-labelledby="activity-heading">
       <div className="data-control-intro">
-        <p className="section-kicker">Optional local evidence</p>
         <h2 id="activity-heading">Desktop activity</h2>
         <p className="settings-copy">
-          Save coarse active, idle, lock and app lifecycle transitions on this computer. No
-          keystrokes, window titles, screenshots or browsing content are recorded. Activity stays
-          local and does not currently change sleep estimates or planning.
+          Off unless you turn it on. Records only when this computer is active, idle or locked:
+          never keystrokes, window titles, screenshots or browsing. It stays on this computer and
+          does not change estimates or planning.
         </p>
-        <p className="settings-copy">
-          Collection is off until you enable it. Once enabled, it continues when you hide or close
-          the window and resumes when ZeitBoard reopens. Quit from the tray to stop it. ZeitBoard
-          must be running; it cannot collect while the computer is asleep or the app is closed. Gaps
-          between polls are recorded as possible suspend/resume evidence.
-        </p>
+        <details className="settings-more">
+          <summary>When it runs</summary>
+          <p className="settings-copy">
+            Once on, it continues when you hide or close the window and resumes when ZeitBoard
+            reopens; Quit from the tray stops it. It cannot collect while the computer is asleep or
+            the app is closed, and gaps between polls are kept as possible suspend and resume
+            evidence.
+          </p>
+        </details>
       </div>
       <div className="data-control-grid">
         <section className="data-control-card" aria-label="Activity consent">

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { PageHeader } from "../components/AppShell";
+import { ScreenTabPanel, ScreenTabs, type ScreenTab } from "../components/ScreenTabs";
 import {
   configureBackendSync,
   disableBackendSync,
@@ -24,6 +25,18 @@ import { LocalAgentSettings } from "./settings/LocalAgentSettings";
 import { ReachingHoursSettings } from "./settings/ReachingHoursSettings";
 import { SleepDataSettings } from "./settings/SleepDataSettings";
 import { createCoalescedRefresh, type CoalescedRefresh } from "../utils/coalescedRefresh";
+import type { SettingsTab } from "../types";
+
+// Settings was one page nine sections long, most of them paragraphs about
+// consent and background behaviour. The sections are tabs now, grouped by what
+// someone comes here to do, and each opens on something short.
+const settingsTabs: ScreenTab<SettingsTab>[] = [
+  { id: "display", label: "Display" },
+  { id: "reaching", label: "Reaching people" },
+  { id: "sync", label: "Sync" },
+  { id: "computer", label: "This computer" },
+  { id: "data", label: "Your data" },
+];
 
 const initialBackendSyncStatus: BackendSyncStatus = {
   enabled: false,
@@ -52,7 +65,10 @@ function initialBackendSyncForm(status = initialBackendSyncStatus): BackendSyncI
   };
 }
 
-export function SettingsScreen() {
+export function SettingsScreen({
+  tab = "display",
+  onSelect = () => {},
+}: { tab?: SettingsTab; onSelect?: (tab: SettingsTab) => void } = {}) {
   const [exportedSleepData, setExportedSleepData] = useState<SleepDataExportSummary | null>(null);
   const [dataControlStatus, setDataControlStatus] = useState("");
   const [dataControlError, setDataControlError] = useState("");
@@ -219,47 +235,61 @@ export function SettingsScreen() {
 
   return (
     <>
-      <PageHeader
-        title="Settings"
-        description="Control display, local storage, and estimate presentation."
-      />
-      <section className="settings-stack">
-        <AppearanceSettings />
-        <StartupSettings />
-        <ActivityCollectionSettings />
-        <section className="settings-section">
-          <div>
-            <p className="section-kicker">Estimates</p>
-            <h2>Uncertainty display</h2>
+      <PageHeader title="Settings" />
+      <section className="screen-tabbed" aria-label="Settings">
+        <ScreenTabs
+          name="settings"
+          label="Settings sections"
+          tabs={settingsTabs}
+          active={tab}
+          onSelect={onSelect}
+        />
+        <ScreenTabPanel name="settings" id="display" active={tab}>
+          <div className="settings-stack">
+            <AppearanceSettings />
           </div>
-          <p className="settings-copy">
-            Uncertainty is never hidden: estimates show predicted ranges, ordinal confidence, and
-            the reasons behind each estimate.
-          </p>
-        </section>
-        <BackendSyncSettings
-          status={backendSyncStatus}
-          form={backendSyncForm}
-          busy={backendSyncBusy}
-          error={backendSyncError}
-          message={backendSyncMessage}
-          onFormChange={(changes) => setBackendSyncForm((form) => ({ ...form, ...changes }))}
-          onConfigure={handleConfigureBackendSync}
-          onDisable={handleDisableBackendSync}
-          onSyncNow={handleSyncNow}
-        />
-        <ReachingHoursSettings />
-        <LocalAgentSettings status={localAgentStatus} error={localAgentError} />
-        <SleepDataSettings
-          exported={exportedSleepData}
-          confirmation={deleteAllConfirmation}
-          busy={dataControlBusy}
-          error={dataControlError}
-          message={dataControlStatus}
-          onConfirmationChange={setDeleteAllConfirmation}
-          onExport={() => void handleExportSleepData()}
-          onErase={() => void handleDeleteAllSleepData()}
-        />
+        </ScreenTabPanel>
+        <ScreenTabPanel name="settings" id="reaching" active={tab}>
+          <div className="settings-stack">
+            <ReachingHoursSettings />
+          </div>
+        </ScreenTabPanel>
+        <ScreenTabPanel name="settings" id="sync" active={tab}>
+          <div className="settings-stack">
+            <BackendSyncSettings
+              status={backendSyncStatus}
+              form={backendSyncForm}
+              busy={backendSyncBusy}
+              error={backendSyncError}
+              message={backendSyncMessage}
+              onFormChange={(changes) => setBackendSyncForm((form) => ({ ...form, ...changes }))}
+              onConfigure={handleConfigureBackendSync}
+              onDisable={handleDisableBackendSync}
+              onSyncNow={handleSyncNow}
+            />
+          </div>
+        </ScreenTabPanel>
+        <ScreenTabPanel name="settings" id="computer" active={tab}>
+          <div className="settings-stack">
+            <StartupSettings />
+            <ActivityCollectionSettings />
+            <LocalAgentSettings status={localAgentStatus} error={localAgentError} />
+          </div>
+        </ScreenTabPanel>
+        <ScreenTabPanel name="settings" id="data" active={tab}>
+          <div className="settings-stack">
+            <SleepDataSettings
+              exported={exportedSleepData}
+              confirmation={deleteAllConfirmation}
+              busy={dataControlBusy}
+              error={dataControlError}
+              message={dataControlStatus}
+              onConfirmationChange={setDeleteAllConfirmation}
+              onExport={() => void handleExportSleepData()}
+              onErase={() => void handleDeleteAllSleepData()}
+            />
+          </div>
+        </ScreenTabPanel>
       </section>
     </>
   );

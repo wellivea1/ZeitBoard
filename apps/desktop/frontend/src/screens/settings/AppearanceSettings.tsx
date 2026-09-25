@@ -38,8 +38,7 @@ export function AppearanceSettings() {
   return (
     <section className="settings-section">
       <div>
-        <p className="section-kicker">Display</p>
-        <h2>Time and appearance</h2>
+        <h2>Appearance</h2>
       </div>
       <fieldset className="appearance-picker">
         <legend>Appearance preset</legend>

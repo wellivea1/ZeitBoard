@@ -700,7 +700,7 @@ describe("desktop navigation", () => {
   });
 
   it("enables, syncs, and disables backend sync from Settings", async () => {
-    window.location.hash = "#/settings";
+    window.location.hash = "#/settings/sync";
     const offStatus = {
       enabled: false,
       status: "off",
@@ -783,7 +783,7 @@ describe("desktop navigation", () => {
   });
 
   it("exports and erases all local sleep data from Settings", async () => {
-    window.location.hash = "#/settings";
+    window.location.hash = "#/settings/data";
     const exportSleep = vi.fn(async () => ({
       fileName: "zeitboard-sleep-export-20260302-060000.json",
       json: '{"schema_version":"v1","observation_set":{"observations":[]},"correction_set":{"corrections":[]}}',

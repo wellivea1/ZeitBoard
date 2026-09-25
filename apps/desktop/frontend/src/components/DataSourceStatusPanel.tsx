@@ -1,10 +1,11 @@
+import type { ReactNode } from "react";
 import type { BackendSyncStatus } from "../data/backendSync";
 import type { CalendarSource } from "../data/calendar";
 import { summarizeSleepSources, type SleepEntriesData } from "../data/sleepEntries";
 import { Icon } from "./Icon";
 
 type SourceRowProps = {
-  detail: string;
+  detail: ReactNode;
   icon: "calendar" | "clock" | "sources";
   name: string;
   state?: "available" | "error" | "off";
@@ -84,11 +85,15 @@ export function DataSourceStatusPanel({
             icon="sources"
             name="Server sync"
             detail={
-              syncStatus.enabled
-                ? `Your own server · ${syncStatus.pushedCount} sent, ${syncStatus.pulledCount} received${
-                    syncStatus.lastSyncLabel ? ` · last ${syncStatus.lastSyncLabel}` : ""
-                  }`
-                : "Everything stays on this device. Turn on in Settings."
+              syncStatus.enabled ? (
+                `Your own server · ${syncStatus.pushedCount} sent, ${syncStatus.pulledCount} received${
+                  syncStatus.lastSyncLabel ? ` · last ${syncStatus.lastSyncLabel}` : ""
+                }`
+              ) : (
+                <>
+                  Everything stays on this device. <a href="#/settings/sync">Set up sync</a>
+                </>
+              )
             }
             status={
               syncStatus.status === "connected"

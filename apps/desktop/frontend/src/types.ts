@@ -5,4 +5,5 @@ export type ScreenId = "home" | "plan" | "rhythm" | "log" | "sharing" | "data-so
 
 export type PlanTab = "tasks" | "calendar";
 export type LogTab = "sleep" | "medications" | "markers";
+export type SettingsTab = "display" | "reaching" | "sync" | "computer" | "data";
 export type RhythmTab = "actogram" | "drift" | "sources";

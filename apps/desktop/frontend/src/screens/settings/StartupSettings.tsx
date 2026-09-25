@@ -94,11 +94,10 @@ export function StartupSettings() {
   return (
     <section className="settings-section" aria-labelledby="startup-title">
       <div className="data-control-intro">
-        <p className="section-kicker">App lifecycle</p>
         <h2 id="startup-title">Startup and background work</h2>
         <p className="settings-copy">
-          Keep ZeitBoard available after signing in to Windows. Startup does not enable activity
-          collection, sync or notifications; each keeps its own consent setting.
+          Starting with Windows turns nothing else on: activity, sync and reminders keep their own
+          settings.
         </p>
       </div>
       <div className="data-control-grid">
@@ -130,8 +129,8 @@ export function StartupSettings() {
             <span>Start in the tray</span>
           </label>
           <p>
-            Windows can delay or disable startup apps. If ZeitBoard does not open, check Windows
-            Settings → Apps → Startup. Moving the executable requires saving this setting again.
+            If ZeitBoard does not open, check Windows Settings → Apps → Startup. After moving the
+            app, save this again.
           </p>
           <button
             type="button"
@@ -145,9 +144,8 @@ export function StartupSettings() {
         <section className="data-control-card" aria-label="Current session">
           <h3>While ZeitBoard is running</h3>
           <p>
-            Closing the window hides it when the tray is available. Enabled collection and sync
-            continue. Reopen from the tray or launch ZeitBoard again. Quit stops background work
-            until the next launch.
+            Closing the window hides it in the tray and anything you turned on keeps running. Quit
+            stops it until the next launch.
           </p>
           {status && !status.trayAvailable && (
             <p>The tray is unavailable. Closing the window will quit; hiding is disabled.</p>

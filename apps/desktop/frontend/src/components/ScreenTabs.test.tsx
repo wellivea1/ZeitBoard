@@ -41,7 +41,15 @@ describe("readRouteFromHash", () => {
 
   it("keeps the utility destinations addressable", () => {
     expect(readRouteFromHash("#/data-sources")).toMatchObject({ screen: "data-sources" });
-    expect(readRouteFromHash("#/settings")).toMatchObject({ screen: "settings" });
+    expect(readRouteFromHash("#/settings")).toMatchObject({
+      screen: "settings",
+      settingsTab: "display",
+    });
+    // A settings section can be linked to, as Data Sources does for sync.
+    expect(readRouteFromHash("#/settings/sync")).toMatchObject({
+      screen: "settings",
+      settingsTab: "sync",
+    });
   });
 });
 

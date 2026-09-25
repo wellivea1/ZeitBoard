@@ -6,13 +6,20 @@
   border-radius: var(--radius-card);
 }
 
+/* One column: the heading and its sentence, then the controls at full width.
+   Beside a label column the controls were squeezed until status values
+   wrapped a letter at a time; each tab holds few enough sections to stack. */
 .settings-section {
-  padding: var(--space-7);
+  padding: var(--space-6);
   display: grid;
-  grid-template-columns: minmax(180px, 0.34fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
-  gap: var(--space-5) var(--space-8);
+  gap: var(--space-4);
   border-bottom: 1px solid var(--divider);
+}
+
+.settings-section .settings-copy {
+  max-width: 72ch;
 }
 
 .settings-section:last-child {
@@ -21,6 +28,22 @@
 
 .settings-section h2 {
   font-size: var(--type-data);
+}
+
+/* Detail that matters for trust but not on every visit folds away. */
+.settings-more {
+  margin-top: var(--space-2);
+}
+
+.settings-more > summary {
+  color: var(--sage-dark);
+  cursor: pointer;
+  font-size: var(--type-label);
+  font-weight: 700;
+}
+
+.settings-more[open] > summary {
+  margin-bottom: var(--space-2);
 }
 
 .data-control-card .startup-toggle {
@@ -44,7 +67,7 @@
 }
 
 .settings-section > :not(:first-child) {
-  grid-column: 2;
+  grid-column: 1;
 }
 
 .appearance-picker {
