@@ -1597,3 +1597,19 @@ The current schema has the column.
 Not verified here: a Windows production build of this branch, a full
 screen-reader pass of the new layouts, and the Android dial against a live
 server's forecasts. Operational qualification is unchanged.
+
+### Fonts and notes, same day
+
+Newsreader and Public Sans are bundled (OFL, with their license texts). In the
+running app `document.fonts` reported both faces loaded, with the Latin
+Extended subsets left unloaded until needed. On the emulator the dial's figure
+and sentence are set in Newsreader and the labels in Public Sans.
+
+The second pass was checked screen by screen in the running app, in the Ink
+theme at 695px. Home's note closed with its ×, was listed in Settings ›
+Display as "What the forecast is · Home", and came back with Show again. The
+conflict versions read as two framed choices. The past-night form and the
+settings groups sit on sheets. The notes on Log, Rhythm, Data Sources and
+Sharing each show once with an ×. New tests cover closing a note, remembering
+it across a reload, and showing one or all again (449 desktop + 6 prototype
+tests); the Android `gradlew check` passed.

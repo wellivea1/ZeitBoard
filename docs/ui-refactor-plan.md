@@ -602,16 +602,28 @@ out three ways.
   asleep in the sleep blue, the boundary the model cannot place hatched, likely
   awake left as paper. Ink, Black, Amber and High contrast are the same page at
   night; the contrast guard (`src/theme/contrast.test.ts`) still holds each pair.
-- **Two faces.** A serif for reading (Newsreader, falling back to Sitka and
-  Georgia on Windows and Noto Serif on Android) and a sans for controls (Public
-  Sans, falling back to Segoe UI and Roboto). The fallbacks are what renders
-  today: nothing is fetched and no font is bundled.
+- **Two faces, bundled.** Newsreader for reading and Public Sans for controls,
+  both variable and under the SIL Open Font License, shipped with each app and
+  never fetched. The desktop carries Latin and Latin Extended WOFF2 (about
+  555 KB) and lets Newsreader's optical-size axis pick the display cut for large
+  text. Android carries the TTFs (about 1.1 MB) and asks for the display cut in
+  its display styles. Characters outside the bundled ranges fall back to the
+  system serif and sans.
 - **No cards, pills, stripes or shadows.** Radii are 0. A section is a
   small-capital title over an ink rule; an entry is a serif title with a
   sentence under it; a state is a word in small capitals whose colour is the
-  only emphasis; a note is italic between hairlines; a count is an italic
-  numeral in the accent. Buttons are square: framed in ink, solid for the
-  primary, and an underlined word for actions inside a row.
+  only emphasis; a count is an italic numeral in the accent. Buttons are
+  square: framed in ink, solid for the primary, and an underlined word for
+  actions inside a row.
+- **Sheets, where text would float.** A note, a set of choices, a form that
+  folds out, a group of settings and a message about the data stand on a
+  sheet: flat paper with a hairline edge, square, never nested. Without them,
+  that text sat loose on the page with nothing to read it against.
+- **Notes close for good.** An explanation that is useful once is a note with an
+  × in its corner. Closed notes are listed in Settings › Display, one place to
+  show them again, singly or all at once; they are remembered on this computer.
+  A consent disclosure, a warning before deleting, what a share link reveals
+  and anything else a decision depends on is not a note and never hides.
 
 ### Three layouts
 
@@ -626,6 +638,19 @@ assistant) are set in the same language. Their content and controls are
 unchanged. The Android sample data is now drawn around the day the app is
 opened, so a new install's dial shows a night ahead rather than an empty ring.
 
+### A second pass: loose text and long explanations
+
+Reviewed in the running app after the first pass, the page had text that
+floated, with no ground or edge to read it against, and explanations repeated on
+every visit. Nine explanations became notes (the forecast's basis on Home,
+keeping one version of a task, medication logging, context markers, how
+corrections work, calendars, importing, and how a share link works). Duplicates
+went: the markers header now counts markers instead of restating the note, and
+the Week board's stale warning is one sentence. The task-conflict versions
+became framed choices, outlined in ink when chosen; forms that fold out, the
+settings groups and the Week board's warnings sit on sheets; and every fold
+uses one drawn triangle.
+
 ### Guards
 
 `lint-ui-standards.mjs` now fails on a side border or inset shadow wider than
@@ -636,9 +661,6 @@ sidebar are gone.
 
 ### Not done
 
-- The fonts are not bundled. Newsreader and Public Sans are open-licensed, and
-  bundling them would make every machine match the sketches. Doing so needs the
-  owner's go-ahead to download them.
 - The Android dial has no plans ring. The companion contract carries tasks but
   not accepted times or calendar events, so there is nothing true to draw there
   yet.
