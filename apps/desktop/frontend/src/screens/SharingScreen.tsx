@@ -98,7 +98,6 @@ export function SharingScreen() {
     <>
       <PageHeader
         title="Sharing"
-        description="Choose the minimum a person needs, require an expiry, and keep revocation one click away."
         actions={
           <div className="status-cluster">
             <span
@@ -116,7 +115,6 @@ export function SharingScreen() {
           <div className="sharing-state-copy">
             <Icon name="shield" />
             <div>
-              <p className="section-kicker">Current state</p>
               <h2>{headline(data)}</h2>
               <p>
                 {data.status === "ok"
@@ -124,6 +122,11 @@ export function SharingScreen() {
                   : (data.message ??
                     "Sharing runs on your own server, and this desktop is not talking to one yet.")}
               </p>
+              {data.status === "off" && (
+                <a className="button secondary compact" href="#/settings/sync">
+                  Set up sync
+                </a>
+              )}
             </div>
           </div>
           <dl className="sharing-state-facts">
@@ -138,10 +141,7 @@ export function SharingScreen() {
 
         <section className="sharing-template-section" aria-labelledby="sharing-links-title">
           <div className="sharing-section-heading">
-            <div>
-              <p className="section-kicker">{connected ? "Your links" : "Nothing to show"}</p>
-              <h2 id="sharing-links-title">Links you have made</h2>
-            </div>
+            <h2 id="sharing-links-title">Links you have made</h2>
             <p>Every permission starts off and must be explicitly granted by you.</p>
           </div>
 
@@ -169,17 +169,23 @@ export function SharingScreen() {
           />
         </section>
 
+        {/* The rules hold for every link, so they are a promise to read once,
+            not a panel to scroll past each visit. What never leaves stays
+            visible. */}
         <aside className="sharing-guardrails" aria-labelledby="sharing-guardrails-title">
-          <div>
-            <p className="section-kicker">Every link, always</p>
-            <h2 id="sharing-guardrails-title">Required guardrails</h2>
-          </div>
-          <ol>
-            <li>A passcode is required; there is no open link.</li>
-            <li>An expiry is required; permanent links are not offered.</li>
-            <li>Revocation is immediate, and the access history stays readable.</li>
-            <li>A failure renders as a contentless unavailable page.</li>
-          </ol>
+          <details>
+            <summary>
+              <h2 id="sharing-guardrails-title">
+                Every link needs a passcode and an expiry, and can be revoked at once
+              </h2>
+            </summary>
+            <ol>
+              <li>A passcode is required; there is no open link.</li>
+              <li>An expiry is required; permanent links are not offered.</li>
+              <li>Revocation is immediate, and the access history stays readable.</li>
+              <li>A failure renders as a contentless unavailable page.</li>
+            </ol>
+          </details>
           <div className="sharing-private-boundary">
             <strong>Never in a trusted link</strong>
             <span>

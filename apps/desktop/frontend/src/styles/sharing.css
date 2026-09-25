@@ -38,7 +38,7 @@
   letter-spacing: -0.02em;
 }
 
-.sharing-state-copy p:last-child {
+.sharing-state-copy p {
   max-width: 720px;
   margin: var(--space-1) 0 0;
   color: var(--muted);
@@ -147,6 +147,25 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
+}
+
+.sharing-guardrails summary {
+  cursor: pointer;
+}
+
+.sharing-guardrails summary h2 {
+  display: inline;
+  font-size: var(--type-body-strong);
+  letter-spacing: 0;
+  line-height: 1.4;
+}
+
+.sharing-guardrails details[open] summary {
+  margin-bottom: var(--space-3);
+}
+
+.sharing-state-copy .button {
+  margin-top: var(--space-3);
 }
 
 .sharing-guardrails ol {
