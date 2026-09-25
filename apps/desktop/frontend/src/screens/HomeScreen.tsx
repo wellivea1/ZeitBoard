@@ -102,6 +102,19 @@ function NextSleep({ overview, outlook }: { overview: OverviewData; outlook: Out
       </div>
     );
   }
+  // Inside a predicted sleep there is no onset ahead, only its end. Calling
+  // that "Next sleep" read as a contradiction at 3 AM.
+  if (!ahead.onset && ahead.wake) {
+    return (
+      <div className="home-next">
+        <p className="home-next-label">
+          <Icon name="moon" /> Likely waking
+        </p>
+        <strong>{bandWording(ahead.wake, outlook.horizonStart, now)}</strong>
+        <small>the end of the sleep the forecast expects now</small>
+      </div>
+    );
+  }
   return (
     <div className="home-next">
       <p className="home-next-label">
