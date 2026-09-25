@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { rhythmFixture } from "../data/rhythm";
-import { ActogramPanel, CycleStrip, DriftPanel } from "./RhythmVisuals";
+import { ActogramPanel, DriftPanel } from "./RhythmVisuals";
 
 function setTrackBounds(element: Element, width: number) {
   vi.spyOn(element, "getBoundingClientRect").mockReturnValue({
@@ -121,23 +121,6 @@ describe("chronological time probes", () => {
     const table = container.querySelector(".sr-table");
     expect(table).toHaveTextContent("Flight arrival");
     expect(table).not.toHaveTextContent("Different-zone marker");
-  });
-
-  it("qualifies predicted positions on the Overview cycle strip", () => {
-    const { container } = render(
-      <CycleStrip
-        actogram={rhythmFixture.actogram}
-        usefulWindowLabel="Today, 3:00 PM to 6:00 PM"
-        sleepWindowLabel="Today, 10:15 PM to 1:27 AM"
-      />,
-    );
-    const track = container.querySelector(".cycle-strip-track");
-    expect(track).not.toBeNull();
-    setTrackBounds(track as Element, 240);
-
-    fireEvent.pointerMove(track as Element, { clientX: 228 });
-
-    expect(visibleProbeLabel(container)).toHaveTextContent("Tue Jun 16 · ~22:48 · predicted");
   });
 
   it("snaps the drift probe to the nearest cycle and reports observed and fitted onset", () => {

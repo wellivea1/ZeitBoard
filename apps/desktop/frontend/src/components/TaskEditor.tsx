@@ -63,7 +63,7 @@ export function TaskEditor({
           />
         </label>
         <label>
-          Duration (minutes)
+          Minutes
           <input
             type="number"
             min={5}
@@ -119,7 +119,7 @@ export function TaskEditor({
         )}
         <div className="page-actions task-editor-actions">
           <button className="button primary" type="submit" disabled={busy || !title.trim()}>
-            {busy ? "Saving…" : task ? "Save changes" : "Save task"}
+            {busy ? "Saving…" : task ? "Save changes" : "Add task"}
           </button>
           {task && (
             <button className="button secondary" type="button" disabled={busy} onClick={onCancel}>

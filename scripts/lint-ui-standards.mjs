@@ -53,11 +53,17 @@ if (existsSync(secondaryScreens)) {
 
 const homePath = join(frontend, "screens", "HomeScreen.tsx");
 const home = readFileSync(homePath, "utf8");
-for (const required of ["CycleStrip", "OutlookPanel", "overview-surface", "overview-facts"]) {
+// Home is one screen: the current state with the one-tap actions, one
+// timeline, and what needs you. The 24-hour strip restated the timeline, and a
+// second one must not creep back; nor may the grid of metric cards it replaced.
+for (const required of ["OutlookPanel", "QuickLogBar", "home-now", "NeedsYou"]) {
   if (!home.includes(required)) fail(homePath, `Home must retain ${required}.`);
 }
+if (/CycleStrip|cycle-strip/.test(home)) {
+  fail(homePath, "Home draws one timeline; the 24-hour strip must not return.");
+}
 if (/metric-card/.test(home) || hasStaticClass(home, "panel")) {
-  fail(homePath, "Home is one surface; generic panels and metric cards are forbidden.");
+  fail(homePath, "Generic panels and metric cards are forbidden on Home.");
 }
 
 // Slice U-H: five primary destinations, then a utility group. The count is the
@@ -75,10 +81,22 @@ if (!shell.includes("utilityNavigation") || !shell.includes('className="utility-
   fail(shellPath, "The utility group must stay separate from the primary destinations.");
 }
 
+// Legacy hashes stay routable. They are written down in the verification
+// record and in whatever the user bookmarked; a dead link is a worse answer
+// than a redirect.
+const legacyStart = shell.indexOf("const legacyRoutes");
+const legacyBlock =
+  legacyStart < 0 ? "" : shell.slice(legacyStart, shell.indexOf("};", legacyStart));
+for (const legacy of ["overview", "calendar", "tasks", "approvals", "medications", "timeline"]) {
+  if (!legacyBlock.includes(`${legacy}: { screen:`)) {
+    fail(shellPath, `The legacy #/${legacy} route must keep redirecting.`);
+  }
+}
+
 // Plan and Log are tab hosts, not new monoliths: they compose the screens they
 // absorbed rather than copying them.
 for (const [name, required] of [
-  ["PlanScreen.tsx", ["CalendarScreen", "TasksScreen", "ApprovalsScreen", "ScreenTabs"]],
+  ["PlanScreen.tsx", ["CalendarScreen", "TasksScreen", "ScreenTabs"]],
   ["LogScreen.tsx", ["SleepLogPanel", "MedicationsScreen", "RhythmMarkersPanel", "ScreenTabs"]],
 ]) {
   const path = join(frontend, "screens", name);
@@ -86,6 +104,17 @@ for (const [name, required] of [
   for (const symbol of required) {
     if (!source.includes(symbol)) fail(path, `${name} must compose ${symbol}.`);
   }
+}
+
+// Tasks and the decisions about them are one view. Accepting a task's time on
+// a different tab from the one it was added on was the most awkward loop in
+// the app; the Approvals tab must not come back.
+const tasksPath = join(frontend, "screens", "TasksScreen.tsx");
+if (!readFileSync(tasksPath, "utf8").includes("<DecisionQueue")) {
+  fail(tasksPath, "Tasks must show the decisions about them.");
+}
+if (existsSync(join(frontend, "screens", "ApprovalsScreen.tsx"))) {
+  fail(tasksPath, "Decisions live beside tasks; a separate Approvals screen must not return.");
 }
 
 for (const [name, requiredClass] of [

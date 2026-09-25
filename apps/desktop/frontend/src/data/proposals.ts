@@ -157,6 +157,13 @@ function proposal(value: unknown): ProposalRecord | undefined {
     return undefined;
   }
   const from = str(value.from);
+  // Both or neither: half a block cannot be drawn or worded.
+  const startAt = str(value.startAt);
+  const endAt = str(value.endAt);
+  const exact =
+    startAt && endAt && Number.isFinite(Date.parse(startAt)) && Number.isFinite(Date.parse(endAt))
+      ? { startAt, endAt }
+      : {};
   return {
     id,
     origin,
@@ -164,6 +171,7 @@ function proposal(value: unknown): ProposalRecord | undefined {
     title,
     ...(from ? { from } : {}),
     to,
+    ...exact,
     rhythmContext,
     confidence: level,
     explanationCodes,
@@ -219,7 +227,8 @@ export async function loadProposals(
 ): Promise<ProposalsResult> {
   const method = findWailsMethod(root, methodNames);
   if (!method && !hasDesktopBridge(root)) return { data: proposalsFixture, source: "fixture" };
-  if (!method) throw new Error("The desktop proposal service is unavailable. Refresh to retry.");
+  if (!method)
+    throw new Error("The desktop proposal service is unavailable. It is retried shortly.");
   const result = await method();
   const proposals = normalizeProposals(result);
   if (!proposals) throw new Error("Proposal service returned an invalid response.");

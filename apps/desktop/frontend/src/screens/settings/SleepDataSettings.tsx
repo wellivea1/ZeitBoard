@@ -25,21 +25,17 @@ export function SleepDataSettings({
   return (
     <section className="settings-section data-controls-panel">
       <div className="data-control-intro">
-        <p className="section-kicker">Local data</p>
-        <h2>Storage</h2>
+        <h2>Your sleep data</h2>
         <p className="settings-copy">
-          Export produces versioned JSON with observation-set and correction-set sections. Suppress
-          appends a correction; erase permanently removes local observations and their correction
-          history. If backend sync is on, erasure also propagates on the next sync: the server
-          hard-deletes its copy and a tombstone tells your other devices to erase theirs. ZeitBoard
-          cannot restore an erased record.
+          Keep a copy, or erase everything. Erasing cannot be undone. With sync on, the next sync
+          also deletes the server&apos;s copy and tells your other devices to erase theirs.
         </p>
       </div>
       <div className="data-control-grid">
         <section className="data-control-card" aria-labelledby="sleep-export-title">
           <div>
             <h3 id="sleep-export-title">Export sleep data</h3>
-            <p>Download contract-shaped JSON for backup, review, or later import tooling.</p>
+            <p>A JSON file with every night and correction, to keep as a backup or import later.</p>
           </div>
           <button className="button secondary" type="button" onClick={onExport} disabled={busy}>
             Export sleep data
@@ -76,8 +72,8 @@ export function SleepDataSettings({
           <div>
             <h3 id="sleep-delete-title">Erase local sleep data</h3>
             <p>
-              This hard-deletes local sleep observations and sleep correction history. It is not the
-              append-only suppress action.
+              Deletes every sleep record and correction on this computer. To leave a single night
+              out of estimates, use Exclude in Log instead.
             </p>
           </div>
           <label htmlFor="delete-all-sleep-data">

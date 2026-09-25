@@ -56,6 +56,12 @@ type OutlookCommitmentDTO struct {
 	WhenLabel     string `json:"whenLabel"`
 	Conflict      string `json:"conflict"`
 	ConflictLabel string `json:"conflictLabel,omitempty"`
+
+	// OffsetHours and DurationHours place the event on the timeline, clamped
+	// to the horizon, so a commitment is drawn where it falls against the
+	// forecast rather than only listed beneath it.
+	OffsetHours   float64 `json:"offsetHours"`
+	DurationHours float64 `json:"durationHours"`
 }
 
 type OutlookOpportunityDTO struct {
@@ -74,8 +80,13 @@ type OutlookDTO struct {
 	// the reason.
 	Freshness FreshnessDTO `json:"freshness"`
 
-	HorizonLabel   string              `json:"horizonLabel"`
-	HorizonHours   float64             `json:"horizonHours"`
+	HorizonLabel string  `json:"horizonLabel"`
+	HorizonHours float64 `json:"horizonHours"`
+
+	// HorizonStart is the instant every offset below is measured from, so the
+	// screen can say "tonight" or "tomorrow" without parsing a sentence.
+	HorizonStart string `json:"horizonStart,omitempty"`
+
 	Days           []OutlookDayMarkDTO `json:"days"`
 	Segments       []OutlookSegmentDTO `json:"segments"`
 	NextSleepLabel string              `json:"nextSleepLabel,omitempty"`
@@ -157,8 +168,16 @@ func (a *App) GetOutlook() (OutlookDTO, error) {
 			return OutlookDTO{}, eventsErr
 		}
 		in.Events = events
-		for _, event := range events {
-			titles[event.ID] = event.Title
+		// BusyDomainEvents is text-free on purpose — it also fingerprints the
+		// calendar for planning — so its titles are always empty, and reading
+		// them here labelled every commitment on Home "Untitled event". Titles
+		// come from the calendar itself; the planner never sees them.
+		titled, titledErr := store.CalendarEvents(ctx, now, horizonEnd)
+		if titledErr != nil {
+			return OutlookDTO{}, titledErr
+		}
+		for _, event := range titled {
+			titles[domain.CalendarEventID(event.EventID)] = event.Title
 		}
 		tasks, _, tasksErr := store.OpenDomainTasks(ctx, zoneID)
 		if tasksErr != nil {
@@ -206,6 +225,7 @@ func outlookDTO(
 		Freshness:        freshnessDTO(view.Freshness),
 		HorizonLabel:     fmt.Sprintf("Next %d hours", int(horizonHours+0.5)),
 		HorizonHours:     horizonHours,
+		HorizonStart:     start.UTC().Format(time.RFC3339),
 		Days:             []OutlookDayMarkDTO{},
 		Segments:         []OutlookSegmentDTO{},
 		OfficeWindows:    []OutlookOfficeDTO{},
@@ -255,11 +275,14 @@ func outlookDTO(
 		if strings.TrimSpace(title) == "" {
 			title = "Untitled event"
 		}
+		offset, duration := clampToHorizon(commitment.Interval, start, view.Horizon.End.UTC)
 		dto.Commitments = append(dto.Commitments, OutlookCommitmentDTO{
 			Title:         title,
 			WhenLabel:     civilRange(commitment.Interval, location),
 			Conflict:      string(commitment.Conflict),
 			ConflictLabel: conflictLabel(commitment.Conflict),
+			OffsetHours:   offset,
+			DurationHours: duration,
 		})
 	}
 	for _, opportunity := range view.Opportunities {
@@ -276,6 +299,23 @@ func outlookDTO(
 		dto.Opportunities = append(dto.Opportunities, entry)
 	}
 	return dto
+}
+
+// clampToHorizon returns where an interval sits on the timeline, in hours from
+// its start, cut to the part inside the horizon.
+func clampToHorizon(interval domain.TimeRange, start, end time.Time) (float64, float64) {
+	from := interval.Start.UTC
+	to := interval.End.UTC
+	if from.Before(start) {
+		from = start
+	}
+	if to.After(end) {
+		to = end
+	}
+	if !to.After(from) {
+		return from.Sub(start).Hours(), 0
+	}
+	return from.Sub(start).Hours(), to.Sub(from).Hours()
 }
 
 func officeDTO(window outlook.OfficeWindow, location *time.Location, start time.Time) OutlookOfficeDTO {

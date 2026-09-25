@@ -45,20 +45,10 @@ function ActionCard({
   onDecide: (proposal: BackendProposal, decision: "approved" | "rejected") => void;
 }) {
   const decidable = reviewIsPending(proposal);
-  const filled = { Low: 1, Medium: 2, High: 3 }[proposal.confidence];
   return (
     <article className="assistant-action-card" data-status={proposal.status}>
       <header>
         <strong>{proposal.title}</strong>
-        <div
-          className="confidence-meter"
-          data-level={proposal.confidence.toLowerCase()}
-          aria-hidden="true"
-        >
-          {[0, 1, 2].map((index) => (
-            <span key={index} data-muted={index >= filled || undefined} />
-          ))}
-        </div>
       </header>
       <p>{proposal.window}</p>
       {proposal.reasonLabels.length > 0 && (
@@ -71,7 +61,7 @@ function ActionCard({
         </div>
       )}
       <footer>
-        <a href="#/plan/approvals">View in Approvals</a>
+        <a href="#/plan/tasks">View in Plan</a>
         {decidable ? (
           <>
             <button
@@ -200,8 +190,8 @@ export function AssistantRail({ open, onClose }: { open: boolean; onClose: () =>
         <span className="assistant-backend" data-mode={backend.mode}>
           <i aria-hidden="true" /> {backend.text}
         </span>
-        <a className="assistant-queue-link" href="#/plan/approvals">
-          Approvals{totalPending > 0 && ` ${totalPending}`}
+        <a className="assistant-queue-link" href="#/plan/tasks">
+          Decisions{totalPending > 0 && ` ${totalPending}`}
         </a>
         <button
           className="icon-button"

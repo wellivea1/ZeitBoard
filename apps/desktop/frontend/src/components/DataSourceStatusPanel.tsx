@@ -1,9 +1,11 @@
+import type { ReactNode } from "react";
 import type { BackendSyncStatus } from "../data/backendSync";
+import type { CalendarSource } from "../data/calendar";
 import { summarizeSleepSources, type SleepEntriesData } from "../data/sleepEntries";
 import { Icon } from "./Icon";
 
 type SourceRowProps = {
-  detail: string;
+  detail: ReactNode;
   icon: "calendar" | "clock" | "sources";
   name: string;
   state?: "available" | "error" | "off";
@@ -25,33 +27,43 @@ function SourceRow({ detail, icon, name, state = "off", status }: SourceRowProps
   );
 }
 
+function sleepDetail(summary: ReturnType<typeof summarizeSleepSources>[number]) {
+  const changed = [
+    summary.corrected > 0 ? `${summary.corrected} corrected` : "",
+    summary.suppressed > 0 ? `${summary.suppressed} hidden` : "",
+  ].filter(Boolean);
+  return [
+    `${summary.total} ${summary.total === 1 ? "record" : "records"}`,
+    summary.provenance,
+    ...changed,
+  ].join(" · ");
+}
+
 export function DataSourceStatusPanel({
   entriesData,
   syncStatus,
+  calendarSources,
 }: {
   entriesData: SleepEntriesData;
   syncStatus?: BackendSyncStatus;
+  /** Undefined while loading; the row waits rather than claiming none. */
+  calendarSources?: CalendarSource[];
 }) {
   const summaries = summarizeSleepSources(entriesData.entries);
   const localUnavailable = entriesData.status === "unavailable";
+  const importedCalendars = calendarSources?.filter((source) => source.readOnly) ?? [];
   return (
     <section className="data-source-registry" aria-labelledby="source-registry-title">
       <div className="data-source-section-heading">
-        <div>
-          <p className="section-kicker">Provenance</p>
-          <h2 id="source-registry-title">Source status</h2>
-        </div>
-        <p>What contributes data, where it is managed, and whether it is available now.</p>
+        <h2 id="source-registry-title">Connected</h2>
       </div>
       <div className="source-ledger">
         {summaries.length === 0 ? (
           <SourceRow
             icon="clock"
-            name="Local sleep observations"
+            name="Sleep records"
             detail={
-              localUnavailable
-                ? entriesData.message
-                : "No manual or imported observations stored yet"
+              localUnavailable ? entriesData.message : "None yet. Log a night or import a file."
             }
             status={localUnavailable ? "Unavailable" : "Empty"}
             state={localUnavailable ? "error" : "off"}
@@ -62,11 +74,7 @@ export function DataSourceStatusPanel({
               key={`${summary.source}-${summary.provenance}`}
               icon={summary.source === "Manual sleep log" ? "clock" : "sources"}
               name={summary.source}
-              detail={`${summary.total} ${
-                summary.total === 1 ? "observation" : "observations"
-              } - ${summary.provenance}; ${summary.corrected} corrected, ${
-                summary.suppressed
-              } suppressed`}
+              detail={sleepDetail(summary)}
               status="Available"
               state="available"
             />
@@ -77,11 +85,15 @@ export function DataSourceStatusPanel({
             icon="sources"
             name="Server sync"
             detail={
-              syncStatus.enabled
-                ? `Your own instance - ${syncStatus.pushedCount} pushed, ${syncStatus.pulledCount} pulled${
-                    syncStatus.lastSyncLabel ? `, last sync ${syncStatus.lastSyncLabel}` : ""
-                  }`
-                : "Data stays on this device unless you enroll in Settings"
+              syncStatus.enabled ? (
+                `Your own server · ${syncStatus.pushedCount} sent, ${syncStatus.pulledCount} received${
+                  syncStatus.lastSyncLabel ? ` · last ${syncStatus.lastSyncLabel}` : ""
+                }`
+              ) : (
+                <>
+                  Everything stays on this device. <a href="#/settings/sync">Set up sync</a>
+                </>
+              )
             }
             status={
               syncStatus.status === "connected"
@@ -99,18 +111,20 @@ export function DataSourceStatusPanel({
             }
           />
         )}
-        <SourceRow
-          icon="calendar"
-          name="Calendar import"
-          detail="Local ICS files and read-only CalDAV snapshots are managed in Calendar"
-          status="Separate workspace"
-        />
-        <SourceRow
-          icon="sources"
-          name="Device activity"
-          detail="Not connected; activity-to-sleep inference is not available"
-          status="Off"
-        />
+        {calendarSources && (
+          <SourceRow
+            icon="calendar"
+            name="Calendars"
+            detail={
+              importedCalendars.length > 0
+                ? importedCalendars.map((source) => source.label).join(" · ")
+                : "None added. Suggested times only avoid what ZeitBoard knows about."
+            }
+            status={importedCalendars.length > 0 ? `${importedCalendars.length} added` : "None"}
+            state={importedCalendars.length > 0 ? "available" : "off"}
+          />
+        )}
+        <SourceRow icon="sources" name="Device activity" detail="Not connected" status="Off" />
       </div>
     </section>
   );

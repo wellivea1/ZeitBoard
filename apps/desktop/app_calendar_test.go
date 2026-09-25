@@ -214,3 +214,68 @@ func requestContext(t *testing.T) context.Context {
 	t.Helper()
 	return context.Background()
 }
+
+// Found by using the app: the ZeitBoard placements source read "Dec 31, 1969
+// to Dec 31, 9999", which is how storage spells "no limit".
+func TestTheAcceptedTimesCalendarHasNoDateRange(t *testing.T) {
+	app := newTestApp(t)
+	fixedNow := time.Now().UTC().Truncate(localProposalTTL).Add(11 * time.Minute)
+	app.nowFn = func() time.Time { return fixedNow }
+	seedSleepEntries(t, app, 12)
+	if _, err := app.AddTask(TaskInput{Title: "Email landlord", DurationMinutes: 15}); err != nil {
+		t.Fatal(err)
+	}
+	built, err := app.buildLocalProposals(fixedNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, _ := onlyPendingCandidate(t, built)
+	if _, err := app.DecideLocalProposal(LocalProposalDecisionInput{ProposalID: id, Decision: "approved"}); err != nil {
+		t.Fatal(err)
+	}
+	calendar, err := app.GetCalendar(CalendarQueryInput{Days: 2, ZoneID: defaultZoneID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, source := range calendar.Sources {
+		if source.Kind != "zeitboard" {
+			continue
+		}
+		found = true
+		if strings.Contains(source.CoverageLabel, "1969") || strings.Contains(source.CoverageLabel, "9999") {
+			t.Fatalf("accepted-times calendar shows storage bounds as a range: %q", source.CoverageLabel)
+		}
+	}
+	if !found {
+		t.Fatal("accepting a time did not create the ZeitBoard placements source")
+	}
+}
+
+// Found by using the app: today's row on the calendar was blank from now until
+// the night's onset band, because the estimator has no window for the waking
+// stretch already under way. The Home outlook draws that stretch, and the two
+// views of the same hours have to agree.
+func TestTheCalendarShowsTheWakingStretchUnderWay(t *testing.T) {
+	app := newTestApp(t)
+	seedSleepEntries(t, app, 12)
+	location, err := time.LoadLocation(defaultZoneID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	calendar, err := app.GetCalendar(CalendarQueryInput{Days: 2, ZoneID: defaultZoneID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	minute := civilMinute(app.currentTime().In(location))
+	today := calendar.Days[0]
+	if !today.IsToday {
+		t.Fatalf("first day is not today: %#v", today)
+	}
+	for _, band := range today.Predictions {
+		if band.Kind == "predicted_wake" && band.StartMinute <= minute && minute < band.EndMinute {
+			return
+		}
+	}
+	t.Fatalf("no waking band covers now (minute %.0f): %#v", minute, today.Predictions)
+}

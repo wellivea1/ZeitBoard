@@ -39,9 +39,9 @@ describe("CalendarSourcesPanel", () => {
     ];
     render(<CalendarSourcesPanel sources={sources} available onChanged={onChanged} />);
 
-    expect(screen.getAllByRole("button", { name: "Remove" })).toHaveLength(1);
-    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
-    const erase = screen.getByRole("button", { name: "Erase source" });
+    expect(screen.getAllByRole("button", { name: /^Remove/ })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Remove Commitments" }));
+    const erase = screen.getByRole("button", { name: "Erase calendar" });
     expect(erase).toBeDisabled();
     fireEvent.change(screen.getByLabelText(/Type REMOVE/), { target: { value: "REMOVE" } });
     fireEvent.click(erase);

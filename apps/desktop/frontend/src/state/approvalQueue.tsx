@@ -6,8 +6,20 @@ import { subscribeProjectionRefresh } from "../utils/projectionRefresh";
 import { reviewQueueChangedEvent } from "../data/reviewQueue";
 import { sleepDataChangedEvent } from "../data/sleepDataEvents";
 
+interface QueueBreakdown {
+  /** Planner suggestions for your own tasks. */
+  suggestions: number;
+  /** Tasks edited on two devices, waiting for you to pick a version. */
+  conflicts: number;
+  /** Proposals from the assistant or a connected agent. */
+  assistant: number;
+  /** Time requests from people you share with. */
+  requests: number;
+}
+
 interface QueueSummary {
   pendingCount: number;
+  breakdown: QueueBreakdown;
   ready: boolean;
   incomplete: boolean;
   now: number;
@@ -63,6 +75,12 @@ export function ApprovalQueueProvider({ children }: { children: ReactNode }) {
   const pendingCount = local.pendingCount + backend.data.pendingCount + visitor.data.pendingCount;
   const value = {
     pendingCount,
+    breakdown: {
+      suggestions: Math.max(0, local.pendingCount - local.taskConflicts.length),
+      conflicts: local.taskConflicts.length,
+      assistant: backend.data.pendingCount,
+      requests: visitor.data.pendingCount,
+    },
     ready: local.ready && backend.ready && visitor.ready,
     incomplete:
       Boolean(local.loadError) ||

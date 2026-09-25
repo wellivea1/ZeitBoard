@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { Icon, type IconName } from "./Icon";
 import { usePendingApprovalsCount } from "../state/approvalQueue";
-import type { LogTab, PlanTab, ScreenId } from "../types";
+import type { LogTab, PlanTab, ScreenId, SettingsTab } from "../types";
 
 const AssistantRail = lazy(() =>
   import("./AssistantRail").then((module) => ({ default: module.AssistantRail })),
@@ -41,16 +41,41 @@ export interface Route {
   screen: ScreenId;
   planTab: PlanTab;
   logTab: LogTab;
+  settingsTab: SettingsTab;
 }
 
-const planTabs = new Set<PlanTab>(["calendar", "tasks", "approvals"]);
+const planTabs = new Set<PlanTab>(["tasks", "calendar"]);
 const logTabs = new Set<LogTab>(["sleep", "medications", "markers"]);
+const settingsTabs = new Set<SettingsTab>(["display", "reaching", "sync", "computer", "data"]);
 
-const defaultRoute: Route = { screen: "home", planTab: "calendar", logTab: "sleep" };
+// Routes that existed before the consolidation. They are still written down,
+// in the verification record and in whatever was bookmarked, and a dead link is
+// a worse answer than a redirect that costs one line each. Approvals became
+// part of Tasks, so its old address lands there.
+const legacyRoutes: Record<string, Partial<Route> & { screen: ScreenId }> = {
+  overview: { screen: "home" },
+  timeline: { screen: "rhythm" },
+  calendar: { screen: "plan", planTab: "calendar" },
+  tasks: { screen: "plan", planTab: "tasks" },
+  approvals: { screen: "plan", planTab: "tasks" },
+  medications: { screen: "log", logTab: "medications" },
+};
+
+// Plan opens on Tasks: it carries the pending count, so the badge on Plan and
+// the page it opens agree about what needs you.
+const defaultRoute: Route = {
+  screen: "home",
+  planTab: "tasks",
+  logTab: "sleep",
+  settingsTab: "display",
+};
 
 export function readRouteFromHash(hash: string): Route {
   const path = hash.replace(/^#\/?/, "");
   const [head = "", second = ""] = path.split("/");
+
+  const legacy = legacyRoutes[head];
+  if (legacy) return { ...defaultRoute, ...legacy };
 
   if (!screenIds.has(head as ScreenId)) return defaultRoute;
   const screen = head as ScreenId;
@@ -60,6 +85,9 @@ export function readRouteFromHash(hash: string): Route {
   }
   if (screen === "log" && logTabs.has(second as LogTab)) {
     return { ...defaultRoute, screen, logTab: second as LogTab };
+  }
+  if (screen === "settings" && settingsTabs.has(second as SettingsTab)) {
+    return { ...defaultRoute, screen, settingsTab: second as SettingsTab };
   }
   return { ...defaultRoute, screen };
 }
@@ -82,8 +110,11 @@ export function useScreenNavigation() {
   const selectLogTab = (logTab: LogTab) => {
     window.location.hash = `#/log/${logTab}`;
   };
+  const selectSettingsTab = (settingsTab: SettingsTab) => {
+    window.location.hash = `#/settings/${settingsTab}`;
+  };
 
-  return { route, selectPlanTab, selectLogTab };
+  return { route, selectPlanTab, selectLogTab, selectSettingsTab };
 }
 
 function NavigationLink({ item, active }: { item: NavItem; active: boolean }) {
@@ -200,7 +231,11 @@ export function PageHeader({
 }: {
   eyebrow?: string;
   title: string;
-  description: string;
+  /**
+   * Optional. Most screens are clear from their title; a sentence restating
+   * the title on every page was part of what made the app read as prose.
+   */
+  description?: string;
   actions?: ReactNode;
 
   /**
@@ -215,7 +250,7 @@ export function PageHeader({
   if (level === "panel") {
     return (
       <header className="panel-header">
-        <p>{description}</p>
+        {description && <p>{description}</p>}
         {actions && <div className="page-actions">{actions}</div>}
       </header>
     );
@@ -225,7 +260,7 @@ export function PageHeader({
       <div>
         {eyebrow && <p className="eyebrow">{eyebrow}</p>}
         <h1>{title}</h1>
-        <p>{description}</p>
+        {description && <p>{description}</p>}
       </div>
       {actions && <div className="page-actions">{actions}</div>}
     </header>

@@ -1,8 +1,9 @@
 import { SleepEntryForm } from "./SleepEntryForm";
-import { useEffect, useState } from "react";
-import { Icon } from "./Icon";
+import { useEffect, useRef, useState } from "react";
+import { QuickLogBar } from "./QuickLogBar";
 import { deleteConfirmationToken } from "../data/sleepDataControl";
-import { notifySleepDataChanged } from "../data/sleepDataEvents";
+import { SleepNightRow } from "./SleepNightRow";
+import { notifySleepDataChanged, sleepDataChangedEvent } from "../data/sleepDataEvents";
 import {
   addSleepEntry,
   correctSleepEntry,
@@ -17,7 +18,6 @@ import {
 
 const fallbackSleepZone = "America/New_York";
 const sleepEntriesPerPage = 50;
-const correctionHistoryPerPage = 50;
 
 function browserZone() {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || fallbackSleepZone;
@@ -42,241 +42,6 @@ function initialSleepForm(): SleepEntryInput {
 
 function endAfterStart(input: SleepEntryInput) {
   return new Date(input.endLocal).getTime() > new Date(input.startLocal).getTime();
-}
-
-function SleepEntryCard({
-  entry,
-  editing,
-  editForm,
-  busy,
-  deleteConfirming,
-  deleteConfirmation,
-  onBeginEdit,
-  onCancelEdit,
-  onEditChange,
-  onSaveEdit,
-  editExcluded,
-  onEditExcluded,
-  onSuppress,
-  onBeginDelete,
-  onCancelDelete,
-  onDeleteConfirmationChange,
-  onDelete,
-}: {
-  entry: SleepEntry;
-  editing: boolean;
-  editForm: SleepEntryInput;
-  busy: boolean;
-  deleteConfirming: boolean;
-  deleteConfirmation: string;
-  onBeginEdit: () => void;
-  onCancelEdit: () => void;
-  onEditChange: (form: SleepEntryInput) => void;
-  onSaveEdit: () => void;
-  editExcluded: boolean;
-  onEditExcluded: (value: boolean) => void;
-  onSuppress: () => void;
-  onBeginDelete: () => void;
-  onCancelDelete: () => void;
-  onDeleteConfirmationChange: (value: string) => void;
-  onDelete: () => void;
-}) {
-  const [historyPage, setHistoryPage] = useState(0);
-  const [historyOpen, setHistoryOpen] = useState(false);
-  const corrected =
-    entry.startLocal !== entry.effectiveStartLocal ||
-    entry.endLocal !== entry.effectiveEndLocal ||
-    entry.classification !== entry.effectiveClassification;
-  const deleteInputID = `delete-confirm-${entry.observationId}`;
-  const historyPageCount = Math.max(1, Math.ceil(entry.history.length / correctionHistoryPerPage));
-  const safeHistoryPage = Math.min(historyPage, historyPageCount - 1);
-  const historyStart = safeHistoryPage * correctionHistoryPerPage;
-  const visibleHistory = entry.history.slice(historyStart, historyStart + correctionHistoryPerPage);
-
-  return (
-    <article className="sleep-entry-card" data-suppressed={entry.suppressed || undefined}>
-      <div className="sleep-entry-main">
-        <div className="record-icon">
-          <Icon name="moon" />
-        </div>
-        <div>
-          <h2>
-            {entry.effectiveStartLabel} to {entry.effectiveEndLabel}
-          </h2>
-          <p>
-            {entry.durationLabel} - {entry.effectiveClassification} - {entry.provenanceLabel}
-          </p>
-          {corrected && (
-            <p className="sleep-entry-raw">
-              Raw entry: {entry.startLabel} to {entry.endLabel}
-            </p>
-          )}
-        </div>
-        <span className={`source-status ${entry.suppressed ? "" : "connected"}`}>
-          {entry.needsReview
-            ? "Review required"
-            : entry.suppressed
-              ? "Suppressed"
-              : corrected
-                ? "Corrected"
-                : "Active"}
-        </span>
-      </div>
-
-      {entry.needsReview && (
-        <div role="status" className="form-status">
-          <p>
-            The source or manual edits disagree. Forecasts are withheld. The form starts from the
-            source window: {entry.sourceWindowLabel}.
-          </p>
-          <ul>
-            {entry.activeEdits.map((edit) => (
-              <li key={edit.correctionId}>
-                {edit.createdLabel}: {edit.summary}
-              </li>
-            ))}
-          </ul>
-          <p>
-            Review every competing edit, enter the intended result, and save a new correction to
-            resolve them.
-          </p>
-        </div>
-      )}
-
-      {editing ? (
-        <form
-          className="sleep-edit-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            onSaveEdit();
-          }}
-        >
-          <SleepEntryForm
-            form={editForm}
-            onChange={onEditChange}
-            submitLabel="Save correction"
-            disabled={busy}
-            editing
-            excluded={editExcluded}
-            onExcludedChange={onEditExcluded}
-          />
-          <button className="button secondary" type="button" onClick={onCancelEdit} disabled={busy}>
-            Cancel
-          </button>
-        </form>
-      ) : (
-        <div className="sleep-entry-actions">
-          <button className="button secondary" type="button" onClick={onBeginEdit} disabled={busy}>
-            Edit by correction
-          </button>
-          <button
-            className="button secondary"
-            type="button"
-            onClick={onSuppress}
-            disabled={entry.suppressed || entry.needsReview || busy}
-          >
-            Suppress from estimates
-          </button>
-          <button
-            className="button secondary danger-outline"
-            type="button"
-            onClick={onBeginDelete}
-            disabled={busy}
-          >
-            Delete permanently
-          </button>
-        </div>
-      )}
-
-      {deleteConfirming && (
-        <div
-          className="sleep-delete-confirmation"
-          role="group"
-          aria-labelledby={`${deleteInputID}-title`}
-        >
-          <div>
-            <strong id={`${deleteInputID}-title`}>Permanent erase</strong>
-            <p>
-              Type DELETE to remove this observation and its correction history from local sleep
-              storage. Use suppress when you only want it excluded from estimates.
-            </p>
-          </div>
-          <label htmlFor={deleteInputID}>Deletion confirmation</label>
-          <input
-            id={deleteInputID}
-            type="text"
-            value={deleteConfirmation}
-            onChange={(event) => onDeleteConfirmationChange(event.target.value)}
-          />
-          <div className="sleep-delete-actions">
-            <button
-              className="button danger"
-              type="button"
-              onClick={onDelete}
-              disabled={busy || deleteConfirmation !== deleteConfirmationToken}
-            >
-              Erase entry
-            </button>
-            <button
-              className="button secondary"
-              type="button"
-              onClick={onCancelDelete}
-              disabled={busy}
-            >
-              Cancel erase
-            </button>
-          </div>
-        </div>
-      )}
-
-      {entry.history.length > 0 && (
-        <details
-          className="sleep-entry-history"
-          onToggle={(event) => setHistoryOpen(event.currentTarget.open)}
-        >
-          <summary>Correction history ({entry.history.length})</summary>
-          {historyOpen && (
-            <>
-              <ul>
-                {visibleHistory.map((item) => (
-                  <li key={item.correctionId}>
-                    <strong>{item.createdLabel}</strong> - {item.summary}
-                  </li>
-                ))}
-              </ul>
-              {historyPageCount > 1 && (
-                <nav className="sleep-history-pagination" aria-label="Correction history pages">
-                  <span>
-                    Corrections {historyStart + 1}-
-                    {Math.min(historyStart + correctionHistoryPerPage, entry.history.length)} of{" "}
-                    {entry.history.length}
-                  </span>
-                  <button
-                    className="button secondary compact"
-                    type="button"
-                    disabled={safeHistoryPage === 0}
-                    onClick={() => setHistoryPage((page) => Math.max(0, page - 1))}
-                  >
-                    Previous corrections
-                  </button>
-                  <button
-                    className="button secondary compact"
-                    type="button"
-                    disabled={safeHistoryPage === historyPageCount - 1}
-                    onClick={() =>
-                      setHistoryPage((page) => Math.min(historyPageCount - 1, page + 1))
-                    }
-                  >
-                    Next corrections
-                  </button>
-                </nav>
-              )}
-            </>
-          )}
-        </details>
-      )}
-    </article>
-  );
 }
 
 // The sleep log: entry, correction history, suppression and erasure.
@@ -304,6 +69,7 @@ export function SleepLogPanel() {
   const [statusMessage, setStatusMessage] = useState("");
 
   const [entryPage, setEntryPage] = useState(0);
+  const addRef = useRef<HTMLDetailsElement>(null);
   const refreshEntries = async () => {
     const loaded = await loadSleepEntries();
     setEntriesData(loaded);
@@ -311,21 +77,27 @@ export function SleepLogPanel() {
 
   useEffect(() => {
     let current = true;
-    void loadSleepEntries()
-      .then((loaded) => {
-        if (current) setEntriesData(loaded);
-      })
-      .catch((error: unknown) => {
-        if (!current) return;
-        setEntriesData({
-          status: "unavailable",
-          empty: true,
-          message: error instanceof Error ? error.message : "Manual sleep log is unavailable.",
-          entries: [],
+    const load = () =>
+      void loadSleepEntries()
+        .then((loaded) => {
+          if (current) setEntriesData(loaded);
+        })
+        .catch((error: unknown) => {
+          if (!current) return;
+          setEntriesData({
+            status: "unavailable",
+            empty: true,
+            message: error instanceof Error ? error.message : "Manual sleep log is unavailable.",
+            entries: [],
+          });
         });
-      });
+    load();
+    // A night recorded with the quick buttons, or imported, belongs in the list
+    // without a Refresh button.
+    window.addEventListener(sleepDataChangedEvent, load);
     return () => {
       current = false;
+      window.removeEventListener(sleepDataChangedEvent, load);
     };
   }, []);
 
@@ -339,7 +111,7 @@ export function SleepLogPanel() {
     try {
       await addSleepEntry(form);
       notifySleepDataChanged();
-      setStatusMessage("Sleep entry saved locally.");
+      setStatusMessage("Night saved.");
       setForm(initialSleepForm());
       await refreshEntries();
     } catch (error) {
@@ -381,7 +153,7 @@ export function SleepLogPanel() {
       };
       await correctSleepEntry(correction);
       notifySleepDataChanged();
-      setStatusMessage("Correction appended locally.");
+      setStatusMessage("Correction saved. The original stays in its history.");
       setEditingId(null);
       await refreshEntries();
     } catch (error) {
@@ -398,7 +170,7 @@ export function SleepLogPanel() {
     try {
       await suppressSleepEntry(entry.observationId, entry.reviewToken);
       notifySleepDataChanged();
-      setStatusMessage("Sleep entry suppressed from estimates.");
+      setStatusMessage("Night excluded from estimates.");
       await refreshEntries();
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Could not suppress entry.");
@@ -425,7 +197,7 @@ export function SleepLogPanel() {
       const loaded = await deleteSleepObservation(entry.observationId, deleteConfirmation);
       setEntriesData(loaded);
       notifySleepDataChanged();
-      setStatusMessage("Sleep entry erased permanently.");
+      setStatusMessage("Night deleted.");
       setDeletingId(null);
       setDeleteConfirmation("");
     } catch (error) {
@@ -441,74 +213,66 @@ export function SleepLogPanel() {
   const visibleEntries = entriesData.entries.slice(entryStart, entryStart + sleepEntriesPerPage);
 
   return (
-    <section className="data-source-workspace sleep-log-workspace" aria-label="Sleep log">
-      <div className="data-source-input-grid">
-        <section className="sleep-entry-panel" aria-labelledby="sleep-entry-title">
-          <div className="data-source-section-heading">
-            <div>
-              <p className="section-kicker">Manual input</p>
-              <h2 id="sleep-entry-title">Add sleep entry</h2>
-            </div>
-            <p>Append one owner-reported principal sleep or nap.</p>
-          </div>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              void submitEntry();
-            }}
-          >
-            <SleepEntryForm
-              form={form}
-              onChange={setForm}
-              submitLabel="Save sleep entry"
-              disabled={busy || entriesData.status === "unavailable"}
-            />
-          </form>
-          {formError && (
-            <p className="form-error" role="alert">
-              {formError}
-            </p>
-          )}
-          <p className="form-status" role="status" aria-live="polite">
-            {statusMessage || entriesData.message}
-          </p>
-        </section>
-      </div>
+    <section className="sleep-log-workspace" aria-label="Sleep log">
+      {/* Recording the night that just happened is two taps; a form for it
+          is for nights that were missed. */}
+      <QuickLogBar />
+      <details className="sleep-add" ref={addRef}>
+        <summary>Add a past night</summary>
+        <form
+          aria-label="Add sleep entry"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void submitEntry();
+          }}
+        >
+          <SleepEntryForm
+            form={form}
+            onChange={setForm}
+            submitLabel="Save sleep entry"
+            disabled={busy || entriesData.status === "unavailable"}
+          />
+        </form>
+      </details>
+      {formError && (
+        <p className="form-error" role="alert">
+          {formError}
+        </p>
+      )}
+      <p className="form-status" role="status" aria-live="polite">
+        {statusMessage}
+      </p>
 
       <section className="sleep-entry-list-panel" aria-labelledby="sleep-log-title">
-        <div className="data-source-section-heading">
-          <div>
-            <p className="section-kicker">Local observations</p>
-            <h2 id="sleep-log-title">Sleep log</h2>
-          </div>
-          <p>Corrections append history; suppression and permanent erasure remain distinct.</p>
-          <button
-            type="button"
-            className="button secondary"
-            disabled={busy}
-            onClick={() => {
-              setEditingId(null);
-              setEditingSnapshot(null);
-              setBusy(true);
-              void refreshEntries()
-                .catch(() =>
-                  setFormError(
-                    "Sleep log could not refresh. Retry when local storage is available.",
-                  ),
-                )
-                .finally(() => setBusy(false));
-            }}
-          >
-            {editingId ? "Reload log (close draft)" : "Refresh log"}
-          </button>
+        <div className="plan-section-head">
+          <h2 id="sleep-log-title">
+            Sleep log
+            {entriesData.entries.length > 0 && (
+              <span className="count">{entriesData.entries.length}</span>
+            )}
+          </h2>
+          <small>Edits keep the original. Delete removes a night for good.</small>
         </div>
         {entriesData.entries.length === 0 ? (
-          <div className="empty-state sleep-log-empty">
-            <p className="section-kicker">{entriesData.status}</p>
+          <div className="sleep-log-empty">
             <h2>No sleep entries yet</h2>
             <p>
-              Add your first principal sleep episode above. The estimator will stay refused until
-              enough usable entries exist.
+              {entriesData.status === "unavailable"
+                ? entriesData.message
+                : "Use the buttons above when you go to sleep and wake up, or "}
+              {entriesData.status !== "unavailable" && (
+                <button
+                  className="text-link"
+                  type="button"
+                  onClick={() => {
+                    if (addRef.current) addRef.current.open = true;
+                  }}
+                >
+                  add a past night
+                </button>
+              )}
+              {entriesData.status !== "unavailable" &&
+                ". Forecasts start once there are enough nights."}
             </p>
           </div>
         ) : (
@@ -538,9 +302,9 @@ export function SleepLogPanel() {
                 </button>
               </nav>
             )}
-            <div className="sleep-entry-list">
+            <ul className="sleep-night-list">
               {visibleEntries.map((entry) => (
-                <SleepEntryCard
+                <SleepNightRow
                   key={entry.observationId}
                   entry={entry}
                   editing={editingId === entry.observationId}
@@ -564,7 +328,7 @@ export function SleepLogPanel() {
                   onDelete={() => void deleteEntry(entry)}
                 />
               ))}
-            </div>
+            </ul>
           </>
         )}
       </section>

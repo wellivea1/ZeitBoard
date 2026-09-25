@@ -17,13 +17,39 @@ describe("readRouteFromHash", () => {
   });
 
   it("falls back to the first tab when the second segment is not one", () => {
-    expect(readRouteFromHash("#/plan/wat")).toMatchObject({ screen: "plan", planTab: "calendar" });
+    expect(readRouteFromHash("#/plan/wat")).toMatchObject({ screen: "plan", planTab: "tasks" });
+    // Approvals is part of Tasks now; an old link lands where its decisions are.
+    expect(readRouteFromHash("#/plan/approvals")).toMatchObject({
+      screen: "plan",
+      planTab: "tasks",
+    });
     expect(readRouteFromHash("#/log")).toMatchObject({ screen: "log", logTab: "sleep" });
+  });
+
+  // The consolidation removed destinations that are still written down — in
+  // the verification record and in whatever the user bookmarked.
+  it.each([
+    ["#/overview", { screen: "home" }],
+    ["#/timeline", { screen: "rhythm" }],
+    ["#/calendar", { screen: "plan", planTab: "calendar" }],
+    ["#/tasks", { screen: "plan", planTab: "tasks" }],
+    ["#/approvals", { screen: "plan", planTab: "tasks" }],
+    ["#/medications", { screen: "log", logTab: "medications" }],
+  ])("keeps the legacy route %s working", (hash, expected) => {
+    expect(readRouteFromHash(hash)).toMatchObject(expected);
   });
 
   it("keeps the utility destinations addressable", () => {
     expect(readRouteFromHash("#/data-sources")).toMatchObject({ screen: "data-sources" });
-    expect(readRouteFromHash("#/settings")).toMatchObject({ screen: "settings" });
+    expect(readRouteFromHash("#/settings")).toMatchObject({
+      screen: "settings",
+      settingsTab: "display",
+    });
+    // A settings section can be linked to, as Data Sources does for sync.
+    expect(readRouteFromHash("#/settings/sync")).toMatchObject({
+      screen: "settings",
+      settingsTab: "sync",
+    });
   });
 });
 

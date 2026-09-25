@@ -852,7 +852,8 @@ every legacy hash still redirecting.
 **Routing** (`readRouteFromHash`): unknown paths fall back to Home; a screen and its tab are read
 from the address; an unrecognised second segment falls back to the first tab; `#/overview`,
 `#/timeline`, `#/calendar`, `#/tasks`, `#/approvals` and `#/medications` all land on the right
-screen _and_ the right tab; the utility destinations stay addressable.
+screen _and_ the right tab (`#/approvals`, and `#/plan/approvals`, on Plan › Tasks, where decisions
+now are); the utility destinations stay addressable.
 
 **Tabs** (`ScreenTabs`): one tab stop for the whole group; arrow keys move and
 wrap; Home and End jump to the ends; other keys are ignored; the pending count
@@ -1512,3 +1513,43 @@ final expiry checks are in `approval-queue-go-expiry.log` and
 external CalDAV write-back, production visitor exchange, native lifecycle, wearable
 pilot or release qualification is claimed. C2 and the overall completion goal remain
 open as described in the completion plan.
+
+
+## UI streamlining pass — 2026-09-24
+
+The design record is `ui-refactor-plan.md` §13. Full Go core, desktop, server and
+contracts checks passed, as did canonical web formatting, lint, types, **435 tests
+(429 desktop + 6 trusted prototype)**, the production web builds, and
+`lint-ui-standards.mjs`. The three existing Fast Refresh lint warnings remain.
+
+Verified in the real app (`wails dev` against a disposable synthetic profile,
+driven from a browser):
+
+- **Plan › Tasks.** Adding a task placed its suggestion under "Needs your decision",
+  and the Plan badge and queue count rose together. Accepting it showed the undo
+  toast, removed it from the queue, and put "Tonight 5:30 – 5:50 PM" on the task
+  row. Undo from history returned the suggestion and cleared the row.
+- **Plan › Calendar.** The board spans the page; the rhythm reads asleep, uncertain
+  and awake like Home's outlook. Today shows the waking stretch under way from a
+  now line to the night's onset band.
+- **Data Sources.** Calendars are listed with kind and range; the placements
+  calendar reads "Times you accept in Plan". "Add a calendar" opens the import card.
+- **Log.** Sleep: quick buttons, the folded past-night form, one line per night,
+  and the edit form and delete confirmation laid out without overflow.
+  Medications: one tap recorded "taken" now, the history count rose, and the row
+  read "last taken today 4:15 PM". Context: markers first, the form folded.
+- **Rhythm, Sharing, Settings.** No page-level Refresh or explanatory banner;
+  Settings tabs open by address (`#/settings/sync`, `#/settings/computer`); the
+  sync status list no longer wraps a letter at a time.
+- **Home at 3 AM** inside a predicted sleep: "Likely waking · Today 7:15 – 10:10 AM"
+  replaced a "Next sleep" panel that showed only a waking window.
+
+New regression tests, each checked to fail before its fix: accepted time on a
+task (Go and web), today's waking stretch on the calendar, the placements
+calendar's range, three-state calendar bands, the task list following a decision,
+one-tap dose recording, the in-sleep waking panel, and the restored legacy
+routes.
+
+Not verified here: the Android companion, a Windows production build of this
+branch, and a full screen-reader pass of the new layouts. Operational
+qualification is unchanged.

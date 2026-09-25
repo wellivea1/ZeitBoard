@@ -26,116 +26,7 @@ function bandStyle(startHour: number, durationHours: number) {
 
 function bandAriaLabel(band: RhythmSleepBandFixture) {
   const prefix = band.kind === "forecast" ? "Predicted sleep window" : "Sleep interval";
-  return `${prefix}: ${band.day}, ${band.startLabel} to ${band.wakeLabel}, ${band.durationLabel}, ${band.source}, ${band.confidence} confidence`;
-}
-
-function dayPercent(hour: number) {
-  return `${(hour / DAY_HOURS) * 100}%`;
-}
-
-function circularSegments(startHour: number, durationHours: number) {
-  const start = ((startHour % DAY_HOURS) + DAY_HOURS) % DAY_HOURS;
-  const boundedDuration = Math.min(Math.max(durationHours, 0), DAY_HOURS);
-  const firstDuration = Math.min(boundedDuration, DAY_HOURS - start);
-  const segments = [{ start, duration: firstDuration }];
-  const remainder = boundedDuration - firstDuration;
-  if (remainder > 0) segments.push({ start: 0, duration: remainder });
-  return segments;
-}
-
-function withinCircularSpan(hour: number, startHour: number, durationHours: number) {
-  const start = ((startHour % DAY_HOURS) + DAY_HOURS) % DAY_HOURS;
-  const point = ((hour % DAY_HOURS) + DAY_HOURS) % DAY_HOURS;
-  const duration = Math.min(Math.max(durationHours, 0), DAY_HOURS);
-  return (point - start + DAY_HOURS) % DAY_HOURS <= duration;
-}
-
-interface CycleStripProps {
-  actogram: RhythmActogram;
-  usefulWindowLabel: string;
-  sleepWindowLabel: string;
-}
-
-export function CycleStrip({ actogram, usefulWindowLabel, sleepWindowLabel }: CycleStripProps) {
-  const forecast = actogram.forecastRows[0];
-  const nowHour = ((actogram.now.hour % DAY_HOURS) + DAY_HOURS) % DAY_HOURS;
-  const forecastStart = forecast ? ((forecast.startHour % DAY_HOURS) + DAY_HOURS) % DAY_HOURS : 0;
-  const awakeDuration = (forecastStart - nowHour + DAY_HOURS) % DAY_HOURS;
-  const resolveProbe = useCallback(
-    (fraction: number) => {
-      if (!forecast) return undefined;
-      const hour = fraction * DAY_HOURS;
-      const predicted = withinCircularSpan(hour, forecastStart, forecast.durationHours);
-      return {
-        position: fraction,
-        label: civilProbeLabel(actogram.now.civilDate, fraction * DAY_HOURS * 60, {
-          predicted,
-          approximate: predicted,
-        }),
-        zoneId: actogram.now.zoneId,
-      };
-    },
-    [actogram.now.civilDate, actogram.now.zoneId, forecast, forecastStart],
-  );
-  const probe = useTimeProbe(resolveProbe);
-
-  if (!forecast) return null;
-
-  return (
-    <figure
-      className="cycle-strip"
-      aria-label={`Today in your cycle. ${usefulWindowLabel}. Predicted sleep window ${sleepWindowLabel}. ${forecast.confidence} confidence.`}
-    >
-      <figcaption>
-        <span>
-          <strong>Today in your cycle</strong>
-          <small>Forecast is approximate and widens ahead.</small>
-        </span>
-        <a href="#/rhythm">Open full rhythm</a>
-      </figcaption>
-      <div className="cycle-strip-axis" aria-hidden="true">
-        <span>12 AM</span>
-        <span>6 AM</span>
-        <span>Noon</span>
-        <span>6 PM</span>
-        <span>12 AM</span>
-      </div>
-      <div
-        className="cycle-strip-track has-time-probe"
-        aria-hidden="true"
-        onPointerMove={probe.onPointerMove}
-        onPointerLeave={probe.onPointerLeave}
-      >
-        {circularSegments(nowHour, awakeDuration).map((segment) => (
-          <span
-            className="cycle-strip-segment is-awake"
-            style={{ left: dayPercent(segment.start), width: dayPercent(segment.duration) }}
-            key={`awake-${segment.start}`}
-          />
-        ))}
-        {circularSegments(forecastStart, forecast.durationHours).map((segment) => (
-          <span
-            className="cycle-strip-segment is-sleep"
-            style={{ left: dayPercent(segment.start), width: dayPercent(segment.duration) }}
-            key={`sleep-${segment.start}`}
-          />
-        ))}
-        <span className="cycle-strip-now" style={{ left: dayPercent(nowHour) }}>
-          now
-        </span>
-        <TimeProbe probeRef={probe.probeRef} labelRef={probe.labelRef} />
-      </div>
-      <div className="cycle-strip-legend">
-        <span>
-          <i className="is-awake" /> Estimated waking span
-        </span>
-        <span>
-          <i className="is-sleep" /> Predicted sleep: {sleepWindowLabel}
-        </span>
-        <span className="cycle-strip-useful">Useful task window: {usefulWindowLabel}</span>
-      </div>
-    </figure>
-  );
+  return `${prefix}: ${band.day}, ${band.startLabel} to ${band.wakeLabel}, ${band.durationLabel}, ${band.source}`;
 }
 
 function ActogramBand({
@@ -154,11 +45,7 @@ function ActogramBand({
       aria-hidden={duplicate || undefined}
       aria-label={duplicate ? undefined : bandAriaLabel(band)}
       role={duplicate ? undefined : "img"}
-    >
-      {!duplicate && (
-        <span>{band.kind === "forecast" ? "Predicted sleep window" : band.source}</span>
-      )}
-    </span>
+    />
   );
 }
 
@@ -243,7 +130,6 @@ function ActogramRow({
         )}
         <TimeProbe probeRef={probe.probeRef} labelRef={probe.labelRef} />
       </div>
-      <small>{band.confidence}</small>
     </div>
   );
 }
@@ -362,7 +248,6 @@ export function ActogramPanel({
             <th>Wake</th>
             <th>Duration</th>
             <th>Source</th>
-            <th>Confidence</th>
             <th>Context markers</th>
           </tr>
         </thead>
@@ -374,7 +259,6 @@ export function ActogramPanel({
               <td>{band.wakeLabel}</td>
               <td>{band.durationLabel}</td>
               <td>{band.source}</td>
-              <td>{band.confidence}</td>
               <td>
                 {markersFor(band)
                   .map(
@@ -564,7 +448,6 @@ export function DriftPanel({ drift }: { drift: RhythmDrift }) {
             <th>Day</th>
             <th>Sleep onset</th>
             <th>Source</th>
-            <th>Confidence</th>
             <th>Fitted onset</th>
           </tr>
         </thead>
@@ -574,7 +457,6 @@ export function DriftPanel({ drift }: { drift: RhythmDrift }) {
               <td>{point.day}</td>
               <td>{point.onsetLabel}</td>
               <td>{point.source}</td>
-              <td>{point.confidence}</td>
               <td>{formatClock24(point.fitHour)}</td>
             </tr>
           ))}

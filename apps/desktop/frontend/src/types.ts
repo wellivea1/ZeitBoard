@@ -3,6 +3,7 @@
 // someone operating under fatigue, which is the condition this product is for.
 export type ScreenId = "home" | "plan" | "rhythm" | "log" | "sharing" | "data-sources" | "settings";
 
-export type PlanTab = "calendar" | "tasks" | "approvals";
+export type PlanTab = "tasks" | "calendar";
 export type LogTab = "sleep" | "medications" | "markers";
+export type SettingsTab = "display" | "reaching" | "sync" | "computer" | "data";
 export type RhythmTab = "actogram" | "drift" | "sources";

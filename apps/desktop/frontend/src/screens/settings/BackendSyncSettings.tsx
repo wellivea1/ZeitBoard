@@ -32,27 +32,28 @@ export function BackendSyncSettings({
   return (
     <section className="settings-section backend-sync-panel">
       <div className="data-control-intro">
-        <p className="section-kicker">Backend sync</p>
         <h2>Self-hosted server</h2>
         <p className="settings-copy">
-          Sync is off by default. When enabled, sleep observations, corrections, and your task list
-          are sent to your enrolled self-hosted backend. Deleting a task or erasing sleep data
-          propagates the deletion to the server and every synced device. Overview and Rhythm clearly
-          label synced server estimates.
+          Off unless you turn it on. Then your sleep records, corrections and tasks go to your own
+          server, and a deletion reaches every synced device. Activity and medication records stay
+          on this computer.
         </p>
-        <p className="settings-copy">
-          Sync runs automatically after enrollment, when ZeitBoard starts, and about every minute
-          while the app is running, including when its window is hidden. Interrupted exchanges retry
-          from saved records. Quit stops background sync. Activity and medication records remain
-          local.
-        </p>
-        <p className="settings-copy">
-          Re-enrolling downloads the server history before replaying missing saved records. A failed
-          connection attempt keeps your previous enrollment. Retained deletion markers prevent
-          erased records from returning after a restore. Changing servers sends this profile's saved
-          sleep records, tasks and deletion markers to the new server; it does not delete the old
-          server's copies.
-        </p>
+        {/* The detail matters for trust, but not on every visit. */}
+        <details className="settings-more">
+          <summary>How sync behaves</summary>
+          <p className="settings-copy">
+            Sync runs after enrollment, when ZeitBoard starts, and about every minute while it is
+            running, including when its window is hidden. Interrupted exchanges retry from saved
+            records; Quit stops it. Home and Rhythm label estimates that come from the server.
+          </p>
+          <p className="settings-copy">
+            Re-enrolling downloads the server history before replaying missing saved records. A
+            failed connection attempt keeps your previous enrollment. Retained deletion markers stop
+            erased records from returning after a restore. Changing servers sends this profile's
+            sleep records, tasks and deletion markers to the new server; it does not delete the old
+            server's copies.
+          </p>
+        </details>
       </div>
       <div className="data-control-grid">
         <section
@@ -62,9 +63,8 @@ export function BackendSyncSettings({
           <div>
             <h3 id="backend-sync-connect-title">Connect backend</h3>
             <p>
-              Use an HTTPS URL and enrollment secret from your own server. The device token is
-              stored with enrollment in your account-protected local database and is never shown
-              here.
+              The HTTPS address and enrollment secret from your own server. The device token it
+              issues stays in the local database and is never shown.
             </p>
           </div>
           <form
@@ -140,8 +140,7 @@ export function BackendSyncSettings({
           <div>
             <h3 id="backend-sync-status-title">Sync status</h3>
             <p>
-              Backend unavailable falls back to local estimates. Conflicts are reported here and do
-              not crash the app.
+              If the server cannot be reached, estimates stay local. Conflicts are reported here.
             </p>
           </div>
           <dl className="sync-status-list">
@@ -176,7 +175,7 @@ export function BackendSyncSettings({
                 {status.taskConflictCount > 0 && (
                   <>
                     {" "}
-                    · <a href="#/plan/approvals">Review conflicting edits</a>
+                    · <a href="#/plan/tasks">Review conflicting edits</a>
                   </>
                 )}
               </dd>

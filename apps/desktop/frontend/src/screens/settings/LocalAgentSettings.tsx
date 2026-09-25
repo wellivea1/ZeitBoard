@@ -19,8 +19,7 @@ export function LocalAgentSettings({ status, error }: LocalAgentSettingsProps) {
   return (
     <section className="settings-section local-agent-panel">
       <div className="data-control-intro">
-        <p className="section-kicker">Local assistant</p>
-        <h2>Desktop-local agent</h2>
+        <h2>Local assistant connection</h2>
         <p className="settings-copy">
           ZeitBoard serves an authenticated MCP endpoint on this computer. Local reads and
           reversible appearance changes work with backend sync off. Voice and speech recognition

@@ -46,7 +46,7 @@ export interface RhythmResult {
 export const rhythmUnavailable: RhythmData = {
   fixtureMode: false,
   status: "unavailable",
-  message: "The desktop service could not load your rhythm. Refresh to try again.",
+  message: "The desktop service could not load your rhythm. It retries by itself.",
   actogram: {
     summary: "Rhythm unavailable",
     observedRows: [],

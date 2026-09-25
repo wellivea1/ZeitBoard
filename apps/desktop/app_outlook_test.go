@@ -216,3 +216,40 @@ func TestOutlookHorizonIsCivilTimeAware(t *testing.T) {
 		}
 	}
 }
+
+// Found by using the app with a real calendar: every fixed event on Home read
+// "Untitled event". The titles were taken from the planner's busy intervals,
+// which are text-free on purpose because they also fingerprint the calendar.
+// The events are the person's own and are shown on their own screen, so the
+// title has to come from the calendar.
+func TestOutlookCommitmentsCarryTheirTitles(t *testing.T) {
+	app := newTestApp(t)
+	seedSleepEntriesEndingAt(t, app, 10, 2*time.Hour)
+
+	start := time.Now().UTC().Add(5 * time.Hour).Truncate(time.Hour)
+	ics := "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//ZeitBoard Test//EN\r\n" +
+		"BEGIN:VEVENT\r\nUID:dentist@example.test\r\nDTSTAMP:20260101T000000Z\r\n" +
+		"DTSTART:" + start.Format("20060102T150405Z") + "\r\n" +
+		"DTEND:" + start.Add(30*time.Minute).Format("20060102T150405Z") + "\r\n" +
+		"SUMMARY:Dentist\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+	if _, err := app.ImportCalendarFile(CalendarFileInput{FileName: "personal.ics", Contents: ics, ZoneID: defaultZoneID}); err != nil {
+		t.Fatalf("import: %v", err)
+	}
+
+	view, err := app.GetOutlook()
+	if err != nil {
+		t.Fatalf("outlook: %v", err)
+	}
+	if len(view.Commitments) != 1 {
+		t.Fatalf("%d commitments, want the imported event", len(view.Commitments))
+	}
+	commitment := view.Commitments[0]
+	if commitment.Title != "Dentist" {
+		t.Errorf("commitment title = %q, want the event's own title", commitment.Title)
+	}
+	// Placed on the timeline where it falls, about five hours in.
+	if commitment.OffsetHours < 4 || commitment.OffsetHours > 6 || commitment.DurationHours <= 0 {
+		t.Errorf("commitment placed at %.2fh for %.2fh, want about 5h for 0.5h",
+			commitment.OffsetHours, commitment.DurationHours)
+	}
+}

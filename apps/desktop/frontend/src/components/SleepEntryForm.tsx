@@ -8,6 +8,7 @@ export function SleepEntryForm({
   editing = false,
   excluded = false,
   onExcludedChange,
+  onCancel,
 }: {
   form: SleepEntryInput;
   onChange: (form: SleepEntryInput) => void;
@@ -16,6 +17,7 @@ export function SleepEntryForm({
   editing?: boolean;
   excluded?: boolean;
   onExcludedChange?: (value: boolean) => void;
+  onCancel?: () => void;
 }) {
   return (
     <div className="sleep-entry-fields">
@@ -50,7 +52,7 @@ export function SleepEntryForm({
         />
       </label>
       <label>
-        Classification
+        Kind
         <select
           value={form.classification}
           disabled={disabled}
@@ -58,32 +60,37 @@ export function SleepEntryForm({
             onChange({ ...form, classification: event.target.value as SleepClassification })
           }
         >
-          <option value="principal">Principal sleep</option>
+          <option value="principal">Main sleep</option>
           <option value="nap">Nap</option>
-          <option value="unknown">Unknown</option>
+          <option value="unknown">Not sure</option>
         </select>
       </label>
+      {editing && (
+        <>
+          <p className="sleep-entry-hint">
+            Times include their UTC offset, for example 2026-11-01T01:30:00-04:00. Keep the offset
+            valid for the selected zone.
+          </p>
+          <label className="sleep-entry-check">
+            <input
+              type="checkbox"
+              checked={excluded}
+              disabled={disabled}
+              onChange={(event) => onExcludedChange?.(event.target.checked)}
+            />
+            Exclude from estimates
+          </label>
+        </>
+      )}
       <div className="sleep-entry-submit">
-        {editing && (
-          <>
-            <p>
-              Times include their UTC offset, for example 2026-11-01T01:30:00-04:00. Keep the offset
-              valid for the selected zone.
-            </p>
-            <label>
-              <input
-                type="checkbox"
-                checked={excluded}
-                disabled={disabled}
-                onChange={(event) => onExcludedChange?.(event.target.checked)}
-              />
-              Exclude from estimates
-            </label>
-          </>
-        )}
         <button className="button primary" type="submit" disabled={disabled}>
           {submitLabel}
         </button>
+        {onCancel && (
+          <button className="button ghost" type="button" onClick={onCancel} disabled={disabled}>
+            Cancel
+          </button>
+        )}
       </div>
     </div>
   );

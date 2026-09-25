@@ -57,74 +57,82 @@ describe("desktop navigation", () => {
     );
   });
 
-  it("renders Overview as one rhythm-first surface instead of metric cards", () => {
+  // Home answers three questions once each: the current state, when the next
+  // sleep is likely, and what needs you. It used to answer them several times
+  // over across nine sections and two timelines.
+  it("renders Home as one screen of state, timeline and what needs you", () => {
     const { container } = render(<App />);
 
     expect(screen.getByRole("heading", { name: "Likely awake" })).toBeVisible();
-    expect(screen.getByText("Sample date · Jun 16")).toBeVisible();
-    expect(screen.getByText("Today in your cycle")).toBeVisible();
-    expect(screen.getByText("Today, 10:15 PM to 1:27 AM")).toBeVisible();
-    expect(screen.getByText("+48 min per cycle")).toBeVisible();
-    expect(container.querySelectorAll(".overview-surface")).toHaveLength(1);
-    expect(container.querySelector(".overview-surface .panel")).toBeNull();
+    expect(screen.getByText("Next sleep")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Next 3 days" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Needs you" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Coming up" })).toBeVisible();
+    // One timeline: the 24-hour strip that restated it is gone.
+    expect(container.querySelectorAll(".outlook-timeline")).toHaveLength(1);
+    expect(container.querySelector(".cycle-strip")).toBeNull();
     expect(container.querySelector(".metric-card")).toBeNull();
+    // The event that lands in predicted sleep is named where it is listed.
+    expect(screen.getByText("Sample appointment")).toBeVisible();
   });
 
-  it("renders approval proposals with explicit actions", async () => {
-    window.location.hash = "#/plan/approvals";
-    const { container } = render(<App />);
-
-    expect(await screen.findByRole("tab", { name: /Approvals/ })).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-    expect(screen.getByText("Email Dr. Okafor")).toBeVisible();
-    expect(screen.getAllByRole("button", { name: "Accept proposal" })).toHaveLength(2);
-    expect(screen.getAllByRole("button", { name: "Reject proposal" })).toHaveLength(2);
-    expect(screen.getByText("Medium")).toBeVisible();
-    expect(container.querySelector(".approval-filter.panel")).toBeNull();
-    expect(container.querySelectorAll(".proposal-stack > .proposal-card")).toHaveLength(2);
-    expect(container.querySelector(".proposal-stack > .panel")).toBeNull();
-  });
-
-  it("keeps task proposals and no-safe-window context in one approval surface", async () => {
+  // Decisions sit directly under the tasks they are about. They used to be a
+  // separate Approvals tab, so a task was added on one tab and its time
+  // accepted on another.
+  it("shows each suggested time with explicit actions beside the tasks", async () => {
     window.location.hash = "#/plan/tasks";
     const { container } = render(<App />);
 
-    await screen.findByRole("heading", { level: 3, name: "Call service provider" });
-    expect(container.querySelector(".approval-summary > .proposal-card")).not.toBeNull();
-    expect(container.querySelector(".approval-summary > .unplaced-row")).not.toBeNull();
-    expect(container.querySelector(".screen-grid > .unplaced-panel")).toBeNull();
-    expect(screen.getByRole("heading", { level: 3, name: "Call service provider" })).toBeVisible();
+    expect(await screen.findByRole("tab", { name: /Tasks/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.queryByRole("tab", { name: /Approvals/ })).toBeNull();
+    expect(screen.getByRole("heading", { name: /Needs your decision/ })).toBeVisible();
+    expect(screen.getByText("Email Dr. Okafor")).toBeVisible();
+    expect(screen.getAllByRole("button", { name: "Accept proposal" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Reject proposal" })).toHaveLength(2);
+    expect(container.querySelectorAll(".decision-queue .proposal-card")).toHaveLength(2);
+    expect(container.querySelector(".proposal-stack > .panel")).toBeNull();
+    // No filter chips: every origin is listed together.
+    expect(screen.queryByRole("group", { name: "Filter approvals" })).toBeNull();
   });
 
-  it("approves a proposal, updates the queue and badge, and supports undo", async () => {
-    window.location.hash = "#/plan/approvals";
+  it("keeps suggestions and tasks without a safe time in one list", async () => {
+    window.location.hash = "#/plan/tasks";
+    const { container } = render(<App />);
+
+    expect(await screen.findByText("Call service provider")).toBeVisible();
+    expect(container.querySelector(".decision-queue .proposal-card")).not.toBeNull();
+    expect(container.querySelector(".decision-queue .unplaced-list")).not.toBeNull();
+  });
+
+  it("approves a suggestion, updates the queue and badge, and supports undo", async () => {
+    window.location.hash = "#/plan/tasks";
     render(<App />);
 
-    // The count now appears twice on purpose: on the Plan destination, so it is
-    // visible from anywhere, and on the Approvals tab once you are here.
+    // The count appears on the Plan destination, so it is visible from
+    // anywhere, and on the Tasks tab once you are here.
     const navigation = () => screen.getByRole("navigation", { name: "Primary navigation" });
     const accepts = await screen.findAllByRole("button", { name: "Accept proposal" });
     expect(accepts).toHaveLength(2);
     expect(within(navigation()).getByLabelText("2 pending")).toBeVisible();
 
     fireEvent.click(accepts[0] as HTMLElement);
-    fireEvent.click(screen.getByRole("button", { name: "History" }));
-
-    expect(screen.getByText("Email Dr. Okafor")).toBeVisible();
-    expect(screen.getByText("approved")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "All 1" }));
     expect(screen.getAllByRole("button", { name: "Accept proposal" })).toHaveLength(1);
     expect(within(navigation()).getByLabelText("1 pending")).toBeVisible();
 
-    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+    fireEvent.click(screen.getByText(/Decision history/));
     expect(screen.getByText("Email Dr. Okafor")).toBeVisible();
+    expect(screen.getByText("approved")).toBeVisible();
+
+    // Named for what it undoes: the confirmation toast has its own Undo.
+    fireEvent.click(screen.getByRole("button", { name: "Undo decision on Email Dr. Okafor" }));
     expect(screen.getAllByRole("button", { name: "Accept proposal" })).toHaveLength(2);
   });
 
-  it("shows the empty state once every proposal is decided", async () => {
-    window.location.hash = "#/plan/approvals";
+  it("says so plainly once every suggestion is decided", async () => {
+    window.location.hash = "#/plan/tasks";
     render(<App />);
 
     fireEvent.click(
@@ -132,7 +140,7 @@ describe("desktop navigation", () => {
     );
     fireEvent.click(screen.getAllByRole("button", { name: "Reject proposal" })[0] as HTMLElement);
 
-    expect(screen.getByRole("heading", { name: "Nothing waiting for approval" })).toBeVisible();
+    expect(screen.getByText(/Nothing is waiting for you/)).toBeVisible();
     expect(screen.queryByRole("button", { name: "Accept proposal" })).toBeNull();
   });
 
@@ -151,13 +159,13 @@ describe("desktop navigation", () => {
     expect(screen.getByLabelText("Show forecast")).not.toBeChecked();
     expect(
       screen.queryByRole("img", {
-        name: "Predicted sleep window: Jun 18, Jun 18, 11:21 PM earliest to Jun 19, 5:27 AM latest, 6 hr 6 min window, Forecast cycle 3, Low confidence",
+        name: "Predicted sleep window: Jun 18, Jun 18, 11:21 PM earliest to Jun 19, 5:27 AM latest, 6 hr 6 min window, Forecast cycle 3",
       }),
     ).toBeNull();
     fireEvent.click(screen.getByLabelText("Show forecast"));
     expect(
       screen.getByRole("img", {
-        name: "Predicted sleep window: Jun 18, Jun 18, 11:21 PM earliest to Jun 19, 5:27 AM latest, 6 hr 6 min window, Forecast cycle 3, Low confidence",
+        name: "Predicted sleep window: Jun 18, Jun 18, 11:21 PM earliest to Jun 19, 5:27 AM latest, 6 hr 6 min window, Forecast cycle 3",
       }),
     ).toBeVisible();
     expect(screen.queryByRole("heading", { name: "Correction inspector" })).toBeNull();
@@ -226,14 +234,16 @@ describe("desktop navigation", () => {
     fireEvent.change(screen.getByLabelText("Started"), {
       target: { value: "2026-07-22T09:00" },
     });
-    fireEvent.change(screen.getByLabelText("IANA time zone"), {
+    fireEvent.change(screen.getByLabelText("Time zone"), {
       target: { value: "America/New_York" },
     });
     fireEvent.change(screen.getByLabelText("Private note (optional)"), {
       target: { value: "Arrival context" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Append marker" }));
-    expect(await screen.findByText("Arrival context")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Add marker" }));
+    // In the recorded list, not the note field it was typed into.
+    const recorded = screen.getByLabelText("Recorded rhythm markers");
+    expect(await within(recorded).findByText("Arrival context")).toBeVisible();
     expect(add).toHaveBeenCalledWith(
       expect.objectContaining({
         kind: "travel",
@@ -514,17 +524,18 @@ describe("desktop navigation", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Save sleep entry" }));
 
-    expect(await screen.findByText("Sleep entry saved locally.")).toBeVisible();
+    expect(await screen.findByText("Night saved.")).toBeVisible();
     expect(addSleep).toHaveBeenCalledWith({
       startLocal: "2026-03-01T22:00",
       endLocal: "2026-03-02T06:00",
       zoneId: "America/New_York",
       classification: "principal",
     });
-    expect(screen.getByText(/Sun Mar 1, 10:00 PM EST to Mon Mar 2, 6:00 AM EST/)).toBeVisible();
+    expect(screen.getByText("Sun, Mar 1")).toBeVisible();
+    expect(screen.getByText("10:00 PM – 6:00 AM")).toBeVisible();
 
+    // Plan opens on Tasks, where a task without a usable estimate says why.
     fireEvent.click(screen.getByRole("link", { name: /^Plan/ }));
-    fireEvent.click(await screen.findByRole("tab", { name: /Approvals/ }));
     expect(await screen.findByText("Local sleep data follow-up")).toBeVisible();
   });
 
@@ -560,21 +571,30 @@ describe("desktop navigation", () => {
         },
       ],
     };
-    const deleteSleep = vi.fn(async () => ({
+    const empty = {
       status: "empty",
       empty: true,
       message: "No sleep entries yet.",
       entries: [],
-    }));
+    };
+    let deleted = false;
+    const deleteSleep = vi.fn(async () => {
+      deleted = true;
+      return empty;
+    });
     (globalThis as { go?: unknown }).go = {
       main: {
         App: {
-          ListSleepEntries: async () => ({
-            status: "ready",
-            empty: false,
-            message: "1 local sleep entry stored on this device.",
-            entries: [entry],
-          }),
+          // The log reloads when sleep data changes, so the store is stateful.
+          ListSleepEntries: async () =>
+            deleted
+              ? empty
+              : {
+                  status: "ready",
+                  empty: false,
+                  message: "1 local sleep entry stored on this device.",
+                  entries: [entry],
+                },
           DeleteSleepObservation: deleteSleep,
         },
       },
@@ -582,20 +602,21 @@ describe("desktop navigation", () => {
 
     render(<App />);
 
+    expect(await screen.findByText("Sun, Mar 1")).toBeVisible();
+    // Excluding keeps the night; deleting is the separate, confirmed step.
     expect(
-      await screen.findByText(/Sun Mar 1, 10:00 PM EST to Mon Mar 2, 6:00 AM EST/),
+      screen.getByRole("button", { name: "Exclude Sun, Mar 1, 10:00 PM – 6:00 AM from estimates" }),
     ).toBeVisible();
-    expect(screen.getByRole("button", { name: "Suppress from estimates" })).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Delete permanently" }));
-    const eraseButton = screen.getByRole("button", { name: "Erase entry" });
+    fireEvent.click(screen.getByRole("button", { name: "Delete Sun, Mar 1, 10:00 PM – 6:00 AM" }));
+    const eraseButton = screen.getByRole("button", { name: "Delete night" });
     expect(eraseButton).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText("Deletion confirmation"), {
+    fireEvent.change(screen.getByLabelText("Type DELETE to confirm"), {
       target: { value: "DELETE" },
     });
     fireEvent.click(eraseButton);
 
-    expect(await screen.findByText("Sleep entry erased permanently.")).toBeVisible();
+    expect(await screen.findByText("Night deleted.")).toBeVisible();
     expect(deleteSleep).toHaveBeenCalledWith({
       observationId: "obs_sleep_01",
       confirmation: "DELETE",
@@ -629,9 +650,12 @@ describe("desktop navigation", () => {
 
     const taskInput = await screen.findByLabelText("Task");
     fireEvent.change(taskInput, { target: { value: "Call clinic" } });
-    fireEvent.click(screen.getByRole("button", { name: "Save task" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add task" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Task storage is unavailable.");
+    // Tasks and decisions share a screen, so this looks for the task error
+    // itself rather than whichever alert happens to be first.
+    const failure = await screen.findByText("Task storage is unavailable.");
+    expect(failure.closest('[role="alert"]')).not.toBeNull();
     expect(taskInput).toHaveValue("Call clinic");
     expect(addTask).toHaveBeenCalledWith(
       expect.objectContaining({ title: "Call clinic", durationMinutes: 45 }),
@@ -676,7 +700,7 @@ describe("desktop navigation", () => {
   });
 
   it("enables, syncs, and disables backend sync from Settings", async () => {
-    window.location.hash = "#/settings";
+    window.location.hash = "#/settings/sync";
     const offStatus = {
       enabled: false,
       status: "off",
@@ -759,7 +783,7 @@ describe("desktop navigation", () => {
   });
 
   it("exports and erases all local sleep data from Settings", async () => {
-    window.location.hash = "#/settings";
+    window.location.hash = "#/settings/data";
     const exportSleep = vi.fn(async () => ({
       fileName: "zeitboard-sleep-export-20260302-060000.json",
       json: '{"schema_version":"v1","observation_set":{"observations":[]},"correction_set":{"corrections":[]}}',
@@ -895,7 +919,7 @@ describe("assistant rail", () => {
     ).toBeVisible();
     expect(screen.getByText("Place task “Call clinic”")).toBeVisible();
     expect(screen.getByText("Thu Jul 10, 11:00 AM to 11:45 AM EDT")).toBeVisible();
-    expect(screen.getByRole("link", { name: "View in Approvals" })).toBeVisible();
+    expect(screen.getByRole("link", { name: "View in Plan" })).toBeVisible();
 
     // Approve goes through the same one-use-token queue decision.
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));

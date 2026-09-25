@@ -18,6 +18,12 @@ describe("SleepLogPanel", () => {
       reason: "owner correction",
       summary: `Correction ${index + 1}`,
     }));
+    // One night per day from Thu, Jan 1, so each row names a different date.
+    const day = (index: number, hour: string) => {
+      const date = new Date(2026, 0, 1 + index);
+      const pad = (value: number) => String(value).padStart(2, "0");
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${hour}`;
+    };
     const entries = Array.from({ length: 51 }, (_, index) => {
       const number = index + 1;
       return {
@@ -28,8 +34,8 @@ describe("SleepLogPanel", () => {
         endLabel: `End ${number}`,
         zoneId: "America/New_York",
         classification: "principal",
-        effectiveStartLocal: "2026-03-01T22:00",
-        effectiveEndLocal: "2026-03-02T06:00",
+        effectiveStartLocal: day(index, "22:00"),
+        effectiveEndLocal: day(index + 1, "06:00"),
         effectiveStartLabel: `Effective start ${number}`,
         effectiveEndLabel: `Effective end ${number}`,
         effectiveClassification: "principal",
@@ -60,8 +66,8 @@ describe("SleepLogPanel", () => {
     render(<SleepLogPanel />);
 
     expect(await screen.findByText("Entries 1-50 of 51")).toBeVisible();
-    expect(screen.getByText("Effective start 1 to Effective end 1")).toBeVisible();
-    expect(screen.queryByText("Effective start 51 to Effective end 51")).not.toBeInTheDocument();
+    expect(screen.getByText("Thu, Jan 1")).toBeVisible();
+    expect(screen.queryByText("Fri, Feb 20")).not.toBeInTheDocument();
 
     expect(screen.queryByText("Created 001")).not.toBeInTheDocument();
     const history = screen.getByText("Correction history (51)").closest("details");
@@ -75,14 +81,16 @@ describe("SleepLogPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Next entries" }));
     expect(screen.getByText("Entries 51-51 of 51")).toBeVisible();
-    expect(screen.getByText("Effective start 51 to Effective end 51")).toBeVisible();
+    expect(screen.getByText("Fri, Feb 20")).toBeVisible();
   });
 
   it("carries the entry form and the log together", () => {
     render(<SleepLogPanel />);
-    expect(screen.getByRole("heading", { name: "Add sleep entry" })).toBeVisible();
+    // The form for a missed night folds away under the quick buttons.
+    expect(screen.getByRole("form", { name: "Add sleep entry" })).toBeInTheDocument();
+    expect(screen.getByText("Add a past night")).toBeVisible();
     expect(screen.getByRole("heading", { name: "Sleep log" })).toBeVisible();
     // Source configuration stayed on Data Sources.
-    expect(screen.queryByRole("heading", { name: "Source status" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Connected" })).toBeNull();
   });
 });

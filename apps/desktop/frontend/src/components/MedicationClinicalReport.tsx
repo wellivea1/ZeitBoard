@@ -154,9 +154,8 @@ export function MedicationClinicalReport({ available }: { available: boolean }) 
     <section className="medication-report" aria-labelledby="medication-report-title">
       <header className="medication-report-heading">
         <div>
-          <p className="section-kicker">Local clinician context</p>
           <h2 id="medication-report-title">Rhythm and medication report</h2>
-          <p>Review recorded evidence and prepare a redacted, printable HTML report.</p>
+          <p>A printable summary for a clinician. You choose what it includes.</p>
         </div>
         <button
           className="button secondary compact"

@@ -79,8 +79,8 @@ describe("CalendarBoard", () => {
     fireEvent.click(screen.getByRole("button", { name: /Private appointment/ }));
     expect(screen.getByRole("heading", { name: "Private appointment" })).toBeVisible();
     expect(screen.getByText("Private office")).toBeVisible();
-    fireEvent.click(screen.getByText(/Event list/));
+    fireEvent.click(screen.getByText(/List these events/));
     expect(screen.getByRole("table")).toBeVisible();
-    expect(screen.getByText("Blocks placement")).toBeVisible();
+    expect(screen.getByText("Busy")).toBeVisible();
   });
 });

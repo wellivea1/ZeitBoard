@@ -36,7 +36,7 @@ function ScreenLoading() {
 }
 
 export default function App() {
-  const { route, selectPlanTab, selectLogTab } = useScreenNavigation();
+  const { route, selectPlanTab, selectLogTab, selectSettingsTab } = useScreenNavigation();
   useEffect(subscribeAnalysisUpdates, []);
 
   const content: ReactNode = {
@@ -46,7 +46,7 @@ export default function App() {
     log: <LogScreen tab={route.logTab} onSelect={selectLogTab} />,
     sharing: <SharingScreen />,
     "data-sources": <DataSourcesScreen />,
-    settings: <SettingsScreen />,
+    settings: <SettingsScreen tab={route.settingsTab} onSelect={selectSettingsTab} />,
   }[route.screen];
 
   return (
@@ -65,6 +65,8 @@ export default function App() {
               Skip to content
             </a>
             <AppShell screen={route.screen}>
+              {/* Settings tabs are left out of the key: switching one must not
+                  remount the screen and lose a half-typed sync enrollment. */}
               <ScreenErrorBoundary key={`${route.screen}/${route.planTab}/${route.logTab}`}>
                 <Suspense fallback={<ScreenLoading />}>{content}</Suspense>
               </ScreenErrorBoundary>

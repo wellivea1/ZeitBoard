@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-var ErrTaskNeedsReview = errors.New("task has conflicting edits; review them in Approvals before editing or placing it")
+var ErrTaskNeedsReview = errors.New("task has conflicting edits; choose a version in Plan before editing or placing it")
 var ErrTaskReviewChanged = errors.New("the task or its downloaded versions changed; refresh and review them again")
 
 type TaskSyncVersion struct {

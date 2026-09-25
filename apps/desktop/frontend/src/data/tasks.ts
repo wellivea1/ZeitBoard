@@ -21,6 +21,8 @@ export interface Task {
   preferredAfterWakeMinutes?: number;
   minimumConfidence?: string;
   editable: boolean;
+  /** The block accepted for this version of the task, when there is one. */
+  scheduled?: { startAt: string; endAt: string; label: string };
 }
 
 export interface TasksData {
@@ -113,6 +115,18 @@ export function normalizeTask(value: unknown): Task | undefined {
   const minimumConfidence =
     typeof value.minimumConfidence === "string" ? value.minimumConfidence : undefined;
   if (minimumConfidence === undefined) return undefined;
+  // All or nothing: half a block cannot be worded.
+  const scheduledStartAt = str(value.scheduledStartAt);
+  const scheduledEndAt = str(value.scheduledEndAt);
+  const scheduledLabel = str(value.scheduledLabel);
+  const scheduled =
+    scheduledStartAt &&
+    scheduledEndAt &&
+    scheduledLabel &&
+    Number.isFinite(Date.parse(scheduledStartAt)) &&
+    Number.isFinite(Date.parse(scheduledEndAt))
+      ? { startAt: scheduledStartAt, endAt: scheduledEndAt, label: scheduledLabel }
+      : undefined;
   return {
     needsReview: value.needsReview,
     updatedAt,
@@ -131,6 +145,7 @@ export function normalizeTask(value: unknown): Task | undefined {
     minimumConfidence,
     // Conflicted task constraints are frozen until the owner reviews both versions.
     editable: !value.needsReview,
+    ...(scheduled ? { scheduled } : {}),
   };
 }
 
@@ -162,8 +177,7 @@ export async function loadTasks(
   return {
     status: "unavailable",
     tasks: [],
-    message:
-      "Your tasks could not be loaded. Refresh to try again; saved tasks have not been changed.",
+    message: "Your tasks could not be loaded. Saved tasks have not been changed.",
   };
 }
 

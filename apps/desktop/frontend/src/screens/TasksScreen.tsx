@@ -1,9 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { Icon } from "../components/Icon";
 import { PageHeader, PlaceholderNotice } from "../components/AppShell";
-import { ProposalCard } from "../components/ProposalCard";
+import { DecisionHistory, DecisionQueue } from "../components/DecisionQueue";
 import { TaskEditor } from "../components/TaskEditor";
-import { useApprovals } from "../state/approvals";
 import {
   addTask,
   updateTask,
@@ -14,12 +12,17 @@ import {
   type TaskInput,
   type TasksData,
 } from "../data/tasks";
+import { calendarDataChangedEvent } from "../data/calendar";
 import { sleepDataChangedEvent } from "../data/sleepDataEvents";
 import { hasDesktopBridge } from "../data/wailsBridge";
 import { createCoalescedRefresh } from "../utils/coalescedRefresh";
 import { subscribeProjectionRefresh } from "../utils/projectionRefresh";
+import { blockWording } from "../utils/relativeTime";
 
-function TaskRow({
+// One line per task: what it is, when it is, and what can be done to it. The
+// list used to be a four-column table whose buttons wrapped under each row at
+// most window widths, and it never said which tasks already had a time.
+function TaskItem({
   task,
   busy,
   onToggleDone,
@@ -32,34 +35,37 @@ function TaskRow({
   onEdit: (task: Task) => void;
   onDelete: (task: Task) => void;
 }) {
+  const details = [task.durationLabel, task.windowLabel, task.afterWakeLabel]
+    .filter(Boolean)
+    .join(" · ");
+  const scheduled = task.status === "open" ? task.scheduled : undefined;
   return (
-    <div className="task-row" role="row" data-status={task.status}>
-      <span role="cell">
-        <input
-          type="checkbox"
-          checked={task.status === "done"}
-          disabled={busy || task.needsReview}
-          onChange={() => onToggleDone(task)}
-          aria-label={`Mark ${task.title} ${task.status === "done" ? "open" : "done"}`}
-        />
-        {task.title}
-      </span>
-      <span role="cell">
-        {[task.durationLabel, task.windowLabel, task.afterWakeLabel].filter(Boolean).join(" · ")}
-      </span>
-      <span role="cell">
-        <span className="task-chip">
-          {task.needsReview ? "Needs review" : task.status === "done" ? "Done" : "Open"}
+    <li className="task-item" data-status={task.status}>
+      <input
+        type="checkbox"
+        checked={task.status === "done"}
+        disabled={busy || task.needsReview}
+        onChange={() => onToggleDone(task)}
+        aria-label={`Mark ${task.title} ${task.status === "done" ? "open" : "done"}`}
+      />
+      <div className="task-item-text">
+        <strong>{task.title}</strong>
+        <span>
+          {scheduled && (
+            <>
+              <span className="task-scheduled" title={scheduled.label}>
+                {blockWording(scheduled.startAt, scheduled.endAt, scheduled.label)}
+              </span>
+              {" · "}
+            </>
+          )}
+          {details}
         </span>
-      </span>
-      <span role="cell" className="task-actions">
-        {task.needsReview && (
-          <a className="button secondary" href="#/plan/approvals">
-            Review conflicting edits
-          </a>
-        )}
+        {task.needsReview && <span className="task-chip">Choose a version above</span>}
+      </div>
+      <div className="task-actions">
         <button
-          className="button secondary"
+          className="button ghost compact"
           type="button"
           disabled={busy || !task.editable}
           aria-label={`Edit ${task.title}`}
@@ -68,7 +74,7 @@ function TaskRow({
           Edit
         </button>
         <button
-          className="button secondary"
+          className="button ghost compact"
           type="button"
           disabled={busy}
           aria-label={`Delete ${task.title}`}
@@ -76,14 +82,12 @@ function TaskRow({
         >
           Delete
         </button>
-      </span>
-    </div>
+      </div>
+    </li>
   );
 }
 
 export function TasksScreen({ embedded }: { embedded?: boolean } = {}) {
-  const { pending, pendingCount, unplaced, error: proposalError } = useApprovals();
-  const firstUnplaced = unplaced[0];
   const [data, setData] = useState<TasksData>({
     status: "unavailable",
     tasks: [],
@@ -108,11 +112,16 @@ export function TasksScreen({ embedded }: { embedded?: boolean } = {}) {
       setData((current) => (result.status === "ok" || current.status !== "ok" ? result : current));
     });
     refreshRef.current = refresh;
-    const unsubscribe = subscribeProjectionRefresh(() => {
+    const request = () => {
       if (!busyRef.current) refresh.request();
-    }, sleepDataChangedEvent);
+    };
+    const unsubscribe = subscribeProjectionRefresh(request, sleepDataChangedEvent);
+    // Accepting or undoing a suggested time writes the calendar, and each
+    // task row shows its accepted time.
+    window.addEventListener(calendarDataChangedEvent, request);
     return () => {
       unsubscribe();
+      window.removeEventListener(calendarDataChangedEvent, request);
       refresh.dispose();
       refreshRef.current = null;
     };
@@ -139,9 +148,7 @@ export function TasksScreen({ embedded }: { embedded?: boolean } = {}) {
         setEditorVersion((version) => version + 1);
       }
     } catch (reason) {
-      setError(
-        reason instanceof Error ? reason.message : "The task action failed. Refresh and try again.",
-      );
+      setError(reason instanceof Error ? reason.message : "The task action failed. Try again.");
     } finally {
       busyRef.current = false;
       setBusy(false);
@@ -150,7 +157,7 @@ export function TasksScreen({ embedded }: { embedded?: boolean } = {}) {
   const save = (input: TaskInput) =>
     void runMutation(
       () => (editing ? updateTask(input) : addTask(input)),
-      `${editing ? "Updated" : "Added"} ${input.title}. Review proposals to place it on your calendar.`,
+      `${editing ? "Updated" : "Added"} ${input.title}. Its suggested time appears under Needs your decision.`,
       true,
     );
   const edit = (task: Task) => {
@@ -165,31 +172,31 @@ export function TasksScreen({ embedded }: { embedded?: boolean } = {}) {
 
   return (
     <>
-      <PageHeader
-        title="Tasks"
-        description="Add flexible work, then review a proposed time before it reaches your calendar."
-        level={embedded ? "panel" : "page"}
-        actions={
-          hasDesktopBridge() && (
+      {!embedded && <PageHeader title="Tasks" />}
+      {!available && (
+        <PlaceholderNotice>
+          {data.message}{" "}
+          {/* Recovery sits with the failure. A permanent Refresh button on a
+              list that refreshes itself was noise the rest of the time. */}
+          {hasDesktopBridge() && (
             <button
-              className="button secondary"
-              disabled={busy}
+              className="button secondary compact"
+              type="button"
               onClick={() => refreshRef.current?.request()}
             >
-              Refresh tasks
+              Try again
             </button>
-          )
-        }
-      />
-      {!available && <PlaceholderNotice>{data.message}</PlaceholderNotice>}
-      <section className="task-workspace" aria-label="Task planning and approvals">
+          )}
+        </PlaceholderNotice>
+      )}
+      <section className="task-workspace" aria-label="Tasks and decisions">
         {available && readError && (
           <p role="alert">
             Latest refresh failed. Showing the last loaded tasks; your draft is kept. {readError}
           </p>
         )}
         {available && (
-          <section className="task-list-panel" aria-label="Your tasks">
+          <section className="task-add-panel" aria-label="Add a task">
             <div ref={editorRef}>
               <TaskEditor
                 key={editorVersion}
@@ -207,10 +214,18 @@ export function TasksScreen({ embedded }: { embedded?: boolean } = {}) {
             <p className="task-feedback" role="status">
               {announcement}
             </p>
-            <div className="panel-heading">
+          </section>
+        )}
+        <DecisionQueue />
+        {available && (
+          <section className="task-list-panel" aria-label="Your tasks">
+            <div className="plan-section-head">
               <h2 id="task-list-title">
-                {openCount} open · {data.tasks.length - openCount} done
+                Your tasks <span className="count">{openCount}</span>
               </h2>
+              {data.tasks.length - openCount > 0 && (
+                <small>{data.tasks.length - openCount} done</small>
+              )}
             </div>
             {deleting && (
               <section className="task-delete-confirmation" aria-label={`Delete ${deleting.title}`}>
@@ -248,17 +263,11 @@ export function TasksScreen({ embedded }: { embedded?: boolean } = {}) {
               </section>
             )}
             {data.tasks.length ? (
-              <div className="task-table" role="table" aria-labelledby="task-list-title">
-                <div className="task-row task-head" role="row">
-                  <span role="columnheader">Task</span>
-                  <span role="columnheader">Constraints</span>
-                  <span role="columnheader">Status</span>
-                  <span role="columnheader">Actions</span>
-                </div>
+              <ul className="task-list" aria-labelledby="task-list-title">
                 {[...data.tasks]
                   .sort((a, b) => Number(a.status === "done") - Number(b.status === "done"))
                   .map((task) => (
-                    <TaskRow
+                    <TaskItem
                       key={task.taskId}
                       task={task}
                       busy={busy}
@@ -276,60 +285,16 @@ export function TasksScreen({ embedded }: { embedded?: boolean } = {}) {
                       }
                     />
                   ))}
-              </div>
+              </ul>
             ) : (
-              <p className="phase-two-copy">
-                No tasks yet. Start with a name and duration. Timing constraints are optional.
-              </p>
-            )}
-            {data.tasks.some((task) => !task.editable) && (
-              <p className="phase-two-copy">
-                Update the desktop app to edit all saved timing constraints.
+              <p className="plan-empty">
+                No tasks yet. Add one above with a name and how long it takes.
               </p>
             )}
           </section>
         )}
 
-        <section
-          className="approval-summary task-proposal-summary"
-          aria-labelledby="approval-title"
-        >
-          {proposalError && (
-            <p role="alert">
-              {proposalError} <a href="#/plan/approvals">Review queue</a>
-            </p>
-          )}
-          <div className="panel-heading">
-            <h2 id="approval-title">Proposed times</h2>
-            <a href="#/plan/approvals">
-              Review all <Icon name="chevron" />
-            </a>
-          </div>
-          <p className="phase-two-copy">
-            {pendingCount > 0
-              ? `${pendingCount} pending ${pendingCount === 1 ? "proposal needs" : "proposals need"} your approval.`
-              : "No proposals are waiting for approval."}
-          </p>
-          {pending.slice(0, 1).map((proposal) => (
-            <ProposalCard proposal={proposal} key={proposal.id} />
-          ))}
-          <aside className="unplaced-row" aria-labelledby="unplaced-title">
-            <div>
-              <p className="section-kicker">Not proposed</p>
-              <h3 id="unplaced-title">
-                {firstUnplaced ? firstUnplaced.title : "Nothing waiting on a window"}
-              </h3>
-            </div>
-            <div>
-              <p>
-                {firstUnplaced
-                  ? firstUnplaced.reason
-                  : "Open tasks with no feasible window will appear here."}
-              </p>
-              {firstUnplaced && <small>{firstUnplaced.nextAction}</small>}
-            </div>
-          </aside>
-        </section>
+        <DecisionHistory />
       </section>
     </>
   );

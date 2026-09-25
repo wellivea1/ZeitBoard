@@ -81,105 +81,35 @@ export function RhythmMarkersPanel({
     <section className="rhythm-marker-workspace" aria-labelledby="rhythm-marker-title">
       <header className="rhythm-marker-heading">
         <div>
-          <p className="section-kicker">Self-reported context</p>
-          <h2 id="rhythm-marker-title">Rhythm markers</h2>
+          <h2 id="rhythm-marker-title">Context markers</h2>
           <p>{data.message}</p>
         </div>
         <div className="rhythm-marker-export">
           <button
-            className="button secondary"
+            className="button ghost compact"
             type="button"
             disabled={!available || exporting}
             onClick={onExport}
           >
-            {exporting ? "Preparing export..." : "Export markers"}
+            {exporting ? "Preparing export…" : "Export markers"}
           </button>
           <small>Owner export includes private notes.</small>
         </div>
       </header>
 
-      <div className="rhythm-marker-boundary" role="note">
-        Markers annotate context only. They do not change the estimate, establish cause, provide a
-        diagnosis, or recommend treatment. A wrong marker must be erased and replaced; records are
-        never edited in place.
-      </div>
+      <p className="rhythm-marker-boundary" role="note">
+        Context only: markers do not change the estimate, establish cause, diagnose, or recommend
+        treatment. To fix one, erase it and add it again; records are never edited in place.
+      </p>
 
       <div className="rhythm-marker-layout">
-        <form className="rhythm-marker-entry" onSubmit={submit}>
-          <div className="rhythm-marker-section-label">
-            <span>Add marker</span>
-            <small>Local device only</small>
-          </div>
-          <label>
-            <span>Context type</span>
-            <select
-              value={kind}
-              disabled={!available || busy}
-              onChange={(event) => setKind(event.target.value as RhythmMarkerKind)}
-            >
-              {markerKinds.map((markerKind) => (
-                <option value={markerKind} key={markerKind}>
-                  {rhythmMarkerKindLabels[markerKind]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>Started</span>
-            <input
-              type="datetime-local"
-              value={startLocal}
-              disabled={!available || busy}
-              onChange={(event) => setStartLocal(event.target.value)}
-            />
-          </label>
-          <label>
-            <span>Ended (optional)</span>
-            <input
-              type="datetime-local"
-              value={endLocal}
-              disabled={!available || busy}
-              onChange={(event) => setEndLocal(event.target.value)}
-            />
-          </label>
-          <label>
-            <span>IANA time zone</span>
-            <input
-              value={zoneId}
-              disabled={!available || busy}
-              spellCheck="false"
-              onChange={(event) => setZoneId(event.target.value)}
-            />
-          </label>
-          <label className="rhythm-marker-note-field">
-            <span>Private note (optional)</span>
-            <textarea
-              aria-label="Private note (optional)"
-              value={note}
-              maxLength={500}
-              disabled={!available || busy}
-              onChange={(event) => setNote(event.target.value)}
-            />
-            <small>{note.length}/500. Never included in trusted sharing.</small>
-          </label>
-          <button className="button primary" type="submit" disabled={!available || busy}>
-            {busy ? "Saving..." : "Append marker"}
-          </button>
-        </form>
-
         <div className="rhythm-marker-ledger" aria-label="Recorded rhythm markers">
-          <div className="rhythm-marker-ledger-head" aria-hidden="true">
-            <span>Type</span>
-            <span>Recorded interval</span>
-            <span>Private note</span>
-            <span>Action</span>
-          </div>
           {data.markers.length === 0 ? (
             <div className="rhythm-marker-empty">
               <strong>{available ? "No markers recorded" : "Desktop service unavailable"}</strong>
               <span>
                 {available
-                  ? "The actogram remains unchanged until you append context."
+                  ? "Add one when travel, illness or an obligation explains an unusual day."
                   : "This browser preview does not invent health context."}
               </span>
             </div>
@@ -252,6 +182,66 @@ export function RhythmMarkersPanel({
             ))
           )}
         </div>
+        <details className="rhythm-marker-add">
+          <summary>Add a marker</summary>
+          <form className="rhythm-marker-entry" onSubmit={submit}>
+            <label>
+              <span>Context type</span>
+              <select
+                value={kind}
+                disabled={!available || busy}
+                onChange={(event) => setKind(event.target.value as RhythmMarkerKind)}
+              >
+                {markerKinds.map((markerKind) => (
+                  <option value={markerKind} key={markerKind}>
+                    {rhythmMarkerKindLabels[markerKind]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Started</span>
+              <input
+                type="datetime-local"
+                value={startLocal}
+                disabled={!available || busy}
+                onChange={(event) => setStartLocal(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>Ended (optional)</span>
+              <input
+                type="datetime-local"
+                value={endLocal}
+                disabled={!available || busy}
+                onChange={(event) => setEndLocal(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>Time zone</span>
+              <input
+                value={zoneId}
+                disabled={!available || busy}
+                spellCheck="false"
+                onChange={(event) => setZoneId(event.target.value)}
+              />
+            </label>
+            <label className="rhythm-marker-note-field">
+              <span>Private note (optional)</span>
+              <textarea
+                aria-label="Private note (optional)"
+                value={note}
+                maxLength={500}
+                disabled={!available || busy}
+                onChange={(event) => setNote(event.target.value)}
+              />
+              <small>{note.length}/500. Never included in trusted sharing.</small>
+            </label>
+            <button className="button primary" type="submit" disabled={!available || busy}>
+              {busy ? "Saving…" : "Add marker"}
+            </button>
+          </form>
+        </details>
       </div>
 
       <p className="form-error" role="alert">

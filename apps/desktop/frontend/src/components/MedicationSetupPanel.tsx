@@ -241,71 +241,13 @@ export function MedicationSetupPanel({
   };
 
   return (
-    <aside className="medication-definition-rail" aria-label="Medication definitions">
-      <section className="medication-rail-section" aria-labelledby="medication-add-title">
-        <header>
-          <p className="section-kicker">Private label</p>
-          <h2 id="medication-add-title">Add medication</h2>
-        </header>
-        <form className="medication-definition-form" onSubmit={add}>
-          <label>
-            <span>Label</span>
-            <input
-              value={draft.label}
-              maxLength={120}
-              autoComplete="off"
-              disabled={!available || busy}
-              placeholder="Your private label"
-              onChange={(event) =>
-                setDraft((current) => ({ ...current, label: event.target.value }))
-              }
-            />
-          </label>
-          <div className="medication-field-pair">
-            <label>
-              <span>Form</span>
-              <input
-                value={draft.form}
-                maxLength={80}
-                disabled={!available || busy}
-                placeholder="Optional"
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, form: event.target.value }))
-                }
-              />
-            </label>
-            <label>
-              <span>Strength label</span>
-              <input
-                value={draft.strengthLabel}
-                maxLength={80}
-                disabled={!available || busy}
-                placeholder="Optional"
-                onChange={(event) =>
-                  setDraft((current) => ({ ...current, strengthLabel: event.target.value }))
-                }
-              />
-            </label>
-          </div>
-          <small>No schedule is inferred from the label.</small>
-          <button
-            className="button primary compact"
-            type="submit"
-            disabled={!available || busy || !draft.label.trim()}
-          >
-            Add private label
-          </button>
-        </form>
-      </section>
-
+    <section className="medication-definition-rail" aria-label="Medication definitions">
       <section className="medication-rail-section" aria-labelledby="medication-list-title">
-        <header className="medication-rail-heading">
-          <div>
-            <p className="section-kicker">Logging roster</p>
-            <h2 id="medication-list-title">Medications</h2>
-          </div>
-          <span>{medications.length}</span>
-        </header>
+        <div className="plan-section-head">
+          <h2 id="medication-list-title">
+            Your medications <span className="count">{medications.length}</span>
+          </h2>
+        </div>
         {medications.length === 0 ? (
           <p className="medication-rail-empty">Add a label to enable quick logging.</p>
         ) : (
@@ -414,6 +356,58 @@ export function MedicationSetupPanel({
           onCancel={() => setErasing(null)}
         />
       )}
-    </aside>
+      <details className="medication-rail-section medication-add">
+        <summary>Add a medication</summary>
+        <form className="medication-definition-form" aria-label="Add medication" onSubmit={add}>
+          <label>
+            <span>Label</span>
+            <input
+              value={draft.label}
+              maxLength={120}
+              autoComplete="off"
+              disabled={!available || busy}
+              placeholder="Your private label"
+              onChange={(event) =>
+                setDraft((current) => ({ ...current, label: event.target.value }))
+              }
+            />
+          </label>
+          <div className="medication-field-pair">
+            <label>
+              <span>Form</span>
+              <input
+                value={draft.form}
+                maxLength={80}
+                disabled={!available || busy}
+                placeholder="Optional"
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, form: event.target.value }))
+                }
+              />
+            </label>
+            <label>
+              <span>Strength label</span>
+              <input
+                value={draft.strengthLabel}
+                maxLength={80}
+                disabled={!available || busy}
+                placeholder="Optional"
+                onChange={(event) =>
+                  setDraft((current) => ({ ...current, strengthLabel: event.target.value }))
+                }
+              />
+            </label>
+          </div>
+          <small>The label stays on this device. No schedule is inferred from it.</small>
+          <button
+            className="button primary compact"
+            type="submit"
+            disabled={!available || busy || !draft.label.trim()}
+          >
+            Add medication
+          </button>
+        </form>
+      </details>
+    </section>
   );
 }

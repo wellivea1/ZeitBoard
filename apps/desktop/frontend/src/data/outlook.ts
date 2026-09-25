@@ -47,6 +47,9 @@ export interface OutlookCommitment {
   whenLabel: string;
   conflict: string;
   conflictLabel?: string;
+  /** Where the event sits on the timeline, clamped to the horizon. */
+  offsetHours?: number;
+  durationHours?: number;
 }
 
 export interface OutlookOpportunity {
@@ -71,6 +74,8 @@ export interface OutlookData {
   freshness: OutlookFreshness;
   horizonLabel: string;
   horizonHours: number;
+  /** The instant every offset is measured from, when the desktop supplies it. */
+  horizonStart?: string;
   days: OutlookDayMark[];
   segments: OutlookSegment[];
   nextSleepLabel?: string;
@@ -192,7 +197,18 @@ function normalizeCommitment(value: unknown): OutlookCommitment | undefined {
   const conflict = str(value.conflict);
   if (!title || !whenLabel || !conflict) return undefined;
   const conflictLabel = str(value.conflictLabel);
-  return { title, whenLabel, conflict, ...(conflictLabel ? { conflictLabel } : {}) };
+  const offsetHours = num(value.offsetHours);
+  const durationHours = num(value.durationHours);
+  return {
+    title,
+    whenLabel,
+    conflict,
+    ...(conflictLabel ? { conflictLabel } : {}),
+    // Position is optional: without it the event is still listed, just not drawn.
+    ...(offsetHours !== undefined && durationHours !== undefined && durationHours >= 0
+      ? { offsetHours, durationHours }
+      : {}),
+  };
 }
 
 function normalizeOpportunity(value: unknown): OutlookOpportunity | undefined {
@@ -298,6 +314,10 @@ export function normalizeOutlook(value: unknown): OutlookData | undefined {
     ...(str(value.withheldMessage)
       ? { withheldMessage: str(value.withheldMessage) as string }
       : {}),
+    // Only a parseable instant: a bad start would put "tonight" on the wrong day.
+    ...(str(value.horizonStart) && Number.isFinite(Date.parse(str(value.horizonStart) as string))
+      ? { horizonStart: str(value.horizonStart) as string }
+      : {}),
   };
 }
 
@@ -321,4 +341,38 @@ export async function loadOutlook(
     // fall through to the fallback
   }
   return outlookUnavailable;
+}
+
+const CONFLICT_KINDS = new Set([
+  "inside_predicted_sleep",
+  "overlaps_predicted_sleep",
+  "near_uncertain_boundary",
+]);
+
+export function isCommitmentConflict(commitment: OutlookCommitment) {
+  return CONFLICT_KINDS.has(commitment.conflict);
+}
+
+interface SleepAhead {
+  /** The uncertain band in which the next sleep is likely to begin. */
+  onset?: OutlookSegment;
+  /** The uncertain band in which that sleep is likely to end. */
+  wake?: OutlookSegment;
+}
+
+/**
+ * Reads the next sleep off the outlook's own bands rather than a separate
+ * label, so the words and the timeline beneath them cannot disagree — which is
+ * what they used to do.
+ */
+export function sleepAhead(segments: OutlookSegment[]): SleepAhead {
+  const ordered = [...segments].sort((a, b) => a.offsetHours - b.offsetHours);
+  const asleepIndex = ordered.findIndex((segment) => segment.presence === "asleep");
+  if (asleepIndex < 0) return {};
+  const before = ordered[asleepIndex - 1];
+  const after = ordered[asleepIndex + 1];
+  return {
+    ...(before?.presence === "uncertain" ? { onset: before } : {}),
+    ...(after?.presence === "uncertain" ? { wake: after } : {}),
+  };
 }

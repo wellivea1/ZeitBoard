@@ -6,8 +6,7 @@ import { ApprovalsProvider } from "./approvals";
 import { BackendProposalsProvider } from "./backendProposals";
 import { VisitorRequestsProvider, useVisitorRequests } from "./visitorRequests";
 import { ApprovalQueueProvider, useApprovalQueue } from "./approvalQueue";
-import { VisitorRequestsPanel } from "../components/VisitorRequestsPanel";
-import { ApprovalsScreen } from "../screens/ApprovalsScreen";
+import { DecisionHistory, DecisionQueue } from "../components/DecisionQueue";
 import { emptyVisitorRequests, type VisitorRequest } from "../data/visitorRequests";
 import { notifyReviewQueueChanged } from "../data/reviewQueue";
 import { civilMinute } from "../utils/civilTime";
@@ -80,19 +79,21 @@ afterEach(() => {
 });
 
 describe("shared approval queue", () => {
-  it("counts all sources beyond the loaded page and filters without hiding errors", async () => {
+  // One list, no filters: every origin is visible at once, and the count covers
+  // pages that have not been loaded yet.
+  it("counts all sources beyond the loaded page and shows every origin together", async () => {
     install();
     render(
       <Providers>
         <Probe />
-        <ApprovalsScreen />
+        <DecisionQueue />
       </Providers>,
     );
     expect(await screen.findByText("13 ready")).toBeVisible(); // two local fixture proposals + 7 backend + 4 requests
-    expect(screen.queryByRole("heading", { name: "Nothing waiting for approval" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Time requests 4" }));
+    expect(screen.queryByText(/Nothing is waiting for you/)).toBeNull();
     expect(screen.getByText("Sam asked for a time")).toBeVisible();
-    expect(screen.queryByText("Email Dr. Okafor")).toBeNull();
+    expect(screen.getByText("Email Dr. Okafor")).toBeVisible();
+    expect(screen.queryByRole("group", { name: "Filter approvals" })).toBeNull();
   });
   it("retains counts and requests during a failed refresh and recovers when disabled", async () => {
     const list = vi
@@ -104,7 +105,7 @@ describe("shared approval queue", () => {
     render(
       <Providers>
         <Probe />
-        <VisitorRequestsPanel />
+        <DecisionQueue />
       </Providers>,
     );
     await screen.findByText("13 ready");
@@ -116,13 +117,15 @@ describe("shared approval queue", () => {
     expect(await screen.findByText("9 ready")).toBeVisible();
     expect(screen.queryByText("Sam asked for a time")).toBeNull();
   });
-  it("shares a request draft across calendar and approvals remounts", async () => {
+  // Switching Plan to Calendar and back unmounts the decision list; a draft
+  // block for a request lives in the provider, not the card.
+  it("keeps a request draft when the decision list is remounted", async () => {
     function Views() {
-      const [calendar, setCalendar] = useState(true);
+      const [shown, setShown] = useState(true);
       return (
         <>
-          <button onClick={() => setCalendar(!calendar)}>Switch view</button>
-          {calendar ? <VisitorRequestsPanel /> : <ApprovalsScreen />}
+          <button onClick={() => setShown(!shown)}>Switch view</button>
+          {shown && <DecisionQueue />}
         </>
       );
     }
@@ -135,6 +138,8 @@ describe("shared approval queue", () => {
     const start = await screen.findByLabelText("Block starts");
     const draft = civilMinute("2099-01-01T13:00:00Z");
     fireEvent.change(start, { target: { value: draft } });
+    fireEvent.click(screen.getByRole("button", { name: "Switch view" }));
+    expect(screen.queryByLabelText("Block starts")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Switch view" }));
     expect(screen.getByLabelText("Block starts")).toHaveValue(draft);
   });
@@ -151,7 +156,8 @@ describe("shared approval queue", () => {
     render(
       <Providers>
         <Probe />
-        <ApprovalsScreen />
+        <DecisionQueue />
+        <DecisionHistory />
       </Providers>,
     );
     const accept = await screen.findByRole("button", { name: "Accept this block" });
@@ -172,7 +178,7 @@ describe("shared approval queue", () => {
     );
     expect(screen.getByText("12 incomplete")).toBeVisible();
     expect(screen.queryByRole("button", { name: "Accept this block" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "History" }));
+    fireEvent.click(screen.getByText(/Decision history/));
     expect(screen.getByText("approved")).toBeVisible();
   });
   it("rejects duplicate pages and preserves drafts for unloaded requests", async () => {
@@ -184,7 +190,7 @@ describe("shared approval queue", () => {
     install({ GetBackendVisitorRequestPage: page });
     render(
       <Providers>
-        <VisitorRequestsPanel />
+        <DecisionQueue />
         <More />
       </Providers>,
     );
@@ -211,7 +217,7 @@ describe("shared approval queue", () => {
     install({ GetBackendVisitorRequests: list });
     render(
       <Providers>
-        <VisitorRequestsPanel />
+        <DecisionQueue />
       </Providers>,
     );
     await act(async () => {});

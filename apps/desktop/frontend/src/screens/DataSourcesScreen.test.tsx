@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { DataSourcesScreen } from "./DataSourcesScreen";
@@ -11,20 +11,27 @@ describe("DataSourcesScreen structure", () => {
   // After slice U-H this screen is about where records come from. Recording
   // last night is Log's job, and the two were only sharing a screen because
   // they had both grown there.
-  it("leads with provenance in one ruled workspace", () => {
-    const { container } = render(<DataSourcesScreen />);
+  it("leads with what is connected, then calendars, then importing", () => {
+    render(<DataSourcesScreen />);
     const workspace = screen.getByRole("region", { name: "Data source review" });
-    const sourceHeading = screen.getByRole("heading", { name: "Source status" });
-    const importHeading = screen.getByRole("heading", { name: /Import/ });
+    const headings = ["Connected", "Calendars", "Import sleep records"].map((name) =>
+      screen.getByRole("heading", { name }),
+    );
 
     expect(workspace.querySelector(".panel")).toBeNull();
-    expect(
-      sourceHeading.compareDocumentPosition(importHeading) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).not.toBe(0);
-    expect(container).toHaveTextContent(
-      "Local ICS files and read-only CalDAV snapshots are managed in Calendar",
-    );
-    expect(container).not.toHaveTextContent("Out of scope for this local sleep-data slice");
+    for (const [index, heading] of headings.slice(1).entries()) {
+      expect(
+        headings[index]!.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).not.toBe(0);
+    }
+  });
+
+  // Calendars used to be added beside the calendar board in Plan. They are
+  // set up here with the other inputs, and the board links to them.
+  it("lists calendars here instead of in Plan", async () => {
+    render(<DataSourcesScreen />);
+    const calendars = screen.getByRole("region", { name: "Calendars" });
+    expect(await within(calendars).findByText("Sample commitments")).toBeVisible();
   });
 
   // Somebody who used to add an entry here must be told where it went rather

@@ -25,10 +25,7 @@ export function LogScreen({ tab, onSelect }: { tab: LogTab; onSelect: (tab: LogT
 
   return (
     <>
-      <PageHeader
-        title="Log"
-        description="Record what happened: sleep and wake, doses taken or skipped, and the context behind an unusual day."
-      />
+      <PageHeader title="Log" />
       <section className="screen-tabbed" aria-label="Log">
         <ScreenTabs name="log" label="Log views" tabs={logTabs} active={tab} onSelect={onSelect} />
 

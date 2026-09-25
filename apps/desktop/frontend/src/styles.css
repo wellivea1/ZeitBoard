@@ -105,11 +105,18 @@
   --radius-control: 4px;
   --radius-card: 8px;
   --radius-overlay: 12px;
-  --type-label: 11px;
-  --type-body: 13px;
-  --type-body-strong: 15px;
-  --type-data: 18px;
-  --type-data-large: 22px;
+  --radius-pill: 999px;
+  /* Type scale. Body text used to be 13px with 10-11px labels (and some 8-9px
+     axis text): too small to read at a glance for someone who is tired, which
+     is when this app gets opened. Nothing renders below --type-micro. */
+  --type-micro: 11px;
+  --type-label: 12px;
+  --type-body: 14px;
+  --type-body-strong: 16px;
+  --type-section: 17px;
+  --type-data: 20px;
+  --type-data-large: 26px;
+  --type-display: 34px;
   --z-strip: 10;
   --z-rail: 20;
   --z-scrim: 90;
@@ -449,12 +456,10 @@
 }
 
 /* Reduced-stimulation: lower density with slightly larger gaps and padding. */
-[data-reduced="true"] .screen-grid,
 [data-reduced="true"] .rhythm-panel {
   gap: 24px;
 }
 
-[data-reduced="true"] .task-row,
 [data-reduced="true"] .record-list article {
   min-height: 52px;
 }
@@ -572,7 +577,7 @@ button {
 .brand small {
   margin-top: 4px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--type-label);
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -634,7 +639,7 @@ button {
   color: var(--confidence-medium-text);
   background: var(--confidence-medium-bg);
   border-radius: 999px;
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 850;
 }
 .nav-link svg {
@@ -679,14 +684,14 @@ button {
   gap: 3px;
 }
 .privacy-note strong {
-  font-size: 11px;
+  font-size: var(--type-label);
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 .privacy-note small {
   max-width: 145px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
   line-height: 1.4;
 }
 
@@ -723,11 +728,13 @@ button {
 }
 .eyebrow,
 .section-kicker {
-  margin-bottom: 7px;
-  color: var(--sage);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
+  margin-bottom: 6px;
+  /* Quiet by design: a label, not an accent. Fifty-odd sage, extra-bold,
+     widely tracked kickers were the loudest thing on most screens. */
+  color: var(--muted);
+  font-size: var(--type-micro);
+  font-weight: 700;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 .page-actions {
@@ -743,13 +750,13 @@ button {
   column-gap: 8px;
   align-items: center;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--type-label);
 }
 .status-cluster small {
   grid-column: 2;
   margin-top: 2px;
   color: var(--subtle);
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 .status-cluster > .button {
   grid-column: 3;
@@ -795,7 +802,7 @@ button {
   min-height: 23px;
   padding: 3px 9px;
   border-radius: 999px;
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 800;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -818,12 +825,7 @@ button {
   border: 1px solid var(--line);
   border-radius: 8px;
 }
-.screen-grid {
-  display: grid;
-  grid-template-columns: repeat(12, minmax(0, 1fr));
-  gap: 20px;
-  align-items: start;
-}
+
 .timeline-panel {
   padding: 25px 27px;
 }
@@ -844,7 +846,7 @@ button {
   align-items: center;
   gap: 4px;
   color: var(--sage-dark);
-  font-size: 11px;
+  font-size: var(--type-label);
   font-weight: 700;
   text-decoration: none;
 }
@@ -859,7 +861,7 @@ button {
   background: transparent;
   border: 1px solid var(--line);
   border-radius: 4px;
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 700;
   letter-spacing: 0.03em;
 }
@@ -867,29 +869,15 @@ button {
   color: var(--muted);
   background: var(--blue-soft);
 }
-.confidence-meter {
-  margin: 4px 0 19px;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 5px;
-}
-.confidence-meter span {
-  height: 5px;
-  background: var(--meter-fill);
-  border-radius: 4px;
-}
-.confidence-meter span[data-muted="true"] {
-  background: var(--meter-muted);
-}
 
 .button {
   min-height: 44px;
-  padding: 0 15px;
+  padding: 0 16px;
   border: 1px solid transparent;
   border-radius: 7px;
   cursor: pointer;
-  font-size: 12px;
-  font-weight: 750;
+  font-size: var(--type-body);
+  font-weight: 650;
 }
 a.button {
   display: inline-flex;
@@ -907,6 +895,59 @@ a.button {
 .button.secondary {
   color: var(--button-secondary-text);
   background: var(--button-secondary-bg);
+  border-color: var(--button-secondary-border);
+}
+/* Secondary actions inside dense rows. Still well above the 24px minimum
+   target size; the full 44px is kept for primary actions. */
+.button.compact {
+  min-height: 36px;
+  padding: 0 12px;
+  font-size: var(--type-label);
+}
+/* A summary laid out with flex loses the browser's disclosure triangle, so
+   those draw their own. */
+.decision-history > summary,
+.medication-feasibility > summary {
+  list-style: none;
+}
+.decision-history > summary::-webkit-details-marker,
+.medication-feasibility > summary::-webkit-details-marker {
+  display: none;
+}
+.decision-history > summary::before,
+.medication-feasibility > summary::before {
+  content: "";
+  width: 0;
+  height: 0;
+  align-self: center;
+  border-block: 5px solid transparent;
+  border-left: 7px solid var(--muted);
+  transition: transform 120ms ease;
+}
+.decision-history[open] > summary::before,
+.medication-feasibility[open] > summary::before {
+  transform: rotate(90deg);
+}
+/* A button that reads as a link inside a sentence. */
+.text-link {
+  padding: 0;
+  color: var(--sage-dark);
+  background: none;
+  border: 0;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+/* Quiet actions that should not compete with the content, such as a manual
+   refresh on a view that already refreshes itself. */
+.button.ghost {
+  color: var(--sage-dark);
+  background: transparent;
+  border-color: transparent;
+}
+.button.ghost:hover {
+  background: var(--chrome-hover);
   border-color: var(--button-secondary-border);
 }
 .button.secondary.danger-outline {
@@ -932,7 +973,7 @@ a.button {
   color: var(--muted);
   background: var(--sage-soft);
   border-left: 3px solid var(--sage);
-  font-size: 11px;
+  font-size: var(--type-label);
   line-height: 1.45;
 }
 .has-time-probe {
@@ -985,10 +1026,7 @@ a.button {
   overflow: hidden;
 }
 .phase-two-panel,
-.approval-filter,
 .proposal-stack,
-.task-list-panel,
-.unplaced-panel,
 .rhythm-tabs,
 .correction-inspector,
 .refusal-panel,
@@ -1000,10 +1038,7 @@ a.button {
   padding: 24px 26px;
   overflow: hidden;
 }
-.approval-history-panel {
-  grid-column: span 12;
-  overflow: hidden;
-}
+
 .approval-error {
   margin-bottom: 16px;
   padding: 10px 14px;
@@ -1014,7 +1049,7 @@ a.button {
   color: var(--danger-text);
   background: var(--danger-bg);
   border: 1px solid var(--danger-border);
-  font-size: 12px;
+  font-size: var(--type-label);
 }
 .approval-decision-list {
   display: grid;
@@ -1043,7 +1078,7 @@ a.button {
 .approval-decision-list span,
 .approval-decision-list small {
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 .decision-state {
   padding-left: 8px;
@@ -1077,7 +1112,7 @@ a.button {
   gap: 14px;
   border-top: 1px solid var(--divider);
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 .rhythm-panel {
   grid-column: span 12;
@@ -1086,7 +1121,6 @@ a.button {
   gap: 20px;
 }
 .phase-two-panel,
-.unplaced-panel,
 .correction-inspector,
 .refusal-panel,
 .source-conflicts-panel,
@@ -1095,33 +1129,21 @@ a.button {
   padding: 24px 26px;
 }
 .phase-two-copy,
-.unplaced-panel p,
 .refusal-panel p {
   margin: 0 0 16px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--type-label);
   line-height: 1.55;
 }
-.unplaced-panel h2,
 .refusal-panel h2 {
   margin: 0 0 8px;
   font-size: 16px;
 }
-.unplaced-panel small,
 .correction-inspector small {
   color: var(--subtle);
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
-.unplaced-panel {
-  padding: var(--space-4) var(--space-5);
-  background: transparent;
-  border-block: 1px solid var(--divider);
-  border-left: 3px solid var(--state-uncertain);
-  border-radius: 0;
-}
-.unplaced-panel > .section-kicker {
-  margin-bottom: var(--space-1);
-}
+
 .unplaced-list {
   margin: var(--space-3) 0 0;
   padding: 0;
@@ -1144,35 +1166,9 @@ a.button {
 }
 .unplaced-list small {
   color: var(--subtle);
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
-.unplaced-row {
-  margin-top: var(--space-4);
-  padding-top: var(--space-4);
-  display: grid;
-  grid-template-columns: minmax(180px, 0.35fr) minmax(0, 1fr);
-  gap: var(--space-5);
-  border-top: 1px solid var(--divider);
-}
-.unplaced-row h3,
-.unplaced-row p {
-  margin: 0;
-}
-.unplaced-row h3 {
-  font-size: var(--type-body);
-}
-.unplaced-row > div:last-child {
-  display: grid;
-  gap: var(--space-2);
-  color: var(--muted);
-  font-size: var(--type-label);
-  line-height: 1.5;
-}
-.unplaced-row small {
-  color: var(--subtle);
-  font-size: 10px;
-}
-.approval-filter,
+
 .rhythm-tabs {
   min-height: 48px;
   padding: 0 16px;
@@ -1180,9 +1176,7 @@ a.button {
   align-items: center;
   gap: 8px;
 }
-.approval-filter {
-  border-block: 1px solid var(--divider);
-}
+
 .sort-filter {
   margin-left: auto;
 }
@@ -1194,12 +1188,7 @@ a.button {
   border: 1px solid var(--line);
   border-radius: var(--radius-card);
 }
-.approval-filter span {
-  margin-right: 16px;
-  color: var(--muted);
-  font-size: 11px;
-  font-weight: 750;
-}
+
 .empty-state {
   grid-column: span 12;
   padding: 48px 26px;
@@ -1213,7 +1202,7 @@ a.button {
   max-width: 460px;
   margin: 0 auto;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--type-body);
   line-height: 1.55;
 }
 .undo-toast {
@@ -1231,7 +1220,7 @@ a.button {
   border: 1px solid var(--line);
   border-radius: 10px;
   box-shadow: var(--shadow);
-  font-size: 13px;
+  font-size: var(--type-body);
 }
 .undo-toast button {
   min-height: 44px;
@@ -1241,7 +1230,7 @@ a.button {
   border: 0;
   border-radius: 6px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: var(--type-body);
   font-weight: 800;
 }
 .proposal-card {
@@ -1263,10 +1252,7 @@ a.button {
 .proposal-stack > .proposal-card:last-child {
   border-bottom: 0;
 }
-.approval-summary > .proposal-card {
-  margin-top: var(--space-4);
-  border-top: 1px solid var(--divider);
-}
+
 .proposal-card::before {
   content: "";
   position: absolute;
@@ -1300,35 +1286,12 @@ a.button {
   color: var(--sage-dark);
   background: transparent;
   border-radius: 0;
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 850;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
-.proposal-confidence {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.proposal-confidence-label {
-  color: var(--muted);
-  font-size: var(--type-label);
-  font-weight: 750;
-}
-.proposal-confidence-meter {
-  width: 44px;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
-}
-.proposal-confidence-meter > span {
-  height: 6px;
-  background: var(--sage);
-  border-radius: 4px;
-}
-.proposal-confidence-meter > span[data-muted="true"] {
-  background: var(--meter-muted);
-}
+
 .proposal-change {
   grid-area: change;
   margin: 0;
@@ -1337,43 +1300,44 @@ a.button {
   align-items: baseline;
   gap: 8px 12px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--type-label);
 }
 .proposal-change strong {
   color: var(--ink);
-  font-size: 13px;
+  font-size: var(--type-body-strong);
+  font-variant-numeric: tabular-nums;
 }
 .proposal-change small {
-  color: var(--subtle);
-  font-size: 10px;
+  color: var(--muted);
+  font-size: var(--type-label);
 }
 .proposal-reasons {
   grid-area: reasons;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-label);
 }
-.proposal-reasons .task-chip {
-  position: relative;
-  padding: 0 0 0 10px;
-  border: 0;
-  border-radius: 0;
+/* What, then when: the origin is a quiet line above the title. */
+.proposal-heading {
+  grid-area: header;
+  display: grid;
+  gap: 2px;
 }
-.proposal-reasons .task-chip::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0.55em;
-  width: 4px;
-  height: 4px;
-  background: var(--subtle);
-  border-radius: 50%;
+.proposal-heading p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+.proposal-heading h3 {
+  margin: 0;
+  font-size: var(--type-body-strong);
+  letter-spacing: -0.01em;
 }
 .proposal-meta {
   grid-area: meta;
   margin: 0;
   color: var(--subtle);
-  font-size: 11px;
+  font-size: var(--type-label);
 }
 .approval-actions {
   grid-area: actions;
@@ -1400,53 +1364,12 @@ a.button {
   border: 0;
   border-radius: 5px;
   cursor: pointer;
-  font-size: 11px;
+  font-size: var(--type-label);
   font-weight: 700;
 }
 .filter.active {
   color: var(--sage-dark);
   background: var(--sage-soft);
-}
-.task-row {
-  min-height: 62px;
-  padding: 0 22px;
-  display: grid;
-  grid-template-columns: minmax(220px, 1.7fr) repeat(3, minmax(100px, 0.65fr));
-  align-items: center;
-  gap: 15px;
-  border-bottom: 1px solid var(--divider);
-  color: var(--muted);
-  font-size: 11px;
-}
-.task-row:last-child {
-  border-bottom: 0;
-}
-.task-row > span:first-child {
-  display: flex;
-  align-items: center;
-  gap: 11px;
-  color: var(--ink);
-  font-size: 12px;
-  font-weight: 650;
-}
-.task-head {
-  min-height: 38px;
-  color: var(--subtle);
-  background: var(--panel-alt);
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-.task-head > span:first-child {
-  color: var(--subtle);
-  font-size: 9px;
-}
-.empty-check {
-  width: 16px;
-  height: 16px;
-  border: 1.5px solid var(--subtle);
-  border-radius: 4px;
 }
 
 .legend {
@@ -1454,7 +1377,7 @@ a.button {
   align-items: center;
   gap: 7px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 .legend i {
   width: 19px;
@@ -1478,7 +1401,7 @@ a.button {
   align-items: center;
   gap: 6px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 750;
 }
 .actogram-controls input {
@@ -1487,17 +1410,19 @@ a.button {
 .actogram-chart {
   overflow-x: auto;
 }
+/* Date, then the 48-hour track. The axis shares the rows' columns and minimum
+   width, so its hours stay over their lines when the chart scrolls. */
 .actogram-visual-axis,
 .actogram-visual-row {
-  min-width: 0;
+  min-width: 760px;
   display: grid;
-  grid-template-columns: 56px minmax(360px, 1fr) 64px;
+  grid-template-columns: 48px minmax(0, 1fr);
   gap: 12px;
 }
 .actogram-visual-axis {
   padding-bottom: 9px;
   color: var(--subtle);
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 .actogram-visual-axis span {
   /* All hour labels share one grid cell and spread horizontally; without the
@@ -1547,13 +1472,9 @@ a.button {
 }
 .actogram-visual-row time {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--type-label);
   font-weight: 750;
   text-align: right;
-}
-.actogram-visual-row small {
-  color: var(--subtle);
-  font-size: 10px;
 }
 .actogram-visual-track {
   --probe-line: var(--actogram-grid);
@@ -1585,11 +1506,8 @@ a.button {
   background: var(--actogram-observed);
   border-radius: 3px;
   white-space: nowrap;
-  font-size: 8px;
+  font-size: var(--type-micro);
   font-weight: 750;
-}
-.actogram-band span {
-  padding: 0 6px;
 }
 .actogram-band.is-inferred {
   color: var(--actogram-inferred-text);
@@ -1628,20 +1546,23 @@ a.button {
   min-width: 760px;
   height: 22px;
   display: grid;
-  grid-template-columns: 64px minmax(620px, 1fr) 76px;
+  grid-template-columns: 48px minmax(0, 1fr);
   gap: 12px;
   align-items: center;
 }
 .actogram-now-line::before {
   content: "";
+  grid-row: 1;
   grid-column: 2;
   height: 1px;
   background: var(--sage);
 }
 .actogram-now-line span {
-  grid-column: 3;
+  grid-row: 1;
+  grid-column: 1;
+  text-align: right;
   color: var(--sage-dark);
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -1652,7 +1573,7 @@ a.button {
   align-items: center;
   gap: 10px 16px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 .actogram-footer span {
   display: inline-flex;
@@ -1669,7 +1590,7 @@ a.button {
   flex-basis: 100%;
   margin: 2px 0 0;
   color: var(--subtle);
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 .legend-observed,
 .legend-point {
@@ -1695,11 +1616,11 @@ a.button {
   justify-items: end;
   gap: 3px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
 .drift-summary strong {
   color: var(--sage-dark);
-  font-size: 13px;
+  font-size: var(--type-body);
 }
 .drift-body {
   display: grid;
@@ -1713,7 +1634,7 @@ a.button {
   flex-direction: column;
   justify-content: space-between;
   color: var(--subtle);
-  font-size: 9px;
+  font-size: var(--type-micro);
   text-align: right;
 }
 .drift-chart {
@@ -1758,7 +1679,7 @@ a.button {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
   color: var(--subtle);
-  font-size: 9px;
+  font-size: var(--type-micro);
 }
 .drift-x-axis span {
   text-align: center;
@@ -1769,7 +1690,7 @@ a.button {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   color: var(--subtle);
-  font-size: 9px;
+  font-size: var(--type-micro);
 }
 .timeline-axis span:last-child {
   text-align: right;
@@ -1787,12 +1708,12 @@ a.button {
 }
 .actogram-row time {
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 700;
 }
 .actogram-row small {
   color: var(--subtle);
-  font-size: 9px;
+  font-size: var(--type-micro);
 }
 .actogram-track {
   position: relative;
@@ -1831,7 +1752,7 @@ a.button {
 .correction-diff dt {
   margin-bottom: 4px;
   color: var(--sage);
-  font-size: 9px;
+  font-size: var(--type-micro);
   font-weight: 850;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -1839,13 +1760,13 @@ a.button {
 .correction-diff dd {
   margin: 0;
   color: var(--ink);
-  font-size: 12px;
+  font-size: var(--type-label);
   line-height: 1.45;
 }
 .diff-note {
   margin: 14px 0 8px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--type-label);
   line-height: 1.5;
 }
 .conflict-list {
@@ -1871,18 +1792,18 @@ a.button {
 }
 .conflict-row h3 {
   margin: 7px 0 5px;
-  font-size: 13px;
+  font-size: var(--type-body);
 }
 .conflict-row p {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--type-label);
   line-height: 1.5;
 }
 .conflict-row small {
   align-self: center;
   color: var(--subtle);
-  font-size: 10px;
+  font-size: var(--type-micro);
   line-height: 1.45;
 }
 .state-pill {
@@ -1891,7 +1812,7 @@ a.button {
   color: var(--confidence-medium-text);
   background: var(--confidence-medium-bg);
   border-radius: 999px;
-  font-size: 8px;
+  font-size: var(--type-micro);
   font-weight: 850;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -1924,7 +1845,7 @@ a.button {
   display: grid;
   gap: 8px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 750;
 }
 .sleep-entry-fields input,
@@ -1935,7 +1856,7 @@ a.button {
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: 6px;
-  font-size: 12px;
+  font-size: var(--type-label);
 }
 .sleep-entry-fields .button {
   align-self: end;
@@ -1943,7 +1864,7 @@ a.button {
 .form-error,
 .form-status {
   margin: 14px 0 0;
-  font-size: 12px;
+  font-size: var(--type-label);
   line-height: 1.5;
 }
 .form-error {
@@ -1952,116 +1873,7 @@ a.button {
 .form-status {
   color: var(--muted);
 }
-.sleep-entry-list {
-  display: grid;
-  gap: 14px;
-}
-.sleep-entry-card {
-  padding: 17px 0 0;
-  border-top: 1px solid var(--divider);
-}
-.sleep-entry-card:first-child {
-  padding-top: 0;
-  border-top: 0;
-}
-.sleep-entry-card[data-suppressed="true"] {
-  opacity: 0.78;
-}
-.sleep-entry-main {
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 16px;
-}
-.sleep-entry-main h2 {
-  margin: 0 0 5px;
-  font-size: 13px;
-}
-.sleep-entry-main p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 10px;
-}
-.sleep-entry-raw {
-  margin-top: 5px !important;
-  color: var(--subtle) !important;
-}
-.sleep-entry-actions,
-.sleep-edit-form {
-  margin: 14px 0 16px 58px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-.sleep-edit-form {
-  display: grid;
-}
-.sleep-delete-confirmation {
-  margin: 14px 0 16px 58px;
-  padding: 14px;
-  display: grid;
-  gap: 11px;
-  color: var(--danger-text);
-  background: var(--danger-bg);
-  border: 1px solid var(--danger-border);
-  border-radius: 8px;
-}
-.sleep-delete-confirmation strong {
-  display: block;
-  margin-bottom: 5px;
-  color: var(--danger-text);
-  font-size: 12px;
-}
-.sleep-delete-confirmation p {
-  margin: 0;
-  color: var(--muted);
-  font-size: 11px;
-  line-height: 1.5;
-}
-.sleep-delete-confirmation label {
-  display: grid;
-  gap: 7px;
-  color: var(--danger-text);
-  font-size: 10px;
-  font-weight: 800;
-}
-.sleep-delete-confirmation input {
-  min-height: 44px;
-  padding: 0 11px;
-  color: var(--ink);
-  background: var(--paper);
-  border: 1px solid var(--danger-border);
-  border-radius: 6px;
-  font-size: 12px;
-}
-.sleep-delete-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-.sleep-entry-history {
-  margin: 0 0 16px 58px;
-  color: var(--muted);
-  font-size: 11px;
-}
-.sleep-entry-history summary {
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  color: var(--sage-dark);
-  cursor: pointer;
-  font-weight: 800;
-}
-.sleep-entry-history ul {
-  margin: 0 0 0 18px;
-  padding: 0;
-  display: grid;
-  gap: 6px;
-  line-height: 1.5;
-}
-.sleep-log-empty {
-  padding-block: 28px;
-}
+
 .record-list article {
   min-height: 88px;
   padding: 17px 21px;
@@ -2091,17 +1903,14 @@ a.button {
 }
 .record-list h2 {
   margin: 0 0 5px;
-  font-size: 13px;
+  font-size: var(--type-body);
 }
 .record-list p {
   margin: 0;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
 }
-.record-time {
-  color: var(--muted);
-  font-size: 11px;
-}
+
 .icon-button {
   width: 44px;
   height: 44px;
@@ -2124,7 +1933,7 @@ a.button {
 
 .source-status {
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 750;
 }
 .source-status.connected::before {
@@ -2156,7 +1965,7 @@ a.button {
   display: grid;
   gap: 8px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 750;
 }
 .settings-section select {
@@ -2166,7 +1975,7 @@ a.button {
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: 6px;
-  font-size: 11px;
+  font-size: var(--type-label);
 }
 .toggle-row {
   grid-template-columns: minmax(0, 1fr) auto;
@@ -2178,11 +1987,11 @@ a.button {
 }
 .toggle-row strong {
   color: var(--ink);
-  font-size: 11px;
+  font-size: var(--type-label);
 }
 .toggle-row small {
   color: var(--muted);
-  font-size: 9px;
+  font-size: var(--type-micro);
   font-weight: 400;
   line-height: 1.4;
 }
@@ -2194,7 +2003,7 @@ a.button {
 .settings-copy {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--type-label);
   line-height: 1.55;
 }
 .settings-section > .button {
@@ -2238,14 +2047,14 @@ a.button {
 .data-control-card p {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--type-label);
   line-height: 1.55;
 }
 .data-control-card label {
   display: grid;
   gap: 8px;
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 800;
 }
 .data-control-card input,
@@ -2257,13 +2066,13 @@ a.button {
   background: var(--paper);
   border: 1px solid var(--line);
   border-radius: 6px;
-  font-size: 12px;
+  font-size: var(--type-label);
 }
 .export-preview {
   min-height: 132px;
   resize: vertical;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 10px;
+  font-size: var(--type-micro);
   line-height: 1.5;
 }
 .backend-sync-card {
@@ -2294,7 +2103,7 @@ a.button {
 }
 .sync-status-list dt {
   color: var(--muted);
-  font-size: 10px;
+  font-size: var(--type-micro);
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -2303,7 +2112,7 @@ a.button {
   margin: 0;
   overflow-wrap: anywhere;
   color: var(--ink);
-  font-size: 12px;
+  font-size: var(--type-label);
 }
 .settings-boundary-list {
   margin: 0;
@@ -2311,7 +2120,7 @@ a.button {
   display: grid;
   gap: 7px;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--type-label);
   line-height: 1.5;
 }
 .danger-zone {
@@ -2414,18 +2223,14 @@ a.button {
   .main-content {
     padding: 26px 18px 42px;
   }
-  .screen-grid {
-    grid-template-columns: 1fr;
-  }
+
   .page-header {
     display: block;
   }
   .page-actions {
     margin-top: 16px;
   }
-  .task-row {
-    grid-template-columns: minmax(180px, 1fr) 90px;
-  }
+
   .conflict-row {
     grid-template-columns: 1fr;
   }
@@ -2448,15 +2253,11 @@ a.button {
   .approval-actions .button {
     width: 100%;
   }
-  .unplaced-row {
-    grid-template-columns: 1fr;
-    gap: var(--space-2);
-  }
+
   .unplaced-list li {
     grid-template-columns: 1fr;
     gap: var(--space-1);
   }
-  .approval-filter,
   .rhythm-tabs {
     flex-wrap: wrap;
     padding: 12px 16px;
@@ -2468,10 +2269,7 @@ a.button {
   .sort-filter {
     margin-left: 0;
   }
-  .task-row > span:nth-child(3),
-  .task-row > span:nth-child(4) {
-    display: none;
-  }
+
   .timeline-axis {
     margin-left: 0;
     padding-right: 0;
@@ -2485,17 +2283,10 @@ a.button {
   .record-list article {
     grid-template-columns: 42px minmax(0, 1fr) auto;
   }
-  .sleep-entry-fields,
-  .sleep-entry-main {
+  .sleep-entry-fields {
     grid-template-columns: 1fr;
   }
-  .sleep-entry-actions,
-  .sleep-edit-form,
-  .sleep-delete-confirmation,
-  .sleep-entry-history {
-    margin-left: 0;
-  }
-  .record-time,
+
   .source-status {
     display: none;
   }
@@ -2525,7 +2316,7 @@ a.button {
   gap: 8px;
   padding: 0 12px;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--type-body);
   font-weight: 600;
   color: var(--muted);
   background: var(--paper);
@@ -2583,7 +2374,7 @@ a.button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: var(--type-label);
   color: var(--subtle);
   white-space: nowrap;
 }
@@ -2598,7 +2389,7 @@ a.button {
 }
 .assistant-queue-link {
   margin-left: auto;
-  font-size: 12px;
+  font-size: var(--type-label);
   color: var(--muted);
   white-space: nowrap;
 }
@@ -2620,7 +2411,7 @@ a.button {
 }
 .assistant-empty {
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--type-body);
   line-height: 1.55;
 }
 .assistant-examples {
@@ -2634,7 +2425,7 @@ a.button {
   border: 1px solid var(--line);
   background: var(--paper);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--type-label);
 }
 .assistant-examples .task-chip:hover {
   background: var(--sage-soft);
@@ -2648,7 +2439,7 @@ a.button {
   max-width: 86%;
   padding: 12px 16px;
   border-radius: 11px;
-  font-size: 13px;
+  font-size: var(--type-body);
   line-height: 1.5;
   white-space: pre-wrap;
   background: var(--paper);
@@ -2707,15 +2498,11 @@ a.button {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  font-size: 13px;
+  font-size: var(--type-body);
 }
-.assistant-action-card header .confidence-meter {
-  width: 54px;
-  margin: 0;
-  flex: none;
-}
+
 .assistant-action-card p {
-  font-size: 12px;
+  font-size: var(--type-label);
   color: var(--muted);
 }
 .assistant-action-card footer {
@@ -2725,7 +2512,7 @@ a.button {
 }
 .assistant-action-card footer a {
   margin-right: auto;
-  font-size: 12px;
+  font-size: var(--type-label);
   color: var(--muted);
 }
 .assistant-action-card[data-status="approved"] {
@@ -2750,7 +2537,7 @@ a.button {
   resize: none;
   padding: 12px;
   font: inherit;
-  font-size: 13px;
+  font-size: var(--type-body);
   color: var(--ink);
   background: var(--bg);
   border: 1px solid var(--line);
@@ -2763,7 +2550,7 @@ a.button {
 .assistant-disclaimer {
   flex: none;
   padding: 0 16px 12px;
-  font-size: 10px;
+  font-size: var(--type-micro);
   color: var(--subtle);
 }
 
@@ -2778,7 +2565,7 @@ a.button {
 .night-rule-fields label {
   display: grid;
   gap: 6px;
-  font-size: 12px;
+  font-size: var(--type-label);
   color: var(--muted);
 }
 .night-rule-fields input,
@@ -2816,9 +2603,6 @@ a.button {
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-3);
-}
-.visitor-requests-panel {
-  padding: var(--space-4) var(--space-5);
 }
 
 .visitor-message {
@@ -2921,45 +2705,8 @@ a.button {
   max-width: 62ch;
 }
 
-.approval-filter {
-  flex-wrap: wrap;
-  padding-block: 8px;
-}
-.approval-filter button[aria-pressed="true"] {
-  background: var(--paper);
-  box-shadow: inset 0 -2px currentColor;
-}
 .visitor-slot select {
   max-width: 100%;
-}
-
-.approval-filter button {
-  background: transparent;
-  color: var(--muted);
-  border: 1px solid transparent;
-}
-.approval-filter button[aria-pressed="true"] {
-  color: var(--ink);
-  border-color: var(--line);
-}
-.approval-screen > p {
-  grid-column: 1 / -1;
-}
-
-.approval-history-panel > h2 {
-  margin: 0;
-  padding: 16px 16px 0;
-  font-size: 16px;
-}
-.approval-history-panel > p {
-  padding: 0 16px;
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.approval-screen > .synced-proposal-pagination {
-  grid-column: 1 / -1;
-  flex-wrap: wrap;
 }
 
 .proposal-card.task-conflict-card {
@@ -2970,7 +2717,7 @@ a.button {
   margin: 6px 0;
 }
 .task-conflict-card > p {
-  font-size: 12px;
+  font-size: var(--type-label);
   color: var(--muted);
 }
 .task-conflict-card fieldset {
@@ -2980,7 +2727,7 @@ a.button {
   min-width: 0;
 }
 .task-conflict-card legend {
-  font-size: 12px;
+  font-size: var(--type-label);
   font-weight: 700;
   margin-bottom: 12px;
 }
@@ -3022,12 +2769,12 @@ a.button {
 }
 .task-conflict-same {
   margin: 12px 0 0;
-  font-size: 12px;
+  font-size: var(--type-label);
   color: var(--muted);
 }
 .task-version-details {
   margin: 8px 0 0;
-  font-size: 12px;
+  font-size: var(--type-label);
 }
 .task-version-details > div {
   display: grid;
@@ -3043,14 +2790,17 @@ a.button {
   overflow-wrap: anywhere;
 }
 .task-review-history {
-  padding: 16px;
-  border-top: 1px solid var(--line);
-  font-size: 12px;
+  padding: 0 16px;
+  border-top: 1px solid var(--divider);
+  font-size: var(--type-label);
+}
+.task-review-history[open] {
+  padding-bottom: 16px;
 }
 .task-review-history summary {
   cursor: pointer;
-  min-height: 44px;
+  padding-block: 13px;
 }
 .task-review-history h3 {
-  font-size: 13px;
+  font-size: var(--type-body);
 }

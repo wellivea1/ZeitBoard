@@ -4,6 +4,7 @@ import { MedicationHistory } from "../components/MedicationHistory";
 import { MedicationFeasibility } from "../components/MedicationFeasibility";
 import { MedicationClinicalReport } from "../components/MedicationClinicalReport";
 import { MedicationLogForm } from "../components/MedicationLogForm";
+import { MedicationQuickTaps } from "../components/MedicationQuickTaps";
 import { MedicationSetupPanel } from "../components/MedicationSetupPanel";
 import {
   addMedication,
@@ -139,6 +140,15 @@ function useMedicationWorkspace() {
   };
 }
 
+function logged(data: MedicationsData | null) {
+  return (input: MedicationEventInput) => {
+    const label =
+      data?.medications.find((medication) => medication.medicationId === input.medicationId)
+        ?.label ?? "Medication";
+    return `${label} recorded as ${input.status}.`;
+  };
+}
+
 type MedicationMutation = (
   operation: () => Promise<MedicationsData>,
   successMessage: string,
@@ -157,54 +167,55 @@ function MedicationWorkspaceView({
   available: boolean;
   mutate: MedicationMutation;
 }) {
+  const loggedMessage = logged(data);
   return (
+    // One column, in the order the work happens: record today's dose, look
+    // back, manage the list. Schedules against predicted sleep and the
+    // clinician report are further down because they are occasional.
     <section className="medication-workspace">
-      <div className="medication-main-column">
-        <MedicationLogForm
+      <section className="medication-today" aria-labelledby="medication-today-title">
+        <div className="plan-section-head">
+          <h2 id="medication-today-title">Record a dose</h2>
+          {data && data.estimateStatus !== "estimated" && <small>{data.estimateMessage}</small>}
+        </div>
+        <MedicationQuickTaps
           medications={data?.medications ?? []}
+          events={data?.events ?? []}
           available={available}
           busy={busy}
           onLog={(input: MedicationEventInput) =>
-            mutate(() => logMedicationEvent(input), `${input.status} medication event recorded.`)
+            mutate(() => logMedicationEvent(input), loggedMessage(input))
           }
         />
-
-        <div
-          className="medication-data-status"
-          data-estimate={data?.estimateStatus ?? "unavailable"}
-        >
-          <div>
-            <strong>{loading && !data ? "Loading local medication data" : data?.message}</strong>
-            <span>{data?.estimateMessage}</span>
-          </div>
-          <small>{data?.updatedLabel}</small>
-        </div>
-
-        <MedicationFeasibility
-          medications={data?.medications ?? []}
-          reminderStatus={data?.reminderStatus ?? "unavailable"}
-          reminderMessage={
-            data?.reminderMessage ?? "Desktop reminders require the ZeitBoard desktop service."
-          }
-        />
-
-        {loading && !data ? (
-          <div className="medication-loading" role="status">
-            Loading medication history...
-          </div>
-        ) : (
-          <MedicationHistory
-            events={data?.events ?? []}
+        <details className="medication-more">
+          <summary>Another time, or with a note</summary>
+          <MedicationLogForm
+            medications={data?.medications ?? []}
+            available={available}
             busy={busy}
-            onCorrect={(input: MedicationEventCorrectionInput) =>
-              mutate(() => correctMedicationEvent(input), "Medication event correction appended.")
-            }
-            onDelete={(eventId: string) =>
-              mutate(() => deleteMedicationEvent(eventId), "Medication event permanently erased.")
+            onLog={(input: MedicationEventInput) =>
+              mutate(() => logMedicationEvent(input), loggedMessage(input))
             }
           />
-        )}
-      </div>
+        </details>
+      </section>
+
+      {loading && !data ? (
+        <div className="medication-loading" role="status">
+          Loading medication history...
+        </div>
+      ) : (
+        <MedicationHistory
+          events={data?.events ?? []}
+          busy={busy}
+          onCorrect={(input: MedicationEventCorrectionInput) =>
+            mutate(() => correctMedicationEvent(input), "Medication event correction appended.")
+          }
+          onDelete={(eventId: string) =>
+            mutate(() => deleteMedicationEvent(eventId), "Medication event permanently erased.")
+          }
+        />
+      )}
 
       <MedicationSetupPanel
         medications={data?.medications ?? []}
@@ -224,6 +235,14 @@ function MedicationWorkspaceView({
             () => deleteMedication(medicationId),
             "Medication and its history permanently erased.",
           )
+        }
+      />
+
+      <MedicationFeasibility
+        medications={data?.medications ?? []}
+        reminderStatus={data?.reminderStatus ?? "unavailable"}
+        reminderMessage={
+          data?.reminderMessage ?? "Desktop reminders require the ZeitBoard desktop service."
         }
       />
     </section>
@@ -250,7 +269,6 @@ export function MedicationsScreen({ embedded }: { embedded?: boolean } = {}) {
     <>
       <PageHeader
         title="Medications"
-        description="Keep a private factual record alongside observed and predicted rhythm context."
         actions={
           <div className="medication-page-actions">
             <div className="status-cluster">
@@ -267,25 +285,24 @@ export function MedicationsScreen({ embedded }: { embedded?: boolean } = {}) {
               disabled={!available || exporting}
               onClick={exportData}
             >
-              {exporting ? "Exporting..." : "Export medication data"}
+              {exporting ? "Exporting…" : "Export medication data"}
             </button>
           </div>
         }
         level={embedded ? "panel" : "page"}
       />
 
+      {/* Both notices stay on screen; they just no longer take a panel each. */}
       <section className="medication-boundary" aria-label="Medication safety boundary">
-        <div>
-          <strong>Logging and context only</strong>
-          <span>{data?.disclaimer ?? "Medication timing is not medical advice."}</span>
-        </div>
-        <div>
-          <strong>No interaction checking</strong>
-          <span>
-            {data?.interactionDisclaimer ??
-              "ZeitBoard does not check medication interactions; ask a pharmacist or clinician."}
-          </span>
-        </div>
+        <span>
+          <strong>Logging and context only</strong>{" "}
+          {data?.disclaimer ?? "Medication timing is not medical advice."}
+        </span>
+        <span>
+          <strong>No interaction checking</strong>{" "}
+          {data?.interactionDisclaimer ??
+            "ZeitBoard does not check medication interactions; ask a pharmacist or clinician."}
+        </span>
       </section>
 
       {error && (
@@ -300,8 +317,6 @@ export function MedicationsScreen({ embedded }: { embedded?: boolean } = {}) {
         {announcement}
       </p>
 
-      <MedicationClinicalReport available={available} />
-
       <MedicationWorkspaceView
         data={data}
         loading={loading}
@@ -309,6 +324,8 @@ export function MedicationsScreen({ embedded }: { embedded?: boolean } = {}) {
         available={available}
         mutate={mutate}
       />
+
+      <MedicationClinicalReport available={available} />
     </>
   );
 }

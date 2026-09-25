@@ -48,15 +48,15 @@ describe("CalendarImportPanel", () => {
       size: 128,
       text: async () => "BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n",
     };
-    fireEvent.change(screen.getByLabelText("iCalendar file"), {
+    fireEvent.change(screen.getByLabelText("Calendar file (.ics)"), {
       target: { files: [selected] },
     });
-    await waitFor(() => expect(screen.getByText(/contents stay/)).toBeVisible());
-    expect(screen.getByRole("button", { name: "Import snapshot" })).toBeDisabled();
+    await waitFor(() => expect(screen.getByText(/stays on this device/)).toBeVisible());
+    expect(screen.getByRole("button", { name: "Import" })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Preview" }));
     expect(await screen.findByText(report.message)).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "Import snapshot" }));
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
 
     await waitFor(() => expect(onChanged).toHaveBeenCalledOnce());
     expect(preview).toHaveBeenCalledWith({
@@ -76,25 +76,25 @@ describe("CalendarImportPanel", () => {
     };
     render(<CalendarImportPanel available zoneId="UTC" onChanged={onChanged} />);
 
-    fireEvent.click(screen.getByRole("tab", { name: "CalDAV" }));
+    fireEvent.click(screen.getByRole("tab", { name: "CalDAV account" }));
     fireEvent.change(screen.getByLabelText("Collection URL"), {
       target: { value: "https://calendar.example.test/dav/" },
     });
     fireEvent.change(screen.getByLabelText("Username"), { target: { value: "owner" } });
-    fireEvent.change(screen.getByLabelText("One-shot password"), {
+    fireEvent.change(screen.getByLabelText("Password"), {
       target: { value: "preview-secret" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Preview REPORT" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
 
     await screen.findByText(report.message);
-    expect(screen.getByLabelText("One-shot password")).toHaveValue("");
-    fireEvent.change(screen.getByLabelText("One-shot password"), {
+    expect(screen.getByLabelText("Password")).toHaveValue("");
+    fireEvent.change(screen.getByLabelText("Password"), {
       target: { value: "commit-secret" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Fetch and import" }));
+    fireEvent.click(screen.getByRole("button", { name: "Import" }));
 
     await waitFor(() => expect(onChanged).toHaveBeenCalledOnce());
-    expect(screen.getByLabelText("One-shot password")).toHaveValue("");
+    expect(screen.getByLabelText("Password")).toHaveValue("");
     expect(preview).toHaveBeenCalledWith(expect.objectContaining({ password: "preview-secret" }));
     expect(commit).toHaveBeenCalledWith(expect.objectContaining({ password: "commit-secret" }));
   });

@@ -1,6 +1,5 @@
 .rhythm-marker-workspace {
   min-width: 0;
-  padding-top: var(--space-6);
 }
 
 .rhythm-marker-heading {
@@ -38,18 +37,41 @@
 
 .rhythm-marker-boundary {
   margin: var(--space-4) 0;
-  padding: var(--space-2) 0 var(--space-2) var(--space-4);
+  padding: var(--space-2) var(--space-3);
   color: var(--muted);
-  border-left: 2px solid var(--state-uncertain);
-  font-size: var(--type-body);
-  line-height: 1.55;
+  background: var(--panel-alt);
+  border-left: 3px solid var(--state-uncertain);
+  border-radius: var(--radius-control);
+  font-size: var(--type-label);
+  line-height: 1.45;
 }
 
+/* The recorded markers first; adding one folds out beneath them. */
 .rhythm-marker-layout {
   display: grid;
-  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
-  gap: var(--space-6);
-  align-items: start;
+  gap: var(--space-4);
+}
+
+.rhythm-marker-add {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+}
+
+.rhythm-marker-add > summary {
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.rhythm-marker-add[open] > summary {
+  border-bottom: 1px solid var(--divider);
+}
+
+.rhythm-marker-add .rhythm-marker-entry {
+  max-width: 560px;
+  padding: var(--space-4);
+  border: 0;
 }
 
 .rhythm-marker-entry {
@@ -60,19 +82,6 @@
   border-bottom: 1px solid var(--line);
 }
 
-.rhythm-marker-section-label {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-
-.rhythm-marker-section-label span {
-  font-size: var(--type-body-strong);
-  font-weight: 750;
-}
-
-.rhythm-marker-section-label small,
 .rhythm-marker-entry label > span,
 .rhythm-marker-entry label > small {
   color: var(--muted);
@@ -113,22 +122,10 @@
   border-top: 1px solid var(--line);
 }
 
-.rhythm-marker-ledger-head,
 .rhythm-marker-row {
   display: grid;
   grid-template-columns: minmax(170px, 1fr) minmax(190px, 1.2fr) minmax(120px, 1fr) 58px;
   gap: var(--space-3);
-}
-
-.rhythm-marker-ledger-head {
-  min-height: 34px;
-  align-items: center;
-  color: var(--subtle);
-  border-bottom: 1px solid var(--line);
-  font-size: var(--type-label);
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
 }
 
 .rhythm-marker-row {
@@ -325,12 +322,6 @@
   color: var(--subtle);
 }
 
-@media (max-width: 1000px) {
-  .rhythm-marker-layout {
-    grid-template-columns: 1fr;
-  }
-}
-
 @media (max-width: 760px) {
   .rhythm-marker-heading {
     grid-template-columns: 1fr;
@@ -338,10 +329,6 @@
 
   .rhythm-marker-export {
     justify-items: stretch;
-  }
-
-  .rhythm-marker-ledger-head {
-    display: none;
   }
 
   .rhythm-marker-row {

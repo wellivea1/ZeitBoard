@@ -52,10 +52,10 @@ describe("LogScreen marker ownership", () => {
     fireEvent.change(screen.getByLabelText("Started"), {
       target: { value: "2026-07-23T08:00" },
     });
-    fireEvent.change(screen.getByLabelText("IANA time zone"), {
+    fireEvent.change(screen.getByLabelText("Time zone"), {
       target: { value: "America/New_York" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Append marker" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add marker" }));
 
     await waitFor(() => expect(addMarker).toHaveBeenCalledTimes(1));
     expect(getMarkers).toHaveBeenCalledTimes(1);

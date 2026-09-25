@@ -31,6 +31,28 @@ describe("tasks", () => {
     expect(data?.tasks[0]?.windowLabel).toContain("Finish by");
   });
 
+  it("keeps an accepted block only when it is whole", () => {
+    const withBlock = (block: Record<string, string>) =>
+      normalizeTasks({ ...backendTasks, tasks: [{ ...backendTasks.tasks[0], ...block }] })
+        ?.tasks[0];
+    expect(
+      withBlock({
+        scheduledStartAt: "2026-09-24T21:30:00Z",
+        scheduledEndAt: "2026-09-24T21:50:00Z",
+        scheduledLabel: "Thu Sep 24, 5:30 PM EDT to Thu Sep 24, 5:50 PM EDT",
+      })?.scheduled,
+    ).toEqual({
+      startAt: "2026-09-24T21:30:00Z",
+      endAt: "2026-09-24T21:50:00Z",
+      label: "Thu Sep 24, 5:30 PM EDT to Thu Sep 24, 5:50 PM EDT",
+    });
+    expect(withBlock({ scheduledStartAt: "2026-09-24T21:30:00Z" })?.scheduled).toBeUndefined();
+    expect(
+      withBlock({ scheduledStartAt: "soon", scheduledEndAt: "later", scheduledLabel: "x" })
+        ?.scheduled,
+    ).toBeUndefined();
+  });
+
   it("rejects malformed tasks and off-enum statuses", () => {
     expect(
       normalizeTasks({ status: "ok", tasks: [{ taskId: "t", status: "archived" }] }),
