@@ -109,6 +109,45 @@ describe("loadOverview", () => {
     expect(result.data.fixtureMode).toBe(false);
   });
 
+  it("carries the count of nights to a first forecast, and only a sound one", async () => {
+    const withProgress = (status: string, progress: unknown) =>
+      loadOverview({
+        go: {
+          main: {
+            App: {
+              GetOverview: async () => ({
+                status,
+                empty: false,
+                refusal: { code: "insufficient_data", message: "need 7; found 3" },
+                currentEstimatedState: "Need more sleep data",
+                timeSinceWake: "Not available",
+                predictedNextSleepWindow: "Not enough local data",
+                driftEstimate: "Not enough local data",
+                confidence: "low",
+                confidenceReasons: [],
+                nextUsefulTaskWindow: "No reliable proposal",
+                sharingStatus: "No active trusted view; local data only",
+                fixtureMode: false,
+                progress,
+              }),
+            },
+          },
+        },
+      });
+
+    expect((await withProgress("refused", { nights: 3, needed: 7 })).data.progress).toEqual({
+      nights: 3,
+      needed: 7,
+    });
+    for (const unsound of [{ nights: -1, needed: 7 }, { nights: 7, needed: 7 }, { nights: 3 }]) {
+      expect((await withProgress("refused", unsound)).data.progress).toBeUndefined();
+    }
+    // An estimate needs no count of the way to one.
+    expect(
+      (await withProgress("estimated", { nights: 3, needed: 7 })).data.progress,
+    ).toBeUndefined();
+  });
+
   it("falls back when the Wails binding is unavailable", async () => {
     await expect(loadOverview({})).resolves.toEqual({
       data: overviewFixture,

@@ -121,6 +121,16 @@ type OverviewDTO struct {
 	// such concept: "Likely awake" was the default whenever the newest stored
 	// sleep interval did not contain now, so it survived indefinitely.
 	Freshness FreshnessDTO `json:"freshness"`
+
+	// Progress counts the way to a first estimate while there is none: the
+	// nights the estimator can use and how many it needs. It is absent once
+	// there is an estimate, and for refusals more nights alone do not resolve.
+	Progress *EstimateProgressDTO `json:"progress,omitempty"`
+}
+
+type EstimateProgressDTO struct {
+	Nights int `json:"nights"`
+	Needed int `json:"needed"`
 }
 
 // FreshnessDTO mirrors core/freshness for the UI. It is the same verdict the
@@ -635,8 +645,9 @@ func (a *App) localOverview(ctx context.Context, now time.Time) (OverviewDTO, er
 			Status:  "refused",
 			Message: "Need at least seven usable principal sleep entries before estimating rhythm.",
 			Refusal: &estimation.EstimationRefusal{
-				Code:    estimation.RefusalInsufficientData,
-				Message: "need at least 7 usable principal sleep episodes",
+				Code:            estimation.RefusalInsufficientData,
+				Message:         "need at least 7 usable principal sleep episodes",
+				MinimumEpisodes: estimation.DefaultConfig().MinimumEpisodes,
 			},
 		}, now), nil
 	}
@@ -1066,6 +1077,13 @@ func overviewUnavailable(state localEstimateState, now time.Time) OverviewDTO {
 	} else if state.Status == "unavailable" {
 		title = "Local storage unavailable"
 	}
+	var progress *EstimateProgressDTO
+	switch {
+	case state.Status == "empty":
+		progress = &EstimateProgressDTO{Needed: estimation.DefaultConfig().MinimumEpisodes}
+	case state.Refusal != nil && state.Refusal.Code == estimation.RefusalInsufficientData && state.Refusal.MinimumEpisodes > 0:
+		progress = &EstimateProgressDTO{Nights: state.Refusal.Episodes, Needed: state.Refusal.MinimumEpisodes}
+	}
 	return OverviewDTO{
 		EstimateSource:           "local",
 		Status:                   state.Status,
@@ -1083,6 +1101,7 @@ func overviewUnavailable(state localEstimateState, now time.Time) OverviewDTO {
 		FixtureMode:              false,
 		Disclaimer:               disclaimer,
 		UpdatedLabel:             analysisUpdatedLabel(state),
+		Progress:                 progress,
 	}
 }
 

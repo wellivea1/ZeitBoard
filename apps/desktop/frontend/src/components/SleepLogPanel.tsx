@@ -44,6 +44,9 @@ function endAfterStart(input: SleepEntryInput) {
   return new Date(input.endLocal).getTime() > new Date(input.startLocal).getTime();
 }
 
+/** Log › Sleep with "Add a past night" already open. */
+const addNightHash = "#/log/sleep/add";
+
 // The sleep log: entry, correction history, suppression and erasure.
 //
 // It moved out of Data Sources in slice U-H. Recording last night is not the
@@ -99,6 +102,20 @@ export function SleepLogPanel() {
       current = false;
       window.removeEventListener(sleepDataChangedEvent, load);
     };
+  }, []);
+
+  // "Add a past night" elsewhere (Home, before a forecast) arrives here with
+  // the form open and its first field ready.
+  useEffect(() => {
+    const openFromAddress = () => {
+      const fold = addRef.current;
+      if (window.location.hash !== addNightHash || !fold) return;
+      fold.open = true;
+      fold.querySelector<HTMLElement>("input, select, textarea")?.focus();
+    };
+    openFromAddress();
+    window.addEventListener("hashchange", openFromAddress);
+    return () => window.removeEventListener("hashchange", openFromAddress);
   }, []);
 
   const submitEntry = async () => {

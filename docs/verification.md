@@ -1613,3 +1613,28 @@ settings groups sit on sheets. The notes on Log, Rhythm, Data Sources and
 Sharing each show once with an ×. New tests cover closing a note, remembering
 it across a reload, and showing one or all again (449 desktop + 6 prototype
 tests); the Android `gradlew check` passed.
+
+## First-run setup — 2026-09-25
+
+Checked in the running app against an empty, disposable profile (`wails dev`
+with a throwaway `APPDATA`), in the Ink theme at desktop width and the Paper
+theme at 700px:
+
+- **Empty.** Home read "Nothing is recorded yet. ZeitBoard looks ahead once it
+  has 7 nights." Fig. 1 showed seven empty discs, then the four ways in.
+- **The past-night link.** "Add a past night" opened Log › Sleep with the form
+  unfolded and its first field focused.
+- **Three nights, added with that form.** Home read "You have recorded 3 of the
+  7 nights ZeitBoard needs before it can look ahead." Three discs were filled.
+- **Seven nights.** Four more nights produced an estimate, and Home became the
+  almanac page with its forecast.
+
+The filled discs first used the Week board's recorded-sleep wash, which was
+too faint in the Ink theme. They now use the figure's asleep tone.
+
+Tests cover the estimator's count (short sleeps are not counted), the
+overview's progress field for empty and refused states, the normaliser
+rejecting an unsound count, each lead sentence, the setup page's links and
+tally, the plain-words refusal for a cycle gap, and the past-night address. The
+desktop and core Go suites and the canonical web checks pass (456 desktop + 6
+prototype tests).

@@ -48,6 +48,15 @@ export interface OverviewData {
     detail: string;
   };
   updatedLabel: string;
+  /**
+   * The way to a first estimate while there is none: the nights the
+   * estimator can use so far and how many it needs. Absent once estimated,
+   * and for a refusal that more nights alone would not resolve.
+   */
+  progress?: {
+    nights: number;
+    needed: number;
+  };
 }
 
 export type OverviewSource = "local" | "synced" | "fixture";

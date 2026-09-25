@@ -66,6 +66,22 @@ function normalizeRefusal(value: unknown): OverviewData["refusal"] | undefined {
   return code && message ? { code, message } : undefined;
 }
 
+function normalizeProgress(value: unknown): OverviewData["progress"] | undefined {
+  if (!isRecord(value)) return undefined;
+  const { nights, needed } = value;
+  if (
+    typeof nights !== "number" ||
+    typeof needed !== "number" ||
+    !Number.isSafeInteger(nights) ||
+    !Number.isSafeInteger(needed) ||
+    nights < 0 ||
+    needed < 1 ||
+    nights >= needed
+  )
+    return undefined;
+  return { nights, needed };
+}
+
 function normalizeWailsOverview(value: unknown): OverviewData | undefined {
   if (isOverviewData(value)) return { ...value, freshness: normalizeFreshness(value.freshness) };
   if (!isRecord(value)) return undefined;
@@ -137,6 +153,9 @@ function normalizeWailsOverview(value: unknown): OverviewData | undefined {
       detail: "Trusted views contain only explicitly allowlisted fields",
     },
     updatedLabel: asString(value.updatedLabel) ?? "Updated from the local service just now",
+    ...(status !== "estimated" && normalizeProgress(value.progress)
+      ? { progress: normalizeProgress(value.progress) }
+      : {}),
   };
 }
 

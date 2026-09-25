@@ -53,6 +53,9 @@ func TestEmptyLocalStoreReturnsHonestStates(t *testing.T) {
 	if !strings.Contains(overview.CurrentEstimatedState, "No sleep entries") {
 		t.Fatalf("empty overview should invite first entry: %#v", overview)
 	}
+	if overview.Progress == nil || overview.Progress.Nights != 0 || overview.Progress.Needed != 7 {
+		t.Fatalf("empty overview should count the way to an estimate: %#v", overview.Progress)
+	}
 
 	rhythm, err := app.GetRhythm()
 	if err != nil {
@@ -100,6 +103,9 @@ func TestBelowMinimumLocalDataReturnsTypedRefusal(t *testing.T) {
 	}
 	if overview.Status != "refused" || overview.Refusal == nil || overview.Refusal.Code != "insufficient_data" {
 		t.Fatalf("expected insufficient data refusal, got %#v", overview)
+	}
+	if overview.Progress == nil || overview.Progress.Nights != 2 || overview.Progress.Needed != 7 {
+		t.Fatalf("refusal should count the nights so far: %#v", overview.Progress)
 	}
 	if overview.FixtureMode {
 		t.Fatal("refusal must not fall back to fixture mode")

@@ -190,6 +190,132 @@
   font-size: var(--type-label);
 }
 
+/* Before the first forecast: the nights so far as the page's figure, then the
+   ways to add more as entries under one rule. */
+.home-setup {
+  margin-top: 34px;
+  display: grid;
+  gap: 14px;
+}
+
+.nights-tally {
+  margin: 0 0 18px;
+  padding: 16px 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 22px;
+  border-top: 1px solid var(--divider);
+  border-bottom: 1px solid var(--divider);
+}
+
+.nights-tally ol {
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 9px;
+  list-style: none;
+}
+
+/* A night is a disc, filled once recorded in the figure's asleep tone. */
+.nights-tally li {
+  width: 18px;
+  height: 18px;
+  border: 1px solid var(--ink);
+  border-radius: var(--radius-dot);
+}
+
+.nights-tally li[data-recorded] {
+  background: var(--state-asleep);
+  border-color: var(--state-asleep);
+}
+
+.nights-tally figcaption {
+  max-width: 46ch;
+  color: var(--muted);
+  font-family: var(--font-serif);
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.nights-tally strong {
+  color: var(--ink);
+  font-weight: 600;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.home-setup-blocked {
+  max-width: 62ch;
+  margin-bottom: 18px;
+  display: grid;
+  gap: 6px;
+}
+
+.home-setup-blocked p {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: 1.45;
+}
+
+.home-setup-blocked .home-setup-detail {
+  color: var(--muted);
+  font-family: var(--font-sans);
+  font-size: var(--type-label);
+}
+
+.home-ways {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 8px 40px;
+  list-style: none;
+}
+
+.home-way {
+  padding: 12px 0 14px;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-content: start;
+  gap: 5px 8px;
+}
+
+.home-way > :not(.home-way-number) {
+  grid-column: 2;
+}
+
+.home-way-number {
+  grid-row: 1;
+  color: var(--accent);
+  font-family: var(--font-serif);
+  font-size: 19px;
+  font-style: italic;
+  line-height: 1.22;
+}
+
+.home-way h3 {
+  grid-row: 1;
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.22;
+}
+
+.home-way p {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-serif);
+  font-size: 15.5px;
+  line-height: 1.4;
+}
+
+.home-way .home-more {
+  margin-top: 4px;
+  justify-self: start;
+}
+
 .home-recovery {
   max-width: 60ch;
   margin-top: 28px;

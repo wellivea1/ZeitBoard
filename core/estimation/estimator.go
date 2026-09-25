@@ -26,6 +26,10 @@ const (
 type EstimationRefusal struct {
 	Code    RefusalCode `json:"code"`
 	Message string      `json:"message"`
+	// Set with insufficient_data: the usable principal sleep episodes found,
+	// and how many an estimate needs, so a reader can show the way to one.
+	Episodes        int `json:"episodes,omitempty"`
+	MinimumEpisodes int `json:"minimum_episodes,omitempty"`
 }
 
 func (r *EstimationRefusal) Error() string { return r.Message }
@@ -219,8 +223,10 @@ type fittedEpisodeModel struct {
 func fitOrderedEpisodes(episodes []domain.SleepSession, config Config) (fittedEpisodeModel, error) {
 	if len(episodes) < config.MinimumEpisodes {
 		return fittedEpisodeModel{}, &EstimationRefusal{
-			Code:    RefusalInsufficientData,
-			Message: fmt.Sprintf("need at least %d usable principal sleep episodes; found %d", config.MinimumEpisodes, len(episodes)),
+			Code:            RefusalInsufficientData,
+			Message:         fmt.Sprintf("need at least %d usable principal sleep episodes; found %d", config.MinimumEpisodes, len(episodes)),
+			Episodes:        len(episodes),
+			MinimumEpisodes: config.MinimumEpisodes,
 		}
 	}
 	fit, err := fitOnsetTrend(episodes)

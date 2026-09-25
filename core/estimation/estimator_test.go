@@ -68,6 +68,22 @@ func TestEstimatorRefusesInsufficientData(t *testing.T) {
 	if !errors.As(err, &refusal) || refusal.Code != RefusalInsufficientData {
 		t.Fatalf("error = %#v", err)
 	}
+	// A reader can say how far there is to go without parsing the message.
+	if refusal.Episodes != 3 || refusal.MinimumEpisodes != DefaultConfig().MinimumEpisodes {
+		t.Fatalf("progress = %d of %d", refusal.Episodes, refusal.MinimumEpisodes)
+	}
+}
+
+func TestInsufficientDataCountsOnlyMainSleepsOfThreeHours(t *testing.T) {
+	now := time.Now().UTC()
+	sessions := syntheticSessions(4, now, 25*time.Hour, 8*time.Hour, "UTC")
+	// Short sleeps are recorded but are not episodes the fit can use.
+	sessions = append(sessions, syntheticSessions(4, now.Add(-12*time.Hour), 25*time.Hour, 2*time.Hour, "UTC")...)
+	_, err := (RobustEstimator{}).Estimate(context.Background(), sessions, now)
+	var refusal *EstimationRefusal
+	if !errors.As(err, &refusal) || refusal.Code != RefusalInsufficientData || refusal.Episodes != 4 {
+		t.Fatalf("error = %#v", err)
+	}
 }
 
 func TestRefusalCodesMatchV1Contract(t *testing.T) {

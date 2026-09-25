@@ -89,6 +89,24 @@ describe("the lead sentence", () => {
     );
   });
 
+  it("counts the nights to a first forecast", () => {
+    const before = (status: OverviewData["status"], nights: number) =>
+      text(leadParts({ ...awake, status, progress: { nights, needed: 7 } }, outlook, now));
+    expect(before("empty", 0)).toBe(
+      "Nothing is recorded yet. ZeitBoard looks ahead once it has 7 nights.",
+    );
+    expect(before("refused", 3)).toBe(
+      "You have recorded 3 of the 7 nights ZeitBoard needs before it can look ahead.",
+    );
+    // Naps and short sleeps are records, but not nights the estimate can use.
+    expect(before("refused", 0)).toBe(
+      "None of your records count yet. ZeitBoard needs 7 nights of main sleep.",
+    );
+    expect(text(leadParts({ ...awake, status: "refused" }, outlook, now))).toBe(
+      "Your records do not give a forecast yet.",
+    );
+  });
+
   it("rounds long waking stretches to the hour", () => {
     expect(awakeFor("8 hours 42 minutes")).toBe("about 9 hours");
     expect(awakeFor("1 hour 40 minutes")).toBe("1 hour 40 minutes");

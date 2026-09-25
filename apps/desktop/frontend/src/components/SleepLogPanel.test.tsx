@@ -93,4 +93,18 @@ describe("SleepLogPanel", () => {
     // Source configuration stayed on Data Sources.
     expect(screen.queryByRole("heading", { name: "Connected" })).toBeNull();
   });
+
+  it("opens the past-night form when it is the address", () => {
+    window.location.hash = "#/log/sleep";
+    const { container } = render(<SleepLogPanel />);
+    const fold = container.querySelector<HTMLDetailsElement>("details.sleep-add")!;
+    expect(fold.open).toBe(false);
+
+    // Home's "Add a past night", followed while Log is already open.
+    window.location.hash = "#/log/sleep/add";
+    fireEvent(window, new HashChangeEvent("hashchange"));
+    expect(fold.open).toBe(true);
+    expect(fold.contains(document.activeElement)).toBe(true);
+    window.location.hash = "";
+  });
 });
