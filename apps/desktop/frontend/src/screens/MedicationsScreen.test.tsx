@@ -120,7 +120,10 @@ describe("MedicationsScreen", () => {
     expect(await screen.findByText("Desktop service unavailable")).toBeInTheDocument();
     expect(screen.queryByText(/sample preview/i)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Export medication data" })).toBeDisabled();
-    expect(screen.getByText("No interaction checking")).toBeInTheDocument();
+    // The boundary is a note until closed: it still says interactions are not checked.
+    expect(screen.getByRole("complementary", { name: "Logging only" })).toHaveTextContent(
+      /does not check medication interactions/,
+    );
   });
 
   // The everyday case is one tap: this medication, now, taken or skipped.

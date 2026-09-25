@@ -552,6 +552,17 @@ button.week-block-text {
   line-height: 1.45;
 }
 
+.week-warning,
+.week-error {
+  padding: 10px 16px;
+  background: var(--paper);
+  border: 1px solid var(--divider);
+}
+
+.week-warning {
+  color: var(--ink);
+}
+
 .week-error {
   color: var(--danger-text);
 }

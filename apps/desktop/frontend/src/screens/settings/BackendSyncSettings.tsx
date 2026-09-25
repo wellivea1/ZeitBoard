@@ -39,7 +39,7 @@ export function BackendSyncSettings({
           on this computer.
         </p>
         {/* The detail matters for trust, but not on every visit. */}
-        <details className="settings-more">
+        <details className="settings-more fold">
           <summary>How sync behaves</summary>
           <p className="settings-copy">
             Sync runs after enrollment, when ZeitBoard starts, and about every minute while it is
@@ -62,10 +62,7 @@ export function BackendSyncSettings({
         >
           <div>
             <h3 id="backend-sync-connect-title">Connect backend</h3>
-            <p>
-              The HTTPS address and enrollment secret from your own server. The device token it
-              issues stays in the local database and is never shown.
-            </p>
+            <p>From your own server. The device token it issues is never shown.</p>
           </div>
           <form
             className="backend-sync-form"
@@ -139,9 +136,6 @@ export function BackendSyncSettings({
         >
           <div>
             <h3 id="backend-sync-status-title">Sync status</h3>
-            <p>
-              If the server cannot be reached, estimates stay local. Conflicts are reported here.
-            </p>
           </div>
           <dl className="sync-status-list">
             <div>

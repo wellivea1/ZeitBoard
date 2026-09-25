@@ -217,7 +217,7 @@ export function SleepLogPanel() {
       {/* Recording the night that just happened is two taps; a form for it
           is for nights that were missed. */}
       <QuickLogBar />
-      <details className="sleep-add" ref={addRef}>
+      <details className="sleep-add fold" ref={addRef}>
         <summary>Add a past night</summary>
         <form
           aria-label="Add sleep entry"

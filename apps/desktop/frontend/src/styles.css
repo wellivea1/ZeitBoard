@@ -1042,7 +1042,7 @@ textarea {
 .source-conflicts-panel,
 .drift-panel,
 .actogram-panel {
-  padding: 24px 26px;
+  padding: 20px 0 24px;
 }
 .phase-two-copy,
 .refusal-panel p {
@@ -1088,6 +1088,146 @@ textarea {
 .proposal-stack {
   display: grid;
   gap: 0;
+}
+
+/* A note, a set of choices or a form set on a sheet of its own: flat paper
+   with a hairline edge and square corners, so it stands off the page rather
+   than floating on it. Not a card: sheets are not nested and carry no stripe,
+   shadow or rounding. */
+.sheet {
+  padding: 14px 18px;
+  background: var(--paper);
+  border: 1px solid var(--divider);
+}
+
+/* A fold: one line that opens to a form or to detail. The triangle is drawn
+   so every fold looks the same, and the form it opens sits on a sheet. */
+.fold > summary {
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+}
+.fold > summary::-webkit-details-marker {
+  display: none;
+}
+.fold > summary::before {
+  content: "";
+  width: 7px;
+  height: 9px;
+  flex: none;
+  background: var(--muted);
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+  transition: transform 120ms ease;
+}
+.fold[open] > summary::before {
+  transform: rotate(90deg);
+}
+.fold[open] > form,
+.fold[open] > section > form {
+  margin-top: 6px;
+  padding: 16px 18px;
+  background: var(--paper);
+  border: 1px solid var(--divider);
+}
+
+/* An explanation that is useful once, closed with its × for good and listed
+   in Settings › Display to show again. */
+.notice {
+  position: relative;
+  margin: 0 0 18px;
+  padding: 12px 48px 13px 18px;
+  display: grid;
+  gap: 4px;
+  background: var(--paper);
+  border: 1px solid var(--divider);
+}
+.notice-title {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--type-micro);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.notice[data-tone="caution"] .notice-title {
+  color: var(--state-uncertain);
+}
+.notice-body,
+.notice-body p {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.45;
+}
+.notice-body p + p {
+  margin-top: 4px;
+}
+.notice-body strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.notice-hide {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.notice-hide:hover {
+  color: var(--ink);
+  background: var(--chrome-hover);
+}
+.notice-hide svg {
+  width: 16px;
+  height: 16px;
+}
+
+.hidden-notes {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--divider);
+}
+.hidden-notes li {
+  padding: 10px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--divider);
+}
+.hidden-notes span {
+  display: grid;
+  gap: 2px;
+}
+.hidden-notes strong {
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-weight: 500;
+}
+.hidden-notes small {
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+.hidden-notes-empty {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-serif);
+  font-style: italic;
 }
 
 /* A lazily loaded screen, for the moment before it arrives. */
@@ -1653,7 +1793,7 @@ textarea {
 }
 .state-pill {
   display: inline;
-  color: var(--state-uncertain);
+  color: var(--muted);
   font-size: var(--type-micro);
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -1813,11 +1953,12 @@ textarea {
   gap: 16px;
 }
 .data-control-card {
-  padding: 14px 0 0;
+  padding: 16px 18px;
   display: grid;
   align-content: start;
   gap: 12px;
-  border-top: 1px solid var(--divider);
+  background: var(--paper);
+  border: 1px solid var(--divider);
 }
 .data-control-card h3 {
   margin: 0 0 6px;
@@ -2005,7 +2146,7 @@ textarea {
       "reasons"
       "meta"
       "actions";
-    padding: var(--space-4);
+    padding: 14px 0;
   }
   .approval-actions {
     width: 100%;
@@ -2374,20 +2515,25 @@ textarea {
   font-size: 20px;
   font-weight: 500;
 }
-.task-conflict-card > p {
-  font-size: var(--type-label);
+.task-conflict-card > p:not(.section-kicker) {
+  margin: 0;
   color: var(--muted);
+  font-family: var(--font-serif);
+  font-size: 15.5px;
 }
 .task-conflict-card fieldset {
-  border: 0;
-  margin: 16px 0;
-  padding: 0;
   min-width: 0;
+  margin: 14px 0;
+  padding: 0;
+  border: 0;
 }
 .task-conflict-card legend {
-  font-size: var(--type-label);
+  margin-bottom: 10px;
+  color: var(--muted);
+  font-size: var(--type-micro);
   font-weight: 700;
-  margin-bottom: 12px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 .task-conflict-versions {
   display: grid;
@@ -2396,12 +2542,14 @@ textarea {
 }
 .task-conflict-version,
 .task-conflict-versions > section {
-  padding: 12px 0;
+  padding: 12px 16px;
   min-width: 0;
-  border-top: 1px solid var(--divider);
+  background: var(--paper);
+  border: 1px solid var(--divider);
 }
 .task-conflict-version:has(input:checked) {
-  border-top-color: var(--ink);
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
 }
 .task-conflict-version {
   display: grid;
@@ -2413,7 +2561,9 @@ textarea {
   min-height: 44px;
   display: flex;
   align-items: center;
-  font-weight: 700;
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 500;
   cursor: pointer;
 }
 .task-conflict-version > .task-version-details {
@@ -2424,9 +2574,9 @@ textarea {
   color: var(--muted);
 }
 .task-conflict-same {
-  margin: 12px 0 0;
-  font-size: var(--type-label);
+  margin: 10px 0 0;
   color: var(--muted);
+  font-size: var(--type-label);
 }
 .task-version-details {
   margin: 8px 0 0;

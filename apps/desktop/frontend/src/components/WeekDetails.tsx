@@ -110,7 +110,7 @@ export function EventTable({ data }: { data: CalendarData }) {
       .map((event) => ({ day, event })),
   );
   return (
-    <details className="week-list">
+    <details className="week-list fold">
       <summary>List these events ({rows.length})</summary>
       {rows.length === 0 ? (
         <p>No events in these days.</p>

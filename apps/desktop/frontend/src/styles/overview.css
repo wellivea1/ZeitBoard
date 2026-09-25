@@ -179,38 +179,15 @@
   font-style: italic;
 }
 
-.home-note {
-  margin: 14px 0 0;
-  color: var(--muted);
-  font-family: var(--font-serif);
-  font-size: 15px;
-  line-height: 1.4;
-}
-
-.home-footer {
-  margin-top: 44px;
-  padding-top: 12px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 24px;
-  align-items: baseline;
-  color: var(--muted);
-  border-top: 1px solid var(--divider);
-  font-size: 12.5px;
-}
-
-.home-confidence summary {
-  cursor: pointer;
-  color: var(--ink);
-}
-
-.home-confidence[open] {
-  flex-basis: 100%;
-}
-
-.home-confidence p {
+/* The note about what the forecast is sits under the columns until closed. */
+.almanac > .notice {
   max-width: 72ch;
-  margin: 6px 0 0;
+  margin: 44px 0 0;
+}
+
+.home-sharing {
+  margin: 14px 0 0;
+  font-size: var(--type-label);
 }
 
 .home-recovery {

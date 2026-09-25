@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Notice } from "./Notice";
 import { CalendarImportPanel } from "./CalendarImportPanel";
 import { removeCalendarSource, type CalendarSource } from "../data/calendar";
 
@@ -63,10 +64,10 @@ export function CalendarSourcesPanel({
           </button>
         )}
       </div>
-      <p className="calendar-ownership-note">
-        Suggested times stay clear of busy events. ZeitBoard never changes your calendars; the times
-        you accept are kept in ZeitBoard placements.
-      </p>
+      <Notice id="calendars.ownership">
+        Suggested times stay clear of busy events. ZeitBoard never changes your calendars: the times
+        you accept are kept in its own placements calendar.
+      </Notice>
       {sources.length === 0 ? (
         <p className="calendar-source-empty">No calendars yet. Adding one is optional.</p>
       ) : (

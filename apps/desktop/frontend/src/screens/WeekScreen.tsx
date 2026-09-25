@@ -263,8 +263,9 @@ function WeekNotes({
       ))}
       {stale && (
         <p className="week-warning">
-          {overview.freshness.explanation.replace(/\.?$/, ".")} The bands below come from the last
-          estimate and may have drifted since.
+          {overview.freshness.ageLabel
+            ? `${overview.freshness.ageLabel}, so these bands come from an older estimate and may have drifted.`
+            : `${overview.freshness.explanation.replace(/\.?$/, ".")} These bands may have drifted.`}
         </p>
       )}
       {data && data.status !== "estimated" && (

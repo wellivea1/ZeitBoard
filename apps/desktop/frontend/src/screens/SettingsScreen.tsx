@@ -18,6 +18,7 @@ import {
 import { notifySleepDataChanged } from "../data/sleepDataEvents";
 import { deleteAllSleepData } from "../data/sleepEntries";
 import { AppearanceSettings } from "./settings/AppearanceSettings";
+import { HiddenNotesSettings } from "./settings/HiddenNotesSettings";
 import { ActivityCollectionSettings } from "./settings/ActivityCollectionSettings";
 import { StartupSettings } from "./settings/StartupSettings";
 import { BackendSyncSettings } from "./settings/BackendSyncSettings";
@@ -247,6 +248,7 @@ export function SettingsScreen({
         <ScreenTabPanel name="settings" id="display" active={tab}>
           <div className="settings-stack">
             <AppearanceSettings />
+            <HiddenNotesSettings />
           </div>
         </ScreenTabPanel>
         <ScreenTabPanel name="settings" id="reaching" active={tab}>

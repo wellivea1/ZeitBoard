@@ -32,6 +32,7 @@
 .rhythm-marker-export {
   display: grid;
   justify-items: end;
+  align-content: start;
   gap: var(--space-1);
 }
 
@@ -333,7 +334,11 @@
   }
 
   .rhythm-marker-export {
-    justify-items: stretch;
+    justify-items: start;
+  }
+
+  .rhythm-marker-erase-link {
+    justify-self: start;
   }
 
   .rhythm-marker-row {

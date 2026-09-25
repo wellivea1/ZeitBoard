@@ -256,9 +256,11 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px 20px;
-  align-items: baseline;
-  padding: 12px 0;
-  border-block: 1px solid var(--divider);
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: var(--paper);
+  border: 1px solid var(--divider);
 }
 
 .outlook-notice svg {

@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from "react";
 import { Diary, Doses, NeedsYou } from "../components/HomeColumns";
+import { Notice } from "../components/Notice";
 import { OutlookPanel } from "../components/OutlookPanel";
 import { QuickLogBar } from "../components/QuickLogBar";
 import { loadOverview } from "../data/backend";
@@ -27,7 +28,7 @@ import { hasDesktopBridge } from "../data/wailsBridge";
 import { localZone } from "../utils/civilTime";
 import { createCoalescedRefresh } from "../utils/coalescedRefresh";
 import { subscribeProjectionRefresh } from "../utils/projectionRefresh";
-import type { ConfidenceLevel, OverviewSource, OverviewData } from "../data/overview";
+import type { OverviewSource, OverviewData } from "../data/overview";
 
 // Home, set as an almanac page (ui-refactor-plan.md §14). It leads with a
 // sentence, not a status tile: how long you have been awake, when sleep is
@@ -136,22 +137,6 @@ function compactDrift(label: string) {
   return label.replace(/ minutes per observed sleep cycle$/, " min per cycle");
 }
 
-function ModelConfidence({ level, reason }: { level: ConfidenceLevel; reason: string }) {
-  return (
-    <details className="home-confidence">
-      <summary>Model confidence</summary>
-      <p>
-        <strong>{level}.</strong> {reason}
-      </p>
-      <p>
-        This describes how well the model fits recent records. Measured against real history it did
-        not rank reliably — episodes marked High were not more accurate than those marked Medium —
-        so decide by the predicted range and the age of your records, not this label.
-      </p>
-    </details>
-  );
-}
-
 export function HomeScreen() {
   const { overview, mode, outlook, loading } = useHomeProjection();
   const calendar = useHomeCalendar();
@@ -203,17 +188,22 @@ export function HomeScreen() {
               onLog={medications.log}
             />
           </section>
-          <footer className="home-footer">
-            <span>Estimated from your sleep records, not a measurement of circadian phase.</span>
-            <ModelConfidence
-              level={overview.confidence.level}
-              reason={overview.confidence.reason}
-            />
-            {overview.sharingStatus.active && (
+          <Notice id="home.estimate">
+            <p>
+              Estimated from your sleep records, not measured: nothing here reads circadian phase.
+            </p>
+            <p>
+              The model's fit to recent records is rated{" "}
+              <strong>{overview.confidence.level}</strong>, but that rating has not ranked forecasts
+              reliably. Go by the range and the age of your records.
+            </p>
+            <p>Kept on this computer, and synced only to your own server if you turn sync on.</p>
+          </Notice>
+          {overview.sharingStatus.active && (
+            <p className="home-sharing">
               <a href="#/sharing">{overview.sharingStatus.label}</a>
-            )}
-            <span>Kept on this computer; synced only to your own server if you turn sync on.</span>
-          </footer>
+            </p>
+          )}
         </>
       ) : (
         !loading && <HomeRecovery overview={overview} />

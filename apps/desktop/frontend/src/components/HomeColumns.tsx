@@ -175,10 +175,13 @@ export function Doses({
           No medications listed. <a href="#/log/medications">Add one in Log</a>.
         </p>
       )}
-      <p className="home-note">
-        <a href="#/log/markers">Note an unusual day</a>: travel, illness or an obligation that
-        explains a night.
-      </p>
+      <a
+        className="home-more"
+        href="#/log/markers"
+        title="Travel, illness or an obligation that explains a night"
+      >
+        Note an unusual day
+      </a>
     </section>
   );
 }

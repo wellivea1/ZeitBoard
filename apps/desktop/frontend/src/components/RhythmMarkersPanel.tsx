@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { Notice } from "./Notice";
 import {
   rhythmMarkerDeleteConfirmation,
   rhythmMarkerKindLabels,
@@ -82,7 +83,13 @@ export function RhythmMarkersPanel({
       <header className="rhythm-marker-heading">
         <div>
           <h2 id="rhythm-marker-title">Context markers</h2>
-          <p>{data.message}</p>
+          {/* The note below says what markers do; the heading only counts them,
+              unless the service has something else to say. */}
+          <p>
+            {data.status === "ready"
+              ? `${data.markers.length} ${data.markers.length === 1 ? "marker" : "markers"} recorded`
+              : data.message}
+          </p>
         </div>
         <div className="rhythm-marker-export">
           <button
@@ -97,10 +104,11 @@ export function RhythmMarkersPanel({
         </div>
       </header>
 
-      <p className="rhythm-marker-boundary" role="note">
-        Context only: markers do not change the estimate, establish cause, diagnose, or recommend
-        treatment. To fix one, erase it and add it again; records are never edited in place.
-      </p>
+      <Notice id="markers.boundary">
+        Markers are context only: they do not change the estimate, establish a cause, diagnose or
+        recommend anything. To fix one, erase it and add it again; records are never edited in
+        place.
+      </Notice>
 
       <div className="rhythm-marker-layout">
         <div className="rhythm-marker-ledger" aria-label="Recorded rhythm markers">
@@ -182,7 +190,7 @@ export function RhythmMarkersPanel({
             ))
           )}
         </div>
-        <details className="rhythm-marker-add">
+        <details className="rhythm-marker-add fold">
           <summary>Add a marker</summary>
           <form className="rhythm-marker-entry" onSubmit={submit}>
             <label>

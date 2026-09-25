@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Notice } from "../components/Notice";
 import { Icon } from "../components/Icon";
 import { PageHeader } from "../components/AppShell";
 import { ScreenTabPanel, ScreenTabs, type ScreenTab } from "../components/ScreenTabs";
@@ -163,16 +164,14 @@ function LocalSourcesPanel({ rhythm }: { rhythm: RhythmData }) {
             </dl>
             <p className="diff-note">{latestChange.summary}</p>
             <small>
-              {latestChange.createdLabel} - {latestChange.reason}. The original observation is
-              preserved; corrections are append-only and reversible with another correction.
+              {latestChange.createdLabel} – {latestChange.reason}.
             </small>
           </>
-        ) : (
-          <p className="phase-two-copy">
-            Observations are immutable. Editing an entry appends a correction here instead of
-            overwriting it, so the evidence trail stays reviewable.
-          </p>
-        )}
+        ) : null}
+        <Notice id="rhythm.corrections">
+          A recorded night is never overwritten. Editing one adds a correction on top, and another
+          correction undoes it, so every change can be traced.
+        </Notice>
       </aside>
 
       <section className="panel source-conflicts-panel" aria-labelledby="local-sources-title">
@@ -204,10 +203,7 @@ function LocalSourcesPanel({ rhythm }: { rhythm: RhythmData }) {
             ))}
           </div>
         ) : (
-          <p className="phase-two-copy">
-            No local sleep data yet. Overlaps between future sources are resolved inside the
-            estimation engine, never silently in the chart.
-          </p>
+          <p className="phase-two-copy">No local sleep data yet.</p>
         )}
         {suppressedCount + correctedCount > 0 && (
           <p className="diff-note">

@@ -29,6 +29,13 @@
   margin-top: 22px;
 }
 
+/* The tab bar's rule already opens the panel; a section's own rule under it
+   would draw two lines a few pixels apart. */
+.screen-tab-panel > .panel:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
 /* A tabbed screen is one surface, like .rhythm-screen: the tabs change what is
  * inside it, not which page you are on. */
 .screen-tabbed {

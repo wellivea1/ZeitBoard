@@ -1469,16 +1469,18 @@ private fun DurableLocalDataNotice(
 
 @Composable
 private fun InfoStrip(text: String) {
-    Column(modifier = Modifier.fillMaxWidth()) {
-        HorizontalDivider(color = Divider)
-        Text(
-            text,
-            modifier = Modifier.padding(vertical = 9.dp),
-            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = ReadingSerif, fontStyle = FontStyle.Italic),
-            color = Muted,
-        )
-        HorizontalDivider(color = Divider)
-    }
+    // A note on a sheet of its own, as on the desktop: paper with a hairline
+    // edge, so it stands off the page rather than floating on it.
+    Text(
+        text,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Paper)
+            .border(1.dp, Divider)
+            .padding(horizontal = 14.dp, vertical = 11.dp),
+        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = ReadingSerif),
+        color = Muted,
+    )
 }
 
 @Composable

@@ -89,10 +89,8 @@ export function AppearanceSettings() {
         <span>
           <strong>Night appearance follows your rhythm</strong>
           <small>
-            Switch to a night preset before your predicted sleep onset and back after wake. The
-            trigger is the forecast, so it drifts with you; without an estimate it honestly falls
-            back to fixed times. A local display preference, not light-therapy guidance; nothing
-            goes through approvals.
+            A night preset before your predicted sleep and back after waking, drifting with the
+            forecast; fixed times when there is none. A display preference, not light therapy.
           </small>
         </span>
         <input

@@ -235,7 +235,7 @@ export function SleepNightRow({
 
       {entry.history.length > 0 && (
         <details
-          className="sleep-entry-history"
+          className="sleep-entry-history fold"
           onToggle={(event) => setHistoryOpen(event.currentTarget.open)}
         >
           <summary>Correction history ({entry.history.length})</summary>
