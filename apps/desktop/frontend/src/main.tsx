@@ -5,6 +5,7 @@ import App from "./App";
 import { AppearanceProvider } from "./theme/AppearanceProvider";
 import { loadAndApplyReducedStimulation } from "./theme/reducedStimulation";
 import { loadAndApplyTheme } from "./theme/theme";
+import "./styles/fonts.css";
 import "./styles.css";
 import "./styles/outlook.css";
 import "./styles/overview.css";

@@ -2,8 +2,9 @@
   /* Almanac (the 2026-09-25 redesign, ui-refactor-plan.md §14): one continuous
      sheet of paper, set in a serif for reading and a sans for controls. No
      cards, no pills, no coloured side stripes; rules and type carry the
-     hierarchy, and colour is kept for what the rhythm data means. The faces
-     are the system's (Sitka and Georgia on Windows), so nothing is fetched. */
+     hierarchy, and colour is kept for what the rhythm data means. Newsreader
+     and Public Sans are bundled (styles/fonts.css); the system faces after
+     them are the fallback for characters outside the bundled ranges. */
   --font-serif: "Newsreader", "Sitka Text", "Sitka", Georgia, "Times New Roman", serif;
   --font-display: "Newsreader", "Sitka Heading", "Sitka", Georgia, "Times New Roman", serif;
   --font-sans:

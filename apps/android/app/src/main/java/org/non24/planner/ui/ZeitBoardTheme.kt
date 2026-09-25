@@ -1,3 +1,6 @@
+// Variable-font settings on a resource font are still marked experimental.
+@file:OptIn(ExperimentalTextApi::class)
+
 package org.non24.planner.ui
 
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -8,16 +11,21 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.non24.planner.R
 
-// Almanac (ui-refactor-plan.md §14), the desktop's paper and ink: a serif for
-// reading (Noto Serif, the system's), the system sans for controls, square
-// corners, and colour kept for what the rhythm means. The one bright colour,
-// the accent, marks now.
+// Almanac (ui-refactor-plan.md §14), the desktop's paper and ink: Newsreader
+// for reading and Public Sans for controls, both bundled (res/font, under the
+// SIL Open Font License in assets/licenses), square corners, and colour kept
+// for what the rhythm means. The one bright colour, the accent, marks now.
 
 internal val Ink = Color(0xFF221F1A)
 internal val Muted = Color(0xFF5C564C)
@@ -98,26 +106,76 @@ private val ZeitBoardShapes = Shapes(
     extraLarge = RoundedCornerShape(0.dp),
 )
 
-private val Serif = FontFamily.Serif
-private val Sans = FontFamily.Default
+// Both faces are variable. Android does not pick an optical size from the text
+// size as a browser does, so the display styles ask for Newsreader's display
+// cut and the rest for its text cut.
+private fun newsreader(opticalSize: Float) = FontFamily(
+    listOf(400, 500, 600, 700).flatMap { weight ->
+        listOf(
+            Font(
+                R.font.newsreader,
+                FontWeight(weight),
+                FontStyle.Normal,
+                variationSettings = FontVariation.Settings(
+                    FontVariation.weight(weight),
+                    FontVariation.Setting("opsz", opticalSize),
+                ),
+            ),
+            Font(
+                R.font.newsreader_italic,
+                FontWeight(weight),
+                FontStyle.Italic,
+                variationSettings = FontVariation.Settings(
+                    FontVariation.weight(weight),
+                    FontVariation.Setting("opsz", opticalSize),
+                ),
+            ),
+        )
+    },
+)
+
+private val Serif = newsreader(opticalSize = 16f)
+private val SerifDisplay = newsreader(opticalSize = 36f)
+
+internal val Sans = FontFamily(
+    listOf(400, 500, 600, 700).flatMap { weight ->
+        listOf(
+            Font(
+                R.font.public_sans,
+                FontWeight(weight),
+                FontStyle.Normal,
+                variationSettings = FontVariation.Settings(FontVariation.weight(weight)),
+            ),
+            Font(
+                R.font.public_sans_italic,
+                FontWeight(weight),
+                FontStyle.Italic,
+                variationSettings = FontVariation.Settings(FontVariation.weight(weight)),
+            ),
+        )
+    },
+)
+
+/** The reading face, for the few places that set it outside the type scale. */
+internal val ReadingSerif = Serif
 
 private val ZeitBoardTypography = Typography(
     displaySmall = TextStyle(
-        fontFamily = Serif,
+        fontFamily = SerifDisplay,
         fontSize = 30.sp,
         lineHeight = 36.sp,
         fontWeight = FontWeight.Normal,
         letterSpacing = (-0.3).sp,
     ),
     headlineLarge = TextStyle(
-        fontFamily = Serif,
+        fontFamily = SerifDisplay,
         fontSize = 28.sp,
         lineHeight = 34.sp,
         fontWeight = FontWeight.Normal,
         letterSpacing = (-0.3).sp,
     ),
     headlineMedium = TextStyle(
-        fontFamily = Serif,
+        fontFamily = SerifDisplay,
         fontSize = 22.sp,
         lineHeight = 28.sp,
         fontWeight = FontWeight.Normal,

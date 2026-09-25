@@ -65,7 +65,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
@@ -392,7 +391,7 @@ private fun NowDial(state: AppUiState, companion: CompanionState, connected: Boo
             Text(
                 it,
                 modifier = Modifier.fillMaxWidth(),
-                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic),
+                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = ReadingSerif, fontStyle = FontStyle.Italic),
                 color = Muted,
             )
         }
@@ -1420,7 +1419,7 @@ private fun ScreenHeader(kicker: String, title: String, description: String) {
         Text(title, style = MaterialTheme.typography.headlineLarge)
         Text(
             description,
-            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Serif),
+            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = ReadingSerif),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
@@ -1475,7 +1474,7 @@ private fun InfoStrip(text: String) {
         Text(
             text,
             modifier = Modifier.padding(vertical = 9.dp),
-            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic),
+            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = ReadingSerif, fontStyle = FontStyle.Italic),
             color = Muted,
         )
         HorizontalDivider(color = Divider)
@@ -1559,7 +1558,7 @@ private fun FixtureBanner() {
         Text(
             "Sample data. Nothing here is yours.",
             modifier = Modifier.padding(horizontal = 18.dp, vertical = 7.dp),
-            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Serif, fontStyle = FontStyle.Italic),
+            style = MaterialTheme.typography.bodySmall.copy(fontFamily = ReadingSerif, fontStyle = FontStyle.Italic),
             color = Amber,
         )
         HorizontalDivider(color = Divider)
