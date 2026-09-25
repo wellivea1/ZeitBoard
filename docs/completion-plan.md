@@ -563,3 +563,7 @@ window and system bars switch with them, so a dark launch has no light flash.
 The colour names the screens use (Ink, Paper, Muted and the rest) now read the
 theme's palette, so no screen had to change. A test holds both palettes to
 WCAG contrast: 4.5:1 for text and 3:1 for the dial's marks.
+
+At the narrowest common width (320dp) every tab fitted except the tab bar's
+own "Settings", which broke across two lines in its fifth of the width; each
+tab now has room in proportion to its word and never wraps.

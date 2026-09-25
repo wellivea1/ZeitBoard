@@ -1684,3 +1684,7 @@ status-bar icons. `gradlew check assembleDebug` passed, including the new
 palette contrast test (both themes, text at 4.5:1 and the dial's marks at 3:1).
 The emulator's own System UI stalled once while switching modes under software
 rendering; ZeitBoard kept drawing.
+
+At 320dp (`wm density 540` on the 1080px panel) Now, Plan, Log, Doses and
+Settings fitted without clipping once the tab bar gave "Settings" room; before,
+it broke as "SETTING / S".

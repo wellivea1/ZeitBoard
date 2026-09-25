@@ -1583,7 +1583,9 @@ private fun DestinationBar(
                 val selected = currentRoute == destination.route
                 Column(
                     modifier = Modifier
-                        .weight(1f)
+                        // Room in proportion to the word: at 320dp, five equal
+                        // slots broke "Settings" across two lines.
+                        .weight(destination.label.length + 3f)
                         .fillMaxHeight()
                         .selectable(
                             selected = selected,
@@ -1597,6 +1599,8 @@ private fun DestinationBar(
                         destination.label.uppercase(locale),
                         style = MaterialTheme.typography.labelMedium,
                         color = if (selected) Ink else Muted,
+                        maxLines = 1,
+                        softWrap = false,
                     )
                     Spacer(modifier = Modifier.height(5.dp))
                     Box(
