@@ -83,6 +83,12 @@ export interface WeekBlock {
   endMinute: number;
   continuesBefore: boolean;
   continuesAfter: boolean;
+  /**
+   * The first part of the block on the board. A block across midnight is
+   * drawn in each day it touches, but only this part carries its controls,
+   * so it is decided, and read aloud, once.
+   */
+  primary: boolean;
   /** Position among the blocks it overlaps, and how many share the width. */
   lane: number;
   lanes: number;
@@ -258,6 +264,8 @@ export function weekColumns({ calendar, suggestions, sleep, medications, now }: 
     }
 
     const pieces: Omit<WeekBlock, "lane" | "lanes">[] = [];
+    // The first column may open partway through a block that began earlier.
+    const primary = (continuesBefore: boolean) => !continuesBefore || index === 0;
     for (const event of day.events) {
       if (event.allDay) continue;
       pieces.push({
@@ -271,6 +279,7 @@ export function weekColumns({ calendar, suggestions, sleep, medications, now }: 
         endMinute: event.pointInTime ? event.startMinute + 15 : event.endMinute,
         continuesBefore: event.continuesBefore,
         continuesAfter: event.continuesAfter,
+        primary: primary(event.continuesBefore),
         event,
       });
     }
@@ -286,6 +295,7 @@ export function weekColumns({ calendar, suggestions, sleep, medications, now }: 
         title: proposal.title,
         timeLabel: clockRange(new Date(proposal.startAt), new Date(proposal.endAt)),
         ...span,
+        primary: primary(span.continuesBefore),
         proposalId: proposal.id,
       });
     }

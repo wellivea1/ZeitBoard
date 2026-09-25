@@ -80,6 +80,38 @@ describe("Plan › Week", () => {
     );
   });
 
+  it("offers a suggestion across midnight once, and opens it from either day", async () => {
+    // Only the clock is fixed, so Testing Library's waits keep running.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      // Noon in UTC is the same date almost everywhere; the sample calendar
+      // is drawn in UTC, where this suggestion crosses midnight.
+      vi.setSystemTime(new Date("2026-09-24T12:00:00Z"));
+      pending = [
+        {
+          ...suggestion("p1", "Deep work"),
+          startAt: "2026-09-24T23:30:00.000Z",
+          endAt: "2026-09-25T01:00:00.000Z",
+        },
+      ];
+      const { container } = render(<WeekScreen />);
+
+      expect(
+        await screen.findAllByRole("button", { name: "Accept the suggested time for Deep work" }),
+      ).toHaveLength(1);
+      expect(screen.getAllByRole("button", { name: /^Deep work, suggested for/ })).toHaveLength(1);
+
+      // The half hour after midnight is drawn in the next day, without controls.
+      const rest = container.querySelector(".week-block[data-continued]");
+      expect(rest).toHaveTextContent("Deep work");
+      expect(rest?.querySelector("button")).toBeNull();
+      fireEvent.click(rest!);
+      expect(screen.getByRole("region", { name: "Selected suggestion" })).toBeVisible();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("remembers how many days to show and steps by that many", async () => {
     const { container } = render(<WeekScreen />);
     await screen.findByRole("region", { name: "Days with sleep and plans" });

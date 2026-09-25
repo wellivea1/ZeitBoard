@@ -356,6 +356,13 @@
   cursor: default;
 }
 
+/* The rest of a block from the column before runs in from the top edge. */
+.week-block[data-continued] {
+  margin-top: 0;
+  border-top-style: none;
+  cursor: pointer;
+}
+
 .week-block-text {
   min-width: 0;
   display: grid;

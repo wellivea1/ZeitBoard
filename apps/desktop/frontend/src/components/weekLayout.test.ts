@@ -204,6 +204,41 @@ describe("weekColumns", () => {
     ]);
   });
 
+  it("gives a block across midnight its controls once, where it begins on the board", () => {
+    const [today, tomorrow] = weekColumns({
+      ...input,
+      suggestions: [
+        {
+          id: "late",
+          title: "Deep work",
+          // 11 PM to 12:30 AM in New York.
+          startAt: "2026-09-25T03:00:00Z",
+          endAt: "2026-09-25T04:30:00Z",
+        } as ProposalRecord,
+      ],
+      calendar: calendar([
+        day("2026-09-24", {
+          // Began the evening before the first column.
+          events: [{ ...event("Overnight shift", "2026-09-24", 0, 360), continuesBefore: true }],
+        }),
+        day("2026-09-25"),
+      ]),
+    });
+    expect(today?.blocks.map((block) => [block.title, block.startMinute, block.primary])).toEqual([
+      ["Overnight shift", 0, true],
+      ["Deep work", 23 * 60, true],
+    ]);
+    expect(tomorrow?.blocks).toEqual([
+      expect.objectContaining({
+        title: "Deep work",
+        startMinute: 0,
+        endMinute: 30,
+        continuesBefore: true,
+        primary: false,
+      }),
+    ]);
+  });
+
   it("shades what lies past the last forecast band", () => {
     const columns = weekColumns({
       ...input,

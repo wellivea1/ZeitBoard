@@ -66,6 +66,29 @@ function Block({
   // Short blocks set the time beside the title rather than under it.
   const short = minutes < 50 || undefined;
 
+  // The rest of a block that began in an earlier column. Its controls are
+  // on that first part; here it is drawn, and a click still opens it.
+  if (!block.primary) {
+    const open = () =>
+      block.proposalId ? onInspect(block.proposalId) : block.event && onSelect(block.event);
+    return (
+      <div
+        className="week-block"
+        data-kind={block.kind}
+        data-short={short}
+        data-continued
+        style={style}
+        aria-hidden="true"
+        onClick={open}
+      >
+        <span className="week-block-text">
+          <strong>{block.title}</strong>
+          <small>continued</small>
+        </span>
+      </div>
+    );
+  }
+
   if (block.kind === "suggested" && block.proposalId) {
     const id = block.proposalId;
     return (
