@@ -1,1557 +1,1557 @@
-# Verification record
-
-Most recent local verification: Windows 11 on 2026-09-08.
-
-## 2026-09-08 product quality pass
-
-- `npm run check:web`: formatting, ESLint/UI standards, TypeScript, 397 desktop tests in 54 files, 6
-  trusted-view tests in 2 files, and both production builds pass. Three existing Fast Refresh export
-  warnings remain; no lint errors.
-- `go test ./core/... ./apps/desktop/... ./apps/server/...` passes. Desktop tests were rerun after
-  the task DTO and civil-time fixes and pass, including exact constraint round-trips across
-  DST/travel, stale revisions, invalid mixed timestamp representations and nonexistent civil times.
-- `go vet ./core/... ./apps/desktop/... ./apps/server/...` passes.
-- `scripts/dev.ps1 -Action check -Component contracts`: all 29 versioned fixtures, standalone tools
-  tests/vet and schema validation pass.
-- `scripts/dev.ps1 -Action check -Component android`: unit tests and lint pass. This is not a new
-  real-device or wearable collection trial.
-- `scripts/dev.ps1 -Action build -Component desktop`: native Windows/amd64 production build succeeds
-  at `apps/desktop/build/bin/ZeitBoard.exe`.
-- Clean production browser smoke: Home and all ten remaining route/tab destinations open with no
-  render failures or console warnings/errors.
-- Desktop and 390px viewport review: all eleven route/tab destinations stay within document width.
-  Calendar/chart content retains its internal scroll. Settings and the assistant remain usable at
-  narrow width.
-- An ignored, synthetic bridge harness verifies task editing/save, visible narrow task actions,
-  service failure withholding and successful Home recovery. It does not read or change a personal
-  database or call a provider. Temporary hot-reload errors during source replacement were excluded
-  from the clean production smoke; they are not counted as a passing runtime test.
-- `git diff --check` passes. Test/build artifacts and the review harness remain ignored. The
-  installed desktop and personal data store were not replaced.
-
-The review and limitations are in
-[`product-quality-review-2026-09-08.md`](product-quality-review-2026-09-08.md). Earlier verification
-records below are historical, not the current test count.
-
-## 2026-07-22 passing checks
-
-- Frontend formatting, ESLint, and repository UI standards. The UI guard passed
-  with 16 screen modules and 10 component stylesheets.
-- Frontend TypeScript and production builds for the desktop and trusted-view
-  workspaces.
-- Frontend tests: 30 desktop test files with 213 tests, plus 2 trusted-view test
-  files with 6 tests.
-- `scripts/dev.ps1 -Action check -Component desktop`: desktop production build.
-- `scripts/dev.ps1 -Action check -Component core`: Go formatting, tests, and vet
-  for `core` and `apps/desktop`, including the Windows tray package.
-- `scripts/dev.ps1 -Action build -Component core`: Go builds for `core` and
-  `apps/desktop`.
-- `scripts/dev.ps1 -Action check -Component server`: server formatting, tests,
-  and vet, including the server/MCP projection privacy allowlist.
-- `scripts/dev.ps1 -Action check -Component contracts`: deterministic drift
-  check for 26 v1 fixtures plus 3 v2 fixtures, tools tests/vet, and schema
-  validation.
-- Native Wails production build at `apps/desktop/build/bin/ZeitBoard.exe`.
-- Android `testDebugUnitTest`, `lintDebug`, and `assembleDebug`; U-G changes no
-  Android source.
-- Browser QA of the medication clinician-report workflow at 1440 x 900 and
-  390 x 844: no page-level horizontal overflow, no console warnings or errors,
-  and the dense chart, tables, controls, and explicit internal chart scrolling
-  remained usable. Changing report controls invalidated export until a fresh
-  preview was generated, and export stayed disabled until the exact `EXPORT`
-  confirmation was entered.
-- Sleep erasure regression: suppression remains exportable and excluded from
-  effective reads; hard deletion removes observation/correction rows and the
-  unique payload marker from the compacted SQLite database and WAL.
-- Medication evidence regression: exclusion remains an append-only correction
-  and stored evidence remains countable/exportable; event erasure removes the
-  selected event and correction chain without deleting its definition, while
-  medication erasure removes the definition and all dependent evidence. Both
-  paths remove unique payload markers from the compacted SQLite database and
-  WAL.
-- Medication schedule regression: strict as-needed/fixed/cycling validation,
-  explicit IANA zones, civil cycle boundaries, DST gaps, first repeated-time
-  occurrence, and real estimator-horizon collision counts pass. Reminder tests
-  verify explicit opt-in, claim-before-notify, durable at-most-once behavior,
-  no retry after notification failure, inactive-definition pause, private-label
-  control-character normalization, immutable claims, and erasure cascade.
-- Medication clinician-report regression: local civil range and DST handling,
-  observed and inferred sleep layers, opt-in forecast and private fields,
-  pseudonymized medication labels, explicit taken/skipped adherence only,
-  rhythm-context annotations, selected-range drift, and robust descriptive
-  before/after medication-start association all pass. Export requires the exact
-  confirmation phrase and emits canonical, script-free standalone HTML with a
-  restrictive CSP, complete chart text alternative, mandatory redactions, and
-  no IANA zone identifier. A transient renderer pass also exercised the full
-  standalone document outside the desktop response adapter.
-- Rhythm-context regression: the four non-diagnostic marker kinds and manual,
-  user-reported provenance are schema-closed; SQLite rows are immutable; local
-  civil inputs reject future times and DST gaps while selecting the first
-  repeated-time occurrence; and adding a marker leaves the estimator projection
-  unchanged under an exact deep comparison. Contract-shaped export passes,
-  trusted-view contracts reject markers and private notes, actogram joins reject
-  a marker whose explicit zone does not match the row clock, and hard erasure
-  removes a unique private note from both the compacted database and WAL.
-- Calendar ownership regression: bounded ICS/CalDAV preview and import,
-  recurrence/DST parsing, immutable imported rows, and source erasure all pass.
-  Erasure removes private labels, titles, locations, notes, and saved endpoints
-  from both the compacted SQLite database and WAL. Text-free scheduler
-  projection, task/sleep/event stale-decision refusal, app-owned approval
-  materialization, rejection, undo, and import-free ICS export also pass.
-
-The check wrapper itself was also corrected: native Go, npm, Wails, contract,
-and Gradle failures now propagate as a non-zero script result.
-
-## Real-history import and estimator gate
-
-Only aggregate results are recorded here. Raw exports, converted observations,
-the validation SQLite databases, rendered charts, and detailed refusal points
-remain private and ignored.
-
-The finalized digital source conversion accounted for every source row:
-
-| Stage                                                                | Count |
-| -------------------------------------------------------------------- | ----: |
-| Finalized Fitbit files read                                          |    35 |
-| Source rows read                                                     |   923 |
-| Exact overlapping rows                                               |   105 |
-| Rows outside 2021-2023                                               |    80 |
-| Included observations                                                |   738 |
-| Included observations under 3h, classified as nap                    |     1 |
-| Matching superseded files excluded (`Old` / `Incomplete` / `weekly`) |    26 |
-
-Against a fresh ignored database, preview reported 738 ready, 0 duplicate,
-and 0 invalid rows. Commit imported all 738 atomically. A second preview
-reported 0 ready, 738 exact duplicates, and 0 invalid rows. The digital
-history covers late October 2021 through December 2023.
-
-The five original handwritten-chart pages were source-reviewed without OCR.
-Their 241 labeled day rows use the Sleep Diary report's 18:00-to-18:00 layout.
-Grid-aligned five-minute boundary estimates were visually checked on full-page
-overlays. The date-complete review ledger contains 243 explicit statuses: 223
-`confirmed_sleep` entries and 20 `confirmed_no_observation` entries. There are
-two more statuses than chart rows because two rows contain two sleep episodes;
-`confirmed_no_observation` means that a row was checked and contains no new
-episode start, not that the owner did not sleep.
-
-Eight chart episodes overlap finalized Fitbit records and were reserved for a
-source-accuracy check. Across their 16 start/end boundaries, absolute chart
-error versus Fitbit was 23.2 minutes mean, 10.0 minutes median, 55.5 minutes
-P90, and 127 minutes maximum. The primary benchmark therefore uses 215 chart
-episodes from before Fitbit begins and retains the eight overlap episodes only
-for calibration. Its 232 chart rows produce a 234-status ledger: 215 confirmed
-sleep entries and 19 explicitly checked rows without a new episode. Conversion
-reported all 234 rows, wrote 215 observations, and silently skipped none.
-
-The combined import used 738 Fitbit observations plus those 215 non-overlapping
-chart observations. On a fresh ignored database, the source previews reported
-738 and 215 ready with zero invalid rows. Their commits appended all 953
-observations atomically; repeat previews reported 738 and 215 exact duplicates
-with zero ready or invalid rows. The measured conversion used one owner-selected
-zone; no travel-zone inference was applied.
-
-The combined backtest used 952 principal episodes; the remaining observation
-was the reported Fitbit nap. With the seven-episode minimum, all 945 eligible
-holdouts were accounted for as 809 evaluations plus 136 typed refusals
-(coverage 0.856). Every refusal was `ambiguous_cycle_index`.
-
-| Candidate  | Scale | Evaluations | Refusals | Coverage | Median error | Mean error | P90 error | Hit rate | Mean window |
-| ---------- | ----: | ----------: | -------: | -------: | -----------: | ---------: | --------: | -------: | ----------: |
-| Baseline   |  1.00 |         809 |      136 |    0.856 |       1.71 h |     2.40 h |    5.41 h |     0.78 |     14.71 h |
-| Tighten-75 |  0.75 |         809 |      136 |    0.856 |       1.71 h |     2.40 h |    5.41 h |     0.72 |     13.31 h |
-| Tighten-50 |  0.50 |         809 |      136 |    0.856 |       1.71 h |     2.40 h |    5.41 h |     0.66 |     11.91 h |
-
-Baseline confidence calibration:
-
-| Confidence | Evaluations | Hit rate | Median error |
-| ---------- | ----------: | -------: | -----------: |
-| High       |          28 |     0.61 |       1.23 h |
-| Medium     |         386 |     0.81 |       1.42 h |
-| Low        |         395 |     0.77 |       2.19 h |
-
-Measured decision: keep the production uncertainty scale at 1.00. Tighten-75
-reduced mean width by 1.40h but lost 6 percentage points of hit rate;
-Tighten-50 reduced width by 2.80h but lost 12 points. Point error did not
-improve. The chart-inclusive baseline also improves on the digital-only run's
-1.77h median, 2.50h mean, and 5.65h P90 errors while preserving its 0.78 hit
-rate. A sensitivity run that allowed the eight lower-precision chart overlaps
-to merge into Fitbit changed only median error, from 1.71h to 1.70h at displayed
-precision; the decision is unchanged. The low-versus-medium error delta and
-the high bucket's lower hit rate justify testing an explicit confidence-window
-calibration or misfit candidate next, but no such signal ships without a
-positive delta against this combined baseline.
-
-## Visual verification
-
-- Reviewed unavailable and populated Rhythm Context states at 1440x900 and
-  390x844 in Paper, Dark, and High contrast. The ruled entry/ledger layout stays
-  within the page, all four marker kinds remain shape-distinct, exact date/zone
-  matches are duplicated across both actogram plots, the forecast remains off by
-  default, and the screen-reader table reports the same context. The export
-  control discloses that owner export includes private notes. Typed `DELETE`
-  enables the permanent-erasure action only after the explicit copy distinguishes
-  physical deletion from observation suppression. Runtime console review
-  reported no warnings or errors; the temporary contract-shaped preview was
-  removed and appearance and viewport overrides were reset.
-- Reviewed the real Medications workspace with unavailable-service and populated
-  bridge states at 1440x900 and 390x844. Definition setup, compact quick log,
-  observed/predicted/unavailable timing context, correction, exclusion, typed
-  hard-erasure controls, the user-authored schedule editor, reminder disclosure,
-  neutral feasibility counts, and DST gap copy remained legible and contained.
-  At 1440x900 the 1425px document had no off-viewport elements; at 390x844 the
-  document remained within its 375px layout viewport while the 720px occurrence
-  table scrolled only inside its named 315px region. Runtime console review
-  reported no warnings or errors, and the viewport override was reset.
-- Reviewed the real-calendar replacement at 1440x900 in the browser fixture:
-  source administration remains a compact rail, forecast ranges remain
-  background bands, fixed events use rectangular overlap lanes, exact event
-  details open in the inspector, and the document has no horizontal overflow.
-- Repeated Calendar at 390x844. The primary board precedes source
-  administration, date controls collapse to two compact rows, the 620px civil
-  board scrolls inside its column, and the document remains within the 375px
-  layout viewport. Runtime console review reported no warnings or errors.
-
-- Manually reviewed Overview and Rhythm at 1440x900 in Paper, Dark, Pitch black,
-  Amber, and High contrast, with reduced stimulation both off and on. Appearance
-  was restored to Auto with reduced stimulation off after the matrix.
-- Reviewed the U-E time probes on Overview, actogram, drift, and Calendar at
-  1440x900. The actogram second plot resolved to the following civil day,
-  forecast positions stayed explicitly predicted, drift reported observed and
-  fitted onsets, and edge chips remained inside their tracks.
-- Repeated probe and containment checks with a 390x844 viewport override in
-  High contrast + reduced stimulation. Overview and Calendar did not widen the
-  page; the actogram retained internal horizontal scrolling while the document
-  stayed at viewport width; the drift screen-reader table remained semantic
-  without contributing its intrinsic column width to page overflow.
-- Pointer movement, chart scrolling, and route changes left at most one probe
-  visible. Runtime console review reported no warnings or errors. Paper, Amber,
-  and High contrast probe chips were visually reviewed; theme contrast tests
-  cover all five presets. Appearance and viewport overrides were reset.
-- Overview measured approximately 693px high (77% of the viewport) with one
-  primary surface and no nested generic panels or metric cards.
-- Rhythm's actogram measured approximately 568px high and stayed within the
-  desktop viewport.
-- Overview had no page-level horizontal overflow at 900x900 or 390x844. The
-  navigation rail scrolls internally at narrow widths as designed.
-- The 390x844 Rhythm pass exposed chart overflow propagating to the page. The
-  final CSS paint-contains that overflow at `.actogram-panel` while preserving
-  horizontal scrolling in `.actogram-chart`; hidden screen-reader tables use
-  fixed layout so added columns cannot widen the page. The UI standards check
-  guards these rules and the readable 760px double-plot width.
-- Reviewed the U-F Data Sources and Sharing remediation at the native 1280x720
-  viewport and 390x844 in Paper, system Dark, Amber, and High contrast. Data
-  Sources leads with a two-column provenance ledger and fits source status plus
-  both input paths above the native fold. Sharing reports that no link exists,
-  marks all relationship rows `Example only`, and uses no avatar or profile
-  card. Both routes use one ruled workspace, contain zero generic `.panel`
-  descendants, and reported zero page-level horizontal overflow. At 390 px the
-  ledgers collapse to label/value rows; the eight route icons remain reachable
-  while their internal scrollbar is visually suppressed. An exact 1440x900
-  metric pass also found no overflowing main-content descendants. Appearance
-  was restored to Auto and the viewport override was reset.
-- Installed the rebuilt debug APK on `Pixel_10_Pro_XL_API_36_1` and reviewed
-  Status, Correct, Medication, and Settings in portrait. The generic section
-  `Panel` is absent; rules and headings separate content without reducing the
-  44/48 dp control targets. Rotated the same AVD to landscape for the large-width
-  Settings check. Accessibility bounds proved the content column was 2040
-  physical pixels (680 dp at 480 dpi) after correcting the modifier order;
-  before that fix it incorrectly filled the 2992 px screen. Portrait was
-  restored. Logcat contained no app crash or ANR, and no text or control clipped.
-- Reviewed U-G's shared proposal surfaces at 1440x900 and 390x844 in system
-  Dark, Paper, and High contrast. Approvals rows measured 144/143 px at desktop
-  width and 220/217 px at narrow width; the first Tasks proposal measured 299
-  px instead of the prior 431 px. The narrow appearance picker measured 347 px
-  instead of 821 px. Both widths retained zero page-level horizontal overflow,
-  every icon-only route link retained an accessible name, and the browser
-  console reported no warnings or errors. Auto appearance and the browser
-  viewport were restored after review.
-- Reinstalled the current debug APK after U-G and repeated the four portrait
-  routes plus Settings in landscape on `Pixel_10_Pro_XL_API_36_1`. The app
-  process remained live, portrait rotation was restored, and logcat contained
-  only emulator/graphics compatibility warnings rather than an app exception,
-  crash, or ANR.
-
-## Previously verified artifacts
-
-Verified on Windows 11 on 2026-06-15 and 2026-06-16:
-
-- Pinned local Node.js and Wails setup, Go modules, Java/Gradle detection, npm
-  installation, and deterministic fixture generation.
-- Native Wails production build at `apps/desktop/build/bin/ZeitBoard.exe` and a
-  hidden Windows launch health check.
-- Android debug APK at
-  `apps/android/app/build/outputs/apk/debug/app-debug.apk`.
-- Desktop overview and trusted-view browser screenshots in `docs/screenshots/`.
-
-## Desktop-local agent endpoint (ADR-0028)
-
-Verified on Windows 11 on 2026-07-26, after the Phase 4 review:
-
-- Full suites green: gofmt clean; `core` 10, `apps/desktop` 4, `apps/server` 7 package groups pass
-  `go vet` and `go test`; 29 contract fixtures verified and validated; 222 desktop frontend tests;
-  TypeScript typecheck; ESLint plus the UI-standards check; 33 installer library tests.
-- **Endpoint gates** (`internal/localagent`): non-loopback callers, absent or invalid bearer tokens,
-  and requests carrying an `Origin` header - including a present-but-empty one - are refused.
-  `Header.Get` cannot distinguish an empty header from an absent one, so the check tests for
-  presence.
-- **Descriptor ACL**: a Windows-only test asserts the published descriptor has a _protected_ DACL
-  with exactly one entry, for the current user. `os.Chmod(0600)` alone does not achieve this on
-  Windows, which is why the explicit DACL exists.
-- **Medical safety**: the post-provider screen is reachable. A benign prompt whose model answer
-  smuggles a dosing directive is refused, while an ordinary scheduling answer using "you
-  should"/"take the 3 PM slot" is not. Decision questions about an unknown medication name ("how
-  much Hetlioz should I take?") refuse via the phrasing rule; ordinary planning ("when should I take
-  my lunch break?") does not.
-- **Publish transaction**: a half-published install (pending marker present, or a declared component
-  missing) fails validation closed; completing clears the marker only after every declared artifact
-  validates. A test asserts the transaction is actually invoked by `install.ps1` and `update.ps1`.
-
-Not verified here: the end-to-end voice path through a real MCP client, which
-needs a running desktop app and a GUI session. `scripts/smoke-local-mcp.ps1`
-covers it manually and was confirmed to fail closed when the bridge is absent.
-
-## Architecture and performance hardening
-
-Verified on Windows 11 on 2026-07-27 against the disposition ledger in
-[`architecture-performance-review-2026-07-27.md`](architecture-performance-review-2026-07-27.md):
-
-- `go test` and `go vet` pass for every core, server, and desktop package. The
-  isolated tools module also passes both commands. The desktop application,
-  local MCP companion, server MCP companion, and server daemon compile.
-- Contract validation passes, and fixture regeneration verifies the exact set
-  of 29 synthetic files from the shared manifest.
-- Desktop frontend: 38 files / 243 tests pass. Trusted-view prototype: 2 files /
-  6 tests pass. Both TypeScript checks, ESLint, the 19-screen UI architecture
-  guard, formatting, and production Vite builds pass. Bundle output contains
-  separate route, assistant, and clinician-report chunks.
-- Android JVM tests were forced to rerun. `lintDebug` and `assembleDebug` pass.
-  `connectedDebugAndroidTest --rerun-tasks` ran 4 tests successfully on the
-  requested `Pixel_10_Pro_XL_API_36_1` API 36 AVD.
-- The freshly installed APK was visually checked on Status, Correct sleep, and
-  Medication event after navigation transitions settled. The screens retain
-  the ruled desktop-aligned hierarchy, compact fields/actions, minimum touch
-  targets, and no generic bubble-panel treatment or clipping.
-- Installer policy, transaction, rollback, no-op update, ACL marker, and static
-  wiring coverage reports 45 passed and 0 failed. All modified PowerShell files
-  also pass the language parser.
-- Focused proposal store/API tests cover active-first stable pagination,
-  high-water exclusion of concurrent inserts, opaque snapshot cursor
-  round-trips/tamper rejection, joined one-use nonces, and cross-device
-  decisions.
-- One-iteration benchmarks on the Ryzen 5 6600U verify linearized backtesting:
-  100 episodes 1.6 ms, 1,000 episodes 42.6 ms, 10,000 episodes 164.3 ms, and
-  20,000 episodes 291.8 ms. These are local diagnostic measurements, not
-  release latency guarantees.
-- `git diff --check` is clean. `git fsck --full` reports no missing or corrupt
-  objects; its dangling blobs are ordinary unreachable edit objects from the
-  interrupted work session.
-
-The connected suite validates Android persistence and process-recreation
-behavior but does not seed real Health Connect provider records. Paging,
-source-offset, duplicate-revision, permission-loss, DST gap/overlap, and
-last-good-snapshot behavior are covered by adapter/repository tests.
-
-## Availability portal foundation (ADR-0029)
-
-Verified 2026-07-31 for slice P5-a. The portal is not exposed: every check
-below runs against a loopback test server or an in-process handler.
-
-**Projection firewall.** The canary suite plants distinctive values in six
-private fields — device label, observation ID, source record ID, task title,
-correction ID, and the owner's private share label — then drives the portal
-with real materialized data derived from twelve principal sleep episodes. No
-canary appears in any public response body, in any response header, or in the
-portal database file bytes, including the write-ahead log. The database check
-reads raw file bytes rather than querying, so an unexpected column would still
-fail it. The materializer's output is asserted separately: it carries no canary
-and no `confidence`, `explanation`, or `estimateId` field.
-
-**Structural boundary.** A test parses the `portal` package's own imports and
-fails if it ever imports `store`, `readmodel`, `assistant`, `api`,
-`portalbridge`, `provider`, `estimation`, or `domain`. The boundary is
-therefore enforced by the dependency graph, not by review.
-
-**Public DTO.** The availability response carries exactly `version`, `windows`,
-`generatedAt`, `horizonEnd`, `status`, and each window exactly `startAt`,
-`endAt`, `zoneId`. Both the presence of every required key and the absence of
-any other are asserted.
-
-**Honesty budget.** Every rendered state — empty, refused, insufficient,
-available, and stale — carries the measured uncertainty qualifier and the
-not-medical notice. A refusal's rendered text is asserted free of "sleep",
-"episode", "record", "refus", "ambiguous", "cycle", and "estimator", so a typed
-estimator refusal never reaches a visitor as a reason. Windows render in civil
-time with the zone stated, and no RFC3339 instant appears in a visible label.
-The freshness ladder is exercised at 30 minutes (fresh), 7 hours (stale, shown
-with a caution), and 25 hours (withheld, no current-state claim, no windows).
-The JSON path applies the same 24-hour cut, so a JSON consumer cannot present
-an "awake now" the page would have withheld.
-
-**Enumeration and revocation.** Unknown, expired, and revoked links produce
-byte-identical 410 responses. Revoking a profile ends existing sessions
-immediately and deletes the materialized snapshot. A session issued for one
-link returns 401 on another.
-
-**Passcode and CSRF.** A wrong passcode returns 401 and arms an exponential
-per profile-and-source backoff; the immediately following attempt is throttled
-with `Retry-After` even when the passcode is correct, and succeeds once the
-backoff elapses. There is no global lockout. The Fetch-Metadata matrix covers
-nine cases: `Sec-Fetch-Site: same-origin` succeeds with no Origin, with a
-matching Origin, and with `Origin: null` — the shape a real browser sends under
-`Referrer-Policy: no-referrer`; `cross-site`, `same-site`, and `none` are
-refused even with a spoofed matching Origin; a matching Origin alone succeeds
-as the pre-Fetch-Metadata fallback; and neither header, or a mismatched Origin
-alongside same-origin metadata, is refused.
-
-**Headers and page content.** Every response — page, availability, stylesheet,
-and generic failure — carries `default-src 'none'`, `frame-ancestors 'none'`,
-`style-src 'self'`, `script-src 'self'`, `connect-src 'self'`, `img-src 'self'`,
-`Cache-Control: no-store, max-age=0`, `Referrer-Policy: no-referrer`,
-`nosniff`, and a noindex robots tag. The rendered page is asserted to contain
-no `<script`, no `<style`, no inline `style="` attribute, and no absolute URL,
-so nothing in it can reach a third party or violate its own CSP. The session
-cookie is asserted `Secure`, `HttpOnly`, `SameSite=Strict`, `Path=/`, with no
-Domain attribute, and its expiry never outlives link expiry.
-
-**Maintenance.** The hourly sweep the daemon runs is exercised directly: a live
-session survives it, an expired one does not, and access rows older than the
-30-day retention window are deleted while recent rows remain. The synchronizer
-CSRF token minted with every session round-trips and rejects wrong values; P5-a
-has no session-authenticated mutation to spend it on, and the test exists so it
-does not rot before P5-b needs it.
-
-**Limits and audit.** The read limit admits 120 requests per source per hour,
-refuses the 121st with `Retry-After`, and restores the budget when the window
-rolls over. `RecordAccess` rejects any event outside the closed enum. Audit-key
-rotation changes the identifier for the same address and deletes rows past the
-retention window. IPv6 addresses inside one /64 collapse to a single identifier
-while a different /64 does not, so per-source limits cannot be evaded by
-address rotation within a prefix.
-
-**Off by default.** With the portal disabled, `mountPortal` leaves `/p/`
-entirely to the private handler — there is no portal route to probe — and the
-owner's four sharing routes return 404. A config that never mentions the portal
-loads with it disabled; an enabled portal without `publicOrigin` fails to load;
-non-loopback `http` origins, origins carrying a path, query, fragment, or
-credentials, and non-http schemes are all rejected.
-
-**Owner surface.** Create, list, revoke, and erase round-trip. The issued link
-resolves once and stops resolving after revocation. The private label is
-readable through the owner API, is absent from the portal store's own profile
-listing, and is gone after erase. Weak passcodes and lifetimes past the 90-day
-cap are refused. All four routes require device authentication.
-
-**Browser verification.** The rendered page was driven in a real browser across
-five states (awake now, not awake, stale, out of date, refused). Two defects
-were found and fixed that the Go suite could not see: an `Origin`-only CSRF
-gate refused every genuine login, because `Referrer-Policy: no-referrer` makes
-browsers send `Origin: null` on same-origin form posts; and the state card's
-`background` shorthand reset the card's own background colour, letting the page
-canvas show through. A CSS-generated "now" badge was also replaced with real
-markup so assistive technology announces it.
-
-Measured suite results: `internal/portal` and `internal/portalbridge` pass, as
-do `api`, `config`, `daemon`, `store`, `readmodel`, `sync`, `assistant`, and
-`mcp`. `gofmt` and `go vet` are clean across the server module.
-
-Not yet verified, and gating exposure: an independent security review
-(exposure-gate item 6), acceptance suites run on a Linux server build, and the
-operator TLS/reverse-proxy runbook with log-token redaction (item 3). Requests,
-messaging, and the live SSE layer are P5-b through P5-d and do not exist.
-
-## Visitor time requests (ADR-0030)
-
-Verified 2026-07-31 for slice P5-b, all against loopback servers and
-in-process handlers. The portal remains unexposed.
-
-**Round trip.** A request submitted through the public form is stored, reaches
-the owner's queue as a proposal with origin `visitor`, is decided with a
-one-use token, and the decision appears on the visitor's status page with the
-exact block the owner chose. The proposal payload carries the visitor's handle
-and message, because judging a request requires them.
-
-**Honest queued state.** With the bridge unable to file the request — no
-enrolled device — the pump reports failure, the request stays `queued`, and
-the visitor is shown "saved and on its way", never "sent". Once a device
-exists the same request goes through without resubmission.
-
-**Idempotency.** Four consecutive pumps over one request produce exactly one
-proposal, which is the failure that actually occurs: the private commit
-succeeds and the acknowledgement is lost. `ApplyDecision` is idempotent in the
-other direction too — three replays of the same approval are a no-op, and a
-later contradicting decision does not overwrite a settled one.
-
-**Exact-slot rule.** Approval is refused with a typed error for a block before
-the window, after it, straddling its end, of the wrong duration when one was
-requested, empty, or inverted; a block inside the window with the exact
-requested length is accepted. Over the API the same cases are 400, and the
-approved block reaches the visitor unchanged.
-
-**One-use tokens and route guards.** A replayed decision token is refused on
-the visitor route. The generic `/v1/proposals/{id}/decision` returns 409 for a
-visitor proposal, so the slot and delivery obligations cannot be skipped by
-choosing the other endpoint. `DecideVisitorProposal` refuses a non-visitor
-proposal. `place_visitor_request` is absent from the assistant action
-registry, so an agent cannot mint a proposal that appears to come from an
-outside person.
-
-**Requester isolation.** A visitor holding the shared link and passcode but no
-requester cookie sees the recovery-code form, not another visitor's request,
-and none of that request's text appears in the response. A wrong secret and an
-unknown request id produce identical status and body. Exchanging the correct
-secret yields a request-scoped cookie that renders the author's own request.
-
-**Validation.** Rejected with typed errors: end before start, a window already
-started, a window over eight hours, durations below 15 or above 480 minutes,
-a duration longer than its window, an unknown zone, and handle or message past
-their rune caps. Control characters are stripped and newlines and tabs folded
-without mangling the text. A window past the forecast horizon is accepted,
-flagged, and rendered with the explicit infeasibility warning — owner decision
-3, no product cap on how far ahead someone may ask.
-
-**Caps and revocation.** The per-session daily cap admits five requests and
-explains the sixth refusal. Revoking a link closes its open requests rather
-than deleting them, so a visitor is not left watching a status that never
-moves. A declined request's rendered text is asserted free of "asleep",
-"sleep", "busy", "calendar", "conflict", "medication", and "because".
-
-**Browser verification.** The whole visitor path was driven in a real browser:
-passcode gate, dashboard, request form, submission, the one-time recovery
-code, and the status page. The requester secret appears only after the `#` in
-the continue link, never in the path or query. The "now" badge, moved from a
-CSS pseudo-element into markup during P5-a, is confirmed present in the
-accessibility tree.
-
-**A P5-a defect this slice exposed.** ADR-0029 stored only a hash of the
-synchronizer token, which a server-rendered form can never embed — the
-mechanism could not have worked. CSRF tokens are now derived from the session
-value under a server-held key, so the plaintext is recoverable on every render
-while staying unguessable. The test asserts derivability, verification, and
-rejection of the session value itself.
-
-Measured suite results: `portal`, `portalbridge`, `api`, `config`, `daemon`,
-`store`, `readmodel`, `sync`, `assistant`, and `mcp` pass; `gofmt` and
-`go vet` are clean; Linux and Windows server builds succeed.
-
-**Owner surface.** The desktop lists open visitor requests, renders the link
-label, window, visitor text, beyond-horizon note, and approval disclosure, and
-sends a chosen block only when approving — a decline carries none, because
-there is nothing to reveal. `parseVisitorSlot` refuses an empty, unparsable,
-inverted, or zero-length block and normalizes to UTC before the value leaves
-the desktop. Normalization refuses a record missing the approval disclosure or
-the picker bounds rather than rendering a silently incomplete card, and one
-malformed request rejects the whole payload.
-
-**A regression this slice caught.** P5-b's 409 guard on the generic decision
-route meant a visitor request appearing in the desktop's synced-proposals list
-would have rendered an Approve button that could not work. Visitor proposals
-are now filtered out of that list, with a test asserting it, and the
-duplicated action id is pinned by a test because the desktop cannot import the
-server module.
-
-Not implemented, and therefore not verified: messaging threads (P5-c) and the
-SSE live layer and audit UI (P5-d). The exposure gate is unchanged and unmet.
-
-## Evidence freshness, activity, and shadow inference (ADR-0031)
-
-Verified 2026-08-04 for the first P7 slices.
-
-**Freshness.** `core/freshness` covers fresh, aging, and withheld bands; no evidence distinguished
-from old evidence; the unrecorded-expected-sleep case that a pure age threshold cannot catch; a
-two-hour-late onset _not_ withholding, which checks the grace period against ADR-0022's measured
-5.41 h P90 error; configured-but-silent sources withholding while no configured source does not;
-clock-skew evidence clamped rather than producing a negative age; an unconfigured policy falling
-back to the defaults; and every explanation asserted free of medication, dose, task, calendar, and
-diagnosis vocabulary so the same strings stay safe on the public surface.
-
-**The two defects it closes.** A desktop test seeds a fittable rhythm whose
-newest record is four days old and asserts the current state is withheld rather
-than "Likely awake", with a counterpart at two hours asserting a plain claim
-still appears. A portalbridge test seeds a rhythm whose newest episode ended
-three days ago and asserts the snapshot is not published as available — the case
-where `generatedAt` was refreshed by an unrelated task push while the sleep
-evidence was stale.
-
-**Activity.** The state machine covers startup; an hour of ordinary work producing no records at
-all; idle backdated to when input stopped rather than to the poll that noticed; the return to use
-carrying the full idle duration; a clock jump becoming suspend/resume; an ordinary 90-second poll
-gap _not_ becoming one; lock taking precedence over idle; a source asserting nothing moving nothing;
-shutdown recorded once; and the encoded payload asserted against a four-key allowlist with no key
-suggesting content capture. An unknown state fails to encode.
-
-**Inference.** Quiet desktop time becoming a candidate with non-zero boundary
-uncertainty; an evening and a weekend away both refused with a typed code; no
-evidence refused distinctly; wearable agreement tightening the boundaries;
-disagreement recorded rather than discarded; the correction prompt naming the
-disagreement without exposing internal source ids; a shutdown not opening a
-quiet interval; and suspend counting as quiet.
-
-Measured: `gofmt` and `go vet` clean across core, desktop, and server including a
-Windows-target vet of core; all Go suites pass; Linux and Windows server builds
-succeed; 29 contract fixtures verify; `npm run check:web` passes.
-
-Not verified because not built: background collection across a hidden window,
-persistence of candidates, the correction prompt, Android sync, the recompute
-orchestrator, and the 48–72 hour operational view. ADR-0031 lists these
-explicitly rather than leaving them implied.
-
-## Shadow inference validation gate (ADR-0031)
-
-Measured 2026-08-04 on the seeded synthetic suite. ADR-0031 requires a
-documented positive validation decision before an inferred episode may reach
-production planning. This is that measurement, and the decision is **no**.
-
-Ten scenarios, each a generated rhythm plus generated desktop activity around
-it. Candidates are matched to truth by greatest overlap; bias is the signed
-median, which distinguishes a correctable offset from noise.
-
-| Scenario                | Truth | Cand | Cover | Onset med | Onset P90 |  Wake med |  Wake P90 | Onset bias |  Wake bias | False |
-| ----------------------- | ----: | ---: | ----: | --------: | --------: | --------: | --------: | ---------: | ---------: | ----: |
-| stable rhythm           |    21 |   21 |  1.00 |       44m |       57m |       30m |       51m |       −44m |       +30m |     0 |
-| free-running tau 24.8   |    18 |   18 |  1.00 |       43m |     1h02m |       23m |       41m |       −49m |       +23m |     0 |
-| forced wake             |    18 |   16 |  0.89 |       37m |     1h05m |       29m |       44m |       −38m |       +29m |     0 |
-| fragmented sleep        |    18 |   18 |  1.00 |       36m |       59m |       23m |       38m |       −38m |       +23m |     0 |
-| naps                    |    18 |   18 |  1.00 |       33m |       55m |       24m |       42m |       −35m |       +24m |     0 |
-| quiet wake              |    18 |   18 |  1.00 |       43m |     1h02m | **1h58m** | **2h16m** |       −49m | **+1h58m** |     0 |
-| long wind-down          |    18 |   18 |  1.00 | **2h03m** | **2h22m** |       23m |       41m | **−2h09m** |       +23m |     0 |
-| machine used mid-sleep  |    18 |   20 |  1.00 |       49m |     1h03m |       23m |       45m |       −43m |       +18m |     0 |
-| machine off some nights |    18 |   15 |  0.83 |       49m |     1h02m |       18m |       41m |       −49m |       +18m |     0 |
-| suspend instead of idle |    18 |   18 |  1.00 |       43m |     1h02m |       23m |       41m |       −49m |       +23m |     0 |
-
-Against the pilot targets (onset median ≤45 m, wake median ≤30 m, boundary P90
-≤90 m, coverage ≥0.85, zero false positives): **5 of 10 scenarios pass.**
-
-**Decision: inferred episodes do not enter production estimation.** They remain
-shadow-only.
-
-**What the numbers say.** Three results matter more than the pass count.
-
-_The error is systematic, not noisy._ Onset bias is −33 to −49 minutes and wake bias +18 to +30
-minutes across every well-behaved scenario. Desktop inactivity brackets sleep by construction:
-someone stops using the machine before falling asleep and touches it again after waking. That is a
-correctable offset rather than an accuracy ceiling, which is a much better position than an unbiased
-error of the same size.
-
-_Behaviour dominates the algorithm._ The two scenarios that fail badly fail on the user's habits,
-not on the inference rules. A two-hour gap before touching the machine after waking produces a 1h58m
-wake error; a two-hour wind-down produces a 2h03m onset error. No refinement of the interval logic
-recovers information the machine never had. This is the strongest argument for Android sync: a
-wearable observes sleep directly and does not depend on whether someone opened a laptop.
-
-_Nothing was invented, but one episode can be reported as two._ Zero false positives in every
-scenario, including the ones with missing evidence, and coverage degrades honestly — 0.83 with four
-nights of no data, 0.89 under forced wake. The mid-sleep-use scenario is subtler: it does **not**
-lose coverage, it produces 20 candidates for 18 episodes. Splitting an eight-hour sleep leaves two
-four-hour halves, both above the three-hour minimum, so each becomes a candidate and one real night
-is counted twice. For a drift estimator that indexes by cycle this is worse than a miss — a missing
-night widens uncertainty, an extra episode shifts the fit. Merging adjacent candidates separated by
-a short waking gap is the obvious remedy and is deliberately not written against synthetic data.
-
-**The calibration trap, stated so it is not walked into.** The measured bias is
-close to the `StopUsingBefore` and `ResumeUsingAfter` values used to generate
-the activity. Shifting candidate boundaries by that bias would improve every
-number here and would be measuring the generator's own parameters back. Bias
-correction must be fitted on live data where the user's real habits are unknown,
-against user-confirmed boundaries, and it must be re-measured before it changes
-anything a person sees.
-
-**What would change the decision.** Boundary correction fitted on live pilot
-data; a second independent source, most plausibly Health Connect sleep via
-Android sync; and a correction prompt that lets the user resolve the conflicts
-the candidates already record. Until then the pilot's Stage 1 — shadow
-collection with no planning effect — is exactly the right posture.
-
-## Android sleep synchronisation (ADR-0032)
-
-Verified 2026-08-06.
-
-**Unit tests** (60 Android tests pass, plus lint and a debug APK): the mapping
-produces one observation on first sight and nothing on an unchanged second
-pass; a revised source record becomes a correction targeting the original with
-a superseding chain, not a second observation; ids satisfy the server's
-identifier rule even for a source name full of characters the rule forbids, and
-the source name does not appear in the id; an episode whose offset disagrees
-with the home zone is held with a typed reason rather than guessed; the offset
-check follows daylight saving, so the same zone in January and August are
-treated differently; a missing revision falls back to the episode end; and
-quoting holds for a hostile source record id, which is the one caller-controlled
-string reaching the wire verbatim.
-
-**Repository tests**: local-only is a supported state rather than an error; a
-failed push keeps the queue, reports it, preserves the previous success time,
-and recovers without the user resubmitting; repeated enqueues of unchanged
-episodes add nothing; pushes batch within the wire limit; changing server clears
-the queue; disabling forgets the queue and the token; travelling episodes are
-counted as held; and a fresh repository over the same durable outbox reports the
-queued work, as after a process death.
-
-**End to end**, against a real `zeitboardd` with the app installed on a Pixel
-emulator: enrollment issued a device token; a push of Android-shaped records was
-accepted (2 of 2); an identical replay was accepted with **0** new records,
-confirming idempotency at the server as well as the source; and a twelve-episode
-history produced `status: estimated` with a drift of **+50 minutes per observed
-sleep cycle** — the rhythm that was generated. Health Connect sleep can now
-reach the estimator with no manual transcription, which is the P7 acceptance
-line for this slice.
-
-**A defect only that run could find.** The Kotlin sent
-`acquisition_method: "device_sensor"`, outside the server's closed enum, and the
-first push was rejected as an invalid batch. Both sides' unit tests passed
-throughout: the Kotlin asserted its own output and the Go asserted its own
-input, and nothing compared them. `android_contract_test.go` now pins the exact
-Android payload as a Go-side fixture, including a case asserting the bad enum
-value is refused.
-
-Not covered: a physical device, a real wearable writing to Health Connect,
-background/periodic sync scheduling, and pull — this slice pushes only.
-
-## The recompute orchestrator (ADR-0033)
-
-Verified 2026-08-06.
-
-**Decision logic** (`core/recompute`, `core/freshness`): a burst of fifty
-requests collapses to one run; a steady one-per-second trickle still runs rather
-than postponing itself indefinitely; the minimum interval floors the rate a
-chatty device can impose; failures back off geometrically to a ceiling and keep
-the work pending; an expiry fires with nobody asking; and the next-wake instant
-is exactly the next deadline and never in the past.
-
-The input fingerprint is order-independent and does not move on its own, changes
-when an episode's recorded-at changes (which is what the freshness policy reads),
-changes when a session is suppressed, changes when a consumer is added, and
-cannot collide across entry boundaries — entries are length-prefixed, without
-which `["ab","c"]` and `["a","bc"]` hash identically.
-
-`freshness.NextChange` is checked by walking the clock forward a minute at a time
-across four input shapes and asserting the state never changes before the
-predicted instant. The guarantee is deliberately one-sided: early is a wasted
-recomputation, late is a stale claim left standing. One further test runs at
-nanosecond resolution, because the unrecorded-sleep rule is a strict comparison
-and a wake scheduled for the exact deadline would have found nothing changed.
-
-**Orchestration**: an unchanged projection keeps its original stamp; changed
-content takes a new one; inputs reverting from A to B and back to A still
-republish, which a naive "skip if this fingerprint has been seen" would not; a
-failed apply is recorded as failed and does not become the last completed run; a
-run left open by a dead process is closed out and its work redone. An import test
-asserts the package reaches no provider, assistant, network, or subprocess.
-
-**Journal** (`apps/server/internal/store`): runs round-trip with both
-fingerprints and their times; a begun run is not a completed one; a failure keeps
-its fingerprints through the re-seal that stores the message; the interrupted
-sweep is idempotent; the table stays bounded at 200 rows and pruning never
-removes the row the orchestrator reads. Fingerprints do not appear in the
-database file, the WAL, or the shared-memory file.
-
-**End to end**, against a live `zeitboardd` with the portal enabled:
-
-| Step | Result |
-| --- | --- |
-| Twelve single-record pushes | One recomputation — `absorbed 11 further request(s)` |
-| Availability with no request driving it | Published, seven windows, `status: available` |
-| Unrelated task push (accepted, cursor 13) | `generatedAt` **unmoved** |
-| Daemon restart | Reconciled to the same content, no restamp |
-| Erasing all twelve records | `status: refused`, zero windows |
-
-The first two rows and the third were re-run against a rebuilt daemon after the
-scheduling fix below, with the twelve pushes issued in parallel rather than in
-sequence. The recomputation landed 30 seconds after the burst rather than 3,
-which is the minimum interval measuring from the link-creation run — the floor
-working, not a delay.
-
-The third row is the ADR-0031 defect finally closed. That ADR found that pushing a task refreshed
-the portal's freshness signal while the sleep evidence underneath was days old; it corrected the
-_status_ and left the stamp moving. The page's 6-hour and 24-hour age rules now measure the
-evidence.
-
-Not covered by the live run: the freshness-expiry wake, because observing it in a
-real daemon means waiting hours for a real threshold. It is covered by the
-quiet-day walk in `apps/server/internal/analysis` — which withholds availability
-with nothing pushed, nothing opened and nobody asking — and by a worker test that
-runs the real goroutine and timer against a result that expires in 60 ms.
-
-Also not covered: the desktop, which recomputes on screen load and is unchanged.
-The background guarantee lives in the daemon.
-
-**A defect only the running worker could find.** Forty requests fired against a live worker while
-its startup run was still finishing, and every one was lost: the completion cleared the pending
-flag, including requests that arrived after the run had already read its inputs. The unit tests
-passed throughout, because they drove the schedule one call at a time and never overlapped a run
-with a request. The flag is now cleared when a run _begins_, and two tests pin it — one for the
-mid-run request, one asserting that asking again during a _failed_ run does not pull the retry
-forward through the backoff.
-
-The worker's locking is reviewed rather than race-detected: this toolchain has
-CGO disabled, so `go test -race` cannot run (see environment limitations). The
-mitigation is structural — all scheduling state is a plain struct with no timer
-and no goroutine of its own, touched only under one mutex, and every decision it
-makes is tested by calling it directly rather than by waiting.
-
-## The 48–72 hour operational view (ADR-0034)
-
-Verified 2026-08-08.
-
-Historical routing evidence: ADR-0046 removes the pre-release route aliases and
-their lint requirement on 2026-09-21. The current five destinations and tab routes
-remain the supported navigation contract.
-
-**Arithmetic** (`core/outlook`): the timeline covers the horizon with no gaps and
-no unmerged neighbours; every predicted boundary carries an uncertain stretch and
-those stretches widen with forecast distance; the current period reads awake
-rather than unknown and ends at the earliest plausible onset; a recorded episode
-overrides the forecast and is marked observed; office windows keep reachable and
-possible separate and never claim more than their own span; Saturday and Sunday
-are skipped; a commitment inside predicted sleep is named as such; tasks are
-placed only in confidently awake segments; an unplaceable task reports a reason
-instead of vanishing; stale evidence withholds the entire view; a refusal keeps
-the estimator's own typed code; the horizon clamps to 48–96 hours; and the sweep
-survives a daylight-saving transition — absolute instants for the timeline, civil
-clock for the office day.
-
-The core view carries event **ids** and no text. A test plants "Oncology
-follow-up", "Ward 4" and "referral letter" in an event and asserts none of them
-reaches the outlook; the desktop joins titles back locally.
-
-**The product claim, checked.** A seeded 40-day generator is walked through a
-fortnight of drift, building the view once per day. Office hours come out
-reachable on some days and unreachable on others. Both assertions matter: a view
-that reported no reachable time all fortnight would be broken, and one that
-reported the same answer every day would not be tracking the drift the whole
-product is about.
-
-**Desktop binding**, against a real store: an available view with layout offsets
-that tile the horizon exactly; all three presence states present; withholding on
-four-day-old evidence with a reason; refusal with no history; office windows
-labelled reachable / partial / unreachable with "partial" never advertising a
-time to ring; day marks 24 hours apart; and no estimator internals
-(`algorithmVersion`, `inputSessionIds`, `characteristicSleepStart`) in the DTO.
-
-**Rendered panel**, checked in the running app: thirteen contiguous bands across
-a 72-hour strip, day marks at 24-hour intervals, legend swatches matching the
-band fills including the hatch, office icons coloured by status, no console
-errors, no horizontal page overflow. Adjacent band luminance contrast is
-1.14–1.37, which is why the uncertain band is hatched rather than solid: the
-three state colours are separated by hue, not by lightness, and three solid
-blocks would be hard to tell apart in greyscale, in the amber-glasses theme, or
-for a reader with a colour vision deficiency.
-
-Not measured: whether the view changes what the user does. Every check above
-establishes that the software does what it claims. Whether more calls get made
-inside office hours is the pilot question below.
-
-## Navigation consolidation (UI slice U-H)
-
-Verified 2026-08-08.
-
-**Structure**: five primary destinations (`Home · Plan · Rhythm · Log ·
-Sharing`) and a separate utility group (`Data Sources · Settings`). The counts
-and the separation are enforced by `scripts/lint-ui-standards.mjs`, along with
-Plan and Log composing the screens they absorbed rather than copying them, and
-every legacy hash still redirecting.
-
-**Routing** (`readRouteFromHash`): unknown paths fall back to Home; a screen and its tab are read
-from the address; an unrecognised second segment falls back to the first tab; `#/overview`,
-`#/timeline`, `#/calendar`, `#/tasks`, `#/approvals` and `#/medications` all land on the right
-screen _and_ the right tab (`#/approvals`, and `#/plan/approvals`, on Plan › Tasks, where decisions
-now are); the utility destinations stay addressable.
-
-**Tabs** (`ScreenTabs`): one tab stop for the whole group; arrow keys move and
-wrap; Home and End jump to the ends; other keys are ignored; the pending count
-renders only when non-zero.
-
-**Behaviour that moved kept its tests.** The sleep-log paging test followed the
-panel out of Data Sources; the marker-ownership test — that an authoritative
-mutation result is not immediately re-fetched — followed the markers from Rhythm
-to Log. 295 frontend tests pass.
-
-**In the running app**: all five destinations and both utilities render; every
-legacy hash resolves to the expected `<h1>` and selected tab; the pending count
-appears on Plan and on the Approvals tab; a tabbed screen has exactly one
-`<h1>`; and there is no horizontal page overflow.
-
-**A defect the running app found and no test did.** Hiding `.sidebar-footer` at
-the 700px breakpoint had always been harmless because Data Sources was a primary
-destination. Moving it to the utility group stranded it, and Settings with it,
-on any narrow window. Fixed by keeping the footer and laying the group out
-horizontally — both links reachable at 375px with 44×44 targets — and pinned by
-a lint rule that was checked to fail before it was checked to pass.
-
-## Home surface spacing (2026-08-08)
-
-A measured pass over the Home screen after the operational view and the
-navigation consolidation landed. Eight defects, all found by reading geometry
-out of the running app rather than by looking at it; the table is in
-[`ui-refactor-plan.md`](ui-refactor-plan.md) §11.
-
-The headline: **the page had two left edges**. Every section on the surface
-carries a full-bleed rule, so the rules aligned and the content did not — the
-outlook's content sat 1px from the surface edge against 25px for everything
-else, and above it the status header and cycle strip sat at 29px against the
-facts' 25px. The surface is now one content column at every width: `--space-6`
-wide, `--space-5` narrow, measured as a single distinct left edge across all
-seven sections at both 1120px and 375px.
-
-Also measured and fixed: a third of the facts row was blank (359px of 1076px)
-because the outlook had taken over the third tile and left a hard three-column
-grid; the timeline's day labels never rendered at all, clipped by the track's
-own overflow; three-part section headings collapsed onto one 15px line; the
-legend's summary sentence sat 608px from the swatches it describes; two adjacent
-rules in different greys met between the facts and the outlook; and the evidence
-row wrapped to 124px because five children were in a four-column grid.
-
-**Guard**: `scripts/lint-ui-standards.mjs` fails if a Home surface stylesheet
-insets a section by `--space-7` — the exact shape of the two-left-edges defect.
-Checked to fail before it was checked to pass. Two DOM assertions cover the
-markup fixes: the day labels render outside the clipped track, and no list in
-the outlook carries a leading icon the others lack.
-
-Not covered: nothing here is a layout _test_. jsdom does not lay out, so the geometry above was
-measured in a real browser and the durable guards are the lint rule and the two structural
-assertions.
-
-## Reported UI defects (2026-08-08)
-
-Four reports from the built app, each reproduced and measured before it was
-changed; the detail is in [`ui-refactor-plan.md`](ui-refactor-plan.md) §12.
-
-- **Section rules were invisible.** Measured at 1.09–1.17:1 against the surface
-  in every theme but High contrast. `--divider` and `--line` are now ≥1.4:1
-  against both `paper` and `canvas` in all five presets, asserted by
-  `contrast.test.ts` (89 assertions, up from 74).
-- **The actogram panel reserved 540px and 560px** — two numbers in two files —
-  for 419px of content, leaving empty surface that read as a solid block.
-  Both reservations removed; measured empty space below the content is now 0.
-- **`overflow-x: hidden` had made the panel a scroll container**, because with a
-  visible `overflow-y` the used value becomes `auto`. A 15px scrollbar was
-  painting over the confidence label of every row. `clip` fixes it; the existing
-  lint rule now pins `clip` rather than `hidden`. No scroll containers remain on
-  the Rhythm route.
-- **The assistant toggle overlapped page headers** by 16px vertically in the
-  same horizontal band. The header reserves the corner; a lint rule requires it.
-
-**Overlap sweep.** A pairwise detector over every visible leaf text node, across
-ten routes, at 760 / 885 / 1045 / 1120px and root font sizes 16 / 20 / 24px.
-One real defect: the Sharing relationship table declared a 524px minimum inside
-a 439px column and painted 61px over the list beside it between ~980 and 1100px.
-Fixed. All sweeps are now clean.
-
-The detector's first run reported six overlaps on Home that were phantoms: a
-closed `<details>` still returns a non-zero client rect in Chrome even though
-its content is not painted. It filters on `checkVisibility()` now. Recorded
-because the first result looked like a defect and was not one.
-
-## Owner-side share links (roadmap slice 12a)
-
-Verified 2026-08-08.
-
-The Sharing screen stopped claiming that link creation is unbuilt. It lists the
-owner's real links from the instance, creates them with a required passcode and
-expiry, and revokes or erases them. `off` (backend sync not configured) and
-`unavailable` (the instance is reachable and its portal is switched off) are
-distinct answers with different remedies, and the screen says which.
-
-**Desktop unit tests**: the duplicated passcode and lifetime limits are pinned
-against the server's; validation refuses a nameless link, a short passcode, a
-missing or over-long expiry, and a link that grants nothing, each with a
-sentence a person can act on; sharing reads as `off` rather than broken without
-sync; erasure requires the link id typed back and offers revocation instead;
-database words become plain ones (`active` → "Working now"); an unnamed link
-still renders.
-
-**Adapter tests**: a status outside the closed set is rejected; a link missing its identity is
-rejected; an unreadable grant flag reads as _withheld_ rather than granted; and a payload whose link
-list is missing is treated as no payload — defaulting it to empty would render "nothing is being
-shared" over an instance that is in fact sharing, which is the one direction this screen must never
-be wrong in.
-
-**Screen tests**: the stale claim and the example rows are gone; `off` and
-`unavailable` are distinguished; the disclosure renders above the create button
-(exposure gate item 7); a new link says plainly that it cannot be shown again;
-erasure needs the id and revocation does not; and the message grant is labelled
-"not delivered yet" because threads are P5-c.
-
-**Live round trip** against a real `zeitboardd` with the portal enabled —
-enrolling through `ConfigureBackendSync` rather than a hand-built config, so the
-exported methods take the path the app takes. Create, list, revoke and erase all
-round-trip, with the private label preserved, the grants preserved, and the
-state actually changing rather than the call merely returning 200.
-
-**Two defects only that run could find**, both invisible to either side's unit
-tests because each side asserted its own fixture:
-
-1. The desktop's shared HTTP client decodes with `DisallowUnknownFields`, and
-   the response structs omitted `schema_version`. **Every** create and list
-   failed as "invalid JSON response".
-2. The server's erase route revoked the link, cleared its audit and deleted its
-   private label — and left the profile row. An "erased" link stayed in the
-   owner's list, revoked and nameless, while the handler's own comment said it
-   erased the record that the link existed. `portal.Store.DeleteProfile` now
-   removes it; every dependent row cascades, because the schema had declared
-   `ON DELETE CASCADE` on that key all along. `TestSharingLifecycle` asserts it,
-   and was checked to fail before the fix.
-
-A third, smaller one came from the tests rather than the app: the first live
-test hand-built a sync config instead of enrolling, so `RevokeBackendShareLink`
-returned `off` without doing anything and the test blamed the server.
-
-## One-tap sleep logging (roadmap slice 15)
-
-Verified 2026-08-09 on Windows 11, commit at the tip of the slice branch.
-
-`core/quicklog` holds the decision and is tested on its own: the plausible pair
-records, and each implausible one returns its own question rather than a
-recorded night. Its bounds are not new numbers — `MinimumEpisode` is
-`core/estimation`'s floor and `MaximumEpisode` is `core/inference`'s ceiling, so
-a pair the estimator would reject can never enter the log through this path.
-
-Ten Go tests in `apps/desktop/app_quicklog_test.go` cover the bindings end to
-end against a real store, and all pass:
-
-- two taps produce one entry, and the first tap alone produces none — the
-  parked onset is an intent, and the append-only log gets nothing until the
-  episode has both ends;
-- waking with nothing marked asks instead of guessing;
-- 30 minutes, 18 hours, and 26 hours each return their own question and record
-  nothing, while the unfinished sleep survives the question so answering it does
-  not require remembering when you went to bed;
-- confirming records the times the person chose, and refuses a backwards pair;
-- a second sleep tap replaces the first;
-- discarding leaves nothing behind;
-- `DeleteAllSleepData` takes the unfinished sleep with it. Without this,
-  "delete all my sleep data" leaves a parked onset that writes a fresh row on
-  the next tap.
-
-Twenty-two frontend tests cover the adapter and the bar. The adapter's outcome
-set is closed and asserted closed: an outcome this build cannot render is
-rejected rather than shown as a success, because the gap between "recorded" and
-"needs an answer" is a night in the log or a night lost. Two UI-standards lint
-rules were added and each was checked to fail before it passed — one pins the
-taps to Home, one pins the prediction label, and the second was strengthened
-after the first version passed against a CSS class name instead of visible text.
-
-**One defect found in the browser preview, not by reasoning.** The confirm
-form's fields were uncontrolled. When one question replaced another React reused
-the same input element, so the field showed the previous question's time
-(`07:10`) while the `value` attribute carried the app's actual suggestion
-(`23:20`) — a time belonging to a different question, in front of someone about
-to record it as fact. The fields are controlled now. The regression test was
-first written around a discard-and-reopen sequence, which unmounts the form and
-therefore passed against the broken build; it was rewritten to replace one
-question with another while the form stays mounted, and then confirmed to fail
-against the uncontrolled version.
-
-A second, smaller one from the same session: the pending block and the transient
-notice both explained what to do next, so the same instruction appeared twice.
-The notice now renders only when there is no pending block to read.
-
-Checked in the preview at 1120px, 820px light, and 375px mobile: no overlap, no
-horizontal scroll, and the prediction label legible in every one.
-
-**What this does not establish.** A tap is a self-report, not an observation.
-This lowers the cost of recording a night; it does not make nights arrive
-without the user, and it does not move the release blocker on manual entry.
-
-## Configurable reaching hours (roadmap slice 16)
-
-Verified 2026-08-09 on Windows 11.
-
-The 48-72 hour view assumed Monday to Friday, 09:00 to 17:00, in the user's own
-zone. Everything below tests the schedules that assumption could not express.
-
-`core/outlook` gained four tests, each checked to fail against the previous
-implementation before it passed:
-
-- a service with equal open and close times covers the whole horizon, and loses none of the
-  confidently awake time to a gap;
-- an overnight schedule produces windows that cross midnight and are still eight hours long, rather
-  than being silently dropped — the old code skipped any window whose close was not after its open,
-  so a night desk produced _no_ way to reach anyone at all;
-- a window that opened last night and has not closed is reported, clamped to now. The day walk now
-  starts a civil day early for this; yesterday's ordinary daytime window still drops out because it
-  closed before now, and a separate test pins that;
-- no open days means no windows. This one was found by a desktop test rather than by reading the
-  code: `officeWindows` substituted its Monday-to-Friday default whenever `Days` was empty, so
-  switching reaching hours _off_ produced three reaching windows. A wholly unset `OfficeHours` still
-  takes the default, and a test pins that too, because that is how every caller who does not care
-  about reaching hours asks for the ordinary case.
-
-Ten Go tests cover the desktop bindings: the default schedule, a saved schedule
-arriving at the outlook, a disabled schedule producing no open days, four
-invalid schedules refused with distinguishable messages, the revision guard
-rejecting a stale edit without overwriting what is stored, the summary wording
-across five shapes, a foreign zone being named while the reader's own is not
-repeated at them, and a saved schedule surviving a restart with its revision
-intact.
-
-Twenty-two frontend tests cover the adapter and the panel, including that a missing `enabled` flag
-reads as _off_ — showing reaching windows nobody asked for is the failure being removed — and that a
-conflict is never reported as a save.
-
-Three UI-standards lint rules were added and each was checked to fail before it
-passed: neither `outlook.ts` nor `reachingHours.ts` may hard-code a working week,
-the panel must read and write the real stored schedule and must say the hours
-belong to the other party, and Settings must expose the panel.
-
-Checked in the browser preview against a stubbed bridge: the stored schedule
-loads into the form, an overnight pair explains itself rather than looking like
-a typo, saving reports what happened, and switching the section off makes the
-day checkboxes and presets genuinely inert (`:disabled` matches and a click
-changes nothing) rather than merely dimmed. No horizontal overflow and no
-overlapping blocks at 966px. Screenshots were not captured — the preview pane
-was not compositing frames in this session — so the visual checks above are
-measured from the DOM and computed styles rather than from an image.
-
-The durable settings-file machinery was extracted from the appearance file into
-a generic store and appearance was moved onto it. The existing appearance
-revision-conflict, persistence and backup-recovery test passes unchanged, which
-is what makes the extraction safe to claim.
-
-**What this does not establish.** One schedule, and the same hours on every selected day. Someone
-who must reach a clinic on Tuesday mornings _and_ an employer on weekday afternoons can express only
-one of them.
-
-## Local file protection (roadmap slice 17, ADR-0035)
-
-Verified 2026-08-10 on Windows 11.
-
-`privacy.md` said at-rest encryption was required locally as well as on the
-instance. The local half was never true, and the fallback it leaned on — file
-permissions restricted to the owner — was not true either on the only platform
-this app ships on. Measured before the fix, on a development machine, the real
-`%APPDATA%\ZeitBoard` directory granted access to five trustees including
-`SYSTEM` and `BUILTIN\Administrators`, with inheritance enabled. The `0o600`
-mode argument every private file was created with sets the read-only attribute
-on Windows and leaves the DACL alone.
-
-`core/platform/privatefile` now applies a protected, single-grant DACL (the file
-mode elsewhere) and exposes `Describe`, which reads the permission back. Every
-assertion below is against what the operating system reports, not against a nil
-error — a test that only checks `os.Chmod` succeeded is a test that passes while
-the file is exposed, which is how the previous claim survived.
-
-Seven package tests: an unrestricted file becomes owner-only and stops inheriting; the operation is
-idempotent and does not alter content; companions that do not exist are skipped without being
-created; a file written into a restricted directory afterwards is private by inheritance; describing
-an absent file fails rather than reporting protection. One test asserts `Describe` reports an
-_unprotected_ file as unprotected, so none of the others can pass vacuously.
-
-Two storage tests: opening the store leaves the database, the write-ahead log
-and the shared-memory file all owner-only and non-inheriting, with nothing in the
-test re-applying the restriction — what is under test is that opening was enough.
-Checked to fail before the fix, and the failure output is the concrete defect:
-`zeitboard.db is reachable by another account: entries=[... S-1-5-18
-S-1-5-32-544 ...] protected=false`. An in-memory store reports no permission
-failure for a file that does not exist.
-
-Seven desktop tests: the backend bearer token, the sync configuration, the
-settings files and an export are each owner-only, the token still reads back
-correctly afterwards, the store reports its own permission result, and the
-readout shown to the user never describes a restricted file as encrypted. The
-token and configuration tests were checked to fail with the restriction removed.
-
-Nine frontend tests on the adapter, including that a missing `ownerOnly` flag reads as _not_
-protected — an unknown permission is not a good one — and that the detail line always carries "not
-encrypted".
-
-**What this does not establish, and says so on the screen.** The local database
-is not encrypted. This protects against another account on the same computer and
-against a careless copy of the profile directory. It does not protect against a
-stolen disk read from another operating system, or against any program running
-as this user. ADR-0035 records why whole-database encryption is not shipped: the
-CGo-free driver offers no VFS or serialize hook, and SQLCipher requires CGO.
-
-## What this record does not measure
-
-Added 2026-08-04 after an applicability/utility/automaticity review
-([`automaticity-review-2026-08-04.md`](automaticity-review-2026-08-04.md)).
-
-Everything above establishes that the software does what it claims. None of it
-establishes that the user does less work or decides better, and the distinction
-matters for a product whose premise is reducing burden. Three gaps are recorded
-here so they are not mistaken for passing checks:
-
-- **Passive coverage is unmeasured.** Both halves of this note are now out of date in the sentence
-  and still true in substance: the desktop collector records real transitions (P7-3) and the Android
-  companion syncs (ADR-0032), but nothing measures what fraction of principal sleep episodes arrive
-  without the user typing them. The collector also only runs while ZeitBoard is running. Measuring
-  coverage needs a pilot over weeks, not a test run.
-- **Current-state freshness now has software checks.** ADR-0031 introduced the shared evidence
-  freshness policy; the September desktop recovery pass also verifies unavailable/stale read
-  handling and automatic refresh. These checks do not measure real-world stale-output incidents or
-  passive coverage.
-- **Confidence calibration is measured and unresolved.** ADR-0022 recorded the buckets inverted
-  (High 0.61 against Medium 0.81). The portal withholds the label on that evidence; the desktop
-  still renders it. That is a known, measured inconsistency, not an untested area.
-
-The pilot metric framework — passive coverage, boundary error, forecast utility
-by horizon, task and calendar utility, and resource cost — is defined in the
-review ledger. It belongs in a dated pilot report rather than in CI, because it
-measures a person's experience over weeks and cannot be asserted by a test run.
-Resource baselines should be captured **before** the collector and recompute
-orchestrator land, or their cost can only be guessed afterwards.
-
-## Environment limitations
-
-- Emulator semantics and screenshots were reviewed, but a full manual TalkBack
-  traversal with spoken-output verification was not performed. Periodic real
-  TalkBack and desktop screen-reader participant walkthroughs remain roadmap
-  work; automated roles and minimum target sizes do not substitute for them.
-- The installed Go toolchain has CGO disabled, so `go test -race` is unavailable.
-
-
-## Android automatic upload increment — 2026-09-08
-
-- 83 passing Android unit tests cover pending/offline source revision chains, nanosecond precision,
-  failed/canonical re-enrollment, bounded batches/retries, cancellation, permissions and sample-mode
-  gates, JSON/acknowledgment/redirect/response limits, failed preference durability and the shared
-  Go/Kotlin wire fixture.
-- Android `check` and `assembleDebug` pass. A disposable Android 16 / API 36.1 emulator passed all
-  eight instrumentation tests, including schema 1→4 and 3→4 migration, SQLite reopen/revision
-  preservation, interrupted server-switch generation recovery, and native HTTP
-  enrollment/upload/provider revision/ restart against a disposable Go API through loopback
-  `adb reverse`.
-- The installed enrollment and connected Settings screens were inspected at 1080×2400. The secret is
-  masked and clears after confirmed enrollment; the screen distinguishes connected-with-no-upload,
-  queued/held counts, background consent and unavailable estimate/task downloads. Sample mode
-  remains labeled.
-- Go core/desktop/server tests and vet pass; added core tests preserve provider provenance and
-  refuse unresolved source/user correction conflicts. Affected API/store tests verify that a later
-  correction cannot retain erased timestamps.
-- The generated shared Android wire fixture validates under the correction and sync schemas and
-  replays as one observed sleep episode. Contract generation, tools tests/vet and schema validation
-  cover 30 deterministic fixture files.
-
-Local logs: `.tools/completion-android-final.log`, `.tools/completion-android-final-check.log`,
-`.tools/completion-go.log`, `.tools/completion-go-sync.log`, `.tools/completion-erasure.log`,
-`.tools/completion-go-vet.log`, `.tools/completion-contracts.log`; visual evidence:
-`.tools/completion-settings.png`. All use synthetic/disposable data.
-
-This does not verify production certificate installation, a wearable's ongoing delivery, OEM
-background/battery behavior, Android pull/remote erasure, cached estimates or task downloads, a
-real-device pilot or independent portal review. Those remained open after that increment; the
-companion increment below adds software evidence for pull/erasure, cached estimates and tasks.
-
-## Android companion increment — 2026-09-08
-
-- 88 Android unit tests pass, including strict v2 forecast/refusal parsing, bounded expiry,
-  synthetic provenance, typed UTC/DST instants, task constraints, cursor validation and all
-  preceding upload/permission/durability checks.
-- Android `check`, `assembleDebug` and `assembleDebugAndroidTest` pass. Native SQLite/HTTP
-  instrumentation runs explicitly on disposable `emulator-5580`, Android 16 / API 36.1, against a
-  loopback Go API with synthetic records. The 16 tests cover schema 1→5 and 3→5, source revision
-  nanoseconds, reopened task revisions, atomic invalid-page rollback, remote erasure, suppression
-  across Health Connect re-import/re-enrollment, conflicting equal provider revisions,
-  restored-server replay, and correct handling of task-shaped observation IDs. Actual HTTP
-  enrollment/push/pull returns a Go estimate and task revisions; erasure removes the downloaded task
-  and affected local Health Connect rows.
-- Go core/server/desktop tests and vet pass. Added coverage checks private companion auth, typed
-  refusal/windows/cache expiry, effective erasure, correction-target backfill on older encrypted
-  databases, and preservation of a provider endpoint beneath a manual overlay. All 32 generated
-  contract fixtures, tools tests/vet and schema validation pass.
-- Native Settings, Status and Tasks were inspected at 1080×2400 using a separate empty loopback
-  server seeded only with explicitly synthetic observations and a synthetic task. Enrollment
-  switches to My data; the phone downloads without Health Connect permission. Status visibly marks
-  server sample forecasts, confidence, snapshot age and zones. Tasks shows duration, revision,
-  civil-time constraints and the desktop editing handoff. The visual pass removed an empty
-  local-sleep panel when synced sleep is already available. With the disposable server stopped, a
-  manual sync retained the downloaded task and original download timestamp and showed a retryable
-  connection error. The cached forecast also survived force-stop and relaunch while the server was
-  offline.
-
-The initial native run caught a `secure_delete` pragma call that Android rejected through `execSQL`;
-the query-based fix passes actual SQLite instrumentation. Local logs:
-`.tools/companion-android-final.log`, `.tools/companion-instrumentation.log`,
-`.tools/companion-go-final.log`, `.tools/companion-contracts.log`; screenshots:
-`.tools/companion-status.png`, `.tools/companion-tasks.png`, `.tools/companion-settings.png`.
-Offline evidence: `.tools/companion-offline.png` and `.tools/companion-restart.xml`.
-
-These checks do not qualify Android-authored manual
-correction/medication sync, wearable/OEM delivery, production TLS, private pilot outcomes,
-clean-machine release behavior or independent portal exposure review. C1–C8 remain open as specified
-in `completion-plan.md`.
-
-## Pre-release simplification — 2026-09-08
-
-Owner clarification removes prototype backward compatibility from acceptance;
-there are no packaged releases or deployed consumers. ADR-0039 records the current
-contract/storage policy. Historical migration results above remain a work log,
-not a supported-version matrix.
-
-- Go core/server/desktop suites pass. Desktop acknowledgment tests retain pending
-  records on wrong versions, missing fields, negative cursors and trailing JSON.
-  Sleep and task batching now run through one shared loop. Current erasure tests
-  still verify deletion of dependent corrections and rejection of later revisions.
-- Android `check` and debug app/test APK builds pass with 88 unit tests. All 15
-  native Android 16 instrumentation tests pass against a disposable Go API. Fresh
-  schema completeness and non-destructive refusal of an obsolete development
-  database replace old migration fixtures. Current reopen, source revisions,
-  enrollment generations, remote erasure, tasks and restored-server replay remain.
-- All 29 maintained contract fixtures validate. Removed the three unused v1
-  medication fixtures and the unreleased duplicate sync/export contract work;
-  provenance and current medication consent/zone fields remain tested.
-- Desktop/web formatting, type checking, lint and production builds pass; all
-  403 web tests pass (397 desktop and six trusted-prototype tests). Lint retains
-  three existing Fast Refresh export warnings and has no errors.
-
-Evidence: `.tools/streamline-go.log`, `.tools/streamline-go-vet.log`,
-`.tools/streamline-android.log`, `.tools/streamline-instrumentation.log`,
-`.tools/streamline-contracts.log`, `.tools/streamline-desktop.log`.
-
-## Connected correction review — 2026-09-08
-
-ADR-0040 adds reviewed source revision / concurrent manual heads to the single
-current correction contract, the private server review endpoint and Android and
-desktop resolution flows. The following checks passed with synthetic data:
-
-- Go core, desktop and server tests; `go vet` across all three modules. Regression
-  tests cover stale forms, concurrent heads, later-save/older-source refusal,
-  reviewed resolution, immutable evidence, erasure, DST repetition and nanoseconds.
-- Root desktop check: lint (three existing Fast Refresh warnings), UI standards,
-  typecheck, 397 desktop + 6 trusted-web tests, and both frontend production builds.
-- Contract generator/check: 30 maintained fixtures, including the private v1
-  sleep-review fixture consumed by Android; all versioned schemas validate.
-- Android check / debug APK / instrumentation APK: 92 unit tests, lint and builds.
-- Disposable Android 16 emulator: 16 instrumentation tests pass against the actual
-  disposable Go HTTP API. The new path saves a manual correction, reopens SQLite
-  with its queue intact, synchronizes full-precision endpoints/classification/
-  exclusion, rejects a stale review, resolves two manual heads and clears open and
-  durable review context on erasure.
-- Native visual interaction: enrolled a disposable server, selected a downloaded
-  source and saved a correction through the actual form. The check found and fixed
-  misleading stale-review text after the phone's own successful save. The Android
-  layout retains reachable controls and the five primary destinations.
-
-Logs: `.tools/manual-review-{go,go-vet,desktop,contracts,android,instrumentation}.log`.
-The screenshot `.tools/manual-review-screen.png` contains synthetic data only.
-No real wearable/OEM battery, production TLS, private pilot, independent portal
-review or signing qualification is claimed. Local-only correction handoff on later
-enrollment and desktop lifecycle checks remain the next C1 work.
-
-## Pre-enrollment correction handoff — 2026-09-08
-
-- Android `check assembleDebug assembleDebugAndroidTest` passes: 92 JVM tests,
-  lint and both APKs. No Go or web runtime code changed in this increment.
-- 21 disposable Android 16 instrumentation tests pass against the actual Go API.
-  Added coverage includes pre-enrollment save/reopen, source aging out of the
-  provider snapshot, unseen newer source/manual edits, explicit resolution,
-  stable parent references and exact instants, clock regression, held-page progress,
-  home-zone reconsideration, missing-source restoration, erasure and fixture exclusion.
-- The test harness erases each case's remote records. An old synthetic observation
-  previously made a later forecast fixture correctly refuse an ambiguous cycle gap;
-  this was a fixture-isolation failure, not grounds to relax the estimator gate.
-- Logs: `.tools/local-handoff-android.log` and
-  `.tools/local-handoff-instrumentation.log`. No real-device, pilot, production TLS
-  or package/signing evidence is inferred from these checks.
-- Read-only desktop audit found that the app's activity sink remains memory-only
-  and collection starts without a saved consent setting. Durable, permission-gated
-  background integration must precede its lifecycle acceptance (completion plan C1).
-
-
-## Desktop consent and background sync — 2026-09-08
-
-ADR-0042 closes the memory-only/unconditional-collection finding above.
-
-- All Go core, desktop and server tests plus `go vet` pass. New tests exercise
-  default-off sampling, persisted grant/revocation, restart with repeated clock
-  values, final shutdown, atomic transition batches, source-scoped export/erasure,
-  task revision reopen and refusal of unsupported development columns without
-  backfills. Poll gaps retain inferred provenance and unknown confidence.
-- Focused Go race checks for collection and background lifecycle pass. Actual
-  disposable TLS HTTP tests cover a failed exchange retaining its outbox, automatic
-  retry without a mounted view, restart without re-upload, cancellation on disable,
-  stale-error rejection and refusal to forward enrollment secrets on redirects.
-- Desktop web checks pass: formatting, lint/UI standards, types, 400 desktop and
-  six trusted-web tests, and both production builds. Three existing Fast Refresh
-  warnings remain. New settings tests cover explicit consent, confirmed erasure,
-  stopped/error retry and absent/malformed bridge recovery.
-- A local browser preview was inspected for activity settings layout, reachable
-  named controls and honest service-unavailable state. It used synthetic preview
-  data; collection was not enabled on the owner's desktop profile.
-- The Windows Wails production build passes using an isolated
-  `ZEITBOARD_DATA_DIR` for binding generation. This is a build check, not a
-  published installer or native suspend/resume qualification.
-
-Logs: `.tools/desktop-activity-go.log`, `.tools/desktop-activity-vet.log` and
-`.tools/desktop-activity-build.log`. Configured login startup, background estimate
-refresh, desktop restore reconciliation and native lifecycle qualification remain
-open under C1; the full completion goal remains active.
-
-
-## Desktop login and recoverable windows — 2026-09-08
-
-ADR-0043 adds explicit login/start-to-tray controls and distinguishes normal
-window close from explicit quit. No owner startup registration was enabled.
-
-- Desktop Go tests and vet pass. Tests cover either DOM/tray initialization order,
-  hidden-launch fallback, lost tray, explicit quit, a pending manual second launch,
-  profile identity, unchanged activity/sync consent and failed startup writes.
-- Focused race checks pass for the new lifecycle, Windows tray and autostart
-  packages. A disposable non-Run registry key verifies quoted commands, hidden
-  and visible modes, moved-executable detection and source-scoped removal. The
-  tray test dispatches synthetic Explorer restart messages through the real
-  adapter handler with an injected icon publisher; it does not restart Explorer.
-- All 45 installer tests pass. The installer now passes the app's current
-  `--background` flag and recognizes both supported modes during removal.
-- Web checks pass: 403 desktop plus six trusted-web tests, formatting,
-  lint/UI standards, type checks and both production builds. Three pre-existing
-  Fast Refresh warnings remain. The new component tests cover explicit save,
-  unavailable-service recovery and quitting without a tray.
-- Browser preview verifies the layout and named startup controls; oversized
-  checkboxes found visually were corrected without shrinking the clickable rows.
-- Windows Wails production build passes with an isolated data directory during
-  binding generation. No real login/suspend/resume or clean-machine installer
-  qualification is inferred from a successful build.
-
-Evidence: `.tools/desktop-startup-{go,vet,race,web,installer,build}.log`.
-Background estimate projection refresh and desktop enrollment/restore remain
-software work. Native lifecycle, pilot and C1–C8 operational gates remain open.
-
-## Desktop background analysis — 2026-09-08
-
-ADR-0044 connects actual desktop readers to the expiring, evidence-guarded
-background snapshot. The server and desktop share `core/recompute.Worker`.
-
-- All Go core, desktop and server tests and vet pass. New coverage includes
-  background expiry without a mounted view, reuse without a foreground estimator
-  call, reopen, unchanged content-change time, correction invalidation, clock
-  regression, erasure during computation, corrupt derived data and bounded,
-  sanitized journal recovery after restart.
-- Race suites pass for `core/recompute`, desktop SQLite, desktop services,
-  server analysis and the daemon. Tests verify that journal recovery cannot
-  interrupt an active foreground publication, close cancels and joins readers,
-  duplicate start returns the active completion signal, and synchronous refresh
-  moves a sleeping worker's deadline forward. Expiry preempts burst throttling;
-  heartbeat cannot bypass failed-refresh backoff.
-- Canonical web checks pass: formatting, lint/UI standards, types, 405 desktop
-  and six trusted-web tests, and both production builds. Three existing Fast
-  Refresh warnings remain. The new native-event bridge tests cover dispatch to
-  existing evidence listeners, disposal and browser-preview absence of Wails.
-- Windows Wails production build passes with an isolated `ZEITBOARD_DATA_DIR`
-  during binding generation. Android, public contracts and installer code are
-  unchanged in this increment; their prior recorded qualification remains.
-
-Evidence: `.tools/desktop-analysis-{go,vet,race,web,build}.log`. The full goal
-remains active. Desktop enrollment/restore reconciliation is the next C1 software
-step; native login/suspend/resume, supported hardware, the private pilot and
-independent portal/release qualification are not established by these tests.
-
-## Desktop enrollment and restore reconciliation — 2026-09-21
-
-ADR-0045 replaces separate desktop config/token publication with atomic SQLite
-enrollment and adds durable reconciliation, suppression and deferred corrections.
-
-- All Go core, desktop and server tests and vet pass. Storage regressions cover
-  failed enrollment commit/reopen, stale status after disable, incomplete versus
-  complete download reconciliation, corrections across pages, erased-source
-  suppression, deletion before upload acknowledgment and preservation of unsent
-  task edits. The API rejects a cursor ahead of restored history.
-- Race suites pass for desktop SQLite, desktop services, server store and API.
-  Stateful TLS tests verify a failed switch retaining the old credential/cursor,
-  successful switching and returning to an earlier server, rollback detected
-  before upload, replay of missing accepted records, suppression after a later
-  server restore, and a 501-record download including this device's envelopes.
-- `TestDesktopSyncAgainstDisposableDaemon` passes against the actual Go daemon
-  over loopback TLS with an isolated server directory and synthetic records. A
-  second local profile restores data using the same credential, exchanges a
-  correction, receives erasure and stays erased after re-enrollment. The test
-  cleans remote payloads; the qualification daemon was stopped after the run.
-  Routine suites skip this opt-in test unless its disposable-server variables
-  are configured.
-- Canonical web checks pass: formatting, lint/UI standards, type checks, 405
-  desktop plus six trusted-web tests, and both production builds. Three existing
-  Fast Refresh warnings remain. Settings shows pending deletion and missing-source
-  counts and explains failed switches, re-enrollment and server-change scope.
-- Android check/lint passes with 93 JVM tests. The new test verifies that a pull
-  HTTP 409 maps to the existing restore/re-enrollment instruction, rather than an
-  upload conflict. The debug APK builds successfully. The earlier 21 native
-  instrumentation cases were not rerun for this error-mapping change.
-- Windows Wails production build passes with an isolated `ZEITBOARD_DATA_DIR`
-  during binding generation. A missing initial value for the new frontend status
-  fields was corrected after the first build caught it; final web/build checks
-  pass. No owner profile or startup registration was modified.
-
-Evidence: `.tools/desktop-reconcile-{go,vet,race,http,live,web,build,android,android-build}.log`.
-Native login/hide/suspend/resume/quit and resource/pilot measurements remain open.
-Task conflict resolution needs C2's reviewed editing flow; this increment proves
-preservation/refusal, not that the conflict UI is finished. The full C1–C8 goal
-remains active.
-
-
-## Unified review queue and exact request times — 2026-09-21
-
-ADR-0046 connects queue counts and request decisions across Home, Plan, Calendar and
-Approvals. Full Go core/desktop/server tests and vet passed; worker, SQLite, desktop,
-server store and API race suites passed. Canonical web formatting, lint, types,
-**410 tests (404 desktop + 6 trusted prototype)** and production builds passed. The
-count replaces 12 obsolete route-alias tests with current queue/time regression
-coverage; three existing Fast Refresh lint warnings remain. Windows Wails production
-build passed with an isolated profile.
-
-Focused evidence includes:
-
-- Storage and authenticated TLS API pages with older visitor requests behind 105
-  assistant proposals, authoritative totals, consumed/expired nonces and scope-bound
-  cursors. Subsecond checks align queue expiry and token rejection at the boundary.
-- Desktop TLS decoding of the real visitor response fields, always-present terminal
-  pagination, exact repeated-hour UTC submission, and a confirmed POST followed by a
-  failing GET without losing the decision acknowledgment.
-- Shared provider tests for mixed totals beyond loaded pages, transient errors,
-  disable, request drafts across remounts, synchronous double-click refusal,
-  non-advancing cursors, expiry wakes, and initial StrictMode remount recovery.
-- Civil-time tests for New York gaps/folds, Lord Howe half-hour transitions, invalid
-  dates and explicitly selected instants. Planning-anchor reads leave the live
-  analysis cache, worker deadline and journal unchanged.
-- Browser inspection of the actual React screens with disposable synthetic bridge
-  fixtures: approval count and history/undo, distinct source filters, full-width
-  request controls and disclosure, explicit UTC offsets, a selected repeated-hour
-  occurrence surviving the switch to Calendar, and approval reducing the shared
-  count. The temporary fixture and local preview server were removed/stopped.
-
-Logs: `.tools/approval-queue-{web,go,vet,race,build,focused-go,focused-web,api}.log`;
-final expiry checks are in `approval-queue-go-expiry.log` and
-`approval-queue-race-expiry.log`. These are local verification artifacts. No actual
-external CalDAV write-back, production visitor exchange, native lifecycle, wearable
-pilot or release qualification is claimed. C2 and the overall completion goal remain
-open as described in the completion plan.
-
-
-## UI streamlining pass — 2026-09-24
-
-The design record is `ui-refactor-plan.md` §13. Full Go core, desktop, server and
-contracts checks passed, as did canonical web formatting, lint, types, **435 tests
-(429 desktop + 6 trusted prototype)**, the production web builds, and
-`lint-ui-standards.mjs`. The three existing Fast Refresh lint warnings remain.
-
-Verified in the real app (`wails dev` against a disposable synthetic profile,
-driven from a browser):
-
-- **Plan › Tasks.** Adding a task placed its suggestion under "Needs your decision",
-  and the Plan badge and queue count rose together. Accepting it showed the undo
-  toast, removed it from the queue, and put "Tonight 5:30 – 5:50 PM" on the task
-  row. Undo from history returned the suggestion and cleared the row.
-- **Plan › Calendar.** The board spans the page; the rhythm reads asleep, uncertain
-  and awake like Home's outlook. Today shows the waking stretch under way from a
-  now line to the night's onset band.
-- **Data Sources.** Calendars are listed with kind and range; the placements
-  calendar reads "Times you accept in Plan". "Add a calendar" opens the import card.
-- **Log.** Sleep: quick buttons, the folded past-night form, one line per night,
-  and the edit form and delete confirmation laid out without overflow.
-  Medications: one tap recorded "taken" now, the history count rose, and the row
-  read "last taken today 4:15 PM". Context: markers first, the form folded.
-- **Rhythm, Sharing, Settings.** No page-level Refresh or explanatory banner;
-  Settings tabs open by address (`#/settings/sync`, `#/settings/computer`); the
-  sync status list no longer wraps a letter at a time.
-- **Home at 3 AM** inside a predicted sleep: "Likely waking · Today 7:15 – 10:10 AM"
-  replaced a "Next sleep" panel that showed only a waking window.
-
-New regression tests, each checked to fail before its fix: accepted time on a
-task (Go and web), today's waking stretch on the calendar, the placements
-calendar's range, three-state calendar bands, the task list following a decision,
-one-tap dose recording, the in-sleep waking panel, and the restored legacy
-routes.
-
-Not verified here: the Android companion, a Windows production build of this
-branch, and a full screen-reader pass of the new layouts. Operational
+# Verification record
+
+Most recent local verification: Windows 11 on 2026-09-08.
+
+## 2026-09-08 product quality pass
+
+- `npm run check:web`: formatting, ESLint/UI standards, TypeScript, 397 desktop tests in 54 files, 6
+  trusted-view tests in 2 files, and both production builds pass. Three existing Fast Refresh export
+  warnings remain; no lint errors.
+- `go test ./core/... ./apps/desktop/... ./apps/server/...` passes. Desktop tests were rerun after
+  the task DTO and civil-time fixes and pass, including exact constraint round-trips across
+  DST/travel, stale revisions, invalid mixed timestamp representations and nonexistent civil times.
+- `go vet ./core/... ./apps/desktop/... ./apps/server/...` passes.
+- `scripts/dev.ps1 -Action check -Component contracts`: all 29 versioned fixtures, standalone tools
+  tests/vet and schema validation pass.
+- `scripts/dev.ps1 -Action check -Component android`: unit tests and lint pass. This is not a new
+  real-device or wearable collection trial.
+- `scripts/dev.ps1 -Action build -Component desktop`: native Windows/amd64 production build succeeds
+  at `apps/desktop/build/bin/ZeitBoard.exe`.
+- Clean production browser smoke: Home and all ten remaining route/tab destinations open with no
+  render failures or console warnings/errors.
+- Desktop and 390px viewport review: all eleven route/tab destinations stay within document width.
+  Calendar/chart content retains its internal scroll. Settings and the assistant remain usable at
+  narrow width.
+- An ignored, synthetic bridge harness verifies task editing/save, visible narrow task actions,
+  service failure withholding and successful Home recovery. It does not read or change a personal
+  database or call a provider. Temporary hot-reload errors during source replacement were excluded
+  from the clean production smoke; they are not counted as a passing runtime test.
+- `git diff --check` passes. Test/build artifacts and the review harness remain ignored. The
+  installed desktop and personal data store were not replaced.
+
+The review and limitations are in
+[`product-quality-review-2026-09-08.md`](product-quality-review-2026-09-08.md). Earlier verification
+records below are historical, not the current test count.
+
+## 2026-07-22 passing checks
+
+- Frontend formatting, ESLint, and repository UI standards. The UI guard passed
+  with 16 screen modules and 10 component stylesheets.
+- Frontend TypeScript and production builds for the desktop and trusted-view
+  workspaces.
+- Frontend tests: 30 desktop test files with 213 tests, plus 2 trusted-view test
+  files with 6 tests.
+- `scripts/dev.ps1 -Action check -Component desktop`: desktop production build.
+- `scripts/dev.ps1 -Action check -Component core`: Go formatting, tests, and vet
+  for `core` and `apps/desktop`, including the Windows tray package.
+- `scripts/dev.ps1 -Action build -Component core`: Go builds for `core` and
+  `apps/desktop`.
+- `scripts/dev.ps1 -Action check -Component server`: server formatting, tests,
+  and vet, including the server/MCP projection privacy allowlist.
+- `scripts/dev.ps1 -Action check -Component contracts`: deterministic drift
+  check for 26 v1 fixtures plus 3 v2 fixtures, tools tests/vet, and schema
+  validation.
+- Native Wails production build at `apps/desktop/build/bin/ZeitBoard.exe`.
+- Android `testDebugUnitTest`, `lintDebug`, and `assembleDebug`; U-G changes no
+  Android source.
+- Browser QA of the medication clinician-report workflow at 1440 x 900 and
+  390 x 844: no page-level horizontal overflow, no console warnings or errors,
+  and the dense chart, tables, controls, and explicit internal chart scrolling
+  remained usable. Changing report controls invalidated export until a fresh
+  preview was generated, and export stayed disabled until the exact `EXPORT`
+  confirmation was entered.
+- Sleep erasure regression: suppression remains exportable and excluded from
+  effective reads; hard deletion removes observation/correction rows and the
+  unique payload marker from the compacted SQLite database and WAL.
+- Medication evidence regression: exclusion remains an append-only correction
+  and stored evidence remains countable/exportable; event erasure removes the
+  selected event and correction chain without deleting its definition, while
+  medication erasure removes the definition and all dependent evidence. Both
+  paths remove unique payload markers from the compacted SQLite database and
+  WAL.
+- Medication schedule regression: strict as-needed/fixed/cycling validation,
+  explicit IANA zones, civil cycle boundaries, DST gaps, first repeated-time
+  occurrence, and real estimator-horizon collision counts pass. Reminder tests
+  verify explicit opt-in, claim-before-notify, durable at-most-once behavior,
+  no retry after notification failure, inactive-definition pause, private-label
+  control-character normalization, immutable claims, and erasure cascade.
+- Medication clinician-report regression: local civil range and DST handling,
+  observed and inferred sleep layers, opt-in forecast and private fields,
+  pseudonymized medication labels, explicit taken/skipped adherence only,
+  rhythm-context annotations, selected-range drift, and robust descriptive
+  before/after medication-start association all pass. Export requires the exact
+  confirmation phrase and emits canonical, script-free standalone HTML with a
+  restrictive CSP, complete chart text alternative, mandatory redactions, and
+  no IANA zone identifier. A transient renderer pass also exercised the full
+  standalone document outside the desktop response adapter.
+- Rhythm-context regression: the four non-diagnostic marker kinds and manual,
+  user-reported provenance are schema-closed; SQLite rows are immutable; local
+  civil inputs reject future times and DST gaps while selecting the first
+  repeated-time occurrence; and adding a marker leaves the estimator projection
+  unchanged under an exact deep comparison. Contract-shaped export passes,
+  trusted-view contracts reject markers and private notes, actogram joins reject
+  a marker whose explicit zone does not match the row clock, and hard erasure
+  removes a unique private note from both the compacted database and WAL.
+- Calendar ownership regression: bounded ICS/CalDAV preview and import,
+  recurrence/DST parsing, immutable imported rows, and source erasure all pass.
+  Erasure removes private labels, titles, locations, notes, and saved endpoints
+  from both the compacted SQLite database and WAL. Text-free scheduler
+  projection, task/sleep/event stale-decision refusal, app-owned approval
+  materialization, rejection, undo, and import-free ICS export also pass.
+
+The check wrapper itself was also corrected: native Go, npm, Wails, contract,
+and Gradle failures now propagate as a non-zero script result.
+
+## Real-history import and estimator gate
+
+Only aggregate results are recorded here. Raw exports, converted observations,
+the validation SQLite databases, rendered charts, and detailed refusal points
+remain private and ignored.
+
+The finalized digital source conversion accounted for every source row:
+
+| Stage                                                                | Count |
+| -------------------------------------------------------------------- | ----: |
+| Finalized Fitbit files read                                          |    35 |
+| Source rows read                                                     |   923 |
+| Exact overlapping rows                                               |   105 |
+| Rows outside 2021-2023                                               |    80 |
+| Included observations                                                |   738 |
+| Included observations under 3h, classified as nap                    |     1 |
+| Matching superseded files excluded (`Old` / `Incomplete` / `weekly`) |    26 |
+
+Against a fresh ignored database, preview reported 738 ready, 0 duplicate,
+and 0 invalid rows. Commit imported all 738 atomically. A second preview
+reported 0 ready, 738 exact duplicates, and 0 invalid rows. The digital
+history covers late October 2021 through December 2023.
+
+The five original handwritten-chart pages were source-reviewed without OCR.
+Their 241 labeled day rows use the Sleep Diary report's 18:00-to-18:00 layout.
+Grid-aligned five-minute boundary estimates were visually checked on full-page
+overlays. The date-complete review ledger contains 243 explicit statuses: 223
+`confirmed_sleep` entries and 20 `confirmed_no_observation` entries. There are
+two more statuses than chart rows because two rows contain two sleep episodes;
+`confirmed_no_observation` means that a row was checked and contains no new
+episode start, not that the owner did not sleep.
+
+Eight chart episodes overlap finalized Fitbit records and were reserved for a
+source-accuracy check. Across their 16 start/end boundaries, absolute chart
+error versus Fitbit was 23.2 minutes mean, 10.0 minutes median, 55.5 minutes
+P90, and 127 minutes maximum. The primary benchmark therefore uses 215 chart
+episodes from before Fitbit begins and retains the eight overlap episodes only
+for calibration. Its 232 chart rows produce a 234-status ledger: 215 confirmed
+sleep entries and 19 explicitly checked rows without a new episode. Conversion
+reported all 234 rows, wrote 215 observations, and silently skipped none.
+
+The combined import used 738 Fitbit observations plus those 215 non-overlapping
+chart observations. On a fresh ignored database, the source previews reported
+738 and 215 ready with zero invalid rows. Their commits appended all 953
+observations atomically; repeat previews reported 738 and 215 exact duplicates
+with zero ready or invalid rows. The measured conversion used one owner-selected
+zone; no travel-zone inference was applied.
+
+The combined backtest used 952 principal episodes; the remaining observation
+was the reported Fitbit nap. With the seven-episode minimum, all 945 eligible
+holdouts were accounted for as 809 evaluations plus 136 typed refusals
+(coverage 0.856). Every refusal was `ambiguous_cycle_index`.
+
+| Candidate  | Scale | Evaluations | Refusals | Coverage | Median error | Mean error | P90 error | Hit rate | Mean window |
+| ---------- | ----: | ----------: | -------: | -------: | -----------: | ---------: | --------: | -------: | ----------: |
+| Baseline   |  1.00 |         809 |      136 |    0.856 |       1.71 h |     2.40 h |    5.41 h |     0.78 |     14.71 h |
+| Tighten-75 |  0.75 |         809 |      136 |    0.856 |       1.71 h |     2.40 h |    5.41 h |     0.72 |     13.31 h |
+| Tighten-50 |  0.50 |         809 |      136 |    0.856 |       1.71 h |     2.40 h |    5.41 h |     0.66 |     11.91 h |
+
+Baseline confidence calibration:
+
+| Confidence | Evaluations | Hit rate | Median error |
+| ---------- | ----------: | -------: | -----------: |
+| High       |          28 |     0.61 |       1.23 h |
+| Medium     |         386 |     0.81 |       1.42 h |
+| Low        |         395 |     0.77 |       2.19 h |
+
+Measured decision: keep the production uncertainty scale at 1.00. Tighten-75
+reduced mean width by 1.40h but lost 6 percentage points of hit rate;
+Tighten-50 reduced width by 2.80h but lost 12 points. Point error did not
+improve. The chart-inclusive baseline also improves on the digital-only run's
+1.77h median, 2.50h mean, and 5.65h P90 errors while preserving its 0.78 hit
+rate. A sensitivity run that allowed the eight lower-precision chart overlaps
+to merge into Fitbit changed only median error, from 1.71h to 1.70h at displayed
+precision; the decision is unchanged. The low-versus-medium error delta and
+the high bucket's lower hit rate justify testing an explicit confidence-window
+calibration or misfit candidate next, but no such signal ships without a
+positive delta against this combined baseline.
+
+## Visual verification
+
+- Reviewed unavailable and populated Rhythm Context states at 1440x900 and
+  390x844 in Paper, Dark, and High contrast. The ruled entry/ledger layout stays
+  within the page, all four marker kinds remain shape-distinct, exact date/zone
+  matches are duplicated across both actogram plots, the forecast remains off by
+  default, and the screen-reader table reports the same context. The export
+  control discloses that owner export includes private notes. Typed `DELETE`
+  enables the permanent-erasure action only after the explicit copy distinguishes
+  physical deletion from observation suppression. Runtime console review
+  reported no warnings or errors; the temporary contract-shaped preview was
+  removed and appearance and viewport overrides were reset.
+- Reviewed the real Medications workspace with unavailable-service and populated
+  bridge states at 1440x900 and 390x844. Definition setup, compact quick log,
+  observed/predicted/unavailable timing context, correction, exclusion, typed
+  hard-erasure controls, the user-authored schedule editor, reminder disclosure,
+  neutral feasibility counts, and DST gap copy remained legible and contained.
+  At 1440x900 the 1425px document had no off-viewport elements; at 390x844 the
+  document remained within its 375px layout viewport while the 720px occurrence
+  table scrolled only inside its named 315px region. Runtime console review
+  reported no warnings or errors, and the viewport override was reset.
+- Reviewed the real-calendar replacement at 1440x900 in the browser fixture:
+  source administration remains a compact rail, forecast ranges remain
+  background bands, fixed events use rectangular overlap lanes, exact event
+  details open in the inspector, and the document has no horizontal overflow.
+- Repeated Calendar at 390x844. The primary board precedes source
+  administration, date controls collapse to two compact rows, the 620px civil
+  board scrolls inside its column, and the document remains within the 375px
+  layout viewport. Runtime console review reported no warnings or errors.
+
+- Manually reviewed Overview and Rhythm at 1440x900 in Paper, Dark, Pitch black,
+  Amber, and High contrast, with reduced stimulation both off and on. Appearance
+  was restored to Auto with reduced stimulation off after the matrix.
+- Reviewed the U-E time probes on Overview, actogram, drift, and Calendar at
+  1440x900. The actogram second plot resolved to the following civil day,
+  forecast positions stayed explicitly predicted, drift reported observed and
+  fitted onsets, and edge chips remained inside their tracks.
+- Repeated probe and containment checks with a 390x844 viewport override in
+  High contrast + reduced stimulation. Overview and Calendar did not widen the
+  page; the actogram retained internal horizontal scrolling while the document
+  stayed at viewport width; the drift screen-reader table remained semantic
+  without contributing its intrinsic column width to page overflow.
+- Pointer movement, chart scrolling, and route changes left at most one probe
+  visible. Runtime console review reported no warnings or errors. Paper, Amber,
+  and High contrast probe chips were visually reviewed; theme contrast tests
+  cover all five presets. Appearance and viewport overrides were reset.
+- Overview measured approximately 693px high (77% of the viewport) with one
+  primary surface and no nested generic panels or metric cards.
+- Rhythm's actogram measured approximately 568px high and stayed within the
+  desktop viewport.
+- Overview had no page-level horizontal overflow at 900x900 or 390x844. The
+  navigation rail scrolls internally at narrow widths as designed.
+- The 390x844 Rhythm pass exposed chart overflow propagating to the page. The
+  final CSS paint-contains that overflow at `.actogram-panel` while preserving
+  horizontal scrolling in `.actogram-chart`; hidden screen-reader tables use
+  fixed layout so added columns cannot widen the page. The UI standards check
+  guards these rules and the readable 760px double-plot width.
+- Reviewed the U-F Data Sources and Sharing remediation at the native 1280x720
+  viewport and 390x844 in Paper, system Dark, Amber, and High contrast. Data
+  Sources leads with a two-column provenance ledger and fits source status plus
+  both input paths above the native fold. Sharing reports that no link exists,
+  marks all relationship rows `Example only`, and uses no avatar or profile
+  card. Both routes use one ruled workspace, contain zero generic `.panel`
+  descendants, and reported zero page-level horizontal overflow. At 390 px the
+  ledgers collapse to label/value rows; the eight route icons remain reachable
+  while their internal scrollbar is visually suppressed. An exact 1440x900
+  metric pass also found no overflowing main-content descendants. Appearance
+  was restored to Auto and the viewport override was reset.
+- Installed the rebuilt debug APK on `Pixel_10_Pro_XL_API_36_1` and reviewed
+  Status, Correct, Medication, and Settings in portrait. The generic section
+  `Panel` is absent; rules and headings separate content without reducing the
+  44/48 dp control targets. Rotated the same AVD to landscape for the large-width
+  Settings check. Accessibility bounds proved the content column was 2040
+  physical pixels (680 dp at 480 dpi) after correcting the modifier order;
+  before that fix it incorrectly filled the 2992 px screen. Portrait was
+  restored. Logcat contained no app crash or ANR, and no text or control clipped.
+- Reviewed U-G's shared proposal surfaces at 1440x900 and 390x844 in system
+  Dark, Paper, and High contrast. Approvals rows measured 144/143 px at desktop
+  width and 220/217 px at narrow width; the first Tasks proposal measured 299
+  px instead of the prior 431 px. The narrow appearance picker measured 347 px
+  instead of 821 px. Both widths retained zero page-level horizontal overflow,
+  every icon-only route link retained an accessible name, and the browser
+  console reported no warnings or errors. Auto appearance and the browser
+  viewport were restored after review.
+- Reinstalled the current debug APK after U-G and repeated the four portrait
+  routes plus Settings in landscape on `Pixel_10_Pro_XL_API_36_1`. The app
+  process remained live, portrait rotation was restored, and logcat contained
+  only emulator/graphics compatibility warnings rather than an app exception,
+  crash, or ANR.
+
+## Previously verified artifacts
+
+Verified on Windows 11 on 2026-06-15 and 2026-06-16:
+
+- Pinned local Node.js and Wails setup, Go modules, Java/Gradle detection, npm
+  installation, and deterministic fixture generation.
+- Native Wails production build at `apps/desktop/build/bin/ZeitBoard.exe` and a
+  hidden Windows launch health check.
+- Android debug APK at
+  `apps/android/app/build/outputs/apk/debug/app-debug.apk`.
+- Desktop overview and trusted-view browser screenshots in `docs/screenshots/`.
+
+## Desktop-local agent endpoint (ADR-0028)
+
+Verified on Windows 11 on 2026-07-26, after the Phase 4 review:
+
+- Full suites green: gofmt clean; `core` 10, `apps/desktop` 4, `apps/server` 7 package groups pass
+  `go vet` and `go test`; 29 contract fixtures verified and validated; 222 desktop frontend tests;
+  TypeScript typecheck; ESLint plus the UI-standards check; 33 installer library tests.
+- **Endpoint gates** (`internal/localagent`): non-loopback callers, absent or invalid bearer tokens,
+  and requests carrying an `Origin` header - including a present-but-empty one - are refused.
+  `Header.Get` cannot distinguish an empty header from an absent one, so the check tests for
+  presence.
+- **Descriptor ACL**: a Windows-only test asserts the published descriptor has a _protected_ DACL
+  with exactly one entry, for the current user. `os.Chmod(0600)` alone does not achieve this on
+  Windows, which is why the explicit DACL exists.
+- **Medical safety**: the post-provider screen is reachable. A benign prompt whose model answer
+  smuggles a dosing directive is refused, while an ordinary scheduling answer using "you
+  should"/"take the 3 PM slot" is not. Decision questions about an unknown medication name ("how
+  much Hetlioz should I take?") refuse via the phrasing rule; ordinary planning ("when should I take
+  my lunch break?") does not.
+- **Publish transaction**: a half-published install (pending marker present, or a declared component
+  missing) fails validation closed; completing clears the marker only after every declared artifact
+  validates. A test asserts the transaction is actually invoked by `install.ps1` and `update.ps1`.
+
+Not verified here: the end-to-end voice path through a real MCP client, which
+needs a running desktop app and a GUI session. `scripts/smoke-local-mcp.ps1`
+covers it manually and was confirmed to fail closed when the bridge is absent.
+
+## Architecture and performance hardening
+
+Verified on Windows 11 on 2026-07-27 against the disposition ledger in
+[`architecture-performance-review-2026-07-27.md`](architecture-performance-review-2026-07-27.md):
+
+- `go test` and `go vet` pass for every core, server, and desktop package. The
+  isolated tools module also passes both commands. The desktop application,
+  local MCP companion, server MCP companion, and server daemon compile.
+- Contract validation passes, and fixture regeneration verifies the exact set
+  of 29 synthetic files from the shared manifest.
+- Desktop frontend: 38 files / 243 tests pass. Trusted-view prototype: 2 files /
+  6 tests pass. Both TypeScript checks, ESLint, the 19-screen UI architecture
+  guard, formatting, and production Vite builds pass. Bundle output contains
+  separate route, assistant, and clinician-report chunks.
+- Android JVM tests were forced to rerun. `lintDebug` and `assembleDebug` pass.
+  `connectedDebugAndroidTest --rerun-tasks` ran 4 tests successfully on the
+  requested `Pixel_10_Pro_XL_API_36_1` API 36 AVD.
+- The freshly installed APK was visually checked on Status, Correct sleep, and
+  Medication event after navigation transitions settled. The screens retain
+  the ruled desktop-aligned hierarchy, compact fields/actions, minimum touch
+  targets, and no generic bubble-panel treatment or clipping.
+- Installer policy, transaction, rollback, no-op update, ACL marker, and static
+  wiring coverage reports 45 passed and 0 failed. All modified PowerShell files
+  also pass the language parser.
+- Focused proposal store/API tests cover active-first stable pagination,
+  high-water exclusion of concurrent inserts, opaque snapshot cursor
+  round-trips/tamper rejection, joined one-use nonces, and cross-device
+  decisions.
+- One-iteration benchmarks on the Ryzen 5 6600U verify linearized backtesting:
+  100 episodes 1.6 ms, 1,000 episodes 42.6 ms, 10,000 episodes 164.3 ms, and
+  20,000 episodes 291.8 ms. These are local diagnostic measurements, not
+  release latency guarantees.
+- `git diff --check` is clean. `git fsck --full` reports no missing or corrupt
+  objects; its dangling blobs are ordinary unreachable edit objects from the
+  interrupted work session.
+
+The connected suite validates Android persistence and process-recreation
+behavior but does not seed real Health Connect provider records. Paging,
+source-offset, duplicate-revision, permission-loss, DST gap/overlap, and
+last-good-snapshot behavior are covered by adapter/repository tests.
+
+## Availability portal foundation (ADR-0029)
+
+Verified 2026-07-31 for slice P5-a. The portal is not exposed: every check
+below runs against a loopback test server or an in-process handler.
+
+**Projection firewall.** The canary suite plants distinctive values in six
+private fields — device label, observation ID, source record ID, task title,
+correction ID, and the owner's private share label — then drives the portal
+with real materialized data derived from twelve principal sleep episodes. No
+canary appears in any public response body, in any response header, or in the
+portal database file bytes, including the write-ahead log. The database check
+reads raw file bytes rather than querying, so an unexpected column would still
+fail it. The materializer's output is asserted separately: it carries no canary
+and no `confidence`, `explanation`, or `estimateId` field.
+
+**Structural boundary.** A test parses the `portal` package's own imports and
+fails if it ever imports `store`, `readmodel`, `assistant`, `api`,
+`portalbridge`, `provider`, `estimation`, or `domain`. The boundary is
+therefore enforced by the dependency graph, not by review.
+
+**Public DTO.** The availability response carries exactly `version`, `windows`,
+`generatedAt`, `horizonEnd`, `status`, and each window exactly `startAt`,
+`endAt`, `zoneId`. Both the presence of every required key and the absence of
+any other are asserted.
+
+**Honesty budget.** Every rendered state — empty, refused, insufficient,
+available, and stale — carries the measured uncertainty qualifier and the
+not-medical notice. A refusal's rendered text is asserted free of "sleep",
+"episode", "record", "refus", "ambiguous", "cycle", and "estimator", so a typed
+estimator refusal never reaches a visitor as a reason. Windows render in civil
+time with the zone stated, and no RFC3339 instant appears in a visible label.
+The freshness ladder is exercised at 30 minutes (fresh), 7 hours (stale, shown
+with a caution), and 25 hours (withheld, no current-state claim, no windows).
+The JSON path applies the same 24-hour cut, so a JSON consumer cannot present
+an "awake now" the page would have withheld.
+
+**Enumeration and revocation.** Unknown, expired, and revoked links produce
+byte-identical 410 responses. Revoking a profile ends existing sessions
+immediately and deletes the materialized snapshot. A session issued for one
+link returns 401 on another.
+
+**Passcode and CSRF.** A wrong passcode returns 401 and arms an exponential
+per profile-and-source backoff; the immediately following attempt is throttled
+with `Retry-After` even when the passcode is correct, and succeeds once the
+backoff elapses. There is no global lockout. The Fetch-Metadata matrix covers
+nine cases: `Sec-Fetch-Site: same-origin` succeeds with no Origin, with a
+matching Origin, and with `Origin: null` — the shape a real browser sends under
+`Referrer-Policy: no-referrer`; `cross-site`, `same-site`, and `none` are
+refused even with a spoofed matching Origin; a matching Origin alone succeeds
+as the pre-Fetch-Metadata fallback; and neither header, or a mismatched Origin
+alongside same-origin metadata, is refused.
+
+**Headers and page content.** Every response — page, availability, stylesheet,
+and generic failure — carries `default-src 'none'`, `frame-ancestors 'none'`,
+`style-src 'self'`, `script-src 'self'`, `connect-src 'self'`, `img-src 'self'`,
+`Cache-Control: no-store, max-age=0`, `Referrer-Policy: no-referrer`,
+`nosniff`, and a noindex robots tag. The rendered page is asserted to contain
+no `<script`, no `<style`, no inline `style="` attribute, and no absolute URL,
+so nothing in it can reach a third party or violate its own CSP. The session
+cookie is asserted `Secure`, `HttpOnly`, `SameSite=Strict`, `Path=/`, with no
+Domain attribute, and its expiry never outlives link expiry.
+
+**Maintenance.** The hourly sweep the daemon runs is exercised directly: a live
+session survives it, an expired one does not, and access rows older than the
+30-day retention window are deleted while recent rows remain. The synchronizer
+CSRF token minted with every session round-trips and rejects wrong values; P5-a
+has no session-authenticated mutation to spend it on, and the test exists so it
+does not rot before P5-b needs it.
+
+**Limits and audit.** The read limit admits 120 requests per source per hour,
+refuses the 121st with `Retry-After`, and restores the budget when the window
+rolls over. `RecordAccess` rejects any event outside the closed enum. Audit-key
+rotation changes the identifier for the same address and deletes rows past the
+retention window. IPv6 addresses inside one /64 collapse to a single identifier
+while a different /64 does not, so per-source limits cannot be evaded by
+address rotation within a prefix.
+
+**Off by default.** With the portal disabled, `mountPortal` leaves `/p/`
+entirely to the private handler — there is no portal route to probe — and the
+owner's four sharing routes return 404. A config that never mentions the portal
+loads with it disabled; an enabled portal without `publicOrigin` fails to load;
+non-loopback `http` origins, origins carrying a path, query, fragment, or
+credentials, and non-http schemes are all rejected.
+
+**Owner surface.** Create, list, revoke, and erase round-trip. The issued link
+resolves once and stops resolving after revocation. The private label is
+readable through the owner API, is absent from the portal store's own profile
+listing, and is gone after erase. Weak passcodes and lifetimes past the 90-day
+cap are refused. All four routes require device authentication.
+
+**Browser verification.** The rendered page was driven in a real browser across
+five states (awake now, not awake, stale, out of date, refused). Two defects
+were found and fixed that the Go suite could not see: an `Origin`-only CSRF
+gate refused every genuine login, because `Referrer-Policy: no-referrer` makes
+browsers send `Origin: null` on same-origin form posts; and the state card's
+`background` shorthand reset the card's own background colour, letting the page
+canvas show through. A CSS-generated "now" badge was also replaced with real
+markup so assistive technology announces it.
+
+Measured suite results: `internal/portal` and `internal/portalbridge` pass, as
+do `api`, `config`, `daemon`, `store`, `readmodel`, `sync`, `assistant`, and
+`mcp`. `gofmt` and `go vet` are clean across the server module.
+
+Not yet verified, and gating exposure: an independent security review
+(exposure-gate item 6), acceptance suites run on a Linux server build, and the
+operator TLS/reverse-proxy runbook with log-token redaction (item 3). Requests,
+messaging, and the live SSE layer are P5-b through P5-d and do not exist.
+
+## Visitor time requests (ADR-0030)
+
+Verified 2026-07-31 for slice P5-b, all against loopback servers and
+in-process handlers. The portal remains unexposed.
+
+**Round trip.** A request submitted through the public form is stored, reaches
+the owner's queue as a proposal with origin `visitor`, is decided with a
+one-use token, and the decision appears on the visitor's status page with the
+exact block the owner chose. The proposal payload carries the visitor's handle
+and message, because judging a request requires them.
+
+**Honest queued state.** With the bridge unable to file the request — no
+enrolled device — the pump reports failure, the request stays `queued`, and
+the visitor is shown "saved and on its way", never "sent". Once a device
+exists the same request goes through without resubmission.
+
+**Idempotency.** Four consecutive pumps over one request produce exactly one
+proposal, which is the failure that actually occurs: the private commit
+succeeds and the acknowledgement is lost. `ApplyDecision` is idempotent in the
+other direction too — three replays of the same approval are a no-op, and a
+later contradicting decision does not overwrite a settled one.
+
+**Exact-slot rule.** Approval is refused with a typed error for a block before
+the window, after it, straddling its end, of the wrong duration when one was
+requested, empty, or inverted; a block inside the window with the exact
+requested length is accepted. Over the API the same cases are 400, and the
+approved block reaches the visitor unchanged.
+
+**One-use tokens and route guards.** A replayed decision token is refused on
+the visitor route. The generic `/v1/proposals/{id}/decision` returns 409 for a
+visitor proposal, so the slot and delivery obligations cannot be skipped by
+choosing the other endpoint. `DecideVisitorProposal` refuses a non-visitor
+proposal. `place_visitor_request` is absent from the assistant action
+registry, so an agent cannot mint a proposal that appears to come from an
+outside person.
+
+**Requester isolation.** A visitor holding the shared link and passcode but no
+requester cookie sees the recovery-code form, not another visitor's request,
+and none of that request's text appears in the response. A wrong secret and an
+unknown request id produce identical status and body. Exchanging the correct
+secret yields a request-scoped cookie that renders the author's own request.
+
+**Validation.** Rejected with typed errors: end before start, a window already
+started, a window over eight hours, durations below 15 or above 480 minutes,
+a duration longer than its window, an unknown zone, and handle or message past
+their rune caps. Control characters are stripped and newlines and tabs folded
+without mangling the text. A window past the forecast horizon is accepted,
+flagged, and rendered with the explicit infeasibility warning — owner decision
+3, no product cap on how far ahead someone may ask.
+
+**Caps and revocation.** The per-session daily cap admits five requests and
+explains the sixth refusal. Revoking a link closes its open requests rather
+than deleting them, so a visitor is not left watching a status that never
+moves. A declined request's rendered text is asserted free of "asleep",
+"sleep", "busy", "calendar", "conflict", "medication", and "because".
+
+**Browser verification.** The whole visitor path was driven in a real browser:
+passcode gate, dashboard, request form, submission, the one-time recovery
+code, and the status page. The requester secret appears only after the `#` in
+the continue link, never in the path or query. The "now" badge, moved from a
+CSS pseudo-element into markup during P5-a, is confirmed present in the
+accessibility tree.
+
+**A P5-a defect this slice exposed.** ADR-0029 stored only a hash of the
+synchronizer token, which a server-rendered form can never embed — the
+mechanism could not have worked. CSRF tokens are now derived from the session
+value under a server-held key, so the plaintext is recoverable on every render
+while staying unguessable. The test asserts derivability, verification, and
+rejection of the session value itself.
+
+Measured suite results: `portal`, `portalbridge`, `api`, `config`, `daemon`,
+`store`, `readmodel`, `sync`, `assistant`, and `mcp` pass; `gofmt` and
+`go vet` are clean; Linux and Windows server builds succeed.
+
+**Owner surface.** The desktop lists open visitor requests, renders the link
+label, window, visitor text, beyond-horizon note, and approval disclosure, and
+sends a chosen block only when approving — a decline carries none, because
+there is nothing to reveal. `parseVisitorSlot` refuses an empty, unparsable,
+inverted, or zero-length block and normalizes to UTC before the value leaves
+the desktop. Normalization refuses a record missing the approval disclosure or
+the picker bounds rather than rendering a silently incomplete card, and one
+malformed request rejects the whole payload.
+
+**A regression this slice caught.** P5-b's 409 guard on the generic decision
+route meant a visitor request appearing in the desktop's synced-proposals list
+would have rendered an Approve button that could not work. Visitor proposals
+are now filtered out of that list, with a test asserting it, and the
+duplicated action id is pinned by a test because the desktop cannot import the
+server module.
+
+Not implemented, and therefore not verified: messaging threads (P5-c) and the
+SSE live layer and audit UI (P5-d). The exposure gate is unchanged and unmet.
+
+## Evidence freshness, activity, and shadow inference (ADR-0031)
+
+Verified 2026-08-04 for the first P7 slices.
+
+**Freshness.** `core/freshness` covers fresh, aging, and withheld bands; no evidence distinguished
+from old evidence; the unrecorded-expected-sleep case that a pure age threshold cannot catch; a
+two-hour-late onset _not_ withholding, which checks the grace period against ADR-0022's measured
+5.41 h P90 error; configured-but-silent sources withholding while no configured source does not;
+clock-skew evidence clamped rather than producing a negative age; an unconfigured policy falling
+back to the defaults; and every explanation asserted free of medication, dose, task, calendar, and
+diagnosis vocabulary so the same strings stay safe on the public surface.
+
+**The two defects it closes.** A desktop test seeds a fittable rhythm whose
+newest record is four days old and asserts the current state is withheld rather
+than "Likely awake", with a counterpart at two hours asserting a plain claim
+still appears. A portalbridge test seeds a rhythm whose newest episode ended
+three days ago and asserts the snapshot is not published as available — the case
+where `generatedAt` was refreshed by an unrelated task push while the sleep
+evidence was stale.
+
+**Activity.** The state machine covers startup; an hour of ordinary work producing no records at
+all; idle backdated to when input stopped rather than to the poll that noticed; the return to use
+carrying the full idle duration; a clock jump becoming suspend/resume; an ordinary 90-second poll
+gap _not_ becoming one; lock taking precedence over idle; a source asserting nothing moving nothing;
+shutdown recorded once; and the encoded payload asserted against a four-key allowlist with no key
+suggesting content capture. An unknown state fails to encode.
+
+**Inference.** Quiet desktop time becoming a candidate with non-zero boundary
+uncertainty; an evening and a weekend away both refused with a typed code; no
+evidence refused distinctly; wearable agreement tightening the boundaries;
+disagreement recorded rather than discarded; the correction prompt naming the
+disagreement without exposing internal source ids; a shutdown not opening a
+quiet interval; and suspend counting as quiet.
+
+Measured: `gofmt` and `go vet` clean across core, desktop, and server including a
+Windows-target vet of core; all Go suites pass; Linux and Windows server builds
+succeed; 29 contract fixtures verify; `npm run check:web` passes.
+
+Not verified because not built: background collection across a hidden window,
+persistence of candidates, the correction prompt, Android sync, the recompute
+orchestrator, and the 48–72 hour operational view. ADR-0031 lists these
+explicitly rather than leaving them implied.
+
+## Shadow inference validation gate (ADR-0031)
+
+Measured 2026-08-04 on the seeded synthetic suite. ADR-0031 requires a
+documented positive validation decision before an inferred episode may reach
+production planning. This is that measurement, and the decision is **no**.
+
+Ten scenarios, each a generated rhythm plus generated desktop activity around
+it. Candidates are matched to truth by greatest overlap; bias is the signed
+median, which distinguishes a correctable offset from noise.
+
+| Scenario                | Truth | Cand | Cover | Onset med | Onset P90 |  Wake med |  Wake P90 | Onset bias |  Wake bias | False |
+| ----------------------- | ----: | ---: | ----: | --------: | --------: | --------: | --------: | ---------: | ---------: | ----: |
+| stable rhythm           |    21 |   21 |  1.00 |       44m |       57m |       30m |       51m |       −44m |       +30m |     0 |
+| free-running tau 24.8   |    18 |   18 |  1.00 |       43m |     1h02m |       23m |       41m |       −49m |       +23m |     0 |
+| forced wake             |    18 |   16 |  0.89 |       37m |     1h05m |       29m |       44m |       −38m |       +29m |     0 |
+| fragmented sleep        |    18 |   18 |  1.00 |       36m |       59m |       23m |       38m |       −38m |       +23m |     0 |
+| naps                    |    18 |   18 |  1.00 |       33m |       55m |       24m |       42m |       −35m |       +24m |     0 |
+| quiet wake              |    18 |   18 |  1.00 |       43m |     1h02m | **1h58m** | **2h16m** |       −49m | **+1h58m** |     0 |
+| long wind-down          |    18 |   18 |  1.00 | **2h03m** | **2h22m** |       23m |       41m | **−2h09m** |       +23m |     0 |
+| machine used mid-sleep  |    18 |   20 |  1.00 |       49m |     1h03m |       23m |       45m |       −43m |       +18m |     0 |
+| machine off some nights |    18 |   15 |  0.83 |       49m |     1h02m |       18m |       41m |       −49m |       +18m |     0 |
+| suspend instead of idle |    18 |   18 |  1.00 |       43m |     1h02m |       23m |       41m |       −49m |       +23m |     0 |
+
+Against the pilot targets (onset median ≤45 m, wake median ≤30 m, boundary P90
+≤90 m, coverage ≥0.85, zero false positives): **5 of 10 scenarios pass.**
+
+**Decision: inferred episodes do not enter production estimation.** They remain
+shadow-only.
+
+**What the numbers say.** Three results matter more than the pass count.
+
+_The error is systematic, not noisy._ Onset bias is −33 to −49 minutes and wake bias +18 to +30
+minutes across every well-behaved scenario. Desktop inactivity brackets sleep by construction:
+someone stops using the machine before falling asleep and touches it again after waking. That is a
+correctable offset rather than an accuracy ceiling, which is a much better position than an unbiased
+error of the same size.
+
+_Behaviour dominates the algorithm._ The two scenarios that fail badly fail on the user's habits,
+not on the inference rules. A two-hour gap before touching the machine after waking produces a 1h58m
+wake error; a two-hour wind-down produces a 2h03m onset error. No refinement of the interval logic
+recovers information the machine never had. This is the strongest argument for Android sync: a
+wearable observes sleep directly and does not depend on whether someone opened a laptop.
+
+_Nothing was invented, but one episode can be reported as two._ Zero false positives in every
+scenario, including the ones with missing evidence, and coverage degrades honestly — 0.83 with four
+nights of no data, 0.89 under forced wake. The mid-sleep-use scenario is subtler: it does **not**
+lose coverage, it produces 20 candidates for 18 episodes. Splitting an eight-hour sleep leaves two
+four-hour halves, both above the three-hour minimum, so each becomes a candidate and one real night
+is counted twice. For a drift estimator that indexes by cycle this is worse than a miss — a missing
+night widens uncertainty, an extra episode shifts the fit. Merging adjacent candidates separated by
+a short waking gap is the obvious remedy and is deliberately not written against synthetic data.
+
+**The calibration trap, stated so it is not walked into.** The measured bias is
+close to the `StopUsingBefore` and `ResumeUsingAfter` values used to generate
+the activity. Shifting candidate boundaries by that bias would improve every
+number here and would be measuring the generator's own parameters back. Bias
+correction must be fitted on live data where the user's real habits are unknown,
+against user-confirmed boundaries, and it must be re-measured before it changes
+anything a person sees.
+
+**What would change the decision.** Boundary correction fitted on live pilot
+data; a second independent source, most plausibly Health Connect sleep via
+Android sync; and a correction prompt that lets the user resolve the conflicts
+the candidates already record. Until then the pilot's Stage 1 — shadow
+collection with no planning effect — is exactly the right posture.
+
+## Android sleep synchronisation (ADR-0032)
+
+Verified 2026-08-06.
+
+**Unit tests** (60 Android tests pass, plus lint and a debug APK): the mapping
+produces one observation on first sight and nothing on an unchanged second
+pass; a revised source record becomes a correction targeting the original with
+a superseding chain, not a second observation; ids satisfy the server's
+identifier rule even for a source name full of characters the rule forbids, and
+the source name does not appear in the id; an episode whose offset disagrees
+with the home zone is held with a typed reason rather than guessed; the offset
+check follows daylight saving, so the same zone in January and August are
+treated differently; a missing revision falls back to the episode end; and
+quoting holds for a hostile source record id, which is the one caller-controlled
+string reaching the wire verbatim.
+
+**Repository tests**: local-only is a supported state rather than an error; a
+failed push keeps the queue, reports it, preserves the previous success time,
+and recovers without the user resubmitting; repeated enqueues of unchanged
+episodes add nothing; pushes batch within the wire limit; changing server clears
+the queue; disabling forgets the queue and the token; travelling episodes are
+counted as held; and a fresh repository over the same durable outbox reports the
+queued work, as after a process death.
+
+**End to end**, against a real `zeitboardd` with the app installed on a Pixel
+emulator: enrollment issued a device token; a push of Android-shaped records was
+accepted (2 of 2); an identical replay was accepted with **0** new records,
+confirming idempotency at the server as well as the source; and a twelve-episode
+history produced `status: estimated` with a drift of **+50 minutes per observed
+sleep cycle** — the rhythm that was generated. Health Connect sleep can now
+reach the estimator with no manual transcription, which is the P7 acceptance
+line for this slice.
+
+**A defect only that run could find.** The Kotlin sent
+`acquisition_method: "device_sensor"`, outside the server's closed enum, and the
+first push was rejected as an invalid batch. Both sides' unit tests passed
+throughout: the Kotlin asserted its own output and the Go asserted its own
+input, and nothing compared them. `android_contract_test.go` now pins the exact
+Android payload as a Go-side fixture, including a case asserting the bad enum
+value is refused.
+
+Not covered: a physical device, a real wearable writing to Health Connect,
+background/periodic sync scheduling, and pull — this slice pushes only.
+
+## The recompute orchestrator (ADR-0033)
+
+Verified 2026-08-06.
+
+**Decision logic** (`core/recompute`, `core/freshness`): a burst of fifty
+requests collapses to one run; a steady one-per-second trickle still runs rather
+than postponing itself indefinitely; the minimum interval floors the rate a
+chatty device can impose; failures back off geometrically to a ceiling and keep
+the work pending; an expiry fires with nobody asking; and the next-wake instant
+is exactly the next deadline and never in the past.
+
+The input fingerprint is order-independent and does not move on its own, changes
+when an episode's recorded-at changes (which is what the freshness policy reads),
+changes when a session is suppressed, changes when a consumer is added, and
+cannot collide across entry boundaries — entries are length-prefixed, without
+which `["ab","c"]` and `["a","bc"]` hash identically.
+
+`freshness.NextChange` is checked by walking the clock forward a minute at a time
+across four input shapes and asserting the state never changes before the
+predicted instant. The guarantee is deliberately one-sided: early is a wasted
+recomputation, late is a stale claim left standing. One further test runs at
+nanosecond resolution, because the unrecorded-sleep rule is a strict comparison
+and a wake scheduled for the exact deadline would have found nothing changed.
+
+**Orchestration**: an unchanged projection keeps its original stamp; changed
+content takes a new one; inputs reverting from A to B and back to A still
+republish, which a naive "skip if this fingerprint has been seen" would not; a
+failed apply is recorded as failed and does not become the last completed run; a
+run left open by a dead process is closed out and its work redone. An import test
+asserts the package reaches no provider, assistant, network, or subprocess.
+
+**Journal** (`apps/server/internal/store`): runs round-trip with both
+fingerprints and their times; a begun run is not a completed one; a failure keeps
+its fingerprints through the re-seal that stores the message; the interrupted
+sweep is idempotent; the table stays bounded at 200 rows and pruning never
+removes the row the orchestrator reads. Fingerprints do not appear in the
+database file, the WAL, or the shared-memory file.
+
+**End to end**, against a live `zeitboardd` with the portal enabled:
+
+| Step | Result |
+| --- | --- |
+| Twelve single-record pushes | One recomputation — `absorbed 11 further request(s)` |
+| Availability with no request driving it | Published, seven windows, `status: available` |
+| Unrelated task push (accepted, cursor 13) | `generatedAt` **unmoved** |
+| Daemon restart | Reconciled to the same content, no restamp |
+| Erasing all twelve records | `status: refused`, zero windows |
+
+The first two rows and the third were re-run against a rebuilt daemon after the
+scheduling fix below, with the twelve pushes issued in parallel rather than in
+sequence. The recomputation landed 30 seconds after the burst rather than 3,
+which is the minimum interval measuring from the link-creation run — the floor
+working, not a delay.
+
+The third row is the ADR-0031 defect finally closed. That ADR found that pushing a task refreshed
+the portal's freshness signal while the sleep evidence underneath was days old; it corrected the
+_status_ and left the stamp moving. The page's 6-hour and 24-hour age rules now measure the
+evidence.
+
+Not covered by the live run: the freshness-expiry wake, because observing it in a
+real daemon means waiting hours for a real threshold. It is covered by the
+quiet-day walk in `apps/server/internal/analysis` — which withholds availability
+with nothing pushed, nothing opened and nobody asking — and by a worker test that
+runs the real goroutine and timer against a result that expires in 60 ms.
+
+Also not covered: the desktop, which recomputes on screen load and is unchanged.
+The background guarantee lives in the daemon.
+
+**A defect only the running worker could find.** Forty requests fired against a live worker while
+its startup run was still finishing, and every one was lost: the completion cleared the pending
+flag, including requests that arrived after the run had already read its inputs. The unit tests
+passed throughout, because they drove the schedule one call at a time and never overlapped a run
+with a request. The flag is now cleared when a run _begins_, and two tests pin it — one for the
+mid-run request, one asserting that asking again during a _failed_ run does not pull the retry
+forward through the backoff.
+
+The worker's locking is reviewed rather than race-detected: this toolchain has
+CGO disabled, so `go test -race` cannot run (see environment limitations). The
+mitigation is structural — all scheduling state is a plain struct with no timer
+and no goroutine of its own, touched only under one mutex, and every decision it
+makes is tested by calling it directly rather than by waiting.
+
+## The 48–72 hour operational view (ADR-0034)
+
+Verified 2026-08-08.
+
+Historical routing evidence: ADR-0046 removes the pre-release route aliases and
+their lint requirement on 2026-09-21. The current five destinations and tab routes
+remain the supported navigation contract.
+
+**Arithmetic** (`core/outlook`): the timeline covers the horizon with no gaps and
+no unmerged neighbours; every predicted boundary carries an uncertain stretch and
+those stretches widen with forecast distance; the current period reads awake
+rather than unknown and ends at the earliest plausible onset; a recorded episode
+overrides the forecast and is marked observed; office windows keep reachable and
+possible separate and never claim more than their own span; Saturday and Sunday
+are skipped; a commitment inside predicted sleep is named as such; tasks are
+placed only in confidently awake segments; an unplaceable task reports a reason
+instead of vanishing; stale evidence withholds the entire view; a refusal keeps
+the estimator's own typed code; the horizon clamps to 48–96 hours; and the sweep
+survives a daylight-saving transition — absolute instants for the timeline, civil
+clock for the office day.
+
+The core view carries event **ids** and no text. A test plants "Oncology
+follow-up", "Ward 4" and "referral letter" in an event and asserts none of them
+reaches the outlook; the desktop joins titles back locally.
+
+**The product claim, checked.** A seeded 40-day generator is walked through a
+fortnight of drift, building the view once per day. Office hours come out
+reachable on some days and unreachable on others. Both assertions matter: a view
+that reported no reachable time all fortnight would be broken, and one that
+reported the same answer every day would not be tracking the drift the whole
+product is about.
+
+**Desktop binding**, against a real store: an available view with layout offsets
+that tile the horizon exactly; all three presence states present; withholding on
+four-day-old evidence with a reason; refusal with no history; office windows
+labelled reachable / partial / unreachable with "partial" never advertising a
+time to ring; day marks 24 hours apart; and no estimator internals
+(`algorithmVersion`, `inputSessionIds`, `characteristicSleepStart`) in the DTO.
+
+**Rendered panel**, checked in the running app: thirteen contiguous bands across
+a 72-hour strip, day marks at 24-hour intervals, legend swatches matching the
+band fills including the hatch, office icons coloured by status, no console
+errors, no horizontal page overflow. Adjacent band luminance contrast is
+1.14–1.37, which is why the uncertain band is hatched rather than solid: the
+three state colours are separated by hue, not by lightness, and three solid
+blocks would be hard to tell apart in greyscale, in the amber-glasses theme, or
+for a reader with a colour vision deficiency.
+
+Not measured: whether the view changes what the user does. Every check above
+establishes that the software does what it claims. Whether more calls get made
+inside office hours is the pilot question below.
+
+## Navigation consolidation (UI slice U-H)
+
+Verified 2026-08-08.
+
+**Structure**: five primary destinations (`Home · Plan · Rhythm · Log ·
+Sharing`) and a separate utility group (`Data Sources · Settings`). The counts
+and the separation are enforced by `scripts/lint-ui-standards.mjs`, along with
+Plan and Log composing the screens they absorbed rather than copying them, and
+every legacy hash still redirecting.
+
+**Routing** (`readRouteFromHash`): unknown paths fall back to Home; a screen and its tab are read
+from the address; an unrecognised second segment falls back to the first tab; `#/overview`,
+`#/timeline`, `#/calendar`, `#/tasks`, `#/approvals` and `#/medications` all land on the right
+screen _and_ the right tab (`#/approvals`, and `#/plan/approvals`, on Plan › Tasks, where decisions
+now are); the utility destinations stay addressable.
+
+**Tabs** (`ScreenTabs`): one tab stop for the whole group; arrow keys move and
+wrap; Home and End jump to the ends; other keys are ignored; the pending count
+renders only when non-zero.
+
+**Behaviour that moved kept its tests.** The sleep-log paging test followed the
+panel out of Data Sources; the marker-ownership test — that an authoritative
+mutation result is not immediately re-fetched — followed the markers from Rhythm
+to Log. 295 frontend tests pass.
+
+**In the running app**: all five destinations and both utilities render; every
+legacy hash resolves to the expected `<h1>` and selected tab; the pending count
+appears on Plan and on the Approvals tab; a tabbed screen has exactly one
+`<h1>`; and there is no horizontal page overflow.
+
+**A defect the running app found and no test did.** Hiding `.sidebar-footer` at
+the 700px breakpoint had always been harmless because Data Sources was a primary
+destination. Moving it to the utility group stranded it, and Settings with it,
+on any narrow window. Fixed by keeping the footer and laying the group out
+horizontally — both links reachable at 375px with 44×44 targets — and pinned by
+a lint rule that was checked to fail before it was checked to pass.
+
+## Home surface spacing (2026-08-08)
+
+A measured pass over the Home screen after the operational view and the
+navigation consolidation landed. Eight defects, all found by reading geometry
+out of the running app rather than by looking at it; the table is in
+[`ui-refactor-plan.md`](ui-refactor-plan.md) §11.
+
+The headline: **the page had two left edges**. Every section on the surface
+carries a full-bleed rule, so the rules aligned and the content did not — the
+outlook's content sat 1px from the surface edge against 25px for everything
+else, and above it the status header and cycle strip sat at 29px against the
+facts' 25px. The surface is now one content column at every width: `--space-6`
+wide, `--space-5` narrow, measured as a single distinct left edge across all
+seven sections at both 1120px and 375px.
+
+Also measured and fixed: a third of the facts row was blank (359px of 1076px)
+because the outlook had taken over the third tile and left a hard three-column
+grid; the timeline's day labels never rendered at all, clipped by the track's
+own overflow; three-part section headings collapsed onto one 15px line; the
+legend's summary sentence sat 608px from the swatches it describes; two adjacent
+rules in different greys met between the facts and the outlook; and the evidence
+row wrapped to 124px because five children were in a four-column grid.
+
+**Guard**: `scripts/lint-ui-standards.mjs` fails if a Home surface stylesheet
+insets a section by `--space-7` — the exact shape of the two-left-edges defect.
+Checked to fail before it was checked to pass. Two DOM assertions cover the
+markup fixes: the day labels render outside the clipped track, and no list in
+the outlook carries a leading icon the others lack.
+
+Not covered: nothing here is a layout _test_. jsdom does not lay out, so the geometry above was
+measured in a real browser and the durable guards are the lint rule and the two structural
+assertions.
+
+## Reported UI defects (2026-08-08)
+
+Four reports from the built app, each reproduced and measured before it was
+changed; the detail is in [`ui-refactor-plan.md`](ui-refactor-plan.md) §12.
+
+- **Section rules were invisible.** Measured at 1.09–1.17:1 against the surface
+  in every theme but High contrast. `--divider` and `--line` are now ≥1.4:1
+  against both `paper` and `canvas` in all five presets, asserted by
+  `contrast.test.ts` (89 assertions, up from 74).
+- **The actogram panel reserved 540px and 560px** — two numbers in two files —
+  for 419px of content, leaving empty surface that read as a solid block.
+  Both reservations removed; measured empty space below the content is now 0.
+- **`overflow-x: hidden` had made the panel a scroll container**, because with a
+  visible `overflow-y` the used value becomes `auto`. A 15px scrollbar was
+  painting over the confidence label of every row. `clip` fixes it; the existing
+  lint rule now pins `clip` rather than `hidden`. No scroll containers remain on
+  the Rhythm route.
+- **The assistant toggle overlapped page headers** by 16px vertically in the
+  same horizontal band. The header reserves the corner; a lint rule requires it.
+
+**Overlap sweep.** A pairwise detector over every visible leaf text node, across
+ten routes, at 760 / 885 / 1045 / 1120px and root font sizes 16 / 20 / 24px.
+One real defect: the Sharing relationship table declared a 524px minimum inside
+a 439px column and painted 61px over the list beside it between ~980 and 1100px.
+Fixed. All sweeps are now clean.
+
+The detector's first run reported six overlaps on Home that were phantoms: a
+closed `<details>` still returns a non-zero client rect in Chrome even though
+its content is not painted. It filters on `checkVisibility()` now. Recorded
+because the first result looked like a defect and was not one.
+
+## Owner-side share links (roadmap slice 12a)
+
+Verified 2026-08-08.
+
+The Sharing screen stopped claiming that link creation is unbuilt. It lists the
+owner's real links from the instance, creates them with a required passcode and
+expiry, and revokes or erases them. `off` (backend sync not configured) and
+`unavailable` (the instance is reachable and its portal is switched off) are
+distinct answers with different remedies, and the screen says which.
+
+**Desktop unit tests**: the duplicated passcode and lifetime limits are pinned
+against the server's; validation refuses a nameless link, a short passcode, a
+missing or over-long expiry, and a link that grants nothing, each with a
+sentence a person can act on; sharing reads as `off` rather than broken without
+sync; erasure requires the link id typed back and offers revocation instead;
+database words become plain ones (`active` → "Working now"); an unnamed link
+still renders.
+
+**Adapter tests**: a status outside the closed set is rejected; a link missing its identity is
+rejected; an unreadable grant flag reads as _withheld_ rather than granted; and a payload whose link
+list is missing is treated as no payload — defaulting it to empty would render "nothing is being
+shared" over an instance that is in fact sharing, which is the one direction this screen must never
+be wrong in.
+
+**Screen tests**: the stale claim and the example rows are gone; `off` and
+`unavailable` are distinguished; the disclosure renders above the create button
+(exposure gate item 7); a new link says plainly that it cannot be shown again;
+erasure needs the id and revocation does not; and the message grant is labelled
+"not delivered yet" because threads are P5-c.
+
+**Live round trip** against a real `zeitboardd` with the portal enabled —
+enrolling through `ConfigureBackendSync` rather than a hand-built config, so the
+exported methods take the path the app takes. Create, list, revoke and erase all
+round-trip, with the private label preserved, the grants preserved, and the
+state actually changing rather than the call merely returning 200.
+
+**Two defects only that run could find**, both invisible to either side's unit
+tests because each side asserted its own fixture:
+
+1. The desktop's shared HTTP client decodes with `DisallowUnknownFields`, and
+   the response structs omitted `schema_version`. **Every** create and list
+   failed as "invalid JSON response".
+2. The server's erase route revoked the link, cleared its audit and deleted its
+   private label — and left the profile row. An "erased" link stayed in the
+   owner's list, revoked and nameless, while the handler's own comment said it
+   erased the record that the link existed. `portal.Store.DeleteProfile` now
+   removes it; every dependent row cascades, because the schema had declared
+   `ON DELETE CASCADE` on that key all along. `TestSharingLifecycle` asserts it,
+   and was checked to fail before the fix.
+
+A third, smaller one came from the tests rather than the app: the first live
+test hand-built a sync config instead of enrolling, so `RevokeBackendShareLink`
+returned `off` without doing anything and the test blamed the server.
+
+## One-tap sleep logging (roadmap slice 15)
+
+Verified 2026-08-09 on Windows 11, commit at the tip of the slice branch.
+
+`core/quicklog` holds the decision and is tested on its own: the plausible pair
+records, and each implausible one returns its own question rather than a
+recorded night. Its bounds are not new numbers — `MinimumEpisode` is
+`core/estimation`'s floor and `MaximumEpisode` is `core/inference`'s ceiling, so
+a pair the estimator would reject can never enter the log through this path.
+
+Ten Go tests in `apps/desktop/app_quicklog_test.go` cover the bindings end to
+end against a real store, and all pass:
+
+- two taps produce one entry, and the first tap alone produces none — the
+  parked onset is an intent, and the append-only log gets nothing until the
+  episode has both ends;
+- waking with nothing marked asks instead of guessing;
+- 30 minutes, 18 hours, and 26 hours each return their own question and record
+  nothing, while the unfinished sleep survives the question so answering it does
+  not require remembering when you went to bed;
+- confirming records the times the person chose, and refuses a backwards pair;
+- a second sleep tap replaces the first;
+- discarding leaves nothing behind;
+- `DeleteAllSleepData` takes the unfinished sleep with it. Without this,
+  "delete all my sleep data" leaves a parked onset that writes a fresh row on
+  the next tap.
+
+Twenty-two frontend tests cover the adapter and the bar. The adapter's outcome
+set is closed and asserted closed: an outcome this build cannot render is
+rejected rather than shown as a success, because the gap between "recorded" and
+"needs an answer" is a night in the log or a night lost. Two UI-standards lint
+rules were added and each was checked to fail before it passed — one pins the
+taps to Home, one pins the prediction label, and the second was strengthened
+after the first version passed against a CSS class name instead of visible text.
+
+**One defect found in the browser preview, not by reasoning.** The confirm
+form's fields were uncontrolled. When one question replaced another React reused
+the same input element, so the field showed the previous question's time
+(`07:10`) while the `value` attribute carried the app's actual suggestion
+(`23:20`) — a time belonging to a different question, in front of someone about
+to record it as fact. The fields are controlled now. The regression test was
+first written around a discard-and-reopen sequence, which unmounts the form and
+therefore passed against the broken build; it was rewritten to replace one
+question with another while the form stays mounted, and then confirmed to fail
+against the uncontrolled version.
+
+A second, smaller one from the same session: the pending block and the transient
+notice both explained what to do next, so the same instruction appeared twice.
+The notice now renders only when there is no pending block to read.
+
+Checked in the preview at 1120px, 820px light, and 375px mobile: no overlap, no
+horizontal scroll, and the prediction label legible in every one.
+
+**What this does not establish.** A tap is a self-report, not an observation.
+This lowers the cost of recording a night; it does not make nights arrive
+without the user, and it does not move the release blocker on manual entry.
+
+## Configurable reaching hours (roadmap slice 16)
+
+Verified 2026-08-09 on Windows 11.
+
+The 48-72 hour view assumed Monday to Friday, 09:00 to 17:00, in the user's own
+zone. Everything below tests the schedules that assumption could not express.
+
+`core/outlook` gained four tests, each checked to fail against the previous
+implementation before it passed:
+
+- a service with equal open and close times covers the whole horizon, and loses none of the
+  confidently awake time to a gap;
+- an overnight schedule produces windows that cross midnight and are still eight hours long, rather
+  than being silently dropped — the old code skipped any window whose close was not after its open,
+  so a night desk produced _no_ way to reach anyone at all;
+- a window that opened last night and has not closed is reported, clamped to now. The day walk now
+  starts a civil day early for this; yesterday's ordinary daytime window still drops out because it
+  closed before now, and a separate test pins that;
+- no open days means no windows. This one was found by a desktop test rather than by reading the
+  code: `officeWindows` substituted its Monday-to-Friday default whenever `Days` was empty, so
+  switching reaching hours _off_ produced three reaching windows. A wholly unset `OfficeHours` still
+  takes the default, and a test pins that too, because that is how every caller who does not care
+  about reaching hours asks for the ordinary case.
+
+Ten Go tests cover the desktop bindings: the default schedule, a saved schedule
+arriving at the outlook, a disabled schedule producing no open days, four
+invalid schedules refused with distinguishable messages, the revision guard
+rejecting a stale edit without overwriting what is stored, the summary wording
+across five shapes, a foreign zone being named while the reader's own is not
+repeated at them, and a saved schedule surviving a restart with its revision
+intact.
+
+Twenty-two frontend tests cover the adapter and the panel, including that a missing `enabled` flag
+reads as _off_ — showing reaching windows nobody asked for is the failure being removed — and that a
+conflict is never reported as a save.
+
+Three UI-standards lint rules were added and each was checked to fail before it
+passed: neither `outlook.ts` nor `reachingHours.ts` may hard-code a working week,
+the panel must read and write the real stored schedule and must say the hours
+belong to the other party, and Settings must expose the panel.
+
+Checked in the browser preview against a stubbed bridge: the stored schedule
+loads into the form, an overnight pair explains itself rather than looking like
+a typo, saving reports what happened, and switching the section off makes the
+day checkboxes and presets genuinely inert (`:disabled` matches and a click
+changes nothing) rather than merely dimmed. No horizontal overflow and no
+overlapping blocks at 966px. Screenshots were not captured — the preview pane
+was not compositing frames in this session — so the visual checks above are
+measured from the DOM and computed styles rather than from an image.
+
+The durable settings-file machinery was extracted from the appearance file into
+a generic store and appearance was moved onto it. The existing appearance
+revision-conflict, persistence and backup-recovery test passes unchanged, which
+is what makes the extraction safe to claim.
+
+**What this does not establish.** One schedule, and the same hours on every selected day. Someone
+who must reach a clinic on Tuesday mornings _and_ an employer on weekday afternoons can express only
+one of them.
+
+## Local file protection (roadmap slice 17, ADR-0035)
+
+Verified 2026-08-10 on Windows 11.
+
+`privacy.md` said at-rest encryption was required locally as well as on the
+instance. The local half was never true, and the fallback it leaned on — file
+permissions restricted to the owner — was not true either on the only platform
+this app ships on. Measured before the fix, on a development machine, the real
+`%APPDATA%\ZeitBoard` directory granted access to five trustees including
+`SYSTEM` and `BUILTIN\Administrators`, with inheritance enabled. The `0o600`
+mode argument every private file was created with sets the read-only attribute
+on Windows and leaves the DACL alone.
+
+`core/platform/privatefile` now applies a protected, single-grant DACL (the file
+mode elsewhere) and exposes `Describe`, which reads the permission back. Every
+assertion below is against what the operating system reports, not against a nil
+error — a test that only checks `os.Chmod` succeeded is a test that passes while
+the file is exposed, which is how the previous claim survived.
+
+Seven package tests: an unrestricted file becomes owner-only and stops inheriting; the operation is
+idempotent and does not alter content; companions that do not exist are skipped without being
+created; a file written into a restricted directory afterwards is private by inheritance; describing
+an absent file fails rather than reporting protection. One test asserts `Describe` reports an
+_unprotected_ file as unprotected, so none of the others can pass vacuously.
+
+Two storage tests: opening the store leaves the database, the write-ahead log
+and the shared-memory file all owner-only and non-inheriting, with nothing in the
+test re-applying the restriction — what is under test is that opening was enough.
+Checked to fail before the fix, and the failure output is the concrete defect:
+`zeitboard.db is reachable by another account: entries=[... S-1-5-18
+S-1-5-32-544 ...] protected=false`. An in-memory store reports no permission
+failure for a file that does not exist.
+
+Seven desktop tests: the backend bearer token, the sync configuration, the
+settings files and an export are each owner-only, the token still reads back
+correctly afterwards, the store reports its own permission result, and the
+readout shown to the user never describes a restricted file as encrypted. The
+token and configuration tests were checked to fail with the restriction removed.
+
+Nine frontend tests on the adapter, including that a missing `ownerOnly` flag reads as _not_
+protected — an unknown permission is not a good one — and that the detail line always carries "not
+encrypted".
+
+**What this does not establish, and says so on the screen.** The local database
+is not encrypted. This protects against another account on the same computer and
+against a careless copy of the profile directory. It does not protect against a
+stolen disk read from another operating system, or against any program running
+as this user. ADR-0035 records why whole-database encryption is not shipped: the
+CGo-free driver offers no VFS or serialize hook, and SQLCipher requires CGO.
+
+## What this record does not measure
+
+Added 2026-08-04 after an applicability/utility/automaticity review
+([`automaticity-review-2026-08-04.md`](automaticity-review-2026-08-04.md)).
+
+Everything above establishes that the software does what it claims. None of it
+establishes that the user does less work or decides better, and the distinction
+matters for a product whose premise is reducing burden. Three gaps are recorded
+here so they are not mistaken for passing checks:
+
+- **Passive coverage is unmeasured.** Both halves of this note are now out of date in the sentence
+  and still true in substance: the desktop collector records real transitions (P7-3) and the Android
+  companion syncs (ADR-0032), but nothing measures what fraction of principal sleep episodes arrive
+  without the user typing them. The collector also only runs while ZeitBoard is running. Measuring
+  coverage needs a pilot over weeks, not a test run.
+- **Current-state freshness now has software checks.** ADR-0031 introduced the shared evidence
+  freshness policy; the September desktop recovery pass also verifies unavailable/stale read
+  handling and automatic refresh. These checks do not measure real-world stale-output incidents or
+  passive coverage.
+- **Confidence calibration is measured and unresolved.** ADR-0022 recorded the buckets inverted
+  (High 0.61 against Medium 0.81). The portal withholds the label on that evidence; the desktop
+  still renders it. That is a known, measured inconsistency, not an untested area.
+
+The pilot metric framework — passive coverage, boundary error, forecast utility
+by horizon, task and calendar utility, and resource cost — is defined in the
+review ledger. It belongs in a dated pilot report rather than in CI, because it
+measures a person's experience over weeks and cannot be asserted by a test run.
+Resource baselines should be captured **before** the collector and recompute
+orchestrator land, or their cost can only be guessed afterwards.
+
+## Environment limitations
+
+- Emulator semantics and screenshots were reviewed, but a full manual TalkBack
+  traversal with spoken-output verification was not performed. Periodic real
+  TalkBack and desktop screen-reader participant walkthroughs remain roadmap
+  work; automated roles and minimum target sizes do not substitute for them.
+- The installed Go toolchain has CGO disabled, so `go test -race` is unavailable.
+
+
+## Android automatic upload increment — 2026-09-08
+
+- 83 passing Android unit tests cover pending/offline source revision chains, nanosecond precision,
+  failed/canonical re-enrollment, bounded batches/retries, cancellation, permissions and sample-mode
+  gates, JSON/acknowledgment/redirect/response limits, failed preference durability and the shared
+  Go/Kotlin wire fixture.
+- Android `check` and `assembleDebug` pass. A disposable Android 16 / API 36.1 emulator passed all
+  eight instrumentation tests, including schema 1→4 and 3→4 migration, SQLite reopen/revision
+  preservation, interrupted server-switch generation recovery, and native HTTP
+  enrollment/upload/provider revision/ restart against a disposable Go API through loopback
+  `adb reverse`.
+- The installed enrollment and connected Settings screens were inspected at 1080×2400. The secret is
+  masked and clears after confirmed enrollment; the screen distinguishes connected-with-no-upload,
+  queued/held counts, background consent and unavailable estimate/task downloads. Sample mode
+  remains labeled.
+- Go core/desktop/server tests and vet pass; added core tests preserve provider provenance and
+  refuse unresolved source/user correction conflicts. Affected API/store tests verify that a later
+  correction cannot retain erased timestamps.
+- The generated shared Android wire fixture validates under the correction and sync schemas and
+  replays as one observed sleep episode. Contract generation, tools tests/vet and schema validation
+  cover 30 deterministic fixture files.
+
+Local logs: `.tools/completion-android-final.log`, `.tools/completion-android-final-check.log`,
+`.tools/completion-go.log`, `.tools/completion-go-sync.log`, `.tools/completion-erasure.log`,
+`.tools/completion-go-vet.log`, `.tools/completion-contracts.log`; visual evidence:
+`.tools/completion-settings.png`. All use synthetic/disposable data.
+
+This does not verify production certificate installation, a wearable's ongoing delivery, OEM
+background/battery behavior, Android pull/remote erasure, cached estimates or task downloads, a
+real-device pilot or independent portal review. Those remained open after that increment; the
+companion increment below adds software evidence for pull/erasure, cached estimates and tasks.
+
+## Android companion increment — 2026-09-08
+
+- 88 Android unit tests pass, including strict v2 forecast/refusal parsing, bounded expiry,
+  synthetic provenance, typed UTC/DST instants, task constraints, cursor validation and all
+  preceding upload/permission/durability checks.
+- Android `check`, `assembleDebug` and `assembleDebugAndroidTest` pass. Native SQLite/HTTP
+  instrumentation runs explicitly on disposable `emulator-5580`, Android 16 / API 36.1, against a
+  loopback Go API with synthetic records. The 16 tests cover schema 1→5 and 3→5, source revision
+  nanoseconds, reopened task revisions, atomic invalid-page rollback, remote erasure, suppression
+  across Health Connect re-import/re-enrollment, conflicting equal provider revisions,
+  restored-server replay, and correct handling of task-shaped observation IDs. Actual HTTP
+  enrollment/push/pull returns a Go estimate and task revisions; erasure removes the downloaded task
+  and affected local Health Connect rows.
+- Go core/server/desktop tests and vet pass. Added coverage checks private companion auth, typed
+  refusal/windows/cache expiry, effective erasure, correction-target backfill on older encrypted
+  databases, and preservation of a provider endpoint beneath a manual overlay. All 32 generated
+  contract fixtures, tools tests/vet and schema validation pass.
+- Native Settings, Status and Tasks were inspected at 1080×2400 using a separate empty loopback
+  server seeded only with explicitly synthetic observations and a synthetic task. Enrollment
+  switches to My data; the phone downloads without Health Connect permission. Status visibly marks
+  server sample forecasts, confidence, snapshot age and zones. Tasks shows duration, revision,
+  civil-time constraints and the desktop editing handoff. The visual pass removed an empty
+  local-sleep panel when synced sleep is already available. With the disposable server stopped, a
+  manual sync retained the downloaded task and original download timestamp and showed a retryable
+  connection error. The cached forecast also survived force-stop and relaunch while the server was
+  offline.
+
+The initial native run caught a `secure_delete` pragma call that Android rejected through `execSQL`;
+the query-based fix passes actual SQLite instrumentation. Local logs:
+`.tools/companion-android-final.log`, `.tools/companion-instrumentation.log`,
+`.tools/companion-go-final.log`, `.tools/companion-contracts.log`; screenshots:
+`.tools/companion-status.png`, `.tools/companion-tasks.png`, `.tools/companion-settings.png`.
+Offline evidence: `.tools/companion-offline.png` and `.tools/companion-restart.xml`.
+
+These checks do not qualify Android-authored manual
+correction/medication sync, wearable/OEM delivery, production TLS, private pilot outcomes,
+clean-machine release behavior or independent portal exposure review. C1–C8 remain open as specified
+in `completion-plan.md`.
+
+## Pre-release simplification — 2026-09-08
+
+Owner clarification removes prototype backward compatibility from acceptance;
+there are no packaged releases or deployed consumers. ADR-0039 records the current
+contract/storage policy. Historical migration results above remain a work log,
+not a supported-version matrix.
+
+- Go core/server/desktop suites pass. Desktop acknowledgment tests retain pending
+  records on wrong versions, missing fields, negative cursors and trailing JSON.
+  Sleep and task batching now run through one shared loop. Current erasure tests
+  still verify deletion of dependent corrections and rejection of later revisions.
+- Android `check` and debug app/test APK builds pass with 88 unit tests. All 15
+  native Android 16 instrumentation tests pass against a disposable Go API. Fresh
+  schema completeness and non-destructive refusal of an obsolete development
+  database replace old migration fixtures. Current reopen, source revisions,
+  enrollment generations, remote erasure, tasks and restored-server replay remain.
+- All 29 maintained contract fixtures validate. Removed the three unused v1
+  medication fixtures and the unreleased duplicate sync/export contract work;
+  provenance and current medication consent/zone fields remain tested.
+- Desktop/web formatting, type checking, lint and production builds pass; all
+  403 web tests pass (397 desktop and six trusted-prototype tests). Lint retains
+  three existing Fast Refresh export warnings and has no errors.
+
+Evidence: `.tools/streamline-go.log`, `.tools/streamline-go-vet.log`,
+`.tools/streamline-android.log`, `.tools/streamline-instrumentation.log`,
+`.tools/streamline-contracts.log`, `.tools/streamline-desktop.log`.
+
+## Connected correction review — 2026-09-08
+
+ADR-0040 adds reviewed source revision / concurrent manual heads to the single
+current correction contract, the private server review endpoint and Android and
+desktop resolution flows. The following checks passed with synthetic data:
+
+- Go core, desktop and server tests; `go vet` across all three modules. Regression
+  tests cover stale forms, concurrent heads, later-save/older-source refusal,
+  reviewed resolution, immutable evidence, erasure, DST repetition and nanoseconds.
+- Root desktop check: lint (three existing Fast Refresh warnings), UI standards,
+  typecheck, 397 desktop + 6 trusted-web tests, and both frontend production builds.
+- Contract generator/check: 30 maintained fixtures, including the private v1
+  sleep-review fixture consumed by Android; all versioned schemas validate.
+- Android check / debug APK / instrumentation APK: 92 unit tests, lint and builds.
+- Disposable Android 16 emulator: 16 instrumentation tests pass against the actual
+  disposable Go HTTP API. The new path saves a manual correction, reopens SQLite
+  with its queue intact, synchronizes full-precision endpoints/classification/
+  exclusion, rejects a stale review, resolves two manual heads and clears open and
+  durable review context on erasure.
+- Native visual interaction: enrolled a disposable server, selected a downloaded
+  source and saved a correction through the actual form. The check found and fixed
+  misleading stale-review text after the phone's own successful save. The Android
+  layout retains reachable controls and the five primary destinations.
+
+Logs: `.tools/manual-review-{go,go-vet,desktop,contracts,android,instrumentation}.log`.
+The screenshot `.tools/manual-review-screen.png` contains synthetic data only.
+No real wearable/OEM battery, production TLS, private pilot, independent portal
+review or signing qualification is claimed. Local-only correction handoff on later
+enrollment and desktop lifecycle checks remain the next C1 work.
+
+## Pre-enrollment correction handoff — 2026-09-08
+
+- Android `check assembleDebug assembleDebugAndroidTest` passes: 92 JVM tests,
+  lint and both APKs. No Go or web runtime code changed in this increment.
+- 21 disposable Android 16 instrumentation tests pass against the actual Go API.
+  Added coverage includes pre-enrollment save/reopen, source aging out of the
+  provider snapshot, unseen newer source/manual edits, explicit resolution,
+  stable parent references and exact instants, clock regression, held-page progress,
+  home-zone reconsideration, missing-source restoration, erasure and fixture exclusion.
+- The test harness erases each case's remote records. An old synthetic observation
+  previously made a later forecast fixture correctly refuse an ambiguous cycle gap;
+  this was a fixture-isolation failure, not grounds to relax the estimator gate.
+- Logs: `.tools/local-handoff-android.log` and
+  `.tools/local-handoff-instrumentation.log`. No real-device, pilot, production TLS
+  or package/signing evidence is inferred from these checks.
+- Read-only desktop audit found that the app's activity sink remains memory-only
+  and collection starts without a saved consent setting. Durable, permission-gated
+  background integration must precede its lifecycle acceptance (completion plan C1).
+
+
+## Desktop consent and background sync — 2026-09-08
+
+ADR-0042 closes the memory-only/unconditional-collection finding above.
+
+- All Go core, desktop and server tests plus `go vet` pass. New tests exercise
+  default-off sampling, persisted grant/revocation, restart with repeated clock
+  values, final shutdown, atomic transition batches, source-scoped export/erasure,
+  task revision reopen and refusal of unsupported development columns without
+  backfills. Poll gaps retain inferred provenance and unknown confidence.
+- Focused Go race checks for collection and background lifecycle pass. Actual
+  disposable TLS HTTP tests cover a failed exchange retaining its outbox, automatic
+  retry without a mounted view, restart without re-upload, cancellation on disable,
+  stale-error rejection and refusal to forward enrollment secrets on redirects.
+- Desktop web checks pass: formatting, lint/UI standards, types, 400 desktop and
+  six trusted-web tests, and both production builds. Three existing Fast Refresh
+  warnings remain. New settings tests cover explicit consent, confirmed erasure,
+  stopped/error retry and absent/malformed bridge recovery.
+- A local browser preview was inspected for activity settings layout, reachable
+  named controls and honest service-unavailable state. It used synthetic preview
+  data; collection was not enabled on the owner's desktop profile.
+- The Windows Wails production build passes using an isolated
+  `ZEITBOARD_DATA_DIR` for binding generation. This is a build check, not a
+  published installer or native suspend/resume qualification.
+
+Logs: `.tools/desktop-activity-go.log`, `.tools/desktop-activity-vet.log` and
+`.tools/desktop-activity-build.log`. Configured login startup, background estimate
+refresh, desktop restore reconciliation and native lifecycle qualification remain
+open under C1; the full completion goal remains active.
+
+
+## Desktop login and recoverable windows — 2026-09-08
+
+ADR-0043 adds explicit login/start-to-tray controls and distinguishes normal
+window close from explicit quit. No owner startup registration was enabled.
+
+- Desktop Go tests and vet pass. Tests cover either DOM/tray initialization order,
+  hidden-launch fallback, lost tray, explicit quit, a pending manual second launch,
+  profile identity, unchanged activity/sync consent and failed startup writes.
+- Focused race checks pass for the new lifecycle, Windows tray and autostart
+  packages. A disposable non-Run registry key verifies quoted commands, hidden
+  and visible modes, moved-executable detection and source-scoped removal. The
+  tray test dispatches synthetic Explorer restart messages through the real
+  adapter handler with an injected icon publisher; it does not restart Explorer.
+- All 45 installer tests pass. The installer now passes the app's current
+  `--background` flag and recognizes both supported modes during removal.
+- Web checks pass: 403 desktop plus six trusted-web tests, formatting,
+  lint/UI standards, type checks and both production builds. Three pre-existing
+  Fast Refresh warnings remain. The new component tests cover explicit save,
+  unavailable-service recovery and quitting without a tray.
+- Browser preview verifies the layout and named startup controls; oversized
+  checkboxes found visually were corrected without shrinking the clickable rows.
+- Windows Wails production build passes with an isolated data directory during
+  binding generation. No real login/suspend/resume or clean-machine installer
+  qualification is inferred from a successful build.
+
+Evidence: `.tools/desktop-startup-{go,vet,race,web,installer,build}.log`.
+Background estimate projection refresh and desktop enrollment/restore remain
+software work. Native lifecycle, pilot and C1–C8 operational gates remain open.
+
+## Desktop background analysis — 2026-09-08
+
+ADR-0044 connects actual desktop readers to the expiring, evidence-guarded
+background snapshot. The server and desktop share `core/recompute.Worker`.
+
+- All Go core, desktop and server tests and vet pass. New coverage includes
+  background expiry without a mounted view, reuse without a foreground estimator
+  call, reopen, unchanged content-change time, correction invalidation, clock
+  regression, erasure during computation, corrupt derived data and bounded,
+  sanitized journal recovery after restart.
+- Race suites pass for `core/recompute`, desktop SQLite, desktop services,
+  server analysis and the daemon. Tests verify that journal recovery cannot
+  interrupt an active foreground publication, close cancels and joins readers,
+  duplicate start returns the active completion signal, and synchronous refresh
+  moves a sleeping worker's deadline forward. Expiry preempts burst throttling;
+  heartbeat cannot bypass failed-refresh backoff.
+- Canonical web checks pass: formatting, lint/UI standards, types, 405 desktop
+  and six trusted-web tests, and both production builds. Three existing Fast
+  Refresh warnings remain. The new native-event bridge tests cover dispatch to
+  existing evidence listeners, disposal and browser-preview absence of Wails.
+- Windows Wails production build passes with an isolated `ZEITBOARD_DATA_DIR`
+  during binding generation. Android, public contracts and installer code are
+  unchanged in this increment; their prior recorded qualification remains.
+
+Evidence: `.tools/desktop-analysis-{go,vet,race,web,build}.log`. The full goal
+remains active. Desktop enrollment/restore reconciliation is the next C1 software
+step; native login/suspend/resume, supported hardware, the private pilot and
+independent portal/release qualification are not established by these tests.
+
+## Desktop enrollment and restore reconciliation — 2026-09-21
+
+ADR-0045 replaces separate desktop config/token publication with atomic SQLite
+enrollment and adds durable reconciliation, suppression and deferred corrections.
+
+- All Go core, desktop and server tests and vet pass. Storage regressions cover
+  failed enrollment commit/reopen, stale status after disable, incomplete versus
+  complete download reconciliation, corrections across pages, erased-source
+  suppression, deletion before upload acknowledgment and preservation of unsent
+  task edits. The API rejects a cursor ahead of restored history.
+- Race suites pass for desktop SQLite, desktop services, server store and API.
+  Stateful TLS tests verify a failed switch retaining the old credential/cursor,
+  successful switching and returning to an earlier server, rollback detected
+  before upload, replay of missing accepted records, suppression after a later
+  server restore, and a 501-record download including this device's envelopes.
+- `TestDesktopSyncAgainstDisposableDaemon` passes against the actual Go daemon
+  over loopback TLS with an isolated server directory and synthetic records. A
+  second local profile restores data using the same credential, exchanges a
+  correction, receives erasure and stays erased after re-enrollment. The test
+  cleans remote payloads; the qualification daemon was stopped after the run.
+  Routine suites skip this opt-in test unless its disposable-server variables
+  are configured.
+- Canonical web checks pass: formatting, lint/UI standards, type checks, 405
+  desktop plus six trusted-web tests, and both production builds. Three existing
+  Fast Refresh warnings remain. Settings shows pending deletion and missing-source
+  counts and explains failed switches, re-enrollment and server-change scope.
+- Android check/lint passes with 93 JVM tests. The new test verifies that a pull
+  HTTP 409 maps to the existing restore/re-enrollment instruction, rather than an
+  upload conflict. The debug APK builds successfully. The earlier 21 native
+  instrumentation cases were not rerun for this error-mapping change.
+- Windows Wails production build passes with an isolated `ZEITBOARD_DATA_DIR`
+  during binding generation. A missing initial value for the new frontend status
+  fields was corrected after the first build caught it; final web/build checks
+  pass. No owner profile or startup registration was modified.
+
+Evidence: `.tools/desktop-reconcile-{go,vet,race,http,live,web,build,android,android-build}.log`.
+Native login/hide/suspend/resume/quit and resource/pilot measurements remain open.
+Task conflict resolution needs C2's reviewed editing flow; this increment proves
+preservation/refusal, not that the conflict UI is finished. The full C1–C8 goal
+remains active.
+
+
+## Unified review queue and exact request times — 2026-09-21
+
+ADR-0046 connects queue counts and request decisions across Home, Plan, Calendar and
+Approvals. Full Go core/desktop/server tests and vet passed; worker, SQLite, desktop,
+server store and API race suites passed. Canonical web formatting, lint, types,
+**410 tests (404 desktop + 6 trusted prototype)** and production builds passed. The
+count replaces 12 obsolete route-alias tests with current queue/time regression
+coverage; three existing Fast Refresh lint warnings remain. Windows Wails production
+build passed with an isolated profile.
+
+Focused evidence includes:
+
+- Storage and authenticated TLS API pages with older visitor requests behind 105
+  assistant proposals, authoritative totals, consumed/expired nonces and scope-bound
+  cursors. Subsecond checks align queue expiry and token rejection at the boundary.
+- Desktop TLS decoding of the real visitor response fields, always-present terminal
+  pagination, exact repeated-hour UTC submission, and a confirmed POST followed by a
+  failing GET without losing the decision acknowledgment.
+- Shared provider tests for mixed totals beyond loaded pages, transient errors,
+  disable, request drafts across remounts, synchronous double-click refusal,
+  non-advancing cursors, expiry wakes, and initial StrictMode remount recovery.
+- Civil-time tests for New York gaps/folds, Lord Howe half-hour transitions, invalid
+  dates and explicitly selected instants. Planning-anchor reads leave the live
+  analysis cache, worker deadline and journal unchanged.
+- Browser inspection of the actual React screens with disposable synthetic bridge
+  fixtures: approval count and history/undo, distinct source filters, full-width
+  request controls and disclosure, explicit UTC offsets, a selected repeated-hour
+  occurrence surviving the switch to Calendar, and approval reducing the shared
+  count. The temporary fixture and local preview server were removed/stopped.
+
+Logs: `.tools/approval-queue-{web,go,vet,race,build,focused-go,focused-web,api}.log`;
+final expiry checks are in `approval-queue-go-expiry.log` and
+`approval-queue-race-expiry.log`. These are local verification artifacts. No actual
+external CalDAV write-back, production visitor exchange, native lifecycle, wearable
+pilot or release qualification is claimed. C2 and the overall completion goal remain
+open as described in the completion plan.
+
+
+## UI streamlining pass — 2026-09-24
+
+The design record is `ui-refactor-plan.md` §13. Full Go core, desktop, server and
+contracts checks passed, as did canonical web formatting, lint, types, **435 tests
+(429 desktop + 6 trusted prototype)**, the production web builds, and
+`lint-ui-standards.mjs`. The three existing Fast Refresh lint warnings remain.
+
+Verified in the real app (`wails dev` against a disposable synthetic profile,
+driven from a browser):
+
+- **Plan › Tasks.** Adding a task placed its suggestion under "Needs your decision",
+  and the Plan badge and queue count rose together. Accepting it showed the undo
+  toast, removed it from the queue, and put "Tonight 5:30 – 5:50 PM" on the task
+  row. Undo from history returned the suggestion and cleared the row.
+- **Plan › Calendar.** The board spans the page; the rhythm reads asleep, uncertain
+  and awake like Home's outlook. Today shows the waking stretch under way from a
+  now line to the night's onset band.
+- **Data Sources.** Calendars are listed with kind and range; the placements
+  calendar reads "Times you accept in Plan". "Add a calendar" opens the import card.
+- **Log.** Sleep: quick buttons, the folded past-night form, one line per night,
+  and the edit form and delete confirmation laid out without overflow.
+  Medications: one tap recorded "taken" now, the history count rose, and the row
+  read "last taken today 4:15 PM". Context: markers first, the form folded.
+- **Rhythm, Sharing, Settings.** No page-level Refresh or explanatory banner;
+  Settings tabs open by address (`#/settings/sync`, `#/settings/computer`); the
+  sync status list no longer wraps a letter at a time.
+- **Home at 3 AM** inside a predicted sleep: "Likely waking · Today 7:15 – 10:10 AM"
+  replaced a "Next sleep" panel that showed only a waking window.
+
+New regression tests, each checked to fail before its fix: accepted time on a
+task (Go and web), today's waking stretch on the calendar, the placements
+calendar's range, three-state calendar bands, the task list following a decision,
+one-tap dose recording, the in-sleep waking panel, and the restored legacy
+routes.
+
+Not verified here: the Android companion, a Windows production build of this
+branch, and a full screen-reader pass of the new layouts. Operational
 qualification is unchanged.
 
 ## Almanac redesign — 2026-09-25
