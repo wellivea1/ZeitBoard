@@ -477,3 +477,21 @@ Using the app found and fixed four defects outside the UI layer:
 **Next C7 work:** first-run setup to a real source, the clinical chart, export
 and template requirements, keyboard and nonvisual equivalents for the new
 layouts, and compact Android layouts.
+
+### C7 almanac redesign — 2026-09-25
+
+The visual layer was replaced rather than adjusted (`ui-refactor-plan.md` §14).
+There is one paper-and-ink design system with a serif for reading and no cards,
+pills or side stripes, laid out three ways:
+
+- the desktop Home as an almanac page led by a sentence;
+- Plan › Week as a calendar-native board for arranging a plan;
+- the Android home screen as a 24-hour dial.
+
+The UI lint now enforces the no-stripe, no-pill rules. Home's diary reads the
+calendar, so events stay listed while the forecast is withheld. The Week board
+says when it draws a stale estimate.
+
+**Next C7 work:** unchanged from the streamlining increment. The Android
+companion also needs accepted times in its contract before the dial can show
+plans.
