@@ -294,9 +294,11 @@ if (!masthead.includes('className="assistant-toggle"')) {
 // a rule across the page and the word itself do the same work. Hairlines of
 // 1px (dividers, ticks, a now line) are allowed; anything heavier on one side
 // is a stripe.
-const stripe =
-  /border-(?:left|right|inline-start|inline-end)(?:-width)?\s*:\s*(?:\d*\.)?\d+px/;
-for (const path of [join(frontend, "styles.css"), ...filesUnder(join(frontend, "styles"), ".css")]) {
+const stripe = /border-(?:left|right|inline-start|inline-end)(?:-width)?\s*:\s*(?:\d*\.)?\d+px/;
+for (const path of [
+  join(frontend, "styles.css"),
+  ...filesUnder(join(frontend, "styles"), ".css"),
+]) {
   const source = readFileSync(path, "utf8").replace(/\/\*[\s\S]*?\*\//g, (comment) =>
     comment.replace(/[^\n]/g, " "),
   );
@@ -318,9 +320,8 @@ for (const path of [join(frontend, "styles.css"), ...filesUnder(join(frontend, "
   for (const rule of source.matchAll(/([^{}]*::?(?:before|after)[^{}]*)\{([^}]*)\}/g)) {
     const body = rule[2];
     const narrow = body.match(/(?:^|[\s;])width:\s*((?:\d*\.)?\d+)px/);
-    const tall = /inset:\s*0 auto 0 0|inset-block:\s*0|top:\s*0;[\s\S]*bottom:\s*0|height:\s*100%/.test(
-      body,
-    );
+    const tall =
+      /inset:\s*0 auto 0 0|inset-block:\s*0|top:\s*0;[\s\S]*bottom:\s*0|height:\s*100%/.test(body);
     if (narrow && Number.parseFloat(narrow[1]) > 1.5 && Number.parseFloat(narrow[1]) <= 8 && tall) {
       fail(path, `${rule[1].trim()} paints a side stripe.`);
     }

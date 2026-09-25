@@ -1,8 +1,6 @@
 .sharing-workspace {
   display: grid;
   grid-template-columns: minmax(0, 1.65fr) minmax(260px, 0.75fr);
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
 }
 
 .sharing-state {
@@ -12,7 +10,7 @@
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: var(--space-6);
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--divider);
 }
 
 .sharing-state-copy {
@@ -27,22 +25,25 @@
   width: 20px;
   height: 20px;
   margin-top: var(--space-1);
-  color: var(--confidence-high-text);
+  color: var(--ink);
 }
 
 .sharing-state h2,
 .sharing-section-heading h2,
 .sharing-guardrails h2 {
   margin: 0;
-  font-size: var(--type-data);
-  letter-spacing: -0.02em;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
 }
 
 .sharing-state-copy p {
-  max-width: 720px;
+  max-width: 70ch;
   margin: var(--space-1) 0 0;
   color: var(--muted);
-  font-size: var(--type-body);
+  font-family: var(--font-serif);
+  font-size: 16px;
   line-height: 1.5;
 }
 
@@ -59,23 +60,24 @@
 
 .sharing-state-facts dt {
   color: var(--muted);
-  font-size: var(--type-label);
-  font-weight: 750;
+  font-size: var(--type-micro);
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.1em;
 }
 
 .sharing-state-facts dd {
   margin: var(--space-1) 0 0;
   color: var(--ink);
-  font-size: var(--type-body-strong);
-  font-weight: 750;
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-variant-numeric: lining-nums tabular-nums;
 }
 
 .sharing-template-section {
   min-width: 0;
   padding: var(--space-5) var(--space-6) var(--space-5) 0;
-  border-right: 1px solid var(--line);
+  border-right: 1px solid var(--divider);
 }
 
 .sharing-section-heading {
@@ -89,7 +91,9 @@
 .sharing-section-heading > p {
   margin: 0;
   color: var(--muted);
-  font-size: var(--type-label);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-style: italic;
   line-height: 1.45;
   text-align: right;
 }
@@ -107,7 +111,9 @@
 
 .sharing-guardrails summary h2 {
   display: inline;
-  font-size: var(--type-body-strong);
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 500;
   letter-spacing: 0;
   line-height: 1.4;
 }
@@ -132,37 +138,43 @@
   min-height: 48px;
   padding: var(--space-3) 0;
   display: grid;
-  grid-template-columns: 24px minmax(0, 1fr);
+  grid-template-columns: 28px minmax(0, 1fr);
   align-items: start;
   gap: var(--space-2);
   color: var(--muted);
   border-top: 1px solid var(--divider);
   counter-increment: guardrail;
-  font-size: var(--type-body);
+  font-family: var(--font-serif);
+  font-size: 15.5px;
   line-height: 1.45;
 }
 
 .sharing-guardrails li::before {
   content: counter(guardrail, decimal-leading-zero);
-  color: var(--subtle);
-  font-size: var(--type-label);
-  font-weight: 800;
+  color: var(--accent);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-style: italic;
 }
 
 .sharing-private-boundary {
   margin-top: auto;
-  padding: var(--space-3) 0 var(--space-3) var(--space-4);
+  padding: var(--space-3) 0;
   display: grid;
   gap: var(--space-1);
   color: var(--muted);
-  border-left: 2px solid var(--state-uncertain);
-  font-size: var(--type-label);
+  border-block: 1px solid var(--divider);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-style: italic;
   line-height: 1.5;
 }
 
 .sharing-private-boundary strong {
   color: var(--ink);
-  font-size: var(--type-body-strong);
+  font-size: 16px;
+  font-style: normal;
+  font-weight: 500;
 }
 
 @media (max-width: 1100px) {
@@ -177,7 +189,7 @@
 
   .sharing-guardrails {
     padding-left: 0;
-    border-top: 1px solid var(--line);
+    border-top: 1px solid var(--divider);
   }
 }
 
@@ -220,7 +232,9 @@
 .sharing-empty {
   margin: var(--space-4) 0 0;
   color: var(--muted);
-  font-size: var(--type-body);
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-style: italic;
 }
 
 .sharing-link-list {
@@ -253,24 +267,23 @@
 }
 
 .sharing-link-state {
-  padding: 0 var(--space-2);
   color: var(--muted);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
-  font-size: var(--type-label);
+  font-size: var(--type-micro);
   font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .sharing-link-state[data-state="active"] {
-  color: var(--state-awake);
-  border-color: var(--state-awake);
+  color: var(--ink);
 }
 
 .sharing-link-grants,
 .sharing-link-dates {
   margin: var(--space-1) 0 0;
   color: var(--muted);
-  font-size: var(--type-body);
+  font-family: var(--font-serif);
+  font-size: 15px;
 }
 
 .sharing-link-dates {
@@ -297,11 +310,10 @@
 
 .sharing-link-erase {
   margin-top: var(--space-3);
-  padding: var(--space-3);
+  padding: var(--space-3) 0;
   display: grid;
   gap: var(--space-2);
-  background: var(--panel-alt);
-  border-radius: var(--radius-card);
+  border-block: 1px solid var(--danger-border);
 }
 
 .sharing-link-erase p {
@@ -318,16 +330,18 @@
 
 .sharing-create {
   margin-top: var(--space-5);
-  padding-top: var(--space-5);
+  padding-top: var(--space-4);
   display: grid;
   gap: var(--space-3);
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--ink);
 }
 
 .sharing-create h3,
 .sharing-created h3 {
   margin: 0;
-  font-size: var(--type-body-strong);
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 500;
 }
 
 .sharing-create label {
@@ -341,12 +355,11 @@
    to create a link without having seen what it reveals. */
 .sharing-disclosure {
   margin: 0;
-  padding: var(--space-3);
+  padding: var(--space-3) 0;
   color: var(--ink);
-  background: var(--panel-alt);
-  border-left: 2px solid var(--state-uncertain);
-  border-radius: var(--radius-control);
-  font-size: var(--type-body);
+  border-block: 1px solid var(--divider);
+  font-family: var(--font-serif);
+  font-size: 16px;
   line-height: 1.5;
 }
 
@@ -360,10 +373,10 @@
 
 .sharing-grants legend {
   padding: 0;
-  color: var(--subtle);
-  font-size: var(--type-label);
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-size: var(--type-micro);
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
@@ -381,17 +394,17 @@
 
 .sharing-created {
   margin-top: var(--space-5);
-  padding: var(--space-4);
+  padding: var(--space-4) 0;
   display: grid;
   gap: var(--space-2);
-  background: var(--panel-alt);
-  border-radius: var(--radius-card);
+  border-block: 1px solid var(--ink);
 }
 
 .sharing-created p {
   margin: 0;
   color: var(--muted);
-  font-size: var(--type-body);
+  font-family: var(--font-serif);
+  font-size: 15.5px;
 }
 
 .sharing-created-url {
@@ -399,7 +412,6 @@
   color: var(--ink);
   background: var(--paper);
   border: 1px solid var(--line);
-  border-radius: var(--radius-control);
   font-family: ui-monospace, SFMono-Regular, monospace;
   font-size: var(--type-body);
   overflow-wrap: anywhere;

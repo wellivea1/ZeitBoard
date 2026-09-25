@@ -1,21 +1,16 @@
 .settings-stack {
   gap: 0;
-  overflow: hidden;
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-card);
 }
 
 /* One column: the heading and its sentence, then the controls at full width.
    Beside a label column the controls were squeezed until status values
    wrapped a letter at a time; each tab holds few enough sections to stack. */
 .settings-section {
-  padding: var(--space-6);
+  padding: 0 0 28px;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-items: start;
-  gap: var(--space-4);
-  border-bottom: 1px solid var(--divider);
+  gap: var(--space-3);
 }
 
 .settings-section .settings-copy {
@@ -27,7 +22,14 @@
 }
 
 .settings-section h2 {
-  font-size: var(--type-data);
+  margin: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--ink);
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 /* Detail that matters for trust but not on every visit folds away. */
@@ -36,10 +38,10 @@
 }
 
 .settings-more > summary {
-  color: var(--sage-dark);
+  color: var(--ink);
   cursor: pointer;
   font-size: var(--type-label);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .settings-more[open] > summary {
@@ -80,9 +82,9 @@
 .appearance-picker legend {
   margin-bottom: var(--space-3);
   color: var(--muted);
-  font-size: var(--type-label);
-  font-weight: 800;
-  letter-spacing: 0.06em;
+  font-size: var(--type-micro);
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
@@ -104,9 +106,7 @@
   display: grid;
   gap: var(--space-2);
   color: var(--muted);
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-control);
+  border: 1px solid var(--divider);
   cursor: pointer;
 }
 
@@ -151,38 +151,36 @@
 }
 
 .appearance-option:has(input:focus-visible) {
-  outline: 3px solid var(--state-uncertain);
+  outline: 2px solid var(--sage);
   outline-offset: 2px;
 }
 
 .appearance-option[data-selected="true"] {
   color: var(--ink);
-  border-color: var(--state-awake);
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
 }
 
 .appearance-option[data-selected="true"]::after {
-  content: "Selected";
+  content: "Chosen";
   position: absolute;
   top: var(--space-3);
   right: var(--space-3);
-  padding: 2px var(--space-2);
-  color: var(--button-primary-text);
-  background: var(--button-primary-bg);
-  border-radius: var(--radius-control);
-  font-size: var(--type-micro);
-  font-weight: 850;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
+  padding: 0 4px;
+  color: var(--preview-action);
+  background: var(--preview-bg);
+  font-family: var(--font-serif);
+  font-size: 13px;
+  font-style: italic;
 }
 
 .appearance-preview {
   height: 58px;
   display: grid;
-  grid-template-columns: 24% minmax(0, 1fr);
+  grid-template-rows: 13px minmax(0, 1fr);
   overflow: hidden;
   background: var(--preview-bg);
   border: 1px solid var(--preview-ink);
-  border-radius: var(--radius-control);
 }
 
 .appearance-option[data-preset="auto"] .appearance-preview {
@@ -194,20 +192,20 @@
 }
 
 .appearance-preview-rail {
-  background: var(--preview-rail);
-  border-right: 1px solid var(--preview-ink);
+  background: var(--preview-bg);
+  border-bottom: 1px solid var(--preview-ink);
 }
 
 .appearance-option[data-preset="auto"] .appearance-preview-rail {
   background: linear-gradient(
-    to bottom,
-    var(--preview-paper-rail) 0 50%,
-    var(--preview-dark-rail) 50% 100%
+    to right,
+    var(--preview-paper-bg) 0 50%,
+    var(--preview-dark-bg) 50% 100%
   );
 }
 
 .appearance-preview-content {
-  padding: var(--space-3);
+  padding: var(--space-2) var(--space-3);
   display: grid;
   align-content: center;
   gap: var(--space-1);
@@ -217,7 +215,6 @@
   height: 4px;
   display: block;
   background: var(--preview-ink);
-  border-radius: var(--radius-control);
 }
 
 .appearance-preview-content b:nth-child(2) {
@@ -238,7 +235,9 @@
 
 .appearance-option-copy strong {
   color: var(--ink);
-  font-size: var(--type-body);
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-weight: 500;
 }
 
 .appearance-option-copy small {
@@ -269,13 +268,13 @@
 }
 
 .data-control-card {
-  border-radius: var(--radius-card);
+  border-radius: 0;
 }
 
 .data-control-card input,
 .export-preview,
 .settings-section select {
-  border-radius: var(--radius-control);
+  border-radius: 0;
 }
 
 .export-summary {
@@ -333,10 +332,6 @@
 }
 
 @media (max-width: 520px) {
-  .settings-section {
-    padding: var(--space-5);
-  }
-
   .appearance-options {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-2);
@@ -459,19 +454,21 @@
 }
 
 .reaching-presets .button[aria-pressed="true"] {
-  border-color: var(--accent);
-  color: var(--accent);
+  color: var(--button-primary-text);
+  background: var(--button-primary-bg);
+  border-color: var(--button-primary-bg);
 }
 
 /* The summary is the sentence the outlook prints, shown here so the effect of
    an edit is visible before leaving the screen. */
 .reaching-summary {
   margin: 0;
-  padding: var(--space-3) var(--space-4);
-  background: var(--panel-alt);
-  border-left: 2px solid var(--accent);
-  border-radius: var(--radius-card);
+  padding: 10px 0;
   color: var(--ink);
+  border-block: 1px solid var(--divider);
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-style: italic;
 }
 
 .reaching-actions {
@@ -506,12 +503,17 @@
 .storage-protection-list li {
   display: grid;
   gap: 2px;
-  padding-left: var(--space-3);
-  border-left: 2px solid var(--state-uncertain);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--divider);
 }
 
 .storage-protection-list li[data-ok="true"] {
-  border-left-color: var(--divider);
+  color: var(--ink);
+}
+
+.storage-protection-list li:not([data-ok="true"]),
+.storage-protection-list li:not([data-ok="true"]) small {
+  color: var(--state-uncertain);
 }
 
 .storage-protection-list small {

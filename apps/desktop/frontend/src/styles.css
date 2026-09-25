@@ -1731,10 +1731,9 @@ textarea {
 
 .settings-stack {
   display: grid;
-  gap: 15px;
+  gap: 0;
 }
 .settings-section {
-  padding: 24px 26px;
   display: grid;
   grid-template-columns: minmax(180px, 1fr) minmax(180px, 0.7fr) minmax(180px, 0.7fr);
   align-items: center;
@@ -1742,7 +1741,6 @@ textarea {
 }
 .settings-section h2 {
   margin: 0;
-  font-size: 16px;
 }
 .settings-section label {
   display: grid;
@@ -1785,8 +1783,9 @@ textarea {
 .settings-copy {
   margin: 0;
   color: var(--muted);
-  font-size: var(--type-label);
-  line-height: 1.55;
+  font-family: var(--font-serif);
+  font-size: 15.5px;
+  line-height: 1.5;
 }
 .settings-section > .button {
   justify-self: start;
@@ -2080,8 +2079,10 @@ textarea {
   border-bottom: 1px solid var(--line);
 }
 .assistant-header > strong {
-  font-size: 14px;
-  font-weight: 600;
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-style: italic;
+  font-weight: 500;
 }
 .assistant-backend {
   display: inline-flex;
@@ -2109,8 +2110,8 @@ textarea {
 .assistant-tabs {
   flex: none;
   display: flex;
-  gap: 6px;
-  padding: 8px 16px;
+  gap: 20px;
+  padding: 4px 16px;
   border-bottom: 1px solid var(--line);
 }
 .assistant-transcript {
@@ -2124,8 +2125,9 @@ textarea {
 }
 .assistant-empty {
   color: var(--muted);
-  font-size: var(--type-body);
-  line-height: 1.55;
+  font-family: var(--font-serif);
+  font-size: 15.5px;
+  line-height: 1.5;
 }
 .assistant-examples {
   margin-top: 12px;

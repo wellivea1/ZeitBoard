@@ -73,10 +73,6 @@
   width: 100%;
 }
 
-.home-record .quick-log-actions svg {
-  display: none;
-}
-
 /* Three columns under small-capital titles. */
 .home-columns {
   margin-top: 36px;
@@ -242,6 +238,11 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+}
+
+/* The two words are the button; the moon and the target were ornament. */
+.quick-log-actions svg {
+  display: none;
 }
 
 .quick-log-pending {
