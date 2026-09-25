@@ -1654,4 +1654,11 @@ halves at half scale, repeats only from the next row, none past the range), an
 unsupported orientation, the export's axis positions and its text alternative
 naming each night once, the preview normaliser counting repeats once and
 accepting a day with no sleep beside a repeated night, and the form sending the
-orientation. The desktop Go suite and the canonical web checks pass.
+orientation. The desktop Go suite and the canonical web checks pass (460
+desktop + 6 prototype tests).
+
+The blank sleep log, rendered from the running app's own module, filled one
+landscape page: a month and a time zone to write in, one line of instructions,
+31 rows of 24 hours from 6 PM, and a notes column. Tests pin its hours, rows,
+heavier midnight and noon rules, the absence of scripts and network references,
+and its content-security policy.

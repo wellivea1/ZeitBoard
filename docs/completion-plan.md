@@ -534,6 +534,9 @@ Two defects surfaced on the way and are fixed in both orientations:
 - a segment a few seconds long after a row boundary rounded to zero width, and
   the preview rejected the whole report over it.
 
-**Next C7 work:** a blank clinical sleep-log template and direct PDF/PNG
-output, keyboard and nonvisual equivalents for the new layouts, and compact
-Android layouts.
+A blank sleep log now prints from Data Sources, beside the CSV template: one
+row a day from 6 PM to 6 PM, matching the chart, for nights kept on paper.
+
+**Next C7 work:** keyboard and nonvisual equivalents for the new layouts, and
+compact Android layouts. Direct PDF/PNG output remains a refinement; printing
+the exported HTML is the PDF path.

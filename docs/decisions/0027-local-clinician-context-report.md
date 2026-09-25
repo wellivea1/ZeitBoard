@@ -91,6 +91,12 @@ the exported HTML:
 - the redaction, forecast opt-in and no-advice rules are unchanged, since the
   double plot only redraws rows the 24-hour report already produced.
 
+A blank sleep log for paper is also available (Data Sources, beside the CSV
+template): a standalone page with no scripts and an offline content-security
+policy, one row a day from 6 PM to 6 PM like this chart, and no personal
+fields beyond a month and a time zone. ZeitBoard never reads it back; the
+nights are entered in Log or copied into the CSV template.
+
 The same change fixed the axis in both orientations. Its hour labels had been
 set in equal grid columns (0, 20, 40, 60 and 80% across) while the hours they
 name fall at 0, 25, 50, 75 and 100%, so "12 AM" stood a fifth of the way along
