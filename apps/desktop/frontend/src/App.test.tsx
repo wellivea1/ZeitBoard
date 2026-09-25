@@ -159,13 +159,13 @@ describe("desktop navigation", () => {
     expect(screen.getByLabelText("Show forecast")).not.toBeChecked();
     expect(
       screen.queryByRole("img", {
-        name: "Predicted sleep window: Jun 18, Jun 18, 11:21 PM earliest to Jun 19, 5:27 AM latest, 6 hr 6 min window, Forecast cycle 3, Low confidence",
+        name: "Predicted sleep window: Jun 18, Jun 18, 11:21 PM earliest to Jun 19, 5:27 AM latest, 6 hr 6 min window, Forecast cycle 3",
       }),
     ).toBeNull();
     fireEvent.click(screen.getByLabelText("Show forecast"));
     expect(
       screen.getByRole("img", {
-        name: "Predicted sleep window: Jun 18, Jun 18, 11:21 PM earliest to Jun 19, 5:27 AM latest, 6 hr 6 min window, Forecast cycle 3, Low confidence",
+        name: "Predicted sleep window: Jun 18, Jun 18, 11:21 PM earliest to Jun 19, 5:27 AM latest, 6 hr 6 min window, Forecast cycle 3",
       }),
     ).toBeVisible();
     expect(screen.queryByRole("heading", { name: "Correction inspector" })).toBeNull();

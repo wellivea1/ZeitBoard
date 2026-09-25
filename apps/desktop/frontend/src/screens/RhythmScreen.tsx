@@ -26,7 +26,7 @@ import {
   summarizeSleepSources,
   type SleepEntriesData,
 } from "../data/sleepEntries";
-import { sleepDataChangedEvent, notifySleepDataChanged } from "../data/sleepDataEvents";
+import { sleepDataChangedEvent } from "../data/sleepDataEvents";
 import { createCoalescedRefresh } from "../utils/coalescedRefresh";
 
 function SourceConflictList({
@@ -286,32 +286,28 @@ export function RhythmScreen() {
     <>
       <PageHeader
         title="Rhythm"
-        description="Inspect sleep-wake observations, correction history, and estimate uncertainty."
         actions={
           <div className="status-cluster">
             <span className="sync-dot" data-mode={mode} aria-hidden="true" />
             <span>{sourceLabel}</span>
-            {mode !== "fixture" && (
-              <button className="button secondary" type="button" onClick={notifySleepDataChanged}>
-                Refresh
-              </button>
-            )}
           </div>
         }
       />
-      <p className="screen-context">
-        {rhythm.status === "unavailable"
-          ? "Your records could not be read. Refresh to retry; saved observations have not been changed."
-          : mode === "synced" && hasRhythm
-            ? "The actogram, drift fit, and forecast below are computed by the synced server estimate."
-            : mode === "synced"
-              ? "The synced server estimator is waiting for enough sleep data before drawing rhythm charts."
-              : mode === "local" && hasRhythm
-                ? "The actogram, drift fit, and forecast below are computed by the local estimation engine."
+      {/* The view refreshes itself; this line only speaks when the chart
+          cannot be drawn or comes from somewhere other than this device. */}
+      {(!hasRhythm || mode !== "local") && (
+        <p className="screen-context">
+          {rhythm.status === "unavailable"
+            ? "Your records could not be read. Saved observations have not been changed; this retries by itself."
+            : mode === "synced" && hasRhythm
+              ? "Computed by your synced server's estimate."
+              : mode === "synced"
+                ? "The synced server is waiting for enough sleep data before drawing rhythm charts."
                 : mode === "local"
-                  ? "The local estimator is waiting for enough sleep observations before drawing rhythm charts."
-                  : "This read-only preview distinguishes imported, estimated, corrected, and incomplete observations."}
-      </p>
+                  ? "Waiting for enough sleep records before drawing rhythm charts."
+                  : "Sample data: a read-only preview of imported, estimated, corrected and incomplete records."}
+        </p>
+      )}
       <section className="rhythm-screen" aria-label="Rhythm review">
         <ScreenTabs
           name="rhythm"

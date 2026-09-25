@@ -26,7 +26,7 @@ function bandStyle(startHour: number, durationHours: number) {
 
 function bandAriaLabel(band: RhythmSleepBandFixture) {
   const prefix = band.kind === "forecast" ? "Predicted sleep window" : "Sleep interval";
-  return `${prefix}: ${band.day}, ${band.startLabel} to ${band.wakeLabel}, ${band.durationLabel}, ${band.source}, ${band.confidence} confidence`;
+  return `${prefix}: ${band.day}, ${band.startLabel} to ${band.wakeLabel}, ${band.durationLabel}, ${band.source}`;
 }
 
 function ActogramBand({
@@ -45,11 +45,7 @@ function ActogramBand({
       aria-hidden={duplicate || undefined}
       aria-label={duplicate ? undefined : bandAriaLabel(band)}
       role={duplicate ? undefined : "img"}
-    >
-      {!duplicate && (
-        <span>{band.kind === "forecast" ? "Predicted sleep window" : band.source}</span>
-      )}
-    </span>
+    />
   );
 }
 
@@ -134,7 +130,6 @@ function ActogramRow({
         )}
         <TimeProbe probeRef={probe.probeRef} labelRef={probe.labelRef} />
       </div>
-      <small>{band.confidence}</small>
     </div>
   );
 }
@@ -253,7 +248,6 @@ export function ActogramPanel({
             <th>Wake</th>
             <th>Duration</th>
             <th>Source</th>
-            <th>Confidence</th>
             <th>Context markers</th>
           </tr>
         </thead>
@@ -265,7 +259,6 @@ export function ActogramPanel({
               <td>{band.wakeLabel}</td>
               <td>{band.durationLabel}</td>
               <td>{band.source}</td>
-              <td>{band.confidence}</td>
               <td>
                 {markersFor(band)
                   .map(
@@ -455,7 +448,6 @@ export function DriftPanel({ drift }: { drift: RhythmDrift }) {
             <th>Day</th>
             <th>Sleep onset</th>
             <th>Source</th>
-            <th>Confidence</th>
             <th>Fitted onset</th>
           </tr>
         </thead>
@@ -465,7 +457,6 @@ export function DriftPanel({ drift }: { drift: RhythmDrift }) {
               <td>{point.day}</td>
               <td>{point.onsetLabel}</td>
               <td>{point.source}</td>
-              <td>{point.confidence}</td>
               <td>{formatClock24(point.fitHour)}</td>
             </tr>
           ))}

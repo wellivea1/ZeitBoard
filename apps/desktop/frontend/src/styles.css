@@ -1424,11 +1424,13 @@ a.button {
 .actogram-chart {
   overflow-x: auto;
 }
+/* Date, then the 48-hour track. The axis shares the rows' columns and minimum
+   width, so its hours stay over their lines when the chart scrolls. */
 .actogram-visual-axis,
 .actogram-visual-row {
-  min-width: 0;
+  min-width: 760px;
   display: grid;
-  grid-template-columns: 56px minmax(360px, 1fr) 64px;
+  grid-template-columns: 48px minmax(0, 1fr);
   gap: 12px;
 }
 .actogram-visual-axis {
@@ -1488,10 +1490,6 @@ a.button {
   font-weight: 750;
   text-align: right;
 }
-.actogram-visual-row small {
-  color: var(--subtle);
-  font-size: var(--type-micro);
-}
 .actogram-visual-track {
   --probe-line: var(--actogram-grid);
   position: relative;
@@ -1524,9 +1522,6 @@ a.button {
   white-space: nowrap;
   font-size: var(--type-micro);
   font-weight: 750;
-}
-.actogram-band span {
-  padding: 0 6px;
 }
 .actogram-band.is-inferred {
   color: var(--actogram-inferred-text);
@@ -1565,18 +1560,21 @@ a.button {
   min-width: 760px;
   height: 22px;
   display: grid;
-  grid-template-columns: 64px minmax(620px, 1fr) 76px;
+  grid-template-columns: 48px minmax(0, 1fr);
   gap: 12px;
   align-items: center;
 }
 .actogram-now-line::before {
   content: "";
+  grid-row: 1;
   grid-column: 2;
   height: 1px;
   background: var(--sage);
 }
 .actogram-now-line span {
-  grid-column: 3;
+  grid-row: 1;
+  grid-column: 1;
+  text-align: right;
   color: var(--sage-dark);
   font-size: var(--type-micro);
   font-weight: 800;
