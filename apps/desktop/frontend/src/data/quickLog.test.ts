@@ -129,8 +129,11 @@ describe("loadQuickLogState", () => {
 describe("taps", () => {
   it("sends the tap and returns what came back", async () => {
     let called = 0;
-    const root = rootWith("BeginQuickSleep", async () => {
+    const root = rootWith("BeginQuickSleep", async (...args: unknown[]) => {
       called += 1;
+      // The Go method takes no parameters: any argument, even undefined,
+      // reaches it as [null] and the app never answers.
+      expect(args).toHaveLength(0);
       return result({
         outcome: "pending",
         recorded: false,
