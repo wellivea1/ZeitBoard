@@ -522,3 +522,60 @@ phantoms: a closed `<details>` still returns a non-zero `getBoundingClientRect()
 in Chrome even though `::details-content` is not painted. The detector now
 filters on `checkVisibility()`. Worth recording because the first result looked
 like a bug and was not one.
+
+
+---
+
+## 13. Streamlining pass (2026-09-24)
+
+By this point every function the app needed was there, but using it meant
+reading. A review of each screen in the running app, against a disposable
+synthetic profile, found the same four patterns on almost every page:
+
+1. **The routine act was the least visible thing on the page.** Log led with a
+   four-field form. Recording a dose meant choosing from a list, checking a
+   pre-filled time and zone, and pressing a button named after a radio choice.
+   Accepting a new task's suggested time was on a different tab from the task.
+2. **Prose stood in for hierarchy.** A kicker, a heading, a description and a
+   paragraph of rules sat above most sections. Settings had nine sections on one
+   page. The two medication safety notices took a panel each on every visit.
+3. **Absolute timestamps where relative ones read at a glance.** "Thu Sep 24,
+   5:30 PM EDT to Thu Sep 24, 5:50 PM EDT", where "Tonight 5:30 – 5:50 PM" says
+   the same.
+4. **Precision the model does not have.** High / Medium / Low appeared on every
+   actogram row, table row and proposal card, though ADR-0022 measured the
+   buckets inverted: "high" hit 61%, "medium" 81%.
+
+| Screen | Before | After |
+|---|---|---|
+| Home | Status, a cycle strip, a facts grid and lists repeating the timeline | Three questions answered once: where you are now, when the next sleep is likely, what needs you. The outlook carries reachable hours and events as rows on one axis |
+| Plan › Tasks | Tasks, Approvals and Calendar tabs; the first suggestion repeated under "Proposed times" | Add, decide, list, history on one page. Each task shows the time accepted for its current version |
+| Plan › Calendar | The board beside a 272px column of import forms, clipped at ordinary widths; bands too faint to see | The board across the page with the outlook's three states, a now line, and the waking stretch under way. Calendars moved to Data Sources |
+| Log › Sleep | Form first; three full-size buttons on every night | Quick buttons first; one line per night with quiet Edit / Exclude / Delete |
+| Log › Medications | Two columns; two notice panels; a 14-row table with a "DST handling" column | One-tap Taken / Skipped for each medication; one column; one compact notice band; the schedule check folded |
+| Log › Context | Form first, then a paragraph of rules | The markers first; the rules in one line |
+| Rhythm | Description, banner and Refresh; "Imported sleep" on every bar; a confidence column | The chart |
+| Data Sources | "Provenance", "contract-shaped JSON", "append-only transaction" | Connected, Calendars, Import |
+| Sharing | Four guardrails always expanded; "Turn on backend sync in Settings" as text | "Set up sync" as a link; the guardrails as one line that opens; what never goes into a link stays visible |
+| Settings | Nine sections on one page | Five tabs, each addressable (`#/settings/sync`) |
+
+**What did not relax.** Charts keep their visual language, and Home and the
+calendar now draw the same three states for the same hours. Every consent,
+safety and privacy statement is still present; some now fold behind a one-line
+summary that states the rule. Destructive actions keep typed confirmation. The
+five primary destinations are unchanged, and the old addresses redirect again.
+
+**Defects found by using the app.** Home listed every fixed event as "Untitled
+event". The first night of the outlook had no onset band. The planner suggested
+overlapping and already-started blocks (fixed under C2). Today's calendar row was
+blank from now until the night's onset band. At 3 AM, Home offered only a waking
+window under the title "Next sleep". The ZeitBoard placements calendar read "Dec
+31, 1969 to Dec 31, 9999". A calendar "Remove" button had no style at all. The
+task list did not follow an accept or undo made directly above it. The legacy
+addresses documented in `verification.md` had stopped redirecting. Each fix has a
+regression test that was checked to fail first.
+
+**Guards.** `lint-ui-standards.mjs` requires Plan › Tasks to compose the
+decision queue, forbids the old Approvals screen, requires Home's outlook, quick
+log and needs-you surfaces, restores the legacy-route check, and still holds the
+double plot to its 760px readability floor.

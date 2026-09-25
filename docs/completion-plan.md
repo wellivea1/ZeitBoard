@@ -451,3 +451,29 @@ against a disposable data directory, which is how the defects above were found.
 **Next C2 work:** reviewed batch semantics can now be built on a plan that does not overlap itself;
 supported calendar write-back and the remaining constraint affordances remain. Operational
 qualification is unchanged from the record above.
+
+### C7 streamlining increment — 2026-09-24
+
+A pass over every screen for the C7 requirement that logging, correction, task
+placement, request review, report export and recovery be navigable without
+developer knowledge. It is recorded in `ui-refactor-plan.md` §13 and
+`verification.md`.
+
+The routine acts now lead each page: two-tap sleep logging, one-tap doses, and
+a task's suggested time decided directly under the task. Approvals is part of
+Plan › Tasks. Calendars moved to Data Sources and Settings split into
+addressable tabs. Relative times ("Tonight 5:30 – 5:50 PM") replace full stamps
+where a glance is the use. Per-row confidence buckets are gone, since ADR-0022
+measured them inverted. Five primary destinations and the visual-first charts are
+unchanged.
+
+Using the app found and fixed four defects outside the UI layer:
+
+- outlook events without titles;
+- a first night without an onset band;
+- a calendar blank for the waking stretch under way;
+- a placements calendar dated 1969 to 9999.
+
+**Next C7 work:** first-run setup to a real source, the clinical chart, export
+and template requirements, keyboard and nonvisual equivalents for the new
+layouts, and compact Android layouts.
