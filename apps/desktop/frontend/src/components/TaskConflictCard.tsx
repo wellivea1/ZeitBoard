@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Notice } from "./Notice";
 import { useApprovals } from "../state/approvals";
 import type { TaskConflict, TaskConflictHistory } from "../data/taskConflicts";
 import type { Task } from "../data/tasks";
@@ -72,10 +73,7 @@ export function TaskConflictCard({ conflict }: { conflict: TaskConflict }) {
     <article className="proposal-card task-conflict-card" data-origin="sync_conflict">
       <p className="section-kicker">Conflicting task edits</p>
       <h2>{conflict.local.title}</h2>
-      <p>
-        Choose the version to keep. This task stays out of scheduling and upload until you review
-        it; other records continue syncing.
-      </p>
+      <p>Changed on two devices. Until you keep one version it stays out of planning and upload.</p>
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -128,10 +126,10 @@ export function TaskConflictCard({ conflict }: { conflict: TaskConflict }) {
             </p>
           )}
         </fieldset>
-        <p className="diff-note">
-          Saving creates a new revision for sync. Existing calendar placements stay unchanged. You
-          can edit the chosen task afterward; the reviewed versions remain in history.
-        </p>
+        <Notice id="tasks.conflict">
+          The version you keep is saved as a new revision and synced. Calendar placements stay as
+          they are, the versions you compared stay in history, and you can edit the task afterwards.
+        </Notice>
         <button className="button primary" type="submit" disabled={busy || !choice}>
           {queue.busyProposalId === conflict.taskId ? "Saving review..." : "Save selected version"}
         </button>

@@ -16,6 +16,7 @@ export type IconName =
   | "focus"
   | "shield"
   | "chevron"
+  | "check"
   | "close"
   | "sparkle";
 
@@ -101,6 +102,7 @@ const paths: Record<IconName, ReactNode> = {
   ),
   shield: <path d="M12 3 20 6v5c0 5.2-3.4 8.6-8 10-4.6-1.4-8-4.8-8-10V6l8-3Z" />,
   chevron: <path d="m9 18 6-6-6-6" />,
+  check: <path d="m5 12.5 4.5 4.5L19 7.5" />,
   close: (
     <>
       <path d="m6 6 12 12" />

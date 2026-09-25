@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Notice } from "./Notice";
 
 import {
   downloadTranscriptionTemplate,
@@ -228,10 +229,17 @@ export function SleepImportPanel({ onImported }: { onImported: () => Promise<voi
       <div className="data-source-section-heading sleep-import-heading">
         <h2 id="sleep-import-title">Import sleep records</h2>
       </div>
-      <p className="sleep-import-intro">
-        A JSON or CSV file in ZeitBoard&apos;s format. You see what it contains before anything is
-        saved, and a file with any invalid row is not imported.
-      </p>
+      <Notice id="import.how">
+        <p>
+          A JSON or CSV file in ZeitBoard&apos;s format. You see what it contains before anything is
+          saved, and a file with any invalid row is not imported.
+        </p>
+        <p>
+          For paper charts, copy them into the CSV template. Each row stays{" "}
+          <code>needs_review</code> until you set it to <code>confirmed_sleep</code> or{" "}
+          <code>confirmed_no_observation</code>; nothing reads handwriting or fills in times.
+        </p>
+      </Notice>
       <div className="sleep-import-controls">
         {nativeImportAvailable ? (
           <button
@@ -278,11 +286,6 @@ export function SleepImportPanel({ onImported }: { onImported: () => Promise<voi
               : "Import"}
         </button>
       </div>
-      <p className="sleep-import-note">
-        Paper charts: copy them into the CSV template. Each row stays <code>needs_review</code>{" "}
-        until you set it to <code>confirmed_sleep</code> or <code>confirmed_no_observation</code>.
-        ZeitBoard does not read handwriting or fill in missing times.
-      </p>
       {error && (
         <p className="form-error" role="alert">
           {error}

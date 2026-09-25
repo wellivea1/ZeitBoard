@@ -1,20 +1,30 @@
 .medication-feasibility > summary {
+  padding-bottom: 8px;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--ink);
   cursor: pointer;
 }
 
 .medication-feasibility > summary h2 {
   margin: 0;
   display: inline;
-  font-size: var(--type-section);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1.2;
+  text-transform: uppercase;
 }
 
 .medication-feasibility > summary span {
   color: var(--muted);
-  font-size: var(--type-label);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-style: italic;
 }
 
 .medication-feasibility[open] > summary {
@@ -24,28 +34,19 @@
 .medication-reminder-state {
   min-height: 44px;
   margin-bottom: var(--space-4);
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-2) 0;
   display: grid;
   grid-template-columns: minmax(150px, 0.42fr) minmax(0, 1fr);
   align-items: center;
   gap: var(--space-3);
   border-block: 1px solid var(--divider);
-  background: var(--panel-alt);
-  box-shadow: inset 3px 0 0 var(--line);
-}
-
-.medication-reminder-state[data-status="ready"] {
-  box-shadow: inset 3px 0 0 var(--state-awake);
-}
-
-.medication-reminder-state[data-status="error"],
-.medication-reminder-state[data-status="unavailable"] {
-  box-shadow: inset 3px 0 0 var(--state-uncertain);
 }
 
 .medication-reminder-state strong {
   color: var(--ink);
-  font-size: var(--type-body);
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 500;
   text-transform: capitalize;
 }
 
@@ -66,25 +67,28 @@
 
 .medication-feasibility-empty strong {
   color: var(--ink);
-  font-size: var(--type-body-strong);
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 500;
 }
 
 .medication-feasibility-empty p {
   max-width: 680px;
   margin: 0;
   color: var(--muted);
-  font-size: var(--type-body);
+  font-family: var(--font-serif);
+  font-size: 15.5px;
   line-height: 1.45;
 }
 
 .medication-feasibility-list {
-  border-top: 1px solid var(--line);
+  border-top: 0;
 }
 
 .medication-feasibility-list > article {
   min-width: 0;
   padding: var(--space-4) 0;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid var(--divider);
 }
 
 .medication-feasibility-record-header {
@@ -108,7 +112,9 @@
 .medication-feasibility-record-header strong {
   overflow: hidden;
   color: var(--ink);
-  font-size: var(--type-body-strong);
+  font-family: var(--font-serif);
+  font-size: 19px;
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -126,21 +132,23 @@
 
 .medication-clinician-rule {
   margin-top: var(--space-3);
-  padding: var(--space-2) var(--space-3);
-  border-left: 3px solid var(--line);
-  background: var(--panel-alt);
+  padding: 0 0 0 var(--space-5);
 }
 
 .medication-clinician-rule span {
-  color: var(--subtle);
-  font-size: var(--type-label);
+  color: var(--muted);
+  font-size: var(--type-micro);
   font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .medication-clinician-rule blockquote {
   margin: var(--space-1) 0 0;
   color: var(--ink);
-  font-size: var(--type-body);
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-style: italic;
   line-height: 1.45;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -158,7 +166,8 @@
   margin: 0;
   padding: var(--space-2) 0;
   color: var(--muted);
-  font-size: var(--type-body);
+  font-family: var(--font-serif);
+  font-size: 15.5px;
   line-height: 1.45;
 }
 
@@ -191,8 +200,9 @@
   min-width: 0;
   margin: 0;
   color: var(--ink);
-  font-size: var(--type-body-strong);
-  font-variant-numeric: tabular-nums;
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-variant-numeric: lining-nums tabular-nums;
   overflow-wrap: anywhere;
 }
 
@@ -205,7 +215,7 @@
 }
 
 .medication-forecast-table-wrap:focus-visible {
-  outline: 2px solid var(--state-awake);
+  outline: 2px solid var(--sage);
   outline-offset: 2px;
 }
 
@@ -229,10 +239,11 @@
   position: sticky;
   top: 0;
   z-index: 1;
-  color: var(--subtle);
-  background: var(--panel-alt);
-  font-size: var(--type-label);
-  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: var(--canvas);
+  border-bottom-color: var(--ink);
+  font-size: var(--type-micro);
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
@@ -259,35 +270,24 @@
 
 .medication-forecast-table td:first-child {
   color: var(--ink);
-  border-left: 3px solid var(--line);
   font-variant-numeric: tabular-nums;
-}
-
-.medication-forecast-table tr[data-status="inside_predicted_sleep"] td:first-child {
-  border-left-color: var(--state-asleep);
-}
-
-.medication-forecast-table tr[data-status="outside_predicted_sleep"] td:first-child {
-  border-left-color: var(--state-awake);
 }
 
 .medication-forecast-table tr[data-status="outside_forecast"] td {
   color: var(--subtle);
-  background: var(--panel-alt);
+  font-style: italic;
 }
 
 .medication-schedule-gaps {
   margin-top: var(--space-3);
-  border-top: 1px solid var(--line);
 }
 
 .medication-schedule-gaps > div {
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-2) 0;
   display: grid;
   grid-template-columns: minmax(180px, 0.35fr) minmax(0, 1fr);
   gap: var(--space-3);
   border-bottom: 1px solid var(--divider);
-  box-shadow: inset 3px 0 0 var(--state-uncertain);
 }
 
 .medication-schedule-gaps strong {
@@ -304,10 +304,8 @@
 
 .medication-schedule-editor {
   min-width: 0;
-  padding: var(--space-4);
-  border-bottom: 1px solid var(--line);
-  background: var(--paper);
-  box-shadow: inset 3px 0 0 var(--state-awake);
+  padding: var(--space-4) 0;
+  border-block: 1px solid var(--ink);
 }
 
 .medication-schedule-editor > header {
@@ -321,8 +319,12 @@
 .medication-schedule-editor h2 {
   margin: 0;
   color: var(--ink);
-  font-size: var(--type-data);
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   line-height: 1.2;
+  text-transform: uppercase;
 }
 
 .medication-schedule-boundary {
@@ -418,10 +420,9 @@
 
 .medication-schedule-validation {
   margin: 0;
-  padding-left: var(--space-2);
   color: var(--danger-text);
-  border-left: 3px solid var(--danger-border);
-  font-size: var(--type-label);
+  font-family: var(--font-serif);
+  font-size: 15px;
   line-height: 1.4;
 }
 
@@ -439,10 +440,6 @@
 }
 
 @media (max-width: 700px) {
-  .medication-feasibility {
-    padding: var(--space-3);
-  }
-
   .medication-reminder-state,
   .medication-feasibility-record-header,
   .medication-schedule-gaps > div {

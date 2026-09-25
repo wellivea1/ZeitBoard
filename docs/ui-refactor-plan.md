@@ -579,3 +579,92 @@ regression test that was checked to fail first.
 decision queue, forbids the old Approvals screen, requires Home's outlook, quick
 log and needs-you surfaces, restores the legacy-route check, and still holds the
 double plot to its 760px readability floor.
+
+## 14. Almanac redesign (2026-09-25)
+
+Every earlier pass changed spacing and wording and kept the look: cards inside
+cards, a tinted pill around any word that was a state, and a coloured bar down
+the left of almost every block. That look reads as generated, and adjusting it
+never removed it. This pass replaces the visual layer instead.
+
+Four directions were sketched against one synthetic moment (Thursday 4:10 PM):
+**Ledger** (dense rows), **Dial** (the day as a 24-hour clock face), **Almanac**
+(an editorial page led by a sentence) and **Week** (calendar-native). The owner
+chose the Almanac for the desktop Home, the Dial for the Android home screen,
+and the Week board for arranging a plan. All three are one design system laid
+out three ways.
+
+### The system
+
+- **Paper and ink.** A warm paper (`--canvas #f2eee5`) and ink (`#221f1a`),
+  hairlines in `--divider`, and one bright colour, the vermilion `--accent`,
+  kept for now and for counts. The rhythm keeps its meaning colours: likely
+  asleep in the sleep blue, the boundary the model cannot place hatched, likely
+  awake left as paper. Ink, Black, Amber and High contrast are the same page at
+  night; the contrast guard (`src/theme/contrast.test.ts`) still holds each pair.
+- **Two faces, bundled.** Newsreader for reading and Public Sans for controls,
+  both variable and under the SIL Open Font License, shipped with each app and
+  never fetched. The desktop carries Latin and Latin Extended WOFF2 (about
+  555 KB) and lets Newsreader's optical-size axis pick the display cut for large
+  text. Android carries the TTFs (about 1.1 MB) and asks for the display cut in
+  its display styles. Characters outside the bundled ranges fall back to the
+  system serif and sans.
+- **No cards, pills, stripes or shadows.** Radii are 0. A section is a
+  small-capital title over an ink rule; an entry is a serif title with a
+  sentence under it; a state is a word in small capitals whose colour is the
+  only emphasis; a count is an italic numeral in the accent. Buttons are
+  square: framed in ink, solid for the primary, and an underlined word for
+  actions inside a row.
+- **Sheets, where text would float.** A note, a set of choices, a form that
+  folds out, a group of settings and a message about the data stand on a
+  sheet: flat paper with a hairline edge, square, never nested. Without them,
+  that text sat loose on the page with nothing to read it against.
+- **Notes close for good.** An explanation that is useful once is a note with an
+  × in its corner. Closed notes are listed in Settings › Display, one place to
+  show them again, singly or all at once; they are remembered on this computer.
+  A consent disclosure, a warning before deleting, what a share link reveals
+  and anything else a decision depends on is not a note and never hides.
+
+### Three layouts
+
+| Surface | Layout |
+|---|---|
+| Desktop Home | A masthead replaces the sidebar. The page leads with a sentence ("You have been awake for about 8 hours. Sleep is likely to begin between 11:30 PM and 1:35 AM tonight…"), the Record buttons beside it. The next three days are Fig. 1. Three columns follow: *Waiting on you* (suggestions decided in place), *In the diary* (events, accepted times and doses by day, read from the calendar so they stay listed while the forecast is withheld) and *Doses and notes*. |
+| Plan › Week | Replaces Plan › Calendar (old addresses redirect). Days are columns on one vertical clock, one, four or seven at a time. Recorded sleep is painted behind the past and the forecast from now on; past the last forecast band the page is shaded. Events are ink, accepted times framed in ink, suggestions dashed in the accent with their decision on the block, or opened under the board with their reasons. Doses are marked at their times. When the records are too old for Home to draw a forecast, the board says the bands come from the last estimate. |
+| Android Now | The day as a 24-hour dial, midnight at the top: the next 24 hours as the outer ring, the last seven recorded nights stepping inwards, now as the accent hand. The centre says how long you have been awake only while the records are current; otherwise it gives the last recorded wake. The desktop's sentence sits under the dial. Tabs are words: Now, Plan, Log, Doses, Settings. |
+
+The other desktop screens (Log, Rhythm, Sharing, Data Sources, Settings, the
+assistant) are set in the same language. Their content and controls are
+unchanged. The Android sample data is now drawn around the day the app is
+opened, so a new install's dial shows a night ahead rather than an empty ring.
+
+### A second pass: loose text and long explanations
+
+Reviewed in the running app after the first pass, the page had text that
+floated, with no ground or edge to read it against, and explanations repeated on
+every visit. Nine explanations became notes (the forecast's basis on Home,
+keeping one version of a task, medication logging, context markers, how
+corrections work, calendars, importing, and how a share link works). Duplicates
+went: the markers header now counts markers instead of restating the note, and
+the Week board's stale warning is one sentence. The task-conflict versions
+became framed choices, outlined in ink when chosen; forms that fold out, the
+settings groups and the Week board's warnings sit on sheets; and every fold
+uses one drawn triangle.
+
+### Guards
+
+`lint-ui-standards.mjs` now fails on a side border or inset shadow wider than
+1.5px, a pseudo-element painted as a narrow full-height bar, and any pill radius,
+in every stylesheet. It requires the assistant toggle in the masthead and keeps
+the utility links reachable on a narrow window. The rules that assumed the
+sidebar are gone.
+
+### Not done
+
+- The Android dial has no plans ring. The companion contract carries tasks but
+  not accepted times or calendar events, so there is nothing true to draw there
+  yet.
+- Android follows the Paper palette only. Its screens still draw with the light
+  constants directly; a dark scheme is defined but not switched on.
+- The Week board does not move blocks by dragging. Accepting, declining and
+  opening a suggestion work on the board; rescheduling still goes through Tasks.

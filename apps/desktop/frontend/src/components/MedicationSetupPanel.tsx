@@ -356,7 +356,7 @@ export function MedicationSetupPanel({
           onCancel={() => setErasing(null)}
         />
       )}
-      <details className="medication-rail-section medication-add">
+      <details className="medication-rail-section medication-add fold">
         <summary>Add a medication</summary>
         <form className="medication-definition-form" aria-label="Add medication" onSubmit={add}>
           <label>

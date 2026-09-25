@@ -1,6 +1,8 @@
 package org.non24.planner.data
 
 import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalTime
 import java.time.ZoneId
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -24,24 +26,45 @@ internal class FixtureSleepRepository(
     override suspend fun refresh() = Unit
 }
 
-fun fixtureEstimateRepository(): EstimateRepository =
-    StaticEstimateRepository(
+// The sample rhythm is drawn around the day the app is opened, so Now shows a
+// night ahead rather than an empty dial: three recorded nights drifting about
+// 45 minutes later each cycle, and the forecast for the next. It is sample
+// data and is labelled as such wherever it appears.
+private val fixtureZone: ZoneId = ZoneId.of("America/New_York")
+
+/**
+ * The day the sample's last recorded night ended on: the most recent 7:20 in
+ * the morning. Before then the sample has you in the night it forecast.
+ */
+internal fun fixtureAnchor(now: Instant): LocalDate {
+    val local = now.atZone(fixtureZone)
+    val woke = local.toLocalTime() >= LocalTime.of(7, 20)
+    return if (woke) local.toLocalDate() else local.toLocalDate().minusDays(1)
+}
+
+private fun fixtureAt(day: LocalDate, hour: Int, minute: Int): Instant =
+    day.atTime(hour, minute).atZone(fixtureZone).toInstant()
+
+fun fixtureEstimateRepository(now: Instant = Instant.now()): EstimateRepository {
+    val day = fixtureAnchor(now)
+    return StaticEstimateRepository(
         EstimateSnapshot(
             label = "Estimated sleep-wake phase",
+            // The window sleep is likely to begin in, then the one waking is likely in.
             predictedSleepWindow = TimeWindow(
-                start = fixtureInstant("2026-06-16T04:40:00Z"),
-                end = fixtureInstant("2026-06-16T06:10:00Z"),
+                start = fixtureAt(day, 23, 55),
+                end = fixtureAt(day.plusDays(1), 1, 25),
             ),
             predictedWakingWindow = TimeWindow(
-                start = fixtureInstant("2026-06-16T12:45:00Z"),
-                end = fixtureInstant("2026-06-16T14:35:00Z"),
+                start = fixtureAt(day.plusDays(1), 7, 35),
+                end = fixtureAt(day.plusDays(1), 9, 25),
             ),
             confidence = Confidence.MODERATE,
             confidenceReasons = listOf(
                 "Synthetic fixture has seven recent principal sleep episodes.",
                 "Forecast windows include explicit temporal uncertainty.",
             ),
-            createdAt = fixtureInstant("2026-06-15T12:00:00Z"),
+            createdAt = now.minusSeconds(3600),
             algorithmVersion = "fixture-contract-v1",
             provenance = Provenance(
                 acquisitionMethod = AcquisitionMethod.FIXTURE,
@@ -50,34 +73,37 @@ fun fixtureEstimateRepository(): EstimateRepository =
             ),
         ),
     )
+}
 
-internal fun fixtureSleepEpisodes(): List<SleepEpisode> {
+internal fun fixtureSleepEpisodes(now: Instant = Instant.now()): List<SleepEpisode> {
     val provenance = Provenance(
         acquisitionMethod = AcquisitionMethod.FIXTURE,
         evidenceStatus = EvidenceStatus.SYNTHETIC,
         sourceId = "android-phase-one-fixture",
     )
-    val zone = ZoneId.of("America/New_York")
+    val day = fixtureAnchor(now)
+    // The identifiers keep their old dates so sample corrections saved
+    // against them stay attached.
     return listOf(
         fixtureSleepEpisode(
             id = "fixture-sleep-2026-06-14",
-            start = fixtureInstant("2026-06-14T03:55:00Z"),
-            end = fixtureInstant("2026-06-14T12:05:00Z"),
-            zone = zone,
+            start = fixtureAt(day.minusDays(1), 23, 10),
+            end = fixtureAt(day, 7, 20),
+            zone = fixtureZone,
             provenance = provenance,
         ),
         fixtureSleepEpisode(
             id = "fixture-sleep-2026-06-13",
-            start = fixtureInstant("2026-06-13T03:08:00Z"),
-            end = fixtureInstant("2026-06-13T11:20:00Z"),
-            zone = zone,
+            start = fixtureAt(day.minusDays(2), 22, 25),
+            end = fixtureAt(day.minusDays(1), 6, 35),
+            zone = fixtureZone,
             provenance = provenance,
         ),
         fixtureSleepEpisode(
             id = "fixture-sleep-2026-06-12",
-            start = fixtureInstant("2026-06-12T02:22:00Z"),
-            end = fixtureInstant("2026-06-12T10:35:00Z"),
-            zone = zone,
+            start = fixtureAt(day.minusDays(3), 21, 40),
+            end = fixtureAt(day.minusDays(2), 5, 50),
+            zone = fixtureZone,
             provenance = provenance,
         ),
     )

@@ -60,20 +60,22 @@ describe("desktop navigation", () => {
   // Home answers three questions once each: the current state, when the next
   // sleep is likely, and what needs you. It used to answer them several times
   // over across nine sections and two timelines.
-  it("renders Home as one screen of state, timeline and what needs you", () => {
+  it("renders Home as an almanac page: a sentence, one figure and three columns", () => {
     const { container } = render(<App />);
 
-    expect(screen.getByRole("heading", { name: "Likely awake" })).toBeVisible();
-    expect(screen.getByText("Next sleep")).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Next 3 days" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Needs you" })).toBeVisible();
-    expect(screen.getByRole("heading", { name: "Coming up" })).toBeVisible();
-    // One timeline: the 24-hour strip that restated it is gone.
+    // The state is said in a sentence, not a status tile.
+    expect(container.querySelector(".lead")?.textContent).toMatch(/awake|Sleep is likely/);
+    expect(screen.getByRole("heading", { name: /The next three days/ })).toBeVisible();
+    for (const title of [/^Waiting on you/, /^In the diary/, /^Doses and notes/]) {
+      expect(screen.getByRole("heading", { name: title })).toBeVisible();
+    }
+    // One timeline: the 24-hour strip that restated it is gone, and so are
+    // the metric cards and the status tile.
     expect(container.querySelectorAll(".outlook-timeline")).toHaveLength(1);
     expect(container.querySelector(".cycle-strip")).toBeNull();
     expect(container.querySelector(".metric-card")).toBeNull();
-    // The event that lands in predicted sleep is named where it is listed.
-    expect(screen.getByText("Sample appointment")).toBeVisible();
+    // The event that lands in predicted sleep is marked on the figure.
+    expect(container.querySelector('.outlook-event[title^="Sample appointment"]')).not.toBeNull();
   });
 
   // Decisions sit directly under the tasks they are about. They used to be a
@@ -116,11 +118,11 @@ describe("desktop navigation", () => {
     const navigation = () => screen.getByRole("navigation", { name: "Primary navigation" });
     const accepts = await screen.findAllByRole("button", { name: "Accept proposal" });
     expect(accepts).toHaveLength(2);
-    expect(within(navigation()).getByLabelText("2 pending")).toBeVisible();
+    expect(within(navigation()).getByRole("link", { name: "Plan, 2 pending" })).toBeVisible();
 
     fireEvent.click(accepts[0] as HTMLElement);
     expect(screen.getAllByRole("button", { name: "Accept proposal" })).toHaveLength(1);
-    expect(within(navigation()).getByLabelText("1 pending")).toBeVisible();
+    expect(within(navigation()).getByRole("link", { name: "Plan, 1 pending" })).toBeVisible();
 
     fireEvent.click(screen.getByText(/Decision history/));
     expect(screen.getByText("Email Dr. Okafor")).toBeVisible();

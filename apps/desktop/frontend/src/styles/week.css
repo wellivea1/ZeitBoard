@@ -1,0 +1,720 @@
+/* Plan › Week (ui-refactor-plan.md §14): the calendar-native view. Days are
+   columns on one vertical clock between two ink rules. The rhythm is painted
+   into the days in the colour it has everywhere — likely asleep as a wash of
+   the sleep blue, the edges the model cannot place hatched, recorded sleep
+   deeper — and plans sit on top: events in ink, accepted times framed in ink,
+   suggestions dashed in the accent until they are decided. */
+
+.week {
+  min-width: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.week-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 26px;
+}
+
+.week-title {
+  margin-right: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+}
+
+.week-title h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.week-title span {
+  color: var(--muted);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-style: italic;
+}
+
+.week-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.week-step {
+  width: 36px;
+  height: 36px;
+}
+
+.week-step[data-direction="back"] svg {
+  transform: rotate(180deg);
+}
+
+.week-nav input[type="date"] {
+  min-height: 32px;
+  margin-left: 10px;
+  padding: 0 8px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  font-size: var(--type-label);
+}
+
+.week-range {
+  display: flex;
+  gap: 18px;
+}
+
+.week-range .filter {
+  min-height: 32px;
+}
+
+/* The board. */
+.week-board {
+  --gutter: 64px;
+  min-width: 0;
+  border-block: 1px solid var(--ink);
+}
+
+.week-head,
+.week-allday,
+.week-grid {
+  display: grid;
+  grid-template-columns: var(--gutter) repeat(var(--days), minmax(0, 1fr));
+}
+
+.week-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--canvas);
+}
+
+.week-head {
+  border-bottom: 1px solid var(--divider);
+}
+
+.week-day-head {
+  min-width: 0;
+  padding: 8px 10px 7px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--muted);
+  box-shadow: inset 1px 0 0 var(--divider);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.week-day-head strong {
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: 0;
+  font-variant-numeric: lining-nums;
+}
+
+.week-day-head em {
+  margin-left: auto;
+  overflow: hidden;
+  color: var(--accent);
+  font-family: var(--font-serif);
+  font-size: 14px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  text-transform: none;
+}
+
+.week-day-head[data-today] {
+  color: var(--ink);
+}
+
+.week-gutter-head {
+  padding: 6px 10px 6px 0;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.week-allday {
+  border-bottom: 1px solid var(--divider);
+}
+
+.week-allday > div {
+  min-width: 0;
+  padding: 3px;
+  display: grid;
+  gap: 3px;
+  box-shadow: inset 1px 0 0 var(--divider);
+}
+
+.week-allday-event {
+  min-width: 0;
+  padding: 2px 6px;
+  overflow: hidden;
+  color: var(--paper);
+  background: var(--ink);
+  border: 0;
+  cursor: pointer;
+  font-family: var(--font-serif);
+  font-size: 13px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.week-scroll {
+  min-height: 360px;
+  max-height: max(360px, calc(100vh - 300px));
+  overflow-y: auto;
+  scrollbar-color: var(--line) transparent;
+}
+
+.week-grid {
+  position: relative;
+  height: calc(var(--hour) * 24);
+}
+
+.week-gutter {
+  position: relative;
+}
+
+.week-gutter span {
+  position: absolute;
+  right: 10px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  transform: translateY(-50%);
+}
+
+.week-gutter .week-gutter-now {
+  z-index: 1;
+  padding: 0 3px;
+  color: var(--accent);
+  background: var(--canvas);
+  font-family: var(--font-serif);
+  font-size: 13px;
+  font-style: italic;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+/* A column: a hairline down its left and one across every hour. */
+.week-day {
+  position: relative;
+  min-width: 0;
+  box-shadow: inset 1px 0 0 var(--divider);
+  background-image: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--divider) 60%, transparent) 1px,
+    transparent 1px
+  );
+  background-size: 100% var(--hour);
+}
+
+.week-band {
+  position: absolute;
+  left: 1px;
+  right: 0;
+}
+
+.week-band[data-kind="asleep"] {
+  background: var(--sleep-wash);
+}
+
+.week-band[data-kind="recorded"] {
+  background: var(--sleep-wash-recorded);
+}
+
+/* Hatched, as on Home: not solid knowledge. */
+.week-band[data-kind="uncertain"] {
+  background-image: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--state-uncertain-fill) 45%, transparent) 0 1.5px,
+    transparent 1.5px 6px
+  );
+}
+
+.week-band span {
+  position: absolute;
+  top: 4px;
+  left: 7px;
+  right: 4px;
+  overflow: hidden;
+  color: var(--state-asleep);
+  font-family: var(--font-serif);
+  font-size: 12.5px;
+  font-style: italic;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.week-band[data-kind="uncertain"] span {
+  right: auto;
+  max-width: calc(100% - 11px);
+  padding: 0 3px;
+  color: var(--state-uncertain);
+  background: var(--canvas);
+}
+
+/* Beyond the last forecast band the page is shaded, not left looking awake. */
+.week-beyond {
+  position: absolute;
+  left: 1px;
+  right: 0;
+  bottom: 0;
+  background: color-mix(in srgb, var(--panel-alt) 75%, transparent);
+  border-top: 1px dashed var(--line);
+}
+
+.week-beyond span {
+  position: absolute;
+  top: 5px;
+  left: 7px;
+  color: var(--muted);
+  font-family: var(--font-serif);
+  font-size: 12.5px;
+  font-style: italic;
+}
+
+.week-dose {
+  position: absolute;
+  right: 6px;
+  z-index: 1;
+  max-width: calc(100% - 12px);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+  transform: translateY(-50%);
+}
+
+.week-dose::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border: 1.5px solid currentColor;
+  border-radius: var(--radius-dot);
+}
+
+.week-block {
+  position: absolute;
+  z-index: 2;
+  min-width: 0;
+  margin-top: 1px;
+  padding: 2px 6px;
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  overflow: hidden;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  container-type: inline-size;
+}
+
+.week-block[data-kind="event"] {
+  color: var(--paper);
+  background: var(--ink);
+  border: 1px solid var(--ink);
+}
+
+.week-block[data-kind="accepted"] {
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--ink);
+}
+
+.week-block[data-kind="suggested"] {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--paper) 90%, transparent);
+  border: 1.5px dashed var(--accent);
+  cursor: default;
+}
+
+/* The rest of a block from the column before runs in from the top edge. */
+.week-block[data-continued] {
+  margin-top: 0;
+  border-top-style: none;
+  cursor: pointer;
+}
+
+.week-block-text {
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+
+/* In a suggestion the words are a button of their own. */
+button.week-block-text {
+  flex: 1;
+  padding: 0;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.week-block strong {
+  overflow: hidden;
+  font-family: var(--font-serif);
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.week-block small {
+  overflow: hidden;
+  opacity: 0.82;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.week-block[data-short] .week-block-text {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.week-block-actions {
+  margin-left: auto;
+  display: flex;
+  flex: none;
+  gap: 3px;
+}
+
+.week-decide {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--ink);
+  cursor: pointer;
+}
+
+.week-decide[data-decision="accept"] {
+  color: var(--paper);
+  background: var(--ink);
+}
+
+.week-decide svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* A block too narrow for its words and its answers keeps the words; the
+   answers are one click away under the board. */
+@container (max-width: 130px) {
+  .week-block-actions {
+    display: none;
+  }
+}
+
+@container (max-width: 90px) {
+  .week-block small {
+    display: none;
+  }
+}
+
+.week-decide:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.week-now {
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  height: 1.5px;
+  pointer-events: none;
+  background: var(--accent);
+  transform: translateY(-50%);
+}
+
+.week-now::before {
+  content: "";
+  position: absolute;
+  left: -3px;
+  top: -3px;
+  width: 7px;
+  height: 7px;
+  background: var(--accent);
+  border-radius: var(--radius-dot);
+}
+
+/* Under the board: the key, where the events come from, and what to do with
+   a suggestion that has no exact time. */
+.week-foot {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.week-legend,
+.week-sources {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 18px;
+}
+
+.week-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.week-legend span::before {
+  content: "";
+  width: 14px;
+  height: 9px;
+  box-sizing: border-box;
+}
+
+.week-legend [data-key="asleep"]::before {
+  background: var(--sleep-wash);
+}
+
+.week-legend [data-key="recorded"]::before {
+  background: var(--sleep-wash-recorded);
+}
+
+.week-legend [data-key="uncertain"]::before {
+  background-image: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--state-uncertain-fill) 45%, transparent) 0 1.5px,
+    transparent 1.5px 4px
+  );
+}
+
+.week-legend [data-key="event"]::before {
+  background: var(--ink);
+}
+
+.week-legend [data-key="accepted"]::before {
+  border: 1px solid var(--ink);
+}
+
+.week-legend [data-key="suggested"]::before {
+  border: 1.5px dashed var(--accent);
+}
+
+.week-sources a,
+.week-sources .text-link {
+  color: var(--ink);
+  font-size: inherit;
+}
+
+.week-sources .text-link:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+  text-decoration: none;
+}
+
+.week-unplaced,
+.week-warning,
+.week-error,
+.week-loading,
+.week-notice {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.week-warning,
+.week-error {
+  padding: 10px 16px;
+  background: var(--paper);
+  border: 1px solid var(--divider);
+}
+
+.week-warning {
+  color: var(--ink);
+}
+
+.week-error {
+  color: var(--danger-text);
+}
+
+.week-notice:empty {
+  display: none;
+}
+
+.week-loading {
+  padding: 40px 0;
+  font-style: italic;
+}
+
+/* The event you clicked, set as an entry under a rule. */
+.week-inspector {
+  max-width: 720px;
+  padding-top: 12px;
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--ink);
+}
+
+.week-inspector .section-kicker {
+  margin: 0;
+}
+
+.week-inspector h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 400;
+}
+
+.week-inspector dl {
+  margin: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.week-inspector dl div {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+}
+
+.week-inspector dt {
+  color: var(--muted);
+  font-size: var(--type-micro);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.week-inspector dd {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 15.5px;
+  overflow-wrap: anywhere;
+}
+
+.week-inspector > .button {
+  justify-self: start;
+}
+
+.week-inspector-when,
+.week-inspector-why {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.week-inspector-why {
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.week-inspector-actions {
+  margin-top: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.week-list summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.week-list > p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-family: var(--font-serif);
+  font-style: italic;
+}
+
+.week-table-scroll {
+  margin-top: 8px;
+  overflow-x: auto;
+}
+
+.week-table-scroll table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--type-label);
+}
+
+.week-table-scroll th {
+  padding: 6px 12px 6px 0;
+  color: var(--muted);
+  border-bottom: 1px solid var(--ink);
+  font-size: var(--type-micro);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.week-table-scroll td {
+  padding: 7px 12px 7px 0;
+  border-bottom: 1px solid var(--divider);
+  vertical-align: top;
+}
+
+@media (max-width: 760px) {
+  .week-board {
+    --gutter: 44px;
+  }
+
+  .week-day-head {
+    padding-inline: 6px;
+  }
+
+  .week-day-head em {
+    display: none;
+  }
+
+  .week-title h2 {
+    font-size: 24px;
+  }
+
+  .week-gutter span {
+    right: 6px;
+  }
+}

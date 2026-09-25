@@ -49,7 +49,7 @@ export function TaskEditor({
   return (
     <section className="task-editor" aria-labelledby="task-editor-title">
       <h2 id="task-editor-title">{task ? "Edit task" : "Add a task"}</h2>
-      <form onSubmit={submit} className="sleep-entry-fields">
+      <form onSubmit={submit} className="sleep-entry-fields sheet">
         <label>
           Task
           <input
@@ -75,7 +75,7 @@ export function TaskEditor({
             onChange={(event) => setDuration(Number(event.target.value))}
           />
         </label>
-        <details className="task-timing" open={task ? true : undefined}>
+        <details className="task-timing fold" open={task ? true : undefined}>
           <summary>Timing constraints (optional)</summary>
           <p>Times are shown in {zone}. Leave blank for any predicted waking window.</p>
           <div className="sleep-entry-fields">

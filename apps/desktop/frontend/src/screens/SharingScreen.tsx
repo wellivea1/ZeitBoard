@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Notice } from "../components/Notice";
 import { Icon } from "../components/Icon";
 import { PageHeader } from "../components/AppShell";
 import { ShareLinkForm } from "../components/ShareLinkForm";
@@ -116,12 +117,12 @@ export function SharingScreen() {
             <Icon name="shield" />
             <div>
               <h2>{headline(data)}</h2>
-              <p>
-                {data.status === "ok"
-                  ? "Every link below is one you made. Revoking stops it immediately; erasing also removes the record that it existed."
-                  : (data.message ??
-                    "Sharing runs on your own server, and this desktop is not talking to one yet.")}
-              </p>
+              {data.status !== "ok" && (
+                <p>
+                  {data.message ??
+                    "Sharing runs on your own server, and this desktop is not talking to one yet."}
+                </p>
+              )}
               {data.status === "off" && (
                 <a className="button secondary compact" href="#/settings/sync">
                   Set up sync
@@ -142,7 +143,6 @@ export function SharingScreen() {
         <section className="sharing-template-section" aria-labelledby="sharing-links-title">
           <div className="sharing-section-heading">
             <h2 id="sharing-links-title">Links you have made</h2>
-            <p>Every permission starts off and must be explicitly granted by you.</p>
           </div>
 
           {error && (
@@ -169,24 +169,23 @@ export function SharingScreen() {
           />
         </section>
 
-        {/* The rules hold for every link, so they are a promise to read once,
-            not a panel to scroll past each visit. What never leaves stays
-            visible. */}
-        <aside className="sharing-guardrails" aria-labelledby="sharing-guardrails-title">
-          <details>
-            <summary>
-              <h2 id="sharing-guardrails-title">
-                Every link needs a passcode and an expiry, and can be revoked at once
-              </h2>
-            </summary>
+        {/* The rules hold for every link, so they are a note to read once and
+            close. What never goes into a link is not: it stays in view beside
+            the form that makes one. */}
+        <aside className="sharing-guardrails" aria-label="How sharing works">
+          <Notice id="sharing.how">
             <ol>
-              <li>A passcode is required; there is no open link.</li>
-              <li>An expiry is required; permanent links are not offered.</li>
-              <li>Revocation is immediate, and the access history stays readable.</li>
-              <li>A failure renders as a contentless unavailable page.</li>
+              <li>
+                Every link needs a passcode and an expiry; there are no open or permanent links.
+              </li>
+              <li>Every permission starts off until you grant it.</li>
+              <li>
+                Revoking stops a link at once. Erasing also removes the record that it existed.
+              </li>
+              <li>A link that fails shows an empty unavailable page, never your data.</li>
             </ol>
-          </details>
-          <div className="sharing-private-boundary">
+          </Notice>
+          <div className="sharing-private-boundary sheet">
             <strong>Never in a trusted link</strong>
             <span>
               Medication, diagnosis, raw activity, location, private calendar text, and rhythm

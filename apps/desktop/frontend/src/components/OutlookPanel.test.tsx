@@ -178,8 +178,10 @@ describe("OutlookPanel", () => {
     };
     const { container } = render(<OutlookPanel data={withheld} />);
     expect(container.querySelectorAll(".outlook-band")).toHaveLength(0);
-    expect(screen.getByText(/not being shown/i)).toBeInTheDocument();
-    expect(screen.getByText(/none has been recorded/i)).toBeInTheDocument();
+    expect(screen.getByText(/not drawn/i)).toBeInTheDocument();
+    // Home's lead sentence gives the reason; the figure says what brings it back.
+    expect(screen.queryByText(/none has been recorded/i)).toBeNull();
+    expect(screen.getByRole("link", { name: "Log sleep" })).toHaveAttribute("href", "#/log/sleep");
   });
 
   it("explains a refusal rather than drawing an empty timeline", () => {

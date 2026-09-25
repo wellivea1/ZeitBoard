@@ -1,286 +1,211 @@
-/* Home. Four units with clear space between them — the current state, the
- * timeline, what needs you, and a quiet footer — rather than one card cut into
- * nine strips by hairlines, which is what read as "no separation between
- * elements". */
+/* Home as an almanac page (ui-refactor-plan.md §14): a lead sentence with the
+   record buttons beside it, the next three days as a figure, then three
+   columns under small-capital titles. One continuous sheet; rules divide it,
+   nothing is boxed. */
 
-.home {
-  display: grid;
-  gap: var(--space-4);
+.almanac {
+  display: block;
 }
 
 .home-now {
-  padding: var(--space-6);
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(240px, 1fr);
-  gap: var(--space-8);
+  grid-template-columns: minmax(0, 1fr) 260px;
+  align-items: end;
+  gap: 28px 64px;
+  padding-top: 10px;
+}
+
+.home-lead {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.lead {
+  max-width: 30em;
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: clamp(27px, 2.7vw, 40px);
+  font-weight: 400;
+  line-height: 1.2;
+  letter-spacing: -0.012em;
+  text-wrap: pretty;
+}
+
+.lead strong {
+  font-weight: 600;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+.home-now[data-state="uncertain"] .lead {
+  color: var(--ink);
+}
+
+.lead-meta {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.lead-meta .sync-dot {
+  margin-right: -8px;
+}
+
+.home-record {
+  display: grid;
+  gap: 8px;
+}
+
+.home-record .section-kicker {
+  margin: 0;
+}
+
+.home-record .quick-log-actions {
+  display: grid;
+}
+
+.home-record .quick-log-actions .button {
+  width: 100%;
+}
+
+/* Three columns under small-capital titles. */
+.home-columns {
+  margin-top: 36px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 32px 56px;
   align-items: start;
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-card);
 }
 
-.home-now-state {
-  display: grid;
-  gap: var(--space-2);
-}
-
-.home-now-state h2 {
-  margin: 0;
+.home-column {
+  min-width: 0;
   display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  color: var(--ink);
-  font-size: var(--type-display);
-  line-height: 1.05;
-  letter-spacing: -0.03em;
+  flex-direction: column;
 }
 
-.home-elapsed {
+.home-entry {
+  display: grid;
+  gap: 5px;
+  padding: 12px 0 14px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.home-entry h3 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.22;
+}
+
+.home-entry p {
   margin: 0;
   color: var(--muted);
-  font-size: var(--type-body-strong);
+  font-family: var(--font-serif);
+  font-size: 15.5px;
+  line-height: 1.4;
 }
 
-.home-elapsed strong {
+.home-entry p strong {
   color: var(--ink);
-  font-size: var(--type-data);
-  font-variant-numeric: tabular-nums;
-}
-
-.home-evidence {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--type-label);
-}
-
-.home-evidence[data-state="stale"],
-.home-evidence[data-state="withheld"] {
-  color: var(--state-uncertain);
   font-weight: 600;
 }
 
-/* The one-tap actions sit under the state they change. */
-.home-now-state .quick-log {
-  margin-top: var(--space-3);
-}
-
-.home-next {
-  padding-left: var(--space-6);
-  display: grid;
-  gap: var(--space-1);
-  border-left: 1px solid var(--divider);
-}
-
-.home-next-label {
-  margin: 0 0 var(--space-1);
+.home-entry-actions {
   display: flex;
-  gap: var(--space-2);
-  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+}
+
+.diary-day h3 {
+  margin: 0;
+  padding: 14px 0 4px;
   color: var(--muted);
-  font-size: var(--type-label);
+  font-family: var(--font-sans);
+  font-size: 11px;
   font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
-.home-next-label svg {
-  width: 16px;
-  height: 16px;
-  color: var(--state-asleep);
-}
-
-.home-next > strong {
-  color: var(--ink);
-  font-size: var(--type-data);
-  font-variant-numeric: tabular-nums;
-}
-
-.home-next > small {
-  color: var(--muted);
-  font-size: var(--type-label);
-}
-
-.home-next-wake {
-  margin: var(--space-3) 0 0;
-  color: var(--muted);
-  font-size: var(--type-body);
-}
-
-.home-next-wake span {
-  color: var(--ink);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-
-.home-lower {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--space-4);
-}
-
-.home-panel {
-  padding: var(--space-4) var(--space-5);
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-card);
-}
-
-.home-panel h3 {
-  margin: 0 0 var(--space-3);
-  font-size: var(--type-body-strong);
-}
-
-.home-list {
+.diary-day ul {
   margin: 0;
   padding: 0;
-  display: grid;
-  gap: var(--space-2);
   list-style: none;
 }
 
-.home-list li {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-3);
-  align-items: baseline;
-  justify-content: space-between;
-  padding-left: var(--space-3);
-  border-left: 3px solid var(--sage);
-  font-size: var(--type-body);
-}
-
-.home-list li[data-tone="warn"] {
-  border-left-color: var(--danger-action-bg);
-}
-
-.home-list a {
-  color: var(--ink);
-  font-weight: 600;
-}
-
-.home-list li > span {
+.diary-day li {
   display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 1px 10px;
+  padding: 4px 0;
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: 1.3;
 }
 
-.home-list small {
+.diary-time {
   color: var(--muted);
-  font-size: var(--type-label);
+  font-size: 15px;
+  font-variant-numeric: lining-nums tabular-nums;
 }
 
-.home-list em {
-  color: var(--danger-text);
-  font-size: var(--type-label);
-  font-style: normal;
+.diary-day li em {
+  grid-column: 2;
+  color: var(--accent);
+  font-size: 14.5px;
+}
+
+.diary-day li[data-kind="dose"] span:not(.diary-time) {
+  color: var(--muted);
+}
+
+.home-more {
+  margin-top: 12px;
+  font-size: 13px;
   font-weight: 600;
 }
 
 .home-empty {
-  margin: 0;
+  margin: 12px 0 0;
   color: var(--muted);
-  font-size: var(--type-body);
+  font-family: var(--font-serif);
+  font-size: 16px;
+  font-style: italic;
 }
 
-.home-footer {
-  padding: 0 var(--space-2);
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-5);
-  align-items: baseline;
-  color: var(--muted);
-  font-size: var(--type-label);
-}
-
-.home-footer strong {
-  color: var(--ink);
-}
-
-.home-footer a {
-  color: var(--sage-dark);
-  font-weight: 600;
-}
-
-.home-footer > small {
-  flex-basis: 100%;
-  font-size: var(--type-label);
+/* The note about what the forecast is sits under the columns until closed. */
+.almanac > .notice {
+  max-width: 72ch;
+  margin: 44px 0 0;
 }
 
 .home-sharing {
-  display: inline-flex;
-  gap: var(--space-1);
-  align-items: center;
-}
-
-.home-sharing svg {
-  width: 14px;
-  height: 14px;
-}
-
-.home-confidence summary {
-  cursor: pointer;
-  color: var(--sage-dark);
-  font-weight: 600;
-}
-
-.home-confidence p {
-  max-width: 62ch;
-  margin: var(--space-2) 0 0;
-  color: var(--muted);
-  line-height: 1.5;
+  margin: 14px 0 0;
+  font-size: var(--type-label);
 }
 
 .home-recovery {
-  padding: var(--space-5) var(--space-6);
-  display: flex;
-  gap: var(--space-5);
-  align-items: center;
-  justify-content: space-between;
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-card);
-}
-
-.home-recovery h3 {
-  margin: 0 0 var(--space-2);
-  font-size: var(--type-section);
+  max-width: 60ch;
+  margin-top: 28px;
+  display: grid;
+  gap: 12px;
 }
 
 .home-recovery p {
-  max-width: 60ch;
   margin: 0;
-  color: var(--muted);
-  font-size: var(--type-body);
-  line-height: 1.5;
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: 1.45;
 }
 
-@media (max-width: 900px) {
-  .home-now {
-    grid-template-columns: 1fr;
-    gap: var(--space-5);
-  }
-
-  .home-next {
-    padding: var(--space-4) 0 0;
-    border-left: 0;
-    border-top: 1px solid var(--divider);
-  }
-
-  .home-lower {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 700px) {
-  .home-now,
-  .home-recovery {
-    padding: var(--space-5);
-  }
-
-  .home-recovery {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-}
-
-/* One-tap sleep logging. Used on Home under the current state and at the top
-   of Log; the host decides the spacing around it. */
+/* One-tap sleep logging. Used on Home beside the lead and at the top of Log;
+   the host decides the spacing around it. */
 .quick-log {
   display: grid;
   gap: var(--space-3);
@@ -292,22 +217,24 @@
   gap: var(--space-2);
 }
 
-.quick-log-actions .button {
-  display: inline-flex;
-  gap: var(--space-2);
-  align-items: center;
+/* The two words are the button; the moon and the target were ornament. */
+.quick-log-actions svg {
+  display: none;
 }
 
 .quick-log-pending {
   margin: 0;
   display: grid;
   gap: 2px;
-  padding-left: var(--space-3);
-  border-left: 2px solid var(--state-asleep);
+  font-family: var(--font-serif);
 }
 
-.quick-log-pending[data-stale] {
-  border-left-color: var(--state-uncertain);
+.quick-log-pending strong {
+  font-weight: 600;
+}
+
+.quick-log-pending[data-stale] strong {
+  color: var(--state-uncertain);
 }
 
 .quick-log-pending small,
@@ -321,17 +248,17 @@
 }
 
 .quick-log-question {
-  padding: var(--space-4);
+  padding: 14px 0;
   display: grid;
   gap: var(--space-3);
-  background: var(--panel-alt);
-  border-radius: var(--radius-card);
+  border-block: 1px solid var(--divider);
 }
 
 .quick-log-question > p {
   margin: 0;
   color: var(--ink);
-  font-size: var(--type-body);
+  font-family: var(--font-serif);
+  font-size: 16px;
 }
 
 .quick-log-question label {
@@ -368,4 +295,17 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+}
+
+@media (max-width: 1100px) {
+  .home-columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .home-now,
+  .home-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

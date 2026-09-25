@@ -4,7 +4,15 @@ import { HomeScreen } from "./HomeScreen";
 import { overviewUnavailable } from "../data/overview";
 
 vi.mock("../state/approvalQueue", () => ({
-  useApprovalQueue: () => ({ pendingCount: 0, ready: true, incomplete: false }),
+  useApprovalQueue: () => ({
+    pendingCount: 0,
+    ready: true,
+    incomplete: false,
+    breakdown: { suggestions: 0, conflicts: 0, assistant: 0, requests: 0 },
+  }),
+}));
+vi.mock("../state/approvals", () => ({
+  useApprovals: () => ({ pending: [], busyProposalId: null, decide: vi.fn() }),
 }));
 afterEach(() => {
   delete (globalThis as { go?: unknown }).go;
@@ -30,10 +38,11 @@ describe("Home data recovery", () => {
     (globalThis as { go?: unknown }).go = { main: { App: { GetOverview } } };
     render(<HomeScreen />);
     expect(screen.queryByText("Sample data")).toBeNull();
-    expect(screen.queryByText("Likely awake")).toBeNull();
-    expect(screen.getByText("Loading your rhythm…")).toBeVisible();
+    expect(screen.queryByText(/You have been awake/)).toBeNull();
+    expect(screen.getByText("Reading your records…")).toBeVisible();
     reject(new Error("synthetic service failure"));
-    expect(await screen.findByRole("heading", { name: "Estimate unavailable" })).toBeVisible();
+    expect(await screen.findByText(/could not be read just now/)).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Your rhythm is not available yet" })).toBeVisible();
     expect(screen.queryByText("Still learning your rhythm")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("Still learning your rhythm")).toBeVisible();

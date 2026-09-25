@@ -1553,3 +1553,63 @@ routes.
 Not verified here: the Android companion, a Windows production build of this
 branch, and a full screen-reader pass of the new layouts. Operational
 qualification is unchanged.
+
+## Almanac redesign — 2026-09-25
+
+The design record is `ui-refactor-plan.md` §14. Canonical web formatting, lint,
+types, **452 tests (446 desktop + 6 trusted prototype)**, the production web
+builds and `lint-ui-standards.mjs` passed, the last now forbidding side stripes
+and pills in every stylesheet. The three existing Fast Refresh lint warnings
+remain. The Android `gradlew check` passed, including lint and the unit tests,
+with new tests for the dial's three states, its sentence and its centre.
+
+Verified in the real app (`wails dev` against a disposable synthetic profile,
+driven from a browser at 737px and 1280px, in the Paper and Ink themes):
+
+- **Home.** The lead sentence with its meta line, Record beside it, Fig. 1, and
+  the three columns. With the records stale, the sentence gives the freshness
+  explanation and stops. Before this fix it went on to print a sleep window
+  that had already begun. The figure says what brings it back without repeating
+  the reason. The diary still lists the calendar's events.
+- **Masthead.** One line at desktop widths; the date drops under 1180px, and
+  under 980px the utility links and the five destinations take a line each.
+- **Plan › Week.** Four days by default; Day and Week, the steps and Today move
+  as labelled. Recorded, likely-asleep and uncertain bands; events, a dashed
+  suggestion accepted from the board and opened for its reasons; a narrow
+  column keeps a block's words and moves its decision under the board. The
+  stale-estimate note shows when Home withholds its figure.
+- **Tasks, Log, Rhythm, Sharing, Data Sources, Settings and the assistant.**
+  Set in the new language with no stripes, pills or card boxes left.
+
+Verified on the Android emulator (`ZeitBoard_Completion_Test`, sample mode):
+the dial draws tonight's onset band, the night and the morning's wake band,
+three recorded nights and the hand. The centre reads "AWAKE 1 h 37 m since
+07:20". The sentence reads "Sleep is likely to begin between 23:55 and 01:25
+tonight, and you will probably wake between 07:35 and 09:25 tomorrow." Two
+defects were found this way and fixed. The sentence was cutting the wake band
+at the dial's 24-hour edge. The sample data was fixed in June, which left the
+dial empty.
+
+The test AVD's app database came from an older development schema and failed
+with "no such column: newer.sequence". Clearing the synthetic app data fixed it.
+The current schema has the column.
+
+Not verified here: a Windows production build of this branch, a full
+screen-reader pass of the new layouts, and the Android dial against a live
+server's forecasts. Operational qualification is unchanged.
+
+### Fonts and notes, same day
+
+Newsreader and Public Sans are bundled (OFL, with their license texts). In the
+running app `document.fonts` reported both faces loaded, with the Latin
+Extended subsets left unloaded until needed. On the emulator the dial's figure
+and sentence are set in Newsreader and the labels in Public Sans.
+
+The second pass was checked screen by screen in the running app, in the Ink
+theme at 695px. Home's note closed with its ×, was listed in Settings ›
+Display as "What the forecast is · Home", and came back with Show again. The
+conflict versions read as two framed choices. The past-night form and the
+settings groups sit on sheets. The notes on Log, Rhythm, Data Sources and
+Sharing each show once with an ×. New tests cover closing a note, remembering
+it across a reload, and showing one or all again (449 desktop + 6 prototype
+tests); the Android `gradlew check` passed.

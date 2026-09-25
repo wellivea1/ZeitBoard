@@ -1,7 +1,5 @@
 .data-source-workspace {
   min-width: 0;
-  border-top: 1px solid var(--line);
-  border-bottom: 1px solid var(--line);
 }
 
 .data-source-registry,
@@ -19,8 +17,10 @@
 
 .data-source-section-heading h2 {
   margin: 0;
-  font-size: var(--type-data);
-  letter-spacing: -0.02em;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 400;
+  letter-spacing: -0.01em;
 }
 
 .data-source-section-heading > p {
@@ -28,7 +28,9 @@
   margin: 0;
   justify-self: end;
   color: var(--muted);
-  font-size: var(--type-label);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-style: italic;
   line-height: 1.45;
   text-align: right;
 }
@@ -67,7 +69,9 @@
 
 .source-ledger-row h3 {
   margin: 0 0 2px;
-  font-size: var(--type-body-strong);
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 500;
 }
 
 .source-ledger-row p {
@@ -79,22 +83,20 @@
 }
 
 .source-ledger-state {
-  padding-left: var(--space-2);
   color: var(--muted);
-  border-left: 2px solid var(--divider);
-  font-size: var(--type-label);
-  font-weight: 800;
+  font-size: var(--type-micro);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
 .source-ledger-state[data-state="available"] {
-  color: var(--confidence-high-text);
-  border-left-color: var(--state-awake);
+  color: var(--ink);
 }
 
 .source-ledger-state[data-state="error"] {
-  color: var(--confidence-low-text);
-  border-left-color: var(--danger-border);
+  color: var(--danger-text);
 }
 
 .sleep-import-panel {
@@ -103,7 +105,7 @@
 }
 
 .sleep-import-panel {
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--divider);
 }
 
 .sleep-entry-fields {
@@ -197,20 +199,20 @@
 
 .sleep-delete-confirmation {
   margin: var(--space-3) 0 0 30px;
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-3) 0;
   display: grid;
   gap: var(--space-3);
   color: var(--danger-text);
-  background: var(--danger-bg);
-  border: 1px solid var(--danger-border);
-  border-radius: var(--radius-card);
+  border-block: 1px solid var(--danger-border);
 }
 
 .sleep-delete-confirmation strong {
   display: block;
   margin-bottom: var(--space-1);
   color: var(--danger-text);
-  font-size: var(--type-body-strong);
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 500;
 }
 
 .sleep-delete-confirmation p {
@@ -254,9 +256,9 @@
   min-height: 44px;
   display: inline-flex;
   align-items: center;
-  color: var(--sage-dark);
+  color: var(--ink);
   cursor: pointer;
-  font-weight: 800;
+  font-weight: 600;
 }
 
 .sleep-entry-history ul {
@@ -274,13 +276,16 @@
 
 .sleep-log-empty h2 {
   margin: 0 0 var(--space-2);
-  font-size: var(--type-body-strong);
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 500;
 }
 
 .sleep-log-empty p {
   margin: 0;
   color: var(--muted);
-  font-size: var(--type-body);
+  font-family: var(--font-serif);
+  font-size: 15.5px;
 }
 
 .sleep-import-intro,
@@ -313,15 +318,15 @@
   min-height: 44px;
   padding: var(--space-2);
   color: var(--ink);
-  background: var(--panel-alt);
-  border: 1px solid var(--divider);
-  border-radius: var(--radius-control);
+  background: var(--paper);
+  border: 1px solid var(--line);
 }
 
 .sleep-import-note {
   margin: var(--space-3) 0 0;
-  padding-left: var(--space-3);
-  border-left: 2px solid var(--state-uncertain);
+  font-family: var(--font-serif);
+  font-size: 14.5px;
+  font-style: italic;
 }
 
 .sleep-import-results {
@@ -352,14 +357,16 @@
 .sleep-import-counts dd {
   margin: var(--space-1) 0 0;
   color: var(--ink);
-  font-size: var(--type-data-large);
+  font-family: var(--font-serif);
+  font-size: 30px;
+  font-variant-numeric: lining-nums tabular-nums;
 }
 
 .sleep-import-document-errors {
   margin-top: var(--space-4);
-  padding: var(--space-3) 0 var(--space-3) var(--space-4);
-  color: var(--confidence-low-text);
-  border-left: 2px solid var(--danger-border);
+  padding: var(--space-3) 0;
+  color: var(--danger-text);
+  border-block: 1px solid var(--danger-border);
 }
 
 .sleep-import-document-errors ul,
@@ -412,8 +419,7 @@
 .sleep-import-table-scroll {
   max-height: 430px;
   overflow: auto;
-  border: 1px solid var(--divider);
-  border-radius: 0;
+  border-block: 1px solid var(--ink);
 }
 
 .sleep-import-table {
@@ -436,10 +442,10 @@
   top: 0;
   z-index: 1;
   color: var(--muted);
-  background: var(--panel-alt);
-  font-size: var(--type-label);
+  background: var(--canvas);
+  font-size: var(--type-micro);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.1em;
 }
 
 .sleep-import-table tr:last-child td {
@@ -459,24 +465,21 @@
 
 .import-row-status {
   display: inline-flex;
-  padding-left: var(--space-2);
   color: var(--muted);
-  border-left: 2px solid var(--divider);
-  font-size: var(--type-label);
-  font-weight: 850;
+  font-size: var(--type-micro);
+  font-weight: 700;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  white-space: nowrap;
 }
 
 .import-row-status.ready,
 .import-row-status.imported {
-  color: var(--confidence-high-text);
-  border-left-color: var(--state-awake);
+  color: var(--ink);
 }
 
 .import-row-status.invalid {
-  color: var(--confidence-low-text);
-  border-left-color: var(--danger-border);
+  color: var(--danger-text);
 }
 
 @media (max-width: 980px) {
@@ -534,7 +537,9 @@
 .data-source-log-pointer {
   margin: 0;
   color: var(--muted);
-  font-size: var(--type-body);
+  font-family: var(--font-serif);
+  font-size: 15.5px;
+  font-style: italic;
 }
 
 /* Log > Sleep: the two quick buttons, a fold-out for a night that was missed,
@@ -555,23 +560,17 @@
 }
 
 .sleep-add {
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-card);
+  border-top: 1px solid var(--divider);
 }
 
 .sleep-add > summary {
-  padding: var(--space-3) var(--space-4);
+  padding: var(--space-3) 0;
   cursor: pointer;
-  font-weight: 700;
-}
-
-.sleep-add[open] > summary {
-  border-bottom: 1px solid var(--divider);
+  font-weight: 600;
 }
 
 .sleep-add > form {
-  padding: var(--space-4);
+  padding: var(--space-2) 0 var(--space-4);
 }
 
 .sleep-entry-list-panel .plan-section-head {
@@ -582,7 +581,6 @@
   margin: 0;
   padding: 0;
   list-style: none;
-  border-top: 1px solid var(--divider);
 }
 
 .sleep-night {
@@ -614,8 +612,9 @@
 }
 
 .sleep-night-main strong {
-  font-size: var(--type-body);
-  font-weight: 700;
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 500;
 }
 
 .sleep-night-main strong span {
@@ -632,19 +631,18 @@
 
 .sleep-night-state {
   margin-left: var(--space-2);
-  padding: 2px 8px;
-  font-style: normal;
   color: var(--muted);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
+  font-family: var(--font-sans);
+  font-style: normal;
   font-size: var(--type-micro);
   font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
   white-space: nowrap;
 }
 
 .sleep-night[data-review] .sleep-night-state {
-  color: var(--confidence-medium-text);
-  border-color: var(--state-uncertain);
+  color: var(--state-uncertain);
 }
 
 .sleep-night-actions {
@@ -654,10 +652,10 @@
 
 .sleep-night-review {
   margin: var(--space-3) 0 0 30px;
-  padding-left: var(--space-3);
   color: var(--muted);
-  border-left: 2px solid var(--state-uncertain);
-  font-size: var(--type-label);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-style: italic;
   line-height: 1.5;
 }
 

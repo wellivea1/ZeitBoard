@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Notice } from "../components/Notice";
 import { PageHeader } from "../components/AppShell";
 import { MedicationHistory } from "../components/MedicationHistory";
 import { MedicationFeasibility } from "../components/MedicationFeasibility";
@@ -187,7 +188,7 @@ function MedicationWorkspaceView({
             mutate(() => logMedicationEvent(input), loggedMessage(input))
           }
         />
-        <details className="medication-more">
+        <details className="medication-more fold">
           <summary>Another time, or with a note</summary>
           <MedicationLogForm
             medications={data?.medications ?? []}
@@ -292,18 +293,14 @@ export function MedicationsScreen({ embedded }: { embedded?: boolean } = {}) {
         level={embedded ? "panel" : "page"}
       />
 
-      {/* Both notices stay on screen; they just no longer take a panel each. */}
-      <section className="medication-boundary" aria-label="Medication safety boundary">
-        <span>
-          <strong>Logging and context only</strong>{" "}
-          {data?.disclaimer ?? "Medication timing is not medical advice."}
-        </span>
-        <span>
-          <strong>No interaction checking</strong>{" "}
+      {/* Read once, then closable; Settings › Display brings it back. */}
+      <Notice id="medications.boundary">
+        <p>{data?.disclaimer ?? "Medication timing is not medical advice."}</p>
+        <p>
           {data?.interactionDisclaimer ??
             "ZeitBoard does not check medication interactions; ask a pharmacist or clinician."}
-        </span>
-      </section>
+        </p>
+      </Notice>
 
       {error && (
         <div className="medication-error" role="alert">

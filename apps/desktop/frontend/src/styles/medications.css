@@ -10,7 +10,6 @@
 .medication-workspace .button.compact {
   min-height: 34px;
   padding-inline: var(--space-3);
-  border-radius: var(--radius-control);
 }
 
 .medication-workspace .text-button,
@@ -46,41 +45,44 @@
 /* Both notices, compact: present on every visit without taking a panel each. */
 .medication-boundary {
   margin-bottom: var(--space-4);
-  padding: var(--space-2) var(--space-3);
+  padding: 10px 0;
   display: grid;
   gap: var(--space-1);
   color: var(--muted);
-  background: var(--panel-alt);
-  border-left: 3px solid var(--state-uncertain);
-  border-radius: var(--radius-control);
-  font-size: var(--type-label);
+  border-block: 1px solid var(--divider);
+  font-family: var(--font-serif);
+  font-size: 14.5px;
+  font-style: italic;
   line-height: 1.45;
 }
 
 .medication-boundary strong {
   margin-right: var(--space-1);
   color: var(--ink);
+  font-style: normal;
+  font-weight: 600;
 }
 
 .medication-error {
   margin-bottom: var(--space-4);
-  padding: var(--space-2) var(--space-3);
+  padding: 10px 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
   color: var(--danger-text);
-  border-left: 3px solid var(--danger-border);
-  background: var(--danger-bg);
-  font-size: var(--type-body);
+  border-block: 1px solid var(--danger-border);
+  font-family: var(--font-serif);
+  font-size: 15px;
 }
 
-/* One column of cards in the order the work happens: record, look back,
-   manage the list, then the occasional schedule check. */
+/* One column of sections in the order the work happens: record, look back,
+   manage the list, then the occasional schedule check. Rules divide them;
+   none is boxed. */
 .medication-workspace {
   min-width: 0;
   display: grid;
-  gap: var(--space-4);
+  gap: 40px;
 }
 
 .medication-today,
@@ -89,10 +91,6 @@
 .medication-feasibility,
 .medication-report {
   min-width: 0;
-  padding: var(--space-5);
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-card);
 }
 
 .medication-log-section,
@@ -100,40 +98,45 @@
   min-width: 0;
 }
 
+/* One entry per medication, set like Home's other columns: the name in the
+   serif, a sentence about the usual time and the last record, then two words
+   to press. */
 .medication-taps {
   margin: 0;
   padding: 0;
   list-style: none;
-  border-top: 1px solid var(--divider);
 }
 
 .medication-taps li {
-  padding: var(--space-3) 0;
+  padding: 12px 0 10px;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-3);
+  gap: 4px;
   border-bottom: 1px solid var(--divider);
 }
 
 .medication-taps li > div:first-child {
   min-width: 0;
   display: grid;
-  gap: 2px;
+  gap: 4px;
 }
 
 .medication-taps strong {
-  font-size: var(--type-body-strong);
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.22;
 }
 
 .medication-taps small {
   color: var(--muted);
-  font-size: var(--type-label);
+  font-family: var(--font-serif);
+  font-size: 15.5px;
+  line-height: 1.4;
 }
 
 .medication-tap-actions {
   display: flex;
-  gap: var(--space-2);
+  gap: 4px 18px;
 }
 
 .medication-more,
@@ -144,9 +147,9 @@
 .medication-more > summary,
 .medication-add > summary {
   padding-block: var(--space-2);
-  color: var(--sage-dark);
+  color: var(--ink);
   cursor: pointer;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .medication-more[open] > summary,
@@ -154,13 +157,14 @@
   margin-bottom: var(--space-3);
 }
 
-.medication-section-heading,
-.medication-rail-heading {
+.medication-section-heading {
+  margin-bottom: var(--space-2);
+  padding-bottom: 8px;
   display: flex;
-  align-items: end;
+  align-items: baseline;
   justify-content: space-between;
   gap: var(--space-3);
-  margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--ink);
 }
 
 .medication-section-heading h2,
@@ -169,14 +173,19 @@
 .medication-event-erasure h3 {
   margin: 0;
   color: var(--ink);
-  font-size: var(--type-data);
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
   line-height: 1.2;
+  text-transform: uppercase;
 }
 
-.medication-section-heading > span,
-.medication-rail-heading > span {
+.medication-section-heading > span {
   color: var(--muted);
-  font-size: var(--type-label);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-style: italic;
   font-variant-numeric: tabular-nums;
 }
 
@@ -253,13 +262,13 @@
 }
 
 .medication-status-field input:checked + span {
-  color: var(--ink);
-  border-color: var(--state-awake);
-  box-shadow: inset 0 -2px 0 var(--state-awake);
+  color: var(--button-primary-text);
+  background: var(--button-primary-bg);
+  border-color: var(--button-primary-bg);
 }
 
 .medication-status-field input:focus-visible + span {
-  outline: 2px solid var(--state-awake);
+  outline: 2px solid var(--sage);
   outline-offset: 2px;
 }
 
@@ -296,19 +305,20 @@
 .medication-history-empty p {
   margin: 0;
   color: var(--muted);
-  font-size: var(--type-body);
+  font-family: var(--font-serif);
+  font-size: 15.5px;
+  font-style: italic;
   line-height: 1.5;
 }
 
 .medication-loading,
 .medication-history-empty {
-  min-height: 180px;
-  padding: var(--space-8) var(--space-4);
+  min-height: 140px;
+  padding: var(--space-6) 0;
   display: grid;
   align-content: center;
   justify-items: start;
   gap: var(--space-2);
-  border-block: 1px solid var(--divider);
   color: var(--muted);
 }
 
@@ -324,7 +334,7 @@
 }
 
 .medication-ledger {
-  border-top: 1px solid var(--line);
+  border-top: 0;
 }
 
 .medication-ledger-header,
@@ -336,37 +346,26 @@
 
 .medication-ledger-header {
   min-height: 30px;
-  padding: 7px var(--space-3);
+  padding: 7px 0;
   align-items: center;
-  color: var(--subtle);
-  border-bottom: 1px solid var(--line);
-  background: var(--panel-alt);
+  color: var(--muted);
+  border-bottom: 1px solid var(--divider);
   font-size: var(--type-micro);
   font-weight: 700;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
 .medication-ledger article {
   position: relative;
-  min-height: 104px;
-  padding: var(--space-3);
+  min-height: 96px;
+  padding: 12px 0;
   align-items: start;
   border-bottom: 1px solid var(--divider);
-  box-shadow: inset 3px 0 0 var(--state-asleep);
-}
-
-.medication-ledger article[data-relation="observed"] {
-  box-shadow: inset 3px 0 0 var(--ink);
-}
-
-.medication-ledger article[data-relation="unavailable"] {
-  box-shadow: inset 3px 0 0 var(--line);
 }
 
 .medication-ledger article[data-excluded="true"] {
-  opacity: 0.64;
-  background: var(--panel-alt);
+  opacity: 0.6;
 }
 
 .medication-ledger-status,
@@ -380,7 +379,9 @@
 
 .medication-ledger-status strong {
   color: var(--ink);
-  font-size: var(--type-body-strong);
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 500;
   text-transform: capitalize;
 }
 
@@ -394,7 +395,9 @@
 .medication-ledger-identity > strong {
   overflow: hidden;
   color: var(--ink);
-  font-size: var(--type-body-strong);
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -408,7 +411,9 @@
 .medication-ledger-identity p {
   margin: var(--space-1) 0 0;
   color: var(--muted);
-  font-size: var(--type-body);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-style: italic;
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
@@ -456,13 +461,12 @@
 .medication-correction-editor,
 .medication-event-erasure {
   margin-top: var(--space-4);
-  padding: var(--space-4);
+  padding: var(--space-4) 0;
   display: grid;
   grid-template-columns: minmax(140px, 0.8fr) repeat(3, minmax(130px, 1fr));
   gap: var(--space-3);
   align-items: end;
-  border-block: 1px solid var(--line);
-  background: var(--panel-alt);
+  border-block: 1px solid var(--ink);
 }
 
 .medication-correction-editor header,
@@ -532,7 +536,7 @@
 }
 
 .medication-definition-list {
-  border-top: 1px solid var(--line);
+  border-top: 0;
 }
 
 .medication-definition-list article {
@@ -554,7 +558,9 @@
   min-width: 0;
   overflow: hidden;
   color: var(--ink);
-  font-size: var(--type-body-strong);
+  font-family: var(--font-serif);
+  font-size: 19px;
+  font-weight: 500;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -566,13 +572,14 @@
 }
 
 .medication-definition-list article[data-active="true"] .medication-definition-title span {
-  color: var(--state-awake);
+  color: var(--ink);
 }
 
 .medication-definition-list p {
   margin: 0;
   color: var(--muted);
-  font-size: var(--type-body);
+  font-family: var(--font-serif);
+  font-size: 15px;
 }
 
 .medication-definition-list small {
@@ -591,15 +598,11 @@
   padding: 2px 0;
 }
 
-.medication-rail-editor,
-.medication-erasure {
-  background: var(--paper);
-}
-
 .medication-erasure {
   display: grid;
   gap: var(--space-3);
-  box-shadow: inset 3px 0 0 var(--danger-border);
+  padding: var(--space-3) 0;
+  border-block: 1px solid var(--danger-border);
 }
 
 @media (max-width: 1120px) {
@@ -633,13 +636,6 @@
   .medication-page-actions {
     align-items: stretch;
     flex-direction: column;
-  }
-
-  .medication-today,
-  .medication-history-section,
-  .medication-definition-rail,
-  .medication-feasibility {
-    padding: var(--space-4);
   }
 
   .medication-taps li {

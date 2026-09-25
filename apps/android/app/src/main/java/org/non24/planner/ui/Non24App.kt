@@ -53,19 +53,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -80,12 +82,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import org.non24.planner.domain.Confidence
 import org.non24.planner.data.DurableLocalDataState
 import org.non24.planner.data.SyncState
 import org.non24.planner.data.CompanionState
@@ -102,24 +104,18 @@ import org.non24.planner.domain.MedicationEvent
 import org.non24.planner.domain.TimeWindow
 import org.non24.planner.domain.resolveTemporalZone
 
+// The desktop's words where the content matches: Now is the dial, Plan the
+// synced tasks, Log the sleep records and their corrections. The routes keep
+// their old names; nothing outside the app links to them.
 private enum class Destination(
     val route: String,
     val label: String,
-    val icon: DestinationIcon,
 ) {
-    STATUS("status", "Status", DestinationIcon.STATUS),
-    CORRECT("correct", "Correct", DestinationIcon.CORRECT),
-    TASKS("tasks", "Tasks", DestinationIcon.TASKS),
-    MEDICATION("medication", "Medication", DestinationIcon.MEDICATION),
-    SETTINGS("settings", "Settings", DestinationIcon.SETTINGS),
-}
-
-private enum class DestinationIcon {
-    STATUS,
-    CORRECT,
-    TASKS,
-    MEDICATION,
-    SETTINGS,
+    STATUS("status", "Now"),
+    TASKS("tasks", "Plan"),
+    CORRECT("correct", "Log"),
+    MEDICATION("medication", "Doses"),
+    SETTINGS("settings", "Settings"),
 }
 
 @Composable
@@ -161,7 +157,7 @@ fun Non24App(
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
                 Column {
-                    BrandBar()
+                    BrandBar(now)
                     if (uiState.settings.dataMode == DataMode.FIXTURE) {
                         FixtureBanner()
                     }
@@ -259,40 +255,23 @@ private fun StatusScreen(
     onOpenHealthConnectListing: () -> Unit,
 ) {
     ScreenColumn {
-        ScreenHeader(
-            kicker = "Today",
-            title = "Status",
-            description = "Estimated sleep timing and the latest observation on this device.",
-        )
-
         DurableLocalDataNotice(state.localDataState, onRetryLocalData)
 
         if (state.settings.dataMode != DataMode.FIXTURE) {
             companion.error?.let { InfoStrip(it) }
             companion.projection?.let { projection ->
                 if (projection.containsSyntheticData) InfoStrip("Your server's history includes synthetic data. This is a sample estimate.")
-                val qualification = when {
-                    projection.status == "refused" -> projection.refusal ?: "A forecast is not available."
-                    !projection.isCurrentSnapshot(now) -> "Cached forecast. Its current-state assessment has expired or the server clock differs; connect to refresh."
-                    projection.freshness != "current" -> projection.freshnessExplanation
-                    else -> "Server estimate based on recent synced sleep."
-                }
-                InfoStrip(qualification)
-                Text("Server snapshot: " + formatDisplay(projection.generatedAt, null, null, state.settings.use24HourTime), style = MaterialTheme.typography.bodySmall)
             }
         }
 
         if (state.localDataState != DurableLocalDataState.Loading) {
-            if (state.estimate != null) {
-                StatusEstimatePanel(state)
-            } else if (state.localDataState == DurableLocalDataState.Ready) {
-                EmptyEstimatePanel(connected)
-            }
+            NowDial(state = state, companion = companion, connected = connected, now = now)
 
             if (
                 state.latestSleepEpisode != null ||
                 (state.localDataState == DurableLocalDataState.Ready && companion.projection?.sleep.isNullOrEmpty())
             ) {
+                SectionHeading("Latest sleep")
                 LatestSleepPanel(
                     episode = state.latestSleepEpisode,
                     use24HourTime = state.settings.use24HourTime,
@@ -334,114 +313,126 @@ private fun StatusScreen(
     }
 }
 
+/**
+ * The dial, the sentence under it, and why it can or cannot be trusted. The
+ * forecast comes from the server when there is one and from this device's
+ * estimate otherwise; a withheld forecast draws no bands, as on the desktop.
+ */
 @Composable
-private fun StatusEstimatePanel(state: AppUiState) {
-    val estimate = requireNotNull(state.estimate)
+private fun NowDial(state: AppUiState, companion: CompanionState, connected: Boolean, now: Instant) {
+    val zone = ZoneId.systemDefault()
+    val use24 = state.settings.use24HourTime
+    val fixture = state.settings.dataMode == DataMode.FIXTURE
+    val projection = if (fixture) null else companion.projection
+    val withheld = projection != null && (projection.status != "estimated" || projection.freshness == "withheld")
+    val forecasts = when {
+        withheld -> emptyList()
+        projection != null -> projection.forecasts.map { ForecastPair(it.sleep, it.waking) }
+        else -> state.estimate?.let { snapshotPairs(it.predictedSleepWindow, it.predictedWakingWindow) }.orEmpty()
+    }
+    // The dial draws 24 hours; the sentence reads further, so a waking band
+    // that runs past the dial's edge is given whole rather than cut at it.
+    val segments = dialSegments(forecasts, now, now.plus(Duration.ofHours(24)))
+    val ahead = sleepAhead(dialSegments(forecasts, now, now.plus(Duration.ofHours(48))))
+    val recorded = (projection?.sleep?.map { TimeWindow(it.start, it.end) }).takeUnless { it.isNullOrEmpty() }
+        ?: state.sleepEpisodes.map { TimeWindow(it.start, it.end) }
+    val nights = recorded.filter { !it.end.isAfter(now) }.sortedByDescending { it.start }.take(7)
+    val current = when {
+        projection != null -> projection.freshness == "current" && projection.isCurrentSnapshot(now)
+        else -> nights.firstOrNull()?.let { Duration.between(it.end, now) < Duration.ofHours(20) } ?: false
+    }
+    val reading = dialCenter(nights.firstOrNull()?.end, now, zone, use24, current)
+    val lead = leadParts(ahead, now, zone, use24)
+    val sentence = lead.joinToString("") { it.text }
+
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                Brush.linearGradient(
-                    colors = listOf(Color(0xFF31564F), Color(0xFF5A776E)),
-                ),
-            )
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalArrangement = Arrangement.spacedBy(11.dp),
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Text(
-            estimate.label.uppercase(Locale.ROOT),
-            style = MaterialTheme.typography.labelSmall,
-            color = Color(0xFFDDE9E4),
+        RhythmDial(
+            segments = segments,
+            nights = nights,
+            now = now,
+            zone = zone,
+            use24HourTime = use24,
+            reading = reading,
+            description = listOf(
+                "The next 24 hours and the last ${nights.size} recorded nights.",
+                "${reading.kicker.lowercase(Locale.ROOT).replaceFirstChar { it.uppercase() }} ${reading.figure}, ${reading.detail}.",
+                sentence,
+            ).filter { it.isNotBlank() }.joinToString(" "),
+            modifier = Modifier.padding(top = 4.dp),
         )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                "Forecast available",
-                style = MaterialTheme.typography.headlineMedium,
-                color = Color.White,
-            )
-            ConfidenceBadge(estimate.confidence)
+        val qualification = when {
+            projection == null && forecasts.isEmpty() ->
+                if (connected) "No current forecast is available. Sync recent sleep records, or open Log to review conflicting edits."
+                else "Connect to your server in Settings to download an estimate from your sleep history."
+            projection?.status == "refused" -> projection.refusal ?: "A forecast is not available."
+            projection != null && !projection.isCurrentSnapshot(now) ->
+                "Cached forecast. Its current-state assessment has expired or the server clock differs; connect to refresh."
+            projection != null && projection.freshness != "current" -> projection.freshnessExplanation
+            else -> null
         }
+        if (lead.isNotEmpty()) {
+            Text(
+                buildAnnotatedString {
+                    lead.forEach { part ->
+                        if (part.strong) withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(part.text) }
+                        else append(part.text)
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                style = MaterialTheme.typography.headlineSmall,
+                color = Ink,
+            )
+        }
+        qualification?.let {
+            Text(
+                it,
+                modifier = Modifier.fillMaxWidth(),
+                style = MaterialTheme.typography.bodyMedium.copy(fontFamily = ReadingSerif, fontStyle = FontStyle.Italic),
+                color = Muted,
+            )
+        }
+        DialLegend()
+        val estimate = state.estimate
+        if (estimate != null && !withheld) {
+            Text(
+                "${estimate.label} · ${estimate.confidence.name.lowercase(Locale.ROOT)} model fit · ${estimate.algorithmVersion}",
+                modifier = Modifier.fillMaxWidth(),
+                style = MaterialTheme.typography.bodySmall,
+                color = Muted,
+            )
+        }
+    }
+}
 
-        HorizontalDivider(color = Color.White.copy(alpha = 0.22f))
-        ForecastRow(
-            label = "Predicted sleep window",
-            window = estimate.predictedSleepWindow,
-            use24HourTime = state.settings.use24HourTime,
-        )
-        ForecastRow(
-            label = "Predicted waking window",
-            window = estimate.predictedWakingWindow,
-            use24HourTime = state.settings.use24HourTime,
-        )
-        HorizontalDivider(color = Color.White.copy(alpha = 0.22f))
-
-        estimate.confidenceReasons.forEach { reason ->
-            Row(
-                verticalAlignment = Alignment.Top,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .padding(top = 5.dp)
-                        .size(4.dp)
-                        .background(Color(0xFFDDE9E4), CircleShape),
-                )
-                Text(
-                    reason,
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color.White.copy(alpha = 0.9f),
-                )
+@Composable
+private fun DialLegend() {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        LegendKey("Likely asleep") { drawRect(SleepBlue) }
+        LegendKey("Cannot say") {
+            val step = 3.dp.toPx()
+            var x = -size.height
+            while (x < size.width) {
+                drawLine(UncertainFill, Offset(x, size.height), Offset(x + size.height, 0f), 1.2.dp.toPx())
+                x += step
             }
         }
-        Text(
-            "Snapshot / ${estimate.algorithmVersion}",
-            style = MaterialTheme.typography.labelSmall,
-            color = Color.White.copy(alpha = 0.62f),
-        )
+        LegendKey("Now") { drawRect(Accent, topLeft = Offset(0f, size.height / 2f - 1.dp.toPx()), size = Size(size.width, 2.dp.toPx())) }
     }
 }
 
 @Composable
-private fun EmptyEstimatePanel(connected: Boolean) {
-    RuledSection {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(9.dp),
-        ) {
-            StatusDot(color = Amber)
-            Text("Estimate unavailable", style = MaterialTheme.typography.titleMedium)
-        }
-        Text(
-            if (connected) "No current forecast is available. Sync recent sleep records, or open Correct to review conflicting edits."
-            else "Connect to your server in Settings to download an estimate from your sleep history.",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
-}
-
-@Composable
-private fun ForecastRow(
-    label: String,
-    window: TimeWindow,
-    use24HourTime: Boolean,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        Text(
-            label.uppercase(Locale.ROOT),
-            style = MaterialTheme.typography.labelSmall,
-            color = Color(0xFFDDE9E4),
-        )
-        Text(
-            formatWindow(window, use24HourTime),
-            style = MaterialTheme.typography.titleMedium,
-            color = Color.White,
-        )
+private fun LegendKey(label: String, swatch: DrawScope.() -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        Canvas(modifier = Modifier.width(14.dp).height(9.dp).clipToBounds(), onDraw = swatch)
+        Text(label, style = MaterialTheme.typography.bodySmall, color = Muted)
     }
 }
 
@@ -1013,7 +1004,7 @@ private fun BackendConnectionSection(
                     "Travel zones are never guessed; these records remain local.",
             )
             Text(
-                "Uploads, downloaded records and cached forecasts are separate. See Status for forecast age and uncertainty, and Tasks for downloaded task state.",
+                "Uploads, downloaded records and cached forecasts are separate. See Now for forecast age and uncertainty, and Plan for downloaded task state.",
                 style = MaterialTheme.typography.bodySmall,
             )
         }
@@ -1165,24 +1156,6 @@ private fun DataRow(label: String, value: String) {
 }
 
 @Composable
-private fun ConfidenceBadge(confidence: Confidence) {
-    val (text, background, foreground) = when (confidence) {
-        Confidence.LOW -> Triple("LOW", Color(0xFFF1E1DF), Color(0xFF714D4A))
-        Confidence.MODERATE -> Triple("MODERATE", AmberSoft, Color(0xFF695528))
-        Confidence.HIGH -> Triple("HIGH", SageSoft, Color(0xFF315C49))
-    }
-    Text(
-        text = text,
-        modifier = Modifier
-            .clip(MaterialTheme.shapes.small)
-            .background(background)
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        style = MaterialTheme.typography.labelSmall,
-        color = foreground,
-    )
-}
-
-@Composable
 private fun MedicationEventRow(event: MedicationEvent, use24HourTime: Boolean) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
@@ -1213,7 +1186,7 @@ private fun SegmentedDataMode(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.small,
         color = Paper,
-        border = BorderStroke(1.dp, Line),
+        border = BorderStroke(1.dp, Ink),
     ) {
         Row(modifier = Modifier.fillMaxWidth().height(44.dp).selectableGroup()) {
             DataModeOption(
@@ -1222,7 +1195,7 @@ private fun SegmentedDataMode(
                 onClick = { onSelected(DataMode.FIXTURE) },
                 modifier = Modifier.weight(1f),
             )
-            Box(modifier = Modifier.fillMaxHeight().width(1.dp).background(Line))
+            Box(modifier = Modifier.fillMaxHeight().width(1.dp).background(Ink))
             DataModeOption(
                 text = "My data",
                 selected = selected == DataMode.HEALTH_CONNECT,
@@ -1246,7 +1219,7 @@ private fun DataModeOption(
         modifier = modifier
             .fillMaxHeight()
             .alpha(if (enabled) 1f else 0.45f)
-            .background(if (selected) SageSoft else Color.Transparent)
+            .background(if (selected) Ink else Color.Transparent)
             .selectable(
                 selected = selected,
                 enabled = enabled,
@@ -1258,7 +1231,7 @@ private fun DataModeOption(
         Text(
             text,
             style = MaterialTheme.typography.labelLarge,
-            color = if (selected) SageDark else Muted,
+            color = if (selected) Paper else Muted,
         )
     }
 }
@@ -1350,8 +1323,8 @@ private fun PrimaryButton(
         modifier = modifier.heightIn(min = 48.dp),
         shape = MaterialTheme.shapes.small,
         colors = ButtonDefaults.buttonColors(
-            containerColor = SageDark,
-            contentColor = Color.White,
+            containerColor = Ink,
+            contentColor = Paper,
         ),
         contentPadding = PaddingValues(horizontal = 13.dp, vertical = 0.dp),
     ) {
@@ -1371,8 +1344,8 @@ private fun SecondaryButton(
         enabled = enabled,
         modifier = modifier.heightIn(min = 44.dp),
         shape = MaterialTheme.shapes.small,
-        border = BorderStroke(1.dp, Color(0xFFCFD5D0)),
-        colors = ButtonDefaults.outlinedButtonColors(contentColor = SageDark),
+        border = BorderStroke(1.dp, if (enabled) Ink else Line),
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = Ink),
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
     ) {
         Text(text, style = MaterialTheme.typography.labelLarge)
@@ -1402,16 +1375,15 @@ private fun CompactSwitch(
             modifier = Modifier
                 .width(36.dp)
                 .height(20.dp)
-                .clip(CircleShape)
-                .background(if (checked) SageDark else Chrome)
-                .border(1.dp, if (checked) SageDark else Line, CircleShape),
+                .background(if (checked) Ink else Paper)
+                .border(1.dp, if (checked) Ink else Line),
         )
         Box(
             modifier = Modifier
                 .align(if (checked) Alignment.CenterEnd else Alignment.CenterStart)
-                .padding(horizontal = 8.dp)
-                .size(16.dp)
-                .background(if (checked) Color.White else Subtle, CircleShape),
+                .padding(horizontal = 9.dp)
+                .size(14.dp)
+                .background(if (checked) Paper else Subtle),
         )
     }
 }
@@ -1442,12 +1414,12 @@ private fun ScreenHeader(kicker: String, title: String, description: String) {
         Text(
             kicker.uppercase(Locale.ROOT),
             style = MaterialTheme.typography.labelSmall,
-            color = Sage,
+            color = Muted,
         )
         Text(title, style = MaterialTheme.typography.headlineLarge)
         Text(
             description,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = ReadingSerif),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
@@ -1457,9 +1429,9 @@ private fun ScreenHeader(kicker: String, title: String, description: String) {
 private fun SectionHeading(text: String) {
     Text(
         text.uppercase(Locale.ROOT),
-        modifier = Modifier.padding(top = 2.dp),
+        modifier = Modifier.padding(top = 10.dp),
         style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        color = Ink,
     )
 }
 
@@ -1497,18 +1469,18 @@ private fun DurableLocalDataNotice(
 
 @Composable
 private fun InfoStrip(text: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth().background(SageSoft),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(modifier = Modifier.width(3.dp).heightIn(min = 42.dp).background(Sage))
-        Text(
-            text,
-            modifier = Modifier.padding(horizontal = 11.dp, vertical = 9.dp),
-            style = MaterialTheme.typography.bodySmall,
-            color = SageDark,
-        )
-    }
+    // A note on a sheet of its own, as on the desktop: paper with a hairline
+    // edge, so it stands off the page rather than floating on it.
+    Text(
+        text,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Paper)
+            .border(1.dp, Divider)
+            .padding(horizontal = 14.dp, vertical = 11.dp),
+        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = ReadingSerif),
+        color = Muted,
+    )
 }
 
 @Composable
@@ -1521,7 +1493,7 @@ private fun InlineStatus(text: String) {
         Text(
             text,
             style = MaterialTheme.typography.labelMedium,
-            color = SageDark,
+            color = Ink,
         )
     }
 }
@@ -1552,7 +1524,8 @@ private fun StatusDot(
 }
 
 @Composable
-private fun BrandBar() {
+private fun BrandBar(now: Instant) {
+    val locale = LocalConfiguration.current.locales[0]
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1560,71 +1533,37 @@ private fun BrandBar() {
             .statusBarsPadding(),
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 16.dp),
+            modifier = Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 18.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            OrbitMark()
-            Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                Text(
-                    "ZeitBoard",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    "COMPANION",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
+            Text(
+                "ZeitBoard",
+                style = MaterialTheme.typography.headlineMedium.copy(fontStyle = FontStyle.Italic, fontWeight = FontWeight.Medium),
+                color = Ink,
+            )
+            Text(
+                DateTimeFormatter.ofPattern("EEE d MMM", locale)
+                    .format(now.atZone(ZoneId.systemDefault()))
+                    .uppercase(locale),
+                style = MaterialTheme.typography.labelSmall,
+                color = Muted,
+            )
         }
-        HorizontalDivider(color = Line)
-    }
-}
-
-@Composable
-private fun OrbitMark() {
-    Canvas(
-        modifier = Modifier
-            .size(28.dp)
-            .semantics { contentDescription = "ZeitBoard" },
-    ) {
-        val center = Offset(size.width / 2f, size.height / 2f)
-        drawCircle(color = Sage, radius = size.minDimension * 0.47f, style = Stroke(width = 1.4.dp.toPx()))
-        drawArc(
-            color = Sage,
-            startAngle = -70f,
-            sweepAngle = 285f,
-            useCenter = false,
-            topLeft = Offset(size.width * 0.19f, size.height * 0.19f),
-            size = Size(size.width * 0.62f, size.height * 0.62f),
-            style = Stroke(width = 1.2.dp.toPx(), cap = StrokeCap.Round),
-        )
-        drawCircle(color = Sage, radius = size.minDimension * 0.13f, center = center)
-        drawCircle(
-            color = Chrome,
-            radius = size.minDimension * 0.065f,
-            center = Offset(size.width * 0.55f, size.height * 0.03f),
-        )
+        HorizontalDivider(color = Ink)
     }
 }
 
 @Composable
 private fun FixtureBanner() {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(AmberSoft)
-            .padding(horizontal = 16.dp, vertical = 7.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        StatusDot(color = Amber, size = 6.dp)
+    Column(modifier = Modifier.fillMaxWidth().background(Chrome)) {
         Text(
-            "FIXTURE MODE / SYNTHETIC DATA",
-            style = MaterialTheme.typography.labelSmall,
-            color = Color(0xFF695528),
+            "Sample data. Nothing here is yours.",
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 7.dp),
+            style = MaterialTheme.typography.bodySmall.copy(fontFamily = ReadingSerif, fontStyle = FontStyle.Italic),
+            color = Amber,
         )
+        HorizontalDivider(color = Divider)
     }
 }
 
@@ -1633,10 +1572,11 @@ private fun DestinationBar(
     currentRoute: String,
     onDestinationSelected: (Destination) -> Unit,
 ) {
+    val locale = LocalConfiguration.current.locales[0]
     Column(modifier = Modifier.fillMaxWidth().background(Chrome).navigationBarsPadding()) {
-        HorizontalDivider(color = Line)
+        HorizontalDivider(color = Ink)
         Row(
-            modifier = Modifier.fillMaxWidth().height(58.dp).selectableGroup(),
+            modifier = Modifier.fillMaxWidth().height(56.dp).selectableGroup(),
         ) {
             Destination.entries.forEach { destination ->
                 val selected = currentRoute == destination.route
@@ -1644,104 +1584,26 @@ private fun DestinationBar(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .background(if (selected) Paper else Chrome)
                         .selectable(
                             selected = selected,
                             role = Role.Tab,
                             onClick = { onDestinationSelected(destination) },
                         ),
                     horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
                 ) {
+                    Text(
+                        destination.label.uppercase(locale),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = if (selected) Ink else Muted,
+                    )
+                    Spacer(modifier = Modifier.height(5.dp))
                     Box(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(2.dp)
-                            .background(if (selected) Sage else Color.Transparent),
+                            .width(28.dp)
+                            .height(1.dp)
+                            .background(if (selected) Ink else Color.Transparent),
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    DestinationGlyph(
-                        destination.icon,
-                        color = if (selected) SageDark else Muted,
-                    )
-                    Spacer(modifier = Modifier.height(3.dp))
-                    Text(
-                        destination.label,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (selected) SageDark else Muted,
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DestinationGlyph(icon: DestinationIcon, color: Color) {
-    Canvas(modifier = Modifier.size(17.dp)) {
-        val stroke = 1.5.dp.toPx()
-        when (icon) {
-            DestinationIcon.STATUS -> {
-                val square = size.width * 0.31f
-                val gap = size.width * 0.18f
-                listOf(
-                    Offset(0f, 0f),
-                    Offset(square + gap, 0f),
-                    Offset(0f, square + gap),
-                    Offset(square + gap, square + gap),
-                ).forEach { topLeft ->
-                    drawRoundRect(
-                        color = color,
-                        topLeft = topLeft,
-                        size = Size(square, square),
-                        cornerRadius = CornerRadius(1.5.dp.toPx()),
-                        style = Stroke(width = stroke),
-                    )
-                }
-            }
-            DestinationIcon.CORRECT -> {
-                drawLine(color, Offset(size.width * 0.12f, size.height * 0.28f), Offset(size.width * 0.88f, size.height * 0.28f), stroke, StrokeCap.Round)
-                drawLine(color, Offset(size.width * 0.12f, size.height * 0.72f), Offset(size.width * 0.88f, size.height * 0.72f), stroke, StrokeCap.Round)
-                drawCircle(color, size.width * 0.10f, Offset(size.width * 0.35f, size.height * 0.28f))
-                drawCircle(color, size.width * 0.10f, Offset(size.width * 0.66f, size.height * 0.72f))
-            }
-            DestinationIcon.TASKS -> {
-                repeat(3) { row ->
-                    val y = size.height * (0.2f + row * 0.3f)
-                    drawCircle(color, size.width * 0.04f, Offset(size.width * 0.12f, y))
-                    drawLine(color, Offset(size.width * 0.3f, y), Offset(size.width * 0.9f, y), stroke, StrokeCap.Round)
-                }
-            }
-            DestinationIcon.MEDICATION -> {
-                rotate(-38f) {
-                    drawRoundRect(
-                        color = color,
-                        topLeft = Offset(size.width * 0.23f, size.height * 0.08f),
-                        size = Size(size.width * 0.54f, size.height * 0.84f),
-                        cornerRadius = CornerRadius(size.width * 0.27f),
-                        style = Stroke(width = stroke),
-                    )
-                    drawLine(
-                        color,
-                        Offset(size.width * 0.23f, size.height * 0.50f),
-                        Offset(size.width * 0.77f, size.height * 0.50f),
-                        stroke,
-                    )
-                }
-            }
-            DestinationIcon.SETTINGS -> {
-                val center = Offset(size.width / 2f, size.height / 2f)
-                drawCircle(color, size.width * 0.31f, center, style = Stroke(width = stroke))
-                drawCircle(color, size.width * 0.09f, center)
-                repeat(4) { index ->
-                    rotate(index * 90f, center) {
-                        drawLine(
-                            color,
-                            Offset(center.x, size.height * 0.02f),
-                            Offset(center.x, size.height * 0.18f),
-                            stroke,
-                            StrokeCap.Round,
-                        )
-                    }
                 }
             }
         }
@@ -1778,23 +1640,4 @@ private fun formatDisplay(
     val zone = resolveTemporalZone(ianaTimeZoneId, offset)
     val pattern = if (use24HourTime) "EEE, MMM d HH:mm z" else "EEE, MMM d h:mm a z"
     return DateTimeFormatter.ofPattern(pattern, Locale.getDefault()).format(instant.atZone(zone))
-}
-
-private fun formatWindow(window: TimeWindow, use24HourTime: Boolean): String {
-    val zone = ZoneId.systemDefault()
-    val start = window.start.atZone(zone)
-    val end = window.end.atZone(zone)
-    val dateFormatter = DateTimeFormatter.ofPattern("EEE, MMM d", Locale.getDefault())
-    val timeFormatter = DateTimeFormatter.ofPattern(
-        if (use24HourTime) "HH:mm" else "h:mm a",
-        Locale.getDefault(),
-    )
-    val zoneFormatter = DateTimeFormatter.ofPattern("z", Locale.getDefault())
-    return if (start.toLocalDate() == end.toLocalDate()) {
-        "${dateFormatter.format(start)} / ${timeFormatter.format(start)} - " +
-            "${timeFormatter.format(end)} ${zoneFormatter.format(end)}"
-    } else {
-        "${dateFormatter.format(start)} ${timeFormatter.format(start)} - " +
-            "${dateFormatter.format(end)} ${timeFormatter.format(end)} ${zoneFormatter.format(end)}"
-    }
 }

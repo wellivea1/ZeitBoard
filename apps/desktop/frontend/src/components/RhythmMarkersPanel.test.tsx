@@ -53,8 +53,9 @@ function renderPanel(
 describe("RhythmMarkersPanel", () => {
   it("states the non-causal boundary and submits a dense append-only entry", async () => {
     const { onAdd } = renderPanel();
-    expect(screen.getByText(/do not change the estimate, establish cause/i)).toBeVisible();
-    expect(screen.getByText(/never edited in place/i)).toBeVisible();
+    const boundary = screen.getByRole("complementary", { name: "What a context marker does" });
+    expect(boundary).toHaveTextContent(/do not change the estimate, establish a cause/i);
+    expect(boundary).toHaveTextContent(/never edited in place/i);
     expect(screen.getByText("Owner export includes private notes.")).toBeVisible();
 
     fireEvent.change(screen.getByLabelText("Context type"), {

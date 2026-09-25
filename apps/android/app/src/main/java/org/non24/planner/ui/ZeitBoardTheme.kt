@@ -1,3 +1,6 @@
+// Variable-font settings on a resource font are still marked experimental.
+@file:OptIn(ExperimentalTextApi::class)
+
 package org.non24.planner.ui
 
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -8,39 +11,57 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontStyle
+import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.non24.planner.R
 
-internal val Ink = Color(0xFF24302D)
-internal val Muted = Color(0xFF5B655F)
-internal val Subtle = Color(0xFF666F6A)
-internal val Line = Color(0xFFDEDFD8)
-internal val Paper = Color(0xFFFFFEFA)
-internal val CanvasColor = Color(0xFFF5F3EE)
-internal val PanelAlt = Color(0xFFFAF9F5)
-internal val Chrome = Color(0xFFEBEAE4)
-internal val Sage = Color(0xFF55766B)
-internal val SageDark = Color(0xFF3E5F55)
-internal val SageSoft = Color(0xFFE4ECE7)
-internal val SleepBlue = Color(0xFF4A5E7A)
-internal val BlueSoft = Color(0xFFE9EFF2)
-internal val Amber = Color(0xFF9A6B16)
-internal val AmberSoft = Color(0xFFF5ECDA)
+// Almanac (ui-refactor-plan.md §14), the desktop's paper and ink: Newsreader
+// for reading and Public Sans for controls, both bundled (res/font, under the
+// SIL Open Font License in assets/licenses), square corners, and colour kept
+// for what the rhythm means. The one bright colour, the accent, marks now.
+
+internal val Ink = Color(0xFF221F1A)
+internal val Muted = Color(0xFF5C564C)
+internal val Subtle = Color(0xFF645E53)
+internal val Line = Color(0xFFC4BBA8)
+internal val Divider = Color(0xFFCFC7B6)
+internal val Paper = Color(0xFFF7F4ED)
+internal val CanvasColor = Color(0xFFF2EEE5)
+internal val PanelAlt = Color(0xFFEBE6DA)
+internal val Chrome = CanvasColor
+internal val Accent = Color(0xFFB3401F)
+internal val DangerText = Color(0xFF8F2D1A)
+
+// The "sage" names predate the redesign and now mean the action and focus
+// colours, as they do on the desktop.
+internal val Sage = Color(0xFF2B3D5E)
+internal val SageDark = Ink
+internal val SageSoft = Color(0xFFE8E2D4)
+internal val SleepBlue = Color(0xFF2B3D5E)
+internal val BlueSoft = Color(0xFFE3E5EA)
+internal val Amber = Color(0xFF9A6A1F)
+internal val AmberSoft = Color(0xFFEFE3CC)
+internal val UncertainFill = Color(0xFFB17A2E)
 
 private val LightColors = lightColorScheme(
-    primary = SageDark,
-    onPrimary = Color.White,
+    primary = Ink,
+    onPrimary = Paper,
     primaryContainer = SageSoft,
-    onPrimaryContainer = SageDark,
+    onPrimaryContainer = Ink,
     secondary = SleepBlue,
-    onSecondary = Color.White,
+    onSecondary = Paper,
     secondaryContainer = BlueSoft,
     onSecondaryContainer = SleepBlue,
     tertiary = Amber,
     tertiaryContainer = AmberSoft,
-    onTertiaryContainer = Color(0xFF695528),
+    onTertiaryContainer = Color(0xFF5C3F12),
     background = CanvasColor,
     onBackground = Ink,
     surface = Paper,
@@ -48,105 +69,180 @@ private val LightColors = lightColorScheme(
     surfaceVariant = PanelAlt,
     onSurfaceVariant = Muted,
     outline = Line,
-    outlineVariant = Color(0xFFECECE7),
+    outlineVariant = Divider,
+    error = DangerText,
 )
 
+// Ink: the same page at night, cream on a blue-black.
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFF8AB4A6),
-    onPrimary = Color(0xFF0F1412),
-    primaryContainer = Color(0xFF253430),
-    onPrimaryContainer = Color(0xFF8FCFB5),
-    secondary = Color(0xFF7A9ABF),
-    onSecondary = Color(0xFF0D1117),
-    secondaryContainer = Color(0xFF25333A),
-    onSecondaryContainer = Color(0xFFCDD7E4),
-    tertiary = Color(0xFFC99A3E),
-    tertiaryContainer = Color(0xFF3B3323),
-    onTertiaryContainer = Color(0xFFE6C87C),
-    background = Color(0xFF161B19),
-    onBackground = Color(0xFFE8EAE5),
-    surface = Color(0xFF1E2522),
-    onSurface = Color(0xFFE8EAE5),
-    surfaceVariant = Color(0xFF222A26),
-    onSurfaceVariant = Color(0xFFA5ADA7),
-    outline = Color(0xFF3B4541),
-    outlineVariant = Color(0xFF252D2A),
+    primary = Color(0xFFEBE5D6),
+    onPrimary = Color(0xFF151619),
+    primaryContainer = Color(0xFF262831),
+    onPrimaryContainer = Color(0xFFEBE5D6),
+    secondary = Color(0xFF8EA4D8),
+    onSecondary = Color(0xFF10131A),
+    secondaryContainer = Color(0xFF1F2533),
+    onSecondaryContainer = Color(0xFFCFD8EA),
+    tertiary = Color(0xFFD0A04C),
+    tertiaryContainer = Color(0xFF2B2518),
+    onTertiaryContainer = Color(0xFFE6C887),
+    background = Color(0xFF151619),
+    onBackground = Color(0xFFEBE5D6),
+    surface = Color(0xFF1C1D21),
+    onSurface = Color(0xFFEBE5D6),
+    surfaceVariant = Color(0xFF212226),
+    onSurfaceVariant = Color(0xFFABA391),
+    outline = Color(0xFF4A463F),
+    outlineVariant = Color(0xFF403D37),
+    error = Color(0xFFEAB0A2),
 )
 
+// Square, like the desktop. Paper does not have rounded corners.
 private val ZeitBoardShapes = Shapes(
-    extraSmall = RoundedCornerShape(3.dp),
-    small = RoundedCornerShape(4.dp),
-    medium = RoundedCornerShape(7.dp),
-    large = RoundedCornerShape(9.dp),
-    extraLarge = RoundedCornerShape(12.dp),
+    extraSmall = RoundedCornerShape(0.dp),
+    small = RoundedCornerShape(0.dp),
+    medium = RoundedCornerShape(0.dp),
+    large = RoundedCornerShape(0.dp),
+    extraLarge = RoundedCornerShape(0.dp),
 )
+
+// Both faces are variable. Android does not pick an optical size from the text
+// size as a browser does, so the display styles ask for Newsreader's display
+// cut and the rest for its text cut.
+private fun newsreader(opticalSize: Float) = FontFamily(
+    listOf(400, 500, 600, 700).flatMap { weight ->
+        listOf(
+            Font(
+                R.font.newsreader,
+                FontWeight(weight),
+                FontStyle.Normal,
+                variationSettings = FontVariation.Settings(
+                    FontVariation.weight(weight),
+                    FontVariation.Setting("opsz", opticalSize),
+                ),
+            ),
+            Font(
+                R.font.newsreader_italic,
+                FontWeight(weight),
+                FontStyle.Italic,
+                variationSettings = FontVariation.Settings(
+                    FontVariation.weight(weight),
+                    FontVariation.Setting("opsz", opticalSize),
+                ),
+            ),
+        )
+    },
+)
+
+private val Serif = newsreader(opticalSize = 16f)
+private val SerifDisplay = newsreader(opticalSize = 36f)
+
+internal val Sans = FontFamily(
+    listOf(400, 500, 600, 700).flatMap { weight ->
+        listOf(
+            Font(
+                R.font.public_sans,
+                FontWeight(weight),
+                FontStyle.Normal,
+                variationSettings = FontVariation.Settings(FontVariation.weight(weight)),
+            ),
+            Font(
+                R.font.public_sans_italic,
+                FontWeight(weight),
+                FontStyle.Italic,
+                variationSettings = FontVariation.Settings(FontVariation.weight(weight)),
+            ),
+        )
+    },
+)
+
+/** The reading face, for the few places that set it outside the type scale. */
+internal val ReadingSerif = Serif
 
 private val ZeitBoardTypography = Typography(
     displaySmall = TextStyle(
+        fontFamily = SerifDisplay,
         fontSize = 30.sp,
-        lineHeight = 33.sp,
-        fontWeight = FontWeight.SemiBold,
-        letterSpacing = (-0.8).sp,
+        lineHeight = 36.sp,
+        fontWeight = FontWeight.Normal,
+        letterSpacing = (-0.3).sp,
     ),
     headlineLarge = TextStyle(
-        fontSize = 27.sp,
-        lineHeight = 30.sp,
-        fontWeight = FontWeight.SemiBold,
-        letterSpacing = (-0.6).sp,
+        fontFamily = SerifDisplay,
+        fontSize = 28.sp,
+        lineHeight = 34.sp,
+        fontWeight = FontWeight.Normal,
+        letterSpacing = (-0.3).sp,
     ),
     headlineMedium = TextStyle(
+        fontFamily = SerifDisplay,
         fontSize = 22.sp,
-        lineHeight = 26.sp,
-        fontWeight = FontWeight.SemiBold,
-        letterSpacing = (-0.35).sp,
+        lineHeight = 28.sp,
+        fontWeight = FontWeight.Normal,
+    ),
+    headlineSmall = TextStyle(
+        fontFamily = Serif,
+        fontSize = 20.sp,
+        lineHeight = 27.sp,
+        fontWeight = FontWeight.Normal,
     ),
     titleLarge = TextStyle(
-        fontSize = 19.sp,
-        lineHeight = 23.sp,
-        fontWeight = FontWeight.SemiBold,
-        letterSpacing = (-0.2).sp,
+        fontFamily = Serif,
+        fontSize = 20.sp,
+        lineHeight = 25.sp,
+        fontWeight = FontWeight.Medium,
     ),
     titleMedium = TextStyle(
-        fontSize = 15.sp,
-        lineHeight = 19.sp,
-        fontWeight = FontWeight.SemiBold,
+        fontFamily = Serif,
+        fontSize = 17.sp,
+        lineHeight = 22.sp,
+        fontWeight = FontWeight.Medium,
     ),
     titleSmall = TextStyle(
-        fontSize = 13.sp,
-        lineHeight = 17.sp,
-        fontWeight = FontWeight.SemiBold,
+        fontFamily = Serif,
+        fontSize = 15.sp,
+        lineHeight = 20.sp,
+        fontWeight = FontWeight.Medium,
     ),
     bodyLarge = TextStyle(
+        fontFamily = Sans,
+        fontSize = 15.sp,
+        lineHeight = 21.sp,
+        fontWeight = FontWeight.Normal,
+    ),
+    bodyMedium = TextStyle(
+        fontFamily = Sans,
         fontSize = 14.sp,
         lineHeight = 20.sp,
         fontWeight = FontWeight.Normal,
     ),
-    bodyMedium = TextStyle(
-        fontSize = 13.sp,
-        lineHeight = 18.sp,
-        fontWeight = FontWeight.Normal,
-    ),
     bodySmall = TextStyle(
-        fontSize = 11.sp,
-        lineHeight = 16.sp,
+        fontFamily = Sans,
+        fontSize = 12.sp,
+        lineHeight = 17.sp,
         fontWeight = FontWeight.Normal,
     ),
+    // Buttons.
     labelLarge = TextStyle(
-        fontSize = 12.sp,
-        lineHeight = 15.sp,
-        fontWeight = FontWeight.Bold,
+        fontFamily = Sans,
+        fontSize = 13.sp,
+        lineHeight = 16.sp,
+        fontWeight = FontWeight.SemiBold,
     ),
+    // Small capitals: section titles, field labels, the tabs.
     labelMedium = TextStyle(
+        fontFamily = Sans,
+        fontSize = 11.sp,
+        lineHeight = 14.sp,
+        fontWeight = FontWeight.Bold,
+        letterSpacing = 1.1.sp,
+    ),
+    labelSmall = TextStyle(
+        fontFamily = Sans,
         fontSize = 10.sp,
         lineHeight = 13.sp,
         fontWeight = FontWeight.Bold,
-        letterSpacing = 0.45.sp,
-    ),
-    labelSmall = TextStyle(
-        fontSize = 9.sp,
-        lineHeight = 12.sp,
-        fontWeight = FontWeight.Bold,
-        letterSpacing = 0.55.sp,
+        letterSpacing = 1.sp,
     ),
 )
 

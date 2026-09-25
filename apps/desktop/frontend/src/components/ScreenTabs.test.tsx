@@ -31,7 +31,8 @@ describe("readRouteFromHash", () => {
   it.each([
     ["#/overview", { screen: "home" }],
     ["#/timeline", { screen: "rhythm" }],
-    ["#/calendar", { screen: "plan", planTab: "calendar" }],
+    ["#/calendar", { screen: "plan", planTab: "week" }],
+    ["#/plan/calendar", { screen: "plan", planTab: "week" }],
     ["#/tasks", { screen: "plan", planTab: "tasks" }],
     ["#/approvals", { screen: "plan", planTab: "tasks" }],
     ["#/medications", { screen: "log", logTab: "medications" }],

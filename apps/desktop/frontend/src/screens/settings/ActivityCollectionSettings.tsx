@@ -93,7 +93,7 @@ export function ActivityCollectionSettings() {
           never keystrokes, window titles, screenshots or browsing. It stays on this computer and
           does not change estimates or planning.
         </p>
-        <details className="settings-more">
+        <details className="settings-more fold">
           <summary>When it runs</summary>
           <p className="settings-copy">
             Once on, it continues when you hide or close the window and resumes when ZeitBoard
