@@ -1,0 +1,4 @@
+<resources>
+    <!-- The Almanac page behind the app: Paper's canvas. -->
+    <color name="window_background">#F2EEE5</color>
+</resources>

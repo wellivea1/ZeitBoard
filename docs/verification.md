@@ -1673,3 +1673,14 @@ and today's "Recorded · 8 hours, 6:00 AM to 2:00 PM". Tests pin the clock
 wording (midnight and noon named), the spoken dates, a suggestion's buttons
 found inside today's group, and the bands' spoken ranges (462 desktop + 6
 prototype tests). Not verified here: NVDA or Narrator reading the board.
+
+## Android at night — 2026-09-25
+
+On the test AVD (sample data), with `cmd uimode night yes`, the Now screen drew
+the Ink page: cream type, light-blue sleep arcs, amber hatching, the rust hand,
+and light status-bar icons. Settings showed dark fields with hairline edges and
+no light patches. With `night no`, Paper returned unchanged, with dark
+status-bar icons. `gradlew check assembleDebug` passed, including the new
+palette contrast test (both themes, text at 4.5:1 and the dial's marks at 3:1).
+The emulator's own System UI stalled once while switching modes under software
+rendering; ZeitBoard kept drawing.

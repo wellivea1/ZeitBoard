@@ -1,9 +1,14 @@
-<resources>
-    <style name="Theme.Non24" parent="android:style/Theme.Material.Light.NoActionBar">
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Paper by day. values-night swaps the parent and the colours for Ink, so the
+         window, the system bars and their icons match the app before it draws. -->
+    <style name="Base.Theme.Non24" parent="android:style/Theme.Material.Light.NoActionBar" />
+
+    <style name="Theme.Non24" parent="Base.Theme.Non24">
         <item name="android:fontFamily">sans</item>
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="android:windowBackground">#F5F3EE</item>
-        <item name="android:statusBarColor">#EBEAE4</item>
-        <item name="android:navigationBarColor">#EBEAE4</item>
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:statusBarColor">@color/window_background</item>
+        <item name="android:navigationBarColor">@color/window_background</item>
+        <item name="android:windowLightStatusBar">@bool/light_system_bars</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="o_mr1">@bool/light_system_bars</item>
     </style>
 </resources>

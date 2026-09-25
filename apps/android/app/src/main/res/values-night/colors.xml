@@ -1,0 +1,4 @@
+<resources>
+    <!-- Ink's canvas, the desktop's dark page. -->
+    <color name="window_background">#151619</color>
+</resources>

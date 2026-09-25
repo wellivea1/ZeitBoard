@@ -104,7 +104,9 @@ internal fun RhythmDial(
     modifier: Modifier = Modifier,
 ) {
     val measurer = rememberTextMeasurer()
-    val labelStyle = MaterialTheme.typography.labelSmall.copy(color = Muted)
+    // Drawing is not composable: take the theme's colours in with it.
+    val palette = LocalAlmanacPalette.current
+    val labelStyle = MaterialTheme.typography.labelSmall.copy(color = palette.muted)
     val labels = if (use24HourTime) listOf("00", "06", "12", "18") else listOf("12a", "6a", "12p", "6p")
 
     Box(
@@ -121,13 +123,13 @@ internal fun RhythmDial(
             val forecastInner = radius * 0.69f
 
             // The next 24 hours.
-            ringArc(forecastOuter, forecastInner, 0f, 360f, Divider, alpha = 0.55f)
+            ringArc(forecastOuter, forecastInner, 0f, 360f, palette.divider, alpha = 0.55f)
             segments.forEach { segment ->
                 val start = clockDegrees(segment.start, zone)
                 val sweep = sweepDegrees(segment.start, segment.end)
                 when (segment.state) {
-                    DialState.ASLEEP -> ringArc(forecastOuter, forecastInner, start, sweep, SleepBlue)
-                    DialState.UNCERTAIN -> hatchedArc(forecastOuter, forecastInner, start, sweep, UncertainFill)
+                    DialState.ASLEEP -> ringArc(forecastOuter, forecastInner, start, sweep, palette.sleepBlue)
+                    DialState.UNCERTAIN -> hatchedArc(forecastOuter, forecastInner, start, sweep, palette.uncertainFill)
                     DialState.AWAKE -> Unit
                 }
             }
@@ -138,13 +140,13 @@ internal fun RhythmDial(
             nights.take(7).forEachIndexed { index, night ->
                 val outer = radius * 0.64f - index * pitch
                 val inner = outer - nightWidth
-                ringArc(outer, inner, 0f, 360f, PanelAlt)
+                ringArc(outer, inner, 0f, 360f, palette.panelAlt)
                 ringArc(
                     outer,
                     inner,
                     clockDegrees(night.start, zone),
                     sweepDegrees(night.start, night.end),
-                    SleepBlue,
+                    palette.sleepBlue,
                     alpha = 1f - index * 0.1f,
                 )
             }
@@ -155,7 +157,7 @@ internal fun RhythmDial(
                 val major = hour % 6 == 0
                 val tickInner = tickOuter - radius * (if (major) 0.065f else 0.03f)
                 drawLine(
-                    color = if (major) Muted else Divider,
+                    color = if (major) palette.muted else palette.divider,
                     start = pointAt(tickInner, hour * 15f),
                     end = pointAt(tickOuter, hour * 15f),
                     strokeWidth = (if (major) 1.4f else 1f).dp.toPx(),
@@ -171,13 +173,13 @@ internal fun RhythmDial(
             val nowDegrees = clockDegrees(now, zone)
             val handEnd = pointAt(radius * 0.84f, nowDegrees)
             drawLine(
-                color = Accent,
+                color = palette.accent,
                 start = pointAt(radius * 0.38f, nowDegrees),
                 end = handEnd,
                 strokeWidth = 2.dp.toPx(),
                 cap = StrokeCap.Round,
             )
-            drawCircle(Accent, radius = 3.5.dp.toPx(), center = handEnd)
+            drawCircle(palette.accent, radius = 3.5.dp.toPx(), center = handEnd)
         }
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
