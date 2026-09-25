@@ -113,9 +113,9 @@ acceptance clause or of its real-device qualification.
 
 ## Deferred product and validation work
 
-- Full onboarding, direct clinician PDF/PNG generation, reserved 48-hour clinical orientation, a
-  blank clinical sleep-log template, and the complete accessibility acceptance matrix from
-  `ui-ux-design.md`. The current selected-range clinical chart and report already export as
+- Full onboarding, direct clinician PDF/PNG generation, a blank clinical sleep-log template, and
+  the complete accessibility acceptance matrix from `ui-ux-design.md`. The selected-range clinical
+  chart, in the 24-hour or the 48-hour double-plot orientation, and its report already export as
   standalone, printable HTML under ADR-0027.
 - The remaining live portal transport, message threads, audit UI and notification delivery;
   passcodes and remote revocation already exist. Public exposure still requires the documented

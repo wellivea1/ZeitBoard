@@ -75,3 +75,23 @@ reminders improve health outcomes.
 [STROBE explanation]: https://pmc.ncbi.nlm.nih.gov/articles/PMC2020496/
 [MedISAFE-BP trial]: https://jamanetwork.com/journals/jamainternalmedicine/fullarticle/2678454
 [REMIND trial]: https://jamanetwork.com/journals/jamainternalmedicine/fullarticle/2605527
+
+## Addendum, 2026-09-25: the 48-hour double plot
+
+The reserved 48-hour orientation is implemented. Each row shows its civil day
+at half scale and then the next day, the conventional double plot in which a
+rhythm that runs later each day reads as one continuous slope instead of
+wrapping at the row edge. The desktop builds the rows once for the preview and
+the exported HTML:
+
+- the right half of a row repeats the next row and is marked as a repeat, so
+  the text alternatives and every summary count still describe each night once;
+- the right half of the last row lies past the selected range and stays empty
+  rather than showing records nobody selected;
+- the redaction, forecast opt-in and no-advice rules are unchanged, since the
+  double plot only redraws rows the 24-hour report already produced.
+
+The same change fixed the axis in both orientations. Its hour labels had been
+set in equal grid columns (0, 20, 40, 60 and 80% across) while the hours they
+name fall at 0, 25, 50, 75 and 100%, so "12 AM" stood a fifth of the way along
+instead of over midnight. Each label now sits over its rule.

@@ -1638,3 +1638,20 @@ rejecting an unsound count, each lead sentence, the setup page's links and
 tally, the plain-words refusal for a cycle gap, and the past-night address. The
 desktop and core Go suites and the canonical web checks pass (456 desktop + 6
 prototype tests).
+
+## Clinical double plot — 2026-09-25
+
+In the running app (disposable profile, eight days with seven recorded
+nights), Log › Medications › Build report, with "Each row" set to "A day and
+the next", drew nine rows: each night stepped later down the page, the right
+half repeated the next row across an inked midline, and the first and last rows
+read "No data" on their own halves. The nine axis hours sat over their rules.
+The running service's export of the same range carried the double-plot rules,
+nine axis labels and "double plot, 48 hours a row" in its header.
+
+Tests cover the doubled rows against the 24-hour report (unchanged counts, own
+halves at half scale, repeats only from the next row, none past the range), an
+unsupported orientation, the export's axis positions and its text alternative
+naming each night once, the preview normaliser counting repeats once and
+accepting a day with no sleep beside a repeated night, and the form sending the
+orientation. The desktop Go suite and the canonical web checks pass.
