@@ -186,7 +186,8 @@ export function DecisionQueue() {
                     setAnnouncement(
                       result.status === "ok"
                         ? `${decision === "approved" ? "Approved" : "Rejected"} ${item.title}.`
-                        : (result.message ?? "Refresh to confirm the decision."),
+                        : (result.message ??
+                            "The decision could not be confirmed yet; it is checked again shortly."),
                     ),
                   );
               }}

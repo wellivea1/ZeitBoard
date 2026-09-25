@@ -266,11 +266,6 @@ export function HomeScreen() {
           <div className="status-cluster">
             <span className="sync-dot" data-mode={mode} aria-hidden="true" />
             <span>{sourceLabel(mode, hasEstimate)}</span>
-            {mode !== "fixture" && (
-              <button className="button ghost" type="button" onClick={notifySleepDataChanged}>
-                Refresh
-              </button>
-            )}
           </div>
         }
       />
@@ -342,11 +337,18 @@ function HomeRecovery({ overview }: { overview: OverviewData }) {
         </h3>
         <p>
           {unavailable
-            ? "Your saved records have not been changed. Refresh to retry, or check Data Sources."
+            ? "Your saved records have not been changed. This retries by itself, or try now."
             : `${overview.refusal?.message ?? overview.confidence.reason} Log sleep or import existing records to build a forecast.`}
         </p>
       </div>
       <div className="page-actions">
+        {/* Recovery sits with the failure; the view already refreshes on
+            focus, on new records and every minute. */}
+        {unavailable && (
+          <button className="button primary" type="button" onClick={notifySleepDataChanged}>
+            Try again
+          </button>
+        )}
         {!unavailable && (
           <a className="button primary" href="#/log/sleep">
             Log sleep

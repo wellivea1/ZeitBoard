@@ -76,5 +76,5 @@ export const overviewUnavailable: OverviewData = {
   },
   usefulTaskWindow: { label: "Unavailable", detail: "" },
   sharingStatus: { active: false, label: "Sharing status unavailable", detail: "" },
-  updatedLabel: "Refresh to try again",
+  updatedLabel: "Retrying shortly",
 };

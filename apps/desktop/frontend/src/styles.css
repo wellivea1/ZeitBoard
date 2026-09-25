@@ -869,20 +869,6 @@ button {
   color: var(--muted);
   background: var(--blue-soft);
 }
-.confidence-meter {
-  margin: 4px 0 19px;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 5px;
-}
-.confidence-meter span {
-  height: 5px;
-  background: var(--meter-fill);
-  border-radius: 4px;
-}
-.confidence-meter span[data-muted="true"] {
-  background: var(--meter-muted);
-}
 
 .button {
   min-height: 44px;
@@ -2514,11 +2500,7 @@ a.button {
   gap: 10px;
   font-size: var(--type-body);
 }
-.assistant-action-card header .confidence-meter {
-  width: 54px;
-  margin: 0;
-  flex: none;
-}
+
 .assistant-action-card p {
   font-size: var(--type-label);
   color: var(--muted);

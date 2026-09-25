@@ -45,20 +45,10 @@ function ActionCard({
   onDecide: (proposal: BackendProposal, decision: "approved" | "rejected") => void;
 }) {
   const decidable = reviewIsPending(proposal);
-  const filled = { Low: 1, Medium: 2, High: 3 }[proposal.confidence];
   return (
     <article className="assistant-action-card" data-status={proposal.status}>
       <header>
         <strong>{proposal.title}</strong>
-        <div
-          className="confidence-meter"
-          data-level={proposal.confidence.toLowerCase()}
-          aria-hidden="true"
-        >
-          {[0, 1, 2].map((index) => (
-            <span key={index} data-muted={index >= filled || undefined} />
-          ))}
-        </div>
       </header>
       <p>{proposal.window}</p>
       {proposal.reasonLabels.length > 0 && (

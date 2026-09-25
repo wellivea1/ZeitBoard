@@ -227,7 +227,8 @@ export async function loadProposals(
 ): Promise<ProposalsResult> {
   const method = findWailsMethod(root, methodNames);
   if (!method && !hasDesktopBridge(root)) return { data: proposalsFixture, source: "fixture" };
-  if (!method) throw new Error("The desktop proposal service is unavailable. Refresh to retry.");
+  if (!method)
+    throw new Error("The desktop proposal service is unavailable. It is retried shortly.");
   const result = await method();
   const proposals = normalizeProposals(result);
   if (!proposals) throw new Error("Proposal service returned an invalid response.");

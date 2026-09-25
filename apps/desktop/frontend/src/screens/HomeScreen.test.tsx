@@ -35,7 +35,7 @@ describe("Home data recovery", () => {
     reject(new Error("synthetic service failure"));
     expect(await screen.findByRole("heading", { name: "Estimate unavailable" })).toBeVisible();
     expect(screen.queryByText("Still learning your rhythm")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("Still learning your rhythm")).toBeVisible();
     expect(screen.getByRole("link", { name: "Import sleep records" })).toHaveAttribute(
       "href",

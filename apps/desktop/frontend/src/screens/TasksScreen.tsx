@@ -148,9 +148,7 @@ export function TasksScreen({ embedded }: { embedded?: boolean } = {}) {
         setEditorVersion((version) => version + 1);
       }
     } catch (reason) {
-      setError(
-        reason instanceof Error ? reason.message : "The task action failed. Refresh and try again.",
-      );
+      setError(reason instanceof Error ? reason.message : "The task action failed. Try again.");
     } finally {
       busyRef.current = false;
       setBusy(false);
