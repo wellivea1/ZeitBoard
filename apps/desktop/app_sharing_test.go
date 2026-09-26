@@ -1,6 +1,9 @@
 package main
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -150,5 +153,63 @@ func TestUnnamedLinkStillReads(t *testing.T) {
 	dto := shareLinkDTO(backendShareProfileRecord{ProfileID: "abc", State: "active"})
 	if dto.Label != "Unnamed link" {
 		t.Errorf("label = %q", dto.Label)
+	}
+}
+
+// TestShareLinkPreviewCarriesTheInstancesPage reads the recipient's page from
+// the owner route and refuses a preview that belongs to another link.
+func TestShareLinkPreviewCarriesTheInstancesPage(t *testing.T) {
+	app := newTestApp(t)
+	previewedFor := "prof_mum"
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/devices":
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(registerDeviceResponse{SchemaVersion: "v1", DeviceID: "device_desktop", Token: "synthetic-token"})
+		case "/v1/portal/profiles/prof_mum/preview":
+			if r.Method != http.MethodGet {
+				t.Errorf("preview method = %s", r.Method)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"schema_version": "v1",
+				"profileId":      previewedFor,
+				"state":          "active",
+				"html":           `<div class="page"><header class="masthead">Availability</header><main></main></div>`,
+				"stylesheet":     ":root, :host { --ink: #221f1a; }",
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	configureBackendForTest(t, app, server.URL)
+
+	preview, err := app.PreviewBackendShareLink(ShareLinkActionInput{ProfileID: "prof_mum"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.Status != "ok" || !strings.Contains(preview.HTML, "masthead") || preview.State != "active" {
+		t.Fatalf("preview = %+v", preview)
+	}
+
+	previewedFor = "prof_someone_else"
+	preview, err = app.PreviewBackendShareLink(ShareLinkActionInput{ProfileID: "prof_mum"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.Status != "error" || preview.HTML != "" {
+		t.Fatalf("a preview for another link was shown: %+v", preview)
+	}
+}
+
+func TestShareLinkPreviewIsOffWithoutSync(t *testing.T) {
+	app := newTestApp(t)
+	preview, err := app.PreviewBackendShareLink(ShareLinkActionInput{ProfileID: "prof_mum"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.Status != "off" || preview.HTML != "" {
+		t.Fatalf("preview without sync = %+v", preview)
 	}
 }

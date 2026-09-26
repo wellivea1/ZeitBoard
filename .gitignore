@@ -34,3 +34,6 @@ captures/
 
 # Local agent-harness scratch (preview launch config is developer-local).
 .claude/
+
+# Windows resources wails writes beside the desktop module during dev builds.
+apps/desktop/*.syso

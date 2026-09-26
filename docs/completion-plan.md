@@ -635,3 +635,17 @@ prototype panels in Rhythm › Sources. Each is fixed, with one shared hook for
 loading and one component for deletion replacing the per-screen copies (see
 `ui-refactor-plan.md`). The prototype `phaseTwo` module is retired: its types
 live with the data they describe and its sample data with the other fixtures.
+
+### C5 exact recipient preview, and a page that said "not awake" all day — 2026-09-26
+
+The Sharing screen now previews each link as its recipient sees it (portal-design
+section 10): the instance renders the link's snapshot with the portal's template,
+records no visit, and the desktop shows the allowlist-rebuilt markup in a shadow
+root. Driving it end to end against a local instance with synthetic nights found
+that the portal said "Likely not awake right now" for the whole of every waking
+day: the estimator forecasts waking windows only after each predicted sleep, so
+the day in progress was never a window. The materializer now publishes it, from
+the observed wake to the earliest likely next sleep, and a regression test pins
+that a visitor during the owner's waking day reads "Likely awake right now".
+Next in C5: the live layer (SSE with polling and no-script fallback), the coarse
+audit view, persisted rate limits and request-scoped threads.

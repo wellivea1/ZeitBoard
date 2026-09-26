@@ -215,6 +215,58 @@ func (s *Server) handleListPortalProfiles(w http.ResponseWriter, r *http.Request
 	})
 }
 
+type portalPreviewResponse struct {
+	SchemaVersion string `json:"schema_version"`
+	ProfileID     string `json:"profileId"`
+	State         string `json:"state"`
+	HTML          string `json:"html"`
+	Stylesheet    string `json:"stylesheet"`
+}
+
+// handlePreviewPortalProfile returns the page a recipient of this link would
+// see now, rendered by the portal's own template from the same projection
+// (portal-design section 10). It records no access: an owner checking what
+// they share is not a visit, and the audit counts visits.
+func (s *Server) handlePreviewPortalProfile(w http.ResponseWriter, r *http.Request) {
+	profileID := strings.TrimSpace(r.PathValue("id"))
+	if profileID == "" {
+		writeError(w, http.StatusBadRequest, "share profile id is required")
+		return
+	}
+	now := s.now()
+	profile, expired, revoked, err := s.portal.store.LookupProfile(r.Context(), profileID, now)
+	if errors.Is(err, portal.ErrProfileNotFound) {
+		writeError(w, http.StatusNotFound, "share profile not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "share profile preview failed")
+		return
+	}
+	snapshot, err := s.portal.store.ReadSnapshot(r.Context(), profileID)
+	if err != nil && !errors.Is(err, portal.ErrNoSnapshot) {
+		log.Printf("portal preview: snapshot unreadable for profile %s: %v", profileID, err)
+	}
+	if err != nil {
+		// The recipient sees the page with nothing materialized yet; so does
+		// the preview.
+		snapshot = portal.Snapshot{}
+	}
+	state := portal.ProfileState{Profile: profile, Expired: expired, Revoked: revoked}
+	preview, err := portal.RenderPreview(state, snapshot, now)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "share profile preview failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, portalPreviewResponse{
+		SchemaVersion: syncmodel.SchemaVersion,
+		ProfileID:     profileID,
+		State:         profileState(state),
+		HTML:          preview.HTML,
+		Stylesheet:    preview.Stylesheet,
+	})
+}
+
 func profileState(state portal.ProfileState) string {
 	switch {
 	case state.Revoked:

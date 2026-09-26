@@ -10,18 +10,34 @@
 <link rel="stylesheet" href="/p/assets/portal.css">
 </head>
 <body>
-<div class="page">
-<header class="masthead">Availability</header>
-<main>
+{{template "open" .}}
 {{end}}
 
-{{define "foot"}}</main>
-</div>
+{{define "foot"}}{{template "close" .}}
 </body>
 </html>
 {{end}}
 
+{{/* The visible page, shared by every page and by the owner's preview, which
+     shows exactly what a recipient sees without a live link. */}}
+{{define "open"}}<div class="page">
+<header class="masthead">Availability</header>
+<main>
+{{end}}
+
+{{define "close"}}</main>
+</div>
+{{end}}
+
 {{define "dashboard"}}{{template "head" .}}
+{{template "dashboard-content" .}}
+{{template "foot" .}}{{end}}
+
+{{define "preview-dashboard"}}{{template "open" .}}
+{{template "dashboard-content" .}}
+{{template "close" .}}{{end}}
+
+{{define "dashboard-content"}}
 {{with .View}}
 <section class="now" aria-labelledby="state-title">
   <h1 class="lead" id="state-title">{{.Headline}}</h1>
@@ -68,7 +84,7 @@
 <section class="ask" aria-labelledby="ask-title">
   <h2 class="section-title" id="ask-title">Need a specific time?</h2>
   <p>You can ask for a window that suits you. They decide, and you will see the answer.</p>
-  <a class="button" href="{{.RequestsPath}}">Ask for a time</a>
+  {{if .Preview}}<span class="button">Ask for a time</span>{{else}}<a class="button" href="{{.RequestsPath}}">Ask for a time</a>{{end}}
 </section>
 {{end}}
 
@@ -78,7 +94,7 @@
   <p>{{.Notice}}</p>
 </aside>
 {{end}}
-{{template "foot" .}}{{end}}
+{{end}}
 
 {{define "request-form"}}{{template "head" .}}
 <section class="now">
@@ -185,8 +201,16 @@
 {{template "foot" .}}{{end}}
 
 {{define "generic"}}{{template "head" .}}
+{{template "generic-content" .}}
+{{template "foot" .}}{{end}}
+
+{{define "preview-generic"}}{{template "open" .}}
+{{template "generic-content" .}}
+{{template "close" .}}{{end}}
+
+{{define "generic-content"}}
 <section class="now">
   <h1 class="lead">{{.Title}}</h1>
   <p class="lead-detail">{{.Error}}</p>
 </section>
-{{template "foot" .}}{{end}}
+{{end}}

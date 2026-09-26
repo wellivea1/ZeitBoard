@@ -1758,3 +1758,18 @@ address; medication records delete through the shared confirmation; the
 Settings › Sync checkbox and status labels lay out correctly. Web checks:
 format, lint (no errors), typecheck, 469 tests (new: `useLoaded`, route and
 refusal cases), production build; desktop Go tests pass.
+
+## Recipient preview and the day in progress — 2026-09-26
+
+A disposable instance (`.cache/zbsrv`, loopback, runtime self-signed TLS, portal
+on) was enrolled from the real desktop app, which pushed 42 synthetic nights.
+A link created from the desktop previewed on the Sharing screen with the
+portal's page; its markup carried no link, script or handler. Before the fix
+the page read "Likely not awake right now" at 7:55 AM with the owner awake
+since 6:15; after it, "Likely awake right now" with today's window running to
+10:45 PM. Tests: portal preview rendering (page without document, inert
+request button, dead links preview as unavailable), the owner route (no visit
+recorded, private label absent, 404 for an unknown link), the desktop method
+(off without sync, refuses a preview for another link), the sanitizer
+(scripts, handlers, styles, links, fetching CSS removed) and the Sharing screen
+flow; server, desktop Go and web suites pass.

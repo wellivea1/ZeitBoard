@@ -405,3 +405,24 @@
   gap: var(--space-2);
   align-items: center;
 }
+
+/* The recipient's page, as their browser would draw it. The frame is only a
+   hairline and a caption: the page inside keeps its own paper and type. */
+.share-preview {
+  margin: var(--space-4) 0 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.share-preview figcaption {
+  color: var(--muted);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-style: italic;
+}
+
+.share-preview-page {
+  max-height: 34rem;
+  overflow: auto;
+  border: 1px solid var(--line);
+}

@@ -214,7 +214,12 @@ the same stamp. That is what makes the page's own 6-hour and 24-hour age rules
 mean something: their clock now starts at the evidence, so an unrelated task
 sync can no longer reset the visitor's staleness warning.
 
-`windows` are the estimate as computed, unfiltered and unclipped. Dropping past
+`windows` are the estimate as computed, unfiltered and unclipped, led by the
+waking period already under way: from the observed wake at the end of the
+newest sleep the estimate used to the earliest likely start of the next one.
+The estimator forecasts waking windows only after each predicted sleep, so
+before this was added (2026-09-26) the page said "not awake right now" for
+the whole of every day the owner was awake. Dropping past
 windows and clipping a window already in progress are **render-time** rules,
 applied identically by `BuildView` and by the availability DTO. They used to run
 at materialization, where they were only correct for the instant the snapshot
@@ -344,6 +349,16 @@ The Sharing screen provides profile state, expiry, coarse last access, create or
 edit grants, required passcode reset, one-time link display, exact recipient
 preview, revoke, and audit/erasure controls. The preview renders the same DTO and
 template as the public page without an iframe or a live public token.
+
+The preview is implemented (2026-09-26). `GET /v1/portal/profiles/{id}/preview`
+renders the link's current snapshot with the portal's own template in preview
+mode, where "Ask for a time" is inert, and records no access, because an owner
+checking a link is not a visit. A revoked or expired link previews as the
+unavailable page its recipient now gets. The desktop treats the markup as data:
+it rebuilds it from an allowlist of the template's elements and attributes (no
+links, scripts, styles or handlers survive), removes anything in the
+stylesheet that could fetch, and shows the page in a shadow root on the
+Sharing screen.
 
 Approvals adds a neutral `visitor` origin, private handle/message details, and
 an explicit disclosure of what approval reveals. Calendar and Approvals call the

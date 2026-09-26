@@ -48,6 +48,10 @@ type pageData struct {
 	MinLocal      string
 	CanRequest    bool
 	RequestsPath  string
+
+	// Preview renders the page for the owner: the same content, with its
+	// links inert, because the owner holds no link token to follow them.
+	Preview bool
 }
 
 func (h *Handler) handleStylesheet(w http.ResponseWriter, r *http.Request) {

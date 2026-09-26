@@ -342,6 +342,58 @@ func validateShareLinkInput(input CreateShareLinkInput) error {
 	return nil
 }
 
+// ShareLinkPreviewDTO is the page a recipient of one link sees now, rendered
+// by the instance from the portal's own template (portal-design section 10).
+// The markup is data from the instance, not code: the screen sanitizes it
+// before showing it, and nothing in it navigates or runs.
+type ShareLinkPreviewDTO struct {
+	Status     string `json:"status"`
+	Message    string `json:"message,omitempty"`
+	ProfileID  string `json:"profileId,omitempty"`
+	State      string `json:"state,omitempty"`
+	HTML       string `json:"html,omitempty"`
+	Stylesheet string `json:"stylesheet,omitempty"`
+}
+
+type backendSharePreviewResponse struct {
+	SchemaVersion string `json:"schema_version"`
+	ProfileID     string `json:"profileId"`
+	State         string `json:"state"`
+	HTML          string `json:"html"`
+	Stylesheet    string `json:"stylesheet"`
+}
+
+// PreviewBackendShareLink shows the owner exactly what the link's recipient
+// sees, without the link: the owner holds no link token after creation, and
+// checking a link is not a visit, so the instance records nothing.
+func (a *App) PreviewBackendShareLink(input ShareLinkActionInput) (ShareLinkPreviewDTO, error) {
+	cfg, token, err := a.requireBackendSync()
+	if err != nil {
+		return ShareLinkPreviewDTO{Status: "off",
+			Message: "Sharing runs on your own server. Turn on backend sync in Settings to preview a link."}, nil
+	}
+	profileID := strings.TrimSpace(input.ProfileID)
+	if profileID == "" {
+		return ShareLinkPreviewDTO{Status: "error", Message: "No link was selected."}, nil
+	}
+	var response backendSharePreviewResponse
+	path := "/v1/portal/profiles/" + url.PathEscape(profileID) + "/preview"
+	if err := a.newDesktopBackendClient(cfg, token).getJSON(a.applicationContext(), path, &response); err != nil {
+		return ShareLinkPreviewDTO{Status: "error", ProfileID: profileID, Message: sanitizeBackendError(err)}, nil
+	}
+	if response.ProfileID != profileID || strings.TrimSpace(response.HTML) == "" {
+		return ShareLinkPreviewDTO{Status: "error", ProfileID: profileID,
+			Message: "Your server returned a preview for a different link."}, nil
+	}
+	return ShareLinkPreviewDTO{
+		Status:     "ok",
+		ProfileID:  profileID,
+		State:      response.State,
+		HTML:       response.HTML,
+		Stylesheet: response.Stylesheet,
+	}, nil
+}
+
 // RevokeBackendShareLink stops the link working. The record stays so the access
 // history remains readable; erasure is a separate, confirmed action.
 func (a *App) RevokeBackendShareLink(input ShareLinkActionInput) (ShareLinksDTO, error) {
@@ -355,7 +407,7 @@ func (a *App) EraseBackendShareLink(input ShareLinkActionInput) (ShareLinksDTO, 
 	if strings.TrimSpace(input.Confirmation) != strings.TrimSpace(input.ProfileID) {
 		result, _ := a.GetBackendShareLinks()
 		result.Status = "error"
-		result.Message = "Type the link's id exactly to erase it. Revoking is enough to stop access."
+		result.Message = "Type the link's id exactly to delete its record. Revoking is enough to stop access."
 		return result, nil
 	}
 	return a.shareLinkAction(input.ProfileID, "erase", "")
