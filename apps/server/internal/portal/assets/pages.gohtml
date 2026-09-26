@@ -10,7 +10,7 @@
 <link rel="stylesheet" href="/p/assets/portal.css">
 {{if .Live}}<script src="/p/assets/portal.js" defer></script>{{end}}
 </head>
-<body{{if .Live}} data-live data-refresh-at="{{.RefreshAt}}"{{end}}>
+<body{{if .Live}} data-live="{{.Live}}"{{if .RefreshAt}} data-refresh-at="{{.RefreshAt}}"{{end}}{{end}}>
 {{template "open" .}}
 {{end}}
 
@@ -162,6 +162,33 @@
   {{if .Request.Handle}}<p class="detail">Sent as {{.Request.Handle}}.</p>{{end}}
   {{if .Request.Message}}<p class="detail">&ldquo;{{.Request.Message}}&rdquo;</p>{{end}}
 </section>
+
+{{if or .Messages .CanMessage}}
+<section class="thread" aria-labelledby="thread-title">
+  <h2 class="section-title" id="thread-title">Messages</h2>
+  {{if .Messages}}
+  <ol class="messages">
+    {{range .Messages}}
+    <li class="message" data-author="{{.Author}}"><p class="message-meta"><span class="message-author">{{.AuthorLabel}}</span> {{.WhenLabel}}</p><p class="message-body">{{.Body}}</p></li>
+    {{end}}
+  </ol>
+  {{else}}
+  <p class="detail">No messages yet.</p>
+  {{end}}
+  {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+  {{if .CanMessage}}
+  <form method="post" action="{{.FormAction}}">
+    <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+    <label for="message">Add a message</label>
+    <textarea id="message" name="message" maxlength="500" rows="3" required></textarea>
+    <button type="submit">Send</button>
+  </form>
+  <p class="detail">Plain words only. They can reply here until they answer your request.</p>
+  {{else}}
+  <p class="detail">This conversation is closed. It is deleted two weeks after the answer.</p>
+  {{end}}
+</section>
+{{end}}
 
 <aside class="sheet fineprint">
   <p>{{.View.Notice}}</p>

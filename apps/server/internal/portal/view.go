@@ -283,6 +283,34 @@ func startOnly(windows []Window, now time.Time, location *time.Location) string 
 	return "an unknown time"
 }
 
+// describeWhen says how long ago something happened, in words that need no
+// time zone: a thread's reader may be anywhere.
+func describeWhen(at, now time.Time) string {
+	age := now.Sub(at)
+	switch {
+	case age < time.Minute:
+		return "just now"
+	case age < time.Hour:
+		minutes := int(age / time.Minute)
+		if minutes == 1 {
+			return "a minute ago"
+		}
+		return fmt.Sprintf("%d minutes ago", minutes)
+	case age < 24*time.Hour:
+		hours := int(age / time.Hour)
+		if hours == 1 {
+			return "an hour ago"
+		}
+		return fmt.Sprintf("%d hours ago", hours)
+	default:
+		days := int(age / (24 * time.Hour))
+		if days == 1 {
+			return "yesterday"
+		}
+		return fmt.Sprintf("%d days ago", days)
+	}
+}
+
 func describeDay(value time.Time, now time.Time, location *time.Location) string {
 	local := value.In(location)
 	today := now.In(location)

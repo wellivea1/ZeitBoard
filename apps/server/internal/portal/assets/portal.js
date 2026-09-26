@@ -9,7 +9,8 @@
 (function () {
   "use strict";
   var body = document.body;
-  if (!body || !body.hasAttribute("data-live")) return;
+  var mode = body ? body.getAttribute("data-live") : null;
+  if (!mode) return;
 
   var page = location.pathname;
   var seen = null;
@@ -57,7 +58,9 @@
   }
 
   schedule(body.getAttribute("data-refresh-at"));
-  if (!("EventSource" in window)) {
+  // A request's own page has no stream to follow: its answer and its
+  // thread arrive through the ordinary page, so it asks once a minute.
+  if (mode === "poll" || !("EventSource" in window)) {
     poll();
     return;
   }

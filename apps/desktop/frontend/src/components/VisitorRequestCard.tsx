@@ -1,6 +1,7 @@
 import { decisionButton, requestDecisionLabel } from "../data/decisionWords";
 import { defaultSlot, type VisitorRequest } from "../data/visitorRequests";
 import { useVisitorRequests } from "../state/visitorRequests";
+import { VisitorThread } from "./VisitorThread";
 import { useApprovalQueue } from "../state/approvalQueue";
 import { reviewIsPending } from "../data/reviewQueue";
 import { civilCandidates, localZone, selectedCivilInstant } from "../utils/civilTime";
@@ -40,6 +41,8 @@ export function VisitorRequestCard({ request }: { request: VisitorRequest }) {
       </p>
 
       {request.message && <p className="visitor-message">“{request.message}”</p>}
+
+      <VisitorThread request={request} />
 
       {request.beyondHorizonNote && (
         <p className="diff-note" role="note">

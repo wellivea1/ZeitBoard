@@ -40,6 +40,24 @@ type BackendVisitorRequestDTO struct {
 	ExpiresLabel       string `json:"expiresLabel"`
 	ApprovalDisclosure string `json:"approvalDisclosure"`
 	DecisionToken      string `json:"decisionToken,omitempty"`
+
+	// The request's thread (P5-c): the visitor's words and the owner's, in
+	// order. CanMessage is whether a reply can still be added.
+	Messages   []VisitorMessageDTO `json:"messages"`
+	CanMessage bool                `json:"canMessage"`
+}
+
+type VisitorMessageDTO struct {
+	Author       string `json:"author"`
+	AuthorLabel  string `json:"authorLabel"`
+	Body         string `json:"body"`
+	CreatedLabel string `json:"createdLabel"`
+}
+
+// VisitorMessageInput is the owner's reply to one request's thread.
+type VisitorMessageInput struct {
+	ProposalID string `json:"proposalId"`
+	Message    string `json:"message"`
 }
 
 type BackendVisitorRequestsDTO struct {
@@ -68,6 +86,12 @@ type backendVisitorRequestRecord struct {
 	ExpiresAt       time.Time `json:"expiresAt"`
 	DecisionToken   string    `json:"decisionToken"`
 	Disclosure      string    `json:"disclosure"`
+	Messages        []struct {
+		Author    string    `json:"author"`
+		Body      string    `json:"body"`
+		CreatedAt time.Time `json:"createdAt"`
+	} `json:"messages"`
+	CanMessage bool `json:"canMessage"`
 }
 
 type backendVisitorRequestListResponse struct {
@@ -168,6 +192,20 @@ func backendVisitorRequestDTO(record backendVisitorRequestRecord) BackendVisitor
 	if record.DurationMinutes > 0 {
 		dto.DurationLabel = fmt.Sprintf("%d minutes", record.DurationMinutes)
 	}
+	dto.CanMessage = record.CanMessage
+	dto.Messages = make([]VisitorMessageDTO, 0, len(record.Messages))
+	for _, message := range record.Messages {
+		author := "They wrote"
+		if message.Author == "owner" {
+			author = "You wrote"
+		}
+		dto.Messages = append(dto.Messages, VisitorMessageDTO{
+			Author:       message.Author,
+			AuthorLabel:  author,
+			Body:         message.Body,
+			CreatedLabel: message.CreatedAt.Local().Format("Jan 2, 3:04 PM"),
+		})
+	}
 	if record.BeyondHorizon {
 		dto.BeyondHorizonNote = "This date is further ahead than the estimate reaches, so there is no availability to check it against."
 	}
@@ -217,6 +255,43 @@ func (a *App) DecideBackendVisitorRequest(input DecideBackendVisitorRequestInput
 		result.Message = "Decision recorded. The queue could not be refreshed; refresh it before another decision."
 	}
 	return result, nil
+}
+
+// ReplyToBackendVisitorRequest adds the owner's message to a request's thread
+// and returns the refreshed queue, so the reply appears where it was typed.
+func (a *App) ReplyToBackendVisitorRequest(input VisitorMessageInput) (BackendVisitorRequestsDTO, error) {
+	message := strings.TrimSpace(input.Message)
+	if message == "" {
+		return BackendVisitorRequestsDTO{Status: "error", Message: "Write a message first.", Requests: []BackendVisitorRequestDTO{}}, nil
+	}
+	return a.visitorThreadAction(input.ProposalID, "messages", map[string]any{"message": message})
+}
+
+// EraseBackendVisitorThread deletes a request's messages now, rather than two
+// weeks after its answer.
+func (a *App) EraseBackendVisitorThread(input VisitorMessageInput) (BackendVisitorRequestsDTO, error) {
+	return a.visitorThreadAction(input.ProposalID, "erase-thread", map[string]any{})
+}
+
+func (a *App) visitorThreadAction(proposalID, action string, payload map[string]any) (BackendVisitorRequestsDTO, error) {
+	cfg, token, err := a.requireBackendSync()
+	if err != nil {
+		return BackendVisitorRequestsDTO{Status: "error", Message: sanitizeBackendError(err), Requests: []BackendVisitorRequestDTO{}}, nil
+	}
+	if strings.TrimSpace(proposalID) == "" {
+		return BackendVisitorRequestsDTO{Status: "error", Message: "No request was selected.", Requests: []BackendVisitorRequestDTO{}}, nil
+	}
+	ctx := a.applicationContext()
+	client := a.newDesktopBackendClient(cfg, token)
+	var response map[string]json.RawMessage
+	path := "/v1/portal/requests/" + url.PathEscape(proposalID) + "/" + action
+	if err := client.postJSON(ctx, path, payload, &response); err != nil {
+		result := a.fetchBackendVisitorRequests(ctx, cfg, token)
+		result.Status = "error"
+		result.Message = sanitizeBackendError(err)
+		return result, nil
+	}
+	return a.fetchBackendVisitorRequests(ctx, cfg, token), nil
 }
 
 // The picker sends exact instants after resolving civil-time gaps and repeated
