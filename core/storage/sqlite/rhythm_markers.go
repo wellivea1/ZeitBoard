@@ -4,19 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"regexp"
-	"strings"
 	"time"
 
-	"non24.app/core/domain"
+	"non24.app/core/markers"
 )
 
 const (
-	RhythmMarkerTravel         = "travel"
-	RhythmMarkerIllness        = "illness"
-	RhythmMarkerDisruption     = "disruption"
-	RhythmMarkerForcedSchedule = "forced_schedule"
+	RhythmMarkerTravel         = markers.Travel
+	RhythmMarkerIllness        = markers.Illness
+	RhythmMarkerDisruption     = markers.Disruption
+	RhythmMarkerForcedSchedule = markers.ForcedSchedule
 )
 
 var (
@@ -24,18 +22,9 @@ var (
 	rhythmMarkerZoneID      = regexp.MustCompile(`^(?:UTC|[A-Za-z0-9._+-]+(?:/[A-Za-z0-9._+-]+)+)$`)
 )
 
-// RhythmMarkerRecord is an immutable, user-reported context annotation. It is
-// deliberately separate from estimator inputs so a marker cannot alter a
-// rhythm estimate or be mistaken for diagnostic evidence.
-type RhythmMarkerRecord struct {
-	MarkerID   string                     `json:"marker_id"`
-	Kind       string                     `json:"kind"`
-	StartAt    time.Time                  `json:"start_at"`
-	EndAt      *time.Time                 `json:"end_at,omitempty"`
-	ZoneID     string                     `json:"zone_id"`
-	Note       string                     `json:"note,omitempty"`
-	Provenance SleepObservationProvenance `json:"provenance"`
-}
+// RhythmMarkerRecord is defined and validated in core/markers, shared with the
+// server's sync validation (ADR-0048).
+type RhythmMarkerRecord = markers.Record
 
 type RhythmMarkerSet struct {
 	SchemaVersion string               `json:"schema_version"`
@@ -125,51 +114,6 @@ func normalizeRhythmMarker(record RhythmMarkerRecord) RhythmMarkerRecord {
 	return record
 }
 
-func validateRhythmMarker(record RhythmMarkerRecord) error {
-	if !contractIdentifier.MatchString(record.MarkerID) {
-		return errors.New("marker_id must match the v1 identifier format")
-	}
-	if !validRhythmMarkerKind(record.Kind) {
-		return errors.New("kind must be travel, illness, disruption, or forced_schedule")
-	}
-	if record.StartAt.IsZero() {
-		return errors.New("start_at is required")
-	}
-	if record.EndAt != nil && !record.EndAt.After(record.StartAt) {
-		return errors.New("end_at must be after start_at")
-	}
-	if len(record.ZoneID) > 64 || !rhythmMarkerZoneID.MatchString(record.ZoneID) {
-		return errors.New("zone_id must be an explicit IANA time-zone identifier")
-	}
-	if _, err := domain.NewZonedInstant(record.StartAt, record.ZoneID); err != nil {
-		return fmt.Errorf("marker start: %w", err)
-	}
-	if strings.TrimSpace(record.Note) != record.Note || len(record.Note) > 500 {
-		return errors.New("note must be canonical private text up to 500 characters")
-	}
-	if record.Provenance.AcquisitionMethod != ProvenanceAcquisitionManual || record.Provenance.EvidenceStatus != ProvenanceEvidenceUserReported {
-		return errors.New("rhythm marker provenance must be manual and user_reported")
-	}
-	if record.Provenance.RecordedAt.IsZero() {
-		return errors.New("provenance.recorded_at is required")
-	}
-	if record.Provenance.SourceRecordID != "" {
-		return errors.New("manual rhythm markers cannot carry a source_record_id")
-	}
-	if record.StartAt.After(record.Provenance.RecordedAt) {
-		return errors.New("start_at cannot be after provenance.recorded_at")
-	}
-	if record.EndAt != nil && record.EndAt.After(record.Provenance.RecordedAt) {
-		return errors.New("end_at cannot be after provenance.recorded_at")
-	}
-	return nil
-}
+func validateRhythmMarker(record RhythmMarkerRecord) error { return record.Validate() }
 
-func validRhythmMarkerKind(value string) bool {
-	switch value {
-	case RhythmMarkerTravel, RhythmMarkerIllness, RhythmMarkerDisruption, RhythmMarkerForcedSchedule:
-		return true
-	default:
-		return false
-	}
-}
+func validRhythmMarkerKind(value string) bool { return markers.ValidKind(value) }

@@ -28,6 +28,17 @@ const (
 	// and erases it on undo or when the task is deleted; the companion draws
 	// the next day's placements on its dial.
 	KindPlacement Kind = "placement"
+	// The medication kinds (ADR-0048). A definition is a mutable intention
+	// and syncs like a task, as immutable revisions "<medication_id>_r<n>";
+	// events and their corrections are append-only evidence whose record id
+	// is their own id. Deleting a medication erases its revisions, events
+	// and corrections together.
+	KindMedication           Kind = "medication"
+	KindMedicationEvent      Kind = "medication_event"
+	KindMedicationCorrection Kind = "medication_correction"
+	// KindContextMarker carries an immutable, user-reported rhythm context
+	// marker (ADR-0026). It is never an estimator input.
+	KindContextMarker Kind = "context_marker"
 	// KindTombstone marks an erased record in the pull stream. Tombstones are
 	// minted only by the server's erase endpoint — clients cannot push them —
 	// and their metadata-only payload carries the erased id plus its original

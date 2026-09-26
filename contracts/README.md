@@ -50,8 +50,11 @@ only event identifiers and half-open UTC intervals. Imported events are read-onl
 only explicitly approved `app_owned` blocks may carry task and proposal links.
 
 The current `v2` medication schemas include explicit schedule zones, reminder opt-in and private
-clinician-rule text. The unused v1 prototypes were removed. These are private, device-local
-contracts. Medication labels, strength/form or
+clinician-rule text. The unused v1 prototypes were removed. These are private contracts: since
+ADR-0048 their definitions, doses and corrections (and v1 rhythm markers) sync to the owner's own
+server as the `medication`, `medication_event`, `medication_correction` and `context_marker` kinds
+of `sync-batch`, which refers to these definitions directly; the validators load every version
+together so it can. Medication labels, strength/form or
 clinician-rule text, and event notes must not enter trusted views, LLM context, MCP output,
 telemetry, or logs. Wake-relative and predicted-sleep timing are read-time projections and are never
 stored as medication evidence.

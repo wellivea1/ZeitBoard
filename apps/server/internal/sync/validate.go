@@ -10,10 +10,24 @@ import (
 	"time"
 
 	"non24.app/core/domain"
+	"non24.app/core/markers"
+	"non24.app/core/medication"
 	"non24.app/core/sleepv1"
 )
 
 var identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{2,63}$`)
+
+// Pushable reports whether a device may push records of a kind. Tombstones
+// are minted only by the server's erase endpoint.
+func Pushable(kind Kind) bool {
+	switch kind {
+	case KindObservation, KindCorrection, KindTask, KindPlacement,
+		KindMedication, KindMedicationEvent, KindMedicationCorrection, KindContextMarker:
+		return true
+	default:
+		return false
+	}
+}
 
 func ValidatePushRequest(req *PushRequest) error {
 	if req.SchemaVersion != SchemaVersion {
@@ -36,7 +50,7 @@ func ValidatePushRequest(req *PushRequest) error {
 			return fmt.Errorf("duplicate recordId %q", record.RecordID)
 		}
 		seen[record.RecordID] = struct{}{}
-		if record.Kind != KindObservation && record.Kind != KindCorrection && record.Kind != KindTask && record.Kind != KindPlacement {
+		if !Pushable(record.Kind) {
 			return errors.New("unsupported record kind")
 		}
 		if record.CreatedAt.IsZero() {
@@ -97,9 +111,82 @@ func validatePayload(kind Kind, recordID string, payload json.RawMessage) error 
 		return validateTask(recordID, payload)
 	case KindPlacement:
 		return validatePlacement(recordID, payload)
+	case KindMedication:
+		return validateMedication(recordID, payload)
+	case KindMedicationEvent:
+		return validateMedicationEvent(recordID, payload)
+	case KindMedicationCorrection:
+		return validateMedicationCorrection(recordID, payload)
+	case KindContextMarker:
+		return validateContextMarker(recordID, payload)
 	default:
 		return errors.New("unsupported record kind")
 	}
+}
+
+// The medication and marker records are validated by the same code that
+// validates them in the desktop's store (core/medication, core/markers), so
+// the two cannot disagree about what a valid record is.
+
+func validateMedication(recordID string, payload json.RawMessage) error {
+	var record medication.Record
+	if err := decodeStrict(payload, &record); err != nil {
+		return errors.New("invalid medication payload")
+	}
+	if err := record.Validate(); err != nil {
+		return fmt.Errorf("invalid medication: %w", err)
+	}
+	if recordID != MedicationRevisionID(record.MedicationID, record.Revision) {
+		return errors.New("recordId must be medication_id plus _r<revision>")
+	}
+	return nil
+}
+
+// MedicationRevisionID is the record id of one medication revision.
+func MedicationRevisionID(medicationID string, revision int) string {
+	return fmt.Sprintf("%s_r%d", medicationID, revision)
+}
+
+func validateMedicationEvent(recordID string, payload json.RawMessage) error {
+	var record medication.EventRecord
+	if err := decodeStrict(payload, &record); err != nil {
+		return errors.New("invalid medication event payload")
+	}
+	if err := record.Validate(); err != nil {
+		return fmt.Errorf("invalid medication event: %w", err)
+	}
+	if record.EventID != recordID {
+		return errors.New("event_id must match recordId")
+	}
+	return nil
+}
+
+func validateMedicationCorrection(recordID string, payload json.RawMessage) error {
+	var record medication.CorrectionRecord
+	if err := decodeStrict(payload, &record); err != nil {
+		return errors.New("invalid medication correction payload")
+	}
+	if err := record.Validate(); err != nil {
+		return fmt.Errorf("invalid medication correction: %w", err)
+	}
+	if record.CorrectionID != recordID {
+		return errors.New("correction_id must match recordId")
+	}
+	return nil
+}
+
+func validateContextMarker(recordID string, payload json.RawMessage) error {
+	var record markers.Record
+	if err := decodeStrict(payload, &record); err != nil {
+		return errors.New("invalid context marker payload")
+	}
+	if err := record.Validate(); err != nil {
+		return fmt.Errorf("invalid context marker: %w", err)
+	}
+	if record.MarkerID != recordID {
+		return errors.New("marker_id must match recordId")
+	}
+	return nil
 }
 
 type placementPayload struct {

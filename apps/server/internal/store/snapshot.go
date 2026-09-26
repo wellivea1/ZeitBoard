@@ -39,7 +39,10 @@ func (s *Store) sleepSnapshot(ctx context.Context, observationID string, recordL
 		filter := "kind IN ('observation', 'correction')"
 		args := []any{since, through}
 		if observationID != "" {
-			filter = "(record_id = ? OR record_id IN (SELECT record_id FROM sync_correction_targets WHERE observation_id = ?))"
+			// The targets table also indexes medication corrections by the
+			// dose they correct, so the kinds are pinned: a sleep review can
+			// never pick up a medication record whose id happens to match.
+			filter = "kind IN ('observation', 'correction') AND (record_id = ? OR record_id IN (SELECT record_id FROM sync_correction_targets WHERE observation_id = ?))"
 			args = append(args, observationID, observationID)
 		}
 		rows, err := tx.QueryContext(ctx, `SELECT seq, record_id, kind, device_id, created_at, nonce, ciphertext
