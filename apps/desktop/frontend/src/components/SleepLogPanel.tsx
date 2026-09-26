@@ -1,7 +1,9 @@
 import { SleepEntryForm } from "./SleepEntryForm";
 import { useEffect, useRef, useState } from "react";
+import { Loading } from "./Loading";
 import { QuickLogBar } from "./QuickLogBar";
-import { deleteConfirmationToken } from "../data/sleepDataControl";
+import { useLoaded } from "../state/useLoaded";
+import { deleteWord } from "../data/deletion";
 import { SleepNightRow } from "./SleepNightRow";
 import { notifySleepDataChanged, sleepDataChangedEvent } from "../data/sleepDataEvents";
 import {
@@ -9,6 +11,7 @@ import {
   correctSleepEntry,
   deleteSleepObservation,
   loadSleepEntries,
+  sleepEntriesUnavailable,
   suppressSleepEntry,
   type SleepCorrectionInput,
   type SleepEntriesData,
@@ -44,6 +47,8 @@ function endAfterStart(input: SleepEntryInput) {
   return new Date(input.endLocal).getTime() > new Date(input.startLocal).getTime();
 }
 
+const noEntries: SleepEntriesData = { status: "empty", empty: true, message: "", entries: [] };
+
 /** Log › Sleep with "Add a past night" already open. */
 const addNightHash = "#/log/sleep/add";
 
@@ -54,19 +59,17 @@ const addNightHash = "#/log/sleep/add";
 // 593-line screen because they had both grown there. Data Sources keeps the
 // sources; this is the log.
 export function SleepLogPanel() {
-  const [entriesData, setEntriesData] = useState<SleepEntriesData>({
-    status: "empty",
-    empty: true,
-    message: "Loading local sleep entries.",
-    entries: [],
+  const { data: loadedEntries, set: setEntriesData } = useLoaded(loadSleepEntries, {
+    events: [sleepDataChangedEvent],
+    fallback: sleepEntriesUnavailable,
   });
+  const entriesData = loadedEntries ?? noEntries;
   const [form, setForm] = useState<SleepEntryInput>(initialSleepForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingSnapshot, setEditingSnapshot] = useState<SleepEntry | null>(null);
   const [editExcluded, setEditExcluded] = useState(false);
   const [editForm, setEditForm] = useState<SleepEntryInput>(initialSleepForm);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [busy, setBusy] = useState(false);
   const [formError, setFormError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
@@ -77,32 +80,6 @@ export function SleepLogPanel() {
     const loaded = await loadSleepEntries();
     setEntriesData(loaded);
   };
-
-  useEffect(() => {
-    let current = true;
-    const load = () =>
-      void loadSleepEntries()
-        .then((loaded) => {
-          if (current) setEntriesData(loaded);
-        })
-        .catch((error: unknown) => {
-          if (!current) return;
-          setEntriesData({
-            status: "unavailable",
-            empty: true,
-            message: error instanceof Error ? error.message : "Manual sleep log is unavailable.",
-            entries: [],
-          });
-        });
-    load();
-    // A night recorded with the quick buttons, or imported, belongs in the list
-    // without a Refresh button.
-    window.addEventListener(sleepDataChangedEvent, load);
-    return () => {
-      current = false;
-      window.removeEventListener(sleepDataChangedEvent, load);
-    };
-  }, []);
 
   // "Add a past night" elsewhere (Home, before a forecast) arrives here with
   // the form open and its first field ready.
@@ -143,7 +120,6 @@ export function SleepLogPanel() {
     setEditExcluded(entry.suppressed);
     setEditingId(entry.observationId);
     setDeletingId(null);
-    setDeleteConfirmation("");
     setEditForm({
       startLocal: entry.effectiveStartLocal,
       endLocal: entry.effectiveEndLocal,
@@ -198,27 +174,21 @@ export function SleepLogPanel() {
 
   const beginDelete = (entry: SleepEntry) => {
     setDeletingId(entry.observationId);
-    setDeleteConfirmation("");
     setEditingId(null);
     setFormError("");
   };
 
   const deleteEntry = async (entry: SleepEntry) => {
-    if (deleteConfirmation !== deleteConfirmationToken) {
-      setFormError("Type DELETE to confirm permanent erasure.");
-      return;
-    }
     setBusy(true);
     setFormError("");
     try {
-      const loaded = await deleteSleepObservation(entry.observationId, deleteConfirmation);
+      const loaded = await deleteSleepObservation(entry.observationId, deleteWord);
       setEntriesData(loaded);
       notifySleepDataChanged();
       setStatusMessage("Night deleted.");
       setDeletingId(null);
-      setDeleteConfirmation("");
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : "Could not erase sleep entry.");
+      setFormError(error instanceof Error ? error.message : "Could not delete the night.");
     } finally {
       setBusy(false);
     }
@@ -270,26 +240,28 @@ export function SleepLogPanel() {
           </h2>
           <small>Edits keep the original. Delete removes a night for good.</small>
         </div>
-        {entriesData.entries.length === 0 ? (
+        {loadedEntries === undefined ? (
+          <Loading />
+        ) : entriesData.status === "unavailable" ? (
+          <div className="sleep-log-empty">
+            <h2>The sleep log could not be read</h2>
+            <p>{entriesData.message} Nothing saved has changed.</p>
+          </div>
+        ) : entriesData.entries.length === 0 ? (
           <div className="sleep-log-empty">
             <h2>No sleep entries yet</h2>
             <p>
-              {entriesData.status === "unavailable"
-                ? entriesData.message
-                : "Use the buttons above when you go to sleep and wake up, or "}
-              {entriesData.status !== "unavailable" && (
-                <button
-                  className="text-link"
-                  type="button"
-                  onClick={() => {
-                    if (addRef.current) addRef.current.open = true;
-                  }}
-                >
-                  add a past night
-                </button>
-              )}
-              {entriesData.status !== "unavailable" &&
-                ". Forecasts start once there are enough nights."}
+              Use the buttons above when you go to sleep and wake up, or{" "}
+              <button
+                className="text-link"
+                type="button"
+                onClick={() => {
+                  if (addRef.current) addRef.current.open = true;
+                }}
+              >
+                add a past night
+              </button>
+              . Forecasts start once there are enough nights.
             </p>
           </div>
         ) : (
@@ -328,7 +300,6 @@ export function SleepLogPanel() {
                   editForm={editForm}
                   busy={busy}
                   deleteConfirming={deletingId === entry.observationId}
-                  deleteConfirmation={deletingId === entry.observationId ? deleteConfirmation : ""}
                   onBeginEdit={() => beginEdit(entry)}
                   onCancelEdit={() => setEditingId(null)}
                   onEditChange={setEditForm}
@@ -337,11 +308,7 @@ export function SleepLogPanel() {
                   onEditExcluded={setEditExcluded}
                   onSuppress={() => void suppressEntry(entry)}
                   onBeginDelete={() => beginDelete(entry)}
-                  onCancelDelete={() => {
-                    setDeletingId(null);
-                    setDeleteConfirmation("");
-                  }}
-                  onDeleteConfirmationChange={setDeleteConfirmation}
+                  onCancelDelete={() => setDeletingId(null)}
                   onDelete={() => void deleteEntry(entry)}
                 />
               ))}

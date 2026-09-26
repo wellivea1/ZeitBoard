@@ -1,15 +1,10 @@
 import type { OverviewData } from "../data/overview";
+import { explainRefusal, inEstimatorWords, type NextStep as Way } from "../data/estimateStatus";
 
 // Home before the first forecast. The estimator needs a week of main sleep, so
 // this page counts the nights so far and lists the ways to add more, each
 // going straight to where it is done. When the records exist but still give
 // no forecast, it says why in plain words and what would change that.
-
-interface Way {
-  title: string;
-  body: string;
-  link?: { href: string; label: string };
-}
 
 const ways: Way[] = [
   {
@@ -32,54 +27,6 @@ const ways: Way[] = [
     link: { href: "#/settings/sync", label: "Set up sync" },
   },
 ];
-
-interface Blocked {
-  sentence: string;
-  next: Way;
-}
-
-// Refusals that more nights alone would not resolve, each with the one step
-// most likely to.
-function blockedBy(refusal: NonNullable<OverviewData["refusal"]>): Blocked {
-  switch (refusal.code) {
-    case "ambiguous_cycle_index":
-      return {
-        sentence: "Two of your recorded sleeps are too far apart to count the cycles between them.",
-        next: {
-          title: "Fill the gap",
-          body: "Add the nights in between, if you remember them.",
-          link: { href: "#/log/sleep/add", label: "Add a past night" },
-        },
-      };
-    case "unsupported_input":
-      return {
-        sentence: "Your records give a pattern this estimator has not been checked on.",
-        next: {
-          title: "Look over recent nights",
-          body: "A date or time typed wrongly can cause this.",
-          link: { href: "#/log/sleep", label: "Open the sleep log" },
-        },
-      };
-    case "conflicting_observations":
-      return {
-        sentence: "Some of your records disagree with each other.",
-        next: {
-          title: "Settle which is right",
-          body: "Review the nights that overlap in the sleep log.",
-          link: { href: "#/log/sleep", label: "Open the sleep log" },
-        },
-      };
-    default:
-      return {
-        sentence: refusal.message,
-        next: {
-          title: "Look over your records",
-          body: "Nothing saved has changed.",
-          link: { href: "#/log/sleep", label: "Open the sleep log" },
-        },
-      };
-  }
-}
 
 function NightsTally({ nights, needed }: { nights: number; needed: number }) {
   return (
@@ -122,7 +69,7 @@ export function HomeSetup({ overview }: { overview: OverviewData }) {
   // synced estimate does not carry it); anything else says what went wrong.
   const blocked =
     overview.status === "refused" && refusal && refusal.code !== "insufficient_data" && !progress
-      ? blockedBy(refusal)
+      ? explainRefusal(refusal)
       : undefined;
 
   return (
@@ -138,7 +85,7 @@ export function HomeSetup({ overview }: { overview: OverviewData }) {
         <div className="home-setup-blocked sheet">
           <p>{blocked.sentence}</p>
           {blocked.sentence !== refusal.message && (
-            <p className="home-setup-detail">In the estimator&apos;s words: {refusal.message}.</p>
+            <p className="home-setup-detail">{inEstimatorWords(refusal.message)}</p>
           )}
         </div>
       )}

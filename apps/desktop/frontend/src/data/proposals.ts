@@ -4,14 +4,29 @@ import {
   type TaskConflict,
   type TaskConflictHistory,
 } from "./taskConflicts";
-import {
-  proposalFixtures,
-  unplacedTaskFixture,
-  type ChangeProposalFixture,
-  type ProposalOrigin,
-} from "./phaseTwo";
+import { proposalFixtures, unplacedTaskFixture } from "./fixture";
 import type { ConfidenceLevel } from "./overview";
 import { findWailsMethod, hasDesktopBridge, type WailsRoot } from "./wailsBridge";
+
+export type ProposalOrigin = "scheduler" | "assistant" | "sync_conflict";
+
+export interface ChangeProposal {
+  id: string;
+  origin: ProposalOrigin;
+  kind: "Move" | "Place" | "Reminder";
+  title: string;
+  from?: string;
+  to: string;
+  /** The exact block, when the desktop supplies it. */
+  startAt?: string;
+  endAt?: string;
+  rhythmContext: string;
+  confidence: ConfidenceLevel;
+  explanationCodes: string[];
+  reasonLabels: string[];
+  createdLabel: string;
+  expiresLabel: string;
+}
 
 export interface UnplacedProposal {
   title: string;
@@ -23,7 +38,7 @@ export interface UnplacedProposal {
 export type ProposalsSource = "local" | "fixture";
 export type ProposalDecisionState = "pending" | "approved" | "rejected";
 
-export interface ProposalRecord extends ChangeProposalFixture {
+export interface ProposalRecord extends ChangeProposal {
   decision: ProposalDecisionState;
   canUndo: boolean;
 }
@@ -46,8 +61,7 @@ export interface ProposalsResult {
   source: ProposalsSource;
 }
 
-// Repackaged from the shared phaseTwo data so the offline shell renders the same
-// shape the scheduler supplies.
+// The browser preview's sample, in the same shape the scheduler supplies.
 export const proposalsFixture: ProposalsData = {
   taskConflicts: [],
   taskConflictHistory: [],
@@ -96,7 +110,7 @@ function strList(value: unknown): string[] | undefined {
 }
 
 const origins: ProposalOrigin[] = ["scheduler", "assistant", "sync_conflict"];
-const kinds: ChangeProposalFixture["kind"][] = ["Move", "Place", "Reminder"];
+const kinds: ChangeProposal["kind"][] = ["Move", "Place", "Reminder"];
 
 function confidence(value: unknown): ConfidenceLevel | undefined {
   const normalized = str(value)?.toLowerCase();
@@ -122,7 +136,7 @@ function proposal(value: unknown): ProposalRecord | undefined {
   if (!isRecord(value)) return undefined;
   const id = str(value.id);
   const origin = str(value.origin) as ProposalOrigin | undefined;
-  const kind = str(value.kind) as ChangeProposalFixture["kind"] | undefined;
+  const kind = str(value.kind) as ChangeProposal["kind"] | undefined;
   const title = str(value.title);
   const to = str(value.to);
   const rhythmContext = str(value.rhythmContext);

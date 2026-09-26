@@ -1,7 +1,8 @@
+import { deleteWord } from "./deletion";
 import { findWailsMethod, type WailsRoot } from "./wailsBridge";
 
 export const medicationDataChangedEvent = "zeitboard:medication-data-changed";
-export const medicationDeleteConfirmation = "DELETE";
+export { deleteWord as medicationDeleteConfirmation } from "./deletion";
 
 export type MedicationEventStatus = "taken" | "skipped";
 export type MedicationEstimateStatus = "estimated" | "empty" | "refused" | "unavailable";
@@ -774,22 +775,14 @@ export function deleteMedication(
   medicationId: string,
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ) {
-  return medicationMutation(
-    "DeleteMedication",
-    { medicationId, confirmation: medicationDeleteConfirmation },
-    root,
-  );
+  return medicationMutation("DeleteMedication", { medicationId, confirmation: deleteWord }, root);
 }
 
 export function deleteMedicationEvent(
   eventId: string,
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ) {
-  return medicationMutation(
-    "DeleteMedicationEvent",
-    { eventId, confirmation: medicationDeleteConfirmation },
-    root,
-  );
+  return medicationMutation("DeleteMedicationEvent", { eventId, confirmation: deleteWord }, root);
 }
 
 export async function exportMedicationData(

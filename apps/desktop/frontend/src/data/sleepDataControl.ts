@@ -1,7 +1,7 @@
 import { exportSleepData, type SleepDataExport } from "./sleepEntries";
 import { findWailsMethod, type WailsRoot } from "./wailsBridge";
 
-export const deleteConfirmationToken = "DELETE";
+export { deleteWord as deleteConfirmationToken } from "./deletion";
 
 export interface SleepDataExportSummary {
   fileName: string;

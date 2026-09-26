@@ -213,7 +213,7 @@ function MedicationWorkspaceView({
             mutate(() => correctMedicationEvent(input), "Medication event correction appended.")
           }
           onDelete={(eventId: string) =>
-            mutate(() => deleteMedicationEvent(eventId), "Medication event permanently erased.")
+            mutate(() => deleteMedicationEvent(eventId), "Dose record deleted.")
           }
         />
       )}
@@ -232,10 +232,7 @@ function MedicationWorkspaceView({
           mutate(() => updateMedicationSchedule(input), "Medication schedule revision saved.")
         }
         onDelete={(medicationId: string) =>
-          mutate(
-            () => deleteMedication(medicationId),
-            "Medication and its history permanently erased.",
-          )
+          mutate(() => deleteMedication(medicationId), "Medication and its history deleted.")
         }
       />
 

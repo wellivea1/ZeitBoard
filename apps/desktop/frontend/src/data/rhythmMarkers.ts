@@ -1,7 +1,7 @@
 import { findWailsMethod, type WailsRoot } from "./wailsBridge";
 
 export const rhythmMarkersChangedEvent = "zeitboard:rhythm-markers-changed";
-export const rhythmMarkerDeleteConfirmation = "DELETE";
+export { deleteWord as rhythmMarkerDeleteConfirmation } from "./deletion";
 
 export type RhythmMarkerKind = "travel" | "illness" | "disruption" | "forced_schedule";
 export type RhythmMarkerStatus = "ready" | "empty" | "unavailable";

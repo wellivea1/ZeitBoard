@@ -298,7 +298,7 @@ export function MedicationScheduleEditor({
             type="submit"
             disabled={busy || Boolean(validationError)}
           >
-            {busy ? "Saving..." : "Save schedule revision"}
+            {busy ? "Saving…" : "Save schedule revision"}
           </button>
         </div>
       </form>

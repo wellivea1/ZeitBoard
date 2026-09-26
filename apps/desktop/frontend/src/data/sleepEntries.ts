@@ -54,6 +54,16 @@ export interface SleepEntriesData {
   entries: SleepEntry[];
 }
 
+// What the log shows when it cannot be read: the reason, never "no entries".
+export function sleepEntriesUnavailable(reason: unknown): SleepEntriesData {
+  return {
+    status: "unavailable",
+    empty: true,
+    message: reason instanceof Error ? reason.message : "The sleep log could not be read.",
+    entries: [],
+  };
+}
+
 export interface SleepDataExport {
   fileName: string;
   json: string;

@@ -35,9 +35,9 @@ it("requires an explicit enable action and lets the owner erase independently", 
   fireEvent.click(screen.getByRole("button", { name: "Enable local activity collection" }));
   await screen.findByText("Running");
   expect(set).toHaveBeenCalledWith({ enabled: true, zoneId: "UTC" });
-  const eraseButton = screen.getByRole("button", { name: "Erase activity records" });
+  const eraseButton = screen.getByRole("button", { name: "Delete activity records" });
   expect(eraseButton).toBeDisabled();
-  fireEvent.change(screen.getByLabelText("Type DELETE to erase activity records"), {
+  fireEvent.change(screen.getByLabelText("Type DELETE to delete activity records"), {
     target: { value: "DELETE" },
   });
   fireEvent.click(eraseButton);

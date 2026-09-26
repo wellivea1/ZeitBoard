@@ -131,7 +131,7 @@ export function TaskConflictCard({ conflict }: { conflict: TaskConflict }) {
           they are, the versions you compared stay in history, and you can edit the task afterwards.
         </Notice>
         <button className="button primary" type="submit" disabled={busy || !choice}>
-          {queue.busyProposalId === conflict.taskId ? "Saving review..." : "Save selected version"}
+          {queue.busyProposalId === conflict.taskId ? "Saving review…" : "Save selected version"}
         </button>
       </form>
     </article>

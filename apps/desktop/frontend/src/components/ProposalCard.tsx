@@ -1,5 +1,6 @@
+import { decisionButton, decisionLabel } from "../data/decisionWords";
 import { useApprovals } from "../state/approvals";
-import type { ChangeProposalFixture, ProposalOrigin } from "../data/phaseTwo";
+import type { ChangeProposal, ProposalOrigin } from "../data/proposals";
 import { blockWording } from "../utils/relativeTime";
 
 // One suggested change, read in the order a person decides it: what, when,
@@ -16,13 +17,13 @@ const originLabels: Record<ProposalOrigin, string> = {
   sync_conflict: "Sync conflict",
 };
 
-const kindLabels: Record<ChangeProposalFixture["kind"], string> = {
+const kindLabels: Record<ChangeProposal["kind"], string> = {
   Place: "new time",
   Move: "moves an existing block",
   Reminder: "reminder",
 };
 
-export function ProposalCard({ proposal }: { proposal: ChangeProposalFixture }) {
+export function ProposalCard({ proposal }: { proposal: ChangeProposal }) {
   const { decide, busyProposalId, ready } = useApprovals();
   const busy = !ready || busyProposalId !== null;
   return (
@@ -44,20 +45,22 @@ export function ProposalCard({ proposal }: { proposal: ChangeProposalFixture }) 
       <p className="proposal-meta">{proposal.expiresLabel}</p>
       <div className="approval-actions">
         <button
-          className="button secondary"
-          type="button"
-          disabled={busy}
-          onClick={() => decide(proposal.id, "rejected")}
-        >
-          {busyProposalId === proposal.id ? "Recording…" : "Reject proposal"}
-        </button>
-        <button
           className="button primary"
           type="button"
           disabled={busy}
+          aria-label={decisionLabel("approved", proposal.title)}
           onClick={() => decide(proposal.id, "approved")}
         >
-          {busyProposalId === proposal.id ? "Recording…" : "Accept proposal"}
+          {busyProposalId === proposal.id ? "Recording…" : decisionButton("approved")}
+        </button>
+        <button
+          className="button secondary"
+          type="button"
+          disabled={busy}
+          aria-label={decisionLabel("rejected", proposal.title)}
+          onClick={() => decide(proposal.id, "rejected")}
+        >
+          {decisionButton("rejected")}
         </button>
       </div>
     </article>

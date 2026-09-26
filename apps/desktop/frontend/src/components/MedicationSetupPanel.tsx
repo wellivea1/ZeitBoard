@@ -1,6 +1,6 @@
+import { ConfirmDelete } from "./ConfirmDelete";
 import { useState, type FormEvent } from "react";
 import {
-  medicationDeleteConfirmation,
   type MedicationDefinition,
   type MedicationInput,
   type MedicationScheduleInput,
@@ -25,38 +25,19 @@ function MedicationErasurePanel({
   onDelete: (medicationId: string) => Promise<void>;
   onCancel: () => void;
 }) {
-  const [confirmation, setConfirmation] = useState("");
-
   return (
-    <section className="medication-rail-section medication-erasure" aria-label="Erase medication">
-      <header>
-        <p className="section-kicker">Permanent local erasure</p>
-        <h2>{medication.label}</h2>
-      </header>
-      <p>This removes the definition, every event, and every correction from local storage.</p>
-      <label>
-        <span>Type {medicationDeleteConfirmation} to confirm</span>
-        <input
-          value={confirmation}
-          autoComplete="off"
-          disabled={busy}
-          onChange={(event) => setConfirmation(event.target.value)}
-        />
-      </label>
-      <div className="medication-editor-actions">
-        <button className="button ghost compact" type="button" disabled={busy} onClick={onCancel}>
-          Cancel
-        </button>
-        <button
-          className="button danger compact"
-          type="button"
-          disabled={busy || confirmation !== medicationDeleteConfirmation}
-          onClick={() => void onDelete(medication.medicationId).then(onCancel, () => undefined)}
-        >
-          Erase medication and history
-        </button>
-      </div>
-    </section>
+    <ConfirmDelete
+      question={`Delete ${medication.label} for good?`}
+      action="Delete medication"
+      busy={busy}
+      onConfirm={() => void onDelete(medication.medicationId).then(onCancel, () => undefined)}
+      onCancel={onCancel}
+    >
+      <p>
+        This deletes it, every dose recorded for it and every correction from this computer. To stop
+        using it but keep its history, archive it instead.
+      </p>
+    </ConfirmDelete>
   );
 }
 
@@ -260,8 +241,8 @@ export function MedicationSetupPanel({
                 </div>
                 <p>{medication.detailLabel}</p>
                 <small>
-                  {medication.schedule?.summary ?? "No schedule"} | {medication.eventCount}{" "}
-                  {medication.eventCount === 1 ? "event" : "events"}
+                  {medication.schedule?.summary ?? "No schedule"} · {medication.eventCount}{" "}
+                  {medication.eventCount === 1 ? "dose recorded" : "doses recorded"}
                 </small>
                 {medication.startedLabel && <small>Start marker: {medication.startedLabel}</small>}
                 <div className="medication-row-actions">
@@ -269,6 +250,7 @@ export function MedicationSetupPanel({
                     className="text-button"
                     type="button"
                     disabled={busy}
+                    aria-label={`Edit ${medication.label}`}
                     onClick={() => {
                       setEditing({ ...medication });
                       setSchedulingID("");
@@ -294,6 +276,7 @@ export function MedicationSetupPanel({
                     className="text-button"
                     type="button"
                     disabled={busy}
+                    aria-label={`${medication.active ? "Archive" : "Reactivate"} ${medication.label}`}
                     onClick={() =>
                       void onUpdate({
                         medicationId: medication.medicationId,
@@ -313,13 +296,14 @@ export function MedicationSetupPanel({
                     className="text-button danger"
                     type="button"
                     disabled={busy}
+                    aria-label={`Delete ${medication.label}`}
                     onClick={() => {
                       setErasing(medication);
                       setEditing(null);
                       setSchedulingID("");
                     }}
                   >
-                    Erase
+                    Delete
                   </button>
                 </div>
               </article>

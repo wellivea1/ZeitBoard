@@ -1,3 +1,4 @@
+import { decisionLabel } from "../data/decisionWords";
 import { useEffect, useRef, type CSSProperties } from "react";
 import type { CalendarEventSegment } from "../data/calendar";
 import type { ProposalDecision } from "../state/approvals";
@@ -114,7 +115,7 @@ function Block({
             data-decision="accept"
             type="button"
             disabled={deciding}
-            aria-label={`Accept the suggested time for ${block.title}`}
+            aria-label={decisionLabel("approved", block.title)}
             onClick={() => onDecide(id, "approved")}
           >
             <Icon name="check" />
@@ -123,7 +124,7 @@ function Block({
             className="week-decide"
             type="button"
             disabled={deciding}
-            aria-label={`Decline the suggested time for ${block.title}`}
+            aria-label={decisionLabel("rejected", block.title)}
             onClick={() => onDecide(id, "rejected")}
           >
             <Icon name="close" />

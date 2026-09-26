@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import type { RhythmDriftPointFixture, RhythmSleepBandFixture } from "../data/phaseTwo";
+import type { RhythmDriftPoint, RhythmSleepBand } from "../data/rhythm";
 import type { RhythmActogram, RhythmDrift } from "../data/rhythm";
 import {
   rhythmMarkerKindLabels,
@@ -24,18 +24,12 @@ function bandStyle(startHour: number, durationHours: number) {
   };
 }
 
-function bandAriaLabel(band: RhythmSleepBandFixture) {
+function bandAriaLabel(band: RhythmSleepBand) {
   const prefix = band.kind === "forecast" ? "Predicted sleep window" : "Sleep interval";
   return `${prefix}: ${band.day}, ${band.startLabel} to ${band.wakeLabel}, ${band.durationLabel}, ${band.source}`;
 }
 
-function ActogramBand({
-  band,
-  duplicate = false,
-}: {
-  band: RhythmSleepBandFixture;
-  duplicate?: boolean;
-}) {
+function ActogramBand({ band, duplicate = false }: { band: RhythmSleepBand; duplicate?: boolean }) {
   const startHour = duplicate ? band.startHour + 24 : band.startHour;
   return (
     <span
@@ -77,7 +71,7 @@ function ActogramRow({
   now,
   markers,
 }: {
-  band: RhythmSleepBandFixture;
+  band: RhythmSleepBand;
   now: RhythmActogram["now"];
   markers: RhythmMarker[];
 }) {
@@ -160,7 +154,7 @@ export function ActogramPanel({
     sameRow.push(marker);
     markersByRow.set(key, sameRow);
   }
-  const markersFor = (band: RhythmSleepBandFixture) =>
+  const markersFor = (band: RhythmSleepBand) =>
     markersByRow.get(rowKey(band.civilDate, band.zoneId)) ?? [];
 
   return (
@@ -211,15 +205,17 @@ export function ActogramPanel({
 
       <div className="actogram-footer">
         <span>
-          <i className="legend-observed" /> observed
+          <i className="legend-observed" /> Observed
         </span>
         <span>
-          <i className="legend-inferred" /> inferred
+          <i className="legend-inferred" /> Inferred
         </span>
         <span>
-          <i className="legend-forecast" /> predicted
+          <i className="legend-forecast" /> Predicted
         </span>
-        <span>| now</span>
+        <span>
+          <i className="legend-now" /> Now
+        </span>
         {presentMarkerKinds.length > 0 && (
           <span className="actogram-marker-legend" aria-label="Context marker legend">
             {presentMarkerKinds.map((markerKind) => (
@@ -275,7 +271,7 @@ export function ActogramPanel({
   );
 }
 
-function scaleDriftX(index: number, points: RhythmDriftPointFixture[]) {
+function scaleDriftX(index: number, points: RhythmDriftPoint[]) {
   if (points.length === 1) return 50;
   return 8 + (index / (points.length - 1)) * 84;
 }
@@ -302,7 +298,31 @@ function formatClockHour(hour: number) {
     : `${hour12}:${String(minute).padStart(2, "0")} ${period}`;
 }
 
-const DRIFT_TICKS = 4;
+// Whole hours at a step that gives three to six lines across the data's range,
+// so the axis reads "6 PM", not "6:20 PM".
+const DRIFT_TICK_STEPS = [1, 2, 3, 4, 6, 8, 12, 24];
+
+function driftTicks(yMinHour: number, yMaxHour: number): number[] {
+  const span = Math.max(yMaxHour - yMinHour, 1);
+  const step = DRIFT_TICK_STEPS.find((candidate) => span / candidate <= 5) ?? 24;
+  const ticks: number[] = [];
+  for (let hour = Math.ceil(yMinHour / step) * step; hour <= yMaxHour; hour += step) {
+    ticks.push(hour);
+  }
+  return ticks;
+}
+
+// At most seven dates under the chart, evenly spread and always including the
+// latest cycle, so the labels never crowd or stack.
+const DRIFT_X_LABELS = 7;
+
+function driftLabelIndexes(count: number): number[] {
+  if (count === 0) return [];
+  const step = Math.max(1, Math.ceil(count / DRIFT_X_LABELS));
+  const indexes: number[] = [];
+  for (let index = (count - 1) % step; index < count; index += step) indexes.push(index);
+  return indexes;
+}
 
 export function DriftPanel({ drift }: { drift: RhythmDrift }) {
   const points = drift.points;
@@ -334,12 +354,10 @@ export function DriftPanel({ drift }: { drift: RhythmDrift }) {
     [points],
   );
   const probe = useTimeProbe(resolveProbe);
-  // Ticks run top (latest onset) to bottom (earliest), derived from the data
-  // range so genuinely free-running onsets are never clipped.
-  const ticks = Array.from(
-    { length: DRIFT_TICKS },
-    (_, i) => yMaxHour - (i / (DRIFT_TICKS - 1)) * (yMaxHour - yMinHour),
-  );
+  // Ticks come from the data range so genuinely free-running onsets are never
+  // clipped, and each label sits level with its own gridline.
+  const ticks = driftTicks(yMinHour, yMaxHour);
+  const labelIndexes = driftLabelIndexes(points.length);
   const fitPoints = points
     .map(
       (point, index) =>
@@ -375,7 +393,9 @@ export function DriftPanel({ drift }: { drift: RhythmDrift }) {
       <div className="drift-body">
         <div className="drift-y-axis" aria-hidden="true">
           {ticks.map((hour) => (
-            <span key={hour}>{formatClockHour(hour)}</span>
+            <span key={hour} style={{ top: `${scaleDriftY(hour, yMinHour, yMaxHour)}%` }}>
+              {formatClockHour(hour)}
+            </span>
           ))}
         </div>
         <div className="drift-chart" role="img" aria-label={drift.summary}>
@@ -401,28 +421,49 @@ export function DriftPanel({ drift }: { drift: RhythmDrift }) {
                   key={hour}
                 />
               ))}
+              {labelIndexes.map((index) => (
+                <line
+                  className="drift-gridline"
+                  x1={scaleDriftX(index, points)}
+                  x2={scaleDriftX(index, points)}
+                  y1="0"
+                  y2="100"
+                  vectorEffect="non-scaling-stroke"
+                  key={`x-${index}`}
+                />
+              ))}
               <polygon className="drift-band" points={bandPoints} />
               <polyline
                 className="drift-fit"
                 points={fitPoints}
                 vectorEffect="non-scaling-stroke"
               />
-              {points.map((point, index) => (
-                <circle
-                  className="drift-point"
-                  cx={scaleDriftX(index, points)}
-                  cy={scaleDriftY(point.onsetHour, yMinHour, yMaxHour)}
-                  r="1.7"
-                  vectorEffect="non-scaling-stroke"
-                  key={point.id}
-                />
-              ))}
+              {/* A zero-length line with a round cap and an unscaled stroke is
+                  a true circle however the plot stretches; a <circle> in this
+                  stretched viewBox is drawn as an ellipse. */}
+              {points.map((point, index) => {
+                const x = scaleDriftX(index, points);
+                const y = scaleDriftY(point.onsetHour, yMinHour, yMaxHour);
+                return (
+                  <line
+                    className="drift-point"
+                    x1={x}
+                    x2={x}
+                    y1={y}
+                    y2={y}
+                    vectorEffect="non-scaling-stroke"
+                    key={point.id}
+                  />
+                );
+              })}
             </svg>
             <TimeProbe probeRef={probe.probeRef} labelRef={probe.labelRef} />
           </div>
           <div className="drift-x-axis" aria-hidden="true">
-            {points.map((point) => (
-              <span key={point.id}>{point.day}</span>
+            {labelIndexes.map((index) => (
+              <span key={points[index]?.id} style={{ left: `${scaleDriftX(index, points)}%` }}>
+                {points[index]?.day}
+              </span>
             ))}
           </div>
         </div>
@@ -430,13 +471,13 @@ export function DriftPanel({ drift }: { drift: RhythmDrift }) {
 
       <div className="actogram-footer">
         <span>
-          <i className="legend-point" /> observed onset
+          <i className="legend-point" /> Observed onset
         </span>
         <span>
-          <i className="legend-fit" /> Theil-Sen fit
+          <i className="legend-fit" /> Trend (Theil–Sen)
         </span>
         <span>
-          <i className="legend-band" /> uncertainty band
+          <i className="legend-band" /> Uncertainty
         </span>
         <p>Y-axis is unwrapped so the free-running trend stays readable across midnight.</p>
       </div>

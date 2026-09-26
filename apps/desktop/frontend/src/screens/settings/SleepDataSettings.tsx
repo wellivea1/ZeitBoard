@@ -27,8 +27,8 @@ export function SleepDataSettings({
       <div className="data-control-intro">
         <h2>Your sleep data</h2>
         <p className="settings-copy">
-          Keep a copy, or erase everything. Erasing cannot be undone. With sync on, the next sync
-          also deletes the server&apos;s copy and tells your other devices to erase theirs.
+          Keep a copy, or delete everything. Deleting cannot be undone. With sync on, the next sync
+          also deletes the server&apos;s copy and tells your other devices to delete theirs.
         </p>
       </div>
       <div className="data-control-grid">
@@ -70,14 +70,14 @@ export function SleepDataSettings({
         </section>
         <section className="data-control-card danger-zone" aria-labelledby="sleep-delete-title">
           <div>
-            <h3 id="sleep-delete-title">Erase local sleep data</h3>
+            <h3 id="sleep-delete-title">Delete all sleep data</h3>
             <p>
               Deletes every sleep record and correction on this computer. To leave a single night
               out of estimates, use Exclude in Log instead.
             </p>
           </div>
           <label htmlFor="delete-all-sleep-data">
-            Type DELETE to erase all local sleep data
+            Type DELETE to delete all sleep data on this computer
             <input
               id="delete-all-sleep-data"
               type="text"
@@ -92,7 +92,7 @@ export function SleepDataSettings({
             onClick={onErase}
             disabled={busy || confirmation !== deleteConfirmationToken}
           >
-            Erase all sleep data
+            Delete all sleep data
           </button>
         </section>
         <StorageProtectionPanel />

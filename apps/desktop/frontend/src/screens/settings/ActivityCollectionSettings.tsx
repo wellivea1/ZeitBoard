@@ -158,7 +158,7 @@ export function ActivityCollectionSettings() {
         <section className="data-control-card" aria-label="Activity data controls">
           <h3>Saved activity records</h3>
           <p>
-            Turning collection off keeps previous records. Erasing also turns collection off.
+            Turning collection off keeps previous records. Deleting also turns collection off.
             Exported files contain exact timestamps; keep them private.
           </p>
           <button
@@ -170,7 +170,7 @@ export function ActivityCollectionSettings() {
             Export activity records
           </button>
           <label className="reaching-field">
-            <span>Type DELETE to erase activity records</span>
+            <span>Type DELETE to delete activity records</span>
             <input
               value={confirmation}
               disabled={busy || !status}
@@ -184,7 +184,7 @@ export function ActivityCollectionSettings() {
             disabled={busy || !status || confirmation !== "DELETE"}
             onClick={() => void run(() => deleteActivityData(confirmation))}
           >
-            Erase activity records
+            Delete activity records
           </button>
         </section>
       </div>

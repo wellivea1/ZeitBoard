@@ -1,3 +1,4 @@
+import { decisionButton, decisionLabel } from "../data/decisionWords";
 import { MedicationQuickTaps } from "./MedicationQuickTaps";
 import type { DiaryDay } from "../data/homeLead";
 import type { MedicationEventInput, MedicationsData } from "../data/medications";
@@ -67,20 +68,20 @@ export function NeedsYou() {
               className="button ghost"
               type="button"
               disabled={approvals.busyProposalId !== null}
-              aria-label={`Accept the suggested time for ${proposal.title}`}
+              aria-label={decisionLabel("approved", proposal.title)}
               onClick={() => approvals.decide(proposal.id, "approved")}
             >
-              Accept
+              {decisionButton("approved")}
             </button>
             <button
               className="button ghost"
               type="button"
               data-quiet
               disabled={approvals.busyProposalId !== null}
-              aria-label={`Decline the suggested time for ${proposal.title}`}
+              aria-label={decisionLabel("rejected", proposal.title)}
               onClick={() => approvals.decide(proposal.id, "rejected")}
             >
-              Decline
+              {decisionButton("rejected")}
             </button>
           </div>
         </article>
@@ -177,7 +178,7 @@ export function Doses({
       )}
       <a
         className="home-more"
-        href="#/log/markers"
+        href="#/log/context"
         title="Travel, illness or an obligation that explains a night"
       >
         Note an unusual day

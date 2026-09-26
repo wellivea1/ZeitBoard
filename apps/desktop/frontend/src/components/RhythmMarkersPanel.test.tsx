@@ -88,11 +88,13 @@ describe("RhythmMarkersPanel", () => {
 
   it("keeps permanent erase distinct from suppression and requires typed DELETE", async () => {
     const { onDelete } = renderPanel();
-    fireEvent.click(screen.getByRole("button", { name: "Erase" }));
-    expect(screen.getByText(/distinct from suppressing an observation/i)).toBeVisible();
-    const erase = screen.getByRole("button", { name: "Permanently erase" });
+    fireEvent.click(screen.getByRole("button", { name: /^Delete Travel \/ time-zone context, / }));
+    expect(screen.getByText(/Its note is deleted with it/)).toBeVisible();
+    const erase = screen.getByRole("button", { name: "Delete marker" });
     expect(erase).toBeDisabled();
-    fireEvent.change(screen.getByLabelText("Type DELETE"), { target: { value: "DELETE" } });
+    fireEvent.change(screen.getByLabelText("Type DELETE to confirm"), {
+      target: { value: "DELETE" },
+    });
     fireEvent.click(erase);
     await waitFor(() => expect(onDelete).toHaveBeenCalledWith("marker_test_01", "DELETE"));
   });

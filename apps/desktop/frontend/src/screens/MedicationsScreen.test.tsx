@@ -179,13 +179,13 @@ describe("MedicationsScreen", () => {
 
     expect(await screen.findByText("Original factual note")).toBeInTheDocument();
     expect(screen.getByText("1 h 45 min before predicted sleep")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Correct" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Edit Evening record, / }));
 
-    const correctionForm = screen.getByRole("form", { name: "Correct Evening record event" });
+    const correctionForm = screen.getByRole("form", { name: /^Edit Evening record, / });
     fireEvent.change(within(correctionForm).getByLabelText("Private note"), {
       target: { value: "Corrected factual note" },
     });
-    fireEvent.click(within(correctionForm).getByRole("button", { name: "Append correction" }));
+    fireEvent.click(within(correctionForm).getByRole("button", { name: "Save correction" }));
 
     await waitFor(() => expect(correct).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("Corrected factual note")).toBeInTheDocument();
@@ -193,14 +193,18 @@ describe("MedicationsScreen", () => {
 
     const ledgerRow = screen.getByText("Corrected factual note").closest("article");
     expect(ledgerRow).not.toBeNull();
-    fireEvent.click(within(ledgerRow as HTMLElement).getByRole("button", { name: "Erase" }));
+    fireEvent.click(
+      within(ledgerRow as HTMLElement).getByRole("button", { name: /^Delete Evening record, / }),
+    );
 
-    const eraseRegion = screen.getByRole("region", { name: "Erase medication event" });
-    const eraseButton = within(eraseRegion).getByRole("button", { name: "Erase event" });
+    const eraseRegion = screen.getByRole("group", {
+      name: /^Delete Evening record, .* for good\?$/,
+    });
+    const eraseButton = within(eraseRegion).getByRole("button", { name: "Delete record" });
     expect(eraseButton).toBeDisabled();
     expect(erase).not.toHaveBeenCalled();
 
-    fireEvent.change(within(eraseRegion).getByLabelText("Type DELETE"), {
+    fireEvent.change(within(eraseRegion).getByLabelText("Type DELETE to confirm"), {
       target: { value: "DELETE" },
     });
     expect(eraseButton).toBeEnabled();
@@ -304,7 +308,7 @@ describe("MedicationsScreen", () => {
     render(<MedicationsScreen />);
 
     expect(await screen.findByText(/Start marker: Jun 20/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Edit Evening record$/ }));
     const editor = screen.getByRole("region", { name: "Edit medication" });
     expect(within(editor).getByText(/does not establish a medication effect/)).toBeInTheDocument();
     fireEvent.change(within(editor).getByLabelText("Local date and time"), {

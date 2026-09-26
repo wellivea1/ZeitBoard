@@ -104,11 +104,11 @@ export function useRhythmMarkers(): RhythmMarkersState {
     try {
       const result = await deleteRhythmMarker(markerId, confirmation);
       setData(result);
-      setAnnouncement("Context marker permanently erased.");
+      setAnnouncement("Context marker deleted.");
       publishChange();
       refreshRef.current?.supersede();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Context marker could not be erased.");
+      setError(reason instanceof Error ? reason.message : "Context marker could not be deleted.");
       throw reason;
     } finally {
       setBusy(false);

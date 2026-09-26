@@ -1,10 +1,10 @@
+import { ConfirmDelete } from "./ConfirmDelete";
 import { useState } from "react";
 import type { ShareLinksData } from "../data/sharing";
 
-// Revoking and erasing are deliberately not one click apart. Revocation stops
-// the link working and keeps its access history readable; erasure removes the
-// record that the link existed at all, and asks for the link's id back first —
-// the same shape the sleep log uses for permanent deletion.
+// Revoking and deleting are deliberately not one click apart. Revocation stops
+// the link working and keeps its access history readable; deletion removes the
+// record that the link existed at all, and asks for the link's id back first.
 
 export function ShareLinkList({
   data,
@@ -18,7 +18,6 @@ export function ShareLinkList({
   onErase: (profileId: string, confirmation: string) => void;
 }) {
   const [erasing, setErasing] = useState<string | null>(null);
-  const [confirmation, setConfirmation] = useState("");
 
   // The state header already explains why there is nothing here. Repeating its
   // sentence under the heading would say the same thing twice on one screen.
@@ -75,44 +74,29 @@ export function ShareLinkList({
               className="button secondary compact danger-outline"
               type="button"
               disabled={busy}
-              onClick={() => {
-                setErasing(erasing === link.profileId ? null : link.profileId);
-                setConfirmation("");
-              }}
+              onClick={() => setErasing(erasing === link.profileId ? null : link.profileId)}
             >
-              Erase record
+              Delete record
             </button>
           </div>
 
           {erasing === link.profileId && (
-            <div className="sharing-link-erase" role="group" aria-label={`Erase ${link.label}`}>
+            <ConfirmDelete
+              question={`Delete the record of ${link.label}?`}
+              action="Delete record"
+              word={link.profileId}
+              busy={busy}
+              onConfirm={() => {
+                onErase(link.profileId, link.profileId);
+                setErasing(null);
+              }}
+              onCancel={() => setErasing(null)}
+            >
               <p>
-                Erasing removes the record that this link existed, including its access history.
-                Revoking is enough to stop it working. Type <code>{link.profileId}</code> to
-                confirm.
+                This removes the record that the link existed, including its access history.
+                Revoking is enough to stop it working.
               </p>
-              <label>
-                <span>Link id</span>
-                <input
-                  value={confirmation}
-                  onChange={(event) => setConfirmation(event.target.value)}
-                  autoComplete="off"
-                  spellCheck={false}
-                />
-              </label>
-              <button
-                className="button danger compact"
-                type="button"
-                disabled={busy || confirmation !== link.profileId}
-                onClick={() => {
-                  onErase(link.profileId, confirmation);
-                  setErasing(null);
-                  setConfirmation("");
-                }}
-              >
-                Erase permanently
-              </button>
-            </div>
+            </ConfirmDelete>
           )}
         </li>
       ))}

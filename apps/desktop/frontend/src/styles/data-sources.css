@@ -197,55 +197,6 @@
   display: grid;
 }
 
-.sleep-delete-confirmation {
-  margin: var(--space-3) 0 0 30px;
-  padding: var(--space-3) 0;
-  display: grid;
-  gap: var(--space-3);
-  color: var(--danger-text);
-  border-block: 1px solid var(--danger-border);
-}
-
-.sleep-delete-confirmation strong {
-  display: block;
-  margin-bottom: var(--space-1);
-  color: var(--danger-text);
-  font-family: var(--font-serif);
-  font-size: 17px;
-  font-weight: 500;
-}
-
-.sleep-delete-confirmation p {
-  margin: 0;
-  color: var(--muted);
-  font-size: var(--type-label);
-  line-height: 1.5;
-}
-
-.sleep-delete-confirmation label {
-  display: grid;
-  gap: var(--space-2);
-  color: var(--danger-text);
-  font-size: var(--type-label);
-  font-weight: 800;
-}
-
-.sleep-delete-confirmation input {
-  min-height: 44px;
-  padding: 0 var(--space-3);
-  color: var(--ink);
-  background: var(--paper);
-  border: 1px solid var(--danger-border);
-  border-radius: var(--radius-control);
-  font-size: var(--type-body);
-}
-
-.sleep-delete-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-}
-
 .sleep-entry-history {
   margin: var(--space-2) 0 0 30px;
   color: var(--muted);
@@ -288,14 +239,6 @@
   font-size: 15.5px;
 }
 
-.sleep-import-intro,
-.sleep-import-note {
-  max-width: 72ch;
-  color: var(--muted);
-  font-size: var(--type-label);
-  line-height: 1.55;
-}
-
 .sleep-import-controls {
   display: flex;
   align-items: end;
@@ -320,13 +263,6 @@
   color: var(--ink);
   background: var(--paper);
   border: 1px solid var(--line);
-}
-
-.sleep-import-note {
-  margin: var(--space-3) 0 0;
-  font-family: var(--font-serif);
-  font-size: 14.5px;
-  font-style: italic;
 }
 
 .sleep-import-results {
@@ -519,7 +455,6 @@
   }
 
   .sleep-edit-form,
-  .sleep-delete-confirmation,
   .sleep-entry-history {
     margin-left: 0;
   }

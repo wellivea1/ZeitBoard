@@ -125,15 +125,19 @@ describe("SharingScreen", () => {
     mount({ GetBackendShareLinks: async () => connected(), EraseBackendShareLink: erase });
     render(<SharingScreen />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Erase record" }));
-    const panel = screen.getByRole("group", { name: /Erase Mum/ });
-    const confirm = within(panel).getByRole("button", { name: "Erase permanently" });
+    fireEvent.click(await screen.findByRole("button", { name: "Delete record" }));
+    const panel = screen.getByRole("group", { name: /Delete the record of Mum/ });
+    const confirm = within(panel).getByRole("button", { name: "Delete record" });
     expect(confirm).toBeDisabled();
 
-    fireEvent.change(within(panel).getByLabelText("Link id"), { target: { value: "wrong" } });
+    fireEvent.change(within(panel).getByLabelText("Type prof_abc123 to confirm"), {
+      target: { value: "wrong" },
+    });
     expect(confirm).toBeDisabled();
 
-    fireEvent.change(within(panel).getByLabelText("Link id"), { target: { value: "prof_abc123" } });
+    fireEvent.change(within(panel).getByLabelText("Type prof_abc123 to confirm"), {
+      target: { value: "prof_abc123" },
+    });
     expect(confirm).toBeEnabled();
     fireEvent.click(confirm);
     await waitFor(() =>
