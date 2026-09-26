@@ -13,8 +13,17 @@ import (
 	"time"
 )
 
-//go:embed assets/portal.css assets/pages.gohtml
+//go:embed assets/portal.css assets/pages.gohtml assets/fonts
 var assetsFS embed.FS
+
+// portalFonts are the only files the font route serves: the Latin cuts of
+// the faces the owner's apps use, bundled under the SIL Open Font License
+// (texts beside them) so a visitor's browser fetches nothing elsewhere.
+var portalFonts = map[string]bool{
+	"newsreader-latin-opsz-normal.woff2":  true,
+	"newsreader-latin-opsz-italic.woff2":  true,
+	"public-sans-latin-wght-normal.woff2": true,
+}
 
 var pageTemplates = template.Must(template.ParseFS(assetsFS, "assets/pages.gohtml"))
 
@@ -48,6 +57,25 @@ func (h *Handler) handleStylesheet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/css; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
+}
+
+func (h *Handler) handleFont(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	if !portalFonts[name] {
+		h.writeGeneric(w, r, http.StatusNotFound)
+		return
+	}
+	data, err := assetsFS.ReadFile("assets/fonts/" + name)
+	if err != nil {
+		h.writeGeneric(w, r, http.StatusInternalServerError)
+		return
+	}
+	// Unlike every page, a font is the same for every visitor and carries
+	// nothing about the owner, so it may be kept.
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	w.Header().Set("Content-Type", "font/woff2")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
 }

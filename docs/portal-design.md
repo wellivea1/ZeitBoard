@@ -27,6 +27,15 @@ confidence buckets are not reliably calibrated. The public product therefore:
 - still accepts a scheduling request when availability is unknown, while making
   that uncertainty visible before submission.
 
+The page is set in the Almanac design the owner's apps use
+(`ui-refactor-plan.md` section 14), as of 2026-09-26: it leads with a
+sentence, draws the windows as a figure of the next three days, lists them in
+words, and keeps the accuracy qualifier and notice on a sheet at the foot. It
+names no product and no person, so a visitor does not learn which app the
+owner uses. The figure is server-rendered SVG positioned by attribute, so the
+content-security policy still allows no inline style or script; the two faces
+are served from the portal's own origin (`font-src 'self'`).
+
 The owner chose a live dashboard. The no-JavaScript response computes the
 current likely-awake state server-side from the latest allowlisted snapshot.
 First-party JavaScript receives authenticated SSE updates, falls back to

@@ -209,3 +209,60 @@ func TestSnapshotVersionDoesNotRegress(t *testing.T) {
 		t.Errorf("an out-of-order publish overwrote a newer snapshot (version %d, want %d)", stored.Version, newer.Version)
 	}
 }
+
+// The figure draws the same windows as the list, on three civil days from
+// local midnight: nothing before now, a window across midnight split between
+// its days, and time past the estimate shaded rather than left looking free.
+func TestFigureDrawsTheWindowsOnThreeDays(t *testing.T) {
+	now := time.Date(2026, 8, 3, 15, 0, 0, 0, time.UTC) // 11:00 in New York
+	view := BuildView(Snapshot{
+		Version: 1, GeneratedAt: now, Status: StatusAvailable, HorizonEnd: now.Add(30 * time.Hour),
+		Windows: []Window{
+			{StartAt: now.Add(-time.Hour), EndAt: now.Add(6 * time.Hour), ZoneID: "America/New_York"},
+			{StartAt: now.Add(10 * time.Hour), EndAt: now.Add(15 * time.Hour), ZoneID: "America/New_York"},
+		},
+	}, now)
+	if len(view.Figure) != 3 || view.Figure[0].Label != "Today" || view.Figure[1].Label != "Tomorrow" {
+		t.Fatalf("figure days = %#v", view.Figure)
+	}
+	today, tomorrow, third := view.Figure[0], view.Figure[1], view.Figure[2]
+	// From now (11:00, 110 of 240) to 17:00, then 21:00 to midnight.
+	if !today.HasNow || today.Now != 110 {
+		t.Fatalf("now on today = %v %v", today.HasNow, today.Now)
+	}
+	if len(today.Bands) != 2 || today.Bands[0] != (FigureBand{X: 110, Width: 60}) || today.Bands[1] != (FigureBand{X: 210, Width: 30}) {
+		t.Fatalf("today's bands = %#v", today.Bands)
+	}
+	// The second window runs on past midnight to 02:00.
+	if len(tomorrow.Bands) != 1 || tomorrow.Bands[0] != (FigureBand{X: 0, Width: 20}) || tomorrow.HasNow {
+		t.Fatalf("tomorrow = %#v", tomorrow)
+	}
+	// The estimate reaches 17:00 tomorrow; after that the rows are shaded.
+	if !tomorrow.HasBeyond || tomorrow.Beyond != 170 || tomorrow.BeyondWidth != 70 {
+		t.Fatalf("tomorrow's shading = %#v", tomorrow)
+	}
+	if !third.HasBeyond || third.Beyond != 0 || third.BeyondWidth != FigureWidth || len(third.Bands) != 0 {
+		t.Fatalf("third day = %#v", third)
+	}
+	if !view.FigureBeyond() {
+		t.Fatal("legend would not explain the shading")
+	}
+}
+
+// When the estimate covers all three days nothing is shaded, and the legend
+// does not offer a key for shading the figure does not show.
+func TestFigureWithoutShadingHasNoBeyondKey(t *testing.T) {
+	now := time.Date(2026, 8, 3, 15, 0, 0, 0, time.UTC)
+	view := BuildView(Snapshot{
+		Version: 1, GeneratedAt: now, Status: StatusAvailable, HorizonEnd: now.Add(96 * time.Hour),
+		Windows: []Window{{StartAt: now.Add(time.Hour), EndAt: now.Add(5 * time.Hour), ZoneID: "UTC"}},
+	}, now)
+	for _, day := range view.Figure {
+		if day.HasBeyond {
+			t.Fatalf("a day inside the estimate is shaded: %#v", day)
+		}
+	}
+	if view.FigureBeyond() {
+		t.Fatal("legend offers a key for shading that is not drawn")
+	}
+}

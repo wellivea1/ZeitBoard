@@ -494,6 +494,30 @@ func TestPageHasNoInlineOrThirdPartyAssets(t *testing.T) {
 	}
 }
 
+// The page's faces come from its own origin: only the bundled files, typed
+// as fonts, and the policy allows nothing else.
+func TestFontsAreServedFromThePortalOnly(t *testing.T) {
+	h := newHarness(t)
+	font := h.get("/p/assets/fonts/newsreader-latin-opsz-normal.woff2", "")
+	if font.Code != http.StatusOK || font.Header().Get("Content-Type") != "font/woff2" || font.Body.Len() < 10000 {
+		t.Fatalf("font = %d %q %d bytes", font.Code, font.Header().Get("Content-Type"), font.Body.Len())
+	}
+	if !strings.Contains(font.Header().Get("Content-Security-Policy"), "font-src 'self'") {
+		t.Fatal("policy does not allow the portal's own fonts")
+	}
+	for _, name := range []string{"OFL-Newsreader.txt", "..%2Fpages.gohtml", "missing.woff2"} {
+		if got := h.get("/p/assets/fonts/"+name, ""); got.Code == http.StatusOK {
+			t.Errorf("served %q", name)
+		}
+	}
+	css := h.get("/p/assets/portal.css", "").Body.String()
+	for _, face := range []string{"newsreader-latin-opsz-normal.woff2", "newsreader-latin-opsz-italic.woff2", "public-sans-latin-wght-normal.woff2"} {
+		if !strings.Contains(css, "/p/assets/fonts/"+face) {
+			t.Errorf("stylesheet does not use %s", face)
+		}
+	}
+}
+
 func TestSessionCookieAttributes(t *testing.T) {
 	h := newHarness(t)
 	recorder := h.login(h.token, testPasscode, testOrigin)

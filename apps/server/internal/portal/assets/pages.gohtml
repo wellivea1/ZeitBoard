@@ -10,158 +10,183 @@
 <link rel="stylesheet" href="/p/assets/portal.css">
 </head>
 <body>
+<div class="page">
+<header class="masthead">Availability</header>
 <main>
 {{end}}
 
 {{define "foot"}}</main>
+</div>
 </body>
 </html>
 {{end}}
 
 {{define "dashboard"}}{{template "head" .}}
 {{with .View}}
-<section class="card state {{if .Unavailable}}is-unavailable{{else if .Stale}}is-stale{{else if .LikelyAwake}}is-awake{{else}}is-not-awake{{end}}">
-  <h1>{{.Headline}}</h1>
-  <p class="detail">{{.Detail}}</p>
-  <p class="freshness{{if .Stale}} is-stale{{end}}">{{.Freshness}}</p>
+<section class="now" aria-labelledby="state-title">
+  <h1 class="lead" id="state-title">{{.Headline}}</h1>
+  <p class="lead-detail">{{.Detail}}</p>
+  <p class="meta{{if .Stale}} is-stale{{end}}">{{.Freshness}}</p>
 </section>
 
+{{if .Figure}}
+<figure class="days">
+  <figcaption><span class="figure-number">Fig. 1</span> The next three days</figcaption>
+  <div class="days-grid" aria-hidden="true">
+    <div class="axis"><span></span><div class="ticks"><span class="t0">12 AM</span><span class="t25">6 AM</span><span class="t50">Noon</span><span class="t75">6 PM</span><span class="t100">12 AM</span></div></div>
+    {{range .Figure}}
+    <div class="day">
+      <span class="day-label">{{.Label}}</span>
+      <svg viewBox="0 0 240 16" preserveAspectRatio="none" focusable="false">
+        <rect class="track" x="0" y="0" width="240" height="16"/>
+        {{if .HasBeyond}}<rect class="beyond" x="{{.Beyond}}" y="0" width="{{.BeyondWidth}}" height="16"/>{{end}}
+        <line class="rule" x1="60" x2="60" y1="0" y2="16"/><line class="rule" x1="120" x2="120" y1="0" y2="16"/><line class="rule" x1="180" x2="180" y1="0" y2="16"/>
+        {{range .Bands}}<rect class="awake" x="{{.X}}" y="3" width="{{.Width}}" height="10"/>{{end}}
+        {{if .HasNow}}<line class="now" x1="{{.Now}}" x2="{{.Now}}" y1="0" y2="16"/>{{end}}
+      </svg>
+    </div>
+    {{end}}
+  </div>
+  <p class="legend" aria-hidden="true"><span><span class="key"></span>Likely awake</span><span><span class="key key-now"></span>Now</span>{{if .FigureBeyond}}<span><span class="key key-beyond"></span>Beyond the estimate</span>{{end}}</p>
+</figure>
+{{end}}
+
 {{if .Windows}}
-<section class="card">
-  <h2>Likely waking windows</h2>
-  <ul class="windows">
+<section class="windows" aria-labelledby="windows-title">
+  <h2 class="section-title" id="windows-title">Likely waking windows</h2>
+  <ul>
     {{range .Windows}}
-    <li{{if .Current}} class="is-current"{{end}}>
-      <span class="day">{{.DayLabel}}{{if .Current}} <span class="badge">now</span>{{end}}</span>
-      <span class="range">{{.RangeLabel}}</span>
-    </li>
+    <li><span class="day-name">{{.DayLabel}}{{if .Current}}<span class="now-word">now</span>{{end}}</span><span class="range">{{.RangeLabel}}</span></li>
     {{end}}
   </ul>
   <p class="zone">Times shown in {{.ZoneLabel}}.</p>
 </section>
 {{end}}
+{{end}}
 
-<section class="card fineprint">
-  <p><strong>How accurate is this?</strong> {{.Qualifier}}</p>
-  <p>{{.Notice}}</p>
+{{if .CanRequest}}
+<section class="ask" aria-labelledby="ask-title">
+  <h2 class="section-title" id="ask-title">Need a specific time?</h2>
+  <p>You can ask for a window that suits you. They decide, and you will see the answer.</p>
+  <a class="button" href="{{.RequestsPath}}">Ask for a time</a>
 </section>
 {{end}}
-{{if .CanRequest}}
-<section class="card">
-  <h2>Need a specific time?</h2>
-  <p class="detail">You can ask for a window that suits you. They decide, and you will see the answer.</p>
-  <p><a class="button-link" href="{{.RequestsPath}}">Ask for a time</a></p>
-</section>
+
+{{with .View}}
+<aside class="sheet fineprint">
+  <p><strong>How accurate is this?</strong> {{.Qualifier}}</p>
+  <p>{{.Notice}}</p>
+</aside>
 {{end}}
 {{template "foot" .}}{{end}}
 
 {{define "request-form"}}{{template "head" .}}
-<section class="card">
-  <h1>Ask for a time</h1>
-  <p class="detail">Give the earliest and latest you could meet. They will pick a time inside that window, or decline.</p>
-  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
-  <form method="post" action="{{.FormAction}}">
-    <input type="hidden" name="csrf" value="{{.CSRFToken}}">
-    <input type="hidden" name="zone_id" value="{{.View.ZoneIDInput}}">
-    <label for="window_start">Earliest</label>
-    <input id="window_start" name="window_start" type="datetime-local" min="{{.MinLocal}}" required>
-    <label for="window_end">Latest</label>
-    <input id="window_end" name="window_end" type="datetime-local" min="{{.MinLocal}}" required>
-    <label for="duration_minutes">How long, in minutes (optional)</label>
-    <input id="duration_minutes" name="duration_minutes" type="number" min="15" max="480" step="5">
-    <label for="handle">Your name (optional)</label>
-    <input id="handle" name="handle" type="text" maxlength="40" autocomplete="off">
-    <label for="message">Anything they should know (optional)</label>
-    <textarea id="message" name="message" maxlength="500" rows="3"></textarea>
-    <button type="submit">Send request</button>
-  </form>
+<section class="now">
+  <h1 class="lead">Ask for a time</h1>
+  <p class="lead-detail">Give the earliest and latest you could meet. They will pick a time inside that window, or decline.</p>
 </section>
+{{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+<form method="post" action="{{.FormAction}}">
+  <input type="hidden" name="csrf" value="{{.CSRFToken}}">
+  <input type="hidden" name="zone_id" value="{{.View.ZoneIDInput}}">
+  <label for="window_start">Earliest</label>
+  <input id="window_start" name="window_start" type="datetime-local" min="{{.MinLocal}}" required>
+  <label for="window_end">Latest</label>
+  <input id="window_end" name="window_end" type="datetime-local" min="{{.MinLocal}}" required>
+  <label for="duration_minutes">How long, in minutes (optional)</label>
+  <input id="duration_minutes" name="duration_minutes" type="number" min="15" max="480" step="5">
+  <label for="handle">Your name (optional)</label>
+  <input id="handle" name="handle" type="text" maxlength="40" autocomplete="off">
+  <label for="message">Anything they should know (optional)</label>
+  <textarea id="message" name="message" maxlength="500" rows="3"></textarea>
+  <button type="submit">Send request</button>
+</form>
 
-<section class="card fineprint">
+<aside class="sheet fineprint">
   <p><strong>How accurate is this?</strong> {{.View.Qualifier}}</p>
   <p>You can ask for any date. Times far ahead cannot be checked against an estimate, and you will be told when that is the case.</p>
   <p>{{.View.Notice}}</p>
-</section>
+</aside>
 {{template "foot" .}}{{end}}
 
 {{define "request-created"}}{{template "head" .}}
-<section class="card state is-not-awake">
-  <h1>Request sent</h1>
-  <p class="detail">{{.Request.StatusDetail}}</p>
+<section class="now">
+  <h1 class="lead">Request sent</h1>
+  <p class="lead-detail">{{.Request.StatusDetail}}</p>
   {{if .Request.Warning}}<p class="error">{{.Request.Warning}}</p>{{end}}
 </section>
 
-<section class="card">
-  <h2>What you asked for</h2>
+<section class="entry" aria-labelledby="asked-title">
+  <h2 class="section-title" id="asked-title">What you asked for</h2>
   <p>{{.Request.WindowLabel}}</p>
   {{if .Request.DurationLabel}}<p class="detail">For {{.Request.DurationLabel}}.</p>{{end}}
 </section>
 
-<section class="card">
-  <h2>Keep this code</h2>
+<section class="entry" aria-labelledby="code-title">
+  <h2 class="section-title" id="code-title">Keep this code</h2>
   <p class="detail">It is the only way to check this request from another browser. It is shown once.</p>
   <p class="code">{{.RecoveryCode}}</p>
-  <p><a class="button-link" href="{{.ContinueURL}}">Check this request</a></p>
+  <a class="button" href="{{.ContinueURL}}">Check this request</a>
 </section>
 {{template "foot" .}}{{end}}
 
 {{define "request-status"}}{{template "head" .}}
-<section class="card state {{if .Request.Open}}is-not-awake{{else}}is-awake{{end}}">
-  <h1>{{.Request.StatusLabel}}</h1>
-  <p class="detail">{{.Request.StatusDetail}}</p>
-  {{if .Request.DecidedLabel}}<p><strong>{{.Request.DecidedLabel}}</strong></p>{{end}}
+<section class="now">
+  <h1 class="lead">{{.Request.StatusLabel}}</h1>
+  <p class="lead-detail">{{.Request.StatusDetail}}</p>
+  {{if .Request.DecidedLabel}}<p class="decided">{{.Request.DecidedLabel}}</p>{{end}}
   {{if .Request.Warning}}<p class="error">{{.Request.Warning}}</p>{{end}}
 </section>
 
-<section class="card">
-  <h2>What you asked for</h2>
+<section class="entry" aria-labelledby="asked-title">
+  <h2 class="section-title" id="asked-title">What you asked for</h2>
   <p>{{.Request.WindowLabel}}</p>
   {{if .Request.DurationLabel}}<p class="detail">For {{.Request.DurationLabel}}.</p>{{end}}
   {{if .Request.Handle}}<p class="detail">Sent as {{.Request.Handle}}.</p>{{end}}
   {{if .Request.Message}}<p class="detail">&ldquo;{{.Request.Message}}&rdquo;</p>{{end}}
 </section>
 
-<section class="card fineprint">
+<aside class="sheet fineprint">
   <p>{{.View.Notice}}</p>
-</section>
+</aside>
 {{template "foot" .}}{{end}}
 
 {{define "request-claim"}}{{template "head" .}}
-<section class="card">
-  <h1>Check a request</h1>
-  <p class="detail">Enter the code you were shown when you sent it.</p>
-  <form method="post" action="{{.FormAction}}">
-    <label for="secret">Request code</label>
-    <input id="secret" name="secret" type="text" autocomplete="off" spellcheck="false" required>
-    <button type="submit">Check</button>
-  </form>
+<section class="now">
+  <h1 class="lead">Check a request</h1>
+  <p class="lead-detail">Enter the code you were shown when you sent it.</p>
 </section>
+<form method="post" action="{{.FormAction}}">
+  <label for="secret">Request code</label>
+  <input id="secret" name="secret" type="text" autocomplete="off" spellcheck="false" required>
+  <button type="submit">Check</button>
+</form>
 
-<section class="card fineprint">
+<aside class="sheet fineprint">
   <p>{{.View.Notice}}</p>
-</section>
+</aside>
 {{template "foot" .}}{{end}}
 
 {{define "passcode"}}{{template "head" .}}
-<section class="card">
-  <h1>This availability link needs a passcode</h1>
-  <p class="detail">Enter the passcode you were given along with this link.</p>
-  {{if .Error}}<p class="error">{{.Error}}</p>{{end}}
-  <form method="post" action="{{.FormAction}}">
-    <label for="passcode">Passcode</label>
-    <input id="passcode" name="passcode" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" required>
-    <button type="submit">Continue</button>
-  </form>
+<section class="now">
+  <h1 class="lead">This availability link needs a passcode</h1>
+  <p class="lead-detail">Enter the passcode you were given along with this link.</p>
 </section>
+{{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+<form method="post" action="{{.FormAction}}">
+  <label for="passcode">Passcode</label>
+  <input id="passcode" name="passcode" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+  <button type="submit">Continue</button>
+</form>
 
-<section class="card fineprint">
+<aside class="sheet fineprint">
   <p>{{.View.Notice}}</p>
-</section>
+</aside>
 {{template "foot" .}}{{end}}
 
 {{define "generic"}}{{template "head" .}}
-<section class="card">
-  <h1>{{.Title}}</h1>
-  <p class="detail">{{.Error}}</p>
+<section class="now">
+  <h1 class="lead">{{.Title}}</h1>
+  <p class="lead-detail">{{.Error}}</p>
 </section>
 {{template "foot" .}}{{end}}
