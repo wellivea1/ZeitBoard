@@ -131,6 +131,55 @@ func TestAnalysisSurvivesReopenAndUnchangedRefreshKeepsContentTime(t *testing.T)
 	}
 }
 
+// A new minute over the same records is not an update. Every view treats the
+// announcement as changed records, and a clinician report marked itself stale,
+// disabling its export, once a minute.
+func TestAnalysisAnnouncesOnlyChangedResults(t *testing.T) {
+	a := newTestApp(t)
+	base := time.Date(2026, 9, 8, 12, 0, 1, 0, time.UTC)
+	a.nowFn = func() time.Time { return base }
+	t.Cleanup(a.stopLocalAnalysis)
+	seedAnalysisEvidence(t, a, base, base.Add(-time.Hour))
+	announced := 0
+	a.analysisUpdated = func() { announced++ }
+	run := func(at time.Time) {
+		t.Helper()
+		if err := a.localAnalysisWorker().RunAt(context.Background(), recompute.ReasonHeartbeat, at); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	run(base)
+	if announced != 1 {
+		t.Fatalf("first result announced %d times", announced)
+	}
+	run(base.Add(time.Minute))
+	run(base.Add(2 * time.Minute))
+	if announced != 1 {
+		t.Fatalf("unchanged minutes announced %d times", announced)
+	}
+	// A result that differs is announced again.
+	a.analysisEstimator = shiftedLocalEstimator{shift: 30 * time.Minute}
+	run(base.Add(3 * time.Minute))
+	if announced != 2 {
+		t.Fatalf("a changed result announced %d times in total", announced)
+	}
+}
+
+// shiftedLocalEstimator moves every predicted window, standing in for a new
+// rhythm without changing the records.
+type shiftedLocalEstimator struct{ shift time.Duration }
+
+func (e shiftedLocalEstimator) Estimate(ctx context.Context, sessions []domain.SleepSession, at time.Time) (domain.PhaseEstimate, error) {
+	estimate, err := (estimation.RobustEstimator{}).Estimate(ctx, sessions, at)
+	for i := range estimate.PredictedSleepWindows {
+		window := &estimate.PredictedSleepWindows[i].Interval
+		window.Start.UTC = window.Start.UTC.Add(e.shift)
+		window.End.UTC = window.End.UTC.Add(e.shift)
+	}
+	return estimate, err
+}
+
 type blockedLocalEstimator struct{ entered, release chan struct{} }
 
 func (e blockedLocalEstimator) Estimate(ctx context.Context, sessions []domain.SleepSession, at time.Time) (domain.PhaseEstimate, error) {

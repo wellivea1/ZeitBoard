@@ -258,7 +258,7 @@ export function MedicationReportPreviewBody({
   onOpenExport: () => void;
   onCancelExport: () => void;
   onConfirmationChange: (value: string) => void;
-  onExport: () => void;
+  onExport: (mode: "print" | "save") => void;
 }) {
   return (
     <div className="medication-report-preview" aria-busy={loading || undefined}>
@@ -293,9 +293,12 @@ export function MedicationReportPreviewBody({
 
       <section className="medication-report-export" aria-labelledby="report-export-title">
         <div>
-          <p className="section-kicker">Local file</p>
-          <h3 id="report-export-title">Printable HTML export</h3>
-          <p>The standalone file uses the preview settings and can be printed to PDF.</p>
+          <p className="section-kicker">Print or save</p>
+          <h3 id="report-export-title">Take the report out</h3>
+          <p>
+            Print it, or choose Save as PDF in the print dialog. The standalone HTML file prints the
+            same way later. Both use the preview settings.
+          </p>
         </div>
         {!exportOpen ? (
           <button
@@ -304,12 +307,12 @@ export function MedicationReportPreviewBody({
             disabled={stale || loading}
             onClick={onOpenExport}
           >
-            Prepare HTML export
+            Print or save…
           </button>
         ) : (
           <div className="medication-report-export-confirmation">
             <label>
-              <span>Type {medicationReportExportConfirmation} to create the file</span>
+              <span>Type {medicationReportExportConfirmation} to print or save it</span>
               <input
                 value={confirmation}
                 autoComplete="off"
@@ -327,12 +330,20 @@ export function MedicationReportPreviewBody({
                 Cancel
               </button>
               <button
+                className="button secondary compact"
+                type="button"
+                disabled={exporting || stale || confirmation !== medicationReportExportConfirmation}
+                onClick={() => onExport("save")}
+              >
+                Save HTML file
+              </button>
+              <button
                 className="button primary compact"
                 type="button"
                 disabled={exporting || stale || confirmation !== medicationReportExportConfirmation}
-                onClick={onExport}
+                onClick={() => onExport("print")}
               >
-                {exporting ? "Preparing..." : "Create HTML report"}
+                {exporting ? "Preparing..." : "Print or save as PDF"}
               </button>
             </div>
           </div>

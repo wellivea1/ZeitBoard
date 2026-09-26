@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { medicationDataChangedEvent } from "../data/medications";
 import {
   downloadMedicationClinicalReport,
+  printMedicationClinicalReport,
   exportMedicationClinicalReport,
   hasLocalMedicationReportService,
   loadMedicationClinicalReport,
@@ -130,7 +131,9 @@ export function MedicationClinicalReport({ available }: { available: boolean }) 
     if (opening && !report && serviceAvailable) void generate();
   };
 
-  const exportReport = async () => {
+  // Both ways out regenerate the page from the settings on the service, after
+  // the same typed confirmation: a printed or saved PDF leaves ZeitBoard too.
+  const exportReport = async (mode: "print" | "save") => {
     if (!report || stale || exporting || confirmation !== medicationReportExportConfirmation) {
       return;
     }
@@ -138,10 +141,15 @@ export function MedicationClinicalReport({ available }: { available: boolean }) 
     setError("");
     try {
       const value = await exportMedicationClinicalReport(input, confirmation);
-      const downloaded = downloadMedicationClinicalReport(value);
-      setAnnouncement(
-        `${value.rowCount}-row clinician report prepared${downloaded ? ` as ${value.fileName}` : "."}`,
-      );
+      if (mode === "print") {
+        printMedicationClinicalReport(value);
+        setAnnouncement(`${value.rowCount}-row clinician report sent to the print dialog.`);
+      } else {
+        const downloaded = downloadMedicationClinicalReport(value);
+        setAnnouncement(
+          `${value.rowCount}-row clinician report prepared${downloaded ? ` as ${value.fileName}` : "."}`,
+        );
+      }
       setExportOpen(false);
       setConfirmation("");
     } catch (reason) {
@@ -212,7 +220,7 @@ export function MedicationClinicalReport({ available }: { available: boolean }) 
                 setConfirmation("");
               }}
               onConfirmationChange={setConfirmation}
-              onExport={() => void exportReport()}
+              onExport={(mode) => void exportReport(mode)}
             />
           )}
         </div>

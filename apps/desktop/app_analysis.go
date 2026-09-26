@@ -76,6 +76,9 @@ func (a *App) requestLocalAnalysis(reason recompute.Reason) {
 }
 
 func (a *App) emitLocalAnalysisUpdate() {
+	if a.analysisUpdated != nil {
+		a.analysisUpdated()
+	}
 	a.window.mu.Lock()
 	ctx, ready := a.window.ctx, a.window.ready
 	a.window.mu.Unlock()
@@ -105,7 +108,13 @@ func (d desktopSleepAnalysis) Prepare(ctx context.Context, now time.Time) (recom
 			if err := store.SaveSleepAnalysis(ctx, value); err != nil {
 				return err
 			}
-			d.app.emitLocalAnalysisUpdate()
+			// The worker saves every minute, since a result is valid for one.
+			// Announce only a changed result: the event reads as "your
+			// records changed" to every view, and a clinician report marked
+			// itself stale, disabling its export, once a minute.
+			if input.Cached == nil || input.Cached.Content != value.Content {
+				d.app.emitLocalAnalysisUpdate()
+			}
 			return nil
 		}}, nil
 }

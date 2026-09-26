@@ -147,7 +147,7 @@ describe("MedicationClinicalReport", () => {
 
     fireEvent.click(screen.getByLabelText("Include private medication labels and strength text"));
     expect(screen.getByText("Preview controls changed")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Prepare HTML export" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Print or save…" })).toBeDisabled();
 
     fireEvent.click(screen.getByRole("button", { name: "Regenerate preview" }));
     await waitFor(() => expect(getReport).toHaveBeenCalledTimes(2));
@@ -155,27 +155,40 @@ describe("MedicationClinicalReport", () => {
       expect.objectContaining({ includeMedicationLabels: true }),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Prepare HTML export" }));
-    const exportRegion = screen.getByRole("region", { name: "Printable HTML export" });
-    const createButton = within(exportRegion).getByRole("button", {
-      name: "Create HTML report",
-    });
-    expect(createButton).toBeDisabled();
-    fireEvent.change(within(exportRegion).getByLabelText("Type EXPORT to create the file"), {
+    fireEvent.click(screen.getByRole("button", { name: "Print or save…" }));
+    // The frame's window stands in for the system print dialog.
+    const printed = vi.fn();
+    const frameWindow = { print: printed, focus: vi.fn(), addEventListener: vi.fn() };
+    vi.spyOn(HTMLIFrameElement.prototype, "contentWindow", "get").mockReturnValue(
+      frameWindow as unknown as Window,
+    );
+    const exportRegion = screen.getByRole("region", { name: "Take the report out" });
+    const printButton = within(exportRegion).getByRole("button", { name: "Print or save as PDF" });
+    const saveButton = within(exportRegion).getByRole("button", { name: "Save HTML file" });
+    expect(printButton).toBeDisabled();
+    expect(saveButton).toBeDisabled();
+    fireEvent.change(within(exportRegion).getByLabelText("Type EXPORT to print or save it"), {
       target: { value: "export" },
     });
-    expect(createButton).toBeDisabled();
-    fireEvent.change(within(exportRegion).getByLabelText("Type EXPORT to create the file"), {
+    expect(printButton).toBeDisabled();
+    fireEvent.change(within(exportRegion).getByLabelText("Type EXPORT to print or save it"), {
       target: { value: "EXPORT" },
     });
-    expect(createButton).toBeEnabled();
-    fireEvent.click(createButton);
+    expect(saveButton).toBeEnabled();
+    expect(printButton).toBeEnabled();
+    fireEvent.click(printButton);
 
     await waitFor(() => expect(exportReport).toHaveBeenCalledTimes(1));
     expect(exportReport).toHaveBeenCalledWith({
       report: expect.objectContaining({ includeMedicationLabels: true }),
       confirmation: "EXPORT",
     });
+    // The page goes to the print dialog from a frame; no HTML file is saved.
+    const frame = await waitFor(() => document.querySelector("iframe[data-report-print]")!);
+    frame.dispatchEvent(new Event("load"));
+    expect(printed).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText(/sent to the print dialog/)).toBeInTheDocument();
+    vi.restoreAllMocks();
   });
 
   it.each([
@@ -203,7 +216,7 @@ describe("MedicationClinicalReport", () => {
     fireEvent(window, new Event(eventName));
 
     expect(screen.getByText("Preview controls changed")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Prepare HTML export" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Print or save…" })).toBeDisabled();
   });
 
   it("stays explicitly unavailable without both clinician-report methods", () => {

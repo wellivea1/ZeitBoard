@@ -797,6 +797,42 @@ export async function exportMedicationClinicalReport(
   return { fileName, html, generatedAt, generatedLabel, rowCount, eventCount, redactions };
 }
 
+/**
+ * Prints the report without saving an HTML file first: the same standalone
+ * page is laid out in a hidden frame and handed to the system print dialog,
+ * where "Save as PDF" is one of the destinations. The frame may not run
+ * scripts (the page has none, and its own policy forbids them); it leaves the
+ * page once printing is done.
+ */
+export function printMedicationClinicalReport(value: MedicationClinicalReportExport): boolean {
+  if (typeof document === "undefined") return false;
+  document.querySelector("iframe[data-report-print]")?.remove();
+  const frame = document.createElement("iframe");
+  frame.dataset.reportPrint = "";
+  frame.setAttribute("sandbox", "allow-same-origin allow-modals");
+  frame.setAttribute("aria-hidden", "true");
+  frame.tabIndex = -1;
+  frame.title = value.fileName;
+  frame.style.cssText = "position: fixed; right: 0; bottom: 0; width: 0; height: 0; border: 0;";
+  frame.addEventListener(
+    "load",
+    () => {
+      const view = frame.contentWindow;
+      if (!view) {
+        frame.remove();
+        return;
+      }
+      view.addEventListener("afterprint", () => frame.remove(), { once: true });
+      view.focus();
+      view.print();
+    },
+    { once: true },
+  );
+  frame.srcdoc = value.html;
+  document.body.appendChild(frame);
+  return true;
+}
+
 export function downloadMedicationClinicalReport(value: MedicationClinicalReportExport): boolean {
   if (
     (typeof navigator !== "undefined" && navigator.userAgent.toLowerCase().includes("jsdom")) ||
