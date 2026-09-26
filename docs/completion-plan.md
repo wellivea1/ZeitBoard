@@ -567,3 +567,20 @@ WCAG contrast: 4.5:1 for text and 3:1 for the dial's marks.
 At the narrowest common width (320dp) every tab fitted except the tab bar's
 own "Settings", which broke across two lines in its fifth of the width; each
 tab now has room in proportion to its word and never wraps.
+
+### C7 print the clinician report — 2026-09-26
+
+The clinician report prints straight from the app: after the same typed
+EXPORT confirmation, "Print or save as PDF" opens the system print dialog,
+where Save as PDF is a destination, and "Save HTML file" keeps the standalone
+file. The page is laid out in a frame that may not run scripts and leaves
+once printing is done.
+
+Checking it in the running app found a defect behind it: the desktop
+announced "analysis updated" every minute, since each result is valid for a
+minute, even when nothing had changed. Every view reloaded, and the report
+marked itself stale and disabled its export about a minute after it was
+built. Only a changed result is announced now.
+
+**Next C7 work:** a screen-reader pass on real assistive technology and the
+Android dial's plans, which first need accepted times to reach the phone.

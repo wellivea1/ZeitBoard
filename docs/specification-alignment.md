@@ -113,8 +113,9 @@ acceptance clause or of its real-device qualification.
 
 ## Deferred product and validation work
 
-- Full onboarding, direct clinician PDF/PNG generation, and the complete accessibility acceptance
-  matrix from `ui-ux-design.md`. A blank sleep log prints from Data Sources. The selected-range clinical
+- Full onboarding, direct clinician PNG generation, and the complete accessibility acceptance
+  matrix from `ui-ux-design.md`. The clinician report prints or saves as PDF from the app, and a
+  blank sleep log prints from Data Sources. The selected-range clinical
   chart, in the 24-hour or the 48-hour double-plot orientation, and its report already export as
   standalone, printable HTML under ADR-0027.
 - The remaining live portal transport, message threads, audit UI and notification delivery;

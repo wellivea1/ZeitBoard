@@ -701,23 +701,32 @@
 .medication-report-export {
   padding: var(--space-3) 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-5);
+  gap: var(--space-3) var(--space-5);
   border-top: 1px solid var(--ink);
 }
 
+/* The field and its three answers keep one line; when that does not fit
+   beside the words, they move under them rather than squeezing. */
 .medication-report-export-confirmation {
-  min-width: min(100%, 390px);
+  flex: 0 1 560px;
+  min-width: min(100%, 560px);
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) auto;
+  grid-template-columns: minmax(160px, 1fr) auto;
   gap: var(--space-2);
   align-items: end;
 }
 
 .medication-report-export-confirmation > div {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--space-2);
+}
+
+.medication-report-export-confirmation > div .button {
+  white-space: nowrap;
 }
 
 .medication-start-fields {

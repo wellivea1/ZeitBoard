@@ -1688,3 +1688,29 @@ rendering; ZeitBoard kept drawing.
 At 320dp (`wm density 540` on the 1080px panel) Now, Plan, Log, Doses and
 Settings fitted without clipping once the tab bar gave "Settings" room; before,
 it broke as "SETTING / S".
+
+## Printing the clinician report — 2026-09-26
+
+In the running desktop app (`wails dev`, disposable profile), Log ›
+Medications › Build report › Print or save…, with EXPORT typed, then "Print or
+save as PDF", opened WebView2's print dialog on the report: "Sleep and
+medication context report", five sheets, with the printer list offering the
+PDF destination. Cancel returned to the report. The first attempt found the
+report's buttons disabled after a minute: the analysis worker had announced
+an unchanged result as an update. A test now shows three unchanged minutes
+announced once and a changed result announced again (it fails without the
+fix). The export's field and three buttons also squeezed into three-line
+stacks at 1180px; they now keep one line, moving under the text when needed.
+Desktop Go suite and canonical web checks pass (464 desktop + 6 prototype
+tests).
+
+## Accessibility audit of every screen — 2026-09-26
+
+No screen reader is installed here (NVDA would need downloading), so the
+running app was audited with a script over its DOM on all fourteen screens,
+each Settings tab, and the open assistant panel. The script looks for controls
+with no accessible name, fields with no label, duplicate IDs, skipped heading
+levels, focusable elements inside `aria-hidden` and positive tab order. It
+found none. Planted faults of each kind were all reported, so the empty
+result is meaningful. A pass with NVDA or Narrator remains to be done; this
+checks structure, not how it sounds.

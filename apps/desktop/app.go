@@ -39,12 +39,14 @@ const (
 var saveSleepDataDialog = runtime.SaveFileDialog
 
 type App struct {
-	ctx                 context.Context
-	analysisMu          sync.Mutex
-	analysisWorker      *recompute.Worker
-	analysisStop        chan struct{}
-	analysisDone        <-chan struct{}
-	analysisEstimator   estimation.Estimator
+	ctx               context.Context
+	analysisMu        sync.Mutex
+	analysisWorker    *recompute.Worker
+	analysisStop      chan struct{}
+	analysisDone      <-chan struct{}
+	analysisEstimator estimation.Estimator
+	// analysisUpdated observes each analysis-updated announcement (tests).
+	analysisUpdated     func()
 	serviceMu           sync.Mutex
 	window              desktopWindow
 	startupMu           sync.Mutex

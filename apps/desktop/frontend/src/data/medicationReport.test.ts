@@ -4,6 +4,7 @@ import {
   downloadMedicationClinicalReport,
   exportMedicationClinicalReport,
   hasLocalMedicationReportService,
+  printMedicationClinicalReport,
   loadMedicationClinicalReport,
   normalizeMedicationClinicalReport,
 } from "./medicationReport";
@@ -121,6 +122,31 @@ describe("medication clinician report adapter", () => {
     const mixed = medicationClinicalDoublePlotFixture(3);
     mixed.range.orientation = "24h";
     expect(normalizeMedicationClinicalReport(mixed)).toBeUndefined();
+  });
+
+  it("prints from a frame that runs nothing, and removes the frame once printed", () => {
+    const value = medicationClinicalReportExportFixture();
+    expect(printMedicationClinicalReport(value)).toBe(true);
+    const frame = document.querySelector<HTMLIFrameElement>("iframe[data-report-print]")!;
+    expect(frame.getAttribute("sandbox")).toBe("allow-same-origin allow-modals");
+    expect(frame.getAttribute("aria-hidden")).toBe("true");
+    expect(frame.srcdoc).toBe(value.html);
+
+    const print = vi.fn();
+    Object.defineProperty(frame.contentWindow!, "print", { configurable: true, value: print });
+    Object.defineProperty(frame.contentWindow!, "focus", { configurable: true, value: vi.fn() });
+    frame.dispatchEvent(new Event("load"));
+    expect(print).toHaveBeenCalledTimes(1);
+
+    // A second request replaces a frame still waiting, rather than stacking.
+    expect(printMedicationClinicalReport(value)).toBe(true);
+    expect(document.querySelectorAll("iframe[data-report-print]")).toHaveLength(1);
+    const next = document.querySelector<HTMLIFrameElement>("iframe[data-report-print]")!;
+    Object.defineProperty(next.contentWindow!, "print", { configurable: true, value: vi.fn() });
+    Object.defineProperty(next.contentWindow!, "focus", { configurable: true, value: vi.fn() });
+    next.dispatchEvent(new Event("load"));
+    next.contentWindow!.dispatchEvent(new Event("afterprint"));
+    expect(document.querySelector("iframe[data-report-print]")).toBeNull();
   });
 
   it("loads and exports only through the local desktop bridge", async () => {
