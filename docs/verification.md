@@ -1773,3 +1773,18 @@ recorded, private label absent, 404 for an unknown link), the desktop method
 (off without sync, refuses a preview for another link), the sanitizer
 (scripts, handlers, styles, links, fetching CSS removed) and the Sharing screen
 flow; server, desktop Go and web suites pass.
+
+## Live availability page — 2026-09-26
+
+The real portal handler was served locally with synthetic snapshots (a
+throwaway harness that republished every 45 seconds; not committed). In the
+browser pane, after entering the passcode, the page opened its event stream
+and loaded only its own script; when the harness published a new estimate
+the page re-read itself and changed from "Likely awake right now" to "Likely
+not awake right now" with the new window, without reloading (a marker set on
+the window survived). Tests: a publish reaches an open stream with only a
+version and freshness; a third stream on one session is refused with 429;
+revocation sends `gone`; a stream needs a session; the page states its next
+change and keeps a `noscript` reload; an in-place refresh is not counted as a
+visit; the script is served from the portal with no remote reach; the page's
+only script is its own file. Suites pass with the race detector.

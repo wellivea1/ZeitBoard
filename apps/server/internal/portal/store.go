@@ -20,6 +20,7 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -116,6 +117,11 @@ type Store struct {
 	db      *sql.DB
 	aead    cipher.AEAD
 	csrfKey []byte
+
+	// live tells open event streams that a link changed. One store is
+	// shared by the publisher and the public handler, so a publish reaches
+	// every open page of that link.
+	live *liveHub
 }
 
 // Open creates or opens the portal database. rootKey is the daemon data key;
@@ -148,12 +154,18 @@ func Open(path string, rootKey []byte) (*Store, error) {
 	}
 	db.SetMaxOpenConns(1)
 	csrfKey := sha256.Sum256(append([]byte("zeitboard-portal-csrf\x00"), derived[:]...))
-	store := &Store{db: db, aead: aead, csrfKey: csrfKey[:]}
+	store := &Store{db: db, aead: aead, csrfKey: csrfKey[:], live: newLiveHub()}
 	if err := store.migrate(context.Background()); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
 	return store, nil
+}
+
+// CloseStreams ends every open event stream. The daemon calls it as it begins
+// a graceful shutdown; pages reconnect to whatever serves them next.
+func (s *Store) CloseStreams() {
+	s.live.close()
 }
 
 func (s *Store) Close() error {
@@ -483,8 +495,11 @@ func (s *Store) DeleteProfile(ctx context.Context, profileID string) error {
 	if profileID == "" {
 		return errors.New("portal profile id is required")
 	}
-	_, err := s.db.ExecContext(ctx, `DELETE FROM portal_profiles WHERE profile_id = ?`, profileID)
-	return err
+	if _, err := s.db.ExecContext(ctx, `DELETE FROM portal_profiles WHERE profile_id = ?`, profileID); err != nil {
+		return err
+	}
+	s.live.notify(profileID)
+	return nil
 }
 
 func (s *Store) RevokeProfile(ctx context.Context, profileID string, now time.Time) error {
@@ -532,7 +547,12 @@ func (s *Store) RevokeProfile(ctx context.Context, profileID string, now time.Ti
 		`DELETE FROM portal_request_sessions WHERE profile_id = ?`, profileID); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	// Revocation is immediate at the link; an open page learns it now too.
+	s.live.notify(profileID)
+	return nil
 }
 
 // PublishSnapshot replaces the materialized availability for one profile. It
@@ -572,6 +592,7 @@ func (s *Store) PublishSnapshot(ctx context.Context, profileID string, snapshot 
 		// intended outcome, not an error.
 		return nil
 	}
+	s.live.notify(profileID)
 	return nil
 }
 
@@ -717,6 +738,9 @@ func (s *Store) MatchesCSRF(sessionValue, presented string) bool {
 type Session struct {
 	ProfileID string
 	ExpiresAt time.Time
+	// Key identifies the session without being its secret: the stored hash,
+	// hex-encoded. It bounds streams per session and re-checks an open one.
+	Key string
 }
 
 func (s *Store) ResolveSession(ctx context.Context, sessionValue string, now time.Time) (Session, error) {
@@ -744,6 +768,39 @@ func (s *Store) ResolveSession(ctx context.Context, sessionValue string, now tim
 		return Session{}, ErrSessionInvalid
 	}
 	session.ExpiresAt = expiresAt
+	session.Key = hex.EncodeToString(sessionHash[:])
+	return session, nil
+}
+
+// ResolveSessionByKey re-reads a session an open stream belongs to, so that
+// revocation, expiry or a new passcode ends the stream rather than leaving it
+// running on a session that no longer exists.
+func (s *Store) ResolveSessionByKey(ctx context.Context, key string, now time.Time) (Session, error) {
+	sessionHash, err := hex.DecodeString(key)
+	if err != nil || len(sessionHash) != sha256.Size {
+		return Session{}, ErrSessionInvalid
+	}
+	row := s.db.QueryRowContext(ctx,
+		`SELECT profile_id, expires_at FROM portal_sessions WHERE session_hash = ?`, sessionHash)
+	var (
+		session      Session
+		expiresAtRaw string
+	)
+	if err := row.Scan(&session.ProfileID, &expiresAtRaw); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Session{}, ErrSessionInvalid
+		}
+		return Session{}, err
+	}
+	expiresAt, err := parseTime(expiresAtRaw)
+	if err != nil {
+		return Session{}, err
+	}
+	if !expiresAt.After(now) {
+		return Session{}, ErrSessionInvalid
+	}
+	session.ExpiresAt = expiresAt
+	session.Key = key
 	return session, nil
 }
 
