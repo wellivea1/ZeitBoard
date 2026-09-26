@@ -671,3 +671,17 @@ sidebar are gone.
   it, so there is no light flash at launch.
 - The Week board does not move blocks by dragging. Accepting, declining and
   opening a suggestion work on the board; rescheduling still goes through Tasks.
+
+### The availability portal joins the design, 2026-09-26
+
+The visitor-facing portal was still in the style the owner rejected: rounded
+cards, a coloured stripe down the status card with a gradient glow, a pill
+badge and rounded green buttons in the system sans. It now follows the same
+rules as the apps. A small-capital masthead reads "Availability" (no product,
+no person). The status leads as a serif sentence with its freshness under it,
+the stale case in the accent. Fig. 1 draws the likely waking windows as ink
+bands on three days' rows with the present as an accent line and time past the
+estimate shaded, and the windows follow as entries with "now" as a small-
+capital word. Forms use small-capital labels, square fields and a solid
+button; the accuracy qualifier and notice stand on a sheet. The page follows
+the visitor's system into the Ink palette at night.

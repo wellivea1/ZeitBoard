@@ -2,6 +2,7 @@ package portal
 
 import (
 	"fmt"
+	"math"
 	"time"
 )
 
@@ -40,6 +41,48 @@ type AvailabilityView struct {
 	// visitor's chosen times are interpreted in the same zone the windows are
 	// displayed in rather than silently in UTC.
 	ZoneIDInput string
+
+	// Figure draws the same windows as a picture: a row per day from local
+	// midnight. It adds nothing the window list does not already say.
+	Figure []FigureDay
+}
+
+// FigureWidth is the figure's own coordinate width. Positions are computed
+// here on that scale, so the template writes numbers into SVG attributes and
+// never a style, which the portal's content-security policy forbids.
+const FigureWidth = 240.0
+
+const figureDays = 3
+
+// FigureBeyond reports whether the figure shades any time past the estimate,
+// so the legend explains the shading only when there is some.
+func (v AvailabilityView) FigureBeyond() bool {
+	for _, day := range v.Figure {
+		if day.HasBeyond {
+			return true
+		}
+	}
+	return false
+}
+
+// FigureDay is one row of the figure: a civil day in the display zone.
+type FigureDay struct {
+	Label string
+	Bands []FigureBand
+	// Now is where the present falls on today's row.
+	HasNow bool
+	Now    float64
+	// Beyond is where the estimate stops on this row, if it stops here or
+	// earlier; the rest of the row is shaded rather than read as empty.
+	HasBeyond   bool
+	Beyond      float64
+	BeyondWidth float64
+}
+
+// FigureBand is one likely waking window, or the part of it on this day.
+type FigureBand struct {
+	X     float64
+	Width float64
 }
 
 type WindowView struct {
@@ -119,6 +162,7 @@ func BuildView(snapshot Snapshot, now time.Time) AvailabilityView {
 		})
 	}
 	view.Windows = upcoming
+	view.Figure = buildFigure(snapshot.Windows, snapshot.HorizonEnd, now, location)
 
 	switch {
 	case view.LikelyAwake:
@@ -137,6 +181,57 @@ func BuildView(snapshot Snapshot, now time.Time) AvailabilityView {
 		view.Detail += " This estimate has not refreshed recently, so treat it with extra caution."
 	}
 	return view
+}
+
+// buildFigure lays the windows on three civil days from local midnight. A
+// window is drawn from now at the earliest, like the list: the page never
+// implies knowledge about a past the visitor cannot use. Days that are 23 or
+// 25 hours long across a clock change keep their true proportions.
+func buildFigure(windows []Window, horizon, now time.Time, location *time.Location) []FigureDay {
+	local := now.In(location)
+	midnight := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, location)
+	position := func(at, dayStart time.Time, length time.Duration) float64 {
+		return math.Round(float64(at.Sub(dayStart))/float64(length)*FigureWidth*100) / 100
+	}
+	days := make([]FigureDay, 0, figureDays)
+	for index := 0; index < figureDays; index++ {
+		start := midnight.AddDate(0, 0, index)
+		end := midnight.AddDate(0, 0, index+1)
+		length := end.Sub(start)
+		day := FigureDay{Label: describeDay(start, now, location)}
+		for _, window := range windows {
+			from := latest(window.StartAt, now, start)
+			to := window.EndAt
+			if to.After(end) {
+				to = end
+			}
+			if !to.After(from) {
+				continue
+			}
+			x := position(from, start, length)
+			day.Bands = append(day.Bands, FigureBand{X: x, Width: math.Max(0.5, position(to, start, length)-x)})
+		}
+		if index == 0 {
+			day.HasNow, day.Now = true, position(now, start, length)
+		}
+		if !horizon.IsZero() && horizon.Before(end) {
+			day.HasBeyond = true
+			day.Beyond = math.Max(0, position(horizon, start, length))
+			day.BeyondWidth = FigureWidth - day.Beyond
+		}
+		days = append(days, day)
+	}
+	return days
+}
+
+func latest(values ...time.Time) time.Time {
+	result := values[0]
+	for _, value := range values[1:] {
+		if value.After(result) {
+			result = value
+		}
+	}
+	return result
 }
 
 func windowLocation(zoneID string) *time.Location {

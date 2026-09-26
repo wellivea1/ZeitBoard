@@ -1730,3 +1730,18 @@ tombstones, titles them from open tasks only, and cuts them to the dial's day.
 Core, desktop and server Go suites, the contract checks and the Android
 `gradlew check` pass. Not verified here: a placement travelling end to end
 through a live server to a phone.
+
+## The portal in the Almanac — 2026-09-26
+
+The real portal handler was served locally with synthetic snapshots (a
+throwaway harness, not committed). In the browser pane: the passcode page, the
+availability page in Paper at desktop width (a sentence lead, Fig. 1 with
+today's band from now and an accent now-line, the windows as entries with an
+accent "now", a solid "Ask for a time"), the stale page in Ink at 375px (the
+freshness line in the accent, windows across midnight split between rows) and
+the request form. The axis's last label wrapped at first; it no longer does.
+Tests pin the figure's geometry (nothing before now, a window across midnight
+split, shading past the estimate, the legend's key only when needed) and the
+font route (only the bundled files, typed as fonts and cacheable, with
+`font-src 'self'`); the existing suite still proves there is no inline style,
+script or third-party reference on the page. Server Go suite passes.

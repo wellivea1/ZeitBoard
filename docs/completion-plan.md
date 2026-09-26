@@ -599,3 +599,27 @@ description. Imported calendar events still stay on the desktop.
 
 **Next:** a screen-reader pass on real assistive technology (NVDA or Narrator
 on the desktop, TalkBack on the phone), and the remaining C2 to C8 milestones.
+
+### C5 review and the portal in the Almanac — 2026-09-26
+
+**Where the portal stands.** P5-a (share links with required passcodes, the
+security middleware, the allowlisted materializer, stale and unavailable
+rules) and P5-b (visitor time requests, request codes, the outbox bridge and
+exact-slot approval) are delivered and green. P5-c (request threads) and P5-d
+(the live layer, persisted rate limits, the audit view, the reverse-proxy
+profile) have been paused since 2026-08-04, waiting on a freshness policy for
+the owner's own current-state claim. That policy now exists, so the pause
+condition is met. Of the resumed sequence in `portal-design.md` section 11,
+two steps are done: the desktop Sharing screen creates, revokes and erases
+real links, and the materializer withholds availability by the shared
+freshness policy (P7-1). The exact recipient preview section 10 asks the
+Sharing screen for is still missing, and the independent review has not
+happened. The exposure gate in section 12 is not passed and the portal stays
+disabled by default.
+
+**The page.** It was still in the style the owner rejected. It is now set in
+the Almanac design (see `ui-refactor-plan.md`): a sentence lead, a figure of
+the next three days, the windows in words, a solid button and the qualifier on
+a sheet, in Paper by day and Ink at night, with the bundled faces served from
+the portal's own origin. The static `trusted-web-prototype` still shows the
+old demo and no longer describes the portal.

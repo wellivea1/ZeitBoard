@@ -88,6 +88,7 @@ func NewHandler(cfg HandlerConfig) (*Handler, error) {
 func (h *Handler) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("GET /p/assets/portal.css", h.baseChain(http.HandlerFunc(h.handleStylesheet)))
+	mux.Handle("GET /p/assets/fonts/{name}", h.baseChain(http.HandlerFunc(h.handleFont)))
 	mux.Handle("GET /p/{linkToken}", h.linkChain(http.HandlerFunc(h.handlePage)))
 	mux.Handle("POST /p/{linkToken}/session", h.linkChain(h.requireOrigin(http.HandlerFunc(h.handleSession))))
 	mux.Handle("GET /p/{linkToken}/availability", h.linkChain(h.requireSession(http.HandlerFunc(h.handleAvailability))))
@@ -125,7 +126,7 @@ func (h *Handler) securityHeaders(next http.Handler) http.Handler {
 		header.Set("Cache-Control", "no-store, max-age=0")
 		header.Set("Content-Security-Policy",
 			"default-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'; "+
-				"img-src 'self'; style-src 'self'; script-src 'self'; connect-src 'self'")
+				"img-src 'self'; style-src 'self'; font-src 'self'; script-src 'self'; connect-src 'self'")
 		header.Set("Referrer-Policy", "no-referrer")
 		header.Set("X-Content-Type-Options", "nosniff")
 		header.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
