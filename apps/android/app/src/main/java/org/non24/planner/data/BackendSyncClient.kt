@@ -27,6 +27,10 @@ interface BackendSyncClient {
     suspend fun companion(baseUrl: String, token: String): Result<JsonObject>
 
     suspend fun sleepReview(baseUrl: String, token: String, observationId: String): Result<JsonObject>
+
+    /** The time-request notice feed after a cursor, or "latest" for its head. */
+    suspend fun notifications(baseUrl: String, token: String, after: String): Result<JsonObject> =
+        Result.failure(UnsupportedOperationException("This client does not read notices."))
 }
 
 class BackendSyncException(val status: Int, message: String) : Exception(message)
@@ -82,6 +86,12 @@ class HttpBackendSyncClient(
             if (error.status == 409) throw SyncServerResetException()
             throw error
         }
+    }
+
+    override suspend fun notifications(baseUrl: String, token: String, after: String): Result<JsonObject> = syncResult {
+        require(after == "latest" || (after.toLongOrNull() ?: -1) >= 0)
+        request(baseUrl, "/v1/notifications?after=$after", token, null, TimeRequestNotifier.FEED_LIMIT_BYTES)
+            .also { parseNotificationFeed(it) }
     }
 
     override suspend fun companion(baseUrl: String, token: String): Result<JsonObject> = syncResult {

@@ -126,6 +126,7 @@ fun Non24App(
     onRequestHealthPermissions: (Set<String>) -> Unit,
     onOpenHealthConnectListing: () -> Unit,
     onRequestBackgroundPermission: () -> Unit,
+    onEnableNotices: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val companion by viewModel.companion.collectAsStateWithLifecycle()
@@ -234,6 +235,7 @@ fun Non24App(
                         state = uiState,
                         viewModel = viewModel,
                         onRequestBackgroundPermission = onRequestBackgroundPermission,
+                        onEnableNotices = onEnableNotices,
                         onDataModeChanged = viewModel::setDataMode,
                         onUse24HourChanged = viewModel::setUse24HourTime,
                     )
@@ -890,6 +892,7 @@ private fun SettingsScreen(
     state: AppUiState,
     viewModel: AppViewModel,
     onRequestBackgroundPermission: () -> Unit,
+    onEnableNotices: () -> Unit,
     onDataModeChanged: (DataMode) -> Unit,
     onUse24HourChanged: (Boolean) -> Unit,
 ) {
@@ -914,7 +917,7 @@ private fun SettingsScreen(
             )
         }
 
-        BackendConnectionSection(viewModel, state, onRequestBackgroundPermission)
+        BackendConnectionSection(viewModel, state, onRequestBackgroundPermission, onEnableNotices)
 
         SectionHeading("Display")
         RuledSection {
@@ -960,6 +963,7 @@ private fun BackendConnectionSection(
     viewModel: AppViewModel,
     state: AppUiState,
     onRequestBackgroundPermission: () -> Unit,
+    onEnableNotices: () -> Unit,
 ) {
     val status by viewModel.syncStatus.collectAsStateWithLifecycle()
     val busy by viewModel.syncBusy.collectAsStateWithLifecycle()
@@ -1084,6 +1088,26 @@ private fun BackendConnectionSection(
             )
             if (backgroundAccess == BackgroundReadState.REQUIRED) SecondaryButton(
                 "Allow background sleep access", onRequestBackgroundPermission, enabled = !busy,
+            )
+        }
+
+        SectionHeading("Time requests")
+        RuledSection {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Tell me when someone asks for a time", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                CompactSwitch(
+                    checked = state.settings.timeRequestNotices,
+                    onCheckedChange = { on -> if (on) onEnableNotices() else viewModel.setTimeRequestNotices(false) },
+                    enabled = !busy,
+                    label = "Tell me when someone asks for a time",
+                )
+            }
+            Text(
+                "Off by default. When on, this phone asks your server about every 15 minutes, while it has a connection, " +
+                    "whether anyone you shared a link with asked for a time or wrote about one. A notice says only that, " +
+                    "never who or what; you answer in ZeitBoard on your computer. Nothing passes through Google or any " +
+                    "other push service, and battery settings can delay a check.",
+                style = MaterialTheme.typography.bodySmall,
             )
         }
     }

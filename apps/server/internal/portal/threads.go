@@ -145,6 +145,15 @@ func (s *Store) AppendMessage(ctx context.Context, profile Profile, requestID, a
 		messageID, requestID, profile.ID, author, formatTime(now), nonce, ciphertext); err != nil {
 		return Message{}, fmt.Errorf("store portal message: %w", err)
 	}
+	if author == AuthorVisitor {
+		// The owner hears of a visitor's message through the same outbox
+		// that carries requests: durable, retried, and carrying no text.
+		if _, err := tx.ExecContext(ctx, `INSERT INTO portal_outbox
+			(kind, request_id, idempotency_key, created_at) VALUES (?, ?, ?, ?)`,
+			outboxMessageNotify, requestID, messageID, formatTime(now)); err != nil {
+			return Message{}, fmt.Errorf("store portal outbox row: %w", err)
+		}
+	}
 	if err := tx.Commit(); err != nil {
 		return Message{}, err
 	}
@@ -202,6 +211,10 @@ func (s *Store) purgeThreads(ctx context.Context, now time.Time) error {
 		RequestQueued, RequestPending, formatTime(now.Add(-ThreadRetention)))
 	return err
 }
+
+// outboxMessageNotify is a handoff saying a visitor wrote; its idempotency
+// key is the message id, and it carries nothing else.
+const outboxMessageNotify = "message_notify"
 
 func messageAAD(messageID, requestID, profileID, author string) []byte {
 	return []byte(strings.Join([]string{"portal-message", messageID, requestID, profileID, author}, "\x00"))

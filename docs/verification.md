@@ -1803,3 +1803,19 @@ thread and author), the visitor route (authorship, synchronizer token,
 escaping, the no-thread link), the owner routes (list, reply, closed after the
 decision, erase, unknown request), the desktop methods and the Approvals card
 (reply, delete through the shared confirmation).
+
+## Notices about time requests — 2026-09-26
+
+Server: a visitor's request, a message written before the request reached the
+owner's queue, and the owner's decision each became exactly one event (replays
+added none), the message's notice pointed at its request, the feed carried
+none of the request text, message text, handle or link label (canaries), a
+caught-up device read nothing new, `after=latest` returned the head, and the
+route refused a negative cursor and a request without a device token. Android
+(JVM): the feed parser refuses unknown kinds, a missing cursor, another schema
+and a negative cursor; an answer in the same page suppresses the notices for
+its request and retires a shown one, and expired events are skipped; the
+notifier starts at the head, then shows what follows, keeps its place after a
+failed read, clears place and notices on reset, and does nothing without a
+server. Android unit tests, lint and the debug build pass; server suites pass.
+The device run on an emulator is still to be recorded.

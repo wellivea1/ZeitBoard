@@ -79,6 +79,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /v1/sync/push", s.requireDevice(http.HandlerFunc(s.handlePush)))
 	mux.Handle("GET /v1/sync/pull", s.requireDevice(http.HandlerFunc(s.handlePull)))
 	mux.Handle("POST /v1/sync/erase", s.requireDevice(http.HandlerFunc(s.handleErase)))
+	mux.Handle("GET /v1/notifications", s.requireDevice(http.HandlerFunc(s.handleNotifications)))
 	if s.portal != nil {
 		// Registered only when the portal is configured. With the portal off
 		// there is no sharing route to probe, on the owner surface or the

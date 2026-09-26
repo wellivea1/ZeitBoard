@@ -677,3 +677,22 @@ in Approvals, with the shared deletion confirmation. With the live layer and the
 recipient preview, C5's software is complete; its acceptance still needs the
 independent review in `portal-design.md` section 12 and C6's notification of new
 requests and messages while the desktop is closed.
+
+### C6 notices about time requests — 2026-09-26
+
+The owner is told, while no desktop window is open, when someone asks for a
+time, writes about a request, or a request is answered elsewhere. The server
+appends a content-free event (kind and request id only) in the same
+transactions that create the visitor proposal and decide it, and through the
+portal outbox for a visitor's message; `GET /v1/notifications` serves it to
+enrolled devices with a head cursor for a device just turning notices on. The
+Android companion reads it every 15 minutes while notices are on (off by
+default, with Android's notification permission), words each notice itself,
+hides it on the lock screen and retires it when the request is answered.
+There is no vendor push service in the path, so there is no intermediary to
+disclose; the delivery limits (15-minute minimum, battery deferral,
+force-stop) are documented in `self-hosting.md`. The optional M-F missed-dose
+signal is dispositioned as not implemented: it needs its own grant and
+projection and is outside this feed. Remaining for C6's acceptance: the
+recorded device run (a portal request raising a notice on an enrolled phone
+with the desktop closed).

@@ -124,6 +124,8 @@ data class AppSettings(
     val dataMode: DataMode = DataMode.FIXTURE,
     val use24HourTime: Boolean = true,
     val backgroundSyncEnabled: Boolean = false,
+    /** Off by default: notices about time requests need their own consent. */
+    val timeRequestNotices: Boolean = false,
 )
 
 enum class BackgroundReadState { UNKNOWN, UNAVAILABLE, REQUIRED, GRANTED }

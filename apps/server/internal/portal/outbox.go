@@ -99,6 +99,16 @@ func (s *Store) AckOutbox(ctx context.Context, entryID int64, requestID string, 
 	return tx.Commit()
 }
 
+// DropOutbox removes a delivered handoff that changes no request state, such
+// as a message notification.
+func (s *Store) DropOutbox(ctx context.Context, entryID int64) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM portal_outbox WHERE id = ?`, entryID)
+	return err
+}
+
+// OutboxMessageNotify is the kind of a message-notification handoff.
+const OutboxMessageNotify = outboxMessageNotify
+
 // NoteOutboxFailure records an attempt without dropping the handoff. The
 // request stays `queued`, which is what the visitor is shown.
 func (s *Store) NoteOutboxFailure(ctx context.Context, entryID int64, reason string) error {

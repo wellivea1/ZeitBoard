@@ -176,7 +176,8 @@ class AppViewModel(
     fun disableBackend() = syncOperation {
         container.backgroundScheduler.cancelAll()
         container.backendSyncRepository.disable()
-        container.settingsRepository.update { it.copy(backgroundSyncEnabled = false) }
+        container.settingsRepository.update { it.copy(backgroundSyncEnabled = false, timeRequestNotices = false) }
+        container.timeRequestNotifier.reset()
         mutableMessage.value = "Disconnected. Local records are retained; server records and device revocation are managed on your server."
     }
 
@@ -184,6 +185,30 @@ class AppViewModel(
         require(!enabled || container.backendSyncRepository.isConfigured())
         container.settingsRepository.update { it.copy(backgroundSyncEnabled = enabled) }
         container.evidenceSync.reconcileSchedule()
+    }
+
+    /** The screen asks for Android's notification permission before turning this on. */
+    fun setTimeRequestNotices(enabled: Boolean) = syncOperation {
+        require(!enabled || container.backendSyncRepository.isConfigured())
+        container.settingsRepository.update { it.copy(timeRequestNotices = enabled) }
+        if (enabled) {
+            container.timeRequestNotifier.prepare()
+            // Start at the feed's head now, so the first notice is about
+            // something that happens after this moment.
+            container.timeRequestNotifier.check().getOrThrow()
+        } else {
+            container.timeRequestNotifier.reset()
+        }
+        container.evidenceSync.reconcileSchedule()
+        mutableMessage.value = if (enabled) {
+            "Notices on. This phone checks your server about every 15 minutes while it has a connection."
+        } else {
+            "Notices off."
+        }
+    }
+
+    fun onNoticePermissionDenied() {
+        mutableMessage.value = "Android did not allow notifications, so notices stay off. You can allow them in the phone's settings."
     }
 
     fun uploadNow() = syncOperation {

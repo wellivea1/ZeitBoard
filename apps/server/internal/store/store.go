@@ -253,6 +253,18 @@ func (s *Store) Migrate(ctx context.Context) error {
 			decided_end TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL
 		)`,
+		// The notification feed (C6): what happened and to which request,
+		// never what anyone wrote. See notifications.go.
+		`CREATE TABLE IF NOT EXISTS notification_events (
+			seq INTEGER PRIMARY KEY AUTOINCREMENT,
+			event_id TEXT NOT NULL UNIQUE,
+			kind TEXT NOT NULL CHECK (kind IN ('visitor_request', 'visitor_message', 'visitor_decided')),
+			subject TEXT NOT NULL,
+			created_at TEXT NOT NULL,
+			expires_at TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_notification_events_expiry
+			ON notification_events(expires_at)`,
 		// The analysis loop's durable memory (ADR-0033). There is no queue of
 		// pending recomputes here on purpose: a recompute is a pure function of
 		// the inputs, so what is worth remembering is which inputs have already

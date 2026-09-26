@@ -8,6 +8,9 @@ interface BackgroundSyncScheduler {
     fun reconcile(enabled: Boolean)
     fun requestUpload()
     fun cancelAll()
+
+    /** Time-request notices run on their own schedule, only while turned on. */
+    fun reconcileNotices(enabled: Boolean) {}
 }
 
 /** Testable orchestration shared by the foreground and durable Android jobs. */
@@ -19,8 +22,10 @@ class EvidenceSyncCoordinator(
     private val initialize: suspend () -> Unit,
 ) {
     suspend fun reconcileSchedule() {
+        val configured = sync.isConfigured()
         scheduler.reconcile(settings.settings.value.backgroundSyncEnabled &&
-            settings.settings.value.dataMode == DataMode.HEALTH_CONNECT && sync.isConfigured())
+            settings.settings.value.dataMode == DataMode.HEALTH_CONNECT && configured)
+        scheduler.reconcileNotices(settings.settings.value.timeRequestNotices && configured)
     }
 
     suspend fun refreshForeground() {

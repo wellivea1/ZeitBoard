@@ -1,5 +1,9 @@
 package org.non24.planner
 
+import org.non24.planner.data.NoticeKind
+import org.non24.planner.data.NoticePoster
+import org.non24.planner.data.NoticeCursorStore
+import org.non24.planner.data.TimeRequestNotifier
 import java.time.Clock
 import java.time.Instant
 import java.time.ZoneOffset
@@ -172,6 +176,20 @@ class AppViewModelMedicationTest {
             override fun cancelAll() = Unit
         }
         override val evidenceSync = EvidenceSyncCoordinator(settingsRepository, health, backendSyncRepository, backgroundScheduler, ::initializeLocalUserData)
+        override val timeRequestNotifier = TimeRequestNotifier(
+            configStore = NoSyncConfig(),
+            client = NoSyncClient(),
+            cursors = object : NoticeCursorStore {
+                override fun load(scope: String): Long? = null
+                override fun save(scope: String, cursor: Long) = Unit
+                override fun clear() = Unit
+            },
+            poster = object : NoticePoster {
+                override fun show(subject: String, kind: NoticeKind) = Unit
+                override fun retire(subject: String) = Unit
+                override fun retireAll() = Unit
+            },
+        )
         var initializeCalls = 0
 
         override suspend fun initializeLocalUserData() {
