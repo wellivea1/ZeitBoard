@@ -156,7 +156,7 @@ func (s *Store) AppendMessage(ctx context.Context, profile Profile, requestID, a
 func (s *Store) ListMessages(ctx context.Context, profileID, requestID string) ([]Message, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT message_id, author, created_at, nonce, ciphertext
 		FROM portal_messages WHERE request_id = ? AND profile_id = ?
-		ORDER BY created_at, message_id`, requestID, profileID)
+		ORDER BY created_at, rowid`, requestID, profileID)
 	if err != nil {
 		return nil, err
 	}
