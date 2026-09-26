@@ -89,6 +89,13 @@ func serve(configPath string, stop <-chan struct{}, ready chan<- struct{}) error
 					log.Printf("portal: request bridge pump failed: %v", err)
 				}
 			},
+			// A visitor's message becomes a notification event on the same
+			// pass that carries requests.
+			NotifyMessageAdded: func() {
+				if err := requestBridge.Pump(context.Background()); err != nil {
+					log.Printf("portal: request bridge pump failed: %v", err)
+				}
+			},
 		})
 		if handlerErr != nil {
 			return fmt.Errorf("configure portal: %w", handlerErr)
@@ -225,6 +232,11 @@ func startPortalMaintenance(store *portal.Store, bridge *portalbridge.RequestBri
 		purge := func() {
 			if err := store.PurgeExpired(context.Background(), time.Now().UTC()); err != nil {
 				log.Printf("portal: maintenance sweep failed: %v", err)
+			}
+			if bridge != nil && bridge.Private != nil {
+				if err := bridge.Private.PurgeNotifications(context.Background(), time.Now().UTC()); err != nil {
+					log.Printf("notifications: retention sweep failed: %v", err)
+				}
 			}
 		}
 		purge()

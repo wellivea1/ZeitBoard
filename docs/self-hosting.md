@@ -260,6 +260,33 @@ delivered once one exists — nothing is lost and nobody is told otherwise. The
 daemon retries delivery every minute in addition to pumping on each request and
 decision.
 
+## Notices about time requests
+
+An Android phone enrolled with this server can tell its owner, while no
+desktop window is open, that someone asked for a time, wrote about a request,
+or that a request was answered elsewhere. It is off by default and turned on
+per phone in the companion's Settings, which asks for Android's notification
+permission.
+
+How it works, and what it cannot do:
+
+- The server keeps a feed of what happened and to which request — never what
+  anyone wrote, never a link's name, never a time — for seven days
+  (`GET /v1/notifications`, device-authenticated). The phone words each notice
+  itself, and hides it on a locked screen.
+- The phone asks the server itself, about every 15 minutes while it has a
+  connection. Nothing goes through Google's or any other push service, so there
+  is no third party to disclose; the cost is delay. Android runs periodic work
+  no more often than every 15 minutes, battery optimisation can stretch that,
+  and a force-stopped app checks again only once reopened.
+- Each phone keeps its own place in the feed, starts at the newest event when
+  notices are turned on (it is not told about the past week), and retires a
+  notice once the request is answered on another device. Disconnecting clears
+  its place and its notices.
+- The optional "missed dose" signal for a trusted person (M-F in the
+  medication plan) is not implemented; it needs its own grant and projection
+  and stays out of this feed.
+
 ## Network And Telemetry
 
 The project has no telemetry path. The daemon listens on the TLS address configured by

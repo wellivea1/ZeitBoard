@@ -133,6 +133,9 @@ func (s *Store) CreateVisitorProposal(ctx context.Context, input VisitorRequestI
 		input.PortalRequestID, proposalID, input.ProfileID, input.CreatedAt.UTC().Format(time.RFC3339Nano)); err != nil {
 		return ProposalRecord{}, fmt.Errorf("link visitor proposal: %w", err)
 	}
+	if err := recordNotification(ctx, s.db, NotifyVisitorRequest+":"+proposalID, NotifyVisitorRequest, proposalID, input.CreatedAt); err != nil {
+		return ProposalRecord{}, err
+	}
 	return record, nil
 }
 
@@ -191,13 +194,16 @@ func (s *Store) DecideVisitorProposal(
 
 	return s.decideProposal(ctx, proposalID, deviceID, decision, token, decidedAt, audit,
 		func(ctx context.Context, tx *sql.Tx, _ ProposalRecord, _ ProposalStatus, at time.Time) error {
-			_, err := tx.ExecContext(ctx, `INSERT INTO portal_status_outbox
+			if _, err := tx.ExecContext(ctx, `INSERT INTO portal_status_outbox
 				(portal_request_id, status, decided_start, decided_end, created_at)
 				VALUES (?, ?, ?, ?, ?)`,
 				payload.PortalRequestID, status,
 				formatOptionalTime(slot.StartAt), formatOptionalTime(slot.EndAt),
-				at.UTC().Format(time.RFC3339Nano))
-			return err
+				at.UTC().Format(time.RFC3339Nano)); err != nil {
+				return err
+			}
+			// Other devices can retire their notice about this request.
+			return recordNotification(ctx, tx, NotifyVisitorDecided+":"+proposalID, NotifyVisitorDecided, proposalID, at)
 		})
 }
 

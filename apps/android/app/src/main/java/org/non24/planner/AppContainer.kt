@@ -26,6 +26,9 @@ import org.non24.planner.data.SleepRepository
 import org.non24.planner.data.SettingsRepository
 import org.non24.planner.data.fixtureEstimateRepository
 import org.non24.planner.data.fixtureSleepEpisodes
+import org.non24.planner.data.TimeRequestNotifier
+import org.non24.planner.notices.AndroidNoticePoster
+import org.non24.planner.notices.SharedPreferencesNoticeCursorStore
 
 interface AppDependencies {
     val backgroundScheduler: BackgroundSyncScheduler
@@ -41,6 +44,8 @@ interface AppDependencies {
     val syncStatus: StateFlow<SyncStatus>
 
     val backendSyncRepository: BackendSyncRepository
+
+    val timeRequestNotifier: TimeRequestNotifier
 
     suspend fun initializeLocalUserData()
 }
@@ -78,6 +83,13 @@ class AppContainer(context: Context) : AppDependencies {
         onRecordsChanged = localUserDataRepository::reloadAfterSync,
     )
     override val syncStatus: StateFlow<SyncStatus> = backendSyncRepository.status
+    private val noticePoster = AndroidNoticePoster(applicationContext)
+    override val timeRequestNotifier = TimeRequestNotifier(
+        configStore = SharedPreferencesSyncConfigStore(applicationContext),
+        client = HttpBackendSyncClient(),
+        cursors = SharedPreferencesNoticeCursorStore(applicationContext),
+        poster = noticePoster,
+    )
     override val backgroundScheduler: BackgroundSyncScheduler = AndroidBackgroundSyncScheduler(applicationContext)
     override val evidenceSync = EvidenceSyncCoordinator(
         settingsRepository, healthConnectRepository, backendSyncRepository,

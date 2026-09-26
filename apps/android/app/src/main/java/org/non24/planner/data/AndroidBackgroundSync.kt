@@ -47,11 +47,48 @@ class AndroidBackgroundSyncScheduler(context: Context) : BackgroundSyncScheduler
     override fun cancelAll() {
         manager.cancelUniqueWork(IMPORT_WORK)
         manager.cancelUniqueWork(UPLOAD_WORK)
+        manager.cancelUniqueWork(NOTICE_WORK)
+    }
+
+    // Android runs periodic work at most every 15 minutes, which is how soon a
+    // notice can follow a request; battery settings can stretch it further.
+    override fun reconcileNotices(enabled: Boolean) {
+        if (!enabled) {
+            manager.cancelUniqueWork(NOTICE_WORK)
+            return
+        }
+        manager.enqueueUniquePeriodicWork(
+            NOTICE_WORK,
+            ExistingPeriodicWorkPolicy.KEEP,
+            PeriodicWorkRequestBuilder<TimeRequestNoticeWorker>(15, TimeUnit.MINUTES)
+                .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+                .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 1, TimeUnit.MINUTES)
+                .build(),
+        )
     }
 
     private companion object {
         const val IMPORT_WORK = "zeitboard-health-import"
         const val UPLOAD_WORK = "zeitboard-sleep-upload"
+        const val NOTICE_WORK = "zeitboard-time-request-notices"
+    }
+}
+
+class TimeRequestNoticeWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
+    override suspend fun doWork(): Result = try {
+        val container = (applicationContext as ZeitBoardApplication).container
+        if (!container.settingsRepository.settings.value.timeRequestNotices) {
+            Result.success()
+        } else {
+            val checked = withTimeoutOrNull(60_000) { container.timeRequestNotifier.check() }
+            val error = checked?.exceptionOrNull()
+            if ((checked == null || error != null) && shouldRetrySync(error, runAttemptCount)) Result.retry() else Result.success()
+        }
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (_: Exception) {
+        // The next period tries again; nothing about a request is logged.
+        Result.success()
     }
 }
 

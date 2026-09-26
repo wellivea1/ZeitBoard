@@ -66,6 +66,12 @@ func (b RequestBridge) submitRequests(ctx context.Context) error {
 
 	var failures []error
 	for _, entry := range entries {
+		if entry.Kind == portal.OutboxMessageNotify {
+			if err := b.notifyMessage(ctx, entry); err != nil {
+				failures = append(failures, err)
+			}
+			continue
+		}
 		if entry.Kind != "proposal_submit" {
 			continue
 		}
@@ -99,6 +105,23 @@ func (b RequestBridge) submitRequests(ctx context.Context) error {
 		}
 	}
 	return errors.Join(failures...)
+}
+
+// notifyMessage turns a visitor's message into a notification event. Until
+// the request itself has reached the owner's queue there is nothing for the
+// notice to point at, so the handoff waits for the next pass.
+func (b RequestBridge) notifyMessage(ctx context.Context, entry portal.OutboxEntry) error {
+	err := b.Private.RecordVisitorMessageNotification(ctx, entry.Request.ID, entry.IdempotencyKey, b.now())
+	if errors.Is(err, store.ErrNoVisitorProposal) {
+		return nil
+	}
+	if err != nil {
+		if noteErr := b.Portal.NoteOutboxFailure(ctx, entry.ID, err.Error()); noteErr != nil {
+			return noteErr
+		}
+		return err
+	}
+	return b.Portal.DropOutbox(ctx, entry.ID)
 }
 
 // deliverDecisions applies owner decisions to the portal store exactly once.
