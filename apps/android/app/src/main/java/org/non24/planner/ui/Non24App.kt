@@ -410,21 +410,22 @@ private fun NowDial(state: AppUiState, companion: CompanionState, connected: Boo
 
 @Composable
 private fun DialLegend() {
+    val palette = LocalAlmanacPalette.current
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        LegendKey("Likely asleep") { drawRect(SleepBlue) }
+        LegendKey("Likely asleep") { drawRect(palette.sleepBlue) }
         LegendKey("Cannot say") {
             val step = 3.dp.toPx()
             var x = -size.height
             while (x < size.width) {
-                drawLine(UncertainFill, Offset(x, size.height), Offset(x + size.height, 0f), 1.2.dp.toPx())
+                drawLine(palette.uncertainFill, Offset(x, size.height), Offset(x + size.height, 0f), 1.2.dp.toPx())
                 x += step
             }
         }
-        LegendKey("Now") { drawRect(Accent, topLeft = Offset(0f, size.height / 2f - 1.dp.toPx()), size = Size(size.width, 2.dp.toPx())) }
+        LegendKey("Now") { drawRect(palette.accent, topLeft = Offset(0f, size.height / 2f - 1.dp.toPx()), size = Size(size.width, 2.dp.toPx())) }
     }
 }
 
@@ -1582,7 +1583,9 @@ private fun DestinationBar(
                 val selected = currentRoute == destination.route
                 Column(
                     modifier = Modifier
-                        .weight(1f)
+                        // Room in proportion to the word: at 320dp, five equal
+                        // slots broke "Settings" across two lines.
+                        .weight(destination.label.length + 3f)
                         .fillMaxHeight()
                         .selectable(
                             selected = selected,
@@ -1596,6 +1599,8 @@ private fun DestinationBar(
                         destination.label.uppercase(locale),
                         style = MaterialTheme.typography.labelMedium,
                         color = if (selected) Ink else Muted,
+                        maxLines = 1,
+                        softWrap = false,
                     )
                     Spacer(modifier = Modifier.height(5.dp))
                     Box(

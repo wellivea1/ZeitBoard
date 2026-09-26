@@ -664,7 +664,9 @@ sidebar are gone.
 - The Android dial has no plans ring. The companion contract carries tasks but
   not accepted times or calendar events, so there is nothing true to draw there
   yet.
-- Android follows the Paper palette only. Its screens still draw with the light
-  constants directly; a dark scheme is defined but not switched on.
+- ~~Android follows the Paper palette only.~~ Done 2026-09-25: Android follows
+  the system into Ink, the desktop's dark theme. The screens' colour names read
+  the palette in force, and the window, system bars and their icons switch with
+  it, so there is no light flash at launch.
 - The Week board does not move blocks by dragging. Accepting, declining and
   opening a suggestion work on the board; rescheduling still goes through Tasks.

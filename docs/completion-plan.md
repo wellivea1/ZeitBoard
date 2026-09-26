@@ -554,3 +554,16 @@ dial already carries a spoken description beside its sentence.
 
 **Next C7 work:** compact Android layouts, and a screen-reader pass of the
 new layouts on real assistive technology.
+
+### C7 Android at night — 2026-09-25
+
+Android now follows the system into Ink, the desktop's dark theme: the page,
+the dial's rings and hand, the fields and the tabs change together, and the
+window and system bars switch with them, so a dark launch has no light flash.
+The colour names the screens use (Ink, Paper, Muted and the rest) now read the
+theme's palette, so no screen had to change. A test holds both palettes to
+WCAG contrast: 4.5:1 for text and 3:1 for the dial's marks.
+
+At the narrowest common width (320dp) every tab fitted except the tab bar's
+own "Settings", which broke across two lines in its fifth of the width; each
+tab now has room in proportion to its word and never wraps.
