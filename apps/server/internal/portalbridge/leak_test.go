@@ -332,9 +332,37 @@ func TestMaterializerDropsEstimatorInternals(t *testing.T) {
 		if !window.EndAt.After(fixture.now) {
 			t.Error("snapshot contains an already-elapsed window")
 		}
-		if window.StartAt.Before(fixture.now) {
-			t.Error("snapshot window starts before now; in-progress windows must be clipped")
-		}
+	}
+}
+
+// TestTheWakingDayUnderWayIsPublished is the regression guard for a page that
+// said "not awake right now" all day. The estimator forecasts waking windows
+// only after each predicted sleep, so the day in progress was never a window.
+// It now is: from the observed wake to the earliest likely next sleep, and a
+// visitor during it reads that the owner is likely awake.
+func TestTheWakingDayUnderWayIsPublished(t *testing.T) {
+	fixture := newLeakFixture(t)
+	snapshot, err := portalbridge.Materializer{
+		Sleep: readmodel.SleepReader{Store: fixture.private},
+		Now:   func() time.Time { return fixture.now },
+	}.Snapshot(context.Background())
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	if len(snapshot.Windows) < 2 {
+		t.Fatalf("windows = %+v", snapshot.Windows)
+	}
+	// The newest recorded sleep ended three hours before now.
+	current := snapshot.Windows[0]
+	if want := fixture.now.Add(-3 * time.Hour); !current.StartAt.Equal(want) {
+		t.Errorf("the day under way starts at %s, want the observed wake %s", current.StartAt, want)
+	}
+	if !current.EndAt.After(fixture.now) || !current.EndAt.Before(snapshot.Windows[1].StartAt) {
+		t.Errorf("the day under way ends at %s; it must end after now and before the next forecast window at %s",
+			current.EndAt, snapshot.Windows[1].StartAt)
+	}
+	if view := portal.BuildView(snapshot, fixture.now); view.Headline != "Likely awake right now" {
+		t.Errorf("a visitor during the owner's waking day reads %q", view.Headline)
 	}
 }
 

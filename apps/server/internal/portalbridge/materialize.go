@@ -130,7 +130,7 @@ func (m Materializer) Prepare(ctx context.Context, now time.Time) (Preparation, 
 		return prep, nil
 	}
 
-	windows := wakingWindows(estimate)
+	windows := withCurrentWakingWindow(wakingWindows(estimate), estimate, sessions)
 	if len(windows) == 0 {
 		prep.Snapshot.Status = portal.StatusInsufficientData
 		return prep, nil
@@ -215,6 +215,39 @@ func wakingWindows(estimate domain.PhaseEstimate) []portal.Window {
 		})
 	}
 	return windows
+}
+
+// withCurrentWakingWindow adds the waking period already under way. The
+// estimator forecasts waking windows only after each predicted sleep, so on
+// its own the page would say "not awake right now" for the whole of every
+// day the owner is awake, and "Likely waking windows" would begin tomorrow.
+//
+// The period runs from the observed wake at the end of the newest sleep the
+// estimate used to the earliest likely start of the next one. Its start is a
+// record, not a forecast; its end is the conservative bound, so the page stops
+// calling the owner awake as soon as sleep could have begun. Whether now falls
+// inside it is decided at render time, like every other window.
+func withCurrentWakingWindow(windows []portal.Window, estimate domain.PhaseEstimate, sessions []domain.SleepSession) []portal.Window {
+	if len(estimate.InputSessionIDs) == 0 || len(estimate.PredictedSleepWindows) == 0 {
+		return windows
+	}
+	newest := estimate.InputSessionIDs[len(estimate.InputSessionIDs)-1]
+	var wake domain.ZonedInstant
+	for _, session := range sessions {
+		if session.ID == newest && len(session.Intervals) > 0 {
+			wake = session.Intervals[len(session.Intervals)-1].Interval.End
+		}
+	}
+	nextSleep := estimate.PredictedSleepWindows[0].Interval.Start
+	if wake.UTC.IsZero() || !nextSleep.UTC.After(wake.UTC) {
+		return windows
+	}
+	zoneID := nextSleep.ZoneID
+	if zoneID == "" {
+		zoneID = "UTC"
+	}
+	current := portal.Window{StartAt: wake.UTC.UTC(), EndAt: nextSleep.UTC.UTC(), ZoneID: zoneID}
+	return append([]portal.Window{current}, windows...)
 }
 
 // Publish writes a prepared projection to every profile it was prepared for.

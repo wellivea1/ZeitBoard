@@ -44,6 +44,40 @@ function mount(app: Record<string, unknown>) {
 }
 
 describe("SharingScreen", () => {
+  it("previews the recipient's page from the server, without its links or scripts", async () => {
+    const preview = vi.fn(async (input: { profileId: string }) => ({
+      status: "ok",
+      profileId: input.profileId,
+      state: "active",
+      html:
+        '<div class="page"><header class="masthead">Availability</header><main>' +
+        '<h1 class="lead">Likely awake now</h1>' +
+        '<a class="button" href="/p/secret-token/requests">Ask for a time</a>' +
+        '<img src="x" onerror="window.__previewRan = true"><script>window.__previewRan = true</script>' +
+        "</main></div>",
+      stylesheet:
+        ':root, :host { --ink: #221f1a; } .x { background: url("https://example.test/p.png"); }',
+    }));
+    mount({ GetBackendShareLinks: async () => connected(), PreviewBackendShareLink: preview });
+    const { container } = render(<SharingScreen />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Preview what Mum sees" }));
+    await waitFor(() => expect(preview).toHaveBeenCalledWith({ profileId: "prof_abc123" }));
+    const figure = await screen.findByRole("figure", { name: "What Mum sees" });
+    const host = container.querySelector(".share-preview-page");
+    await waitFor(() => expect(host?.shadowRoot?.textContent).toContain("Likely awake now"));
+    const shadow = host?.shadowRoot as ShadowRoot;
+    expect(shadow.innerHTML).toContain("Ask for a time");
+    for (const banned of ["href", "<img", "onerror", "<script", "url("]) {
+      expect(shadow.innerHTML).not.toContain(banned);
+    }
+    expect((window as { __previewRan?: boolean }).__previewRan).toBeUndefined();
+    expect(within(figure).getByText(/Nothing here is recorded as a visit/)).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Hide what Mum sees" }));
+    expect(screen.queryByRole("figure", { name: "What Mum sees" })).toBeNull();
+  });
+
   // The defect this slice closes: the screen claimed the system could not do
   // something it had been able to do since P5-a. Honest about the user's
   // experience, wrong about the system — and that is the worse way round.

@@ -32,6 +32,7 @@ func TestSharingRoutesAbsentWithoutPortal(t *testing.T) {
 	}{
 		{http.MethodGet, "/v1/portal/profiles"},
 		{http.MethodPost, "/v1/portal/profiles"},
+		{http.MethodGet, "/v1/portal/profiles/abc/preview"},
 		{http.MethodPost, "/v1/portal/profiles/abc/revoke"},
 		{http.MethodPost, "/v1/portal/profiles/abc/erase"},
 	}
@@ -162,6 +163,69 @@ func TestSharingLifecycle(t *testing.T) {
 		if profile.ID == created.ProfileID {
 			t.Error("the erased share profile is still stored")
 		}
+	}
+}
+
+// TestSharingPreviewShowsTheRecipientsPageWithoutAVisit is portal-design
+// section 10: the owner sees exactly the recipient's page, from the portal's
+// template and the link's own projection, and checking it is not recorded as
+// a visit.
+func TestSharingPreviewShowsTheRecipientsPageWithoutAVisit(t *testing.T) {
+	h, portalStore := newPortalHarness(t)
+	token := h.registerDevice(t, "desktop")
+
+	status, data := h.request(t, http.MethodPost, "/v1/portal/profiles", token,
+		`{"label":"Mum","passcode":"long-enough-passcode","expiresInDays":30,"grants":{"wakingWindows":true,"allowRequests":true,"allowMessages":false}}`)
+	if status != http.StatusCreated {
+		t.Fatalf("create status = %d body = %s", status, data)
+	}
+	var created createPortalProfileResponse
+	if err := json.Unmarshal(data, &created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+
+	status, data = h.request(t, http.MethodGet, "/v1/portal/profiles/"+created.ProfileID+"/preview", token, "")
+	if status != http.StatusOK {
+		t.Fatalf("preview status = %d body = %s", status, data)
+	}
+	var preview portalPreviewResponse
+	if err := json.Unmarshal(data, &preview); err != nil {
+		t.Fatalf("decode preview: %v", err)
+	}
+	if preview.State != "active" || !strings.Contains(preview.HTML, `class="masthead"`) {
+		t.Fatalf("preview = %+v", preview)
+	}
+	if strings.Contains(preview.HTML, "Mum") {
+		t.Error("the owner's private label reached the recipient's page")
+	}
+	if strings.Contains(preview.HTML, strings.TrimPrefix(created.LinkURL, "https://share.example.test")) {
+		t.Error("the preview carries the live link")
+	}
+	summaries, err := portalStore.SummarizeAccess(t.Context(), created.ProfileID, portalTestNow.Add(-time.Hour))
+	if err != nil {
+		t.Fatalf("summarize access: %v", err)
+	}
+	if len(summaries) != 0 {
+		t.Errorf("previewing was recorded as a visit: %+v", summaries)
+	}
+
+	// A revoked link previews as the page its recipient now gets.
+	if status, data := h.request(t, http.MethodPost, "/v1/portal/profiles/"+created.ProfileID+"/revoke", token, "{}"); status != http.StatusOK {
+		t.Fatalf("revoke status = %d body = %s", status, data)
+	}
+	status, data = h.request(t, http.MethodGet, "/v1/portal/profiles/"+created.ProfileID+"/preview", token, "")
+	if status != http.StatusOK {
+		t.Fatalf("revoked preview status = %d body = %s", status, data)
+	}
+	if err := json.Unmarshal(data, &preview); err != nil {
+		t.Fatalf("decode revoked preview: %v", err)
+	}
+	if preview.State != "revoked" || !strings.Contains(preview.HTML, "This link is no longer available.") {
+		t.Errorf("revoked preview = %+v", preview)
+	}
+
+	if status, _ := h.request(t, http.MethodGet, "/v1/portal/profiles/prof_missing/preview", token, ""); status != http.StatusNotFound {
+		t.Errorf("missing profile preview status = %d, want 404", status)
 	}
 }
 

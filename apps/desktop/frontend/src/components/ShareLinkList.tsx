@@ -1,3 +1,4 @@
+import { SharePreview } from "./SharePreview";
 import { ConfirmDelete } from "./ConfirmDelete";
 import { useState } from "react";
 import type { ShareLinksData } from "../data/sharing";
@@ -18,6 +19,7 @@ export function ShareLinkList({
   onErase: (profileId: string, confirmation: string) => void;
 }) {
   const [erasing, setErasing] = useState<string | null>(null);
+  const [previewing, setPreviewing] = useState<string | null>(null);
 
   // The state header already explains why there is nothing here. Repeating its
   // sentence under the heading would say the same thing twice on one screen.
@@ -60,6 +62,15 @@ export function ShareLinkList({
           )}
 
           <div className="sharing-link-actions">
+            <button
+              className="button secondary compact"
+              type="button"
+              aria-expanded={previewing === link.profileId}
+              aria-label={`${previewing === link.profileId ? "Hide" : "Preview"} what ${link.label} sees`}
+              onClick={() => setPreviewing(previewing === link.profileId ? null : link.profileId)}
+            >
+              {previewing === link.profileId ? "Hide preview" : "Preview"}
+            </button>
             {link.state === "active" && (
               <button
                 className="button secondary compact"
@@ -79,6 +90,10 @@ export function ShareLinkList({
               Delete record
             </button>
           </div>
+
+          {previewing === link.profileId && (
+            <SharePreview profileId={link.profileId} label={link.label} />
+          )}
 
           {erasing === link.profileId && (
             <ConfirmDelete

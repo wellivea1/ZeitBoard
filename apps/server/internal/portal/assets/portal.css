@@ -42,8 +42,11 @@
     U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
-/* Paper by day. */
-:root {
+/* Paper by day. The page is also shown to its owner as a preview inside a
+   shadow root, so the tokens are set on :host and the page rules on
+   .portal-root as well as on the document. */
+:root,
+:host {
   color-scheme: light;
 
   --ink: #221f1a;
@@ -64,7 +67,8 @@
 
 /* Ink at night: the same page, cream on a blue-black. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root,
+  :host {
     color-scheme: dark;
 
     --ink: #ebe5d6;
@@ -85,7 +89,8 @@
   box-sizing: border-box;
 }
 
-body {
+body,
+.portal-root {
   margin: 0;
   background: var(--canvas);
   color: var(--ink);
