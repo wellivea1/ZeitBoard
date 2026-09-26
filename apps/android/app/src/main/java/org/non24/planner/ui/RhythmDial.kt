@@ -96,6 +96,7 @@ private fun DrawScope.hatchedArc(outer: Float, inner: Float, start: Float, sweep
 internal fun RhythmDial(
     segments: List<DialSegment>,
     nights: List<TimeWindow>,
+    plans: List<DialPlan> = emptyList(),
     now: Instant,
     zone: ZoneId,
     use24HourTime: Boolean,
@@ -132,6 +133,18 @@ internal fun RhythmDial(
                     DialState.UNCERTAIN -> hatchedArc(forecastOuter, forecastInner, start, sweep, palette.uncertainFill)
                     DialState.AWAKE -> Unit
                 }
+            }
+
+            // Plans: accepted times, drawn in ink just inside the forecast they
+            // were fitted to, so a plan and the sleep it avoids read together.
+            plans.forEach { plan ->
+                ringArc(
+                    radius * 0.678f,
+                    radius * 0.652f,
+                    clockDegrees(plan.start, zone),
+                    sweepDegrees(plan.start, plan.end),
+                    palette.ink,
+                )
             }
 
             // The last seven nights, newest outermost, fading inwards.

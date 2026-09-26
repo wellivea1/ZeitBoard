@@ -155,6 +155,7 @@ func (s *Store) FinishSyncReconciliation(ctx context.Context) error {
 	for _, statement := range []string{
 		`DELETE FROM local_sleep_sync_records WHERE record_id NOT IN(SELECT record_id FROM local_sync_seen)`,
 		`DELETE FROM local_task_sync_records WHERE record_id NOT IN(SELECT record_id FROM local_sync_seen)`,
+		`DELETE FROM local_placement_sync_records WHERE record_id NOT IN(SELECT record_id FROM local_sync_seen)`,
 		`DELETE FROM local_sync_seen`,
 		`DELETE FROM local_sync_state WHERE key='sync_reconcile'`,
 	} {

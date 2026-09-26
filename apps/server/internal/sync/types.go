@@ -23,6 +23,11 @@ const (
 	// "<task_id>_r<revision>"; consumers keep the highest revision per task
 	// (ADR-0020). Deleting a task erases all its pushed revisions (ADR-0017).
 	KindTask Kind = "task"
+	// KindPlacement carries an accepted time for a task: which task, start and
+	// end (ADR-0047). The desktop sends one when a suggested time is approved
+	// and erases it on undo or when the task is deleted; the companion draws
+	// the next day's placements on its dial.
+	KindPlacement Kind = "placement"
 	// KindTombstone marks an erased record in the pull stream. Tombstones are
 	// minted only by the server's erase endpoint — clients cannot push them —
 	// and their metadata-only payload carries the erased id plus its original

@@ -75,6 +75,15 @@ fun fixtureEstimateRepository(now: Instant = Instant.now()): EstimateRepository 
     )
 }
 
+/** Sample accepted times for the dial in sample mode, placed around the present. */
+internal fun fixturePlans(now: Instant = Instant.now()): List<SyncedPlan> {
+    val start = now.truncatedTo(java.time.temporal.ChronoUnit.HOURS).plus(java.time.Duration.ofHours(3))
+    return listOf(
+        SyncedPlan("Sample: paperwork", start, start.plus(java.time.Duration.ofMinutes(90))),
+        SyncedPlan("Sample: call the pharmacy", start.plus(java.time.Duration.ofHours(19)), start.plus(java.time.Duration.ofHours(19).plusMinutes(30))),
+    )
+}
+
 internal fun fixtureSleepEpisodes(now: Instant = Instant.now()): List<SleepEpisode> {
     val provenance = Provenance(
         acquisitionMethod = AcquisitionMethod.FIXTURE,

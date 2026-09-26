@@ -1714,3 +1714,19 @@ levels, focusable elements inside `aria-hidden` and positive tab order. It
 found none. Planted faults of each kind were all reported, so the empty
 result is meaningful. A pass with NVDA or Narrator remains to be done; this
 checks structure, not how it sounds.
+
+## Plans on the Android dial — 2026-09-26
+
+On the test AVD in sample mode, the dial drew the two sample accepted times as
+ink arcs just inside the forecast ring, and the legend gained "Plans". Tests
+cover every link in the path: the contract's placement example validates; the
+server accepts a placement and rejects another record's id, a reversed or
+day-long interval, an unknown zone and a title; the desktop builds the payload
+from an accepted block with no title, stops sending it once acknowledged,
+queues its erasure when the block is deleted (and ignores an acknowledgment
+that arrives after), confirms it when pulled back, and settles its tombstone
+without touching the block; the companion parses placements and their
+tombstones, titles them from open tasks only, and cuts them to the dial's day.
+Core, desktop and server Go suites, the contract checks and the Android
+`gradlew check` pass. Not verified here: a placement travelling end to end
+through a live server to a phone.

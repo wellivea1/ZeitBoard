@@ -351,6 +351,11 @@ func (a *App) syncSleepRecords(ctx context.Context, cfg backendSyncConfig, token
 	if err != nil {
 		return counts, err
 	}
+	placementsPushed, err := a.pushPlacementRecords(ctx, store, client)
+	counts.pushed += placementsPushed
+	if err != nil {
+		return counts, err
+	}
 	moreErasures, err := a.pushSleepErasures(ctx, store, client)
 	counts.erasuresPushed += moreErasures
 	if err != nil {
@@ -377,6 +382,16 @@ func (a *App) pushTaskRecords(ctx context.Context, store *storage.Store, client 
 		store.PendingTaskSyncRecords, store.MarkTaskSyncRecordsPushed,
 		func(record storage.TaskSyncRecord) syncPushRecord {
 			return syncPushRecord{RecordID: record.RecordID, Kind: "task", CreatedAt: record.CreatedAt.UTC(), Payload: record.Payload}
+		})
+}
+
+// pushPlacementRecords sends accepted times, so the companion can draw the
+// day's plans (ADR-0047). Removing one queues its erasure instead.
+func (a *App) pushPlacementRecords(ctx context.Context, store *storage.Store, client desktopBackendClient) (int, error) {
+	return pushPendingSyncRecords(ctx, client, storage.MaxPlacementSyncPageSize,
+		store.PendingPlacementSyncRecords, store.MarkPlacementSyncRecordsPushed,
+		func(record storage.PlacementSyncRecord) syncPushRecord {
+			return syncPushRecord{RecordID: record.RecordID, Kind: "placement", CreatedAt: record.CreatedAt.UTC(), Payload: record.Payload}
 		})
 }
 
@@ -548,6 +563,9 @@ func (a *App) pullSleepPage(ctx context.Context, store *storage.Store, client de
 				return storage.SyncPullPageResult{}, false, err
 			}
 			records = append(records, storage.SyncPullTask{Task: task})
+		case "placement":
+			// This computer authored it; pulling it back confirms the upload.
+			records = append(records, storage.SyncPullPlacement{PlacementID: record.RecordID})
 		case "tombstone":
 			var payload syncTombstonePayload
 			if err := json.Unmarshal(record.Payload, &payload); err != nil {
@@ -977,6 +995,9 @@ func (a *App) backendSyncStatusCounts(cfg backendSyncConfig, counts syncCounts) 
 			pending += count
 		}
 		if count, err := store.PendingTaskSyncRecordCount(ctx); err == nil {
+			pending += count
+		}
+		if count, err := store.PendingPlacementSyncRecordCount(ctx); err == nil {
 			pending += count
 		}
 		if value, err := store.SleepSyncCursor(ctx); err == nil {

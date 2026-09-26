@@ -91,6 +91,7 @@ import java.util.Locale
 import org.non24.planner.data.DurableLocalDataState
 import org.non24.planner.data.SyncState
 import org.non24.planner.data.CompanionState
+import org.non24.planner.data.fixturePlans
 import org.non24.planner.data.SleepReview
 import org.non24.planner.data.SleepReviewState
 import org.non24.planner.data.formatReviewInput
@@ -334,6 +335,9 @@ private fun NowDial(state: AppUiState, companion: CompanionState, connected: Boo
     // that runs past the dial's edge is given whole rather than cut at it.
     val segments = dialSegments(forecasts, now, now.plus(Duration.ofHours(24)))
     val ahead = sleepAhead(dialSegments(forecasts, now, now.plus(Duration.ofHours(48))))
+    // Accepted times from the desktop (ADR-0047); sample data brings its own.
+    val plans = dialPlans(if (fixture) fixturePlans(now) else companion.plans, now, now.plus(Duration.ofHours(24)))
+    val clock = DateTimeFormatter.ofPattern(if (use24) "HH:mm" else "h:mm a", LocalConfiguration.current.locales[0]).withZone(zone)
     val recorded = (projection?.sleep?.map { TimeWindow(it.start, it.end) }).takeUnless { it.isNullOrEmpty() }
         ?: state.sleepEpisodes.map { TimeWindow(it.start, it.end) }
     val nights = recorded.filter { !it.end.isAfter(now) }.sortedByDescending { it.start }.take(7)
@@ -353,6 +357,7 @@ private fun NowDial(state: AppUiState, companion: CompanionState, connected: Boo
         RhythmDial(
             segments = segments,
             nights = nights,
+            plans = plans,
             now = now,
             zone = zone,
             use24HourTime = use24,
@@ -361,6 +366,9 @@ private fun NowDial(state: AppUiState, companion: CompanionState, connected: Boo
                 "The next 24 hours and the last ${nights.size} recorded nights.",
                 "${reading.kicker.lowercase(Locale.ROOT).replaceFirstChar { it.uppercase() }} ${reading.figure}, ${reading.detail}.",
                 sentence,
+                if (plans.isEmpty()) "" else "Plans: " + plans.joinToString("; ") {
+                    "${it.title}, ${clock.format(it.start)} to ${clock.format(it.end)}"
+                } + ".",
             ).filter { it.isNotBlank() }.joinToString(" "),
             modifier = Modifier.padding(top = 4.dp),
         )
@@ -395,7 +403,7 @@ private fun NowDial(state: AppUiState, companion: CompanionState, connected: Boo
                 color = Muted,
             )
         }
-        DialLegend()
+        DialLegend(showPlans = plans.isNotEmpty())
         val estimate = state.estimate
         if (estimate != null && !withheld) {
             Text(
@@ -409,7 +417,7 @@ private fun NowDial(state: AppUiState, companion: CompanionState, connected: Boo
 }
 
 @Composable
-private fun DialLegend() {
+private fun DialLegend(showPlans: Boolean) {
     val palette = LocalAlmanacPalette.current
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -425,6 +433,7 @@ private fun DialLegend() {
                 x += step
             }
         }
+        if (showPlans) LegendKey("Plans") { drawRect(palette.ink, topLeft = Offset(0f, size.height / 2f - 2.dp.toPx()), size = Size(size.width, 4.dp.toPx())) }
         LegendKey("Now") { drawRect(palette.accent, topLeft = Offset(0f, size.height / 2f - 1.dp.toPx()), size = Size(size.width, 2.dp.toPx())) }
     }
 }

@@ -661,9 +661,10 @@ sidebar are gone.
 
 ### Not done
 
-- The Android dial has no plans ring. The companion contract carries tasks but
-  not accepted times or calendar events, so there is nothing true to draw there
-  yet.
+- ~~The Android dial has no plans ring.~~ Done 2026-09-26 (ADR-0047): accepted
+  times sync as placement records, and the dial draws the next day's as a thin
+  ink ring inside the forecast. Imported calendar events still stay on the
+  desktop.
 - ~~Android follows the Paper palette only.~~ Done 2026-09-25: Android follows
   the system into Ink, the desktop's dark theme. The screens' colour names read
   the palette in force, and the window, system bars and their icons switch with
