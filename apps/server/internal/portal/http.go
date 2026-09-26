@@ -88,10 +88,12 @@ func NewHandler(cfg HandlerConfig) (*Handler, error) {
 func (h *Handler) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("GET /p/assets/portal.css", h.baseChain(http.HandlerFunc(h.handleStylesheet)))
+	mux.Handle("GET /p/assets/portal.js", h.baseChain(http.HandlerFunc(h.handleScript)))
 	mux.Handle("GET /p/assets/fonts/{name}", h.baseChain(http.HandlerFunc(h.handleFont)))
 	mux.Handle("GET /p/{linkToken}", h.linkChain(http.HandlerFunc(h.handlePage)))
 	mux.Handle("POST /p/{linkToken}/session", h.linkChain(h.requireOrigin(http.HandlerFunc(h.handleSession))))
 	mux.Handle("GET /p/{linkToken}/availability", h.linkChain(h.requireSession(http.HandlerFunc(h.handleAvailability))))
+	mux.Handle("GET /p/{linkToken}/events", h.linkChain(h.requireSession(http.HandlerFunc(h.handleEvents))))
 	mux.Handle("GET /p/{linkToken}/requests", h.linkChain(h.requireSession(http.HandlerFunc(h.handleRequestForm))))
 	mux.Handle("POST /p/{linkToken}/requests", h.linkChain(h.requireOrigin(h.requireSession(http.HandlerFunc(h.handleCreateRequest)))))
 	mux.Handle("GET /p/{linkToken}/requests/{requestID}", h.linkChain(h.requireSession(http.HandlerFunc(h.handleRequestStatus))))

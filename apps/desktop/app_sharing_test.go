@@ -213,3 +213,20 @@ func TestShareLinkPreviewIsOffWithoutSync(t *testing.T) {
 		t.Fatalf("preview without sync = %+v", preview)
 	}
 }
+
+// TestShareAccessLabelsCoverTheServerEvents pins the event names this file
+// mirrors from portal.AccessEvent. They had drifted: the desktop knew
+// "passcode_failure" while the instance recorded "passcode_rejected", so the
+// owner saw raw codes such as "page_view".
+func TestShareAccessLabelsCoverTheServerEvents(t *testing.T) {
+	for _, event := range []string{"page_view", "availability_read", "passcode_accepted",
+		"passcode_rejected", "throttled", "link_rejected"} {
+		label := shareAccessLabel(event)
+		if label == "Other activity" || strings.Contains(label, "_") {
+			t.Errorf("event %q has no label (%q)", event, label)
+		}
+	}
+	if label := shareAccessLabel("something_new"); label != "Other activity" {
+		t.Errorf("an unknown event is shown as %q", label)
+	}
+}

@@ -209,10 +209,11 @@ What is implemented ([ADR-0029](decisions/0029-availability-portal-foundation.md
 and [ADR-0030](decisions/0030-visitor-time-requests.md)): share links that show
 broad likely-awake windows to someone holding the link and its passcode, and —
 when the link grants it — visitor requests for a specific time that land in the
-owner's approval queue and return a decision to the requester. Messaging
-threads and the live-updating dashboard are not implemented. The owner decides
-requests in the desktop app's Approvals screen, which shows the window asked
-for and a block picker bounded to it.
+owner's approval queue and return a decision to the requester — and a page
+that stays current while it is open. Messaging threads are not implemented.
+The owner decides requests in the desktop app's Approvals screen, which shows
+the window asked for and a block picker bounded to it, and can preview each
+link from the Sharing screen exactly as its recipient sees it.
 
 When the portal is disabled the daemon never opens the portal database, never
 constructs a public handler, and never registers the owner's sharing routes.
@@ -236,6 +237,13 @@ When enabled:
   working share links. The daemon itself does not log request paths.
 - Public responses set `Cache-Control: no-store`. Do not add caching for `/p/`
   in the proxy.
+- An open page holds an event stream at `/p/<token>/events`. Pass it through
+  unbuffered and let it live for at least 30 minutes (nginx:
+  `proxy_buffering off; proxy_read_timeout 35m;` for that location; Caddy
+  flushes streams by itself). The daemon sends a heartbeat every 15 seconds,
+  recycles each stream after 30 minutes, and marks responses
+  `X-Accel-Buffering: no`. A page whose stream is refused or cut off asks once
+  a minute instead; a page without script reloads every five minutes.
 
 Links are created from the app, not from a config file. Each one requires a
 passcode of at least six characters, expires within 90 days, is displayed

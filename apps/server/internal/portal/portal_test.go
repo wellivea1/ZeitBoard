@@ -487,7 +487,13 @@ func TestPageHasNoInlineOrThirdPartyAssets(t *testing.T) {
 	cookie := h.sessionCookie(h.login(h.token, testPasscode, testOrigin))
 	body := h.get("/p/"+h.token, cookie).Body.String()
 
-	for _, forbidden := range []string{"<script", "style=\"", "<style", "http://", "https://"} {
+	// The one script is the page's own file; an inline one would be refused
+	// by the policy and one from elsewhere would reach a third party.
+	const ownScript = `<script src="/p/assets/portal.js" defer></script>`
+	if strings.Count(body, "<script") != strings.Count(body, ownScript) {
+		t.Error("page carries a script other than its own file")
+	}
+	for _, forbidden := range []string{"style=\"", "<style", "http://", "https://"} {
 		if strings.Contains(body, forbidden) {
 			t.Errorf("page contains %q, which the CSP forbids or which reaches a third party", forbidden)
 		}

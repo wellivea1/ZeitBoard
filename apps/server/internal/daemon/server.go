@@ -67,6 +67,7 @@ func serve(configPath string, stop <-chan struct{}, ready chan<- struct{}) error
 
 	options := []api.Option{api.WithProvider(llm, providerStatus)}
 	var publicHandler http.Handler
+	closeStreams := func() {}
 	if cfg.Portal.Enabled {
 		portalStore, portalErr := portal.Open(filepath.Join(cfg.DataDir, "zeitboard-portal.db"), cfg.DataKey)
 		if portalErr != nil {
@@ -130,6 +131,7 @@ func serve(configPath string, stop <-chan struct{}, ready chan<- struct{}) error
 			Recompute:    recomputeWorker,
 		}))
 		publicHandler = portalHandler.Routes()
+		closeStreams = portalStore.CloseStreams
 		log.Printf("zeitboardd portal enabled at %s/p/", cfg.Portal.PublicOrigin)
 	}
 
@@ -143,6 +145,9 @@ func serve(configPath string, stop <-chan struct{}, ready chan<- struct{}) error
 		WriteTimeout:      30 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
+	// Open availability streams would otherwise hold a graceful shutdown for
+	// their whole lifetime.
+	server.RegisterOnShutdown(closeStreams)
 
 	listener, err := net.Listen("tcp", cfg.ListenAddress)
 	if err != nil {
