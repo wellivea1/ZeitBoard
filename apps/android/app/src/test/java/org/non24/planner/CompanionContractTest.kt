@@ -76,4 +76,39 @@ class CompanionContractTest {
         assertTrue(runCatching { parseSyncedTask("task_synthetic_r2", JsonObject(task - "updated_at")) }.isFailure)
         assertTrue(runCatching { parseSyncedTask("task_synthetic_r1", task) }.isFailure)
     }
+
+    private fun placement(id: String = "event_accepted_01", start: String = "2026-09-27T18:30:00Z", end: String = "2026-09-27T20:00:00Z") =
+        buildJsonObject {
+            put("placement_id", id); put("task_id", "task_synthetic"); put("start_at", start); put("end_at", end)
+            put("zone_id", "America/New_York"); put("created_at", "2026-09-26T09:00:00Z")
+        }
+
+    @Test fun `an accepted time names its task and a real interval of at most a day`() {
+        val parsed = parseSyncedPlacement("event_accepted_01", placement())
+        assertEquals("task_synthetic", parsed.taskId)
+        assertEquals(Instant.parse("2026-09-27T18:30:00Z"), parsed.start)
+        validatePulledPayload("event_accepted_01", "placement", placement())
+        // Another record's id, a reversed or day-long interval, or a title it must not carry.
+        assertTrue(runCatching { parseSyncedPlacement("event_accepted_02", placement()) }.isFailure)
+        assertTrue(runCatching { parseSyncedPlacement("event_accepted_01", placement(end = "2026-09-27T18:00:00Z")) }.isFailure)
+        assertTrue(runCatching { parseSyncedPlacement("event_accepted_01", placement(end = "2026-09-28T19:00:00Z")) }.isFailure)
+        assertTrue(runCatching { parseSyncedPlacement("event_accepted_01", JsonObject(placement() + ("title" to JsonPrimitive("private")))) }.isFailure)
+        // Its erasure arrives as a tombstone naming the kind.
+        validatePulledPayload("event_accepted_01", "tombstone", buildJsonObject { put("record_id", "event_accepted_01"); put("record_kind", "placement") })
+    }
+
+    @Test fun `plans are the accepted times of open tasks, titled from each task's latest revision`() {
+        fun task(id: String, title: String, status: String) = SyncedTask(id, title, 30, status, 1, null, null, null)
+        val tasks = listOf(task("task_open", "Paperwork (rescoped)", "open"), task("task_done", "Finished call", "done"))
+        val placements = listOf(
+            SyncedPlacement("event_late", "task_open", Instant.parse("2026-09-27T21:00:00Z"), Instant.parse("2026-09-27T21:30:00Z")),
+            SyncedPlacement("event_early", "task_open", Instant.parse("2026-09-27T18:30:00Z"), Instant.parse("2026-09-27T20:00:00Z")),
+            SyncedPlacement("event_done", "task_done", Instant.parse("2026-09-27T19:00:00Z"), Instant.parse("2026-09-27T19:30:00Z")),
+            SyncedPlacement("event_orphan", "task_missing", Instant.parse("2026-09-27T19:00:00Z"), Instant.parse("2026-09-27T19:30:00Z")),
+        )
+        assertEquals(
+            listOf("Paperwork (rescoped)" to Instant.parse("2026-09-27T18:30:00Z"), "Paperwork (rescoped)" to Instant.parse("2026-09-27T21:00:00Z")),
+            plansFrom(placements, tasks).map { it.title to it.start },
+        )
+    }
 }

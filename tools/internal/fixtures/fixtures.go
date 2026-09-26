@@ -171,6 +171,16 @@ type syncBatch struct {
 	Records       []syncRecord `json:"records"`
 }
 
+// syncPlacementPayload is an accepted time for a task (ADR-0047).
+type syncPlacementPayload struct {
+	PlacementID string `json:"placement_id"`
+	TaskID      string `json:"task_id"`
+	StartAt     string `json:"start_at"`
+	EndAt       string `json:"end_at"`
+	ZoneID      string `json:"zone_id"`
+	CreatedAt   string `json:"created_at"`
+}
+
 type syncTombstonePayload struct {
 	RecordID string `json:"record_id"`
 }
@@ -775,7 +785,7 @@ func Build() ([]File, error) {
 
 	syncBatchFixture := syncBatch{
 		SchemaVersion: "v1",
-		Cursor:        4,
+		Cursor:        5,
 		Records: []syncRecord{
 			{
 				Seq:       1,
@@ -816,6 +826,21 @@ func Build() ([]File, error) {
 					MinimumConfidence: "low",
 					Revision:          2,
 					UpdatedAt:         ts(generatedAt),
+				},
+			},
+			{
+				Seq:       5,
+				RecordID:  "event_placement_01",
+				Kind:      "placement",
+				DeviceID:  "device_desktop_01",
+				CreatedAt: ts(generatedAt),
+				Payload: syncPlacementPayload{
+					PlacementID: "event_placement_01",
+					TaskID:      "task_flexible_01",
+					StartAt:     ts(generatedAt.Add(minutes(24 * 60))),
+					EndAt:       ts(generatedAt.Add(minutes(24*60 + 60))),
+					ZoneID:      "America/New_York",
+					CreatedAt:   ts(generatedAt),
 				},
 			},
 		},

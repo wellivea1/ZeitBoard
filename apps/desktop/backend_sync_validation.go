@@ -75,6 +75,8 @@ func validatePullEnvelopePage(page syncPullResponse, since int64) error {
 			field = "observation_id"
 		case "correction":
 			field = "correction_id"
+		case "placement":
+			field = "placement_id"
 		case "task":
 			var revision int
 			if json.Unmarshal(fields["task_id"], &id) != nil || json.Unmarshal(fields["revision"], &revision) != nil || revision < 1 || item.RecordID != fmt.Sprintf("%s_r%d", id, revision) {

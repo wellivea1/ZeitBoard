@@ -31,6 +31,35 @@ func TestValidatePushRequestRejectsUnknownPayloadFields(t *testing.T) {
 	}
 }
 
+func TestValidatePushRequestAcceptsOnlyWellFormedPlacements(t *testing.T) {
+	placement := func(id, start, end, zone, extra string) PushRequest {
+		t.Helper()
+		payload := `{"placement_id":"` + id + `","task_id":"task_flexible_01","start_at":"` + start + `","end_at":"` + end +
+			`","zone_id":"` + zone + `","created_at":"2026-03-05T12:40:00Z"` + extra + `}`
+		raw := `{"schema_version":"v1","records":[{"recordId":"event_placement_01","kind":"placement","createdAt":"2026-03-05T12:40:00Z","payload":` + payload + `}]}`
+		var req PushRequest
+		if err := json.Unmarshal([]byte(raw), &req); err != nil {
+			t.Fatal(err)
+		}
+		return req
+	}
+	valid := placement("event_placement_01", "2026-03-06T14:00:00Z", "2026-03-06T15:30:00Z", "America/New_York", "")
+	if err := ValidatePushRequest(&valid); err != nil {
+		t.Fatalf("valid placement rejected: %v", err)
+	}
+	for name, req := range map[string]PushRequest{
+		"another record's id":       placement("event_placement_02", "2026-03-06T14:00:00Z", "2026-03-06T15:30:00Z", "America/New_York", ""),
+		"ends before it starts":     placement("event_placement_01", "2026-03-06T15:30:00Z", "2026-03-06T14:00:00Z", "America/New_York", ""),
+		"longer than a day":         placement("event_placement_01", "2026-03-06T14:00:00Z", "2026-03-07T15:30:00Z", "America/New_York", ""),
+		"unknown zone":              placement("event_placement_01", "2026-03-06T14:00:00Z", "2026-03-06T15:30:00Z", "Mars/Base", ""),
+		"a title it must not carry": placement("event_placement_01", "2026-03-06T14:00:00Z", "2026-03-06T15:30:00Z", "America/New_York", `,"title":"private"`),
+	} {
+		if err := ValidatePushRequest(&req); err == nil {
+			t.Errorf("placement with %s was accepted", name)
+		}
+	}
+}
+
 func requestWithPayload(t *testing.T, payload string) PushRequest {
 	t.Helper()
 	raw := `{"schema_version":"v1","records":[{"recordId":"obs_sleep_01","kind":"observation","createdAt":"2026-03-05T12:40:00Z","payload":` + payload + `}]}`

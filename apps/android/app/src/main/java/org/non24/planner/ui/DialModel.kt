@@ -7,6 +7,7 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
+import org.non24.planner.data.SyncedPlan
 import org.non24.planner.domain.TimeWindow
 
 // What the Now dial draws, worked out apart from the drawing so it can be
@@ -18,6 +19,17 @@ import org.non24.planner.domain.TimeWindow
 internal enum class DialState { ASLEEP, UNCERTAIN, AWAKE }
 
 internal data class DialSegment(val state: DialState, val start: Instant, val end: Instant)
+
+/** An accepted time as the dial draws it: the part inside the dial's day. */
+internal data class DialPlan(val title: String, val start: Instant, val end: Instant)
+
+/** The accepted times between [from] and [to], cut to that window, earliest first. */
+internal fun dialPlans(plans: List<SyncedPlan>, from: Instant, to: Instant): List<DialPlan> =
+    plans.mapNotNull { plan ->
+        val start = maxOf(plan.start, from)
+        val end = minOf(plan.end, to)
+        if (end.isAfter(start)) DialPlan(plan.title, start, end) else null
+    }.sortedBy { it.start }
 
 /** A predicted sleep window and a predicted waking window, as the estimator gives them. */
 internal data class ForecastPair(val sleep: TimeWindow, val waking: TimeWindow)

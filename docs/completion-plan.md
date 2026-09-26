@@ -584,3 +584,18 @@ built. Only a changed result is announced now.
 
 **Next C7 work:** a screen-reader pass on real assistive technology and the
 Android dial's plans, which first need accepted times to reach the phone.
+
+### C1/C7 plans on the Android dial — 2026-09-26
+
+Accepted times reach the phone (ADR-0047, the owner's choice of three). An
+accepted suggestion is an app-owned block on the desktop; it now also travels
+as an immutable `placement` record naming its task and interval. A trigger on
+the block's deletion queues the record's erasure, so undo, deleting the task
+and erasing all data each remove it from the server. The server validates and
+relays it; the companion keeps it with its downloaded tasks and draws the
+accepted times of open tasks as a thin ink ring inside the forecast, for the
+next 24 hours, with a "Plans" key and the plans in the dial's spoken
+description. Imported calendar events still stay on the desktop.
+
+**Next:** a screen-reader pass on real assistive technology (NVDA or Narrator
+on the desktop, TalkBack on the phone), and the remaining C2 to C8 milestones.

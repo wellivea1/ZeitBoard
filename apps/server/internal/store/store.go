@@ -1173,7 +1173,7 @@ func (s *Store) PullKindThrough(ctx context.Context, kind syncmodel.Kind, since,
 		return nil, 0, errors.New("cursors must not be negative")
 	}
 	switch kind {
-	case syncmodel.KindObservation, syncmodel.KindCorrection, syncmodel.KindTask:
+	case syncmodel.KindObservation, syncmodel.KindCorrection, syncmodel.KindTask, syncmodel.KindPlacement:
 	default:
 		return nil, 0, errors.New("stored record kind is not supported")
 	}

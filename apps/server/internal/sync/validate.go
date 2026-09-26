@@ -36,7 +36,7 @@ func ValidatePushRequest(req *PushRequest) error {
 			return fmt.Errorf("duplicate recordId %q", record.RecordID)
 		}
 		seen[record.RecordID] = struct{}{}
-		if record.Kind != KindObservation && record.Kind != KindCorrection && record.Kind != KindTask {
+		if record.Kind != KindObservation && record.Kind != KindCorrection && record.Kind != KindTask && record.Kind != KindPlacement {
 			return errors.New("unsupported record kind")
 		}
 		if record.CreatedAt.IsZero() {
@@ -95,9 +95,44 @@ func validatePayload(kind Kind, recordID string, payload json.RawMessage) error 
 		return validateCorrection(recordID, payload)
 	case KindTask:
 		return validateTask(recordID, payload)
+	case KindPlacement:
+		return validatePlacement(recordID, payload)
 	default:
 		return errors.New("unsupported record kind")
 	}
+}
+
+type placementPayload struct {
+	PlacementID string    `json:"placement_id"`
+	TaskID      string    `json:"task_id"`
+	StartAt     time.Time `json:"start_at"`
+	EndAt       time.Time `json:"end_at"`
+	ZoneID      string    `json:"zone_id"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// validatePlacement mirrors sync-batch.schema.json#/$defs/placementPayload: an
+// accepted time names its task and a real interval of at most a day, in a
+// real zone, and its record id is its own id (ADR-0047).
+func validatePlacement(recordID string, payload json.RawMessage) error {
+	var placement placementPayload
+	if err := decodeStrict(payload, &placement); err != nil {
+		return errors.New("invalid placement payload")
+	}
+	if placement.PlacementID != recordID {
+		return errors.New("placement_id must match recordId")
+	}
+	if err := validateIdentifier(placement.TaskID, "task_id"); err != nil {
+		return err
+	}
+	if placement.StartAt.IsZero() || placement.CreatedAt.IsZero() || !placement.EndAt.After(placement.StartAt) ||
+		placement.EndAt.Sub(placement.StartAt) > 24*time.Hour {
+		return errors.New("placement must be an interval of at most a day")
+	}
+	if _, err := domain.NewZonedInstant(placement.StartAt, placement.ZoneID); err != nil {
+		return errors.New("placement zone_id must be an IANA zone")
+	}
+	return nil
 }
 
 type taskPayload struct {

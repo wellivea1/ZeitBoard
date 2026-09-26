@@ -1,5 +1,6 @@
 package org.non24.planner.data
 
+import java.time.Duration
 import java.time.Instant
 import java.time.ZoneId
 import kotlinx.serialization.json.*
@@ -35,9 +36,16 @@ data class CompanionProjection(
         )
     }
 }
+/** An accepted time for a task, as the desktop sent it (ADR-0047). */
+data class SyncedPlacement(val placementId: String, val taskId: String, val start: Instant, val end: Instant)
+
+/** A plan the dial draws: an accepted time and its task's title. */
+data class SyncedPlan(val title: String, val start: Instant, val end: Instant)
+
 data class CompanionState(
     val projection: CompanionProjection? = null,
     val tasks: List<SyncedTask> = emptyList(),
+    val plans: List<SyncedPlan> = emptyList(),
     val downloadedAt: Instant? = null,
     val error: String? = null,
     val totalTaskCount: Int = tasks.size,
@@ -98,13 +106,34 @@ internal fun validatePulledPayload(id: String, kind: String, payload: JsonObject
             changes["end_at"]?.let { Instant.parse(it.jsonPrimitive.content) }
         }
         "task" -> parseSyncedTask(id, payload)
+        "placement" -> parseSyncedPlacement(id, payload)
         "tombstone" -> {
             payload.exactKeys(setOf("record_id"), setOf("record_kind"))
             require(payload.string("record_id") == id)
-            if (payload.containsKey("record_kind")) require(payload.string("record_kind") in setOf("observation", "correction", "task"))
+            if (payload.containsKey("record_kind")) require(payload.string("record_kind") in setOf("observation", "correction", "task", "placement"))
         }
         else -> error("Unsupported sync record kind.")
     }
+}
+
+internal fun parseSyncedPlacement(recordId: String, payload: JsonObject): SyncedPlacement {
+    payload.exactKeys(setOf("placement_id", "task_id", "start_at", "end_at", "zone_id", "created_at"))
+    require(validSyncId(recordId) && payload.string("placement_id") == recordId)
+    val taskId = payload.string("task_id")
+    require(validSyncId(taskId))
+    val start = payload.instant("start_at")
+    val end = payload.instant("end_at")
+    require(end.isAfter(start) && !end.isAfter(start.plus(Duration.ofHours(24))))
+    ZoneId.of(payload.string("zone_id"))
+    payload.instant("created_at")
+    return SyncedPlacement(recordId, taskId, start, end)
+}
+
+/** Accepted times of tasks still open, each titled from its task's latest revision, earliest first. */
+internal fun plansFrom(placements: List<SyncedPlacement>, tasks: List<SyncedTask>): List<SyncedPlan> {
+    val open = tasks.filter { it.status == "open" }.associateBy { it.id }
+    return placements.mapNotNull { placement -> open[placement.taskId]?.let { SyncedPlan(it.title, placement.start, placement.end) } }
+        .sortedBy { it.start }
 }
 
 internal fun parseSyncedTask(recordId: String, payload: JsonObject): SyncedTask {

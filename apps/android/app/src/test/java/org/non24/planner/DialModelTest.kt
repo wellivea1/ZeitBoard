@@ -9,7 +9,9 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Before
 import org.junit.Test
+import org.non24.planner.data.SyncedPlan
 import org.non24.planner.domain.TimeWindow
+import org.non24.planner.ui.dialPlans
 import org.non24.planner.ui.DialState
 import org.non24.planner.ui.ForecastPair
 import org.non24.planner.ui.dialCenter
@@ -99,5 +101,19 @@ class DialModelTest {
         val stale = dialCenter(wake, now, zone, use24HourTime = false, current = false)
         assertEquals("LAST WAKE RECORDED", stale.kicker)
         assertEquals("8 h 2 m ago", stale.figure)
+    }
+
+    @Test fun `plans are cut to the dial's day and anything outside it is left off`() {
+        val now = Instant.parse("2026-09-26T12:00:00Z")
+        val plans = listOf(
+            SyncedPlan("Began earlier", now.minus(Duration.ofMinutes(30)), now.plus(Duration.ofMinutes(30))),
+            SyncedPlan("Tomorrow evening", now.plus(Duration.ofHours(23)), now.plus(Duration.ofHours(25))),
+            SyncedPlan("Yesterday", now.minus(Duration.ofHours(20)), now.minus(Duration.ofHours(19))),
+            SyncedPlan("In two days", now.plus(Duration.ofHours(30)), now.plus(Duration.ofHours(31))),
+        )
+        val drawn = dialPlans(plans, now, now.plus(Duration.ofHours(24)))
+        assertEquals(listOf("Began earlier", "Tomorrow evening"), drawn.map { it.title })
+        assertEquals(now, drawn[0].start)
+        assertEquals(now.plus(Duration.ofHours(24)), drawn[1].end)
     }
 }

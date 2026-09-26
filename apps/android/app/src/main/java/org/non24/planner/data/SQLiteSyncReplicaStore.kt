@@ -56,12 +56,12 @@ class SQLiteSyncReplicaStore(private val database: () -> SQLiteDatabase) : SyncR
             page.records.filter { it.kind != "tombstone" }.forEach { record ->
                 val target = when (record.kind) {
                     "correction" -> record.payload.string("target_observation_id")
-                    "task" -> record.payload.string("task_id")
+                    "task", "placement" -> record.payload.string("task_id")
                     else -> record.recordId
                 }
                 val erased = exists("sync_erased_records", "record_id", record.recordId) ||
                     (record.kind == "correction" && exists("sync_erased_records", "record_id", target)) ||
-                    (record.kind == "task" && exists("sync_erased_tasks", "task_id", target)) ||
+                    (record.kind in setOf("task", "placement") && exists("sync_erased_tasks", "task_id", target)) ||
                     exists("erased_health_sources", "observation_id", target)
                 if (erased) return@forEach
                 val existing = db.rawQuery("SELECT payload FROM sync_replica WHERE record_id = ?", arrayOf(record.recordId)).use {
@@ -108,9 +108,13 @@ class SQLiteSyncReplicaStore(private val database: () -> SQLiteDatabase) : SyncR
                     AND newer.target_id = r.target_id AND newer.revision > r.revision)
                 ORDER BY CASE r.task_status WHEN 'open' THEN 0 ELSE 1 END, r.seq DESC LIMIT 500""", null,
         ).use { cursor -> buildList { while (cursor.moveToNext()) add(parseSyncedTask(cursor.getString(0), Json.parseToJsonElement(cursor.getString(1)).jsonObject)) } }
+        val placements = database().rawQuery("SELECT record_id, payload FROM sync_replica WHERE kind = 'placement' ORDER BY seq DESC LIMIT 500", null).use { rows ->
+            buildList { while (rows.moveToNext()) add(parseSyncedPlacement(rows.getString(0), Json.parseToJsonElement(rows.getString(1)).jsonObject)) }
+        }
         return CompanionState(
             projection = meta("projection")?.let { parseCompanion(Json.parseToJsonElement(it).jsonObject) },
             tasks = tasks,
+            plans = plansFrom(placements, tasks),
             downloadedAt = meta("downloaded_at")?.let(Instant::parse),
             totalTaskCount = database().rawQuery("SELECT COUNT(DISTINCT target_id) FROM sync_replica WHERE kind = 'task'", null).use { it.moveToFirst(); it.getInt(0) },
             sleepSources = sources, totalSleepSourceCount = totalSleepSources,
@@ -168,7 +172,7 @@ class SQLiteSyncReplicaStore(private val database: () -> SQLiteDatabase) : SyncR
         val taskId = if (erasedKind == "task") Regex("^(.+)_r[1-9][0-9]*$").matchEntire(id)?.groupValues?.get(1) else null
         if (taskId != null) {
             db.insertWithOnConflict("sync_erased_tasks", null, ContentValues().apply { put("task_id", taskId) }, SQLiteDatabase.CONFLICT_IGNORE)
-            db.delete("sync_replica", "kind = 'task' AND target_id = ?", arrayOf(taskId))
+            db.delete("sync_replica", "kind IN ('task', 'placement') AND target_id = ?", arrayOf(taskId))
         }
         db.delete("sync_replica", "record_id = ? OR (kind = 'correction' AND target_id = ?)", arrayOf(id, id))
         db.delete("sync_outbox", "record_id = ? OR observation_id = ?", arrayOf(id, id))

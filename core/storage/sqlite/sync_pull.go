@@ -45,6 +45,14 @@ type SyncPullTask struct {
 
 func (SyncPullTask) isSyncPullRecord() {}
 
+// SyncPullPlacement is an accepted time coming back from the server. This
+// computer authored it (ADR-0047); pulling it only confirms the upload.
+type SyncPullPlacement struct {
+	PlacementID string
+}
+
+func (SyncPullPlacement) isSyncPullRecord() {}
+
 type SyncPullTombstone struct {
 	RecordID   string
 	RecordKind string
@@ -69,6 +77,7 @@ const (
 	preparedSyncPullObservation preparedSyncPullKind = iota + 1
 	preparedSyncPullCorrection
 	preparedSyncPullTask
+	preparedSyncPullPlacement
 	preparedSyncPullTombstone
 )
 
@@ -153,7 +162,7 @@ func (s *Store) applySyncPullPage(
 			seenID = record.correction.record.CorrectionID
 		case preparedSyncPullTask:
 			seenID = taskRevisionRecordID(record.task.record.TaskID, record.task.record.Revision)
-		case preparedSyncPullTombstone:
+		case preparedSyncPullPlacement, preparedSyncPullTombstone:
 			seenID = record.recordID
 		}
 		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO local_sync_seen SELECT ? WHERE EXISTS(SELECT 1 FROM local_sync_state WHERE key='sync_reconcile' AND value='1')`, seenID); err != nil {
@@ -166,6 +175,8 @@ func (s *Store) applySyncPullPage(
 			applied, err = insertSyncedSleepObservationTx(ctx, tx, record.observation, syncedAt)
 		case preparedSyncPullTask:
 			applied, err = applySyncedTaskTx(ctx, tx, record.task, syncedAt)
+		case preparedSyncPullPlacement:
+			err = markPlacementPushedTx(ctx, tx, record.recordID, syncedAt)
 		default:
 			handled = false
 		}
@@ -239,7 +250,9 @@ func (s *Store) applySyncPullPage(
 		if err != nil {
 			return SyncPullPageResult{}, fmt.Errorf("classify sync pull tombstone %d: %w", index, err)
 		}
-		if recordKind == "task" {
+		if recordKind == "placement" {
+			applied, err = erasePlacementRecordTx(ctx, tx, record.recordID)
+		} else if recordKind == "task" {
 			applied, err = eraseSyncedTaskRecordTx(ctx, tx, record.recordID)
 			if err == nil {
 				_, err = tx.ExecContext(ctx,
@@ -339,6 +352,11 @@ func prepareSyncPullRecord(record SyncPullRecord) (preparedSyncPullRecord, error
 		}
 		prepared, err := prepareSyncedTask(value.Task)
 		return preparedSyncPullRecord{kind: preparedSyncPullTask, task: prepared}, err
+	case SyncPullPlacement:
+		if !contractIdentifier.MatchString(value.PlacementID) {
+			return preparedSyncPullRecord{}, errors.New("placement record id is not a valid identifier")
+		}
+		return preparedSyncPullRecord{kind: preparedSyncPullPlacement, recordID: value.PlacementID}, nil
 	case SyncPullTombstone:
 		if err := validateSyncPullTombstone(value.RecordID, value.RecordKind); err != nil {
 			return preparedSyncPullRecord{}, err
@@ -715,6 +733,8 @@ func validateSyncPullTombstone(recordID, recordKind string) error {
 		if !taskRevisionIDPattern.MatchString(recordID) {
 			return errors.New("task tombstone record_id must identify a task revision")
 		}
+		return nil
+	case "placement":
 		return nil
 	default:
 		return fmt.Errorf("unsupported tombstone record kind %q", recordKind)
