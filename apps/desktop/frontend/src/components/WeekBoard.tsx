@@ -4,6 +4,7 @@ import type { ProposalDecision } from "../state/approvals";
 import { Icon } from "./Icon";
 import {
   hourLabel,
+  minuteClock,
   MIN_BLOCK_MINUTES,
   type WeekBand,
   type WeekBlock,
@@ -41,7 +42,10 @@ function Band({ band, px }: { band: WeekBand; px: (minutes: number) => string })
       data-kind={band.kind}
       style={{ top: px(band.startMinute), height: px(minutes) }}
     >
-      {minutes >= 50 && <span>{band.label}</span>}
+      {minutes >= 50 && <span aria-hidden="true">{band.label}</span>}
+      <span className="sr-only">
+        {band.label}, {minuteClock(band.startMinute)} to {minuteClock(band.endMinute)}
+      </span>
     </div>
   );
 }
@@ -153,6 +157,8 @@ function Day({ column, ...handlers }: BlockHandlers & { column: WeekColumn }) {
   return (
     <div
       className="week-day"
+      role="group"
+      aria-label={column.spokenDate}
       data-today={column.isToday || undefined}
       data-past={column.isPast || undefined}
     >
@@ -162,11 +168,13 @@ function Day({ column, ...handlers }: BlockHandlers & { column: WeekColumn }) {
       {column.forecastEndsAt !== undefined && (
         <div className="week-beyond" style={{ top: px(column.forecastEndsAt) }}>
           <span>Beyond the forecast</span>
+          <span className="sr-only">, from {minuteClock(column.forecastEndsAt)}</span>
         </div>
       )}
       {column.doses.map((dose) => (
         <span className="week-dose" style={{ top: px(dose.minute) }} key={dose.key}>
           {dose.label}
+          <span className="sr-only"> scheduled at {minuteClock(dose.minute)}</span>
         </span>
       ))}
       {column.blocks.map((block) => (

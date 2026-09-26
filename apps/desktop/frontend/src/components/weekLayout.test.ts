@@ -3,7 +3,7 @@ import type { CalendarBandSegment, CalendarData, CalendarEventSegment } from "..
 import type { MedicationsData } from "../data/medications";
 import type { ProposalRecord } from "../data/proposals";
 import type { SleepEntry } from "../data/sleepEntries";
-import { assignLanes, hourLabel, weekColumns, weekTitle } from "./weekLayout";
+import { assignLanes, hourLabel, minuteClock, weekColumns, weekTitle } from "./weekLayout";
 
 const zoneId = "America/New_York";
 // Thursday 24 September, 4:10 PM in New York.
@@ -259,6 +259,29 @@ describe("wording", () => {
     expect(weekTitle("2026-09-24", "2026-09-27")).toBe("24 – 27 September");
     expect(weekTitle("2026-09-30", "2026-10-03")).toBe("30 September – 3 October");
     expect(weekTitle("2026-09-24", "2026-09-24")).toBe("Thursday 24 September");
+  });
+
+  it("speaks a minute of the day as a clock time, naming the day's edges", () => {
+    expect([0, 75, 720, 1350, 1440].map(minuteClock)).toEqual([
+      "midnight",
+      "1:15 AM",
+      "noon",
+      "10:30 PM",
+      "midnight",
+    ]);
+  });
+
+  it("names each day in full for assistive technology", () => {
+    const [today, tomorrow] = weekColumns({
+      suggestions: [],
+      sleep: [],
+      medications: null,
+      now,
+      calendar: calendar([day("2026-09-24"), day("2026-09-25")]),
+    });
+    // In the reader's own locale: "Thursday, September 24" or "Thursday 24 September".
+    expect(today?.spokenDate).toMatch(/^Thursday.*(24.*September|September.*24), today$/);
+    expect(tomorrow?.spokenDate).toMatch(/^Friday.*(25.*September|September.*25)$/);
   });
 
   it("labels the gutter in words at noon", () => {
