@@ -495,3 +495,26 @@ says when it draws a stale estimate.
 **Next C7 work:** unchanged from the streamlining increment. The Android
 companion also needs accepted times in its contract before the dial can show
 plans.
+
+### C7 first-run setup — 2026-09-25
+
+Home before the first forecast used to say only that there was not enough
+recorded sleep. It now counts the way there and goes straight to each way in:
+
+- **Counting.** The estimator reports the usable nights it found and how many it
+  needs (main sleeps of three hours or more; seven). The lead sentence and the
+  page's figure count them.
+- **Ways in.** Four entries, each linking to where it is done: record from
+  tonight with the buttons beside the sentence, add past nights
+  (`#/log/sleep/add` opens the form), import a file, or sync from the phone.
+- **Honest refusal.** When the records exist but give no forecast for another
+  reason (a gap too long to count cycles across, a pattern outside the range
+  the estimator was checked on, records that disagree), the page says so in
+  plain words, quotes the estimator, and offers the one step likely to help.
+
+In the running app, an empty profile went from "0 of 7" through three nights
+added with the past-night form ("3 of 7") to a forecast at seven.
+
+**Next C7 work:** the clinical chart, export and template requirements,
+keyboard and nonvisual equivalents for the new layouts, and compact Android
+layouts.

@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from "react";
 import { Diary, Doses, NeedsYou } from "../components/HomeColumns";
+import { HomeSetup } from "../components/HomeSetup";
 import { Notice } from "../components/Notice";
 import { OutlookPanel } from "../components/OutlookPanel";
 import { QuickLogBar } from "../components/QuickLogBar";
@@ -28,7 +29,7 @@ import { hasDesktopBridge } from "../data/wailsBridge";
 import { localZone } from "../utils/civilTime";
 import { createCoalescedRefresh } from "../utils/coalescedRefresh";
 import { subscribeProjectionRefresh } from "../utils/projectionRefresh";
-import type { OverviewSource, OverviewData } from "../data/overview";
+import type { OverviewSource } from "../data/overview";
 
 // Home, set as an almanac page (ui-refactor-plan.md §14). It leads with a
 // sentence, not a status tile: how long you have been awake, when sleep is
@@ -205,40 +206,30 @@ export function HomeScreen() {
             </p>
           )}
         </>
+      ) : loading ? null : overview.status === "unavailable" ? (
+        <HomeRecovery />
       ) : (
-        !loading && <HomeRecovery overview={overview} />
+        <HomeSetup overview={overview} />
       )}
     </div>
   );
 }
 
-function HomeRecovery({ overview }: { overview: OverviewData }) {
-  const unavailable = overview.status === "unavailable";
+function HomeRecovery() {
   return (
-    <section className="home-recovery" aria-labelledby="learning-title">
-      <h2 id="learning-title" className="section-title">
-        {unavailable ? "Your rhythm is not available yet" : "Still learning your rhythm"}
+    <section className="home-recovery" aria-labelledby="recovery-title">
+      <h2 id="recovery-title" className="section-title">
+        Your rhythm is not available yet
       </h2>
-      <p>
-        {unavailable
-          ? "Your saved records have not been changed. This retries by itself, or try now."
-          : `${overview.refusal?.message ?? overview.confidence.reason} Log sleep or import existing records to build a forecast.`}
-      </p>
+      <p>Your saved records have not been changed. This retries by itself, or try now.</p>
       <div className="page-actions">
         {/* Recovery sits with the failure; the view already refreshes on
             focus, on new records and every minute. */}
-        {unavailable && (
-          <button className="button primary" type="button" onClick={notifySleepDataChanged}>
-            Try again
-          </button>
-        )}
-        {!unavailable && (
-          <a className="button primary" href="#/log/sleep">
-            Log sleep
-          </a>
-        )}
+        <button className="button primary" type="button" onClick={notifySleepDataChanged}>
+          Try again
+        </button>
         <a className="button secondary" href="#/data-sources">
-          {unavailable ? "Check Data Sources" : "Import sleep records"}
+          Check Data Sources
         </a>
       </div>
     </section>

@@ -59,6 +59,26 @@ function edges(outlook: OutlookData, segment: OutlookSegment) {
   return { start: roundToMinutes(start, 5), end: roundToMinutes(end, 5) };
 }
 
+/** Before the first forecast: how far there is to go, counted in nights. */
+function beforeForecast(overview: OverviewData, say: (text: string) => void) {
+  const progress = overview.progress;
+  if (!progress) {
+    say(
+      overview.status === "refused"
+        ? "Your records do not give a forecast yet."
+        : "There is not enough recorded sleep to look ahead yet.",
+    );
+  } else if (progress.nights > 0) {
+    say(
+      `You have recorded ${progress.nights} of the ${progress.needed} nights ZeitBoard needs before it can look ahead.`,
+    );
+  } else if (overview.status === "empty") {
+    say(`Nothing is recorded yet. ZeitBoard looks ahead once it has ${progress.needed} nights.`);
+  } else {
+    say(`None of your records count yet. ZeitBoard needs ${progress.needed} nights of main sleep.`);
+  }
+}
+
 export function leadParts(overview: OverviewData, outlook: OutlookData, now = new Date()) {
   const parts: LeadPart[] = [];
   const say = (text: string) => parts.push({ text });
@@ -69,7 +89,7 @@ export function leadParts(overview: OverviewData, outlook: OutlookData, now = ne
     return parts;
   }
   if (overview.status !== "estimated") {
-    say("There is not enough recorded sleep to look ahead yet.");
+    beforeForecast(overview, say);
     return parts;
   }
 

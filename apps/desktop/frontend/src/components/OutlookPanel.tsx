@@ -201,8 +201,7 @@ export function OutlookPanel({ data }: { data: OutlookData }) {
     <section className="outlook" aria-labelledby="outlook-title">
       <header className="outlook-head">
         <h2 id="outlook-title">
-          <span className="figure-number">Fig. 1</span>
-          {horizonTitle(data.horizonHours)}
+          <span className="figure-number">Fig. 1</span> {horizonTitle(data.horizonHours)}
         </h2>
         <a href="#/rhythm">Full rhythm</a>
       </header>
