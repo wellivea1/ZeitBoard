@@ -17,6 +17,24 @@ beforeEach(() => {
 });
 
 describe("desktop navigation", () => {
+  it("opens a new destination at its top with focus inside it, but not a tab", async () => {
+    window.location.hash = "#/plan/tasks";
+    const scroll = vi.spyOn(window, "scrollTo");
+    render(<App />);
+    await screen.findByRole("heading", { level: 1, name: "Plan" });
+    expect(scroll).not.toHaveBeenCalled();
+
+    fireEvent.click(await screen.findByRole("tab", { name: "Week" }));
+    await screen.findByRole("tab", { name: "Week", selected: true });
+    expect(scroll).not.toHaveBeenCalled();
+
+    window.location.hash = "#/rhythm";
+    await screen.findByRole("heading", { level: 1, name: "Rhythm" });
+    expect(scroll).toHaveBeenCalledWith(0, 0);
+    expect(screen.getByRole("main")).toHaveFocus();
+    scroll.mockRestore();
+  });
+
   it("skips to the active view without changing its route", async () => {
     window.location.hash = "#/plan/tasks";
     render(<App />);

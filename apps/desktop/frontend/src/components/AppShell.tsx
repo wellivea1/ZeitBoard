@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { usePendingApprovalsCount } from "../state/approvalQueue";
 import type { LogTab, PlanTab, RhythmTab, ScreenId, SettingsTab } from "../types";
 
@@ -110,6 +110,17 @@ export function useScreenNavigation() {
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
+  // A new destination opens at its top, and a screen reader lands in it
+  // rather than back at the navigation it just used. Switching tabs within a
+  // screen keeps both, since the tabs are already where the reader is.
+  const openedScreen = useRef(route.screen);
+  useEffect(() => {
+    if (route.screen === openedScreen.current) return;
+    openedScreen.current = route.screen;
+    window.scrollTo(0, 0);
+    document.getElementById("main-content")?.focus({ preventScroll: true });
+  }, [route.screen]);
+
   // A tab is part of the address: coming back to a bookmarked or reloaded view
   // should land where it did, and the assistant's links can point at one.
   const selectPlanTab = (planTab: PlanTab) => {
@@ -215,7 +226,7 @@ export function AppShell({ screen, children }: { screen: ScreenId; children: Rea
           fallback={
             assistantOpen ? (
               <div className="assistant-rail" role="status">
-                Loading assistant...
+                Opening the assistant…
               </div>
             ) : null
           }
