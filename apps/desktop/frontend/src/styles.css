@@ -2456,6 +2456,67 @@ textarea {
   font-style: italic;
 }
 
+/* A request's thread: entries between hairlines; the owner's own words are
+   marked by their label, not by a bubble. */
+.visitor-thread {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+.visitor-thread-list {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--divider);
+}
+.visitor-thread-list li {
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--divider);
+}
+.visitor-thread-meta {
+  margin: 0 0 2px;
+  color: var(--muted);
+  font-size: var(--type-micro);
+}
+.visitor-thread-meta span {
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.visitor-thread-list li[data-author="owner"] .visitor-thread-meta span {
+  color: var(--accent);
+}
+.visitor-thread-body {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 15.5px;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+.visitor-thread-reply {
+  width: 100%;
+  display: grid;
+  gap: var(--space-1);
+  justify-items: start;
+}
+.visitor-thread-reply label {
+  color: var(--muted);
+  font-size: var(--type-micro);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.visitor-thread-reply textarea {
+  width: 100%;
+  padding: 8px 10px;
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--line);
+  font: inherit;
+  resize: vertical;
+}
+
 .visitor-slot {
   display: flex;
   flex-wrap: wrap;

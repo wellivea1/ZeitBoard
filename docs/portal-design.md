@@ -102,8 +102,8 @@ POST /p/{linkToken}/requests/{publicID}/messages
 
 The delivered requester exchange is nested under its request rather than the
 flat `/request-session` in the original sketch, so the route itself names the
-request the secret belongs to. `/events` is delivered (2026-09-26); `/messages`
-is P5-c.
+request the secret belongs to. `/events` and `/messages` are delivered
+(2026-09-26).
 
 The live layer as built: each event is `state` with `{version, freshness}` or
 `gone` when the link or session has stopped working; nothing else crosses the
@@ -308,6 +308,19 @@ messages close when the request is decided. Encrypted bodies remain available
 for 14 days so both parties can read the completed exchange, then a tested hard-
 delete job removes them. The owner can erase a thread sooner. Minimal decision
 audit does not retain message bodies.
+
+As built (2026-09-26): a thread needs the link's `allowMessages` grant, which
+the Sharing screen offers only together with requests. The visitor writes on
+the request's own status page, which needs the link session, its synchronizer
+token and the request cookie, and follows post-redirect-get; the page asks for
+updates once a minute. Bodies keep line breaks, lose other control characters,
+are at most 500 characters and are escaped on render. Each body is sealed with
+its message, request, profile and author as associated data, so a row moved to
+another thread or author does not open. The visitor may send 20 messages a day
+per thread and a link 100 a day; the owner's replies are not limited. The owner
+reads each thread with its request in Approvals, replies there while the request
+is open, and can delete the conversation at any time; the maintenance job
+deletes threads fourteen days after their request was answered or closed.
 
 ## 8. Abuse resistance and privacy-preserving audit
 

@@ -1788,3 +1788,18 @@ revocation sends `gone`; a stream needs a session; the page states its next
 change and keeps a `noscript` reload; an in-place refresh is not counted as a
 visit; the script is served from the portal with no remote reach; the page's
 only script is its own file. Suites pass with the race detector.
+
+## Request threads end to end — 2026-09-26
+
+Against the disposable local instance, with a link created from the real
+desktop app granting requests and messages, a scripted visitor (the browser pane
+refuses the instance's self-signed certificate) entered the passcode, asked for
+a time, exchanged its one-time code for the request cookie and wrote a two-line
+message; the status page showed it under "You". The desktop app listed the
+request with its thread, and the owner's reply appeared on the visitor's page as
+"They wrote". Tests: the thread store (grant, closing on the answer, per-thread
+limit with the owner exempt, validation, retention and erasure, sealing bound to
+thread and author), the visitor route (authorship, synchronizer token,
+escaping, the no-thread link), the owner routes (list, reply, closed after the
+decision, erase, unknown request), the desktop methods and the Approvals card
+(reply, delete through the shared confirmation).

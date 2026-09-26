@@ -35,6 +35,7 @@ type Handler struct {
 	publicOrigin    string
 	resolutionFloor time.Duration
 	notifyCreated   func()
+	notifyMessage   func()
 }
 
 type HandlerConfig struct {
@@ -56,6 +57,11 @@ type HandlerConfig struct {
 	// decides what that means. Keeping it signal-shaped is what lets the
 	// portal package stay unable to reach private data.
 	NotifyRequestCreated func()
+
+	// NotifyMessageAdded is called after a visitor's message is stored. Like
+	// NotifyRequestCreated it is a bare signal: what it means, and whom to
+	// tell, is decided on the owner side.
+	NotifyMessageAdded func()
 }
 
 func NewHandler(cfg HandlerConfig) (*Handler, error) {
@@ -80,6 +86,7 @@ func NewHandler(cfg HandlerConfig) (*Handler, error) {
 		publicOrigin:    origin,
 		resolutionFloor: floor,
 		notifyCreated:   cfg.NotifyRequestCreated,
+		notifyMessage:   cfg.NotifyMessageAdded,
 	}, nil
 }
 
@@ -98,6 +105,7 @@ func (h *Handler) Routes() http.Handler {
 	mux.Handle("POST /p/{linkToken}/requests", h.linkChain(h.requireOrigin(h.requireSession(http.HandlerFunc(h.handleCreateRequest)))))
 	mux.Handle("GET /p/{linkToken}/requests/{requestID}", h.linkChain(h.requireSession(http.HandlerFunc(h.handleRequestStatus))))
 	mux.Handle("POST /p/{linkToken}/requests/{requestID}/session", h.linkChain(h.requireOrigin(h.requireSession(http.HandlerFunc(h.handleRequestSession)))))
+	mux.Handle("POST /p/{linkToken}/requests/{requestID}/messages", h.linkChain(h.requireOrigin(h.requireSession(http.HandlerFunc(h.handleCreateMessage)))))
 	return mux
 }
 

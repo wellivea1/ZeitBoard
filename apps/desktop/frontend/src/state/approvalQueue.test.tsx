@@ -27,6 +27,8 @@ const request: VisitorRequest = {
   expiresLabel: "Expires later",
   approvalDisclosure: "Approval shares the exact time.",
   decisionToken: "synthetic-token",
+  messages: [],
+  canMessage: false,
 };
 const visitorPage = {
   ...emptyVisitorRequests,
@@ -79,6 +81,67 @@ afterEach(() => {
 });
 
 describe("shared approval queue", () => {
+  it("shows a request's thread and sends the owner's reply to it", async () => {
+    const visitorLine = {
+      author: "visitor",
+      authorLabel: "They wrote",
+      body: "Is Tuesday possible?",
+      createdLabel: "Oct 31, 12:30 PM",
+    };
+    const withThread = { ...request, canMessage: true, messages: [visitorLine] };
+    const reply = vi.fn(async (input: { proposalId: string; message: string }) => ({
+      ...visitorPage,
+      requests: [
+        {
+          ...withThread,
+          messages: [
+            visitorLine,
+            {
+              author: "owner",
+              authorLabel: "You wrote",
+              body: input.message,
+              createdLabel: "Oct 31, 1:00 PM",
+            },
+          ],
+        },
+      ],
+    }));
+    const erase = vi.fn(async () => ({
+      ...visitorPage,
+      requests: [{ ...withThread, messages: [] }],
+    }));
+    install({
+      GetBackendVisitorRequests: vi.fn(async () => ({ ...visitorPage, requests: [withThread] })),
+      ReplyToBackendVisitorRequest: reply,
+      EraseBackendVisitorThread: erase,
+    });
+    render(
+      <Providers>
+        <DecisionQueue />
+      </Providers>,
+    );
+
+    expect(await screen.findByText("Is Tuesday possible?")).toBeVisible();
+    const box = screen.getByLabelText("Reply to Sam");
+    const send = screen.getByRole("button", { name: "Send" });
+    expect(send).toBeDisabled();
+    fireEvent.change(box, { target: { value: "Tuesday at 3 works." } });
+    await act(async () => fireEvent.click(send));
+    expect(reply).toHaveBeenCalledWith({ proposalId: "request-1", message: "Tuesday at 3 works." });
+    expect(await screen.findByText("Tuesday at 3 works.")).toBeVisible();
+    expect(screen.getByLabelText("Reply to Sam")).toHaveValue("");
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete the conversation with Sam" }));
+    const confirm = screen.getByRole("button", { name: "Delete conversation" });
+    expect(confirm).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Type DELETE to confirm"), {
+      target: { value: "DELETE" },
+    });
+    await act(async () => fireEvent.click(confirm));
+    expect(erase).toHaveBeenCalledWith({ proposalId: "request-1", message: "" });
+    expect(screen.queryByText("Is Tuesday possible?")).toBeNull();
+  });
+
   // One list, no filters: every origin is visible at once, and the count covers
   // pages that have not been loaded yet.
   it("counts all sources beyond the loaded page and shows every origin together", async () => {

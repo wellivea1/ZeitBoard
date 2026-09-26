@@ -90,6 +90,8 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle("POST /v1/portal/profiles/{id}/erase", s.requireDevice(http.HandlerFunc(s.handleErasePortalProfile)))
 		mux.Handle("GET /v1/portal/requests", s.requireDevice(http.HandlerFunc(s.handleListVisitorRequests)))
 		mux.Handle("POST /v1/portal/requests/{id}/decision", s.requireDevice(http.HandlerFunc(s.handleDecideVisitorRequest)))
+		mux.Handle("POST /v1/portal/requests/{id}/messages", s.requireDevice(http.HandlerFunc(s.handleReplyToVisitorRequest)))
+		mux.Handle("POST /v1/portal/requests/{id}/erase-thread", s.requireDevice(http.HandlerFunc(s.handleEraseVisitorThread)))
 	}
 	return mux
 }

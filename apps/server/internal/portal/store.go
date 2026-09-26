@@ -273,6 +273,22 @@ func (s *Store) migrate(ctx context.Context) error {
 			profile_id TEXT NOT NULL,
 			expires_at TEXT NOT NULL
 		)`,
+		// Request threads (P5-c). Bodies are sealed like request text; the
+		// author is in the clear because limits count by it, and it says
+		// nothing a thread's two readers do not already know.
+		`CREATE TABLE IF NOT EXISTS portal_messages (
+			message_id TEXT PRIMARY KEY,
+			request_id TEXT NOT NULL REFERENCES portal_requests(request_id) ON DELETE CASCADE,
+			profile_id TEXT NOT NULL,
+			author TEXT NOT NULL CHECK (author IN ('visitor', 'owner')),
+			created_at TEXT NOT NULL,
+			nonce BLOB NOT NULL,
+			ciphertext BLOB NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_portal_messages_request
+			ON portal_messages(request_id, created_at)`,
+		`CREATE INDEX IF NOT EXISTS idx_portal_messages_profile
+			ON portal_messages(profile_id, author, created_at)`,
 	}
 	for _, statement := range statements {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {
@@ -838,7 +854,7 @@ func (s *Store) PurgeExpired(ctx context.Context, now time.Time) error {
 		formatTime(now.Add(-AuditRetention))); err != nil {
 		return err
 	}
-	return nil
+	return s.purgeThreads(ctx, now)
 }
 
 func hashToken(value string) [32]byte {

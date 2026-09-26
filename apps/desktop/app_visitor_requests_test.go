@@ -189,3 +189,57 @@ func TestVisitorQueueCurrentWireContractAndConfirmedDecision(t *testing.T) {
 		t.Fatalf("confirmed decision lost to failed refresh: %v", err)
 	}
 }
+
+// TestVisitorThreadReachesTheOwnerAndTheReplyReachesTheServer covers the
+// desktop's half of P5-c: the thread arrives with the queue, and a reply is
+// posted to the request's own route and comes back in the refreshed queue.
+func TestVisitorThreadReachesTheOwnerAndTheReplyReachesTheServer(t *testing.T) {
+	app := newTestApp(t)
+	var replied atomic.Bool
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/devices":
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(registerDeviceResponse{SchemaVersion: "v1", DeviceID: "device_desktop", Token: "synthetic-token"})
+		case "/v1/portal/requests":
+			ownerMessage := ""
+			if replied.Load() {
+				ownerMessage = `,{"author":"owner","body":"Tuesday works.","createdAt":"2026-10-31T13:00:00Z"}`
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"schema_version":"v1","pendingCount":1,"nextExpiryAt":"2099-01-01T00:00:00Z","requests":[{"proposalId":"visitor-1","profileId":"family","label":"Family","status":"pending","windowStartAt":"2026-11-01T05:00:00Z","windowEndAt":"2026-11-01T07:00:00Z","zoneId":"UTC","durationMinutes":30,"beyondHorizon":false,"handle":"Sam","message":"","createdAt":"2026-10-31T12:00:00Z","expiresAt":"2099-01-01T00:00:00Z","decisionToken":"synthetic-decision-token","disclosure":"Exact accepted time is shared.","messages":[{"author":"visitor","body":"Is Tuesday possible?","createdAt":"2026-10-31T12:30:00Z"}` + ownerMessage + `],"canMessage":true}],"pagination":{"limit":50,"hasMore":false}}`))
+		case "/v1/portal/requests/visitor-1/messages":
+			var payload map[string]string
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil || payload["message"] != "Tuesday works." {
+				t.Errorf("reply payload = %v (%v)", payload, err)
+			}
+			replied.Store(true)
+			_, _ = w.Write([]byte(`{"schema_version":"v1","status":"sent"}`))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	configureBackendForTest(t, app, server.URL)
+
+	queue, err := app.GetBackendVisitorRequests()
+	if err != nil || queue.Status != "ok" || len(queue.Requests) != 1 {
+		t.Fatalf("queue = %+v (%v)", queue, err)
+	}
+	request := queue.Requests[0]
+	if !request.CanMessage || len(request.Messages) != 1 || request.Messages[0].AuthorLabel != "They wrote" {
+		t.Fatalf("thread = %+v", request.Messages)
+	}
+
+	if result, _ := app.ReplyToBackendVisitorRequest(VisitorMessageInput{ProposalID: "visitor-1", Message: "   "}); result.Status != "error" {
+		t.Errorf("an empty reply was sent: %+v", result)
+	}
+	result, err := app.ReplyToBackendVisitorRequest(VisitorMessageInput{ProposalID: "visitor-1", Message: " Tuesday works. "})
+	if err != nil || result.Status != "ok" {
+		t.Fatalf("reply = %+v (%v)", result, err)
+	}
+	messages := result.Requests[0].Messages
+	if len(messages) != 2 || messages[1].AuthorLabel != "You wrote" || messages[1].Body != "Tuesday works." {
+		t.Errorf("thread after the reply = %+v", messages)
+	}
+}

@@ -157,17 +157,109 @@ func (h *Handler) handleRequestStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	h.renderRequestStatus(w, r, profile, requestID, "")
+}
+
+// renderRequestStatus shows a request to its author, with its thread when
+// the link carries messages.
+func (h *Handler) renderRequestStatus(w http.ResponseWriter, r *http.Request, profile Profile, requestID, message string) {
+	ctx := r.Context()
 	request, err := h.store.ReadRequest(ctx, profile.ID, requestID)
 	if err != nil {
 		h.writeGeneric(w, r, http.StatusGone)
 		return
 	}
+	messages, err := h.store.ListMessages(ctx, profile.ID, requestID)
+	if err != nil {
+		log.Printf("portal: thread unreadable for a request under profile %s: %v", profile.ID, err)
+		messages = nil
+	}
+	view := h.requestView(request)
 	h.renderPage(w, r, http.StatusOK, "request-status", pageData{
-		Title:   "Your request",
-		Refresh: true,
-		Request: h.requestView(request),
-		View:    AvailabilityView{Notice: NoticeNotMedical},
+		Title:      "Your request",
+		Refresh:    true,
+		Live:       "poll",
+		Error:      message,
+		Request:    view,
+		View:       AvailabilityView{Notice: NoticeNotMedical},
+		Messages:   h.messageViews(messages),
+		CanMessage: profile.Grants.AllowMessages && view.Open,
+		CSRFToken:  h.store.CSRFToken(sessionValueFrom(r)),
+		FormAction: requestMessagesPath(r.PathValue("linkToken"), requestID),
 	})
+}
+
+// handleCreateMessage adds the author's message to their request's thread.
+// It needs the link session (with its CSRF token) and proof of authorship,
+// so holding the shared link is not enough to write into someone's thread.
+func (h *Handler) handleCreateMessage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	profile := profileFromContext(ctx)
+	requestID := r.PathValue("requestID")
+
+	authorized, err := h.store.AuthorizesRequest(ctx, requestCookieValue(r), profile.ID, requestID, h.now())
+	if err != nil || !authorized {
+		h.writeGeneric(w, r, http.StatusGone)
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		h.renderRequestStatus(w, r, profile, requestID, "That message could not be read. Try again.")
+		return
+	}
+	if !h.store.MatchesCSRF(sessionValueFrom(r), r.PostFormValue("csrf")) {
+		h.writeGeneric(w, r, http.StatusForbidden)
+		return
+	}
+	if _, err := h.store.AppendMessage(ctx, profile, requestID, AuthorVisitor, r.PostFormValue("message"), h.now()); err != nil {
+		if errors.Is(err, ErrMessageInvalid) || errors.Is(err, ErrMessageLimit) || errors.Is(err, ErrThreadClosed) {
+			h.renderRequestStatus(w, r, profile, requestID, humanMessageError(err))
+			return
+		}
+		log.Printf("portal: message not stored for profile %s: %v", profile.ID, err)
+		h.writeGeneric(w, r, http.StatusServiceUnavailable)
+		return
+	}
+	if h.notifyMessage != nil {
+		h.notifyMessage()
+	}
+	// Post, redirect, get: a reload must not send the message twice.
+	http.Redirect(w, r, requestPath(r.PathValue("linkToken"), requestID), http.StatusSeeOther)
+}
+
+// MessageView is one message as its request's author sees it.
+type MessageView struct {
+	Author      string
+	AuthorLabel string
+	WhenLabel   string
+	Body        string
+}
+
+func (h *Handler) messageViews(messages []Message) []MessageView {
+	views := make([]MessageView, 0, len(messages))
+	for _, message := range messages {
+		label := "You"
+		if message.Author == AuthorOwner {
+			label = "They wrote"
+		}
+		views = append(views, MessageView{
+			Author:      message.Author,
+			AuthorLabel: label,
+			WhenLabel:   describeWhen(message.CreatedAt, h.now()),
+			Body:        message.Body,
+		})
+	}
+	return views
+}
+
+func humanMessageError(err error) string {
+	message := err.Error()
+	for _, prefix := range []string{ErrMessageInvalid.Error() + ": ", ErrMessageLimit.Error() + ": ", ErrThreadClosed.Error() + ": "} {
+		message = strings.TrimPrefix(message, prefix)
+	}
+	if message == "" {
+		return "That message could not be sent."
+	}
+	return strings.ToUpper(message[:1]) + message[1:] + "."
 }
 
 func (h *Handler) requestView(request Request) RequestView {
@@ -347,6 +439,10 @@ func requestsPath(linkToken string) string {
 
 func requestPath(linkToken, requestID string) string {
 	return (&url.URL{Path: "/p/" + linkToken + "/requests/" + requestID}).String()
+}
+
+func requestMessagesPath(linkToken, requestID string) string {
+	return (&url.URL{Path: "/p/" + linkToken + "/requests/" + requestID + "/messages"}).String()
 }
 
 func requestSessionPath(linkToken, requestID string) string {
