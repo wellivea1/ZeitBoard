@@ -29,7 +29,6 @@
 }
 
 .calendar-source-empty,
-.calendar-ownership-note,
 .inline-notice {
   margin: 0;
   color: var(--muted);
@@ -40,11 +39,6 @@
 
 .calendar-source-empty {
   font-style: italic;
-}
-
-.calendar-ownership-note {
-  max-width: 72ch;
-  margin-bottom: var(--space-3);
 }
 
 .calendar-source-list {
@@ -93,14 +87,6 @@
   font-family: ui-monospace, "Cascadia Code", monospace;
 }
 
-/* Removing a calendar asks once, between two rules in the danger colour. */
-.calendar-remove-confirmation {
-  margin-top: var(--space-3);
-  padding: 12px 0;
-  border-block: 1px solid var(--danger-border);
-}
-
-.calendar-remove-confirmation label,
 .calendar-import-form label {
   display: grid;
   gap: var(--space-1);
@@ -109,7 +95,6 @@
   font-weight: 700;
 }
 
-.calendar-remove-confirmation input,
 .calendar-import-form input {
   min-width: 0;
   width: 100%;
@@ -120,7 +105,6 @@
   border: 1px solid var(--line);
 }
 
-.calendar-remove-confirmation > div,
 .calendar-import-actions {
   display: flex;
   flex-wrap: wrap;

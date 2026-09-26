@@ -1,4 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
+import { estimateSourceLabel } from "../data/estimateStatus";
 import { Diary, Doses, NeedsYou } from "../components/HomeColumns";
 import { HomeSetup } from "../components/HomeSetup";
 import { Notice } from "../components/Notice";
@@ -37,12 +38,6 @@ import type { OverviewSource } from "../data/overview";
 // as a figure, then three columns: what is waiting on you, what is in the
 // diary, and the doses to record. The state tile, the next-sleep panel and the
 // "Coming up" list it replaces each restated part of that sentence.
-
-function sourceLabel(source: OverviewSource, hasEstimate: boolean) {
-  if (source === "synced") return hasEstimate ? "Synced estimate" : "Synced, awaiting estimate";
-  if (source === "local") return hasEstimate ? "Local estimate" : "Local data";
-  return "Sample data";
-}
 
 function useHomeProjection() {
   const desktop = hasDesktopBridge();
@@ -162,7 +157,7 @@ export function HomeScreen() {
           </p>
           <p className="lead-meta">
             <span className="sync-dot" data-mode={mode} aria-hidden="true" />
-            <span>{sourceLabel(mode, hasEstimate)}</span>
+            <span>{estimateSourceLabel(mode, hasEstimate)}</span>
             {hasEstimate && overview.freshness.trusted && (
               <span>{overview.freshness.ageLabel}</span>
             )}

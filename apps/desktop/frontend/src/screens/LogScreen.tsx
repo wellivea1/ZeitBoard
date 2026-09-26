@@ -17,7 +17,7 @@ import type { LogTab } from "../types";
 const logTabs: ScreenTab<LogTab>[] = [
   { id: "sleep", label: "Sleep" },
   { id: "medications", label: "Medications" },
-  { id: "markers", label: "Context" },
+  { id: "context", label: "Context" },
 ];
 
 export function LogScreen({ tab, onSelect }: { tab: LogTab; onSelect: (tab: LogTab) => void }) {
@@ -37,7 +37,7 @@ export function LogScreen({ tab, onSelect }: { tab: LogTab; onSelect: (tab: LogT
           <MedicationsScreen embedded />
         </ScreenTabPanel>
 
-        <ScreenTabPanel name="log" id="markers" active={tab}>
+        <ScreenTabPanel name="log" id="context" active={tab}>
           <RhythmMarkersPanel
             data={markers.data}
             busy={markers.busy}

@@ -123,7 +123,7 @@ export function DataSourcesScreen() {
         />
         <SleepImportPanel onImported={refreshEntries} />
         <p className="data-source-log-pointer">
-          Individual nights, their corrections, and erasing them are in{" "}
+          Individual nights, their corrections, and deleting them are in{" "}
           <a href="#/log/sleep">Log</a>.
         </p>
       </section>

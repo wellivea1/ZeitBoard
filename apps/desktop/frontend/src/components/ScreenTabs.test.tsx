@@ -13,7 +13,11 @@ describe("readRouteFromHash", () => {
 
   it("reads a screen and its tab from the address", () => {
     expect(readRouteFromHash("#/plan/tasks")).toMatchObject({ screen: "plan", planTab: "tasks" });
-    expect(readRouteFromHash("#/log/markers")).toMatchObject({ screen: "log", logTab: "markers" });
+    expect(readRouteFromHash("#/log/context")).toMatchObject({ screen: "log", logTab: "context" });
+    expect(readRouteFromHash("#/rhythm/drift")).toMatchObject({
+      screen: "rhythm",
+      rhythmTab: "drift",
+    });
   });
 
   it("falls back to the first tab when the second segment is not one", () => {

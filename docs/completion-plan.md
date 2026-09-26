@@ -623,3 +623,15 @@ the next three days, the windows in words, a solid button and the qualifier on
 a sheet, in Paper by day and Ink at night, with the bundled faces served from
 the portal's own origin. The static `trusted-web-prototype` still shows the
 old demo and no longer describes the portal.
+
+### C7 consistency pass — 2026-09-26
+
+The owner's completion goal adds that the UX must be consistent and simple to
+navigate. Walking every screen of the real app with synthetic data found
+inconsistent decision and deletion vocabulary, six different permanent-delete
+confirmations, loading states that claimed data was missing or unreadable, a
+drift chart whose labels stacked and misaligned with real data, and sample-only
+prototype panels in Rhythm › Sources. Each is fixed, with one shared hook for
+loading and one component for deletion replacing the per-screen copies (see
+`ui-refactor-plan.md`). The prototype `phaseTwo` module is retired: its types
+live with the data they describe and its sample data with the other fixtures.

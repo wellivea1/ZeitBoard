@@ -1,3 +1,4 @@
+import { decisionButton, decisionDone, decisionLabel } from "../data/decisionWords";
 import { useState } from "react";
 import { ProposalCard } from "./ProposalCard";
 import { TaskConflictCard, TaskConflictHistoryCard } from "./TaskConflictCard";
@@ -47,20 +48,22 @@ function SyncedProposalCard({
       </p>
       <div className="approval-actions">
         <button
-          className="button secondary"
-          type="button"
-          disabled={busy || !reviewIsPending(proposal)}
-          onClick={() => onDecide(proposal, "rejected")}
-        >
-          Reject proposal
-        </button>
-        <button
           className="button primary"
           type="button"
           disabled={busy || !reviewIsPending(proposal)}
+          aria-label={decisionLabel("approved", proposal.title)}
           onClick={() => onDecide(proposal, "approved")}
         >
-          Accept proposal
+          {decisionButton("approved")}
+        </button>
+        <button
+          className="button secondary"
+          type="button"
+          disabled={busy || !reviewIsPending(proposal)}
+          aria-label={decisionLabel("rejected", proposal.title)}
+          onClick={() => onDecide(proposal, "rejected")}
+        >
+          {decisionButton("rejected")}
         </button>
       </div>
     </article>
@@ -185,7 +188,7 @@ export function DecisionQueue() {
                   .then((result) =>
                     setAnnouncement(
                       result.status === "ok"
-                        ? `${decision === "approved" ? "Approved" : "Rejected"} ${item.title}.`
+                        ? decisionDone(decision, item.title)
                         : (result.message ??
                             "The decision could not be confirmed yet; it is checked again shortly."),
                     ),

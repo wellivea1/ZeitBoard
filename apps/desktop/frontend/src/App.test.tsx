@@ -92,8 +92,12 @@ describe("desktop navigation", () => {
     expect(screen.queryByRole("tab", { name: /Approvals/ })).toBeNull();
     expect(screen.getByRole("heading", { name: /Needs your decision/ })).toBeVisible();
     expect(screen.getByText("Email Dr. Okafor")).toBeVisible();
-    expect(screen.getAllByRole("button", { name: "Accept proposal" })).toHaveLength(2);
-    expect(screen.getAllByRole("button", { name: "Reject proposal" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /^Accept the suggested time for/ })).toHaveLength(
+      2,
+    );
+    expect(screen.getAllByRole("button", { name: /^Decline the suggested time for/ })).toHaveLength(
+      2,
+    );
     expect(container.querySelectorAll(".decision-queue .proposal-card")).toHaveLength(2);
     expect(container.querySelector(".proposal-stack > .panel")).toBeNull();
     // No filter chips: every origin is listed together.
@@ -116,12 +120,16 @@ describe("desktop navigation", () => {
     // The count appears on the Plan destination, so it is visible from
     // anywhere, and on the Tasks tab once you are here.
     const navigation = () => screen.getByRole("navigation", { name: "Primary navigation" });
-    const accepts = await screen.findAllByRole("button", { name: "Accept proposal" });
+    const accepts = await screen.findAllByRole("button", {
+      name: /^Accept the suggested time for/,
+    });
     expect(accepts).toHaveLength(2);
     expect(within(navigation()).getByRole("link", { name: "Plan, 2 pending" })).toBeVisible();
 
     fireEvent.click(accepts[0] as HTMLElement);
-    expect(screen.getAllByRole("button", { name: "Accept proposal" })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: /^Accept the suggested time for/ })).toHaveLength(
+      1,
+    );
     expect(within(navigation()).getByRole("link", { name: "Plan, 1 pending" })).toBeVisible();
 
     fireEvent.click(screen.getByText(/Decision history/));
@@ -130,7 +138,9 @@ describe("desktop navigation", () => {
 
     // Named for what it undoes: the confirmation toast has its own Undo.
     fireEvent.click(screen.getByRole("button", { name: "Undo decision on Email Dr. Okafor" }));
-    expect(screen.getAllByRole("button", { name: "Accept proposal" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: /^Accept the suggested time for/ })).toHaveLength(
+      2,
+    );
   });
 
   it("says so plainly once every suggestion is decided", async () => {
@@ -138,12 +148,16 @@ describe("desktop navigation", () => {
     render(<App />);
 
     fireEvent.click(
-      (await screen.findAllByRole("button", { name: "Accept proposal" }))[0] as HTMLElement,
+      (
+        await screen.findAllByRole("button", { name: /^Accept the suggested time for/ })
+      )[0] as HTMLElement,
     );
-    fireEvent.click(screen.getAllByRole("button", { name: "Reject proposal" })[0] as HTMLElement);
+    fireEvent.click(
+      screen.getAllByRole("button", { name: /^Decline the suggested time for/ })[0] as HTMLElement,
+    );
 
     expect(screen.getByText(/Nothing is waiting for you/)).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Accept proposal" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Accept the suggested time for/ })).toBeNull();
   });
 
   it("switches rhythm tabs between actogram and source review", async () => {
@@ -152,7 +166,7 @@ describe("desktop navigation", () => {
 
     expect(await screen.findByRole("heading", { name: "Rhythm" })).toBeVisible();
     // Actogram is the default tab; correction/source review lives under Sources.
-    expect(screen.getByRole("heading", { name: "Double-plot actogram" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Double-plot actogram" })).toBeVisible();
     expect(
       screen.getByText(
         "Approximate. Forecast widens with time and is shown as ranges, not hard lines.",
@@ -170,14 +184,16 @@ describe("desktop navigation", () => {
         name: "Predicted sleep window: Jun 18, Jun 18, 11:21 PM earliest to Jun 19, 5:27 AM latest, 6 hr 6 min window, Forecast cycle 3",
       }),
     ).toBeVisible();
-    expect(screen.queryByRole("heading", { name: "Correction inspector" })).toBeNull();
+    expect(screen.queryByRole("heading", { name: "What the estimator sees" })).toBeNull();
 
     fireEvent.click(screen.getByRole("tab", { name: "Sources" }));
 
-    expect(screen.getByRole("heading", { name: "Correction inspector" })).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Undo correction" })).toBeNull();
-    expect(screen.getByRole("heading", { name: "Source conflicts and missingness" })).toBeVisible();
-    expect(screen.getByText("Wearable sleep overlaps desktop activity")).toBeVisible();
+    // The tab is part of the address, and Sources shows the log's own
+    // composition even in the preview: there is no synthetic conflict showcase.
+    expect(await screen.findByRole("heading", { name: "What the estimator sees" })).toBeVisible();
+    expect(window.location.hash).toBe("#/rhythm/sources");
+    expect(screen.queryByText("Wearable sleep overlaps desktop activity")).toBeNull();
+    expect(screen.queryByText(/conflicting_observations/i)).toBeNull();
   });
 
   it("appends and permanently erases context through the real desktop bridge", async () => {
@@ -229,7 +245,7 @@ describe("desktop navigation", () => {
         },
       },
     };
-    window.location.hash = "#/log/markers";
+    window.location.hash = "#/log/context";
     render(<App />);
     expect(await screen.findByText("No markers recorded")).toBeVisible();
 
@@ -255,9 +271,11 @@ describe("desktop navigation", () => {
       }),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Erase" }));
-    fireEvent.change(screen.getByLabelText("Type DELETE"), { target: { value: "DELETE" } });
-    fireEvent.click(screen.getByRole("button", { name: "Permanently erase" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Delete Travel/ }));
+    fireEvent.change(screen.getByLabelText("Type DELETE to confirm"), {
+      target: { value: "DELETE" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Delete marker" }));
     expect(await screen.findByText("No markers recorded")).toBeVisible();
     expect(erase).toHaveBeenCalledWith({ markerId: "marker_local_01", confirmation: "DELETE" });
   });
@@ -341,13 +359,16 @@ describe("desktop navigation", () => {
     render(<App />);
 
     await screen.findByText("Local data");
-    fireEvent.click(screen.getByRole("tab", { name: "Sources" }));
-
-    // Real refusal, not the refusal fixture.
+    // The refusal is explained in plain words where the chart would be, with
+    // the estimator's own message; its code is never shown.
     expect(
-      await screen.findByRole("heading", { name: "The estimator is refusing, not guessing" }),
+      screen.getByRole("heading", { name: "There are not enough nights yet to draw a forecast." }),
     ).toBeVisible();
-    expect(screen.getByText("insufficient_data")).toBeVisible();
+    expect(
+      screen.getByText("In the estimator's words: Add at least seven principal sleep episodes."),
+    ).toBeVisible();
+    expect(screen.queryByText("insufficient_data")).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "Sources" }));
 
     // Real correction history drives the inspector; the fixture undo button is gone.
     expect(await screen.findByRole("heading", { name: "1 corrected entry" })).toBeVisible();
@@ -359,7 +380,7 @@ describe("desktop navigation", () => {
     expect(screen.getByRole("heading", { name: "What the estimator sees" })).toBeVisible();
     expect(screen.getByRole("heading", { name: "Manual sleep log" })).toBeVisible();
     expect(
-      screen.getByText(/2 entries, 1 corrected, 1 suppressed from estimates/, { selector: "p" }),
+      screen.getByText(/2 entries, 1 corrected, 1 excluded from estimates/, { selector: "p" }),
     ).toBeVisible();
   });
 
@@ -369,9 +390,9 @@ describe("desktop navigation", () => {
 
     fireEvent.click(await screen.findByRole("tab", { name: "Drift" }));
 
-    expect(screen.getByRole("heading", { name: "Sleep-onset drift" })).toBeVisible();
+    expect(await screen.findByRole("heading", { name: "Sleep-onset drift" })).toBeVisible();
     expect(screen.getAllByText("+48 min per cycle").length).toBeGreaterThan(0);
-    expect(screen.getByText("Theil-Sen fit")).toBeVisible();
+    expect(screen.getByText("Trend (Theil–Sen)")).toBeVisible();
     expect(
       screen.getByText(
         "Y-axis is unwrapped so the free-running trend stays readable across midnight.",
@@ -823,16 +844,16 @@ describe("desktop navigation", () => {
     expect(screen.getByText("zeitboard-sleep-export-20260302-060000.json")).toBeVisible();
     expect(screen.getByText("Mar 2, 2026, 6:00 AM")).toBeVisible();
     expect(screen.getByText("1 observation, 1 correction")).toBeVisible();
-    const eraseAll = screen.getByRole("button", { name: "Erase all sleep data" });
+    const eraseAll = screen.getByRole("button", { name: "Delete all sleep data" });
     expect(eraseAll).toBeDisabled();
 
-    fireEvent.change(screen.getByLabelText(/Type DELETE to erase all local sleep data/), {
+    fireEvent.change(screen.getByLabelText(/Type DELETE to delete all sleep data/), {
       target: { value: "DELETE" },
     });
     fireEvent.click(eraseAll);
 
     expect(
-      await screen.findByText("All local sleep observations and correction history were erased."),
+      await screen.findByText("All sleep records and corrections on this computer were deleted."),
     ).toBeVisible();
     expect(deleteAll).toHaveBeenCalledWith({ confirmation: "DELETE" });
   });

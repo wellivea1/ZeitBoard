@@ -1,3 +1,4 @@
+import { decisionDone } from "../data/decisionWords";
 import {
   resolveTaskConflict as recordTaskResolution,
   type TaskConflict,
@@ -300,14 +301,11 @@ function ApprovalUndoToast({
     return () => clearTimeout(timer);
   }, [onDismiss]);
 
-  const verb = decision.decision === "approved" ? "Approved" : "Rejected";
   return (
     <div className="undo-toast" role="status" aria-live="polite">
-      <span>
-        {verb} {decision.title}.
-      </span>
+      <span>{decisionDone(decision.decision, decision.title)}</span>
       <button type="button" disabled={busy} onClick={onUndo}>
-        {busy ? "Undoing..." : "Undo"}
+        {busy ? "Undoing…" : "Undo"}
       </button>
     </div>
   );

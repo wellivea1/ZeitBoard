@@ -1745,3 +1745,16 @@ split, shading past the estimate, the legend's key only when needed) and the
 font route (only the bundled files, typed as fonts and cacheable, with
 `font-src 'self'`); the existing suite still proves there is no inline style,
 script or third-party reference on the page. Server Go suite passes.
+
+## Consistency pass — 2026-09-26
+
+The real app (`wails dev`) was driven in the browser pane against a disposable
+profile under `.cache/dev-profile`, seeded through its own methods with 42
+synthetic drifting nights, three tasks, a synthetic ICS calendar and one
+medication. Checked after the changes: Rhythm opens on "Reading your
+records…" and draws its charts; the drift chart has round points, dates under
+their points and whole-hour labels on their gridlines; Rhythm tabs change the
+address; medication records delete through the shared confirmation; the
+Settings › Sync checkbox and status labels lay out correctly. Web checks:
+format, lint (no errors), typecheck, 469 tests (new: `useLoaded`, route and
+refusal cases), production build; desktop Go tests pass.

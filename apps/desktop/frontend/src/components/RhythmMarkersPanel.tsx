@@ -1,3 +1,4 @@
+import { ConfirmDelete } from "./ConfirmDelete";
 import { useState, type FormEvent } from "react";
 import { Notice } from "./Notice";
 import {
@@ -46,7 +47,6 @@ export function RhythmMarkersPanel({
   const [zoneId, setZoneId] = useState(browserZone);
   const [note, setNote] = useState("");
   const [eraseID, setEraseID] = useState("");
-  const [confirmation, setConfirmation] = useState("");
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -68,12 +68,9 @@ export function RhythmMarkersPanel({
   };
 
   const erase = (markerId: string) => {
-    if (busy || confirmation !== rhythmMarkerDeleteConfirmation) return;
-    void onDelete(markerId, confirmation).then(
-      () => {
-        setEraseID("");
-        setConfirmation("");
-      },
+    if (busy) return;
+    void onDelete(markerId, rhythmMarkerDeleteConfirmation).then(
+      () => setEraseID(""),
       () => undefined,
     );
   };
@@ -83,19 +80,21 @@ export function RhythmMarkersPanel({
       <header className="rhythm-marker-heading">
         <div>
           <h2 id="rhythm-marker-title">Context markers</h2>
-          {/* The note below says what markers do; the heading only counts them,
-              unless the service has something else to say. */}
-          <p>
-            {data.status === "ready"
-              ? `${data.markers.length} ${data.markers.length === 1 ? "marker" : "markers"} recorded`
-              : data.message}
-          </p>
+          {/* The note below says what markers do and the list says when there
+              are none; the heading only counts them, or says why it cannot. */}
+          {data.markers.length > 0 ? (
+            <p>
+              {data.markers.length} {data.markers.length === 1 ? "marker" : "markers"} recorded
+            </p>
+          ) : (
+            data.status === "unavailable" && <p>{data.message}</p>
+          )}
         </div>
         <div className="rhythm-marker-export">
           <button
             className="button ghost compact"
             type="button"
-            disabled={!available || exporting}
+            disabled={!available || exporting || data.markers.length === 0}
             onClick={onExport}
           >
             {exporting ? "Preparing export…" : "Export markers"}
@@ -106,7 +105,7 @@ export function RhythmMarkersPanel({
 
       <Notice id="markers.boundary">
         Markers are context only: they do not change the estimate, establish a cause, diagnose or
-        recommend anything. To fix one, erase it and add it again; records are never edited in
+        recommend anything. To fix one, delete it and add it again; records are never edited in
         place.
       </Notice>
 
@@ -141,50 +140,21 @@ export function RhythmMarkersPanel({
                   type="button"
                   disabled={busy}
                   aria-expanded={eraseID === marker.markerId}
-                  onClick={() => {
-                    setEraseID(marker.markerId);
-                    setConfirmation("");
-                  }}
+                  aria-label={`Delete ${marker.kindLabel}, ${marker.rangeLabel}`}
+                  onClick={() => setEraseID(marker.markerId)}
                 >
-                  Erase
+                  Delete
                 </button>
                 {eraseID === marker.markerId && (
-                  <div className="rhythm-marker-erase" role="group" aria-label="Permanent erasure">
-                    <p>
-                      This physically deletes the marker and private note. It is distinct from
-                      suppressing an observation, and it cannot be undone.
-                    </p>
-                    <label>
-                      <span>Type DELETE</span>
-                      <input
-                        value={confirmation}
-                        autoFocus
-                        disabled={busy}
-                        onChange={(event) => setConfirmation(event.target.value)}
-                      />
-                    </label>
-                    <div>
-                      <button
-                        className="button danger"
-                        type="button"
-                        disabled={busy || confirmation !== rhythmMarkerDeleteConfirmation}
-                        onClick={() => erase(marker.markerId)}
-                      >
-                        Permanently erase
-                      </button>
-                      <button
-                        className="button secondary"
-                        type="button"
-                        disabled={busy}
-                        onClick={() => {
-                          setEraseID("");
-                          setConfirmation("");
-                        }}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
+                  <ConfirmDelete
+                    question="Delete this marker for good?"
+                    action="Delete marker"
+                    busy={busy}
+                    onConfirm={() => erase(marker.markerId)}
+                    onCancel={() => setEraseID("")}
+                  >
+                    <p>Its note is deleted with it. This cannot be undone.</p>
+                  </ConfirmDelete>
                 )}
               </article>
             ))

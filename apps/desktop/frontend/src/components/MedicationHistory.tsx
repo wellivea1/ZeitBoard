@@ -1,9 +1,6 @@
+import { ConfirmDelete } from "./ConfirmDelete";
 import { useState, type FormEvent } from "react";
-import {
-  medicationDeleteConfirmation,
-  type MedicationEventCorrectionInput,
-  type MedicationLog,
-} from "../data/medications";
+import { type MedicationEventCorrectionInput, type MedicationLog } from "../data/medications";
 
 const medicationEventsPerPage = 50;
 
@@ -61,7 +58,6 @@ export function MedicationHistory({
 }) {
   const [editing, setEditing] = useState<MedicationLog | null>(null);
   const [erasing, setErasing] = useState<MedicationLog | null>(null);
-  const [confirmation, setConfirmation] = useState("");
   const [page, setPage] = useState(0);
   const pageCount = Math.max(1, Math.ceil(events.length / medicationEventsPerPage));
   const safePage = Math.min(page, pageCount - 1);
@@ -159,24 +155,25 @@ export function MedicationHistory({
                     className="text-button"
                     type="button"
                     disabled={busy}
+                    aria-label={`Edit ${item.medicationLabel}, ${item.civilTime}`}
                     onClick={() => {
                       setEditing({ ...item });
                       setErasing(null);
                     }}
                   >
-                    Correct
+                    Edit
                   </button>
                   <button
                     className="text-button danger"
                     type="button"
                     disabled={busy}
+                    aria-label={`Delete ${item.medicationLabel}, ${item.civilTime}`}
                     onClick={() => {
                       setErasing(item);
                       setEditing(null);
-                      setConfirmation("");
                     }}
                   >
-                    Erase
+                    Delete
                   </button>
                 </div>
               </article>
@@ -189,10 +186,10 @@ export function MedicationHistory({
         <form
           className="medication-correction-editor"
           onSubmit={save}
-          aria-label={`Correct ${editing.medicationLabel} event`}
+          aria-label={`Edit ${editing.medicationLabel}, ${editing.civilTime}`}
         >
           <header>
-            <p className="section-kicker">Append correction</p>
+            <p className="section-kicker">Edits keep the original</p>
             <h3>{editing.medicationLabel}</h3>
           </header>
           <label>
@@ -274,7 +271,7 @@ export function MedicationHistory({
                 )
               }
             />
-            <span>Exclude from adherence summaries without erasing evidence</span>
+            <span>Exclude from adherence summaries without deleting the record</span>
           </label>
           <div className="medication-editor-actions">
             <button
@@ -286,56 +283,27 @@ export function MedicationHistory({
               Cancel
             </button>
             <button className="button primary compact" type="submit" disabled={busy}>
-              Append correction
+              Save correction
             </button>
           </div>
         </form>
       )}
 
       {erasing && (
-        <section className="medication-event-erasure" aria-label="Erase medication event">
-          <div>
-            <p className="section-kicker">Permanent local erasure</p>
-            <h3>
-              {erasing.medicationLabel} - {erasing.civilTime}
-            </h3>
-            <p>Correction history for this event will also be removed.</p>
-          </div>
-          <label>
-            <span>Type {medicationDeleteConfirmation}</span>
-            <input
-              value={confirmation}
-              disabled={busy}
-              onChange={(event) => setConfirmation(event.target.value)}
-            />
-          </label>
-          <div className="medication-editor-actions">
-            <button
-              className="button ghost compact"
-              type="button"
-              disabled={busy}
-              onClick={() => setErasing(null)}
-            >
-              Cancel
-            </button>
-            <button
-              className="button danger compact"
-              type="button"
-              disabled={busy || confirmation !== medicationDeleteConfirmation}
-              onClick={() =>
-                void onDelete(erasing.eventId).then(
-                  () => {
-                    setErasing(null);
-                    setConfirmation("");
-                  },
-                  () => undefined,
-                )
-              }
-            >
-              Erase event
-            </button>
-          </div>
-        </section>
+        <ConfirmDelete
+          question={`Delete ${erasing.medicationLabel}, ${erasing.civilTime}, for good?`}
+          action="Delete record"
+          busy={busy}
+          onConfirm={() =>
+            void onDelete(erasing.eventId).then(
+              () => setErasing(null),
+              () => undefined,
+            )
+          }
+          onCancel={() => setErasing(null)}
+        >
+          <p>Its corrections are deleted with it.</p>
+        </ConfirmDelete>
       )}
     </section>
   );

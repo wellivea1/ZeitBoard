@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Icon } from "./Icon";
 import { SleepEntryForm } from "./SleepEntryForm";
 import type { SleepEntry, SleepEntryInput } from "../data/sleepEntries";
-import { deleteConfirmationToken } from "../data/sleepDataControl";
+import { ConfirmDelete } from "./ConfirmDelete";
 import { clockRange } from "../utils/relativeTime";
 
 // One night in the sleep log: what was recorded, and quiet actions to edit it,
@@ -43,7 +43,6 @@ export function SleepNightRow({
   editForm,
   busy,
   deleteConfirming,
-  deleteConfirmation,
   onBeginEdit,
   onCancelEdit,
   onEditChange,
@@ -53,7 +52,6 @@ export function SleepNightRow({
   onSuppress,
   onBeginDelete,
   onCancelDelete,
-  onDeleteConfirmationChange,
   onDelete,
 }: {
   entry: SleepEntry;
@@ -61,7 +59,6 @@ export function SleepNightRow({
   editForm: SleepEntryInput;
   busy: boolean;
   deleteConfirming: boolean;
-  deleteConfirmation: string;
   onBeginEdit: () => void;
   onCancelEdit: () => void;
   onEditChange: (form: SleepEntryInput) => void;
@@ -71,7 +68,6 @@ export function SleepNightRow({
   onSuppress: () => void;
   onBeginDelete: () => void;
   onCancelDelete: () => void;
-  onDeleteConfirmationChange: (value: string) => void;
   onDelete: () => void;
 }) {
   const [historyPage, setHistoryPage] = useState(0);
@@ -80,7 +76,6 @@ export function SleepNightRow({
     entry.startLocal !== entry.effectiveStartLocal ||
     entry.endLocal !== entry.effectiveEndLocal ||
     entry.classification !== entry.effectiveClassification;
-  const deleteInputID = `delete-confirm-${entry.observationId}`;
   const historyPageCount = Math.max(1, Math.ceil(entry.history.length / correctionHistoryPerPage));
   const safeHistoryPage = Math.min(historyPage, historyPageCount - 1);
   const historyStart = safeHistoryPage * correctionHistoryPerPage;
@@ -198,39 +193,18 @@ export function SleepNightRow({
       )}
 
       {deleteConfirming && (
-        <div
-          className="sleep-delete-confirmation"
-          role="group"
-          aria-labelledby={`${deleteInputID}-title`}
+        <ConfirmDelete
+          question="Delete this night for good?"
+          action="Delete night"
+          busy={busy}
+          onConfirm={onDelete}
+          onCancel={onCancelDelete}
         >
-          <div>
-            <strong id={`${deleteInputID}-title`}>Delete this night for good?</strong>
-            <p>
-              This removes it and its corrections from this device. To keep it but leave it out of
-              estimates, use Exclude instead.
-            </p>
-          </div>
-          <label htmlFor={deleteInputID}>Type DELETE to confirm</label>
-          <input
-            id={deleteInputID}
-            type="text"
-            value={deleteConfirmation}
-            onChange={(event) => onDeleteConfirmationChange(event.target.value)}
-          />
-          <div className="sleep-delete-actions">
-            <button
-              className="button danger"
-              type="button"
-              onClick={onDelete}
-              disabled={busy || deleteConfirmation !== deleteConfirmationToken}
-            >
-              Delete night
-            </button>
-            <button className="button ghost" type="button" onClick={onCancelDelete} disabled={busy}>
-              Keep it
-            </button>
-          </div>
-        </div>
+          <p>
+            This removes it and its corrections from this device. To keep it but leave it out of
+            estimates, use Exclude instead.
+          </p>
+        </ConfirmDelete>
       )}
 
       {entry.history.length > 0 && (

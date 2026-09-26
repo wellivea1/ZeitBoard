@@ -44,7 +44,7 @@ describe("LogScreen marker ownership", () => {
       main: { App: { GetRhythmMarkers: getMarkers, AddRhythmMarker: addMarker } },
     };
 
-    render(<LogScreen tab="markers" onSelect={() => {}} />);
+    render(<LogScreen tab="context" onSelect={() => {}} />);
     expect(await screen.findByText("Private travel context")).toBeVisible();
     expect(getMarkers).toHaveBeenCalledTimes(1);
 

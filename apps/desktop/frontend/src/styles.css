@@ -90,7 +90,6 @@
   --drift-point: #2b3d5e;
   --drift-grid: #e6e0d3;
   --drift-axis: #cfc7b6;
-  --drift-svg-bg: linear-gradient(to right, #e6e0d3 1px, transparent 1px);
   --meter-muted: #e6e0d3;
   --meter-fill: #5c564c;
 
@@ -231,7 +230,6 @@
   --drift-point: #a6b8e0;
   --drift-grid: #2a2b30;
   --drift-axis: #403d37;
-  --drift-svg-bg: linear-gradient(to right, #2a2b30 1px, transparent 1px);
   --meter-muted: #2a2b30;
   --meter-fill: #aba391;
 
@@ -300,7 +298,6 @@
   --drift-point: #a6b8e0;
   --drift-grid: #17171a;
   --drift-axis: #26241f;
-  --drift-svg-bg: linear-gradient(to right, #141417 1px, transparent 1px);
   --meter-muted: #1c1c1e;
   --meter-fill: #a8a090;
   --shadow: none;
@@ -374,7 +371,6 @@
   --drift-point: #ffc21a;
   --drift-grid: #1c1503;
   --drift-axis: #3d2c05;
-  --drift-svg-bg: linear-gradient(to right, #1c1503 1px, transparent 1px);
   --meter-muted: #241a04;
   --meter-fill: #d19200;
   --shadow: none;
@@ -445,7 +441,6 @@
   --drift-point: #ffffff;
   --drift-grid: #333333;
   --drift-axis: #6f6f6f;
-  --drift-svg-bg: linear-gradient(to right, #1a1a1a 1px, transparent 1px);
   --meter-muted: #333333;
   --meter-fill: #ffffff;
   --shadow: none;
@@ -465,8 +460,6 @@
 }
 
 /* Reduced-stimulation: soften saturation and contrast on decorative status cues. */
-[data-reduced="true"] .state-pill,
-[data-reduced="true"] .proposal-kind,
 [data-reduced="true"] .actogram-band,
 [data-reduced="true"] .drift-point {
   filter: saturate(0.65);
@@ -497,6 +490,8 @@
 html {
   min-width: 320px;
   background: var(--canvas);
+  /* The navigation stays put between a short page and a long one. */
+  scrollbar-gutter: stable;
 }
 body {
   margin: 0;
@@ -878,6 +873,50 @@ textarea {
   transform: rotate(90deg);
 }
 /* A button that reads as a link inside a sentence. */
+/* Every permanent deletion asks the same way (ConfirmDelete): a question,
+   what is lost, a typed word, then the action beside a way out. */
+.confirm-delete {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3) 0;
+  display: grid;
+  gap: var(--space-3);
+  border-block: 1px solid var(--danger-border);
+}
+.confirm-delete-text strong {
+  display: block;
+  margin-bottom: var(--space-1);
+  color: var(--danger-text);
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 500;
+}
+.confirm-delete-text p {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-label);
+  line-height: 1.5;
+}
+.confirm-delete label {
+  color: var(--danger-text);
+  font-size: var(--type-label);
+  font-weight: 800;
+}
+.confirm-delete input {
+  max-width: 22rem;
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  color: var(--ink);
+  background: var(--paper);
+  border: 1px solid var(--danger-border);
+  border-radius: var(--radius-control);
+  font-size: var(--type-body);
+}
+.confirm-delete-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
 .text-link {
   padding: 0;
   color: var(--ink);
@@ -965,7 +1004,6 @@ textarea {
 
 .proposal-stack,
 .correction-inspector,
-.refusal-panel,
 .source-conflicts-panel {
   grid-column: span 12;
 }
@@ -1038,23 +1076,12 @@ textarea {
 }
 
 .correction-inspector,
-.refusal-panel,
 .source-conflicts-panel,
 .drift-panel,
 .actogram-panel {
   padding: 20px 0 24px;
 }
-.phase-two-copy,
-.refusal-panel p {
-  margin: 0 0 16px;
-  color: var(--muted);
-  font-size: var(--type-label);
-  line-height: 1.55;
-}
-.refusal-panel h2 {
-  margin: 0 0 8px;
-  font-size: 16px;
-}
+
 .correction-inspector small {
   color: var(--subtle);
   font-size: var(--type-micro);
@@ -1301,32 +1328,6 @@ textarea {
 }
 .proposal-stack > .proposal-card:last-child {
   border-bottom: 0;
-}
-
-.proposal-header {
-  grid-area: header;
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-}
-.proposal-header h2 {
-  margin: 0;
-  font-family: var(--font-serif);
-  font-size: 19px;
-  font-weight: 500;
-}
-.proposal-kind {
-  min-width: 34px;
-  padding: 0;
-  display: grid;
-  align-items: start;
-  color: var(--muted);
-  background: transparent;
-  font-size: var(--type-micro);
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
 }
 
 .proposal-change {
@@ -1648,8 +1649,15 @@ textarea {
   height: 2px;
   background: var(--drift-fit);
 }
-.drift-panel {
-  min-height: 420px;
+.actogram-footer .legend-point {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.actogram-footer .legend-now {
+  width: 2px;
+  height: 12px;
+  background: var(--accent);
 }
 .drift-summary {
   display: grid;
@@ -1669,13 +1677,16 @@ textarea {
   align-items: stretch;
 }
 .drift-y-axis {
+  position: relative;
   height: 300px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
   color: var(--subtle);
   font-size: var(--type-micro);
-  text-align: right;
+}
+.drift-y-axis span {
+  position: absolute;
+  right: 0;
+  transform: translateY(-50%);
+  white-space: nowrap;
 }
 .drift-chart {
   min-height: 330px;
@@ -1692,8 +1703,6 @@ textarea {
   width: 100%;
   height: 100%;
   overflow: visible;
-  background-image: var(--drift-svg-bg);
-  background-size: 20% 100%;
   border-left: 1px solid var(--drift-axis);
   border-bottom: 1px solid var(--drift-axis);
 }
@@ -1711,18 +1720,20 @@ textarea {
   stroke-width: 0.9;
 }
 .drift-point {
-  fill: var(--drift-point);
-  stroke: var(--paper);
-  stroke-width: 0.6;
+  stroke: var(--drift-point);
+  stroke-width: 8px;
+  stroke-linecap: round;
 }
 .drift-x-axis {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  position: relative;
   color: var(--subtle);
   font-size: var(--type-micro);
 }
 .drift-x-axis span {
-  text-align: center;
+  position: absolute;
+  top: 8px;
+  transform: translateX(-50%);
+  white-space: nowrap;
 }
 
 .actogram {
@@ -1791,14 +1802,7 @@ textarea {
   font-size: var(--type-micro);
   line-height: 1.45;
 }
-.state-pill {
-  display: inline;
-  color: var(--muted);
-  font-size: var(--type-micro);
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
+
 .sr-table,
 .sr-only {
   position: absolute;
@@ -1980,7 +1984,7 @@ textarea {
   font-size: var(--type-micro);
   font-weight: 800;
 }
-.data-control-card input,
+.data-control-card input:not([type="checkbox"]):not([type="radio"]),
 .export-preview {
   width: 100%;
   min-height: 44px;
@@ -2019,7 +2023,7 @@ textarea {
 }
 .sync-status-list div {
   display: grid;
-  grid-template-columns: 110px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
   gap: 12px;
   align-items: baseline;
 }
@@ -2059,8 +2063,7 @@ textarea {
   .rhythm-screen .source-conflicts-panel {
     grid-column: span 8;
   }
-  .rhythm-screen .correction-inspector,
-  .rhythm-screen .refusal-panel {
+  .rhythm-screen .correction-inspector {
     grid-column: span 4;
   }
 }
@@ -2441,18 +2444,8 @@ textarea {
   flex-direction: column;
   gap: var(--space-3);
 }
-.proposal-card[data-origin="visitor"] .proposal-header {
-  grid-template-columns: 60px minmax(0, 1fr);
-}
-.proposal-card[data-origin="visitor"] h3 {
-  margin: 0;
-  font-size: 15px;
-}
-.proposal-card[data-origin="visitor"] .proposal-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3);
+.proposal-card[data-origin="visitor"] .approval-actions {
+  justify-content: flex-start;
 }
 
 .visitor-message {

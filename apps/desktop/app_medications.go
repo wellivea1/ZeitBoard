@@ -569,7 +569,7 @@ func medicationDTO(record storage.MedicationRecord, eventCount int, state localE
 	if record.StrengthLabel != "" {
 		detailParts = append(detailParts, record.StrengthLabel)
 	}
-	detail := strings.Join(detailParts, " - ")
+	detail := strings.Join(detailParts, " · ")
 	if detail == "" {
 		detail = "No form or strength label"
 	}

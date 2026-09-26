@@ -230,7 +230,7 @@ export function MedicationReportControls({
           uploaded.
         </p>
         <button className="button primary compact" type="submit" disabled={!canGenerate}>
-          {loading ? "Generating..." : hasReport ? "Regenerate preview" : "Generate preview"}
+          {loading ? "Generating…" : hasReport ? "Regenerate preview" : "Generate preview"}
         </button>
       </div>
     </form>
@@ -343,7 +343,7 @@ export function MedicationReportPreviewBody({
                 disabled={exporting || stale || confirmation !== medicationReportExportConfirmation}
                 onClick={() => onExport("print")}
               >
-                {exporting ? "Preparing..." : "Print or save as PDF"}
+                {exporting ? "Preparing…" : "Print or save as PDF"}
               </button>
             </div>
           </div>

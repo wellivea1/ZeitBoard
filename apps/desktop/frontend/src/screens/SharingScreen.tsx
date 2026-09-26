@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { Loading } from "../components/Loading";
+import { useLoaded } from "../state/useLoaded";
 import { Notice } from "../components/Notice";
 import { Icon } from "../components/Icon";
 import { PageHeader } from "../components/AppShell";
@@ -49,20 +51,11 @@ function headline(data: ShareLinksData) {
 }
 
 export function SharingScreen() {
-  const [data, setData] = useState<ShareLinksData>(shareLinksUnavailable);
+  const { data: loaded, set: setData } = useLoaded(loadShareLinks);
+  const data = loaded ?? shareLinksUnavailable;
   const [created, setCreated] = useState<CreatedShareLink | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    let current = true;
-    void loadShareLinks().then((loaded) => {
-      if (current) setData(loaded);
-    });
-    return () => {
-      current = false;
-    };
-  }, []);
 
   const submit = async (input: CreateShareLinkInput) => {
     setBusy(true);
@@ -100,100 +93,106 @@ export function SharingScreen() {
       <PageHeader
         title="Sharing"
         actions={
-          <div className="status-cluster">
-            <span
-              className="sync-dot"
-              data-mode={connected ? "synced" : "fixture"}
-              aria-hidden="true"
-            />
-            <span>{connected ? "Your own server" : "Not connected"}</span>
-          </div>
+          loaded && (
+            <div className="status-cluster">
+              <span
+                className="sync-dot"
+                data-mode={connected ? "synced" : "fixture"}
+                aria-hidden="true"
+              />
+              <span>{connected ? "Your own server" : "Not connected"}</span>
+            </div>
+          )
         }
       />
 
-      <section className="sharing-workspace" aria-label="Share links">
-        <header className="sharing-state">
-          <div className="sharing-state-copy">
-            <Icon name="shield" />
-            <div>
-              <h2>{headline(data)}</h2>
-              {data.status !== "ok" && (
-                <p>
-                  {data.message ??
-                    "Sharing runs on your own server, and this desktop is not talking to one yet."}
-                </p>
-              )}
-              {data.status === "off" && (
-                <a className="button secondary compact" href="#/settings/sync">
-                  Set up sync
-                </a>
-              )}
-            </div>
-          </div>
-          <dl className="sharing-state-facts">
-            {stateFacts(data).map((fact) => (
-              <div key={fact.label}>
-                <dt>{fact.label}</dt>
-                <dd>{fact.value}</dd>
+      {loaded === undefined ? (
+        <Loading />
+      ) : (
+        <section className="sharing-workspace" aria-label="Share links">
+          <header className="sharing-state">
+            <div className="sharing-state-copy">
+              <Icon name="shield" />
+              <div>
+                <h2>{headline(data)}</h2>
+                {data.status !== "ok" && (
+                  <p>
+                    {data.message ??
+                      "Sharing runs on your own server, and this desktop is not talking to one yet."}
+                  </p>
+                )}
+                {data.status === "off" && (
+                  <a className="button secondary compact" href="#/settings/sync">
+                    Set up sync
+                  </a>
+                )}
               </div>
-            ))}
-          </dl>
-        </header>
+            </div>
+            <dl className="sharing-state-facts">
+              {stateFacts(data).map((fact) => (
+                <div key={fact.label}>
+                  <dt>{fact.label}</dt>
+                  <dd>{fact.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </header>
 
-        <section className="sharing-template-section" aria-labelledby="sharing-links-title">
-          <div className="sharing-section-heading">
-            <h2 id="sharing-links-title">Links you have made</h2>
-          </div>
+          <section className="sharing-template-section" aria-labelledby="sharing-links-title">
+            <div className="sharing-section-heading">
+              <h2 id="sharing-links-title">Links you have made</h2>
+            </div>
 
-          {error && (
-            <p className="form-error" role="alert">
-              {error}
-            </p>
-          )}
+            {error && (
+              <p className="form-error" role="alert">
+                {error}
+              </p>
+            )}
 
-          <ShareLinkList
-            data={data}
-            busy={busy}
-            onRevoke={(profileId) => void run(() => revokeShareLink(profileId))}
-            onErase={(profileId, confirmation) =>
-              void run(() => eraseShareLink(profileId, confirmation))
-            }
-          />
+            <ShareLinkList
+              data={data}
+              busy={busy}
+              onRevoke={(profileId) => void run(() => revokeShareLink(profileId))}
+              onErase={(profileId, confirmation) =>
+                void run(() => eraseShareLink(profileId, confirmation))
+              }
+            />
 
-          <ShareLinkForm
-            data={data}
-            busy={busy}
-            created={created}
-            onDismissCreated={() => setCreated(null)}
-            onSubmit={(input) => void submit(input)}
-          />
-        </section>
+            <ShareLinkForm
+              data={data}
+              busy={busy}
+              created={created}
+              onDismissCreated={() => setCreated(null)}
+              onSubmit={(input) => void submit(input)}
+            />
+          </section>
 
-        {/* The rules hold for every link, so they are a note to read once and
+          {/* The rules hold for every link, so they are a note to read once and
             close. What never goes into a link is not: it stays in view beside
             the form that makes one. */}
-        <aside className="sharing-guardrails" aria-label="How sharing works">
-          <Notice id="sharing.how">
-            <ol>
-              <li>
-                Every link needs a passcode and an expiry; there are no open or permanent links.
-              </li>
-              <li>Every permission starts off until you grant it.</li>
-              <li>
-                Revoking stops a link at once. Erasing also removes the record that it existed.
-              </li>
-              <li>A link that fails shows an empty unavailable page, never your data.</li>
-            </ol>
-          </Notice>
-          <div className="sharing-private-boundary sheet">
-            <strong>Never in a trusted link</strong>
-            <span>
-              Medication, diagnosis, raw activity, location, private calendar text, and rhythm
-              marker notes.
-            </span>
-          </div>
-        </aside>
-      </section>
+          <aside className="sharing-guardrails" aria-label="How sharing works">
+            <Notice id="sharing.how">
+              <ol>
+                <li>
+                  Every link needs a passcode and an expiry; there are no open or permanent links.
+                </li>
+                <li>Every permission starts off until you grant it.</li>
+                <li>
+                  Revoking stops a link at once. Deleting also removes the record that it existed.
+                </li>
+                <li>A link that fails shows an empty unavailable page, never your data.</li>
+              </ol>
+            </Notice>
+            <div className="sharing-private-boundary sheet">
+              <strong>Never in a trusted link</strong>
+              <span>
+                Medication, diagnosis, raw activity, location, private calendar text, and rhythm
+                marker notes.
+              </span>
+            </div>
+          </aside>
+        </section>
+      )}
     </>
   );
 }

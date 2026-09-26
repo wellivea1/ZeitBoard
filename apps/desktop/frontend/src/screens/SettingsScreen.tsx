@@ -170,7 +170,7 @@ export function SettingsScreen({
 
   const handleDeleteAllSleepData = async () => {
     if (deleteAllConfirmation !== deleteConfirmationToken) {
-      setDataControlError("Type DELETE to confirm permanent erasure.");
+      setDataControlError("Type DELETE to confirm.");
       return;
     }
     setDataControlBusy(true);
@@ -180,9 +180,9 @@ export function SettingsScreen({
       notifySleepDataChanged();
       setExportedSleepData(null);
       setDeleteAllConfirmation("");
-      setDataControlStatus("All local sleep observations and correction history were erased.");
+      setDataControlStatus("All sleep records and corrections on this computer were deleted.");
     } catch (error) {
-      setDataControlError(error instanceof Error ? error.message : "Could not erase sleep data.");
+      setDataControlError(error instanceof Error ? error.message : "Could not delete sleep data.");
     } finally {
       setDataControlBusy(false);
     }

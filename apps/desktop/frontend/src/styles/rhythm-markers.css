@@ -41,17 +41,6 @@
   font-size: var(--type-label);
 }
 
-.rhythm-marker-boundary {
-  margin: var(--space-4) 0;
-  padding: 10px 0;
-  color: var(--muted);
-  border-block: 1px solid var(--divider);
-  font-family: var(--font-serif);
-  font-size: 14.5px;
-  font-style: italic;
-  line-height: 1.45;
-}
-
 /* The recorded markers first; adding one folds out beneath them. */
 .rhythm-marker-layout {
   display: grid;
@@ -99,8 +88,7 @@
 
 .rhythm-marker-entry input,
 .rhythm-marker-entry select,
-.rhythm-marker-entry textarea,
-.rhythm-marker-erase input {
+.rhythm-marker-entry textarea {
   width: 100%;
   min-height: 40px;
   padding: var(--space-2) var(--space-3);
@@ -188,41 +176,6 @@
   font-weight: 800;
   text-decoration: underline;
   text-underline-offset: 3px;
-}
-
-.rhythm-marker-erase {
-  grid-column: 1 / -1;
-  padding: var(--space-3) 0 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(160px, 220px) auto;
-  gap: var(--space-3);
-  align-items: end;
-  border-top: 1px solid var(--danger-border);
-}
-
-.rhythm-marker-erase p {
-  margin: 0;
-  color: var(--danger-text);
-  font-size: var(--type-label);
-  line-height: 1.5;
-}
-
-.rhythm-marker-erase label {
-  display: grid;
-  gap: var(--space-1);
-  color: var(--danger-text);
-  font-size: var(--type-label);
-  font-weight: 800;
-}
-
-.rhythm-marker-erase input {
-  border-color: var(--danger-border);
-}
-
-.rhythm-marker-erase > div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
 }
 
 .rhythm-marker-empty {
@@ -348,9 +301,5 @@
   .rhythm-marker-range,
   .rhythm-marker-row > p {
     grid-column: 1 / -1;
-  }
-
-  .rhythm-marker-erase {
-    grid-template-columns: 1fr;
   }
 }

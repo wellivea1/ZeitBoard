@@ -112,7 +112,7 @@ describe("shared approval queue", () => {
     act(notifyReviewQueueChanged);
     expect(await screen.findByText("13 incomplete")).toBeVisible();
     expect(screen.getByText("Sam asked for a time")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Accept this block" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /^Accept the chosen time for/ })).toBeDisabled();
     act(notifyReviewQueueChanged);
     expect(await screen.findByText("9 ready")).toBeVisible();
     expect(screen.queryByText("Sam asked for a time")).toBeNull();
@@ -160,7 +160,7 @@ describe("shared approval queue", () => {
         <DecisionHistory />
       </Providers>,
     );
-    const accept = await screen.findByRole("button", { name: "Accept this block" });
+    const accept = await screen.findByRole("button", { name: /^Accept the chosen time for/ });
     fireEvent.click(accept);
     fireEvent.click(accept);
     expect(decide).toHaveBeenCalledTimes(1);
@@ -177,7 +177,7 @@ describe("shared approval queue", () => {
       }),
     );
     expect(screen.getByText("12 incomplete")).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Accept this block" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Accept the chosen time for/ })).toBeNull();
     fireEvent.click(screen.getByText(/Decision history/));
     expect(screen.getByText("approved")).toBeVisible();
   });
@@ -221,12 +221,12 @@ describe("shared approval queue", () => {
       </Providers>,
     );
     await act(async () => {});
-    expect(screen.getByRole("button", { name: "Accept this block" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /^Accept the chosen time for/ })).toBeEnabled();
     await act(async () => {
       vi.advanceTimersByTime(1001);
     });
     expect(list).toHaveBeenCalledTimes(2);
-    expect(screen.queryByRole("button", { name: "Accept this block" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Accept the chosen time for/ })).toBeNull();
   });
 });
 

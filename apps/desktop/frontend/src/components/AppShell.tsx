@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
 import { usePendingApprovalsCount } from "../state/approvalQueue";
-import type { LogTab, PlanTab, ScreenId, SettingsTab } from "../types";
+import type { LogTab, PlanTab, RhythmTab, ScreenId, SettingsTab } from "../types";
 
 const AssistantRail = lazy(() =>
   import("./AssistantRail").then((module) => ({ default: module.AssistantRail })),
@@ -38,12 +38,14 @@ const screenIds = new Set<ScreenId>([
 export interface Route {
   screen: ScreenId;
   planTab: PlanTab;
+  rhythmTab: RhythmTab;
   logTab: LogTab;
   settingsTab: SettingsTab;
 }
 
 const planTabs = new Set<PlanTab>(["tasks", "week"]);
-const logTabs = new Set<LogTab>(["sleep", "medications", "markers"]);
+const rhythmTabs = new Set<RhythmTab>(["actogram", "drift", "sources"]);
+const logTabs = new Set<LogTab>(["sleep", "medications", "context"]);
 const settingsTabs = new Set<SettingsTab>(["display", "reaching", "sync", "computer", "data"]);
 
 // Routes that existed before the consolidation. They are still written down,
@@ -64,6 +66,7 @@ const legacyRoutes: Record<string, Partial<Route> & { screen: ScreenId }> = {
 const defaultRoute: Route = {
   screen: "home",
   planTab: "tasks",
+  rhythmTab: "actogram",
   logTab: "sleep",
   settingsTab: "display",
 };
@@ -84,6 +87,9 @@ export function readRouteFromHash(hash: string): Route {
   // Plan › Calendar became Plan › Week when the board turned calendar-native.
   if (screen === "plan" && second === "calendar") {
     return { ...defaultRoute, screen, planTab: "week" };
+  }
+  if (screen === "rhythm" && rhythmTabs.has(second as RhythmTab)) {
+    return { ...defaultRoute, screen, rhythmTab: second as RhythmTab };
   }
   if (screen === "log" && logTabs.has(second as LogTab)) {
     return { ...defaultRoute, screen, logTab: second as LogTab };
@@ -109,6 +115,9 @@ export function useScreenNavigation() {
   const selectPlanTab = (planTab: PlanTab) => {
     window.location.hash = `#/plan/${planTab}`;
   };
+  const selectRhythmTab = (rhythmTab: RhythmTab) => {
+    window.location.hash = `#/rhythm/${rhythmTab}`;
+  };
   const selectLogTab = (logTab: LogTab) => {
     window.location.hash = `#/log/${logTab}`;
   };
@@ -116,7 +125,7 @@ export function useScreenNavigation() {
     window.location.hash = `#/settings/${settingsTab}`;
   };
 
-  return { route, selectPlanTab, selectLogTab, selectSettingsTab };
+  return { route, selectPlanTab, selectRhythmTab, selectLogTab, selectSettingsTab };
 }
 
 function NavigationLink({ item, active }: { item: NavItem; active: boolean }) {

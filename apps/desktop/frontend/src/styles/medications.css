@@ -42,27 +42,6 @@
   opacity: 0.55;
 }
 
-/* Both notices, compact: present on every visit without taking a panel each. */
-.medication-boundary {
-  margin-bottom: var(--space-4);
-  padding: 10px 0;
-  display: grid;
-  gap: var(--space-1);
-  color: var(--muted);
-  border-block: 1px solid var(--divider);
-  font-family: var(--font-serif);
-  font-size: 14.5px;
-  font-style: italic;
-  line-height: 1.45;
-}
-
-.medication-boundary strong {
-  margin-right: var(--space-1);
-  color: var(--ink);
-  font-style: normal;
-  font-weight: 600;
-}
-
 .medication-error {
   margin-bottom: var(--space-4);
   padding: 10px 0;
@@ -169,8 +148,7 @@
 
 .medication-section-heading h2,
 .medication-rail-section h2,
-.medication-correction-editor h3,
-.medication-event-erasure h3 {
+.medication-correction-editor h3 {
   margin: 0;
   color: var(--ink);
   font-family: var(--font-sans);
@@ -198,9 +176,7 @@
 
 .medication-log-form label,
 .medication-definition-form label,
-.medication-correction-editor label,
-.medication-erasure label,
-.medication-event-erasure label {
+.medication-correction-editor label {
   min-width: 0;
   display: grid;
   gap: var(--space-1);
@@ -212,9 +188,7 @@
 .medication-log-form select,
 .medication-definition-form input,
 .medication-correction-editor input,
-.medication-correction-editor select,
-.medication-erasure input,
-.medication-event-erasure input {
+.medication-correction-editor select {
   width: 100%;
   min-width: 0;
 }
@@ -458,8 +432,7 @@
   padding: 2px 0;
 }
 
-.medication-correction-editor,
-.medication-event-erasure {
+.medication-correction-editor {
   margin-top: var(--space-4);
   padding: var(--space-4) 0;
   display: grid;
@@ -469,8 +442,7 @@
   border-block: 1px solid var(--ink);
 }
 
-.medication-correction-editor header,
-.medication-event-erasure > div:first-child {
+.medication-correction-editor header {
   align-self: center;
 }
 
@@ -491,18 +463,6 @@
 
 .medication-correction-editor .medication-editor-actions {
   grid-column: 4;
-}
-
-.medication-event-erasure {
-  grid-template-columns: minmax(220px, 1fr) minmax(180px, 0.7fr) auto;
-}
-
-.medication-event-erasure p,
-.medication-erasure p {
-  margin: var(--space-1) 0 0;
-  color: var(--muted);
-  font-size: var(--type-body);
-  line-height: 1.45;
 }
 
 /* The list first; adding a medication folds out beneath it. */
@@ -598,13 +558,6 @@
   padding: 2px 0;
 }
 
-.medication-erasure {
-  display: grid;
-  gap: var(--space-3);
-  padding: var(--space-3) 0;
-  border-block: 1px solid var(--danger-border);
-}
-
 @media (max-width: 1120px) {
   .medication-log-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -643,8 +596,7 @@
   }
 
   .medication-log-form,
-  .medication-correction-editor,
-  .medication-event-erasure {
+  .medication-correction-editor {
     grid-template-columns: 1fr;
   }
 

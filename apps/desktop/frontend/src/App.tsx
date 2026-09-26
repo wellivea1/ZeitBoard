@@ -36,13 +36,14 @@ function ScreenLoading() {
 }
 
 export default function App() {
-  const { route, selectPlanTab, selectLogTab, selectSettingsTab } = useScreenNavigation();
+  const { route, selectPlanTab, selectRhythmTab, selectLogTab, selectSettingsTab } =
+    useScreenNavigation();
   useEffect(subscribeAnalysisUpdates, []);
 
   const content: ReactNode = {
     home: <HomeScreen />,
     plan: <PlanScreen tab={route.planTab} onSelect={selectPlanTab} />,
-    rhythm: <RhythmScreen />,
+    rhythm: <RhythmScreen tab={route.rhythmTab} onSelect={selectRhythmTab} />,
     log: <LogScreen tab={route.logTab} onSelect={selectLogTab} />,
     sharing: <SharingScreen />,
     "data-sources": <DataSourcesScreen />,

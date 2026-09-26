@@ -147,7 +147,7 @@ type assistantProposalSummary struct {
 	Payload       json.RawMessage `json:"payload"`
 }
 
-const assistantOffMessage = "The assistant runs on your self-hosted backend. Connect it under Settings → Backend sync to start chatting."
+const assistantOffMessage = "The assistant runs on your self-hosted backend. Connect it under Settings › Sync to start chatting."
 
 // GetAssistantStatus reports whether the assistant surface is usable and which
 // provider the backend discloses. It makes no network call when sync is off.

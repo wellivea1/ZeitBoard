@@ -1,3 +1,4 @@
+import { ConfirmDelete } from "./ConfirmDelete";
 import { useState } from "react";
 import { Notice } from "./Notice";
 import { CalendarImportPanel } from "./CalendarImportPanel";
@@ -25,21 +26,19 @@ export function CalendarSourcesPanel({
   onChanged: () => void;
 }) {
   const [removing, setRemoving] = useState<string | null>(null);
-  const [confirmation, setConfirmation] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [adding, setAdding] = useState(false);
   const sourceBeingRemoved = sources.find((source) => source.sourceId === removing);
 
   const remove = (sourceId: string) => {
-    if (confirmation !== "REMOVE" || busy) return;
+    if (busy) return;
     setBusy(true);
     setError("");
     void removeCalendarSource(sourceId).then(
       () => {
         setBusy(false);
         setRemoving(null);
-        setConfirmation("");
         onChanged();
       },
       (reason: unknown) => {
@@ -90,7 +89,6 @@ export function CalendarSourcesPanel({
                   aria-label={`Remove ${source.label}`}
                   onClick={() => {
                     setRemoving(source.sourceId);
-                    setConfirmation("");
                     setError("");
                   }}
                 >
@@ -102,40 +100,17 @@ export function CalendarSourcesPanel({
         </ul>
       )}
       {sourceBeingRemoved && (
-        <div className="calendar-remove-confirmation">
-          <label>
-            <span>
-              Type REMOVE to erase {sourceBeingRemoved.label} and its events from ZeitBoard
-            </span>
-            <input
-              value={confirmation}
-              autoComplete="off"
-              disabled={busy}
-              onChange={(event) => setConfirmation(event.currentTarget.value)}
-            />
-          </label>
-          <div>
-            <button
-              className="button ghost compact"
-              type="button"
-              disabled={busy}
-              onClick={() => {
-                setRemoving(null);
-                setConfirmation("");
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              className="button danger compact"
-              type="button"
-              disabled={busy || confirmation !== "REMOVE"}
-              onClick={() => remove(sourceBeingRemoved.sourceId)}
-            >
-              {busy ? "Erasing…" : "Erase calendar"}
-            </button>
-          </div>
-        </div>
+        <ConfirmDelete
+          question={`Remove ${sourceBeingRemoved.label} from ZeitBoard?`}
+          action="Remove calendar"
+          busyAction="Removing…"
+          word="REMOVE"
+          busy={busy}
+          onConfirm={() => remove(sourceBeingRemoved.sourceId)}
+          onCancel={() => setRemoving(null)}
+        >
+          <p>Its events are deleted from ZeitBoard. The calendar itself is not changed.</p>
+        </ConfirmDelete>
       )}
       {error && (
         <p className="form-error" role="alert">

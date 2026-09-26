@@ -1,11 +1,8 @@
+import { decisionButton, requestDecisionLabel } from "../data/decisionWords";
 import { defaultSlot, type VisitorRequest } from "../data/visitorRequests";
-
 import { useVisitorRequests } from "../state/visitorRequests";
-
 import { useApprovalQueue } from "../state/approvalQueue";
-
 import { reviewIsPending } from "../data/reviewQueue";
-
 import { civilCandidates, localZone, selectedCivilInstant } from "../utils/civilTime";
 
 export function VisitorRequestCard({ request }: { request: VisitorRequest }) {
@@ -30,14 +27,11 @@ export function VisitorRequestCard({ request }: { request: VisitorRequest }) {
 
   return (
     <article className="proposal-card" data-origin="visitor">
-      <div className="proposal-header">
-        <span className="proposal-kind">Request</span>
-        <div>
-          <p className="section-kicker">{request.linkLabel}</p>
-          <h3>
-            {request.handle ? `${request.handle} asked for a time` : "Someone asked for a time"}
-          </h3>
-        </div>
+      <div className="proposal-heading">
+        <p>Visitor request · {request.linkLabel}</p>
+        <h3>
+          {request.handle ? `${request.handle} asked for a time` : "Someone asked for a time"}
+        </h3>
       </div>
 
       <p className="proposal-change">
@@ -120,28 +114,29 @@ export function VisitorRequestCard({ request }: { request: VisitorRequest }) {
 
       <p className="proposal-disclosure">{request.approvalDisclosure}</p>
 
-      <div className="proposal-actions">
+      <p className="proposal-meta">
+        {request.createdLabel} · {request.expiresLabel}
+      </p>
+
+      <div className="approval-actions">
         <button
-          className="button primary compact"
+          className="button primary"
           type="button"
           disabled={busy || !valid}
+          aria-label={requestDecisionLabel("approved", request.handle)}
           onClick={() => void queue.decide(request, "approved", slot)}
         >
-          {queue.busyId === request.proposalId ? "Recording..." : "Accept this block"}
+          {queue.busyId === request.proposalId ? "Recording…" : decisionButton("approved")}
         </button>
-
         <button
-          className="button secondary compact"
+          className="button secondary"
           type="button"
           disabled={busy}
+          aria-label={requestDecisionLabel("rejected", request.handle)}
           onClick={() => void queue.decide(request, "rejected", slot)}
         >
-          Decline
+          {decisionButton("rejected")}
         </button>
-
-        <small>
-          {request.createdLabel}, {request.expiresLabel}
-        </small>
       </div>
     </article>
   );

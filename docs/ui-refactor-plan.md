@@ -407,7 +407,7 @@ overlay without owning the editing.
 
 **One tablist, not three.** `components/ScreenTabs.tsx` carries the roving
 tabindex and the arrow/Home/End handling that three hand-rolled copies would
-have drifted on. Tabs are part of the address (`#/plan/tasks`, `#/log/markers`),
+have drifted on. Tabs are part of the address (`#/plan/tasks`, `#/log/context`),
 so a reload or a bookmark lands where it did.
 
 **Current routes only (2026-09-21).** Following the owner's pre-release direction,
@@ -685,3 +685,43 @@ estimate shaded, and the windows follow as entries with "now" as a small-
 capital word. Forms use small-capital labels, square fields and a solid
 button; the accuracy qualifier and notice stand on a sheet. The page follows
 the visitor's system into the Ink palette at night.
+
+### One vocabulary and one loading state, 2026-09-26
+
+A walk through every screen of the real app, against a disposable profile
+with six weeks of synthetic nights, found the same act named differently and
+the same state shown differently from screen to screen.
+
+- **Deciding.** Home said Accept and Decline, Plan said Accept proposal and
+  Reject proposal (in the other order), visitor requests said Accept this
+  block. Every decision is now Accept then Decline, each button named for what
+  it decides, and the announcement says Accepted or Declined
+  (`data/decisionWords.ts`). The visitor card uses the same heading and
+  actions as the others.
+- **Deleting.** Six hand-built confirmations used Erase, Permanently erase,
+  Erase record and Delete, with the typed word and the button order varying.
+  One `ConfirmDelete` now asks the same way everywhere: a question, what is
+  lost, the gentler option where there is one, "Type DELETE to confirm", then
+  the action beside Keep it. A calendar asks for REMOVE and a share link for
+  its id, in the same layout. Medication records say Edit and Delete like
+  sleep nights, and every row's buttons are named for their record.
+- **Loading.** Rhythm opened on "Your records could not be read" and "Rhythm
+  unavailable", and the sleep log on "No sleep entries yet", until the first
+  read returned; Sharing and file protection briefly said to open the desktop
+  app. `useLoaded` gives every view one rule: until the first read settles the
+  view says "Reading your records…", which is neither empty nor unavailable.
+- **Rhythm.** The Sources tab's sample-only panels (raw codes such as
+  CONFLICTING_OBSERVATIONS, action chips run together) are gone; the preview
+  shows the same panel as the app. A refusal is explained where the chart would
+  be, in the words Home uses, never as the estimator's code. Tabs are part of
+  the address like Plan's and Log's. The drift chart's dates were laid in a
+  fixed six-column grid, so six weeks stacked four deep; its hour labels were
+  spread evenly but its gridlines were not; and its points were drawn as
+  ellipses. Dates are now placed under their points (at most seven), hours are
+  whole and level with their lines, and points are round.
+- **Small things.** Legends are in sentence case with a real key for now;
+  separators are the middle dot (medication details said "tablet - 0.5 mg");
+  the Context tab no longer says it is empty twice or offers to export
+  nothing; the assistant points to Settings › Sync, the name of the tab; the
+  navigation no longer shifts between short and long pages; the self-signed
+  TLS checkbox is a checkbox again.

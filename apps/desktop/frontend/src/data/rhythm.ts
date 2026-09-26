@@ -1,18 +1,47 @@
-import {
-  rhythmActogramFixture,
-  rhythmDriftFixture,
-  type RhythmDriftPointFixture,
-  type RhythmSleepBandFixture,
-} from "./phaseTwo";
+import { rhythmActogramFixture, rhythmDriftFixture } from "./fixture";
 import type { ConfidenceLevel } from "./overview";
 import { findWailsMethod, hasDesktopBridge, type WailsRoot } from "./wailsBridge";
+
+export type RhythmBandKind = "observed" | "corrected" | "inferred" | "nap" | "forecast";
+
+export interface RhythmSleepBand {
+  id: string;
+  day: string;
+  civilDate: string;
+  zoneId?: string;
+  startHour: number;
+  durationHours: number;
+  kind: RhythmBandKind;
+  startLabel: string;
+  wakeLabel: string;
+  durationLabel: string;
+  source: string;
+  confidence: ConfidenceLevel;
+  originalStartHour?: number;
+  originalDurationHours?: number;
+  originalLabel?: string;
+}
+
+export interface RhythmDriftPoint {
+  id: string;
+  day: string;
+  civilDate: string;
+  zoneId?: string;
+  onsetHour: number;
+  fitHour: number;
+  bandLowHour: number;
+  bandHighHour: number;
+  onsetLabel: string;
+  source: string;
+  confidence: ConfidenceLevel;
+}
 
 export type RhythmSource = "local" | "synced" | "fixture";
 
 export interface RhythmActogram {
   summary: string;
-  observedRows: RhythmSleepBandFixture[];
-  forecastRows: RhythmSleepBandFixture[];
+  observedRows: RhythmSleepBand[];
+  forecastRows: RhythmSleepBand[];
   now: { label: string; day: string; civilDate: string; zoneId?: string; hour: number };
 }
 
@@ -23,7 +52,7 @@ export interface RhythmDrift {
   summary: string;
   yMinHour: number;
   yMaxHour: number;
-  points: RhythmDriftPointFixture[];
+  points: RhythmDriftPoint[];
 }
 
 export interface RhythmData {
@@ -64,8 +93,7 @@ export const rhythmUnavailable: RhythmData = {
   },
 };
 
-// The fixture is repackaged from the shared phaseTwo data so the offline shell
-// renders the same shape the backend supplies, and the two never diverge.
+// The browser preview's sample, in the same shape the backend supplies.
 export const rhythmFixture: RhythmData = {
   fixtureMode: true,
   status: "estimated",
@@ -135,7 +163,7 @@ function refusal(value: unknown): RhythmData["refusal"] | undefined {
   return code && message ? { code, message } : undefined;
 }
 
-function band(value: unknown, requireZone: boolean): RhythmSleepBandFixture | undefined {
+function band(value: unknown, requireZone: boolean): RhythmSleepBand | undefined {
   if (!isRecord(value)) return undefined;
   const id = str(value.id);
   const day = str(value.day);
@@ -172,7 +200,7 @@ function band(value: unknown, requireZone: boolean): RhythmSleepBandFixture | un
     zoneId,
     startHour,
     durationHours,
-    kind: kind as RhythmSleepBandFixture["kind"],
+    kind: kind as RhythmSleepBand["kind"],
     startLabel,
     wakeLabel,
     durationLabel,
@@ -181,7 +209,7 @@ function band(value: unknown, requireZone: boolean): RhythmSleepBandFixture | un
   };
 }
 
-function point(value: unknown, requireZone: boolean): RhythmDriftPointFixture | undefined {
+function point(value: unknown, requireZone: boolean): RhythmDriftPoint | undefined {
   if (!isRecord(value)) return undefined;
   const id = str(value.id);
   const day = str(value.day);
