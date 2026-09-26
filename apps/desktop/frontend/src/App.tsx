@@ -6,7 +6,7 @@ import { ApprovalQueueProvider } from "./state/approvalQueue";
 import { BackendProposalsProvider } from "./state/backendProposals";
 import { HomeScreen } from "./screens/HomeScreen";
 import { ScreenErrorBoundary } from "./components/ScreenErrorBoundary";
-import { subscribeAnalysisUpdates } from "./data/sleepDataEvents";
+import { subscribeBackendEvents } from "./data/backendEvents";
 
 const PlanScreen = lazy(() =>
   import("./screens/PlanScreen").then((module) => ({ default: module.PlanScreen })),
@@ -38,7 +38,7 @@ function ScreenLoading() {
 export default function App() {
   const { route, selectPlanTab, selectRhythmTab, selectLogTab, selectSettingsTab } =
     useScreenNavigation();
-  useEffect(subscribeAnalysisUpdates, []);
+  useEffect(subscribeBackendEvents, []);
 
   const content: ReactNode = {
     home: <HomeScreen />,

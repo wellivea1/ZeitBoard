@@ -49,7 +49,7 @@ const initialBackendSyncStatus: BackendSyncStatus = {
   lastError: "",
   pendingPushCount: 0,
   pendingErasureCount: 0,
-  waitingCorrectionCount: 0,
+  waitingRecordCount: 0,
   taskConflictCount: 0,
   pushedCount: 0,
   pulledCount: 0,

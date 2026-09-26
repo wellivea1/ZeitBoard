@@ -79,11 +79,17 @@ func (a *App) emitLocalAnalysisUpdate() {
 	if a.analysisUpdated != nil {
 		a.analysisUpdated()
 	}
+	a.announce("zeitboard:analysis-updated")
+}
+
+// announce tells the window that the backend changed data on its own. An
+// announcement carries no payload; each view re-reads its own projection.
+func (a *App) announce(name string) {
 	a.window.mu.Lock()
 	ctx, ready := a.window.ctx, a.window.ready
 	a.window.mu.Unlock()
 	if ready && !a.closing.Load() {
-		runtime.EventsEmit(ctx, "zeitboard:analysis-updated")
+		runtime.EventsEmit(ctx, name)
 	}
 }
 

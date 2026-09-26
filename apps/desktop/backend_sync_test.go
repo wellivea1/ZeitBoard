@@ -378,7 +378,7 @@ func TestPullRetainsOrphanCorrectionAndReportsWaitingForSource(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if status.Status != "error" || !strings.Contains(status.LastError, "waiting for their source") {
+	if status.Status != "error" || !strings.Contains(status.LastError, "waiting for the records they belong to") {
 		t.Fatalf("orphan correction must remain visible as waiting: %#v", status)
 	}
 	if status.PulledCount != 1 || status.SkippedCount != 1 {

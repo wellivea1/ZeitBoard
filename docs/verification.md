@@ -1819,3 +1819,27 @@ notifier starts at the head, then shows what follows, keeps its place after a
 failed read, clears place and notices on reset, and does nothing without a
 server. Android unit tests, lint and the debug build pass; server suites pass.
 The device run on an emulator is still to be recorded.
+
+## Medication and marker sync between computers — 2026-09-26
+
+Server: each new kind has valid and invalid cases checked against both the JSON
+Schema and the Go validator; erasing a definition removed its revisions, doses
+and corrections and left a medication whose id merely begins the same
+untouched; later uploads for it were refused; erasing a dose removed its
+corrections. Desktop store: upload order (definition, dose, correction) and
+paging; the highest revision wins and a replayed older one is skipped; an edit
+made while another computer changed a different field rebases to one revision
+holding both, with the rebase rules pinned separately (the same field, a
+cleared field, an invalid combination, an identical edit, no base); doses and
+corrections that arrive before their definition wait and apply when it arrives;
+two computers' first corrections of one dose both apply; a deletion queues its
+erasures, including an upload acknowledged after it, and refuses later records;
+tombstones from another device erase without queueing again, including a
+kindless one routed by what the device holds; markers upload, download, refuse
+a conflicting copy and erase; a new server receives what it does not hold.
+Breaking the rebase or the suppression check makes these tests fail. End to
+end, two desktops on one stateful peer exchanged a definition, a dose and a
+marker; a correction made on one changed the other's clinician report;
+concurrent edits converged on one revision carrying both changes; deletions
+travelled both ways with nothing left pending. The core, server and desktop Go
+suites and the web tests (477), types and formatting pass.

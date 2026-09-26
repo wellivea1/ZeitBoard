@@ -6,7 +6,7 @@ import { MedicationsScreen } from "./MedicationsScreen";
 const response = {
   status: "ready",
   empty: false,
-  message: "1 medication and 1 medication event stored only on this device.",
+  message: "1 medication and 1 recorded dose.",
   estimateStatus: "estimated",
   estimateMessage: "Current rhythm estimate available for recent-event context.",
   medications: [
@@ -162,7 +162,7 @@ describe("MedicationsScreen", () => {
     const erase = vi.fn(async () => {
       current.events = [];
       current.medications[0]!.eventCount = 0;
-      current.message = "1 medication and 0 medication events stored only on this device.";
+      current.message = "1 medication and 0 recorded doses.";
       return structuredClone(current);
     });
     (globalThis as GlobalWithGo).go = {

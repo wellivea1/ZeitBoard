@@ -382,7 +382,10 @@ export function MedicationSetupPanel({
               />
             </label>
           </div>
-          <small>The label stays on this device. No schedule is inferred from it.</small>
+          <small>
+            The label is kept on this computer, and synced only to your own server if you turn sync
+            on. No schedule is inferred from it.
+          </small>
           <button
             className="button primary compact"
             type="submit"

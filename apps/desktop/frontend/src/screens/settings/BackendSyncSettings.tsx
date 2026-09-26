@@ -159,8 +159,8 @@ export function BackendSyncSettings({
               <dd>{status.pendingErasureCount}</dd>
             </div>
             <div>
-              <dt>Corrections waiting for sources</dt>
-              <dd>{status.waitingCorrectionCount}</dd>
+              <dt>Downloads waiting for related records</dt>
+              <dd>{status.waitingRecordCount}</dd>
             </div>
             <div>
               <dt>Tasks needing review</dt>

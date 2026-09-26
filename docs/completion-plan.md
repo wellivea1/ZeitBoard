@@ -36,9 +36,9 @@ current UX repairs and recovered owner direction. Preserve that uncommitted work
 - Reaching hours, U-H navigation, direct agent appearance actions and local file protection have
   shipped. Do not rebuild these from stale descriptions. ADR-0035 explicitly chooses OS file
   protection over local database encryption.
-- Local medication M-A through M-C exists. Synchronization and complete propose-only agent coverage
-  do not; generic statements that the assistant or disease-management phase is complete conceal
-  those gaps.
+- Local medication M-A through M-C exists and now syncs between the owner's computers (C3). The
+  companion's medication sync and complete propose-only agent coverage do not exist yet; generic
+  statements that the assistant or disease-management phase is complete conceal those gaps.
 - The original installer plan still has clean-machine, update/rollback, service lifecycle and
   signing checks that automated builds do not prove.
 
@@ -696,3 +696,20 @@ signal is dispositioned as not implemented: it needs its own grant and
 projection and is outside this feed. Remaining for C6's acceptance: the
 recorded device run (a portal request raising a notice on an enrolled phone
 with the desktop closed).
+
+### C3 medication and marker sync, server and desktop — 2026-09-26
+
+Medication definitions, doses, dose corrections and rhythm context markers now
+travel between the owner's computers through their own server (ADR-0048). The
+server accepts four new record kinds, validated by the same code the desktop
+store uses (now in `core/medication` and `core/markers`); erasing a definition
+erases every revision, dose and correction of it and refuses later uploads for
+it from a device that was offline. The desktop uploads definitions before doses
+before corrections and keeps the highest revision of a definition. An edit made
+while apart is rebased field by field, so a rename on one computer and a new
+schedule on another both survive. A dose that arrives before its definition
+waits and applies when the definition arrives, two computers' corrections of
+one dose both apply in creation order, and deleting a definition, dose or
+marker erases it on every device. A sync that downloads or erases anything now
+refreshes every open view. Remaining for C3: the Android companion (accept these
+kinds, log doses against synced definitions, handle erasure) and its device run.

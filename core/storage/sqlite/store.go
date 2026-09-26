@@ -211,12 +211,6 @@ func (s *Store) initialize(ctx context.Context) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_local_medication_corrections_target
 			ON local_medication_event_corrections(target_event_id, created_at, correction_id)`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS idx_local_medication_corrections_supersedes
-			ON local_medication_event_corrections(supersedes_correction_id)
-			WHERE supersedes_correction_id <> ''`,
-		`CREATE UNIQUE INDEX IF NOT EXISTS idx_local_medication_corrections_root
-			ON local_medication_event_corrections(target_event_id)
-			WHERE supersedes_correction_id = ''`,
 		`CREATE TRIGGER IF NOT EXISTS trg_local_medication_corrections_immutable
 			BEFORE UPDATE ON local_medication_event_corrections
 			BEGIN
@@ -349,6 +343,9 @@ func (s *Store) initialize(ctx context.Context) error {
 		return err
 	}
 	if err := s.initializePlacementSync(ctx); err != nil {
+		return err
+	}
+	if err := s.initializeMedicationSync(ctx); err != nil {
 		return err
 	}
 	// Validate the current shape without rewriting development-era records.
@@ -551,7 +548,7 @@ func (s *Store) DeleteAll(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	for _, table := range []string{"local_placement_sync_records", "local_sync_connection", "local_sync_seen", "local_sync_deferred_corrections", "local_sleep_analysis", "local_recompute_runs", "source_collection_preferences", "source_observations", "manual_corrections", "phase_estimates", "medication_events", "share_profiles", "local_sleep_corrections", "local_sleep_observations", "local_medication_reminder_claims", "local_medication_event_corrections", "local_medication_events", "local_medications", "local_rhythm_markers", "local_proposal_decisions", "local_calendar_events", "local_calendar_sources"} {
+	for _, table := range []string{"local_placement_sync_records", "local_sync_connection", "local_sync_seen", "local_sync_deferred_corrections", "local_sleep_analysis", "local_recompute_runs", "source_collection_preferences", "source_observations", "manual_corrections", "phase_estimates", "medication_events", "share_profiles", "local_sleep_corrections", "local_sleep_observations", "local_medication_sync_records", "local_evidence_sync_records", "local_sync_deferred_medication", "local_medication_reminder_claims", "local_medication_event_corrections", "local_medication_events", "local_medications", "local_rhythm_markers", "local_proposal_decisions", "local_calendar_events", "local_calendar_sources"} {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table); err != nil {
 			_ = tx.Rollback()
 			return err

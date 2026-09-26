@@ -77,9 +77,20 @@ func validatePullEnvelopePage(page syncPullResponse, since int64) error {
 			field = "correction_id"
 		case "placement":
 			field = "placement_id"
-		case "task":
+		case storage.SyncKindMedicationEvent:
+			field = "event_id"
+		case storage.SyncKindMedicationCorrection:
+			field = "correction_id"
+		case storage.SyncKindContextMarker:
+			field = "marker_id"
+		case "task", storage.SyncKindMedication:
+			// A revision's record id is its owner's id plus _r<revision>.
+			owner := "task_id"
+			if item.Kind == storage.SyncKindMedication {
+				owner = "medication_id"
+			}
 			var revision int
-			if json.Unmarshal(fields["task_id"], &id) != nil || json.Unmarshal(fields["revision"], &revision) != nil || revision < 1 || item.RecordID != fmt.Sprintf("%s_r%d", id, revision) {
+			if json.Unmarshal(fields[owner], &id) != nil || json.Unmarshal(fields["revision"], &revision) != nil || revision < 1 || item.RecordID != fmt.Sprintf("%s_r%d", id, revision) {
 				return invalid
 			}
 			continue
