@@ -19,7 +19,7 @@ func medicationRevision(id string, revision int) syncmodel.PushRecord {
 	return syncmodel.PushRecord{
 		RecordID: syncmodel.MedicationRevisionID(id, revision), Kind: syncmodel.KindMedication,
 		CreatedAt: time.Date(2026, 9, 2, 12, 0, revision, 0, time.UTC),
-		Payload: json.RawMessage(fmt.Sprintf(`{"medication_id":%q,"label":"canary-medication-label","active":true,"created_at":"2026-09-01T12:00:00Z","revision":%d,"updated_at":"2026-09-02T12:00:00Z"}`, id, revision)),
+		Payload:   json.RawMessage(fmt.Sprintf(`{"medication_id":%q,"label":"canary-medication-label","active":true,"created_at":"2026-09-01T12:00:00Z","revision":%d,"updated_at":"2026-09-02T12:00:00Z"}`, id, revision)),
 	}
 }
 
@@ -27,7 +27,7 @@ func medicationDose(eventID, medicationID string) syncmodel.PushRecord {
 	return syncmodel.PushRecord{
 		RecordID: eventID, Kind: syncmodel.KindMedicationEvent,
 		CreatedAt: time.Date(2026, 9, 2, 12, 1, 0, 0, time.UTC),
-		Payload: json.RawMessage(fmt.Sprintf(`{"event_id":%q,"medication_id":%q,"dose_at":"2026-09-02T02:00:00Z","zone_id":"UTC","status":"taken","scheduled":true,"provenance":{"acquisition_method":"manual","evidence_status":"user_reported","recorded_at":"2026-09-02T02:01:00Z"}}`, eventID, medicationID)),
+		Payload:   json.RawMessage(fmt.Sprintf(`{"event_id":%q,"medication_id":%q,"dose_at":"2026-09-02T02:00:00Z","zone_id":"UTC","status":"taken","scheduled":true,"provenance":{"acquisition_method":"manual","evidence_status":"user_reported","recorded_at":"2026-09-02T02:01:00Z"}}`, eventID, medicationID)),
 	}
 }
 
@@ -35,7 +35,7 @@ func medicationFix(correctionID, eventID string) syncmodel.PushRecord {
 	return syncmodel.PushRecord{
 		RecordID: correctionID, Kind: syncmodel.KindMedicationCorrection,
 		CreatedAt: time.Date(2026, 9, 2, 12, 2, 0, 0, time.UTC),
-		Payload: json.RawMessage(fmt.Sprintf(`{"correction_id":%q,"target_event_id":%q,"created_at":"2026-09-02T03:00:00Z","reason":"user_edit","changes":{"status":"skipped"}}`, correctionID, eventID)),
+		Payload:   json.RawMessage(fmt.Sprintf(`{"correction_id":%q,"target_event_id":%q,"created_at":"2026-09-02T03:00:00Z","reason":"user_edit","changes":{"status":"skipped"}}`, correctionID, eventID)),
 	}
 }
 
