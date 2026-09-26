@@ -19,6 +19,26 @@ describe("Wails bridge lookup", () => {
     });
   });
 
+  it("sends no argument when there is no input, as a method without parameters requires", async () => {
+    // Wails serialises the arguments a binding receives: an explicit
+    // undefined arrives in Go as [null], which a method without parameters
+    // rejects without ever answering.
+    const received: unknown[][] = [];
+    const service = {
+      Run(...args: unknown[]) {
+        received.push(args);
+        return Promise.resolve(JSON.stringify(args));
+      },
+    };
+    const method = findWailsMethod({ go: { main: { App: service } } }, ["Run"])!;
+
+    await expect(method()).resolves.toBe("[]");
+    await expect(method(undefined)).resolves.toBe("[]");
+    await expect(method(null)).resolves.toBe("[null]");
+    await expect(method({ cursor: "c1" })).resolves.toBe('[{"cursor":"c1"}]');
+    expect(received.map((args) => args.length)).toEqual([0, 0, 1, 1]);
+  });
+
   it("skips malformed bridge branches", () => {
     const root = {
       go: {

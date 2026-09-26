@@ -27,7 +27,12 @@ export function findWailsMethod(
       for (const name of names) {
         const candidate = serviceValue[name];
         if (typeof candidate === "function") {
-          return (candidate as WailsMethod).bind(serviceValue);
+          const method = candidate as (...args: unknown[]) => Promise<unknown>;
+          // Wails forwards every argument it is handed and serialises an
+          // undefined one as null. A Go method that takes no argument then
+          // refuses the call, and the promise it returned never settles.
+          return (input?: unknown) =>
+            input === undefined ? method.call(serviceValue) : method.call(serviceValue, input);
         }
       }
     }
