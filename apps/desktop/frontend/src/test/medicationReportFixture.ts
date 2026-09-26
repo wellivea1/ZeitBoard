@@ -15,6 +15,7 @@ export const medicationClinicalReportInput: MedicationClinicalReportInput = {
   toDate: "2026-07-21",
   zoneId: "America/New_York",
   dayStartHour: 18,
+  orientation: "24h",
   includeForecast: false,
   includeMedication: true,
   includeMedicationLabels: false,
@@ -22,6 +23,53 @@ export const medicationClinicalReportInput: MedicationClinicalReportInput = {
   includeRhythmContext: true,
   includeRhythmContextNotes: false,
 };
+
+/**
+ * The same report as a 48-hour double plot, built the way the desktop builds
+ * it: each row's day at half scale, then the next row's day marked as a
+ * repeat; the last row's right half stays empty.
+ */
+export function medicationClinicalDoublePlotFixture(rowCount = 32): MedicationClinicalReport {
+  return asDoublePlot(medicationClinicalReportFixture(rowCount));
+}
+
+export function asDoublePlot(report: MedicationClinicalReport): MedicationClinicalReport {
+  const rows = report.actogram.rows;
+  const half = (offset: number, repeat: boolean) => ({
+    sleep: (segment: MedicationClinicalReport["actogram"]["rows"][number]["sleep"][number]) => ({
+      ...segment,
+      startPercent: offset + segment.startPercent / 2,
+      widthPercent: segment.widthPercent / 2,
+      ...(repeat ? { repeat: true } : {}),
+    }),
+    annotation: (
+      annotation: MedicationClinicalReport["actogram"]["rows"][number]["annotations"][number],
+    ) => ({
+      ...annotation,
+      positionPercent: offset + annotation.positionPercent / 2,
+      ...(repeat ? { repeat: true } : {}),
+    }),
+  });
+  const own = half(0, false);
+  const next = half(50, true);
+  return {
+    ...report,
+    range: { ...report.range, orientation: "48h" },
+    actogram: {
+      ...report.actogram,
+      orientation: "48h",
+      axisLabels: ["6 PM", "12 AM", "6 AM", "12 PM", "6 PM", "12 AM", "6 AM", "12 PM", "6 PM"],
+      rows: rows.map((row, index) => ({
+        ...row,
+        sleep: [...row.sleep.map(own.sleep), ...(rows[index + 1]?.sleep ?? []).map(next.sleep)],
+        annotations: [
+          ...row.annotations.map(own.annotation),
+          ...(rows[index + 1]?.annotations ?? []).map(next.annotation),
+        ],
+      })),
+    },
+  };
+}
 
 export function medicationClinicalReportFixture(rowCount = 32): MedicationClinicalReport {
   const count = Math.max(3, rowCount);
@@ -104,6 +152,7 @@ export function medicationClinicalReportFixture(rowCount = 32): MedicationClinic
       label: `${civilDate(0)} to ${civilDate(count - 1)}`,
       dayStartHour: 18,
       dayStartLabel: "6:00 PM to 6:00 PM next day",
+      orientation: "24h",
     },
     summary: {
       calendarRows: count,
@@ -126,6 +175,7 @@ export function medicationClinicalReportFixture(rowCount = 32): MedicationClinic
       "Forecast bands omitted",
     ],
     actogram: {
+      orientation: "24h",
       axisLabels: ["6 PM", "12 AM", "6 AM", "12 PM", "6 PM"],
       rows,
       legend: [

@@ -12,6 +12,14 @@ type medicationReportHTMLMonth struct {
 	Rows  []MedicationClinicalActogramRowDTO
 }
 
+// An hour label on the chart's axis, placed on the same 240-unit scale as the
+// rows so it sits over its rule.
+type medicationReportHTMLTick struct {
+	X      float64
+	Anchor string
+	Label  string
+}
+
 type medicationReportHTMLDriftPoint struct {
 	Day        string
 	OnsetLabel string
@@ -32,7 +40,12 @@ type medicationReportHTMLDriftSegment struct {
 }
 
 type medicationReportHTMLView struct {
-	Report           MedicationClinicalReportDTO
+	Report MedicationClinicalReportDTO
+	// Double is the 48-hour orientation. TextRows describe each day once:
+	// the repeated right half of a double-plot row is left out.
+	Double           bool
+	TextRows         []MedicationClinicalActogramRowDTO
+	Ticks            []medicationReportHTMLTick
 	Months           []medicationReportHTMLMonth
 	DriftPoints      []medicationReportHTMLDriftPoint
 	ObservedSegments []medicationReportHTMLDriftSegment
@@ -41,7 +54,13 @@ type medicationReportHTMLView struct {
 }
 
 func renderMedicationClinicalReportHTML(report MedicationClinicalReportDTO) (string, error) {
-	view := medicationReportHTMLView{Report: report, Months: medicationReportHTMLMonths(report.Actogram.Rows)}
+	view := medicationReportHTMLView{
+		Report:   report,
+		Double:   report.Actogram.Orientation == medicationReportDoublePlot,
+		TextRows: medicationReportTextRows(report.Actogram.Rows),
+		Ticks:    medicationReportHTMLTicks(report.Actogram.AxisLabels),
+		Months:   medicationReportHTMLMonths(report.Actogram.Rows),
+	}
 	view.DriftPoints, view.ObservedSegments, view.FitSegments, view.DriftBand = medicationReportHTMLDrift(report.Drift)
 	tmpl, err := template.New("clinician-report").Funcs(template.FuncMap{
 		"chartX": func(percent float64) float64 { return math.Round(percent*2.4*100) / 100 },
@@ -61,6 +80,46 @@ func renderMedicationClinicalReportHTML(report MedicationClinicalReportDTO) (str
 		return "", err
 	}
 	return strings.TrimSpace(output.String()), nil
+}
+
+func medicationReportHTMLTicks(labels []string) []medicationReportHTMLTick {
+	ticks := make([]medicationReportHTMLTick, 0, len(labels))
+	for index, label := range labels {
+		anchor := "middle"
+		switch index {
+		case 0:
+			anchor = "start"
+		case len(labels) - 1:
+			anchor = "end"
+		}
+		x := 0.0
+		if len(labels) > 1 {
+			x = math.Round(float64(index)/float64(len(labels)-1)*240*100) / 100
+		}
+		ticks = append(ticks, medicationReportHTMLTick{X: x, Anchor: anchor, Label: label})
+	}
+	return ticks
+}
+
+func medicationReportTextRows(rows []MedicationClinicalActogramRowDTO) []MedicationClinicalActogramRowDTO {
+	result := make([]MedicationClinicalActogramRowDTO, 0, len(rows))
+	for _, row := range rows {
+		sleep := make([]MedicationClinicalSleepSegmentDTO, 0, len(row.Sleep))
+		for _, segment := range row.Sleep {
+			if !segment.Repeat {
+				sleep = append(sleep, segment)
+			}
+		}
+		annotations := make([]MedicationClinicalAnnotationDTO, 0, len(row.Annotations))
+		for _, annotation := range row.Annotations {
+			if !annotation.Repeat {
+				annotations = append(annotations, annotation)
+			}
+		}
+		row.Sleep, row.Annotations = sleep, annotations
+		result = append(result, row)
+	}
+	return result
 }
 
 func medicationReportHTMLMonths(rows []MedicationClinicalActogramRowDTO) []medicationReportHTMLMonth {
@@ -140,12 +199,14 @@ const medicationClinicalReportTemplate = `<!doctype html>
     .month:last-child { break-after: auto; page-break-after: auto; }
     .month-heading { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 4pt; }
     .month-heading h2 { flex: 1; margin: 0; }
-    .axis { display: grid; grid-template-columns: 48pt repeat(5, 1fr); margin: 3pt 0; color: #5b6862; font-size: 7pt; }
-    .axis span:not(:first-child) { text-align: center; }
+    .axis { display: grid; grid-template-columns: 48pt 1fr; align-items: end; margin: 3pt 0; color: #5b6862; font-size: 7pt; }
+    .axis svg.ticks { height: 8pt; }
+    .axis text { fill: #5b6862; font-size: 7px; }
     .actogram-row { display: grid; grid-template-columns: 48pt 1fr; min-height: 13pt; border-top: .5pt solid #d8ddda; break-inside: avoid; }
     .actogram-row.weekend { background: #f4f6f5; }
     .actogram-row .date { padding: 1.5pt 4pt; font-size: 7.2pt; font-variant-numeric: tabular-nums; }
     .actogram-row .track { border-left: .5pt solid #9ba7a1; background-image: linear-gradient(to right, transparent calc(25% - .25pt), #d9dfdc calc(25% - .25pt), #d9dfdc 25%, transparent 25%, transparent calc(50% - .25pt), #d9dfdc calc(50% - .25pt), #d9dfdc 50%, transparent 50%, transparent calc(75% - .25pt), #d9dfdc calc(75% - .25pt), #d9dfdc 75%, transparent 75%); }
+    .actogram-row .track.double { background-image: linear-gradient(to right, transparent calc(50% - .5pt), #9ba7a1 calc(50% - .5pt), #9ba7a1 50%, transparent 50%), repeating-linear-gradient(to right, transparent 0, transparent calc(12.5% - .25pt), #d9dfdc calc(12.5% - .25pt), #d9dfdc 12.5%); }
     svg { display: block; width: 100%; height: 12pt; overflow: visible; }
     rect.sleep_observed { fill: #315e91; }
     rect.sleep_inferred { fill: #9eb4c8; stroke: #315e91; stroke-width: .6; stroke-dasharray: 2 1; }
@@ -193,7 +254,7 @@ const medicationClinicalReportTemplate = `<!doctype html>
     <p>Owner-generated local record for clinical review. This artifact contains observations and descriptive projections, not instructions.</p>
     <dl class="report-meta">
       <div><dt>Row-date range</dt><dd>{{.Report.Range.Label}}</dd></div>
-      <div><dt>Clinical row</dt><dd>{{.Report.Range.DayStartLabel}}</dd></div>
+      <div><dt>Clinical row</dt><dd>{{.Report.Range.DayStartLabel}}{{if .Double}}; double plot, 48 hours a row{{end}}</dd></div>
       <div><dt>Generated</dt><dd>{{.Report.GeneratedLabel}}</dd></div>
       <div><dt>Completeness</dt><dd>{{title .Report.Status}}</dd></div>
     </dl>
@@ -217,11 +278,11 @@ const medicationClinicalReportTemplate = `<!doctype html>
   {{range .Months}}
   <section class="month">
     <div class="month-heading"><h2>{{.Label}}</h2></div>
-    <div class="axis"><span>Row date</span>{{range $.Report.Actogram.AxisLabels}}<span>{{.}}</span>{{end}}</div>
+    <div class="axis"><span>Row date</span><svg class="ticks" viewBox="0 0 240 8" aria-hidden="true">{{range $.Ticks}}<text x="{{.X}}" y="7" text-anchor="{{.Anchor}}">{{.Label}}</text>{{end}}</svg></div>
     {{range .Rows}}
     <div class="actogram-row{{if .Weekend}} weekend{{end}}">
       <span class="date">{{.DayLabel}}</span>
-      <div class="track">
+      <div class="track{{if $.Double}} double{{end}}">
         <svg viewBox="0 0 240 12" role="img" aria-label="{{.CivilDate}}: {{if .NoData}}no recorded sleep{{else}}{{len .Sleep}} sleep segment(s){{end}}, {{len .Annotations}} annotation(s)">
           {{if .NoData}}<text class="no-data" x="4" y="9">no data</text>{{end}}
           {{range .Sleep}}<rect class="{{.Kind}}" x="{{chartX .StartPercent}}" y="3" width="{{chartW .WidthPercent}}" height="6"><title>{{.StartLabel}} to {{.WakeLabel}}; {{.Source}}; {{.Confidence}} confidence</title></rect>{{end}}
@@ -238,7 +299,7 @@ const medicationClinicalReportTemplate = `<!doctype html>
     <caption>Clinical chart text alternative for every calendar row</caption>
     <thead><tr><th>Date</th><th>Sleep and forecast segments</th><th>Recorded timing annotations</th></tr></thead>
     <tbody>
-      {{range .Report.Actogram.Rows}}
+      {{range .TextRows}}
       <tr>
         <td>{{.CivilDate}}</td>
         <td>{{if .Sleep}}{{range $index, $segment := .Sleep}}{{if $index}}; {{end}}{{$segment.StartLabel}} to {{$segment.WakeLabel}}, {{$segment.Source}}, {{$segment.Confidence}} confidence{{end}}{{else}}No recorded sleep{{end}}</td>

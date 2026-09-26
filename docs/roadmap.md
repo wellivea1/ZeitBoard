@@ -462,10 +462,10 @@ Largely delivered (see "Where things stand"). Remaining in scope:
   — now carries a real owner-only DACL that is read back and asserted, and privacy.md no longer
   claims the local store is encrypted, because it is not. Whole-database encryption remains open and
   is blocked on the CGo-free driver offering no VFS or serialize hook; SQLCipher would require CGO.
-- Clinical-chart refinements beyond delivered M-C: reserved 48-hour clinical orientation, direct
-  PNG/PDF generation, and a blank clinical sleep-log template. The shipped 24-hour report already
-  prints to PDF from standalone local HTML; refinements must preserve the same redaction and
-  no-advice gate.
+- Clinical-chart refinements beyond delivered M-C: direct PNG/PDF generation. The 48-hour double
+  plot and a printable blank sleep log shipped 2026-09-25 (ADR-0027 addendum); the report prints to
+  PDF from standalone local HTML, and refinements must preserve the same redaction and no-advice
+  gate.
 
 Exit criteria: a fatigued user can read current state, recent drift, and the
 next predicted windows in seconds; the app is keyboard-operable and meets WCAG

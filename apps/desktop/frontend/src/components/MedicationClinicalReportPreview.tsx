@@ -69,16 +69,32 @@ export function MedicationReportActogram({ report }: { report: MedicationClinica
           <p className="section-kicker">Clinical-day view</p>
           <h3 id="clinical-actogram-title">Sleep and recorded timing</h3>
         </div>
-        <span>{report.range.dayStartLabel} anchor</span>
+        <span>
+          {report.range.dayStartLabel} anchor
+          {report.actogram.orientation === "48h" && ", double plot"}
+        </span>
       </header>
 
       <p className="medication-report-figure-summary">{report.actogram.summary}</p>
-      <div className="clinical-actogram" role="img" aria-label={report.actogram.summary}>
+      <div
+        className="clinical-actogram"
+        data-orientation={report.actogram.orientation}
+        role="img"
+        aria-label={report.actogram.summary}
+      >
         <div className="clinical-actogram-axis" aria-hidden="true">
           <span />
-          {report.actogram.axisLabels.map((label, index) => (
-            <span key={`${label}-${index}`}>{label}</span>
-          ))}
+          {/* Each hour sits over its rule: the labels span the row edge to edge. */}
+          <div className="clinical-actogram-ticks">
+            {report.actogram.axisLabels.map((label, index, labels) => (
+              <span
+                key={`${label}-${index}`}
+                style={{ left: `${(index / (labels.length - 1)) * 100}%` }}
+              >
+                {label}
+              </span>
+            ))}
+          </div>
         </div>
         {rows.map((row, index) => (
           <Fragment key={row.civilDate}>
@@ -144,6 +160,7 @@ export function MedicationReportActogram({ report }: { report: MedicationClinica
                 {row.noData
                   ? "No recorded sleep"
                   : row.sleep
+                      .filter((segment) => !segment.repeat)
                       .map(
                         (segment) =>
                           `${sleepKindLabel(segment.kind)}, ${segment.startLabel} to ${segment.wakeLabel}, ${segment.durationLabel}, ${segment.confidence} confidence`,
@@ -151,9 +168,10 @@ export function MedicationReportActogram({ report }: { report: MedicationClinica
                       .join("; ")}
               </td>
               <td>
-                {row.annotations.length === 0
+                {row.annotations.every((annotation) => annotation.repeat)
                   ? "None"
                   : row.annotations
+                      .filter((annotation) => !annotation.repeat)
                       .map((annotation) =>
                         [annotation.label, annotation.atLabel, annotation.detail]
                           .filter(Boolean)

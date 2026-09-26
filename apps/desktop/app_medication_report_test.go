@@ -158,6 +158,96 @@ func TestMedicationClinicianReportSixPMAnchorKeepsOvernightSleepOnOneRow(t *test
 	}
 }
 
+func TestMedicationClinicianReportDoublePlotShowsEachDayThenTheNext(t *testing.T) {
+	app := newTestApp(t)
+	app.nowFn = func() time.Time { return time.Date(2026, 7, 5, 12, 0, 0, 0, time.UTC) }
+	// A rhythm running an hour later each day.
+	for _, night := range [][2]string{
+		{"2026-07-01T22:00", "2026-07-02T06:00"},
+		{"2026-07-02T23:00", "2026-07-03T07:00"},
+		{"2026-07-04T00:00", "2026-07-04T08:00"},
+	} {
+		if _, err := app.AddSleepEntry(SleepEntryInput{StartLocal: night[0], EndLocal: night[1], ZoneID: "UTC", Classification: storage.SleepClassificationPrincipal}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	input := MedicationClinicalReportInput{RangeMode: "custom", FromDate: "2026-07-01", ToDate: "2026-07-03", ZoneID: "UTC", DayStartHour: 18}
+	single, err := app.GetMedicationClinicianReport(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	input.Orientation = "48h"
+	double, err := app.GetMedicationClinicianReport(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if single.Actogram.Orientation != "24h" || double.Actogram.Orientation != "48h" || double.Range.Orientation != "48h" {
+		t.Fatalf("orientation = %q / %q", single.Actogram.Orientation, double.Actogram.Orientation)
+	}
+	// The same days and counts; only the drawing changes.
+	if double.Summary != single.Summary || len(double.Actogram.Rows) != len(single.Actogram.Rows) {
+		t.Fatalf("summary changed: %#v vs %#v", double.Summary, single.Summary)
+	}
+	if got := double.Actogram.AxisLabels; len(got) != 9 || got[0] != got[4] || got[4] != got[8] {
+		t.Fatalf("axis = %v", got)
+	}
+	for index, row := range double.Actogram.Rows {
+		own, repeated := []MedicationClinicalSleepSegmentDTO{}, []MedicationClinicalSleepSegmentDTO{}
+		for _, segment := range row.Sleep {
+			if segment.Repeat {
+				repeated = append(repeated, segment)
+			} else {
+				own = append(own, segment)
+			}
+		}
+		// The left half is the row's own day at half scale...
+		if len(own) != len(single.Actogram.Rows[index].Sleep) {
+			t.Fatalf("row %d own segments = %#v", index, own)
+		}
+		for i, segment := range own {
+			want := single.Actogram.Rows[index].Sleep[i]
+			if segment.StartPercent != roundReportPercent(want.StartPercent/2) || segment.WidthPercent != roundReportPercent(want.WidthPercent/2) {
+				t.Fatalf("row %d left half = %#v, from %#v", index, segment, want)
+			}
+		}
+		// ...and the right half repeats the next row, except past the range.
+		wantRepeated := 0
+		if index+1 < len(single.Actogram.Rows) {
+			wantRepeated = len(single.Actogram.Rows[index+1].Sleep)
+		}
+		if len(repeated) != wantRepeated {
+			t.Fatalf("row %d repeated %d segments, want %d", index, len(repeated), wantRepeated)
+		}
+		for _, segment := range repeated {
+			if segment.StartPercent < 50 || segment.StartPercent+segment.WidthPercent > 100.01 {
+				t.Fatalf("row %d right half = %#v", index, segment)
+			}
+		}
+	}
+
+	// The export draws the double plot and describes each night once.
+	html, err := renderMedicationClinicalReportHTML(double)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(html, `class="track double"`) || !strings.Contains(html, "double plot, 48 hours a row") {
+		t.Fatal("export does not draw the double plot")
+	}
+	// Nine hours on the axis, each over its rule: midnight a quarter of a day in.
+	if strings.Count(html, "<text x=") != 9 || !strings.Contains(html, `<text x="30" y="7" text-anchor="middle">12 AM</text>`) || !strings.Contains(html, `<text x="120" y="7" text-anchor="middle">6 PM</text>`) {
+		t.Fatal("export axis labels are not placed on their hours")
+	}
+	table := html[strings.Index(html, "<table"):]
+	if n := strings.Count(table, "Jul 2, 11:00 PM UTC to"); n != 1 {
+		t.Fatalf("text alternative lists the second night %d times", n)
+	}
+
+	input.Orientation = "72h"
+	if _, err := app.GetMedicationClinicianReport(input); err == nil {
+		t.Fatal("accepted an unsupported orientation")
+	}
+}
+
 func TestMedicationClinicianReportDriftUsesOnlySelectedRange(t *testing.T) {
 	app := newTestApp(t)
 	app.nowFn = func() time.Time { return time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC) }

@@ -518,3 +518,25 @@ added with the past-night form ("3 of 7") to a forecast at seven.
 **Next C7 work:** the clinical chart, export and template requirements,
 keyboard and nonvisual equivalents for the new layouts, and compact Android
 layouts.
+
+### C7 clinical double plot — 2026-09-25
+
+The clinician report's chart can now be drawn as the 48-hour double plot that
+ADR-0027 reserved (see its addendum): each row is a day and then the next, so
+drift reads as a continuous slope. The report form offers it as "A day and the
+next". Repeated halves are marked, so the text alternatives and summary counts
+describe each night once.
+
+Two defects surfaced on the way and are fixed in both orientations:
+
+- the axis labels were a fifth of a day out of place, sitting in equal grid
+  columns instead of over the hours they name;
+- a segment a few seconds long after a row boundary rounded to zero width, and
+  the preview rejected the whole report over it.
+
+A blank sleep log now prints from Data Sources, beside the CSV template: one
+row a day from 6 PM to 6 PM, matching the chart, for nights kept on paper.
+
+**Next C7 work:** keyboard and nonvisual equivalents for the new layouts, and
+compact Android layouts. Direct PDF/PNG output remains a refinement; printing
+the exported HTML is the PDF path.

@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Notice } from "./Notice";
+import { downloadBlankSleepLog } from "../data/blankSleepLog";
 
 import {
   downloadTranscriptionTemplate,
@@ -272,6 +273,14 @@ export function SleepImportPanel({ onImported }: { onImported: () => Promise<voi
           onClick={downloadTranscriptionTemplate}
         >
           Download CSV template
+        </button>
+        <button
+          className="button secondary"
+          type="button"
+          disabled={busy}
+          onClick={downloadBlankSleepLog}
+        >
+          Download blank sleep log
         </button>
         <button
           className="button primary"

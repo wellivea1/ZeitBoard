@@ -21,11 +21,14 @@ const (
 )
 
 type MedicationClinicalReportInput struct {
-	RangeMode                 string `json:"rangeMode"`
-	FromDate                  string `json:"fromDate"`
-	ToDate                    string `json:"toDate"`
-	ZoneID                    string `json:"zoneId"`
-	DayStartHour              int    `json:"dayStartHour"`
+	RangeMode    string `json:"rangeMode"`
+	FromDate     string `json:"fromDate"`
+	ToDate       string `json:"toDate"`
+	ZoneID       string `json:"zoneId"`
+	DayStartHour int    `json:"dayStartHour"`
+	// Orientation is "24h" (one civil day per row, the default) or "48h", the
+	// double plot: each row shows its day and then the next.
+	Orientation               string `json:"orientation"`
 	IncludeForecast           bool   `json:"includeForecast"`
 	IncludeMedication         bool   `json:"includeMedication"`
 	IncludeMedicationLabels   bool   `json:"includeMedicationLabels"`
@@ -46,6 +49,7 @@ type MedicationClinicalReportRangeDTO struct {
 	Label         string `json:"label"`
 	DayStartHour  int    `json:"dayStartHour"`
 	DayStartLabel string `json:"dayStartLabel"`
+	Orientation   string `json:"orientation"`
 }
 
 type MedicationClinicalReportSummaryDTO struct {
@@ -69,6 +73,9 @@ type MedicationClinicalSleepSegmentDTO struct {
 	DurationLabel string  `json:"durationLabel"`
 	Source        string  `json:"source"`
 	Confidence    string  `json:"confidence"`
+	// Repeat marks the right half of a 48-hour row: the next row's day drawn
+	// again. A text alternative describes each night once by skipping it.
+	Repeat bool `json:"repeat,omitempty"`
 }
 
 type MedicationClinicalAnnotationDTO struct {
@@ -77,6 +84,7 @@ type MedicationClinicalAnnotationDTO struct {
 	Label           string  `json:"label"`
 	AtLabel         string  `json:"atLabel"`
 	Detail          string  `json:"detail,omitempty"`
+	Repeat          bool    `json:"repeat,omitempty"`
 }
 
 type MedicationClinicalActogramRowDTO struct {
@@ -95,10 +103,11 @@ type MedicationClinicalLegendDTO struct {
 }
 
 type MedicationClinicalActogramDTO struct {
-	AxisLabels []string                           `json:"axisLabels"`
-	Rows       []MedicationClinicalActogramRowDTO `json:"rows"`
-	Legend     []MedicationClinicalLegendDTO      `json:"legend"`
-	Summary    string                             `json:"summary"`
+	Orientation string                             `json:"orientation"`
+	AxisLabels  []string                           `json:"axisLabels"`
+	Rows        []MedicationClinicalActogramRowDTO `json:"rows"`
+	Legend      []MedicationClinicalLegendDTO      `json:"legend"`
+	Summary     string                             `json:"summary"`
 }
 
 type MedicationClinicalDriftPointDTO struct {
@@ -296,7 +305,19 @@ func (a *App) medicationClinicianReportAt(ctx context.Context, input MedicationC
 		message = fmt.Sprintf("%d of %d calendar rows have no recorded sleep. Gaps remain visible and no sleep was invented.", noDataRows, len(rows))
 	}
 	redactions := medicationReportRedactions(input)
+	orientation, err := medicationReportOrientation(input.Orientation)
+	if err != nil {
+		return MedicationClinicalReportDTO{}, err
+	}
 	axisStart := reportRange.dayStart
+	axisLabels := []string{formatReportClock(axisStart), formatReportClock((axisStart + 6) % 24), formatReportClock((axisStart + 12) % 24), formatReportClock((axisStart + 18) % 24), formatReportClock(axisStart)}
+	actogramSummary := "Single-plot clinical actogram. Each row is one civil day; forecast is included only when explicitly selected."
+	chartRows := rows
+	if orientation == medicationReportDoublePlot {
+		axisLabels = append(axisLabels[:4:4], axisLabels...)
+		actogramSummary = "Double-plot clinical actogram. Each row shows its civil day and then the next, so the right half repeats the row below; the right half of the last row lies past the range and is empty. Forecast is included only when explicitly selected."
+		chartRows = doubleMedicationReportRows(rows)
+	}
 	return MedicationClinicalReportDTO{
 		Status:         status,
 		Message:        message,
@@ -309,6 +330,7 @@ func (a *App) medicationClinicianReportAt(ctx context.Context, input MedicationC
 			Label:         reportRange.fromDate.Format("Jan 2, 2006") + " to " + reportRange.toDate.Format("Jan 2, 2006"),
 			DayStartHour:  reportRange.dayStart,
 			DayStartLabel: formatReportClock(reportRange.dayStart) + " to " + formatReportClock(reportRange.dayStart) + " next day",
+			Orientation:   orientation,
 		},
 		Summary: MedicationClinicalReportSummaryDTO{
 			CalendarRows:          len(rows),
@@ -323,10 +345,11 @@ func (a *App) medicationClinicianReportAt(ctx context.Context, input MedicationC
 		},
 		Redactions: redactions,
 		Actogram: MedicationClinicalActogramDTO{
-			AxisLabels: []string{formatReportClock(axisStart), formatReportClock((axisStart + 6) % 24), formatReportClock((axisStart + 12) % 24), formatReportClock((axisStart + 18) % 24), formatReportClock(axisStart)},
-			Rows:       rows,
-			Legend:     medicationReportLegend(legendKinds),
-			Summary:    "Single-plot clinical actogram. Each row is one civil day; forecast is included only when explicitly selected.",
+			Orientation: orientation,
+			AxisLabels:  axisLabels,
+			Rows:        chartRows,
+			Legend:      medicationReportLegend(legendKinds),
+			Summary:     actogramSummary,
 		},
 		Drift:        drift,
 		Adherence:    adherence,
@@ -353,6 +376,9 @@ func resolveMedicationReportRange(input MedicationClinicalReportInput, now time.
 	}
 	if input.DayStartHour != 12 && input.DayStartHour != 18 {
 		return medicationReportRange{}, errors.New("clinical report day start must be noon or 6 PM")
+	}
+	if _, err := medicationReportOrientation(input.Orientation); err != nil {
+		return medicationReportRange{}, err
 	}
 	mode := strings.TrimSpace(input.RangeMode)
 	if mode == "" {
@@ -484,6 +510,9 @@ func addMedicationReportSleep(rows []MedicationClinicalActogramRowDTO, rowStarts
 				if endHour <= startHour {
 					continue
 				}
+				if roundReportPercent((endHour-startHour)/24*100) <= 0 {
+					continue
+				}
 				localStart := start.In(reportRange.location)
 				localEnd := end.In(reportRange.location)
 				source := strings.TrimSpace(session.SourceLabel)
@@ -525,7 +554,7 @@ func addMedicationReportForecast(rows []MedicationClinicalActogramRowDTO, rowSta
 			endHour := medicationReportRelativeCivilHour(rowDate, end, reportRange.location, reportRange.dayStart)
 			startHour = math.Max(0, math.Min(24, startHour))
 			endHour = math.Max(startHour, math.Min(24, endHour))
-			if endHour <= startHour {
+			if endHour <= startHour || roundReportPercent((endHour-startHour)/24*100) <= 0 {
 				continue
 			}
 			rows[index].Sleep = append(rows[index].Sleep, MedicationClinicalSleepSegmentDTO{
@@ -963,4 +992,64 @@ func formatReportClock(hour int) string {
 
 func roundReportPercent(value float64) float64 {
 	return math.Round(value*100) / 100
+}
+
+const (
+	medicationReportSinglePlot = "24h"
+	medicationReportDoublePlot = "48h"
+)
+
+func medicationReportOrientation(value string) (string, error) {
+	switch strings.TrimSpace(value) {
+	case "", medicationReportSinglePlot:
+		return medicationReportSinglePlot, nil
+	case medicationReportDoublePlot:
+		return medicationReportDoublePlot, nil
+	default:
+		return "", errors.New("clinical chart rows must span 24 or 48 hours")
+	}
+}
+
+// doubleMedicationReportRows lays the day rows out as a double plot. Each row
+// shows its own day on the left and the next day on the right, so a rhythm
+// that drifts later each day reads as one continuous slope instead of
+// wrapping at the row edge. The right half repeats the next row's left half
+// and is marked so; the right half of the last row lies past the range and
+// stays empty rather than showing records nobody selected.
+func doubleMedicationReportRows(rows []MedicationClinicalActogramRowDTO) []MedicationClinicalActogramRowDTO {
+	doubled := make([]MedicationClinicalActogramRowDTO, len(rows))
+	for index, row := range rows {
+		var next MedicationClinicalActogramRowDTO
+		if index+1 < len(rows) {
+			next = rows[index+1]
+		}
+		row.Sleep = append(halvedReportSegments(row.Sleep, 0, false), halvedReportSegments(next.Sleep, 50, true)...)
+		row.Annotations = append(halvedReportAnnotations(row.Annotations, 0, false), halvedReportAnnotations(next.Annotations, 50, true)...)
+		doubled[index] = row
+	}
+	return doubled
+}
+
+func halvedReportSegments(segments []MedicationClinicalSleepSegmentDTO, offset float64, repeat bool) []MedicationClinicalSleepSegmentDTO {
+	result := make([]MedicationClinicalSleepSegmentDTO, 0, len(segments))
+	for _, segment := range segments {
+		segment.StartPercent = roundReportPercent(offset + segment.StartPercent/2)
+		segment.WidthPercent = roundReportPercent(segment.WidthPercent / 2)
+		if segment.WidthPercent <= 0 {
+			continue
+		}
+		segment.Repeat = repeat
+		result = append(result, segment)
+	}
+	return result
+}
+
+func halvedReportAnnotations(annotations []MedicationClinicalAnnotationDTO, offset float64, repeat bool) []MedicationClinicalAnnotationDTO {
+	result := make([]MedicationClinicalAnnotationDTO, 0, len(annotations))
+	for _, annotation := range annotations {
+		annotation.PositionPercent = roundReportPercent(offset + annotation.PositionPercent/2)
+		annotation.Repeat = repeat
+		result = append(result, annotation)
+	}
+	return result
 }
