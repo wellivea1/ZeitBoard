@@ -1703,3 +1703,14 @@ fix). The export's field and three buttons also squeezed into three-line
 stacks at 1180px; they now keep one line, moving under the text when needed.
 Desktop Go suite and canonical web checks pass (464 desktop + 6 prototype
 tests).
+
+## Accessibility audit of every screen — 2026-09-26
+
+No screen reader is installed here (NVDA would need downloading), so the
+running app was audited with a script over its DOM on all fourteen screens,
+each Settings tab, and the open assistant panel. The script looks for controls
+with no accessible name, fields with no label, duplicate IDs, skipped heading
+levels, focusable elements inside `aria-hidden` and positive tab order. It
+found none. Planted faults of each kind were all reported, so the empty
+result is meaningful. A pass with NVDA or Narrator remains to be done; this
+checks structure, not how it sounds.
