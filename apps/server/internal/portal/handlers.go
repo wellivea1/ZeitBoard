@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-//go:embed assets/portal.css assets/pages.gohtml assets/fonts
+//go:embed assets/portal.css assets/portal.js assets/pages.gohtml assets/fonts
 var assetsFS embed.FS
 
 // portalFonts are the only files the font route serves: the Latin cuts of
@@ -52,6 +52,11 @@ type pageData struct {
 	// Preview renders the page for the owner: the same content, with its
 	// links inert, because the owner holds no link token to follow them.
 	Preview bool
+
+	// Live loads the page's own script, which keeps an open page current;
+	// RefreshAt is the next instant the page's claim changes by itself.
+	Live      bool
+	RefreshAt string
 }
 
 func (h *Handler) handleStylesheet(w http.ResponseWriter, r *http.Request) {
@@ -61,6 +66,17 @@ func (h *Handler) handleStylesheet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/css; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
+}
+
+func (h *Handler) handleScript(w http.ResponseWriter, r *http.Request) {
+	data, err := assetsFS.ReadFile("assets/portal.js")
+	if err != nil {
+		h.writeGeneric(w, r, http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
 }
@@ -91,7 +107,13 @@ func (h *Handler) handlePage(w http.ResponseWriter, r *http.Request) {
 		h.renderPasscode(w, r, "")
 		return
 	}
-	_ = h.store.RecordAccess(ctx, profile.ID, EventPageView, sourceFromContext(ctx), h.now())
+	// The page's script refreshes an open page in place; that is a read of
+	// availability, not another visit.
+	event := EventPageView
+	if r.Header.Get("X-Portal-Refresh") == "1" {
+		event = EventAvailabilityRead
+	}
+	_ = h.store.RecordAccess(ctx, profile.ID, event, sourceFromContext(ctx), h.now())
 
 	snapshot, err := h.store.ReadSnapshot(ctx, profile.ID)
 	if err != nil {
@@ -105,10 +127,17 @@ func (h *Handler) handlePage(w http.ResponseWriter, r *http.Request) {
 		}
 		snapshot = Snapshot{}
 	}
-	view := BuildView(snapshot, h.now())
+	now := h.now()
+	view := BuildView(snapshot, now)
+	refreshAt := ""
+	if next := nextChange(snapshot, now); !next.IsZero() {
+		refreshAt = next.UTC().Format(time.RFC3339)
+	}
 	h.renderPage(w, r, http.StatusOK, "dashboard", pageData{
 		Title:        "Availability",
 		Refresh:      true,
+		Live:         true,
+		RefreshAt:    refreshAt,
 		View:         view,
 		CanRequest:   profile.Grants.AllowRequests,
 		RequestsPath: requestsPath(r.PathValue("linkToken")),

@@ -5,11 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow, noarchive">
 <meta name="referrer" content="no-referrer">
-{{if .Refresh}}<meta http-equiv="refresh" content="300">{{end}}
+{{if .Refresh}}<noscript><meta http-equiv="refresh" content="300"></noscript>{{end}}
 <title>{{.Title}}</title>
 <link rel="stylesheet" href="/p/assets/portal.css">
+{{if .Live}}<script src="/p/assets/portal.js" defer></script>{{end}}
 </head>
-<body>
+<body{{if .Live}} data-live data-refresh-at="{{.RefreshAt}}"{{end}}>
 {{template "open" .}}
 {{end}}
 

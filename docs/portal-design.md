@@ -102,7 +102,23 @@ POST /p/{linkToken}/requests/{publicID}/messages
 
 The delivered requester exchange is nested under its request rather than the
 flat `/request-session` in the original sketch, so the route itself names the
-request the secret belongs to. `/events` and `/messages` are P5-d and P5-c.
+request the secret belongs to. `/events` is delivered (2026-09-26); `/messages`
+is P5-c.
+
+The live layer as built: each event is `state` with `{version, freshness}` or
+`gone` when the link or session has stopped working; nothing else crosses the
+stream. The page's own script (`/p/assets/portal.js`, the only script) then
+re-reads the page through the ordinary authenticated route and swaps its
+`<main>`, so the template stays the only renderer. The page also says when its
+own claim next changes (`data-refresh-at`: a window opening or closing, or the
+estimate turning stale or unavailable) and refreshes itself then. A refused or
+dropped-and-closed stream falls back to a one-minute poll, and the five-minute
+meta refresh is inside `<noscript>`. An in-place refresh is recorded as an
+availability read, not a page view, so the owner's "opened the page" count
+means what it says. Streams are bounded at two per session, twenty per link
+and two hundred in total, carry a per-event write deadline in place of the
+daemon's 30-second one, end on revocation, and end promptly when the daemon
+shuts down.
 
 Middleware order is request-size cap, security headers, source throttling, link
 resolution, passcode-session gate, CSRF/origin gate for mutation, then handler.

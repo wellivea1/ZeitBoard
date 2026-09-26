@@ -183,6 +183,27 @@ func BuildView(snapshot Snapshot, now time.Time) AvailabilityView {
 	return view
 }
 
+// nextChange is the next instant the page's claim changes with no new
+// estimate: a window opening or closing, or the estimate turning stale or
+// unavailable. An open page refreshes itself then.
+func nextChange(snapshot Snapshot, now time.Time) time.Time {
+	var next time.Time
+	consider := func(at time.Time) {
+		if at.After(now) && (next.IsZero() || at.Before(next)) {
+			next = at
+		}
+	}
+	for _, window := range snapshot.Windows {
+		consider(window.StartAt)
+		consider(window.EndAt)
+	}
+	if !snapshot.GeneratedAt.IsZero() {
+		consider(snapshot.GeneratedAt.Add(StaleAfter))
+		consider(snapshot.GeneratedAt.Add(UnavailableAfter))
+	}
+	return next
+}
+
 // buildFigure lays the windows on three civil days from local midnight. A
 // window is drawn from now at the earliest, like the list: the page never
 // implies knowledge about a past the visitor cannot use. Days that are 23 or

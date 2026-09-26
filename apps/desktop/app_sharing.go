@@ -262,16 +262,26 @@ func shareGrantSummary(grants ShareGrantsDTO) string {
 	return "Shows " + strings.Join(parts, "; ")
 }
 
+// shareAccessLabel names the instance's access events (portal.AccessEvent)
+// for the owner. The desktop cannot import the server module, so
+// TestShareAccessLabelsCoverTheServerEvents pins the set; an event it does
+// not know is shown as other activity, never as its code.
 func shareAccessLabel(event string) string {
 	switch event {
-	case "availability_read":
+	case "page_view":
 		return "Opened the page"
-	case "passcode_failure":
+	case "availability_read":
+		return "Updated an open page"
+	case "passcode_accepted":
+		return "Entered the passcode"
+	case "passcode_rejected":
 		return "Wrong passcode"
-	case "request_created":
-		return "Asked for a time"
+	case "throttled":
+		return "Turned away for too many requests"
+	case "link_rejected":
+		return "Tried an unknown link"
 	default:
-		return event
+		return "Other activity"
 	}
 }
 

@@ -649,3 +649,18 @@ the observed wake to the earliest likely next sleep, and a regression test pins
 that a visitor during the owner's waking day reads "Likely awake right now".
 Next in C5: the live layer (SSE with polling and no-script fallback), the coarse
 audit view, persisted rate limits and request-scoped threads.
+
+### C5 live layer — 2026-09-26
+
+The availability page now stays current while it is open (P5-d's live
+layer): an authenticated event stream says only which version is current and
+how fresh it is, the page's own script re-reads itself through the normal
+route and replaces its content in place, and it also refreshes at the exact
+instant its claim next changes. Refused or dropped streams fall back to a
+one-minute poll; the no-script page keeps its five-minute reload. Streams are
+bounded per session, per link and globally, end on revocation and on
+shutdown, and the reverse-proxy guidance covers them. The Sharing screen's
+access audit also names every event the instance records — its labels had
+drifted from the server's event names, so an owner would have seen codes such
+as `page_view`. Remaining in C5: request-scoped threads (P5-c) with their
+14-day deletion job, and the independent review.
