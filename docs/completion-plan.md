@@ -664,3 +664,16 @@ access audit also names every event the instance records — its labels had
 drifted from the server's event names, so an owner would have seen codes such
 as `page_view`. Remaining in C5: request-scoped threads (P5-c) with their
 14-day deletion job, and the independent review.
+
+### C5 request threads — 2026-09-26
+
+P5-c is implemented: a visitor who asked for a time and the owner can exchange
+short plain-text messages about that request. Threads are sealed in the portal
+store with their thread and author bound in, need the link's messages grant
+(offered only with requests), close when the request is answered, are deleted
+two weeks later by the maintenance job or at once by the owner, and are bounded
+per thread and per link. The owner reads and answers them on the request's card
+in Approvals, with the shared deletion confirmation. With the live layer and the
+recipient preview, C5's software is complete; its acceptance still needs the
+independent review in `portal-design.md` section 12 and C6's notification of new
+requests and messages while the desktop is closed.

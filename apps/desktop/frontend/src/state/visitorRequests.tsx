@@ -9,6 +9,8 @@ import {
 } from "react";
 import {
   decideVisitorRequest,
+  eraseVisitorThread,
+  replyToVisitorRequest,
   defaultSlot,
   emptyVisitorRequests,
   loadVisitorRequestPage,
@@ -41,6 +43,9 @@ interface VisitorRequestsContextValue {
     decision: "approved" | "rejected",
     slot: VisitorSlot,
   ) => Promise<void>;
+  /** Resolves true when the reply reached the server, so its draft can go. */
+  reply: (request: VisitorRequest, message: string) => Promise<boolean>;
+  eraseThread: (request: VisitorRequest) => Promise<void>;
 }
 
 const VisitorRequestsContext = createContext<VisitorRequestsContextValue | null>(null);
@@ -221,6 +226,52 @@ export function VisitorRequestsProvider({ children }: { children: ReactNode }) {
     [publish],
   );
 
+  const threadAction = useCallback(
+    async (request: VisitorRequest, run: () => Promise<VisitorRequestsData>, done: string) => {
+      if (busy.current) return false;
+      busy.current = true;
+      setBusyId(request.proposalId);
+      setDecisionError("");
+      try {
+        const result = await run();
+        if (!active.current) return false;
+        if (result.status !== "ok") {
+          setDecisionError(result.message ?? "That did not reach your server.");
+          if (result.requests.length > 0) publish(result);
+          return false;
+        }
+        publish(result);
+        setAnnouncement(done);
+        return true;
+      } finally {
+        busy.current = false;
+        if (active.current) setBusyId(null);
+      }
+    },
+    [publish],
+  );
+
+  const reply = useCallback(
+    (request: VisitorRequest, message: string) =>
+      threadAction(
+        request,
+        () => replyToVisitorRequest(request.proposalId, message),
+        "Sent. They see it on their request's page.",
+      ),
+    [threadAction],
+  );
+
+  const eraseThread = useCallback(
+    async (request: VisitorRequest) => {
+      await threadAction(
+        request,
+        () => eraseVisitorThread(request.proposalId),
+        "The conversation was deleted.",
+      );
+    },
+    [threadAction],
+  );
+
   return (
     <VisitorRequestsContext.Provider
       value={{
@@ -237,6 +288,8 @@ export function VisitorRequestsProvider({ children }: { children: ReactNode }) {
         refresh,
         loadOlder,
         decide,
+        reply,
+        eraseThread,
       }}
     >
       {children}

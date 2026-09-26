@@ -353,6 +353,17 @@ type visitorRequestDTO struct {
 	ExpiresAt       time.Time `json:"expiresAt"`
 	DecisionToken   string    `json:"decisionToken,omitempty"`
 	Disclosure      string    `json:"disclosure"`
+
+	// The request's thread (P5-c), and whether the owner may add to it: the
+	// link must carry messages and the request must still be open.
+	Messages   []visitorMessageDTO `json:"messages"`
+	CanMessage bool                `json:"canMessage"`
+}
+
+type visitorMessageDTO struct {
+	Author    string    `json:"author"`
+	Body      string    `json:"body"`
+	CreatedAt time.Time `json:"createdAt"`
 }
 
 // approvalDisclosure is required by design section 6: approving reveals the
@@ -405,7 +416,14 @@ func (s *Server) handleListVisitorRequests(w http.ResponseWriter, r *http.Reques
 			writeError(w, http.StatusInternalServerError, "visitor request list failed")
 			return
 		}
+		messages, canMessage, threadErr := s.visitorThread(r, payload, record.Status == store.ProposalPending)
+		if threadErr != nil {
+			writeError(w, http.StatusInternalServerError, "visitor request list failed")
+			return
+		}
 		requests = append(requests, visitorRequestDTO{
+			Messages:        messages,
+			CanMessage:      canMessage,
 			ProposalID:      record.ID,
 			ProfileID:       payload.ProfileID,
 			Label:           labels[payload.ProfileID],
@@ -434,6 +452,94 @@ func (s *Server) handleListVisitorRequests(w http.ResponseWriter, r *http.Reques
 		SchemaVersion: syncmodel.SchemaVersion,
 		Requests:      requests,
 	})
+}
+
+// visitorThread reads a request's messages from the portal store. A link
+// that has been erased takes its threads with it, which reads as no thread.
+func (s *Server) visitorThread(r *http.Request, payload store.VisitorProposalPayload, open bool) ([]visitorMessageDTO, bool, error) {
+	profile, expired, revoked, err := s.portal.store.LookupProfile(r.Context(), payload.ProfileID, s.now())
+	if errors.Is(err, portal.ErrProfileNotFound) {
+		return []visitorMessageDTO{}, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	messages, err := s.portal.store.ListMessages(r.Context(), payload.ProfileID, payload.PortalRequestID)
+	if err != nil {
+		return nil, false, err
+	}
+	dtos := make([]visitorMessageDTO, 0, len(messages))
+	for _, message := range messages {
+		dtos = append(dtos, visitorMessageDTO{Author: message.Author, Body: message.Body, CreatedAt: message.CreatedAt})
+	}
+	return dtos, open && profile.Grants.AllowMessages && !expired && !revoked, nil
+}
+
+type visitorMessageRequest struct {
+	Message string `json:"message"`
+}
+
+// visitorRequestPayload finds the visitor request behind a proposal id, so
+// the owner routes act on exactly the request the owner is looking at.
+func (s *Server) visitorRequestPayload(r *http.Request) (store.VisitorProposalPayload, int, string) {
+	proposalID := strings.TrimSpace(r.PathValue("id"))
+	record, err := s.store.ProposalByID(r.Context(), proposalID)
+	if err != nil || record.ActionID != store.ActionVisitorRequest {
+		return store.VisitorProposalPayload{}, http.StatusNotFound, "visitor request not found"
+	}
+	payload, err := store.VisitorProposalPayloadOf(record)
+	if err != nil {
+		return store.VisitorProposalPayload{}, http.StatusInternalServerError, "visitor request unreadable"
+	}
+	return payload, 0, ""
+}
+
+// handleReplyToVisitorRequest adds the owner's message to a request's thread.
+func (s *Server) handleReplyToVisitorRequest(w http.ResponseWriter, r *http.Request) {
+	payload, status, message := s.visitorRequestPayload(r)
+	if status != 0 {
+		writeError(w, status, message)
+		return
+	}
+	var req visitorMessageRequest
+	if err := decodeBody(w, r, maxDeviceBodyBytes, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid message")
+		return
+	}
+	profile, expired, revoked, err := s.portal.store.LookupProfile(r.Context(), payload.ProfileID, s.now())
+	if err != nil || expired || revoked {
+		writeError(w, http.StatusConflict, "this link no longer carries messages")
+		return
+	}
+	if _, err := s.portal.store.AppendMessage(r.Context(), profile, payload.PortalRequestID, portal.AuthorOwner, req.Message, s.now()); err != nil {
+		switch {
+		case errors.Is(err, portal.ErrMessageInvalid):
+			writeError(w, http.StatusBadRequest, strings.TrimPrefix(err.Error(), portal.ErrMessageInvalid.Error()+": "))
+		case errors.Is(err, portal.ErrThreadClosed):
+			writeError(w, http.StatusConflict, "this conversation is closed")
+		case errors.Is(err, portal.ErrRequestNotFound):
+			writeError(w, http.StatusNotFound, "visitor request not found")
+		default:
+			writeError(w, http.StatusInternalServerError, "message not stored")
+		}
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"schema_version": syncmodel.SchemaVersion, "status": "sent"})
+}
+
+// handleEraseVisitorThread deletes a request's messages now rather than when
+// the retention window closes.
+func (s *Server) handleEraseVisitorThread(w http.ResponseWriter, r *http.Request) {
+	payload, status, message := s.visitorRequestPayload(r)
+	if status != 0 {
+		writeError(w, status, message)
+		return
+	}
+	if err := s.portal.store.EraseThread(r.Context(), payload.ProfileID, payload.PortalRequestID); err != nil {
+		writeError(w, http.StatusInternalServerError, "thread erase failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"schema_version": syncmodel.SchemaVersion, "status": "erased"})
 }
 
 type visitorDecisionRequest struct {

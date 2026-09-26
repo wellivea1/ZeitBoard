@@ -55,8 +55,13 @@ type pageData struct {
 
 	// Live loads the page's own script, which keeps an open page current;
 	// RefreshAt is the next instant the page's claim changes by itself.
-	Live      bool
+	Live      string
 	RefreshAt string
+
+	// Thread fields: a request's messages, shown to its author, and whether
+	// a new one may be sent.
+	Messages   []MessageView
+	CanMessage bool
 }
 
 func (h *Handler) handleStylesheet(w http.ResponseWriter, r *http.Request) {
@@ -136,7 +141,7 @@ func (h *Handler) handlePage(w http.ResponseWriter, r *http.Request) {
 	h.renderPage(w, r, http.StatusOK, "dashboard", pageData{
 		Title:        "Availability",
 		Refresh:      true,
-		Live:         true,
+		Live:         "stream",
 		RefreshAt:    refreshAt,
 		View:         view,
 		CanRequest:   profile.Grants.AllowRequests,

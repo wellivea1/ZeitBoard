@@ -210,7 +210,9 @@ and [ADR-0030](decisions/0030-visitor-time-requests.md)): share links that show
 broad likely-awake windows to someone holding the link and its passcode, and —
 when the link grants it — visitor requests for a specific time that land in the
 owner's approval queue and return a decision to the requester — and a page
-that stays current while it is open. Messaging threads are not implemented.
+that stays current while it is open, and — when the link grants it — a
+short plain-text conversation about each request, open until the request is
+answered and deleted two weeks after.
 The owner decides requests in the desktop app's Approvals screen, which shows
 the window asked for and a block picker bounded to it, and can preview each
 link from the Sharing screen exactly as its recipient sees it.

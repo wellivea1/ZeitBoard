@@ -468,3 +468,100 @@ func TestReviewRoutesScopeBeforePagingAndRejectForeignCursors(t *testing.T) {
 		}
 	}
 }
+
+// TestOwnerReadsAndAnswersAVisitorThread is P5-c on the owner's side: the
+// request list carries its thread, the owner replies into it while it is
+// open, the thread closes with the decision, and the owner can erase it.
+func TestOwnerReadsAndAnswersAVisitorThread(t *testing.T) {
+	h, portalStore := newPortalHarness(t)
+	ctx := t.Context()
+	profileID, _ := portal.NewProfileID()
+	linkToken, _ := portal.NewLinkToken()
+	if err := portalStore.CreateProfile(ctx, portal.CreateProfileInput{
+		ProfileID: profileID, Token: linkToken, Passcode: "long-enough-passcode",
+		Grants:    portal.Grants{WakingWindows: true, AllowRequests: true, AllowMessages: true},
+		CreatedAt: portalTestNow, ExpiresAt: portalTestNow.Add(30 * 24 * time.Hour),
+	}); err != nil {
+		t.Fatalf("create profile: %v", err)
+	}
+	profile, err := portalStore.ResolveLink(ctx, linkToken, portalTestNow)
+	if err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	session, err := portalStore.CreateSession(ctx, profile, portalTestNow)
+	if err != nil {
+		t.Fatalf("session: %v", err)
+	}
+	created, err := portalStore.CreateRequest(ctx, profile, session.Session, portal.RequestInput{
+		WindowStart: portalTestNow.Add(30 * time.Hour), WindowEnd: portalTestNow.Add(34 * time.Hour), ZoneID: "UTC",
+	}, false, portalTestNow)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	if _, err := portalStore.AppendMessage(ctx, profile, created.Request.ID, portal.AuthorVisitor, "Is Tuesday possible?", portalTestNow); err != nil {
+		t.Fatalf("visitor message: %v", err)
+	}
+	token := h.registerDevice(t, "desktop")
+	bridge := portalbridge.RequestBridge{Portal: portalStore, Private: h.st, Now: func() time.Time { return portalTestNow }}
+	if err := bridge.Pump(ctx); err != nil {
+		t.Fatalf("pump: %v", err)
+	}
+
+	list := func() visitorRequestDTO {
+		t.Helper()
+		status, data := h.request(t, http.MethodGet, "/v1/portal/requests", token, "")
+		if status != http.StatusOK {
+			t.Fatalf("list status = %d body = %s", status, data)
+		}
+		var listed visitorRequestListResponse
+		if err := json.Unmarshal(data, &listed); err != nil || len(listed.Requests) != 1 {
+			t.Fatalf("decode list: %v (%d)", err, len(listed.Requests))
+		}
+		return listed.Requests[0]
+	}
+	entry := list()
+	if !entry.CanMessage || len(entry.Messages) != 1 || entry.Messages[0].Body != "Is Tuesday possible?" || entry.Messages[0].Author != portal.AuthorVisitor {
+		t.Fatalf("thread in the list = %+v (can message %v)", entry.Messages, entry.CanMessage)
+	}
+
+	path := "/v1/portal/requests/" + entry.ProposalID
+	if status, data := h.request(t, http.MethodPost, path+"/messages", token, `{"message":"Tuesday at 3 works."}`); status != http.StatusOK {
+		t.Fatalf("reply status = %d body = %s", status, data)
+	}
+	if status, _ := h.request(t, http.MethodPost, path+"/messages", token, `{"message":"   "}`); status != http.StatusBadRequest {
+		t.Errorf("empty reply status = %d, want 400", status)
+	}
+	entry = list()
+	if len(entry.Messages) != 2 || entry.Messages[1].Author != portal.AuthorOwner {
+		t.Fatalf("thread after the reply = %+v", entry.Messages)
+	}
+	visible, err := portalStore.ListMessages(ctx, profile.ID, created.Request.ID)
+	if err != nil || len(visible) != 2 || visible[1].Body != "Tuesday at 3 works." {
+		t.Fatalf("the visitor's thread = %+v (%v)", visible, err)
+	}
+
+	if status, data := h.request(t, http.MethodPost, path+"/decision", token,
+		fmt.Sprintf(`{"decision":"rejected","token":%q}`, entry.DecisionToken)); status != http.StatusOK {
+		t.Fatalf("decline status = %d body = %s", status, data)
+	}
+	if err := bridge.Pump(ctx); err != nil {
+		t.Fatalf("pump decision: %v", err)
+	}
+	entry = list()
+	if entry.CanMessage || len(entry.Messages) != 2 {
+		t.Errorf("after the answer: can message %v, %d messages; want closed and still readable", entry.CanMessage, len(entry.Messages))
+	}
+	if status, _ := h.request(t, http.MethodPost, path+"/messages", token, `{"message":"one more"}`); status != http.StatusConflict {
+		t.Errorf("reply after the answer status = %d, want 409", status)
+	}
+
+	if status, data := h.request(t, http.MethodPost, path+"/erase-thread", token, "{}"); status != http.StatusOK {
+		t.Fatalf("erase status = %d body = %s", status, data)
+	}
+	if entry = list(); len(entry.Messages) != 0 {
+		t.Errorf("messages after erasure = %d", len(entry.Messages))
+	}
+	if status, _ := h.request(t, http.MethodPost, "/v1/portal/requests/not-a-request/messages", token, `{"message":"hi"}`); status != http.StatusNotFound {
+		t.Errorf("reply to an unknown request status = %d, want 404", status)
+	}
+}

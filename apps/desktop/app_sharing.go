@@ -254,7 +254,7 @@ func shareGrantSummary(grants ShareGrantsDTO) string {
 		parts = append(parts, "can ask for a time")
 	}
 	if grants.AllowMessages {
-		parts = append(parts, "can send a short message")
+		parts = append(parts, "can write to you about a request")
 	}
 	if len(parts) == 0 {
 		return "Shows nothing yet"

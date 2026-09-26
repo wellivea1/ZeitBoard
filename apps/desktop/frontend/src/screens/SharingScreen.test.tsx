@@ -194,11 +194,21 @@ describe("SharingScreen", () => {
     expect(await screen.findByText("Revoked")).toBeVisible();
   });
 
-  // Threads are P5-c. The grant exists so a link does not need re-issuing, and
-  // the label says plainly that nothing is delivered yet.
-  it("does not imply messaging works", async () => {
+  // Messages belong to a request: the grant says so, and it cannot be given
+  // to a link that takes no requests.
+  it("offers messages only with requests", async () => {
     mount({ GetBackendShareLinks: async () => connected() });
     render(<SharingScreen />);
-    expect(await screen.findByText(/Send a short message \(not delivered yet\)/)).toBeVisible();
+    const messages = await screen.findByRole("checkbox", {
+      name: /Write to you about a time they asked for/,
+    });
+    const requests = screen.getByRole("checkbox", { name: /Ask you for a time/ });
+    expect(messages).toBeDisabled();
+    fireEvent.click(requests);
+    expect(messages).toBeEnabled();
+    fireEvent.click(messages);
+    fireEvent.click(requests);
+    expect(messages).not.toBeChecked();
+    expect(messages).toBeDisabled();
   });
 });

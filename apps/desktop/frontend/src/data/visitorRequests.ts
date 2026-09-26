@@ -38,6 +38,16 @@ export interface VisitorRequest {
   expiresLabel: string;
   approvalDisclosure: string;
   decisionToken?: string;
+  /** The request's thread, oldest first, and whether a reply can be added. */
+  messages: VisitorMessage[];
+  canMessage: boolean;
+}
+
+export interface VisitorMessage {
+  author: "visitor" | "owner";
+  authorLabel: string;
+  body: string;
+  createdLabel: string;
 }
 
 export interface VisitorRequestsData extends ReviewQueueSummary {
@@ -99,6 +109,18 @@ export function normalizeVisitorRequest(value: unknown): VisitorRequest | undefi
   const durationLabel = str(value.durationLabel);
   const beyondHorizonNote = str(value.beyondHorizonNote);
   const decisionToken = str(value.decisionToken);
+  const messages: VisitorMessage[] = [];
+  for (const item of Array.isArray(value.messages) ? value.messages : []) {
+    if (!isRecord(item)) return undefined;
+    const author = item.author;
+    const authorLabel = str(item.authorLabel);
+    const body = str(item.body);
+    const createdLabel = str(item.createdLabel);
+    if ((author !== "visitor" && author !== "owner") || !authorLabel || !body || !createdLabel) {
+      return undefined;
+    }
+    messages.push({ author, authorLabel, body, createdLabel });
+  }
   return {
     proposalId,
     status,
@@ -117,6 +139,8 @@ export function normalizeVisitorRequest(value: unknown): VisitorRequest | undefi
     expiresLabel,
     approvalDisclosure,
     ...(decisionToken ? { decisionToken } : {}),
+    messages,
+    canMessage: value.canMessage === true,
   };
 }
 
@@ -242,6 +266,51 @@ export async function decideVisitorRequest(
     message: "Could not confirm the decision. Refresh the queue before retrying.",
     requests: [],
   };
+}
+
+// A reply to a request's thread, or erasing the thread, returns the refreshed
+// queue like a decision does, so the result appears where it was typed.
+async function threadAction(
+  name: "ReplyToBackendVisitorRequest" | "EraseBackendVisitorThread",
+  input: { proposalId: string; message?: string },
+  root: WailsRoot,
+): Promise<VisitorRequestsData> {
+  const method = findWailsMethod(root, [name]);
+  if (!method) {
+    return {
+      ...emptyVisitorRequests,
+      status: "error",
+      message: "Messages need the ZeitBoard desktop app.",
+    };
+  }
+  try {
+    const normalized = normalizeVisitorRequests(
+      await method({ proposalId: input.proposalId, message: input.message ?? "" }),
+    );
+    if (normalized) return normalized;
+  } catch {
+    // Reported below; nothing was lost on this side.
+  }
+  return {
+    ...emptyVisitorRequests,
+    status: "error",
+    message: "Could not reach your server. Nothing was sent.",
+  };
+}
+
+export function replyToVisitorRequest(
+  proposalId: string,
+  message: string,
+  root: WailsRoot = globalThis as unknown as WailsRoot,
+): Promise<VisitorRequestsData> {
+  return threadAction("ReplyToBackendVisitorRequest", { proposalId, message }, root);
+}
+
+export function eraseVisitorThread(
+  proposalId: string,
+  root: WailsRoot = globalThis as unknown as WailsRoot,
+): Promise<VisitorRequestsData> {
+  return threadAction("EraseBackendVisitorThread", { proposalId }, root);
 }
 
 // defaultSlot proposes a starting block: the requested length from the window

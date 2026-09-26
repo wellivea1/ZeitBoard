@@ -155,7 +155,14 @@ export function ShareLinkForm({
           <input
             type="checkbox"
             checked={form.allowRequests}
-            onChange={(event) => setForm({ ...form, allowRequests: event.target.checked })}
+            onChange={(event) =>
+              // Messages belong to a request, so they go when requests do.
+              setForm({
+                ...form,
+                allowRequests: event.target.checked,
+                allowMessages: event.target.checked && form.allowMessages,
+              })
+            }
           />
           <span>Ask you for a time (you decide each one)</span>
         </label>
@@ -163,12 +170,10 @@ export function ShareLinkForm({
           <input
             type="checkbox"
             checked={form.allowMessages}
+            disabled={!form.allowRequests}
             onChange={(event) => setForm({ ...form, allowMessages: event.target.checked })}
           />
-          {/* Threads are P5-c. The grant is stored so an existing link does not
-              need re-issuing later, and the label says so rather than implying
-              a feature that is not there. */}
-          <span>Send a short message (not delivered yet)</span>
+          <span>Write to you about a time they asked for (plain text, until you answer)</span>
         </label>
       </fieldset>
 
