@@ -195,6 +195,20 @@ func (s *Store) Migrate(ctx context.Context) error {
 			observation_id TEXT NOT NULL
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_sync_correction_observation ON sync_correction_targets(observation_id)`,
+		// Medication erasure (ADR-0048): a deleted medication's id blocks any
+		// later revision or event for it, and its events are indexed by
+		// medication so deleting the definition finds them without
+		// decrypting every record.
+		`CREATE TABLE IF NOT EXISTS sync_medication_tombstones (
+			medication_id TEXT PRIMARY KEY,
+			device_id TEXT NOT NULL,
+			erased_at TEXT NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS sync_medication_members (
+			record_id TEXT PRIMARY KEY REFERENCES sync_records(record_id) ON DELETE CASCADE,
+			medication_id TEXT NOT NULL
+		)`,
+		`CREATE INDEX IF NOT EXISTS idx_sync_medication_members ON sync_medication_members(medication_id)`,
 		`CREATE TABLE IF NOT EXISTS proposals (
 			id TEXT PRIMARY KEY,
 			action_id TEXT NOT NULL,
@@ -380,7 +394,7 @@ func (s *Store) Append(ctx context.Context, deviceID string, records []syncmodel
 
 	accepted := 0
 	for _, record := range records {
-		var correctionTarget string
+		var correctionTarget, medicationMember string
 		// A tombstoned record id can never be resurrected: a stale device
 		// re-pushing an erased record is a silent no-op, not a conflict.
 		var tombstoned int
@@ -410,6 +424,42 @@ func (s *Store) Append(ctx context.Context, deviceID string, records []syncmodel
 			}
 			if !errors.Is(err, sql.ErrNoRows) {
 				return 0, 0, err
+			}
+		}
+		if record.Kind == syncmodel.KindMedicationCorrection {
+			var correction struct {
+				TargetEventID string `json:"target_event_id"`
+			}
+			if err := json.Unmarshal(record.Payload, &correction); err != nil {
+				return 0, 0, errors.New("invalid medication correction payload")
+			}
+			// Deleting a dose deletes its corrections; one that arrives
+			// later from an offline device must not bring its times back.
+			correctionTarget = correction.TargetEventID
+			err := tx.QueryRowContext(ctx, `SELECT 1 FROM sync_tombstones WHERE record_id = ?`, correction.TargetEventID).Scan(&tombstoned)
+			if err == nil {
+				continue
+			}
+			if !errors.Is(err, sql.ErrNoRows) {
+				return 0, 0, err
+			}
+		}
+		if record.Kind == syncmodel.KindMedication || record.Kind == syncmodel.KindMedicationEvent {
+			medicationID, err := medicationIDOf(record)
+			if err != nil {
+				return 0, 0, err
+			}
+			err = tx.QueryRowContext(ctx,
+				`SELECT 1 FROM sync_medication_tombstones WHERE medication_id = ?`, medicationID,
+			).Scan(&tombstoned)
+			if err == nil {
+				continue
+			}
+			if !errors.Is(err, sql.ErrNoRows) {
+				return 0, 0, err
+			}
+			if record.Kind == syncmodel.KindMedicationEvent {
+				medicationMember = medicationID
 			}
 		}
 		if record.Kind == syncmodel.KindTask {
@@ -463,6 +513,11 @@ func (s *Store) Append(ctx context.Context, deviceID string, records []syncmodel
 		accepted++
 		if correctionTarget != "" {
 			if _, err := tx.ExecContext(ctx, `INSERT INTO sync_correction_targets(record_id, observation_id) VALUES(?, ?)`, record.RecordID, correctionTarget); err != nil {
+				return 0, 0, err
+			}
+		}
+		if medicationMember != "" {
+			if _, err := tx.ExecContext(ctx, `INSERT INTO sync_medication_members(record_id, medication_id) VALUES(?, ?)`, record.RecordID, medicationMember); err != nil {
 				return 0, 0, err
 			}
 		}
@@ -628,6 +683,16 @@ func expandTaskErasureTargets(
 		if err != nil {
 			return nil, err
 		}
+		if syncmodel.Kind(kind) == syncmodel.KindMedication {
+			members, err := expandMedicationErasure(ctx, tx, deviceID, recordID, erasedAt)
+			if err != nil {
+				return nil, err
+			}
+			for _, member := range members {
+				appendID(member)
+			}
+			continue
+		}
 		if syncmodel.Kind(kind) != syncmodel.KindTask {
 			continue
 		}
@@ -650,6 +715,72 @@ func expandTaskErasureTargets(
 		}
 	}
 	return result, nil
+}
+
+// expandMedicationErasure turns one known medication revision into deleting the
+// medication: every revision, every recorded dose and every correction of one,
+// and a registry entry that refuses anything later from an offline device.
+func expandMedicationErasure(ctx context.Context, tx *sql.Tx, deviceID, recordID, erasedAt string) ([]string, error) {
+	medicationID, ok := taskIDFromRevisionRecordID(recordID)
+	if !ok {
+		return nil, fmt.Errorf("stored medication record %q has an invalid revision id", recordID)
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT OR IGNORE INTO sync_medication_tombstones(medication_id, device_id, erased_at) VALUES(?, ?, ?)`,
+		medicationID, deviceID, erasedAt,
+	); err != nil {
+		return nil, err
+	}
+	var ids []string
+	collect := func(query string, args ...any) error {
+		rows, err := tx.QueryContext(ctx, query, args...)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				return err
+			}
+			ids = append(ids, id)
+		}
+		return rows.Err()
+	}
+	pattern := escapeSQLLike(medicationID) + `\_r%`
+	if err := collect(`SELECT record_id FROM sync_records WHERE kind = ? AND record_id LIKE ? ESCAPE '\' ORDER BY seq`,
+		string(syncmodel.KindMedication), pattern); err != nil {
+		return nil, err
+	}
+	// The pattern also matches another medication whose id begins with this
+	// one's and "_r"; keep only this medication's own revisions.
+	revisions := ids[:0]
+	for _, id := range ids {
+		if owner, ok := taskIDFromRevisionRecordID(id); ok && owner == medicationID {
+			revisions = append(revisions, id)
+		}
+	}
+	ids = revisions
+	if err := collect(`SELECT record_id FROM sync_medication_members WHERE medication_id = ? ORDER BY record_id`, medicationID); err != nil {
+		return nil, err
+	}
+	if err := collect(`SELECT target.record_id FROM sync_correction_targets target
+		JOIN sync_medication_members member ON member.record_id = target.observation_id
+		WHERE member.medication_id = ? ORDER BY target.record_id`, medicationID); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+// medicationIDOf reads the medication a revision or an event belongs to.
+func medicationIDOf(record syncmodel.PushRecord) (string, error) {
+	var payload struct {
+		MedicationID string `json:"medication_id"`
+	}
+	if err := json.Unmarshal(record.Payload, &payload); err != nil || payload.MedicationID == "" {
+		return "", errors.New("invalid medication payload")
+	}
+	return payload.MedicationID, nil
 }
 
 func taskRevisionRecordIDsTx(ctx context.Context, tx *sql.Tx, taskID string) ([]string, error) {

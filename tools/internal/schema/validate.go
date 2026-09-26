@@ -63,14 +63,37 @@ func loadVersion(root, version string) (*Set, error) {
 		if entry.IsDir() || !strings.HasSuffix(name, ".schema.json") {
 			continue
 		}
-		doc, err := loadJSON(filepath.Join(contractsDir, name))
-		if err != nil {
-			return nil, err
-		}
-		if err := compiler.AddResource(set.resourceBase+name, doc); err != nil {
-			return nil, fmt.Errorf("add resource %s: %w", name, err)
-		}
 		set.names = append(set.names, name)
+	}
+	// Every version is registered, so a schema of one version can refer to a
+	// definition of another ("../v2/medication-set.schema.json#/..."); the
+	// set still validates and lists only its own version.
+	versions, err := os.ReadDir(filepath.Join(root, "contracts"))
+	if err != nil {
+		return nil, fmt.Errorf("read contracts dir: %w", err)
+	}
+	for _, versionDir := range versions {
+		if !versionDir.IsDir() || !validContractVersion(versionDir.Name()) {
+			continue
+		}
+		dir := filepath.Join(root, "contracts", versionDir.Name())
+		files, err := os.ReadDir(dir)
+		if err != nil {
+			return nil, fmt.Errorf("read contracts dir: %w", err)
+		}
+		for _, file := range files {
+			name := file.Name()
+			if file.IsDir() || !strings.HasSuffix(name, ".schema.json") {
+				continue
+			}
+			doc, err := loadJSON(filepath.Join(dir, name))
+			if err != nil {
+				return nil, err
+			}
+			if err := compiler.AddResource("mem:///contracts/"+versionDir.Name()+"/"+name, doc); err != nil {
+				return nil, fmt.Errorf("add resource %s/%s: %w", versionDir.Name(), name, err)
+			}
+		}
 	}
 	return set, nil
 }

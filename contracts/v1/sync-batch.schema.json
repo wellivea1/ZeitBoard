@@ -59,7 +59,7 @@
         },
         "kind": {
           "type": "string",
-          "enum": ["observation", "correction", "task", "placement"]
+          "enum": ["observation", "correction", "task", "placement", "medication", "medication_event", "medication_correction", "context_marker"]
         },
         "createdAt": {
           "$ref": "common.schema.json#/$defs/timestamp"
@@ -88,7 +88,7 @@
         },
         "kind": {
           "type": "string",
-          "enum": ["observation", "correction", "task", "placement", "tombstone"]
+          "enum": ["observation", "correction", "task", "placement", "medication", "medication_event", "medication_correction", "context_marker", "tombstone"]
         },
         "deviceId": {
           "$ref": "common.schema.json#/$defs/identifier"
@@ -119,6 +119,18 @@
         },
         {
           "$ref": "#/$defs/placementPayload"
+        },
+        {
+          "$ref": "../v2/medication-set.schema.json#/$defs/medication"
+        },
+        {
+          "$ref": "../v2/medication-event-set.schema.json#/$defs/event"
+        },
+        {
+          "$ref": "../v2/medication-event-set.schema.json#/$defs/correction"
+        },
+        {
+          "$ref": "rhythm-marker-set.schema.json#/$defs/marker"
         },
         {
           "$ref": "#/$defs/tombstonePayload"
@@ -171,7 +183,7 @@
         },
         "record_kind": {
           "type": "string",
-          "enum": ["observation", "correction", "task", "placement"]
+          "enum": ["observation", "correction", "task", "placement", "medication", "medication_event", "medication_correction", "context_marker"]
         }
       }
     },
@@ -241,6 +253,74 @@
             "properties": {
               "payload": {
                 "$ref": "#/$defs/placementPayload"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "medication"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "$ref": "../v2/medication-set.schema.json#/$defs/medication"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "medication_event"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "$ref": "../v2/medication-event-set.schema.json#/$defs/event"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "medication_correction"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "$ref": "../v2/medication-event-set.schema.json#/$defs/correction"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "context_marker"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "$ref": "rhythm-marker-set.schema.json#/$defs/marker"
               }
             }
           }
