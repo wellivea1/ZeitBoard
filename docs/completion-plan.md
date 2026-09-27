@@ -847,3 +847,34 @@ Windows 10 1903 and later, then falls back to the registry's zone name through t
 the zone `/etc/localtime` links to. The desktop looks the zone up once per run, as Go reads the
 local clock once per run. When the system names no zone the desktop uses UTC rather than a guessed
 place. The tests pin their computer to New York, so they hold wherever they run.
+
+### C4 the voice-client path survives restarts — 2026-09-27
+
+The desktop's stdio bridge is what a voice client such as Claude Desktop runs. It read the
+running app's address and token once, and exited on its first failed request. Two ordinary
+events therefore ended a voice client's connection until the client itself was restarted:
+
+- restarting ZeitBoard, which moves the endpoint to a new port and token;
+- thirty idle minutes, after which the endpoint drops the session.
+
+The bridge now finds the app again. It re-reads the descriptor, opens a new session the way the
+client opened the first, and retries once. It retries only a request that certainly never ran
+(connection refused, token refused, session gone), so a proposal is never made twice. While the
+app is closed it answers "ZeitBoard is not running" and keeps serving. It may also start before
+the app does.
+
+Running the smoke for real found that PowerShell starts a child's input with a UTF-8 byte-order
+mark, which the bridge could not parse. `scripts/smoke-local-mcp.ps1` had never completed a
+session. The bridge now ignores the mark, as any client on a UTF-8 Windows console needs, and the
+script writes without one.
+
+The script now covers the documented voice-client path:
+
+- the tool list, with nothing that decides;
+- facts, from the snapshot and a question;
+- the byte-identical refusal;
+- a proposed dose waiting for the owner (`-ProposeDose`);
+- a session carrying on across an app restart (`-Reconnect`).
+
+Remaining in C4: the same coverage for the server's connector and the chat assistant with a
+configured provider.

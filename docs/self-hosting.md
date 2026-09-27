@@ -312,13 +312,27 @@ appearance and night mode, without depending on the server.
    It discovers the running app through a descriptor file in the desktop config
    directory, restricted to your user account - there is no port or token to
    copy by hand.
-3. Start ZeitBoard, then use the client's voice mode.
+3. Use the client's voice mode. ZeitBoard and the client can start in either
+   order. The connection survives ZeitBoard restarting and the endpoint dropping
+   an idle session: the bridge finds the app again and carries on. While
+   ZeitBoard is closed, requests get "ZeitBoard is not running" instead of the
+   connection failing.
 
 The endpoint binds `127.0.0.1` on an ephemeral port, requires a bearer token,
 rejects any request carrying an `Origin` header, and exposes allowlisted read
 projections plus one direct display action (`set_appearance`, per ADR-0021).
-Scheduling requests are propose-only and need an enrolled backend; there is no
-approve or apply tool. Settings shows its status and the descriptor path.
+Scheduling requests are propose-only and need an enrolled backend. "I took my
+evening tablet" becomes a proposed dose that waits on Home for you to accept
+(ADR-0051). There is no approve or apply tool. Settings shows the endpoint's
+status and the descriptor path.
+
+`scripts\smoke-local-mcp.ps1` checks this path end to end against the
+installed app:
+
+- the tool list, facts and the medical refusal, read-only by default;
+- `-ProposeDose` also proposes one dose, which you then decline on Home;
+- `-Reconnect` waits while you restart ZeitBoard and checks that the session
+  carries on.
 
 ### Option B - backend connector (works from any machine)
 
