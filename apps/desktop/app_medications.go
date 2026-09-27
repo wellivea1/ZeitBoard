@@ -141,9 +141,12 @@ type MedicationScheduleGapDTO struct {
 }
 
 type MedicationLogDTO struct {
-	EventID           string `json:"eventId"`
-	MedicationID      string `json:"medicationId"`
-	MedicationLabel   string `json:"medicationLabel"`
+	EventID         string `json:"eventId"`
+	MedicationID    string `json:"medicationId"`
+	MedicationLabel string `json:"medicationLabel"`
+	// DoseAt is the instant; DoseLocal and CivilTime are the civil time in the
+	// dose's own zone, which may not be this computer's.
+	DoseAt            string `json:"doseAt"`
 	DoseLocal         string `json:"doseLocal"`
 	CivilTime         string `json:"civilTime"`
 	ZoneID            string `json:"zoneId"`
@@ -836,6 +839,7 @@ func medicationEventDTO(
 		EventID:           event.EventID,
 		MedicationID:      event.MedicationID,
 		MedicationLabel:   label,
+		DoseAt:            event.DoseAt.UTC().Format(time.RFC3339),
 		DoseLocal:         local.Format("2006-01-02T15:04"),
 		CivilTime:         local.Format("Mon Jan 2, 3:04 PM MST"),
 		ZoneID:            event.ZoneID,

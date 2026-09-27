@@ -4,6 +4,7 @@ import type {
   MedicationEventStatus,
   MedicationLog,
 } from "../data/medications";
+import { zoneWords } from "../utils/civilTime";
 import { clockTime, relativeDay } from "../utils/relativeTime";
 
 // One tap per dose. Recording "taken now" used to mean choosing the medication
@@ -23,7 +24,9 @@ function browserZone() {
 
 function lastEventWording(event: MedicationLog | undefined, now: Date) {
   if (!event) return "";
-  const at = new Date(event.doseLocal.slice(0, 16));
+  // The instant, read on this computer's clock: a dose recorded in another
+  // zone is still "today at 12:41 AM" here, not its own zone's 4:41 AM.
+  const at = new Date(event.doseAt);
   const status = event.status === "taken" ? "Last taken" : "Last skipped";
   if (Number.isNaN(at.getTime())) return `${status} ${event.civilTime}`;
   const day = relativeDay(at, now);
@@ -51,7 +54,10 @@ function usualWording(medication: MedicationDefinition) {
     schedule.kind === "cycling" && schedule.daysOn && schedule.daysOff
       ? `, ${schedule.daysOn} days on and ${schedule.daysOff} off`
       : "";
-  return `Usually at ${list}${cycle}`;
+  // The schedule keeps its own zone; say so when this computer is elsewhere.
+  const zone =
+    schedule.zoneId && schedule.zoneId !== browserZone() ? ` ${zoneWords(schedule.zoneId)}` : "";
+  return `Usually at ${list}${zone}${cycle}`;
 }
 
 /** "Tablet, 5 mg. Usually at 10:00 PM. Last taken yesterday at 10:05 PM." */
@@ -103,7 +109,7 @@ export function MedicationQuickTaps({
       {active.map((medication) => {
         const last = events
           .filter((event) => event.medicationId === medication.medicationId)
-          .sort((a, b) => b.doseLocal.localeCompare(a.doseLocal))[0];
+          .sort((a, b) => Date.parse(b.doseAt) - Date.parse(a.doseAt))[0];
         const details = doseSentence(medication, last);
         return (
           <li key={medication.medicationId}>

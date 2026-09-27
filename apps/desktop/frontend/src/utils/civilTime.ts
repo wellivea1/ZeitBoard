@@ -1,3 +1,9 @@
+/** "New York time" for a region's zone; "UTC" for a zone that names no place. */
+export function zoneWords(zoneId: string) {
+  const slash = zoneId.lastIndexOf("/");
+  return slash < 0 ? zoneId : `${zoneId.slice(slash + 1).replace(/_/g, " ")} time`;
+}
+
 export function localZone() {
   return Intl.DateTimeFormat().resolvedOptions().timeZone;
 }
