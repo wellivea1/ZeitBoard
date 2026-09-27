@@ -31,7 +31,6 @@ import (
 )
 
 const (
-	defaultZoneID = "America/New_York"
 	disclaimer    = "Estimates describe observed sleep-wake timing and uncertainty. This application does not provide medical advice."
 	deleteConfirm = "DELETE"
 )
@@ -994,7 +993,7 @@ func (a *App) DeleteTask(input TaskActionInput) (TasksDTO, error) {
 func taskRecordFromInput(input TaskInput, taskID string, createdAt time.Time, status string) (storage.TaskRecord, error) {
 	zoneID := strings.TrimSpace(input.ZoneID)
 	if zoneID == "" {
-		zoneID = defaultZoneID
+		zoneID = localZoneID()
 	}
 	location, err := time.LoadLocation(zoneID)
 	if err != nil {
@@ -1131,7 +1130,7 @@ func emptyRhythmProjection(state localEstimateState, now time.Time) estimation.R
 	if message == "" {
 		message = "Add at least seven principal sleep episodes before the app estimates a rhythm."
 	}
-	localNow := now.In(locationOrUTC(defaultZoneID))
+	localNow := now.In(locationOrUTC(localZoneID()))
 	return estimation.RhythmProjection{
 		FixtureMode:     false,
 		EstimateSource:  "local",
@@ -1144,7 +1143,7 @@ func emptyRhythmProjection(state localEstimateState, now time.Time) estimation.R
 			Label:     "now",
 			Day:       localNow.Format("Jan 2"),
 			CivilDate: localNow.Format("2006-01-02"),
-			ZoneID:    defaultZoneID,
+			ZoneID:    localZoneID(),
 			Hour:      localClockHour(localNow),
 		},
 		DriftTitle:      "Sleep-onset drift",
@@ -1273,7 +1272,7 @@ func correctionSummary(changes storage.SleepCorrectionChanges, zoneID string) st
 func parseSleepInput(input SleepEntryInput) (time.Time, time.Time, string, string, error) {
 	zoneID := strings.TrimSpace(input.ZoneID)
 	if zoneID == "" {
-		zoneID = defaultZoneID
+		zoneID = localZoneID()
 	}
 	location, err := time.LoadLocation(zoneID)
 	if err != nil {

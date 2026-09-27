@@ -824,3 +824,26 @@ Found along the way: on Windows the desktop's own zone resolves to the developme
 zone. It is fixed next.
 
 Remaining in C4: the agent smoke tests.
+
+### Consistency: the desktop names its own time zone — 2026-09-27
+
+On Windows, and on Linux and macOS without `TZ`, Go reports the local zone only as "Local". The
+desktop read that as unknown and fell back to New York. On any computer elsewhere, every time the
+desktop itself stated or recorded was then under New York's name:
+
+- the rhythm and outlook's clock;
+- the snapshot the assistant reads;
+- quick "going to sleep" taps;
+- proposed doses;
+- planner suggestions before an estimate existed;
+- the empty-state "now".
+
+The screens' own entries were right, since the browser named the zone. Records from the two
+sources disagreed.
+
+`core/platform/localzone` now asks the system. On Windows it asks the ICU that ships with
+Windows 10 1903 and later, then falls back to the registry's zone name through the Windows table
+(moved from the calendar importer into `core/timezones`). On Linux and macOS it takes `TZ`, then
+the zone `/etc/localtime` links to. The desktop looks the zone up once per run, as Go reads the
+local clock once per run. When the system names no zone the desktop uses UTC rather than a guessed
+place. The tests pin their computer to New York, so they hold wherever they run.

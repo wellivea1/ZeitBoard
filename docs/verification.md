@@ -2021,3 +2021,14 @@ today at 5:36 AM". Plan showed the same dose as a card: "Assistant proposal · R
 3, moved the dose to the history, and Home's doses column read "Last taken today at 5:36 AM".
 
 The core, server and desktop Go suites, the contract fixture check and the full web check pass.
+
+## The desktop names its own time zone — 2026-09-27
+
+- On this Windows computer, Windows' ICU named `America/New_York`, and the named zone keeps the
+  computer's clock offset. A test checks that offset on every machine it runs on.
+- Go's placeholder "Local", an empty name and an unknown zone are refused.
+- The calendar importer still maps Windows zone names, now through `core/timezones`, and its
+  tests pass.
+- The desktop's tests pin their computer to New York and pass. The package vets for Linux and
+  macOS as well.
+- The core and desktop Go suites pass.

@@ -236,7 +236,7 @@ func (a *App) SendAssistantMessage(input AssistantMessageInput) (AssistantReplyD
 // the rail re-attaches them locally for display.
 func (a *App) assistantPlanningContext(ctx context.Context, scope assistantFactScope) (assistantContextPayload, error) {
 	now := a.currentTime().UTC().Truncate(time.Minute)
-	payload := assistantContextPayload{ZoneID: defaultZoneID, Now: now}
+	payload := assistantContextPayload{ZoneID: localZoneID(), Now: now}
 	store, err := a.requireStore()
 	if err != nil {
 		return payload, err
