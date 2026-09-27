@@ -1011,9 +1011,10 @@ The real-app run found two faults that were older than this feature:
 
 - **Error reasons never reached the owner.** Wails rejects a Go error with its bare message.
   Every screen tests for an Error, so each showed its generic fallback, never the reason. The
-  bridge now turns the message into an Error, which fixes every screen at once. With reasons
-  shown, the sync failure in Plan read "backend request failed". It now reads "Could not reach
-  ZeitBoard's server."
+  bridge now turns the message into an Error, which fixes every screen at once. A Go error is a
+  lowercase clause by convention, so the bridge also shows it as a sentence ("Wake time must be
+  after sleep start."). With reasons shown, the sync failure in Plan read "backend request
+  failed". It now reads "Could not reach ZeitBoard's server."
 - **The import message said "1 events, 1 of them busy".** It now reads "1 event, 1 busy."
 
 With this, C2's acceptance is met. A refresh action on each calendar's row, instead of adding the

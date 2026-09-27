@@ -13,6 +13,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+/**
+ * A Go error is a lowercase clause without a full stop, by Go convention.
+ * Shown to the owner, it reads as a sentence.
+ */
+export function asSentence(message: string): string {
+  const trimmed = message.trim();
+  if (!trimmed) return trimmed;
+  const capitalized = trimmed.charAt(0).toLocaleUpperCase() + trimmed.slice(1);
+  return /[.!?…]$/.test(capitalized) ? capitalized : `${capitalized}.`;
+}
+
 export function findWailsMethod(
   root: WailsRoot,
   names: readonly string[],
@@ -39,8 +50,9 @@ export function findWailsMethod(
             } catch (reason) {
               // Wails rejects with a Go error's bare message. Everything above
               // the bridge reads a failure as an Error, and a string would fall
-              // through to a generic "that did not work".
-              throw typeof reason === "string" ? new Error(reason) : reason;
+              // through to a generic "that did not work"; the message is shown
+              // as the sentence it is meant to be.
+              throw typeof reason === "string" ? new Error(asSentence(reason)) : reason;
             }
           };
         }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findWailsMethod } from "./wailsBridge";
+import { asSentence, findWailsMethod } from "./wailsBridge";
 
 describe("Wails bridge lookup", () => {
   it("finds a nested method and preserves its service binding", async () => {
@@ -63,6 +63,7 @@ describe("Wails bridge lookup", () => {
         main: {
           App: {
             Refuse: () => Promise.reject("Your calendar did not accept this sign-in."),
+            Clause: () => Promise.reject("wake time must be after sleep start"),
             Throw: () => Promise.reject(refusal),
           },
         },
@@ -73,5 +74,20 @@ describe("Wails bridge lookup", () => {
       new Error("Your calendar did not accept this sign-in."),
     );
     await expect(findWailsMethod(root, ["Throw"])?.()).rejects.toBe(refusal);
+    // Go's lowercase clause reads as a sentence.
+    await expect(findWailsMethod(root, ["Clause"])?.()).rejects.toEqual(
+      new Error("Wake time must be after sleep start."),
+    );
+  });
+
+  it("makes a sentence of a clause, and leaves a sentence alone", () => {
+    expect(asSentence("backend sync is off")).toBe("Backend sync is off.");
+    expect(asSentence("ZeitBoard is quitting; sync has stopped.")).toBe(
+      "ZeitBoard is quitting; sync has stopped.",
+    );
+    expect(asSentence("message is too long (2000 characters max)")).toBe(
+      "Message is too long (2000 characters max).",
+    );
+    expect(asSentence("  ")).toBe("");
   });
 });
