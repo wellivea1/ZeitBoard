@@ -51,6 +51,39 @@ class SQLiteSyncReplicaTest {
         }
     }
 
+    @Test fun medicationErasureTakesItsDosesAndCorrectionsButNotMarkers() {
+        val provenance = buildJsonObject { put("acquisition_method", "manual"); put("evidence_status", "user_reported"); put("recorded_at", at.toString()) }
+        val medication = buildJsonObject {
+            put("medication_id", "med_synthetic"); put("label", "Synthetic medication"); put("active", true)
+            put("created_at", at.toString()); put("revision", 1); put("updated_at", at.toString())
+        }
+        val dose = buildJsonObject {
+            put("event_id", "dose_synthetic"); put("medication_id", "med_synthetic"); put("dose_at", at.toString()); put("zone_id", "UTC")
+            put("status", "taken"); put("scheduled", true); put("provenance", provenance)
+        }
+        val correction = buildJsonObject {
+            put("correction_id", "medcor_synthetic"); put("target_event_id", "dose_synthetic"); put("created_at", at.toString())
+            put("reason", "user_edit"); put("changes", buildJsonObject { put("status", "skipped") })
+        }
+        val marker = buildJsonObject {
+            put("marker_id", "marker_synthetic"); put("kind", "travel"); put("start_at", at.toString()); put("zone_id", "UTC"); put("provenance", provenance)
+        }
+        SQLiteLocalUserDataStore(context, databaseName).use { store ->
+            val replica = replica(store)
+            fun kept() = store.readableDatabase.rawQuery("SELECT record_id FROM sync_replica ORDER BY record_id", null).use { rows ->
+                buildList { while (rows.moveToNext()) add(rows.getString(0)) }
+            }
+            replica.apply(PullPage(4, listOf(
+                PulledRecord(1, "med_synthetic_r1", "medication", medication), PulledRecord(2, "dose_synthetic", "medication_event", dose),
+                PulledRecord(3, "medcor_synthetic", "medication_correction", correction), PulledRecord(4, "marker_synthetic", "context_marker", marker),
+            )), at)
+            assertEquals(listOf("dose_synthetic", "marker_synthetic", "med_synthetic_r1", "medcor_synthetic"), kept())
+            replica.apply(PullPage(5, listOf(PulledRecord(5, "med_synthetic_r1", "tombstone",
+                buildJsonObject { put("record_id", "med_synthetic_r1"); put("record_kind", "medication") }))), at)
+            assertEquals(listOf("marker_synthetic"), kept())
+        }
+    }
+
     @Test fun invalidPageRollsBackRowsAndCursorTogether() {
         SQLiteLocalUserDataStore(context, databaseName).use { store ->
             val replica = replica(store)
