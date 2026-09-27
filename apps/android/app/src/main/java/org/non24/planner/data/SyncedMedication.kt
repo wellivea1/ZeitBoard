@@ -2,10 +2,13 @@ package org.non24.planner.data
 
 import java.time.Instant
 import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 
 // Medication definitions, doses, dose corrections and context markers synced
 // from the owner's computers (ADR-0048). Each record is checked exactly as its
@@ -31,6 +34,25 @@ data class SyncedDose(
     val zoneId: String,
     val status: String,
     val scheduled: Boolean,
+)
+
+/** A medication on the owner's computer, as the phone offers it for a dose. */
+data class CompanionMedication(
+    val medicationId: String,
+    val label: String,
+    val scheduleKind: String?,
+    val civilTimes: List<String>,
+    val scheduleZoneId: String?,
+    val lastDose: CompanionDose?,
+)
+
+/** A dose as it stands after its corrections; pending until it has uploaded. */
+data class CompanionDose(
+    val eventId: String,
+    val status: String,
+    val doseAt: Instant,
+    val zoneId: String,
+    val pending: Boolean,
 )
 
 internal val MEDICATION_SCHEDULE_KINDS = setOf("as_needed", "fixed_clock", "cycling")
@@ -122,4 +144,47 @@ internal fun validateSyncedMarker(recordId: String, payload: JsonObject) {
     ZoneId.of(payload.string("zone_id"))
     payload.privateText("note", 500)
     payload.provenance()
+}
+
+/**
+ * A dose after its corrections, applied in the order they were made, as the
+ * desktop applies them; null once a correction excludes it.
+ */
+internal fun effectiveDose(dose: SyncedDose, corrections: List<JsonObject>): SyncedDose? {
+    var current = dose
+    var excluded = false
+    corrections.sortedWith(compareBy({ it.instant("created_at") }, { it.string("correction_id") })).forEach { correction ->
+        val changes = correction.getValue("changes").jsonObject
+        if (changes.containsKey("dose_at")) current = current.copy(doseAt = changes.instant("dose_at"))
+        if (changes.containsKey("zone_id")) current = current.copy(zoneId = changes.string("zone_id"))
+        if (changes.containsKey("status")) current = current.copy(status = changes.string("status"))
+        if (changes.containsKey("scheduled")) current = current.copy(scheduled = changes.boolean("scheduled"))
+        if (changes.containsKey("excluded")) excluded = changes.boolean("excluded")
+    }
+    return current.takeUnless { excluded }
+}
+
+/**
+ * The dose a tap on the phone records: now, in the owner's home zone, taken
+ * or skipped. It counts as scheduled when the medication has a schedule. The
+ * record is immutable; the desktop corrects or deletes it (ADR-0048).
+ */
+internal fun doseRecord(eventId: String, medication: CompanionMedication, status: String, at: Instant, zone: ZoneId): OutboxRecord {
+    require(validSyncId(eventId) && status in DOSE_STATUSES)
+    val recorded = at.truncatedTo(ChronoUnit.SECONDS)
+    val payload = buildJsonObject {
+        put("event_id", eventId)
+        put("medication_id", medication.medicationId)
+        put("dose_at", recorded.toString())
+        put("zone_id", zone.id)
+        put("status", status)
+        put("scheduled", medication.scheduleKind == "fixed_clock" || medication.scheduleKind == "cycling")
+        put("provenance", buildJsonObject {
+            put("acquisition_method", "manual")
+            put("evidence_status", "user_reported")
+            put("recorded_at", recorded.toString())
+        })
+    }
+    parseSyncedDose(eventId, payload)
+    return OutboxRecord(recordId = eventId, kind = "medication_event", createdAt = recorded, sourceRevision = recorded, payload = payload.toString())
 }

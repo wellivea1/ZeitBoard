@@ -1900,3 +1900,20 @@ JVM:
 Instrumented, on the `ZeitBoard_Completion_Test` emulator (8 replica tests): a medication, its dose,
 the dose's correction and a marker were all kept, and a medication tombstone left only the marker.
 Android unit tests, lint and the debug build pass.
+
+## Doses on the phone — 2026-09-27
+
+JVM:
+
+- a tap produces one valid `medication_event`: now, truncated to the second, in the home zone,
+  scheduled when the medication has a schedule, user-reported;
+- an unknown status is refused;
+- corrections apply in creation order, and an exclusion hides the dose;
+- the words match the design ("Usually 10:00 PM", "Usually 10:00 PM New York time" when the phone
+  is elsewhere, "Last taken yesterday at 10:05 PM", "…, uploading");
+- the repository queues exactly one dose for a listed medication and none for one no longer on the
+  list.
+
+Instrumented, on the emulator (9 replica tests): a downloaded dose appears as its correction left it,
+a tap on the phone becomes the latest dose and is marked pending, and a medication tombstone removes
+the medication and the queued tap.

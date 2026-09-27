@@ -111,7 +111,7 @@ private fun roundToFive(instant: Instant): Instant {
     return Instant.ofEpochMilli(Math.round(instant.toEpochMilli().toDouble() / step) * step)
 }
 
-private fun clock(time: ZonedDateTime, use24HourTime: Boolean, withPeriod: Boolean = true): String {
+internal fun clock(time: ZonedDateTime, use24HourTime: Boolean, withPeriod: Boolean = true): String {
     val pattern = when {
         use24HourTime -> "HH:mm"
         withPeriod -> "h:mm a"

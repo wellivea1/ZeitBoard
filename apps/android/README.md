@@ -32,10 +32,12 @@ In Settings, enter your own server's HTTPS address, enrollment secret and home I
 selects My data and permits forecast/task downloads plus upload of the recent Health Connect sleep
 snapshot and provider revisions when sleep access is granted. Corrections made in the connected
 Correct screen also upload. Saved local corrections and their source observations join sync on
-enrollment, including sources outside the recent provider snapshot. Medication events entered on
-the phone remain local. Medication definitions, doses, dose corrections and context markers from
-the owner's computers download and are kept with their erasures (ADR-0048); a pull never fails on
-them.
+enrollment, including sources outside the recent provider snapshot. Medication definitions, doses,
+dose corrections and context markers from the owner's computers download and are kept with their
+erasures (ADR-0048). The Doses screen lists the active medications with their usual time and latest
+dose. Taken or Skipped records the dose now, in the home zone; it shows as uploading until the next
+sync sends it, and is corrected or deleted on the computer. Deleting a medication there also removes
+a tap still waiting to upload. Free-text events for anything not on the list stay on the phone.
 The screen shows queued and held records, last upload and recovery errors. A last upload is not
 proof of a current estimate. Use the current backend, desktop and Android contracts together.
 

@@ -51,6 +51,8 @@ data class CompanionState(
     val totalTaskCount: Int = tasks.size,
     val sleepSources: List<SyncedSleep> = emptyList(),
     val totalSleepSourceCount: Int = sleepSources.size,
+    /** Active medications from the owner's computer, for dose logging (ADR-0048). */
+    val medications: List<CompanionMedication> = emptyList(),
 )
 
 internal fun JsonObject.integer(key: String): Long =

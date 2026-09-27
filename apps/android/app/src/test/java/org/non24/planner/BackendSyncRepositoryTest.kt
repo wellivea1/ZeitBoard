@@ -68,6 +68,7 @@ internal class FakeOutbox : SyncOutboxStore {
 
     override fun knownSources(): Map<String, SourceSyncRevision> = buildMap {
         rows.values.forEach { (record, _) ->
+            if (record.kind != "observation" && record.kind != "correction") return@forEach
             val payload = Json.parseToJsonElement(record.payload).jsonObject
             val isCorrection = record.kind == "correction"
             if (isCorrection && payload["acquisition_method"]?.jsonPrimitive?.content != "health_connect") return@forEach
