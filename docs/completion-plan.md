@@ -877,4 +877,35 @@ The script now covers the documented voice-client path:
 - a session carrying on across an app restart (`-Reconnect`).
 
 Remaining in C4: the same coverage for the server's connector and the chat assistant with a
-configured provider.
+configured provider (below).
+
+### C4 the server's connector and a configured model, smoke-tested — 2026-09-27
+
+`scripts/smoke-backend-mcp.ps1` does for the server's connector (self-hosting.md, Option B) what
+the local smoke does for the desktop. It runs the connector as a voice client would and checks:
+
+- the tool list, with nothing that decides;
+- facts from the server's projections;
+- proposals listed without approval tokens;
+- optionally, a proposal waiting for the owner (`-Propose`);
+- optionally, the chat assistant (`-Assistant`): a dosing question refused without the model, and
+  a planning question sent to the configured model;
+- optionally, the session carrying on across a server restart (`-Reconnect`).
+
+Building it found:
+
+- **Approval tokens reached the model.** The connector handed each proposal's one-use approval
+  token to the model, in propose results and in the proposal list, and a test asserted it. The
+  model could not use one without the connector's device token, but approval material has no
+  place in an agent's hands (ADR-0012). The connector now removes it; the desktop's endpoint never
+  passed it.
+- **A configured provider could not be local.** The only way to use a model the operator runs
+  was to misuse the OpenCode Zen provider with a dummy key. `openai_compatible` now names any
+  server speaking OpenAI's chat completions, such as Ollama or llama.cpp, with an endpoint and an
+  optional key. With such a model the assistant's context never leaves the operator's machines.
+  Every provider's endpoint must now be HTTPS, or plain HTTP only to the same machine.
+- **The connector had the same byte-order-mark gap** as the desktop bridge. It is fixed the same
+  way.
+
+With C4's smoke coverage complete, what remains is its wording on "task/calendar operations",
+reviewed next.

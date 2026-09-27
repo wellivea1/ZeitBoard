@@ -16,8 +16,9 @@ legal advice.
   data or keys, and receives **no telemetry**. Its security duty is sound defaults, honest
   representations, and a hardening runbook for operators.
 - **LLM provider** — the user's chosen provider (OpenCode Zen / OpenRouter / OpenAI /
-  Anthropic). Sees only the minimized, redacted context the user's instance sends under
-  the user's key; its data handling is the **user's** relationship and responsibility.
+  Anthropic), or an OpenAI-compatible model the user runs. Sees only the minimized, redacted
+  context the user's instance sends under the user's key, over HTTPS unless it runs on the
+  same machine; its data handling is the **user's** relationship and responsibility.
 
 ## Assets
 

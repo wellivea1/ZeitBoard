@@ -23,7 +23,7 @@
       "required": ["configured", "provider"],
       "properties": {
         "configured": {"type": "boolean"},
-        "provider": {"type": "string", "enum": ["disabled", "openai", "anthropic", "openrouter", "opencode_zen", "fake"]},
+        "provider": {"type": "string", "enum": ["disabled", "openai", "anthropic", "openrouter", "opencode_zen", "openai_compatible", "fake"]},
         "model": {"type": "string", "minLength": 1, "maxLength": 120}
       }
     },

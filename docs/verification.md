@@ -2063,3 +2063,42 @@ and recorded nothing: Melatonin still read "Last taken today at 12:46 AM".
 
 The first real run found the byte-order mark: PowerShell wrote EF BB BF before the first message,
 and the bridge answered a parse error.
+
+## The server's connector and a configured model — 2026-09-27
+
+Tests:
+
+- Provider:
+  - a hosted provider without a key stays off;
+  - `openai_compatible` needs an endpoint and a model, but no key;
+  - endpoints are accepted over HTTPS, or plain HTTP to `127.0.0.1`, `::1` or `localhost`;
+  - endpoints are refused over plain HTTP to a LAN address or a named host, over another scheme,
+    with credentials, or as a relative URL;
+  - a keyless server gets no `Authorization` header, and a keyed one gets the bearer key;
+  - the request asks for a JSON object.
+- Connector:
+  - a propose result and the proposal list carry no `decisionToken`, while the proposal is
+    pending;
+  - input starting with a byte-order mark is read;
+  - the registry test still holds the tool list.
+
+The real smoke used a disposable `zeitboardd` with `openai_compatible` pointed at a local Ollama
+serving `qwen2.5:0.5b`. The connector device was enrolled like any device. The run passed:
+
+- 8 tools, none deciding;
+- facts, with the provider reported as `openai_compatible/qwen2.5:0.5b`;
+- proposals listed with no approval tokens;
+- a proposal waiting for the owner;
+- the assistant refused the dosing question;
+- after the server was stopped and started mid-run, the same connector session carried on.
+
+The planning question reached the model, but its replies were unusable, and the server said so
+("unknown", no proposal). Sent the server's exact prompt three times, the 0.5B model:
+
+- left out `schema_version`;
+- copied the enum text as the action;
+- filled the target with invented values such as `default_start_time`.
+
+The server's strict parsing refused all three, as it should. A model that follows the action
+schema needs a larger download, which was not made. The contract fixture check and the server
+suite pass.

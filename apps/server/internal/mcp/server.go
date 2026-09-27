@@ -13,6 +13,8 @@ import (
 
 const ProtocolVersion = "2025-11-25"
 
+var utf8BOM = []byte{0xef, 0xbb, 0xbf}
+
 type Server struct {
 	Backend              *BackendClient
 	Configured           bool
@@ -43,7 +45,9 @@ func (s *Server) Serve(ctx context.Context, input io.Reader, output io.Writer) e
 			return ctx.Err()
 		default:
 		}
-		line := bytes.TrimSpace(scanner.Bytes())
+		// A Windows client writing through a UTF-8 console encoding starts
+		// its input with a byte-order mark.
+		line := bytes.TrimSpace(bytes.TrimPrefix(scanner.Bytes(), utf8BOM))
 		if len(line) == 0 {
 			continue
 		}
@@ -258,10 +262,50 @@ type textContent struct {
 }
 
 func jsonResult(data json.RawMessage) toolResult {
+	data, err := withoutDecisionTokens(data)
+	if err != nil {
+		return textError("ZeitBoard returned a response the connector could not read.")
+	}
 	return toolResult{
 		Content:           []textContent{{Type: "text", Text: string(data)}},
 		StructuredContent: data,
 	}
+}
+
+// withoutDecisionTokens removes the one-use approval tokens the backend gives
+// every device with a proposal. Approving is the owner's act in ZeitBoard
+// (ADR-0012): the connector has no tool that decides, and the model has no use
+// for the capability, so it never sees one.
+func withoutDecisionTokens(data json.RawMessage) (json.RawMessage, error) {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return nil, err
+	}
+	if !dropKey(value, "decisionToken") {
+		return data, nil
+	}
+	return json.Marshal(value)
+}
+
+func dropKey(value any, key string) bool {
+	dropped := false
+	switch node := value.(type) {
+	case map[string]any:
+		if _, ok := node[key]; ok {
+			delete(node, key)
+			dropped = true
+		}
+		for _, child := range node {
+			dropped = dropKey(child, key) || dropped
+		}
+	case []any:
+		for _, child := range node {
+			dropped = dropKey(child, key) || dropped
+		}
+	}
+	return dropped
 }
 
 func textError(message string) toolResult {

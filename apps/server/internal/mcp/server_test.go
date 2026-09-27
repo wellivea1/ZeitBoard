@@ -72,8 +72,16 @@ func TestProposeToolCreatesPendingProposalOnly(t *testing.T) {
 	if response.Result != "proposal_pending" || response.Action != "propose_place_task" || len(response.Proposals) != 1 {
 		t.Fatalf("propose response = %+v", response)
 	}
-	if response.Proposals[0].Status != store.ProposalPending || response.Proposals[0].DecisionToken == "" {
-		t.Fatalf("proposal summary = %+v, want pending with approval token", response.Proposals[0])
+	// The proposal waits for the owner; the model never holds the token that
+	// would decide it.
+	if response.Proposals[0].Status != store.ProposalPending || response.Proposals[0].DecisionToken != "" ||
+		strings.Contains(string(result.StructuredContent), "decisionToken") {
+		t.Fatalf("proposal summary = %+v, want pending without an approval token", response.Proposals[0])
+	}
+	listed, err := srv.callTool(context.Background(), callParams("list_proposals", nil))
+	if err != nil || listed.IsError || !strings.Contains(string(listed.StructuredContent), response.Proposals[0].ProposalID) ||
+		strings.Contains(string(listed.StructuredContent), "decisionToken") {
+		t.Fatalf("listed proposals = %s, %v", listed.StructuredContent, err)
 	}
 	if !strings.Contains(response.Answer, "human approval") {
 		t.Fatalf("proposal answer should mention human approval: %q", response.Answer)
@@ -333,5 +341,17 @@ func assertNoForbiddenToolFields(t *testing.T, body []byte) {
 		if strings.Contains(lower, forbidden) {
 			t.Fatalf("tool output leaked forbidden field/value %q in %s", forbidden, body)
 		}
+	}
+}
+
+func TestServeReadsInputThatStartsWithAByteOrderMark(t *testing.T) {
+	srv := &Server{}
+	var output bytes.Buffer
+	input := string(utf8BOM) + `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}` + "\n"
+	if err := srv.Serve(context.Background(), strings.NewReader(input), &output); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(output.String(), `"protocolVersion"`) {
+		t.Fatalf("initialize after a byte-order mark: %s", output.String())
 	}
 }
