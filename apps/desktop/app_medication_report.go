@@ -368,7 +368,7 @@ func (a *App) medicationClinicianReportAt(ctx context.Context, input MedicationC
 func resolveMedicationReportRange(input MedicationClinicalReportInput, now time.Time, sessions []domain.SleepSession, medications []storage.MedicationRecord, events []storage.EffectiveMedicationEvent, markers []storage.RhythmMarkerRecord) (medicationReportRange, error) {
 	zoneID := strings.TrimSpace(input.ZoneID)
 	if zoneID == "" {
-		zoneID = defaultZoneID
+		zoneID = localZoneID()
 	}
 	location, err := time.LoadLocation(zoneID)
 	if err != nil {

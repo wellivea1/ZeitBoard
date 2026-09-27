@@ -193,7 +193,7 @@ func (a *App) buildLocalProposals(now time.Time) (localProposalBuild, error) {
 		result.dto.Proposals = append(result.dto.Proposals, dto)
 	}
 
-	zoneID := defaultZoneID
+	zoneID := localZoneID()
 	if state.Status == "estimated" {
 		zoneID = state.Estimate.AsOf.ZoneID
 	}

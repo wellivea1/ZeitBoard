@@ -59,9 +59,8 @@ Task proposals already exist, but they could not carry a dose:
 ## Consequences
 
 - An agent can relay "I took it" without being able to write health data.
-- The desktop's zone at the time of the proposal is the recorded dose's zone. On Windows that
-  zone currently resolves to the development default rather than the computer's own zone. That
-  is a known defect of the desktop's zone lookup, tracked separately; it affects quick logging
-  in the same way.
+- The desktop's zone at the time of the proposal is the recorded dose's zone. The desktop names
+  that zone from the system (`core/platform/localzone`). Until 2026-09-27 it named New York on
+  every Windows computer, which also affected quick logging.
 - The server and its connector are unchanged in what they accept, apart from the explicit
   refusal of dose proposals.

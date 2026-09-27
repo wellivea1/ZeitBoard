@@ -269,7 +269,7 @@ func (a *App) getCalendar(ctx context.Context, input CalendarQueryInput) (Calend
 	}
 	zoneID := strings.TrimSpace(input.ZoneID)
 	if zoneID == "" {
-		zoneID = defaultZoneID
+		zoneID = localZoneID()
 	}
 	location, err := time.LoadLocation(zoneID)
 	if err != nil {
@@ -430,7 +430,7 @@ func parseCalendarFile(input CalendarFileInput, importedAt time.Time) (calendarc
 	}
 	zoneID := strings.TrimSpace(input.ZoneID)
 	if zoneID == "" {
-		zoneID = defaultZoneID
+		zoneID = localZoneID()
 	}
 	coverageStart, coverageEnd := calendarcore.CoverageAround(importedAt)
 	return calendarcore.ParseICS([]byte(input.Contents), calendarcore.ParseOptions{
@@ -485,7 +485,7 @@ func (a *App) fetchCalDAVCalendar(ctx context.Context, input CalDAVInput, import
 	}
 	zoneID := strings.TrimSpace(input.ZoneID)
 	if zoneID == "" {
-		zoneID = defaultZoneID
+		zoneID = localZoneID()
 	}
 	label := strings.TrimSpace(input.Label)
 	if label == "" {

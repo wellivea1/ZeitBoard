@@ -859,7 +859,7 @@ func medicationEventDTO(
 func medicationEventValues(doseLocal, rawZoneID, rawStatus, rawNote string, now time.Time) (time.Time, string, string, string, error) {
 	zoneID := strings.TrimSpace(rawZoneID)
 	if zoneID == "" {
-		zoneID = defaultZoneID
+		zoneID = localZoneID()
 	}
 	location, err := time.LoadLocation(zoneID)
 	if err != nil {

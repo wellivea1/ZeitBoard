@@ -332,11 +332,3 @@ func parseQuickLocal(value, field string) (time.Time, error) {
 	}
 	return parsed.UTC(), nil
 }
-
-func localZoneID() string {
-	zone := time.Local.String()
-	if zone == "" || zone == "Local" {
-		return defaultZoneID
-	}
-	return zone
-}
