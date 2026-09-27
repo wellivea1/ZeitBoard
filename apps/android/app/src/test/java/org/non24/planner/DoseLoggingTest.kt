@@ -15,7 +15,7 @@ class DoseLoggingTest {
     private val now = Instant.parse("2026-09-27T14:00:00Z") // 10:00 AM in New York
     private val evening = CompanionMedication("med_synthetic", "Synthetic evening tablet", "fixed_clock", listOf("22:00"), "America/New_York", null)
 
-    @Test fun `a tap records one immutable dose now, in the home zone, scheduled when the medication has a schedule`() {
+    @Test fun `a tap records one immutable dose now, in the home zone, never marked scheduled`() {
         val record = doseRecord("dose-synthetic01", evening, "taken", Instant.parse("2026-09-27T14:00:07.123Z"), zone)
         assertEquals("medication_event", record.kind)
         assertEquals("dose-synthetic01", record.recordId)
@@ -23,10 +23,10 @@ class DoseLoggingTest {
         val dose = parseSyncedDose(record.recordId, payload)
         assertEquals(Instant.parse("2026-09-27T14:00:07Z"), dose.doseAt)
         assertEquals("America/New_York", dose.zoneId)
-        assertTrue(dose.scheduled)
+        // Even for a medication with a fixed schedule: only an explicit mark
+        // makes a dose count in adherence (ADR-0027).
+        assertFalse(dose.scheduled)
         assertEquals("user_reported", payload.getValue("provenance").jsonObject.getValue("evidence_status").jsonPrimitive.content)
-        val asNeeded = doseRecord("dose-synthetic02", evening.copy(scheduleKind = "as_needed", civilTimes = emptyList()), "skipped", now, zone)
-        assertFalse(parseSyncedDose(asNeeded.recordId, Json.parseToJsonElement(asNeeded.payload).jsonObject).scheduled)
         assertTrue(runCatching { doseRecord("dose-synthetic03", evening, "maybe", now, zone) }.isFailure)
     }
 

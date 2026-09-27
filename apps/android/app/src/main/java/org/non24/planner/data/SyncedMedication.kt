@@ -166,8 +166,10 @@ internal fun effectiveDose(dose: SyncedDose, corrections: List<JsonObject>): Syn
 
 /**
  * The dose a tap on the phone records: now, in the owner's home zone, taken
- * or skipped. It counts as scheduled when the medication has a schedule. The
- * record is immutable; the desktop corrects or deletes it (ADR-0048).
+ * or skipped. A tap never marks the dose scheduled: adherence counts only
+ * doses the owner explicitly marks scheduled (ADR-0027), which the desktop's
+ * one-tap row does not either. The record is immutable; the desktop corrects
+ * or deletes it (ADR-0048).
  */
 internal fun doseRecord(eventId: String, medication: CompanionMedication, status: String, at: Instant, zone: ZoneId): OutboxRecord {
     require(validSyncId(eventId) && status in DOSE_STATUSES)
@@ -178,7 +180,7 @@ internal fun doseRecord(eventId: String, medication: CompanionMedication, status
         put("dose_at", recorded.toString())
         put("zone_id", zone.id)
         put("status", status)
-        put("scheduled", medication.scheduleKind == "fixed_clock" || medication.scheduleKind == "cycling")
+        put("scheduled", false)
         put("provenance", buildJsonObject {
             put("acquisition_method", "manual")
             put("evidence_status", "user_reported")

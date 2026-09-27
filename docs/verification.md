@@ -1906,7 +1906,8 @@ Android unit tests, lint and the debug build pass.
 JVM:
 
 - a tap produces one valid `medication_event`: now, truncated to the second, in the home zone,
-  scheduled when the medication has a schedule, user-reported;
+  user-reported, and never marked scheduled, since adherence counts only explicit marks
+  (ADR-0027), as on the desktop;
 - an unknown status is refused;
 - corrections apply in creation order, and an exclusion hides the dose;
 - the words match the design ("Usually 10:00 PM", "Usually 10:00 PM New York time" when the phone

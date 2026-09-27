@@ -75,7 +75,7 @@ class BackendSyncIntegrationTest {
                 val dose = doses.single()
                 assertEquals(uploaded?.eventId, dose.recordId)
                 assertEquals("taken", dose.payload.string("status"))
-                assertTrue(dose.payload.getValue("scheduled").jsonPrimitive.boolean)
+                assertFalse(dose.payload.getValue("scheduled").jsonPrimitive.boolean)
             }
         } finally {
             config.clear(); context.deleteDatabase(name)
