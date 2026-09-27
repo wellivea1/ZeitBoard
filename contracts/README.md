@@ -43,6 +43,21 @@ agent/direct proposal path. The request reuses the assistant action target shape
 request-scoped planning context; the response contains a pending proposal and one-use
 decision token, but no approval/apply operation.
 
+`assistant-snapshot.schema.json` is what an assistant may know about the owner's day, in one
+document (ADR-0049). It covers:
+
+- the rhythm estimate and whether it may describe now;
+- recent sleep, stated as Home states it;
+- the next three days;
+- what awaits the owner;
+- tasks, medication timing, context markers and sync state.
+
+It carries no title, label, note, location or raw record, and no exact time of recorded
+evidence. The desktop's local agent endpoint returns every section as `get_snapshot`. The chat
+assistant sends its server only the planning view (rhythm, plans, needs_you), whose model reads
+enums, counts, opaque ids and civil-time ranges only. The desktop's tests validate its real output
+against this schema.
+
 `calendar-event-set.schema.json` is a private, device-local contract. Imported
 event text may be displayed locally but must never be copied into schedule requests,
 trusted views, MCP payloads, telemetry, or server projections. Scheduling receives

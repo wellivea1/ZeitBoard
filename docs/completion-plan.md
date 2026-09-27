@@ -713,3 +713,39 @@ one dose both apply in creation order, and deleting a definition, dose or
 marker erases it on every device. A sync that downloads or erases anything now
 refreshes every open view. Remaining for C3: the Android companion (accept these
 kinds, log doses against synced definitions, handle erasure) and its device run.
+
+### C4 one assistant snapshot — 2026-09-27
+
+Everything an assistant may know about the owner's day now comes from one versioned, redacted
+document (ADR-0049, `contracts/v1/assistant-snapshot.schema.json`), built from the same
+computations Home draws. It covers:
+
+- whether the estimate may describe now, and what the owner is doing;
+- when sleep and waking are likely;
+- the fitted rhythm and the fit rating's caveat;
+- recent sleep as Home states it;
+- the next three days: timeline, reachable hours, commitments with their conflicts, accepted
+  times, suggestions awaiting a decision, and unplaced tasks;
+- what needs the owner;
+- tasks, medication timing, markers and sync state.
+
+The local agent endpoint serves it as `get_snapshot`, listed first. Before this, the chat model
+saw only tasks, sleep windows and busy intervals. It now also receives the planning view, which
+it reads as enums, ids and civil times only; it still never sees a sleep record or health context.
+
+The "sleep likely begins / waking likely" rule moved from the web code into `core/outlook`, and
+Home's lead now reads its result. The screen and the assistant state the same ranges from one
+computation.
+
+Along the way:
+
+- with sync on, Home's overview now carries this computer's freshness verdict. The server's
+  overview has none, so Home used to read every synced estimate as "cannot confirm how recent"
+  and never said what was happening now;
+- the outlook's zone fallback no longer yields the non-zone "Local";
+- the sync settings copy stopped saying medication stays on this computer, which C3 made
+  untrue;
+- agent confidence levels are lower-case everywhere.
+
+Remaining in C4: the versioned action registry, propose-only dose logging, and the agent smoke
+tests.

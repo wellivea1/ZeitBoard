@@ -32,12 +32,16 @@ vi.mock("../data/fixture", async (importOriginal) => {
     offsetHours,
     durationHours,
   });
+  const now = Date.now();
+  const hoursAhead = (hours: number) => new Date(now + hours * 3_600_000).toISOString();
   return {
     ...actual,
     outlookFixture: {
       ...actual.outlookFixture,
-      horizonStart: new Date().toISOString(),
+      horizonStart: new Date(now).toISOString(),
       segments: [segment("asleep", 0, 3), segment("uncertain", 3, 2), segment("awake", 5, 14)],
+      // What the desktop reads off these segments: no onset ahead, this sleep's end.
+      wake: { start: hoursAhead(3), end: hoursAhead(5) },
     },
   };
 });

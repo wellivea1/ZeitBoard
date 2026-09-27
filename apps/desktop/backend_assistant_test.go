@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -72,6 +73,25 @@ func TestAssistantMessageSendsRedactedContextAndMapsProposals(t *testing.T) {
 	}
 	if !strings.Contains(body, taskID) || !strings.Contains(body, "\"availability\"") || !strings.Contains(body, "\"estimate_id\"") {
 		t.Fatalf("assistant context missing redacted planning data: %s", body)
+	}
+	// The snapshot travels as its planning view only: no sleep section, no
+	// time since the recorded wake, no tasks, medication, markers or sync.
+	var sent struct {
+		Context struct {
+			Snapshot map[string]json.RawMessage `json:"snapshot"`
+		} `json:"context"`
+	}
+	if err := json.Unmarshal(assistantBody, &sent); err != nil {
+		t.Fatal(err)
+	}
+	keys := make([]string, 0, len(sent.Context.Snapshot))
+	for key := range sent.Context.Snapshot {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	if strings.Join(keys, " ") != "disclaimer needs_you now plans private_fields rhythm schema_version zone_id" ||
+		strings.Contains(string(sent.Context.Snapshot["rhythm"]), "awake_for_minutes") {
+		t.Fatalf("chat snapshot sections = %v, rhythm %s", keys, sent.Context.Snapshot["rhythm"])
 	}
 
 	// Mapping: provider disclosed, proposal carries token and the LOCAL title.

@@ -1,0 +1,406 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ZeitBoard assistant snapshot v1",
+  "description": "Everything an assistant may know about the owner's day, coalesced into one document (ADR-0049): the rhythm estimate and whether it may be trusted now, recent sleep, the next three days, what awaits the owner, tasks, medication timing, context markers and sync state. It carries no title, label, note, location, clinician text or raw record, and no exact time of recorded evidence. Instants are in the owner's zone to the minute. The local agent endpoint returns every section; the chat assistant sends its server only rhythm (without awake_for_minutes), plans and needs_you.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "zone_id", "now", "rhythm", "plans", "needs_you", "private_fields", "disclaimer"],
+  "properties": {
+    "schema_version": { "const": "v1" },
+    "zone_id": { "$ref": "common.schema.json#/$defs/zoneId" },
+    "now": { "$ref": "#/$defs/instant" },
+    "rhythm": { "$ref": "#/$defs/rhythm" },
+    "sleep": { "$ref": "#/$defs/sleep" },
+    "plans": { "$ref": "#/$defs/plans" },
+    "needs_you": { "$ref": "#/$defs/needsYou" },
+    "tasks": { "$ref": "#/$defs/tasks" },
+    "medication": { "$ref": "#/$defs/medication" },
+    "markers": { "$ref": "#/$defs/markers" },
+    "sync": { "$ref": "#/$defs/sync" },
+    "private_fields": { "$ref": "#/$defs/sentence" },
+    "disclaimer": { "$ref": "#/$defs/sentence" }
+  },
+  "$defs": {
+    "instant": {
+      "description": "An instant in the owner's zone, to the minute, with its offset.",
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:00(Z|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "range": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "end"],
+      "properties": {
+        "start": { "$ref": "#/$defs/instant" },
+        "end": { "$ref": "#/$defs/instant" }
+      }
+    },
+    "identifier": { "$ref": "common.schema.json#/$defs/identifier" },
+    "count": { "type": "integer", "minimum": 0 },
+    "minutes": { "type": "integer", "minimum": 0, "maximum": 100000 },
+    "level": { "type": "string", "enum": ["low", "medium", "high"] },
+    "agentLevel": { "type": "string", "enum": ["low", "medium", "high", "unknown"] },
+    "label": {
+      "description": "App-generated wording, never the owner's text.",
+      "type": "string",
+      "maxLength": 200
+    },
+    "sentence": { "type": "string", "minLength": 1, "maxLength": 600 },
+    "rhythm": {
+      "description": "The estimate as Home states it. presence is what the owner is doing now, stated only while freshness is current (otherwise unknown, and freshness_explanation says why); sleep_onset is when the next sleep is likely to begin and wake when waking is likely to follow.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "freshness", "presence", "fit_reasons"],
+      "properties": {
+        "status": { "type": "string", "enum": ["estimated", "empty", "refused", "unavailable"] },
+        "refusal": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "message"],
+          "properties": {
+            "code": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "message": { "$ref": "#/$defs/sentence" }
+          }
+        },
+        "freshness": { "type": "string", "enum": ["current", "stale", "withheld"] },
+        "freshness_reason": {
+          "type": "string",
+          "enum": ["no_evidence", "evidence_aging", "evidence_stale", "expected_sleep_unrecorded", "no_sources_reporting"]
+        },
+        "freshness_explanation": { "$ref": "#/$defs/sentence" },
+        "presence": { "type": "string", "enum": ["awake", "asleep", "unknown"] },
+        "awake_for_minutes": {
+          "description": "Time since the latest recorded wake, to five minutes; only while presence is awake.",
+          "$ref": "#/$defs/minutes"
+        },
+        "sleep_onset": { "$ref": "#/$defs/range" },
+        "wake": { "$ref": "#/$defs/range" },
+        "cycle_minutes": { "$ref": "#/$defs/minutes" },
+        "drift_minutes_per_cycle": { "type": "integer", "minimum": -1440, "maximum": 1440 },
+        "typical_sleep_minutes": { "$ref": "#/$defs/minutes" },
+        "fit_rating": { "$ref": "#/$defs/level" },
+        "fit_reasons": {
+          "type": "array",
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/label" }
+        }
+      }
+    },
+    "sleep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nights_on_record", "going_to_sleep_marked"],
+      "properties": {
+        "nights_on_record": { "$ref": "#/$defs/count" },
+        "last": {
+          "description": "The latest main sleep as Home lists it: the civil date it ended on and its length to five minutes.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ended_on", "duration_minutes", "source"],
+          "properties": {
+            "ended_on": { "type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$" },
+            "duration_minutes": { "$ref": "#/$defs/minutes" },
+            "source": { "$ref": "#/$defs/label" }
+          }
+        },
+        "going_to_sleep_marked": {
+          "description": "A going-to-sleep tap is still waiting for its wake.",
+          "type": "boolean"
+        }
+      }
+    },
+    "plans": {
+      "description": "The next three days. Segments, reachable hours and commitments come from the operational outlook; suggestions and unplaced tasks from the planner behind Home's Needs you.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "segments", "reachable_hours", "commitments", "suggestions", "unplaced", "truncated"],
+      "properties": {
+        "status": { "type": "string", "enum": ["available", "refused", "withheld"] },
+        "horizon": { "$ref": "#/$defs/range" },
+        "segments": {
+          "type": "array",
+          "maxItems": 48,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["presence", "start", "end", "observed"],
+            "properties": {
+              "presence": { "type": "string", "enum": ["awake", "asleep", "uncertain", "unknown"] },
+              "start": { "$ref": "#/$defs/instant" },
+              "end": { "$ref": "#/$defs/instant" },
+              "observed": { "type": "boolean" }
+            }
+          }
+        },
+        "reachable_hours": {
+          "type": "array",
+          "maxItems": 16,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["start", "end", "status", "reachable", "possible"],
+            "properties": {
+              "start": { "$ref": "#/$defs/instant" },
+              "end": { "$ref": "#/$defs/instant" },
+              "status": { "type": "string", "enum": ["reachable", "partial", "unreachable"] },
+              "reachable": { "type": "array", "items": { "$ref": "#/$defs/range" } },
+              "possible": { "type": "array", "items": { "$ref": "#/$defs/range" } }
+            }
+          }
+        },
+        "commitments": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ref", "start", "end", "all_day", "conflict"],
+            "properties": {
+              "ref": { "type": "string", "pattern": "^commitment_[0-9]{2,}$" },
+              "start": { "$ref": "#/$defs/instant" },
+              "end": { "$ref": "#/$defs/instant" },
+              "all_day": { "type": "boolean" },
+              "conflict": {
+                "type": "string",
+                "enum": ["none", "inside_predicted_sleep", "overlaps_predicted_sleep", "near_uncertain_boundary"]
+              },
+              "task_id": {
+                "description": "Present when this block is the task's accepted time.",
+                "$ref": "#/$defs/identifier"
+              }
+            }
+          }
+        },
+        "suggestions": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["proposal_id", "task_id", "start", "end", "confidence", "reasons"],
+            "properties": {
+              "proposal_id": { "$ref": "#/$defs/identifier" },
+              "task_id": { "$ref": "#/$defs/identifier" },
+              "start": { "$ref": "#/$defs/instant" },
+              "end": { "$ref": "#/$defs/instant" },
+              "confidence": { "$ref": "#/$defs/level" },
+              "reasons": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": ["within_predicted_waking_window", "avoids_fixed_event", "within_task_bounds", "uncertainty_buffer_applied"]
+                }
+              }
+            }
+          }
+        },
+        "unplaced": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["task_id", "reason"],
+            "properties": {
+              "task_id": { "$ref": "#/$defs/identifier" },
+              "reason": {
+                "type": "string",
+                "enum": ["no_available_interval", "outside_forecast_horizon", "estimate_unavailable", "invalid_constraints"]
+              }
+            }
+          }
+        },
+        "truncated": { "type": "boolean" }
+      }
+    },
+    "needsYou": {
+      "description": "What awaits the owner's decision: suggested times to accept or decline, and tasks edited on two devices.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["suggestions", "task_conflicts"],
+      "properties": {
+        "suggestions": { "$ref": "#/$defs/count" },
+        "task_conflicts": { "$ref": "#/$defs/count" }
+      }
+    },
+    "tasks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "truncated", "items"],
+      "properties": {
+        "count": { "$ref": "#/$defs/count" },
+        "truncated": { "type": "boolean" },
+        "items": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["task_id", "duration_minutes", "status", "needs_review"],
+            "properties": {
+              "task_id": { "$ref": "#/$defs/identifier" },
+              "duration_minutes": { "$ref": "#/$defs/minutes" },
+              "status": { "type": "string", "minLength": 1, "maxLength": 32 },
+              "needs_review": { "type": "boolean" },
+              "earliest_start_at": { "type": "string", "format": "date-time" },
+              "latest_finish_at": { "type": "string", "format": "date-time" },
+              "preferred_after_wake_minutes": { "type": "integer" },
+              "minimum_confidence": { "$ref": "#/$defs/level" }
+            }
+          }
+        }
+      }
+    },
+    "medication": {
+      "description": "Neutral timing facts under opaque medication ids, as the get_medication_timing tool returns them.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "count", "truncated", "items"],
+      "properties": {
+        "status": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "count": { "$ref": "#/$defs/count" },
+        "truncated": { "type": "boolean" },
+        "items": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["medication_id", "active", "schedule_kind", "included_event_count", "logged_event_summary"],
+            "properties": {
+              "medication_id": { "$ref": "#/$defs/identifier" },
+              "active": { "type": "boolean" },
+              "schedule_kind": { "type": "string", "enum": ["as_needed", "fixed_clock", "cycling", "none"] },
+              "included_event_count": { "$ref": "#/$defs/count" },
+              "logged_event_summary": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["taken_count", "skipped_count", "scheduled_count", "unscheduled_count", "excluded_count", "corrected_event_count"],
+                "properties": {
+                  "taken_count": { "$ref": "#/$defs/count" },
+                  "skipped_count": { "$ref": "#/$defs/count" },
+                  "scheduled_count": { "$ref": "#/$defs/count" },
+                  "unscheduled_count": { "$ref": "#/$defs/count" },
+                  "excluded_count": { "$ref": "#/$defs/count" },
+                  "corrected_event_count": { "$ref": "#/$defs/count" },
+                  "latest": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["status", "scheduled", "wake_relation", "sleep_relation", "sleep_relation_kind", "confidence", "excluded"],
+                    "properties": {
+                      "status": { "type": "string", "enum": ["taken", "skipped"] },
+                      "scheduled": { "type": "boolean" },
+                      "wake_relation": { "$ref": "#/$defs/label" },
+                      "sleep_relation": { "$ref": "#/$defs/label" },
+                      "sleep_relation_kind": { "type": "string", "enum": ["observed", "predicted", "unavailable"] },
+                      "confidence": { "$ref": "#/$defs/agentLevel" },
+                      "excluded": { "type": "boolean" }
+                    }
+                  }
+                }
+              },
+              "schedule": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["kind", "civil_times", "reminder_enabled", "forecast"],
+                "properties": {
+                  "kind": { "type": "string", "enum": ["as_needed", "fixed_clock", "cycling"] },
+                  "zone_id": { "$ref": "common.schema.json#/$defs/zoneId" },
+                  "civil_times": {
+                    "type": "array",
+                    "items": { "type": "string", "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$" }
+                  },
+                  "days_on": { "$ref": "#/$defs/count" },
+                  "days_off": { "$ref": "#/$defs/count" },
+                  "cycle_started_on": { "type": "string", "format": "date" },
+                  "reminder_enabled": { "type": "boolean" },
+                  "forecast": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["status", "covered_count", "collision_count", "outside_horizon_count", "occurrences", "gaps", "truncated"],
+                    "properties": {
+                      "status": { "type": "string", "maxLength": 32 },
+                      "covered_count": { "$ref": "#/$defs/count" },
+                      "collision_count": { "$ref": "#/$defs/count" },
+                      "outside_horizon_count": { "$ref": "#/$defs/count" },
+                      "occurrences": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": ["civil_date", "civil_time", "status", "context", "confidence", "ambiguous"],
+                          "properties": {
+                            "civil_date": { "type": "string", "format": "date" },
+                            "civil_time": { "type": "string", "maxLength": 5 },
+                            "status": { "type": "string", "maxLength": 40 },
+                            "context": { "$ref": "#/$defs/label" },
+                            "confidence": { "$ref": "#/$defs/agentLevel" },
+                            "ambiguous": { "type": "boolean" },
+                            "dst_note": { "$ref": "#/$defs/label" }
+                          }
+                        }
+                      },
+                      "gaps": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "additionalProperties": false,
+                          "required": ["civil_date", "civil_time"],
+                          "properties": {
+                            "civil_date": { "type": "string", "format": "date" },
+                            "civil_time": { "type": "string", "maxLength": 5 }
+                          }
+                        }
+                      },
+                      "truncated": { "type": "boolean" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "markers": {
+      "description": "Context marker kinds and civil dates, as list_rhythm_markers returns them; never a note.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "count", "truncated", "items"],
+      "properties": {
+        "status": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "count": { "$ref": "#/$defs/count" },
+        "truncated": { "type": "boolean" },
+        "items": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["marker_id", "kind", "civil_start_date", "zone_id"],
+            "properties": {
+              "marker_id": { "$ref": "#/$defs/identifier" },
+              "kind": { "type": "string", "enum": ["travel", "illness", "disruption", "forced_schedule"] },
+              "civil_start_date": { "type": "string", "format": "date" },
+              "civil_end_date": { "type": "string", "format": "date" },
+              "zone_id": { "$ref": "common.schema.json#/$defs/zoneId" }
+            }
+          }
+        }
+      }
+    },
+    "sync": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["enabled", "status", "pending_uploads", "pending_erasures", "waiting_records"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "status": { "type": "string", "enum": ["off", "connected", "error"] },
+        "last_sync_at": { "$ref": "#/$defs/instant" },
+        "pending_uploads": { "$ref": "#/$defs/count" },
+        "pending_erasures": { "$ref": "#/$defs/count" },
+        "waiting_records": { "$ref": "#/$defs/count" }
+      }
+    }
+  }
+}

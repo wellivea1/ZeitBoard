@@ -20,10 +20,15 @@ function segment(presence: OutlookSegment["presence"], from: number, to: number)
   };
 }
 
+// The desktop reads these off the segments below (outlook.SleepAhead).
+const hoursAhead = (hours: number) => new Date(now.getTime() + hours * 3_600_000).toISOString();
+
 const outlook: OutlookData = {
   ...outlookFixture,
   status: "available",
   horizonStart: now.toISOString(),
+  sleepOnset: { start: hoursAhead(7.333), end: hoursAhead(9.417) },
+  wake: { start: hoursAhead(15.083), end: hoursAhead(18) },
   segments: [
     segment("awake", 0, 7.333),
     segment("uncertain", 7.333, 9.417),
@@ -61,7 +66,12 @@ describe("the lead sentence", () => {
   });
 
   it("gives only the end of a sleep the forecast has already begun", () => {
-    const inSleep = { ...outlook, segments: [segment("asleep", 0, 3), segment("uncertain", 3, 6)] };
+    const inSleep: OutlookData = {
+      ...outlook,
+      segments: [segment("asleep", 0, 3), segment("uncertain", 3, 6)],
+      sleepOnset: undefined,
+      wake: { start: hoursAhead(3), end: hoursAhead(6) },
+    };
     expect(text(leadParts({ ...awake, state: "Likely asleep" }, inSleep, now))).toContain(
       "This sleep is likely to end between 7:10 and 10:10 PM tonight.",
     );

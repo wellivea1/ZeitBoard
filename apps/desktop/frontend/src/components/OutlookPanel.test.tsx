@@ -38,7 +38,6 @@ const base: OutlookData = {
       durationHours: 6.33,
     },
   ],
-  nextSleepLabel: "Wed, Aug 5, 11:20 PM to 10:40 AM",
   officeHoursLabel: "Typical office hours, Monday to Friday 9:00 AM to 5:00 PM",
   officeWindows: [
     {

@@ -25,6 +25,10 @@ type PlanningContext struct {
 	FixedEvents     []FixedEventContext       `json:"fixed_events,omitempty"`
 	MedicationFacts []MedicationFactContext   `json:"medication_facts,omitempty"`
 	Markers         []RhythmMarkerFactContext `json:"markers,omitempty"`
+	// Snapshot is the desktop's assistant snapshot in its planning view
+	// (ADR-0049): now, the night ahead, the next three days and what awaits
+	// the owner. It never carries a sleep record or health context.
+	Snapshot *SnapshotContext `json:"snapshot,omitempty"`
 }
 
 type TaskContext struct {
@@ -34,6 +38,7 @@ type TaskContext struct {
 	LatestFinishAt            *time.Time `json:"latest_finish_at,omitempty"`
 	PreferredAfterWakeMinutes *int       `json:"preferred_after_wake_minutes,omitempty"`
 	MinimumConfidence         string     `json:"minimum_confidence,omitempty"`
+	NeedsReview               bool       `json:"needs_review,omitempty"`
 	BusinessHours             bool       `json:"business_hours,omitempty"`
 	BusinessStartLocal        string     `json:"business_start_local,omitempty"`
 	BusinessEndLocal          string     `json:"business_end_local,omitempty"`

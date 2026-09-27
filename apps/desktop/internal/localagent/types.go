@@ -45,6 +45,11 @@ type ToolDefinition struct {
 func ToolDefinitions(proposalsAvailable bool) []ToolDefinition {
 	tools := []ToolDefinition{
 		{Name: "get_status", Title: "Get Status", Description: "Read desktop-local agent and data availability status.", InputSchema: emptySchema()},
+		{Name: "get_snapshot", Title: "Get Snapshot", Description: "Start here. Read everything ZeitBoard may tell an assistant in one versioned document " +
+			"(assistant-snapshot v1): whether the rhythm estimate can be trusted now and what it says, recent sleep, the next three days " +
+			"(when sleep and waking are likely, reachable hours, commitments, suggested times, tasks that could not be placed), what awaits " +
+			"the owner's decision, tasks, medication timing, context markers and sync state. The other read tools are narrower views of the " +
+			"same data. Titles, labels, notes and raw records are never included.", InputSchema: emptySchema()},
 		{Name: "get_overview", Title: "Get Overview", Description: "Read a speakable overview projection. Raw sleep records are never returned.", InputSchema: emptySchema()},
 		{Name: "get_rhythm_summary", Title: "Get Rhythm Summary", Description: "Read predicted sleep-wake timing, drift, confidence, and refusal state without raw records.", InputSchema: emptySchema()},
 		{Name: "list_tasks", Title: "List Tasks", Description: "Read allowlisted task planning fields. Private task titles and notes are omitted.", InputSchema: emptySchema()},

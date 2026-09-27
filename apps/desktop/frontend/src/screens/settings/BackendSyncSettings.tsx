@@ -34,9 +34,9 @@ export function BackendSyncSettings({
       <div className="data-control-intro">
         <h2>Self-hosted server</h2>
         <p className="settings-copy">
-          Off unless you turn it on. Then your sleep records, corrections and tasks go to your own
-          server, and a deletion reaches every synced device. Activity and medication records stay
-          on this computer.
+          Off unless you turn it on. Then your sleep records, tasks and accepted times, medications
+          and doses, and context markers go to your own server, and a deletion reaches every synced
+          device. Activity records stay on this computer.
         </p>
         {/* The detail matters for trust, but not on every visit. */}
         <details className="settings-more fold">

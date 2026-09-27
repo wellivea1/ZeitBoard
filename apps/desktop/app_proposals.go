@@ -211,6 +211,7 @@ func (a *App) buildLocalProposals(now time.Time) (localProposalBuild, error) {
 	if !ok {
 		for _, task := range tasks {
 			result.dto.Unplaced = append(result.dto.Unplaced, UnplacedDTO{
+				TaskID:     string(task.ID),
 				Title:      task.Title,
 				ReasonCode: string(scheduling.ReasonNoAvailableInterval),
 				Reason:     unplacedReasonLabel(scheduling.ReasonNoAvailableInterval),
@@ -261,6 +262,7 @@ func (a *App) buildLocalProposals(now time.Time) (localProposalBuild, error) {
 		if proposalErr != nil {
 			reason := scheduling.ClassifyUnplaced(proposalErr)
 			result.dto.Unplaced = append(result.dto.Unplaced, UnplacedDTO{
+				TaskID:     record.TaskID,
 				Title:      task.Title,
 				ReasonCode: string(reason),
 				Reason:     unplacedReasonLabel(reason),

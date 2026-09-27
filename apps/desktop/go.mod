@@ -3,6 +3,7 @@ module non24.app/desktop
 go 1.26.0
 
 require (
+	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/wailsapp/wails/v2 v2.12.0
 	golang.org/x/sys v0.42.0
 	non24.app/core v0.0.0

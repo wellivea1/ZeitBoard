@@ -361,6 +361,29 @@ func Build(in Input) (Outlook, error) {
 	return view, nil
 }
 
+// SleepAhead reads the timeline the way the Home screen's sentence does:
+// around the first predicted sleep, the uncertain stretch before it is when
+// sleep is likely to begin and the uncertain stretch after it is when waking
+// is likely. Either is nil when the timeline does not show it — while a sleep
+// is already under way there is no onset ahead.
+func (o Outlook) SleepAhead() (onset, wake *domain.TimeRange) {
+	for index, segment := range o.Segments {
+		if segment.Presence != PresenceAsleep {
+			continue
+		}
+		if index > 0 && o.Segments[index-1].Presence == PresenceUncertain {
+			interval := o.Segments[index-1].Interval
+			onset = &interval
+		}
+		if index+1 < len(o.Segments) && o.Segments[index+1].Presence == PresenceUncertain {
+			interval := o.Segments[index+1].Interval
+			wake = &interval
+		}
+		return onset, wake
+	}
+	return nil, nil
+}
+
 // refusalOf preserves the estimator's own typed refusal rather than flattening
 // every failure into one message. "Not enough history yet" and "these records
 // contradict each other" call for different things from the reader.

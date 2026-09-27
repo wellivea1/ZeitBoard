@@ -1,4 +1,4 @@
-import { isCommitmentConflict, sleepAhead, type OutlookData, type OutlookSegment } from "./outlook";
+import { isCommitmentConflict, type OutlookData, type OutlookRange } from "./outlook";
 import type { CalendarDay } from "./calendar";
 import type { MedicationsData } from "./medications";
 import type { OverviewData } from "./overview";
@@ -52,11 +52,13 @@ function sentence(text: string) {
   return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
 }
 
-function edges(outlook: OutlookData, segment: OutlookSegment) {
-  const start = atOffset(outlook.horizonStart, segment.offsetHours);
-  const end = atOffset(outlook.horizonStart, segment.offsetHours + segment.durationHours);
-  if (!start || !end) return undefined;
-  return { start: roundToMinutes(start, 5), end: roundToMinutes(end, 5) };
+/** The ranges the desktop reads off the timeline, to five minutes. */
+function edges(value: OutlookRange | undefined) {
+  if (!value) return undefined;
+  return {
+    start: roundToMinutes(new Date(value.start), 5),
+    end: roundToMinutes(new Date(value.end), 5),
+  };
 }
 
 /** Before the first forecast: how far there is to go, counted in nights. */
@@ -100,9 +102,9 @@ export function leadParts(overview: OverviewData, outlook: OutlookData, now = ne
   else if (tone === "asleep") say("The forecast places you in a sleep now. ");
   else say(`${sentence(overview.state)} `);
 
-  const ahead = outlook.status === "available" ? sleepAhead(outlook.segments) : {};
-  const onset = ahead.onset ? edges(outlook, ahead.onset) : undefined;
-  const wake = ahead.wake ? edges(outlook, ahead.wake) : undefined;
+  const available = outlook.status === "available";
+  const onset = available ? edges(outlook.sleepOnset) : undefined;
+  const wake = available ? edges(outlook.wake) : undefined;
 
   if (onset) {
     const [a, b] = betweenClocks(onset.start, onset.end);

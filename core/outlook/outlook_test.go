@@ -982,3 +982,40 @@ func presences(segments []outlook.Segment) []string {
 	}
 	return out
 }
+
+// TestSleepAheadBracketsTheFirstSleep: the onset is the uncertain stretch
+// that ends where the first predicted sleep begins, and the wake the one that
+// begins where it ends — the ranges the Home sentence and the assistant state.
+func TestSleepAheadBracketsTheFirstSleep(t *testing.T) {
+	f := newFixture(t)
+	view := build(t, f.input())
+	onset, wake := view.SleepAhead()
+	if onset == nil || wake == nil {
+		t.Fatalf("a drifting three-day forecast has no bracketed sleep: onset %v, wake %v", onset, wake)
+	}
+	var asleep *outlook.Segment
+	for index := range view.Segments {
+		if view.Segments[index].Presence == outlook.PresenceAsleep {
+			asleep = &view.Segments[index]
+			break
+		}
+	}
+	if asleep == nil || !onset.End.UTC.Equal(asleep.Interval.Start.UTC) || !wake.Start.UTC.Equal(asleep.Interval.End.UTC) {
+		t.Fatalf("onset %v and wake %v do not bracket the first sleep %v", onset, wake, asleep)
+	}
+	if !onset.Start.UTC.Before(onset.End.UTC) || !wake.Start.UTC.Before(wake.End.UTC) {
+		t.Fatalf("empty ranges: onset %v, wake %v", onset, wake)
+	}
+
+	// A sleep already under way has no onset ahead; nothing at all has neither.
+	underway := outlook.Outlook{Segments: []outlook.Segment{
+		{Presence: outlook.PresenceAsleep, Interval: asleep.Interval},
+		{Presence: outlook.PresenceUncertain, Interval: *wake},
+	}}
+	if onset, wake := underway.SleepAhead(); onset != nil || wake == nil {
+		t.Fatalf("sleep under way: onset %v, wake %v", onset, wake)
+	}
+	if onset, wake := (outlook.Outlook{}).SleepAhead(); onset != nil || wake != nil {
+		t.Fatalf("empty timeline: onset %v, wake %v", onset, wake)
+	}
+}
