@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"non24.app/core/agentactions"
 	"non24.app/core/estimation"
 	"non24.app/core/platform/privatefile"
 	"non24.app/core/recompute"
@@ -942,15 +943,7 @@ func backendProposalDTO(record backendProposalRecord) BackendProposalDTO {
 }
 
 func backendProposalTitle(action, taskID string) string {
-	verb := "Schedule change"
-	switch action {
-	case "propose_move_task":
-		verb = "Move task"
-	case "propose_place_task":
-		verb = "Place task"
-	case "propose_reminder_shift":
-		verb = "Shift reminder"
-	}
+	verb := agentactions.CardTitle(action)
 	if taskID == "" {
 		return verb
 	}

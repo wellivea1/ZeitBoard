@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"non24.app/core/agentactions"
 	"non24.app/server/internal/provider"
 	"non24.app/server/internal/store"
 )
@@ -108,20 +109,12 @@ type DirectProposalRequest struct {
 type modelAction struct {
 	SchemaVersion     string        `json:"schema_version"`
 	RecommendedAction string        `json:"recommended_action"`
-	Target            *actionTarget `json:"target,omitempty"`
+	Target            *ActionTarget `json:"target,omitempty"`
 	Answer            string        `json:"answer,omitempty"`
 }
 
-type actionTarget struct {
-	TaskID                    string     `json:"task_id"`
-	EarliestStartAt           *time.Time `json:"earliest_start_at,omitempty"`
-	LatestFinishAt            *time.Time `json:"latest_finish_at,omitempty"`
-	DurationMinutes           int        `json:"duration_minutes,omitempty"`
-	PreferredAfterWakeMinutes *int       `json:"preferred_after_wake_minutes,omitempty"`
-	ReminderID                string     `json:"reminder_id,omitempty"`
-}
-
-type ActionTarget = actionTarget
+// ActionTarget is what every task proposal names, on every surface.
+type ActionTarget = agentactions.Target
 
 type storedProposalPayload struct {
 	ProposalID        string                   `json:"proposal_id"`

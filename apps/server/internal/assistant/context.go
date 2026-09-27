@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"non24.app/core/agentactions"
 )
 
 var (
@@ -408,8 +410,11 @@ func assistantSystemPrompt() string {
 	}, " ")
 }
 
+// actionSchemaPrompt shows the model the action JSON, with the proposals the
+// action registry offers the chat assistant.
 func actionSchemaPrompt() json.RawMessage {
-	return json.RawMessage(`{"schema_version":"v1","recommended_action":"answer_only|propose_move_task|propose_place_task|propose_reminder_shift","target":{"task_id":"identifier","earliest_start_at":"optional RFC3339","latest_finish_at":"optional RFC3339","duration_minutes":"optional integer","preferred_after_wake_minutes":"optional integer","reminder_id":"optional identifier"},"answer":"optional plain answer"}`)
+	actions := append([]string{"answer_only"}, agentactions.IDs(agentactions.ChatAssistant, agentactions.Proposal)...)
+	return json.RawMessage(`{"schema_version":"v1","recommended_action":"` + strings.Join(actions, "|") + `","target":{"task_id":"identifier","earliest_start_at":"optional RFC3339","latest_finish_at":"optional RFC3339","duration_minutes":"optional integer","preferred_after_wake_minutes":"optional integer","reminder_id":"optional identifier"},"answer":"optional plain answer"}`)
 }
 
 func min(left, right int) int {
