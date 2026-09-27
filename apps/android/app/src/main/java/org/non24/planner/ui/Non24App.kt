@@ -967,8 +967,8 @@ private fun SettingsScreen(
                 "Imported sleep snapshots, corrections, and medication events are stored " +
                     "in ZeitBoard's app-private database.",
             )
-            PrivacyLine("No analytics, telemetry or tracking SDKs. Connecting explicitly enables sleep uploads to your own server over TLS.")
-            PrivacyLine("Health Connect sleep, provider revisions and saved sleep corrections upload, including corrections made before enrollment and their source observations. Sample records and medication events stay on this device.")
+            PrivacyLine("No analytics, telemetry or tracking SDKs. Connecting explicitly enables uploads to your own server over TLS.")
+            PrivacyLine("Health Connect sleep, provider revisions, saved sleep corrections and doses recorded against your computer's medications upload, including corrections made before enrollment and their source observations. Sample records and free-text medication events stay on this device.")
             PrivacyLine("Medication labels and exact behavioral timestamps are never logged.")
         }
     }
@@ -1041,8 +1041,9 @@ private fun BackendConnectionSection(
         (error ?: status.lastError)?.let { InfoStrip(it) }
         if (!connected || editing) {
             Text(
-                "Connect to download your server's forecasts and tasks, and upload permitted recent Health Connect sleep and provider revisions. " +
-                    "Saved sleep corrections also upload, including those made before enrollment and their original source observations. Sample records and medication events are excluded from uploads.",
+                "Connect to download your server's forecasts, tasks and medications, and upload permitted recent Health Connect sleep and provider revisions. " +
+                    "Saved sleep corrections and doses recorded against your computer's medications also upload, including corrections made before enrollment and their original source observations. " +
+                    "Sample records and free-text medication events are excluded from uploads.",
                 style = MaterialTheme.typography.bodySmall,
             )
             if (connected) InfoStrip(

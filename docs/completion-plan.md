@@ -782,5 +782,5 @@ The latest dose is the effective one: downloaded doses are taken after their cor
 in creation order as the desktop applies them. Free-text events for anything not on the list stay
 on the phone.
 
-With this, C3's software is complete. Remaining: the recorded device run, in which a dose tapped on
-an enrolled phone appears in the desktop's history and report.
+With this, C3's software is complete. The device run is recorded in `verification.md`: a dose tapped
+on an enrolled phone appeared in the real desktop's history and clinician report.

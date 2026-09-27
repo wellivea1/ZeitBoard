@@ -22,6 +22,66 @@ import org.non24.planner.domain.*
 /** Opt-in smoke against a disposable Go API reached through adb reverse, never an owner's server. */
 @RunWith(AndroidJUnit4::class)
 class BackendSyncIntegrationTest {
+    /**
+     * ADR-0048 through the real Go API: a medication another device (the
+     * desktop) uploaded reaches the phone's Doses list, a tap there uploads a
+     * dose, and the other device downloads it.
+     */
+    @Test
+    fun aDoseTappedOnThePhoneReachesTheComputer() = runBlocking {
+        assumeTrue(InstrumentationRegistry.getArguments().getString("zeitboardSyncIntegration") == "true")
+        val context: Context = ApplicationProvider.getApplicationContext()
+        val name = "zeitboard-dose-round-trip-test.db"
+        val config = SharedPreferencesSyncConfigStore(context, "zeitboard_dose_round_trip_test")
+        val address = "http://127.0.0.1:18767"
+        val client = HttpBackendSyncClient()
+        val medicationId = "med_round_trip_" + UUID.randomUUID().toString().replace("-", "").take(12)
+        val now = Instant.now().truncatedTo(ChronoUnit.SECONDS)
+        val definition = buildJsonObject {
+            put("medication_id", medicationId); put("label", "Synthetic round-trip tablet"); put("active", true)
+            put("created_at", now.toString()); put("revision", 1); put("updated_at", now.toString())
+            put("schedule", buildJsonObject {
+                put("kind", "fixed_clock"); put("zone_id", "UTC"); put("civil_times", buildJsonArray { add("21:00") }); put("reminder_enabled", false)
+            })
+        }
+        context.deleteDatabase(name); config.clear()
+        try {
+            val computer = client.enroll(address, "synthetic-completion-secret", "Synthetic computer").getOrThrow()
+            client.push(address, computer, listOf(OutboxRecord("${medicationId}_r1", "medication", now, now, definition.toString()))).getOrThrow()
+            SQLiteLocalUserDataStore(context, name).use { store ->
+                val sync = BackendSyncRepository(
+                    SQLiteSyncOutboxStore({ store.readableDatabase }, { store.writableDatabase }), config, client,
+                    replica = SQLiteSyncReplicaStore { store.writableDatabase },
+                )
+                sync.enroll(address, "synthetic-completion-secret", "UTC", "Synthetic phone").getOrThrow()
+                sync.synchronize().getOrThrow()
+                val listed = sync.companion.value.medications.single { it.medicationId == medicationId }
+                assertEquals(listOf("21:00"), listed.civilTimes)
+                assertNull(listed.lastDose)
+                sync.logDose(medicationId, "taken").getOrThrow()
+                assertEquals(true, sync.companion.value.medications.single { it.medicationId == medicationId }.lastDose?.pending)
+                sync.synchronize().getOrThrow()
+                val uploaded = sync.companion.value.medications.single { it.medicationId == medicationId }.lastDose
+                assertEquals(false, uploaded?.pending)
+                // The computer downloads the phone's dose.
+                var since = 0L
+                val doses = mutableListOf<PulledRecord>()
+                while (true) {
+                    val page = client.pull(address, computer, since).getOrThrow()
+                    doses += page.records.filter { it.kind == "medication_event" && it.payload.string("medication_id") == medicationId }
+                    if (page.records.size < SYNC_PULL_LIMIT) break
+                    since = page.cursor
+                }
+                val dose = doses.single()
+                assertEquals(uploaded?.eventId, dose.recordId)
+                assertEquals("taken", dose.payload.string("status"))
+                assertTrue(dose.payload.getValue("scheduled").jsonPrimitive.boolean)
+            }
+        } finally {
+            config.clear(); context.deleteDatabase(name)
+        }
+    }
+
     @Test
     fun preEnrollmentCorrectionHandoffPreservesUnseenRemoteChangesForReview() = runBlocking {
         assumeTrue(InstrumentationRegistry.getArguments().getString("zeitboardSyncIntegration") == "true")

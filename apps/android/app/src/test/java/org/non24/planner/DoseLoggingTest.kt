@@ -49,6 +49,7 @@ class DoseLoggingTest {
         assertEquals("Usually 10:00 PM", usualTimes(evening, zone, use24HourTime = false))
         assertEquals("Usually 22:00", usualTimes(evening, zone, use24HourTime = true))
         assertEquals("Usually 10:00 PM New York time", usualTimes(evening, ZoneId.of("Europe/Lisbon"), use24HourTime = false))
+        assertEquals("Usually 21:00 UTC", usualTimes(evening.copy(civilTimes = listOf("21:00"), scheduleZoneId = "UTC"), zone, use24HourTime = true))
         assertEquals("As needed", usualTimes(evening.copy(scheduleKind = "as_needed", civilTimes = emptyList()), zone, false))
         assertNull(usualTimes(evening.copy(scheduleKind = null), zone, false))
 

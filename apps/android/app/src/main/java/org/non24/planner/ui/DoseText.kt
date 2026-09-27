@@ -24,11 +24,15 @@ internal fun usualTimes(medication: CompanionMedication, deviceZone: ZoneId, use
             val zone = medication.scheduleZoneId?.let(ZoneId::of) ?: deviceZone
             val clocks = times.map { clock(LocalDate.now(zone).atTime(LocalTime.parse(it)).atZone(zone), use24HourTime) }
             // The schedule keeps its own zone; say so when the phone is elsewhere.
-            val elsewhere = if (zone.rules != deviceZone.rules) " ${zone.id.substringAfterLast('/').replace('_', ' ')} time" else ""
+            val elsewhere = if (zone.rules != deviceZone.rules) " " + zoneWords(zone.id) else ""
             "Usually " + clocks.joinToString(" and ") + elsewhere
         }
     }
 }
+
+/** "New York time" for a region's zone; "UTC" for a zone that names no place. */
+internal fun zoneWords(id: String): String =
+    if ('/' in id) id.substringAfterLast('/').replace('_', ' ') + " time" else id
 
 /** "Last taken yesterday at 10:05 PM", "Skipped today at 8:00 AM, uploading", "Nothing recorded yet". */
 internal fun lastDoseText(dose: CompanionDose?, now: Instant, deviceZone: ZoneId, use24HourTime: Boolean): String {
