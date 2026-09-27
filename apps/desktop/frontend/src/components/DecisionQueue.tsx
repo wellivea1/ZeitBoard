@@ -1,6 +1,7 @@
 import { decisionButton, decisionDone, decisionLabel } from "../data/decisionWords";
 import { useState } from "react";
 import { AgentProposalCard, AgentProposalHistoryRow } from "./AgentProposalCard";
+import { BatchReview } from "./BatchReview";
 import { ProposalCard } from "./ProposalCard";
 import { TaskConflictCard, TaskConflictHistoryCard } from "./TaskConflictCard";
 import { VisitorRequestCard } from "./VisitorRequestCard";
@@ -153,9 +154,12 @@ export function DecisionQueue() {
   const agent = useAgentProposals();
   const summary = useApprovalQueue();
   const [announcement, setAnnouncement] = useState("");
+  const [reviewing, setReviewing] = useState(false);
   const remotePending = backend.data.proposals.filter((item) => reviewIsPending(item, summary.now));
   const requests = visitor.data.requests.filter((item) => reviewIsPending(item, summary.now));
   const waitingHere = agent.data.pending.filter((item) => proposalIsWaiting(item, summary.now));
+  // Suggested times are planned together, so several can be reviewed together.
+  const reviewTogether = reviewing && local.pending.length > 0;
   const now = new Date(summary.now);
   const loaded =
     local.taskConflicts.length +
@@ -172,6 +176,16 @@ export function DecisionQueue() {
           {summary.pendingCount > 0 && <span className="count">{summary.pendingCount}</span>}
         </h2>
         {local.source === "fixture" && <span className="task-chip">Sample data</span>}
+        {!reviewTogether && local.pending.length > 1 && (
+          <button
+            className="button ghost compact"
+            type="button"
+            disabled={!local.ready || local.busyProposalId !== null}
+            onClick={() => setReviewing(true)}
+          >
+            Review {local.pending.length} suggestions together
+          </button>
+        )}
       </div>
       <QueueErrors />
       {!summary.ready && <p role="status">Loading…</p>}
@@ -190,9 +204,11 @@ export function DecisionQueue() {
           {waitingHere.map((proposal) => (
             <AgentProposalCard proposal={proposal} now={now} key={`agent-${proposal.proposalId}`} />
           ))}
-          {local.pending.map((proposal) => (
-            <ProposalCard proposal={proposal} key={`local-${proposal.id}`} />
-          ))}
+          {reviewTogether && <BatchReview onClose={() => setReviewing(false)} />}
+          {!reviewTogether &&
+            local.pending.map((proposal) => (
+              <ProposalCard proposal={proposal} key={`local-${proposal.id}`} />
+            ))}
           {remotePending.map((proposal) => (
             <SyncedProposalCard
               proposal={proposal}

@@ -195,11 +195,11 @@ func (s *Store) propose(ctx context.Context, proposalID, actionID, medicationID 
 }
 
 // AgentProposals lists the waiting proposals and the recent history at now,
-// newest first.
+// newest first; proposals made in the same second, last made first.
 func (s *Store) AgentProposals(ctx context.Context, now time.Time) ([]AgentProposal, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT proposal_id, action_id, payload_json, created_at, expires_at,
 		decision, decided_at, result_id
-		FROM local_agent_proposals ORDER BY created_at DESC, proposal_id DESC LIMIT ?`, agentProposalListLimit)
+		FROM local_agent_proposals ORDER BY created_at DESC, rowid DESC LIMIT ?`, agentProposalListLimit)
 	if err != nil {
 		return nil, err
 	}

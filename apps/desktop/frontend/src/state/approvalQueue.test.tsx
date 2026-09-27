@@ -148,6 +148,81 @@ describe("shared approval queue", () => {
 
   // One list, no filters: every origin is visible at once, and the count covers
   // pages that have not been loaded yet.
+  // Suggested times are planned leaving room for each other, so several are
+  // reviewed and decided in one step (ADR-0052).
+  it("reviews suggested times together and decides the chosen ones in one step", async () => {
+    let decided = new Set<string>();
+    const decideTogether = vi.fn(
+      async ({ proposalIds, decision }: { proposalIds: string[]; decision: string }) => {
+        decided = new Set([...decided, ...proposalIds]);
+        return {
+          decisions: proposalIds.map((proposalId) => ({
+            proposalId,
+            decision,
+            message: "Recorded.",
+          })),
+          message: "Recorded together.",
+        };
+      },
+    );
+    install({
+      // The owner's own suggestions, not the sample: decisions reach the desktop.
+      GetProposals: async () => ({
+        ...proposalsFixture,
+        fixtureMode: false,
+        proposals: proposalsFixture.proposals.map((proposal) =>
+          decided.has(proposal.id)
+            ? { ...proposal, decision: "approved", canUndo: true }
+            : proposal,
+        ),
+      }),
+      DecideLocalProposals: decideTogether,
+    });
+    render(
+      <Providers>
+        <Probe />
+        <DecisionQueue />
+      </Providers>,
+    );
+    expect(await screen.findByText("13 ready")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Review 2 suggestions together" }));
+    expect(screen.getByRole("heading", { name: "Review together" })).toBeVisible();
+    // Leave one out to decide alone.
+    fireEvent.click(screen.getByRole("checkbox", { name: /Taxes focus block/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Accept 1 suggested time" }));
+    expect(await screen.findByText("12 ready")).toBeVisible();
+    expect(decideTogether).toHaveBeenCalledWith({
+      proposalIds: ["proposal-email-okafor"],
+      decision: "approved",
+    });
+    // The left-out suggestion is back as a card of its own.
+    expect(screen.queryByRole("heading", { name: "Review together" })).toBeNull();
+    expect(screen.getByText("Taxes focus block")).toBeVisible();
+  });
+
+  it("decides nothing in a reviewed batch when the plan changed first", async () => {
+    install({
+      GetProposals: async () => ({ ...proposalsFixture, fixtureMode: false }),
+      DecideLocalProposals: vi.fn(async () => {
+        throw "proposal inputs changed; refresh proposals";
+      }),
+    });
+    render(
+      <Providers>
+        <Probe />
+        <DecisionQueue />
+      </Providers>,
+    );
+    expect(await screen.findByText("13 ready")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Review 2 suggestions together" }));
+    fireEvent.click(screen.getByRole("button", { name: "Decline 2 suggested times" }));
+    expect(
+      await screen.findByText(
+        "Something changed since you reviewed these, so none was decided. Review them again.",
+      ),
+    ).toBeVisible();
+    expect(screen.getByText("13 ready")).toBeVisible();
+  });
   it("counts all sources beyond the loaded page and shows every origin together", async () => {
     install();
     render(
