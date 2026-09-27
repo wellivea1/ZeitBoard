@@ -108,3 +108,62 @@ func TestExportOwnedICSUsesCivilDatesForAllDayEvents(t *testing.T) {
 		t.Fatalf("all-day export uses wrong values:\n%s", text)
 	}
 }
+
+// A calendar a CalDAV server stores holds one event per resource and no
+// METHOD (RFC 4791 section 4.1). Read back, it is recognised as ZeitBoard's own.
+func TestACalendarObjectHoldsOneOwnedEventAndIsRecognisedOnImport(t *testing.T) {
+	stamp := time.Date(2026, 9, 27, 18, 0, 0, 0, time.UTC)
+	owned := Event{
+		EventID:        "calendar_event_written",
+		SourceID:       "calendar_source_zeitboard",
+		SourceRecordID: "proposal_written",
+		Title:          "Call the pharmacy",
+		StartAt:        time.Date(2026, 9, 28, 15, 0, 0, 0, time.UTC),
+		EndAt:          time.Date(2026, 9, 28, 15, 15, 0, 0, time.UTC),
+		ZoneID:         "America/New_York",
+		Busy:           true,
+		Ownership:      OwnershipAppOwned,
+		CreatedAt:      stamp,
+		TaskID:         "task_written",
+		TaskRevision:   1,
+		ProposalID:     "proposal_written",
+	}
+	data, err := CalendarObject(owned, stamp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(data)
+	if strings.Count(text, "BEGIN:VEVENT") != 1 || strings.Contains(text, "METHOD:") ||
+		!strings.Contains(text, "UID:calendar_event_written@zeitboard.local\r\n") || !strings.HasSuffix(text, "END:VCALENDAR\r\n") {
+		t.Fatalf("calendar object = %q", text)
+	}
+	set, err := ParseICS(data, testParseOptions())
+	if err != nil || len(set.Events) != 1 {
+		t.Fatalf("parsed = %+v, %v", set, err)
+	}
+	if eventID, own := OwnEventID(set.Events[0].SourceRecordID); !own || eventID != owned.EventID {
+		t.Fatalf("an imported copy of the written event reads as %q, %v", eventID, own)
+	}
+	// As a server may store it: folded, and with a parameter on the UID.
+	stored := "BEGIN:VCALENDAR\r\nBEGIN:VEVENT\r\nUID;X-SERVER=1:calendar_event_wri\r\n tten@zeitboard.local\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"
+	if uid, err := CalendarObjectUID([]byte(stored)); err != nil || uid != OwnUID(owned.EventID) {
+		t.Fatalf("stored object UID = %q, %v", uid, err)
+	}
+	if _, err := CalendarObjectUID([]byte("BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n")); err == nil {
+		t.Fatal("an object without a UID was given one")
+	}
+
+	imported := owned
+	imported.Ownership = OwnershipImported
+	if _, err := CalendarObject(imported, stamp); err == nil {
+		t.Fatal("an imported event was written as ZeitBoard's own")
+	}
+	if _, err := CalendarObject(owned, time.Time{}); err == nil {
+		t.Fatal("a calendar object without a stamp was written")
+	}
+	for _, record := range []string{"private@example.test/20260316T120000Z", "@zeitboard.local/20260316T120000Z", "calendar_event_x@zeitboard.local.evil/20260316T120000Z"} {
+		if eventID, own := OwnEventID(record); own {
+			t.Errorf("%q reads as ZeitBoard's own %q", record, eventID)
+		}
+	}
+}

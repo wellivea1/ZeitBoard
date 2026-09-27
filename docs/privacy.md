@@ -37,9 +37,14 @@ empty state until entries exist; synthetic data appears only in clearly labeled
 sample mode. Local sleep-file import reads only the JSON or CSV the user
 explicitly selects; it does not scan arbitrary folders or upload the file.
 Calendar import likewise reads only an owner-selected ICS file or an explicitly
-entered CalDAV collection. CalDAV is read-only, bounded, and device-side. The
-password is used for one request and cleared; it is never persisted. Stored
-collection endpoints are sanitized to exclude credentials and query secrets.
+entered CalDAV collection. Importing is read-only, bounded, and device-side. The
+import password is used for one request and cleared; it is never persisted.
+Stored collection endpoints are sanitized to exclude credentials and query
+secrets. Writing accepted times to a CalDAV calendar is off unless the owner
+turns it on for one imported calendar (ADR-0053). Its sign-in is then kept in
+the owner-protected local database, unencrypted, like the backend credential.
+It is sent only to that calendar's own origin, never synced or exported, and
+erased when writing stops or the calendar is removed.
 Medication data is created only from labels, optional form/strength and
 clinician-rule text, optional owner-recorded start markers, schedules, and
 taken/skipped events the owner explicitly enters. The app does not query a drug
@@ -180,7 +185,11 @@ through its events, checkpoints the WAL, and vacuums the local database.
 Imported events cannot be edited or suppressed in place. Approval creates a
 separately owned ZeitBoard block; rejection creates no event; undo removes only
 that app-owned block. Calendar export contains app-owned placements only and
-never copies imported text.
+never copies imported text. With writing on, each accepted time also goes to
+the owner's CalDAV calendar as ZeitBoard's own event: the task's title, the
+time, and opaque task and suggestion ids. Whoever hosts that calendar can read
+them, which the offer says before it asks for a sign-in. ZeitBoard writes and
+removes only events it named, and never one the owner has changed since.
 
 Medication definitions, optional start markers, schedules, raw events and
 corrections are stored in local SQLite. When the owner turns sync on, they

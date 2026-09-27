@@ -270,8 +270,7 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
       return true;
     } catch (reason) {
       // The desktop reports a changed plan as "proposal inputs changed".
-      const message =
-        reason instanceof Error ? reason.message : typeof reason === "string" ? reason : "";
+      const message = reason instanceof Error ? reason.message : "";
       if (mounted.current) {
         setDecisionError(
           message.includes("inputs changed")

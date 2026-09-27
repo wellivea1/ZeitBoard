@@ -1158,7 +1158,7 @@ func (c desktopBackendClient) doJSON(ctx context.Context, method, path string, p
 	}
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return errors.New("backend request failed")
+		return errors.New("Could not reach ZeitBoard's server.")
 	}
 	defer resp.Body.Close()
 	const responseLimit = 2 * 1024 * 1024

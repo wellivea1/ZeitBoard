@@ -31,7 +31,7 @@ export const noticeCatalog = {
     where: "Rhythm",
   },
   "calendars.ownership": {
-    title: "Your calendars are read, never changed",
+    title: "Your own events are never changed",
     where: "Data Sources",
   },
   "import.how": {

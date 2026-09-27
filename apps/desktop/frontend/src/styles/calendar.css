@@ -57,37 +57,114 @@
   border-bottom: 1px solid var(--divider);
 }
 
-.calendar-source-row > div {
+.calendar-source-name {
   min-width: 0;
   display: grid;
   gap: 2px;
 }
 
-.calendar-source-row strong,
-.calendar-source-row span,
-.calendar-source-row small {
+.calendar-source-name strong,
+.calendar-source-name span,
+.calendar-source-name small {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.calendar-source-row strong {
+.calendar-source-name strong {
   font-family: var(--font-serif);
   font-size: 19px;
   font-weight: 500;
 }
 
-.calendar-source-row span,
-.calendar-source-row small {
+.calendar-source-name span,
+.calendar-source-name small {
   color: var(--muted);
   font-size: var(--type-label);
+}
+
+.calendar-source-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: var(--space-2);
+}
+
+/* Writing accepted times to this calendar: under its row, inside the row's
+   own rules, divided from the calendar's name by a hairline. */
+.calendar-write {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--divider);
+}
+
+.calendar-write > strong {
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.calendar-write > p,
+.calendar-write-stop > p {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--muted);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.calendar-write > small {
+  color: var(--muted);
+  font-size: var(--type-label);
+  line-height: 1.4;
+}
+
+.calendar-write-problems {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  list-style: none;
+  border-top: 1px solid var(--divider);
+}
+
+.calendar-write-problem {
+  display: grid;
+  gap: 2px;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--divider);
+}
+
+.calendar-write-problem strong {
+  font-family: var(--font-serif);
+  font-weight: 500;
+}
+
+.calendar-write-problem span {
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.calendar-write-problem p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+/* Waiting for the owner, as a caution note is marked. */
+.calendar-write-problem[data-conflict="true"] p {
+  color: var(--state-uncertain);
 }
 
 .calendar-source-endpoint {
   font-family: ui-monospace, "Cascadia Code", monospace;
 }
 
-.calendar-import-form label {
+.calendar-import-form label,
+.calendar-write label {
   display: grid;
   gap: var(--space-1);
   color: var(--muted);
@@ -95,7 +172,8 @@
   font-weight: 700;
 }
 
-.calendar-import-form input {
+.calendar-import-form input,
+.calendar-write input {
   min-width: 0;
   width: 100%;
   min-height: 36px;
