@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { subscribeBackendEvents } from "./backendEvents";
 import { calendarDataChangedEvent } from "./calendar";
+import { doseProposalsChangedEvent } from "./doseProposals";
 import { medicationDataChangedEvent } from "./medications";
 import { rhythmMarkersChangedEvent } from "./rhythmMarkers";
 import { sleepDataChangedEvent } from "./sleepDataEvents";
@@ -21,6 +22,7 @@ function bridge() {
     medicationDataChangedEvent,
     rhythmMarkersChangedEvent,
     calendarDataChangedEvent,
+    doseProposalsChangedEvent,
   ];
   const listeners = views.map((view) => {
     const listener = (event: Event) => heard.push(event.type);
@@ -59,7 +61,17 @@ it("refreshes every synced view when a sync downloads or erases records", () => 
     calendarDataChangedEvent,
   ]);
   release();
-  expect(dispose).toHaveBeenCalledTimes(2);
+  expect(dispose).toHaveBeenCalledTimes(3);
+});
+
+it("shows a dose an agent proposed without waiting for a refresh", () => {
+  const { heard, announce, release } = bridge();
+  try {
+    announce("zeitboard:dose-proposed");
+    expect(heard).toEqual([doseProposalsChangedEvent]);
+  } finally {
+    release();
+  }
 });
 
 it("keeps browser preview usable without a native runtime", () => {

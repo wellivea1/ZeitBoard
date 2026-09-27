@@ -348,6 +348,9 @@ func (s *Store) initialize(ctx context.Context) error {
 	if err := s.initializeMedicationSync(ctx); err != nil {
 		return err
 	}
+	if err := s.initializeDoseProposals(ctx); err != nil {
+		return err
+	}
 	// Validate the current shape without rewriting development-era records.
 	// Packaged-release upgrade guarantees begin with the first release.
 	for _, query := range []string{

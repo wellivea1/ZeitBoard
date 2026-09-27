@@ -1973,3 +1973,51 @@ Each surface is tested against the registry:
   proposal offered to the chat assistant is named in the prompt.
 
 The core, server and desktop Go suites and the contract fixture check pass.
+
+## An agent proposes a dose — 2026-09-27
+
+Store (`core/storage/sqlite`, synthetic medication):
+
+- a proposed dose records nothing until it is recorded;
+- once recorded, it is one medication event: manual, user-reported, not scheduled, recorded at
+  the decision, under the dose's own time and zone, and it is queued to upload;
+- a recorded proposal cannot be recorded again or discarded;
+- a discarded or lapsed proposal records nothing, and a lapsed one cannot be recorded;
+- an unknown medication or an inactive one is refused;
+- the twenty-first waiting proposal is refused until others lapse;
+- history older than thirty days is pruned;
+- erasing the medication erases its proposals. Removing the cascade made that test fail.
+
+Desktop (`propose_log_dose` through the local endpoint's dispatch):
+
+- the result carries the proposal id and no label;
+- the snapshot counts one waiting dose, then none once it is recorded;
+- the queue re-attaches the label for the screen;
+- recording produces the dose in Medications, not marked scheduled;
+- refused, with "No dose was proposed", and queued nothing:
+  - a label given as the id, an unknown id, or a dose amount as the status;
+  - a future dose, or one over a week old;
+  - a note, a scheduled mark, or no target.
+
+Server: a `propose_log_dose` sent to the direct proposal endpoint, even with a task target, is
+refused and stores nothing. The registry's tests hold dose proposals to the local endpoint.
+
+Web:
+
+- the queue counts a proposed dose with the other sources and shows it in Plan;
+- Accept sends `record`, refreshes medication views, and moves the dose to the history;
+- normalizers refuse malformed queues;
+- the event bridge refreshes the queue when an agent proposes.
+
+In the running desktop (disposable dev profile), an MCP client called the local endpoint:
+
+- `propose_log_dose` was listed;
+- a medication label passed as the id was refused;
+- a proposal for a synthetic medication was queued, and the snapshot counted it.
+
+Home listed it first under "Waiting on you" (4): "A dose your assistant asked to record, taken
+today at 5:36 AM". Plan showed the same dose as a card: "Assistant proposal · Record dose",
+"Nothing is recorded until you accept · lapses tomorrow at 5:36 AM". Accept dropped the count to
+3, moved the dose to the history, and Home's doses column read "Last taken today at 5:36 AM".
+
+The core, server and desktop Go suites, the contract fixture check and the full web check pass.

@@ -193,7 +193,7 @@ are append-only evidence.**
 | **M-B Schedules + feasibility — delivered (ADR-0025)** | `fixed_clock`/`as_needed`/`cycling` schedules, explicit-zone civil expansion, opt-in at-most-once desktop reminders, neutral collision forecast surface, clinician-rule attribution | M-A |
 | **M-C Adherence + clinician export - delivered (ADR-0027)** | explicit-record adherence-vs-rhythm table, dose/start markers, robust observational association with the ADR-0026 confounder list, redacted preview, and standalone printable HTML/PDF path | M-A; marker records (delivered) |
 | **M-D Sync** | definitions as revision records, events as append-only records, tombstone deletion | M-A (mirrors ADR-0020) |
-| **M-E Agent surface** | redacted assistant/MCP context + `propose_log_dose`; refusal-boundary tests | M-A, slice-8 rail |
+| **M-E Agent surface** | redacted assistant/MCP context + `propose_log_dose` (delivered, ADR-0051: proposed doses wait on the owner's computer until accepted); refusal-boundary tests | M-A, slice-8 rail |
 | **M-F Missed-dose sharing** | Medfriend-equivalent as an off-by-default sharing permission | sharing transport (deferred) |
 
 Ordering rationale: M-A retired the last full "Sample preview" screen; M-B

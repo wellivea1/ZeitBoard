@@ -799,3 +799,28 @@ registry.
 
 Remaining in C4: propose-only dose logging (the first action added through the registry), and the
 agent smoke tests.
+
+### C4 an agent can propose a dose — 2026-09-27
+
+An agent on the owner's computer can now relay "I took my evening tablet" (ADR-0051). The local
+endpoint's `propose_log_dose` names a medication by its opaque id, taken or skipped, and
+optionally when. It is the first action added through the registry.
+
+The dose waits on the computer, never synced or exported, and lapses after a day. It appears
+first under "Waiting on you" on Home and in Plan's decision queue, counted with everything else
+waiting on the owner, under the same Accept and Decline. Accepting records the dose a hand-logged
+one would be, never marked scheduled, so it syncs and reaches the history and the clinician report
+like any other.
+
+Proposals now have a subject:
+
+- the server resolves task proposals, and refuses a dose proposal even when it names a task;
+- the chat model and the server's connector are never offered dose proposals.
+
+The snapshot counts the doses still waiting.
+
+Found along the way: on Windows the desktop's own zone resolves to the development default
+(New York) rather than the computer's zone. Quick logging and proposed doses both record that
+zone. It is fixed next.
+
+Remaining in C4: the agent smoke tests.

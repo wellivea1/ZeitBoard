@@ -152,8 +152,9 @@ func parseModelAction(text string) (modelAction, error) {
 	return action, nil
 }
 
-// validateAction accepts an answer, or a proposal the surfaces it came from
-// may make (the action registry decides which) with a valid target.
+// validateAction accepts an answer, or a task proposal the surfaces it came
+// from may make (the action registry decides which) with a valid target. The
+// server resolves only task proposals; a dose waits on the owner's computer.
 func validateAction(action modelAction, surfaces agentactions.Surface) error {
 	if utf8.RuneCountInString(action.Answer) > 2000 {
 		return errors.New("assistant answer is too long")
@@ -166,7 +167,7 @@ func validateAction(action modelAction, surfaces agentactions.Surface) error {
 		if action.Target != nil {
 			return errors.New("answer_only must not include a target")
 		}
-	case agentactions.IsProposal(action.RecommendedAction, surfaces):
+	case agentactions.IsTaskProposal(action.RecommendedAction, surfaces):
 		if action.Target == nil {
 			return errors.New("proposal action requires a task target")
 		}
@@ -185,7 +186,7 @@ func (s *Service) HandleDirectProposal(ctx context.Context, device store.Device,
 	if req.SchemaVersion != SchemaVersion {
 		return MessageResponse{}, errors.New("unsupported schema version")
 	}
-	if !agentactions.IsProposal(req.RecommendedAction, agentactions.AnyMCP) {
+	if !agentactions.IsTaskProposal(req.RecommendedAction, agentactions.AnyMCP) {
 		return MessageResponse{}, errors.New("direct proposal requires a propose action")
 	}
 	action := modelAction{

@@ -23,3 +23,17 @@ export function requestDecisionLabel(decision: Decision, who: string | undefined
 export function decisionDone(decision: Decision, title: string): string {
   return `${decision === "approved" ? "Accepted" : "Declined"} ${title}.`;
 }
+
+/** The accessible name for deciding on a dose an assistant proposed. */
+export function doseDecisionLabel(decision: Decision, medication: string): string {
+  return decision === "approved"
+    ? `Accept and record the proposed dose of ${medication}`
+    : `Decline the proposed dose of ${medication}`;
+}
+
+/** What is announced once a proposed dose is decided. */
+export function doseDecisionDone(decision: Decision, medication: string): string {
+  return decision === "approved"
+    ? `Recorded the dose of ${medication}.`
+    : `Declined the dose of ${medication}.`;
+}

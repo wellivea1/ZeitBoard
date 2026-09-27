@@ -11,6 +11,7 @@ import (
 	"non24.app/core/domain"
 	"non24.app/core/freshness"
 	"non24.app/core/outlook"
+	storage "non24.app/core/storage/sqlite"
 )
 
 // The assistant snapshot (ADR-0049, contracts/v1/assistant-snapshot.schema.json)
@@ -172,10 +173,13 @@ type snapshotTasks struct {
 }
 
 type snapshotMedication struct {
-	Status    string               `json:"status"`
-	Count     int                  `json:"count"`
-	Truncated bool                 `json:"truncated"`
-	Items     []agentMedicationDTO `json:"items"`
+	Status    string `json:"status"`
+	Count     int    `json:"count"`
+	Truncated bool   `json:"truncated"`
+	// PendingDoseProposals counts doses an agent proposed that wait for the
+	// owner (ADR-0051).
+	PendingDoseProposals int                  `json:"pending_dose_proposals"`
+	Items                []agentMedicationDTO `json:"items"`
 }
 
 type snapshotMarkers struct {
@@ -225,6 +229,16 @@ func (a *App) assistantSnapshot(ctx context.Context, now time.Time) (assistantSn
 	if err != nil {
 		return assistantSnapshot{}, localAgentProjectionError("snapshot", err)
 	}
+	doseProposals, err := store.DoseProposals(ctx, now)
+	if err != nil {
+		return assistantSnapshot{}, localAgentProjectionError("snapshot", err)
+	}
+	waitingDoses := 0
+	for _, proposal := range doseProposals {
+		if proposal.State == storage.DoseProposalPending {
+			waitingDoses++
+		}
+	}
 	cfg, err := a.loadBackendSyncConfig()
 	if err != nil {
 		return assistantSnapshot{}, localAgentProjectionError("snapshot", err)
@@ -243,7 +257,7 @@ func (a *App) assistantSnapshot(ctx context.Context, now time.Time) (assistantSn
 		Tasks:         &snapshotTasks{Count: tasks.Count, Truncated: tasks.Truncated, Items: tasks.Tasks},
 		Medication: &snapshotMedication{
 			Status: medication.Status, Count: medication.MedicationCount,
-			Truncated: medication.Truncated, Items: medication.Medications,
+			Truncated: medication.Truncated, PendingDoseProposals: waitingDoses, Items: medication.Medications,
 		},
 		Markers: &snapshotMarkers{Status: markers.Status, Count: markers.Count, Truncated: markers.Truncated, Items: markers.Markers},
 		Sync: &snapshotSync{

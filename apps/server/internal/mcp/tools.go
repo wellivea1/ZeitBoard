@@ -77,7 +77,7 @@ func proposeSchema() map[string]any {
 		"required":             []string{"context", "target"},
 		"properties": map[string]any{
 			"context": planningContextSchema(),
-			"target":  agentactions.TargetSchema(),
+			"target":  agentactions.TaskTargetSchema(),
 		},
 	}
 }

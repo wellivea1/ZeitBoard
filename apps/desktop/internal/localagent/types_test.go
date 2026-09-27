@@ -8,11 +8,12 @@ import (
 )
 
 // The local endpoint offers exactly the registry's local actions, under the
-// registry's names, and proposals only while a backend can take them.
+// registry's names. Task proposals need a server to resolve them; a dose waits
+// on this computer, so its proposal is always offered.
 func TestToolListOffersExactlyTheRegisteredLocalActions(t *testing.T) {
-	for _, proposalsAvailable := range []bool{false, true} {
+	for _, taskProposals := range []bool{false, true} {
 		listed := map[string]ToolDefinition{}
-		for _, tool := range ToolDefinitions(proposalsAvailable) {
+		for _, tool := range ToolDefinitions(taskProposals) {
 			listed[tool.Name] = tool
 			_, registered := agentactions.Lookup(tool.Name)
 			isRead := strings.HasPrefix(tool.Name, "get_") || strings.HasPrefix(tool.Name, "list_") || strings.HasPrefix(tool.Name, "ask_")
@@ -22,9 +23,10 @@ func TestToolListOffersExactlyTheRegisteredLocalActions(t *testing.T) {
 		}
 		for _, action := range agentactions.All() {
 			tool, offered := listed[action.ID]
-			want := action.On(agentactions.LocalMCP) && (action.Kind == agentactions.Direct || proposalsAvailable)
+			want := action.On(agentactions.LocalMCP) &&
+				(action.Kind == agentactions.Direct || action.Subject == agentactions.DoseSubject || taskProposals)
 			if offered != want {
-				t.Errorf("proposals available %v: %s offered %v, want %v", proposalsAvailable, action.ID, offered, want)
+				t.Errorf("task proposals available %v: %s offered %v, want %v", taskProposals, action.ID, offered, want)
 			}
 			if offered && (tool.Title != action.Title || tool.Description != action.Description) {
 				t.Errorf("%s is listed as %q / %q, not the registry's", action.ID, tool.Title, tool.Description)

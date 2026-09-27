@@ -36,7 +36,11 @@ type localAgentQuestion struct {
 }
 
 type localAgentProposalArguments struct {
-	Target agentactions.Target `json:"target"`
+	Target agentactions.TaskTarget `json:"target"`
+}
+
+type localAgentDoseArguments struct {
+	Target agentactions.DoseTarget `json:"target"`
 }
 
 var localAgentIdentifierPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{2,79}$`)
@@ -120,7 +124,7 @@ func (a *App) GetLocalAgentStatus() LocalAgentStatusDTO {
 	status := LocalAgentStatusDTO{
 		SchemaVersion:             "v1",
 		Mode:                      "desktop_local",
-		BackendProposalsAvailable: desktopLocalCapability{app: a}.ProposalsAvailable(context.Background()),
+		BackendProposalsAvailable: desktopLocalCapability{app: a}.TaskProposalsAvailable(context.Background()),
 		AppearanceStatus:          "ready",
 	}
 	if _, err := a.requireStore(); err == nil {
@@ -145,7 +149,7 @@ func (a *App) GetLocalAgentStatus() LocalAgentStatusDTO {
 	return status
 }
 
-func (c desktopLocalCapability) ProposalsAvailable(context.Context) bool {
+func (c desktopLocalCapability) TaskProposalsAvailable(context.Context) bool {
 	if c.app == nil {
 		return false
 	}
@@ -204,10 +208,15 @@ func (c desktopLocalCapability) CallTool(ctx context.Context, name string, argum
 	case "ask_zeitboard_facts":
 		value, err = c.app.answerLocalFacts(ctx, arguments)
 	default:
-		if !agentactions.IsProposal(name, agentactions.LocalMCP) {
+		action, ok := agentactions.ProposalOn(name, agentactions.LocalMCP)
+		switch {
+		case !ok:
 			return nil, localagent.UserError("Unknown ZeitBoard tool.")
+		case action.Subject == agentactions.DoseSubject:
+			value, err = c.app.proposeDose(ctx, name, arguments)
+		default:
+			value, err = c.app.createLocalAgentProposal(ctx, name, arguments)
 		}
-		value, err = c.app.createLocalAgentProposal(ctx, name, arguments)
 	}
 	if err != nil {
 		return nil, err
@@ -324,7 +333,7 @@ func (a *App) createLocalAgentProposal(ctx context.Context, action string, argum
 	request := struct {
 		SchemaVersion     string                  `json:"schema_version"`
 		RecommendedAction string                  `json:"recommended_action"`
-		Target            agentactions.Target     `json:"target"`
+		Target            agentactions.TaskTarget `json:"target"`
 		Context           assistantContextPayload `json:"context"`
 	}{"v1", action, input.Target, planning}
 	var response assistantMessageResponse

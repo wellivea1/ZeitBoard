@@ -320,9 +320,14 @@ unreachable backend configuration exposes no tools.
 **Desktop-local endpoint (ADR-0028).** The desktop app serves its own MCP endpoint on
 loopback while it runs, so an agent on the same machine can read state and change
 appearance without the backend. It exposes allowlisted read projections, one direct
-display action (`set_appearance`, reversible and non-health per ADR-0021), and
-propose-only scheduling tools that require an enrolled backend. It has no approve/apply
-tool either.
+display action (`set_appearance`, reversible and non-health per ADR-0021),
+propose-only scheduling tools that require an enrolled backend, and `propose_log_dose`
+(ADR-0051). It has no approve/apply tool either.
+
+A proposed dose names a medication by its opaque id, taken or skipped, and optionally when. It
+carries no label, note or amount, and it stays on this computer: it is never synced or exported,
+it lapses after a day, and erasing the medication erases it. Only the owner's Accept turns it
+into a dose, the same record a hand-logged dose is.
 
 Both the local endpoint and the chat assistant read one **assistant snapshot** (ADR-0049). It
 is the owner's day as Home states it, built from the same computations as the screens:

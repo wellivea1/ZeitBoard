@@ -18,7 +18,7 @@ type fakeCapability struct {
 	calls     []string
 }
 
-func (f *fakeCapability) ProposalsAvailable(context.Context) bool {
+func (f *fakeCapability) TaskProposalsAvailable(context.Context) bool {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.proposals
