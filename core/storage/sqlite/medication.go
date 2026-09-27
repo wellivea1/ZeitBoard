@@ -434,40 +434,23 @@ func (s *Store) ExportMedicationData(ctx context.Context, generatedAt time.Time)
 	}, nil
 }
 
+// DeleteMedication erases a definition with every dose, correction, schedule
+// and reminder claim of it, and queues the erasure for the server so the
+// owner's other devices lose it too (ADR-0048).
 func (s *Store) DeleteMedication(ctx context.Context, medicationID string) error {
 	if !contractIdentifier.MatchString(medicationID) {
 		return errors.New("medication_id must match the v1 identifier format")
 	}
-	result, err := s.db.ExecContext(ctx, `DELETE FROM local_medications WHERE medication_id = ?`, medicationID)
-	if err != nil {
-		return err
-	}
-	changed, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if changed == 0 {
-		return ErrMedicationNotFound
-	}
-	return s.compactDeletedData(ctx)
+	return s.eraseHere(ctx, medicationID, eraseMedicationTx, ErrMedicationNotFound)
 }
 
+// DeleteMedicationEvent erases a dose with its corrections, here and, through
+// the server, everywhere.
 func (s *Store) DeleteMedicationEvent(ctx context.Context, eventID string) error {
 	if !contractIdentifier.MatchString(eventID) {
 		return errors.New("event_id must match the v1 identifier format")
 	}
-	result, err := s.db.ExecContext(ctx, `DELETE FROM local_medication_events WHERE event_id = ?`, eventID)
-	if err != nil {
-		return err
-	}
-	changed, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if changed == 0 {
-		return ErrMedicationEventNotFound
-	}
-	return s.compactDeletedData(ctx)
+	return s.eraseHere(ctx, eventID, eraseMedicationEventTx, ErrMedicationEventNotFound)
 }
 
 func normalizeMedicationRecord(record MedicationRecord) MedicationRecord {

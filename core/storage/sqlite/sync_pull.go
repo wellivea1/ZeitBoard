@@ -79,6 +79,10 @@ const (
 	preparedSyncPullTask
 	preparedSyncPullPlacement
 	preparedSyncPullTombstone
+	preparedSyncPullMedication
+	preparedSyncPullMedicationEvent
+	preparedSyncPullMedicationCorrection
+	preparedSyncPullMarker
 )
 
 type preparedSyncPullRecord struct {
@@ -86,6 +90,8 @@ type preparedSyncPullRecord struct {
 	observation preparedSyncedSleepObservation
 	correction  preparedSyncedSleepCorrection
 	task        preparedSyncedTask
+	medication  preparedMedicationSync
+	marker      preparedMarkerSync
 	recordID    string
 	recordKind  string
 }
@@ -107,8 +113,12 @@ type preparedSyncedTask struct {
 }
 
 // ApplySyncPullPage applies one server page and advances its cursor atomically.
-// Corrections are deferred until all observations in the page exist, and
-// tombstones are applied last so erasure wins over records in the same page.
+// Records apply in dependency order: sources, tasks, medication definitions
+// and markers first, then doses, then corrections of sleep and doses, then
+// anything that was waiting for a record this page delivered. A record whose
+// source has not arrived waits in the store rather than being lost at cursor
+// advance. Tombstones are applied last so erasure wins over records in the
+// same page.
 // A page containing tombstones performs one secure checkpoint/compaction after
 // commit. Pending compaction state is durable, so a post-commit failure is
 // retried by the next page without replaying or losing the cursor.
@@ -162,6 +172,10 @@ func (s *Store) applySyncPullPage(
 			seenID = record.correction.record.CorrectionID
 		case preparedSyncPullTask:
 			seenID = taskRevisionRecordID(record.task.record.TaskID, record.task.record.Revision)
+		case preparedSyncPullMedication, preparedSyncPullMedicationEvent, preparedSyncPullMedicationCorrection:
+			seenID = record.medication.recordID
+		case preparedSyncPullMarker:
+			seenID = record.marker.record.MarkerID
 		case preparedSyncPullPlacement, preparedSyncPullTombstone:
 			seenID = record.recordID
 		}
@@ -177,6 +191,10 @@ func (s *Store) applySyncPullPage(
 			applied, err = applySyncedTaskTx(ctx, tx, record.task, syncedAt)
 		case preparedSyncPullPlacement:
 			err = markPlacementPushedTx(ctx, tx, record.recordID, syncedAt)
+		case preparedSyncPullMedication:
+			applied, err = applySyncedMedicationTx(ctx, tx, record.medication, syncedAt)
+		case preparedSyncPullMarker:
+			applied, err = insertSyncedMarkerTx(ctx, tx, record.marker, syncedAt)
 		default:
 			handled = false
 		}
@@ -187,6 +205,30 @@ func (s *Store) applySyncPullPage(
 			result.Applied++
 		} else if handled {
 			result.Skipped++
+		}
+	}
+
+	for _, kind := range []preparedSyncPullKind{preparedSyncPullMedicationEvent, preparedSyncPullMedicationCorrection} {
+		for index, record := range prepared {
+			if record.kind != kind {
+				continue
+			}
+			applied, err := insertSyncedMedicationEvidenceTx(ctx, tx, record.medication, syncedAt)
+			if errors.Is(err, errSyncParentMissing) {
+				if err := deferMedicationRecordTx(ctx, tx, record.medication); err != nil {
+					return SyncPullPageResult{}, err
+				}
+				result.Skipped++
+				continue
+			}
+			if err != nil {
+				return SyncPullPageResult{}, fmt.Errorf("apply sync pull %s %d: %w", record.medication.kind, index, err)
+			}
+			if applied {
+				result.Applied++
+			} else {
+				result.Skipped++
+			}
 		}
 	}
 
@@ -240,6 +282,11 @@ func (s *Store) applySyncPullPage(
 			return SyncPullPageResult{}, err
 		}
 	}
+	waited, err := applyDeferredMedicationRecordsTx(ctx, tx, syncedAt)
+	if err != nil {
+		return SyncPullPageResult{}, err
+	}
+	result.Applied += waited
 
 	for index, record := range prepared {
 		if record.kind != preparedSyncPullTombstone {
@@ -250,9 +297,10 @@ func (s *Store) applySyncPullPage(
 		if err != nil {
 			return SyncPullPageResult{}, fmt.Errorf("classify sync pull tombstone %d: %w", index, err)
 		}
-		if recordKind == "placement" {
+		switch recordKind {
+		case "placement":
 			applied, err = erasePlacementRecordTx(ctx, tx, record.recordID)
-		} else if recordKind == "task" {
+		case "task":
 			applied, err = eraseSyncedTaskRecordTx(ctx, tx, record.recordID)
 			if err == nil {
 				_, err = tx.ExecContext(ctx,
@@ -260,7 +308,17 @@ func (s *Store) applySyncPullPage(
 					record.recordID,
 				)
 			}
-		} else {
+		case SyncKindMedication:
+			// Any erased revision means the definition was deleted.
+			medicationID, _, _ := splitRevisionRecordID(record.recordID)
+			applied, err = eraseMedicationTx(ctx, tx, medicationID, erasedElsewhere)
+		case SyncKindMedicationEvent:
+			applied, err = eraseMedicationEventTx(ctx, tx, record.recordID, erasedElsewhere)
+		case SyncKindMedicationCorrection:
+			applied, err = eraseMedicationCorrectionTx(ctx, tx, record.recordID, erasedElsewhere)
+		case SyncKindContextMarker:
+			applied, err = eraseMarkerTx(ctx, tx, record.recordID, erasedElsewhere)
+		default:
 			applied, err = eraseSyncedSleepRecordTx(ctx, tx, record.recordID)
 		}
 		if err != nil {
@@ -352,6 +410,18 @@ func prepareSyncPullRecord(record SyncPullRecord) (preparedSyncPullRecord, error
 		}
 		prepared, err := prepareSyncedTask(value.Task)
 		return preparedSyncPullRecord{kind: preparedSyncPullTask, task: prepared}, err
+	case SyncPullMedication:
+		prepared, err := prepareSyncedMedication(value.Medication)
+		return preparedSyncPullRecord{kind: preparedSyncPullMedication, medication: prepared}, err
+	case SyncPullMedicationEvent:
+		prepared, err := prepareSyncedMedicationEvent(value.Event)
+		return preparedSyncPullRecord{kind: preparedSyncPullMedicationEvent, medication: prepared}, err
+	case SyncPullMedicationCorrection:
+		prepared, err := prepareSyncedMedicationCorrection(value.Correction)
+		return preparedSyncPullRecord{kind: preparedSyncPullMedicationCorrection, medication: prepared}, err
+	case SyncPullMarker:
+		prepared, err := prepareSyncedMarker(value.Marker)
+		return preparedSyncPullRecord{kind: preparedSyncPullMarker, marker: prepared}, err
 	case SyncPullPlacement:
 		if !contractIdentifier.MatchString(value.PlacementID) {
 			return preparedSyncPullRecord{}, errors.New("placement record id is not a valid identifier")
@@ -729,12 +799,12 @@ func validateSyncPullTombstone(recordID, recordKind string) error {
 	switch recordKind {
 	case "", SleepSyncKindObservation, SleepSyncKindCorrection:
 		return nil
-	case "task":
+	case "task", SyncKindMedication:
 		if !taskRevisionIDPattern.MatchString(recordID) {
-			return errors.New("task tombstone record_id must identify a task revision")
+			return fmt.Errorf("%s tombstone record_id must identify a revision", recordKind)
 		}
 		return nil
-	case "placement":
+	case "placement", SyncKindMedicationEvent, SyncKindMedicationCorrection, SyncKindContextMarker:
 		return nil
 	default:
 		return fmt.Errorf("unsupported tombstone record kind %q", recordKind)
@@ -751,27 +821,51 @@ func syncPullTombstoneKindTx(
 		return recordKind, nil
 	}
 
+	// A kindless tombstone names an id the server never held. Route it by
+	// what this device holds under that id.
 	match := taskRevisionIDPattern.FindStringSubmatch(recordID)
-	taskID := ""
+	revisionOf := ""
 	if match != nil {
-		taskID = match[1]
+		revisionOf = match[1]
 	}
-	var taskEvidence, sleepEvidence int
+	var task, sleep, medication, dose, correction, marker bool
 	if err := tx.QueryRowContext(ctx, `
 		SELECT
 			EXISTS(SELECT 1 FROM local_task_sync_records WHERE record_id = ?)
 			OR EXISTS(SELECT 1 FROM local_tasks WHERE task_id = ?),
 			EXISTS(SELECT 1 FROM local_sleep_sync_records WHERE record_id = ?)
 			OR EXISTS(SELECT 1 FROM local_sleep_observations WHERE observation_id = ?)
-			OR EXISTS(SELECT 1 FROM local_sleep_corrections WHERE correction_id = ?)`,
-		recordID, taskID, recordID, recordID, recordID,
-	).Scan(&taskEvidence, &sleepEvidence); err != nil {
+			OR EXISTS(SELECT 1 FROM local_sleep_corrections WHERE correction_id = ?),
+			EXISTS(SELECT 1 FROM local_medication_sync_records WHERE record_id = ?)
+			OR EXISTS(SELECT 1 FROM local_medications WHERE medication_id = ?),
+			EXISTS(SELECT 1 FROM local_medication_events WHERE event_id = ?)
+			OR EXISTS(SELECT 1 FROM local_sync_deferred_medication WHERE record_id = ? AND kind = 'medication_event'),
+			EXISTS(SELECT 1 FROM local_medication_event_corrections WHERE correction_id = ?)
+			OR EXISTS(SELECT 1 FROM local_sync_deferred_medication WHERE record_id = ? AND kind = 'medication_correction'),
+			EXISTS(SELECT 1 FROM local_rhythm_markers WHERE marker_id = ?)`,
+		recordID, revisionOf, recordID, recordID, recordID,
+		recordID, revisionOf, recordID, recordID, recordID, recordID, recordID,
+	).Scan(&task, &sleep, &medication, &dose, &correction, &marker); err != nil {
 		return "", err
 	}
-	if taskEvidence != 0 && sleepEvidence != 0 {
-		return "", fmt.Errorf("legacy tombstone %q is ambiguous between task and sleep data", recordID)
+	var kinds []string
+	for _, candidate := range []struct {
+		held bool
+		kind string
+	}{
+		{task, "task"}, {sleep, SleepSyncKindObservation}, {medication, SyncKindMedication},
+		{dose, SyncKindMedicationEvent}, {correction, SyncKindMedicationCorrection}, {marker, SyncKindContextMarker},
+	} {
+		if candidate.held {
+			kinds = append(kinds, candidate.kind)
+		}
 	}
-	if taskEvidence != 0 || IsTaskRevisionID(recordID) {
+	switch {
+	case len(kinds) > 1:
+		return "", fmt.Errorf("legacy tombstone %q is ambiguous between %v", recordID, kinds)
+	case len(kinds) == 1:
+		return kinds[0], nil
+	case IsTaskRevisionID(recordID):
 		return "task", nil
 	}
 	return SleepSyncKindObservation, nil

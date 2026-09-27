@@ -48,23 +48,23 @@ type BackendSyncInput struct {
 }
 
 type BackendSyncStatusDTO struct {
-	TaskConflictCount      int    `json:"taskConflictCount"`
-	Enabled                bool   `json:"enabled"`
-	Status                 string `json:"status"`
-	BackendURL             string `json:"backendUrl"`
-	DeviceID               string `json:"deviceId"`
-	InsecureSkipVerify     bool   `json:"insecureSkipVerify"`
-	LastSyncLabel          string `json:"lastSyncLabel"`
-	LastError              string `json:"lastError"`
-	PendingPushCount       int    `json:"pendingPushCount"`
-	PendingErasureCount    int    `json:"pendingErasureCount"`
-	WaitingCorrectionCount int    `json:"waitingCorrectionCount"`
-	PushedCount            int    `json:"pushedCount"`
-	PulledCount            int    `json:"pulledCount"`
-	SkippedCount           int    `json:"skippedCount"`
-	ErasuresPushed         int    `json:"erasuresPushed"`
-	TombstonesApplied      int    `json:"tombstonesApplied"`
-	Cursor                 int64  `json:"cursor"`
+	TaskConflictCount   int    `json:"taskConflictCount"`
+	Enabled             bool   `json:"enabled"`
+	Status              string `json:"status"`
+	BackendURL          string `json:"backendUrl"`
+	DeviceID            string `json:"deviceId"`
+	InsecureSkipVerify  bool   `json:"insecureSkipVerify"`
+	LastSyncLabel       string `json:"lastSyncLabel"`
+	LastError           string `json:"lastError"`
+	PendingPushCount    int    `json:"pendingPushCount"`
+	PendingErasureCount int    `json:"pendingErasureCount"`
+	WaitingRecordCount  int    `json:"waitingRecordCount"`
+	PushedCount         int    `json:"pushedCount"`
+	PulledCount         int    `json:"pulledCount"`
+	SkippedCount        int    `json:"skippedCount"`
+	ErasuresPushed      int    `json:"erasuresPushed"`
+	TombstonesApplied   int    `json:"tombstonesApplied"`
+	Cursor              int64  `json:"cursor"`
 }
 
 type backendSyncConfig = storage.SyncConnection
@@ -296,7 +296,10 @@ func (a *App) syncNowLocked(parent context.Context) (BackendSyncStatusDTO, error
 		}
 		return a.backendSyncStatusCounts(cfg, syncCounts{}), nil
 	}
-	counts, syncErr := a.syncSleepRecords(ctx, cfg, token)
+	counts, syncErr := a.syncRecords(ctx, cfg, token)
+	if counts.pulled > 0 || counts.tombstonesApplied > 0 {
+		a.announce("zeitboard:sync-applied")
+	}
 	a.backendConfigMu.Lock()
 	defer a.backendConfigMu.Unlock()
 	if syncErr != nil {
@@ -320,7 +323,10 @@ type syncCounts struct {
 	tombstonesApplied int
 }
 
-func (a *App) syncSleepRecords(ctx context.Context, cfg backendSyncConfig, token string) (syncCounts, error) {
+// syncRecords runs one sync pass: download, reconcile, upload erasures and
+// every pending kind in dependency order, then download what the upload made
+// visible.
+func (a *App) syncRecords(ctx context.Context, cfg backendSyncConfig, token string) (syncCounts, error) {
 	defer a.requestLocalAnalysis(recompute.ReasonEvidence)
 	counts := syncCounts{}
 	store, err := a.requireStore()
@@ -330,46 +336,40 @@ func (a *App) syncSleepRecords(ctx context.Context, cfg backendSyncConfig, token
 	client := a.newDesktopBackendClient(cfg, token)
 	// Learn remote erasure before replaying local data. A new enrollment starts
 	// at zero and reconciles old acknowledgments only after a complete pull.
-	counts.pulled, counts.skipped, counts.tombstonesApplied, err = a.pullSleepRecords(ctx, store, client)
+	counts.pulled, counts.skipped, counts.tombstonesApplied, err = a.pullRecords(ctx, store, client)
 	if err != nil {
 		return counts, err
 	}
 	if err := store.FinishSyncReconciliation(ctx); err != nil {
 		return counts, err
 	}
-	counts.erasuresPushed, err = a.pushSleepErasures(ctx, store, client)
+	counts.erasuresPushed, err = a.pushErasures(ctx, store, client)
 	if err != nil {
 		return counts, err
 	}
-	sleepPushed, err := a.pushSleepRecords(ctx, store, client)
-	counts.pushed += sleepPushed
-	if err != nil {
-		return counts, err
+	for _, push := range []func(context.Context, *storage.Store, desktopBackendClient) (int, error){
+		a.pushSleepRecords, a.pushTaskRecords, a.pushPlacementRecords, a.pushMedicationRecords, a.pushMarkerRecords,
+	} {
+		pushed, err := push(ctx, store, client)
+		counts.pushed += pushed
+		if err != nil {
+			return counts, err
+		}
 	}
-	tasksPushed, err := a.pushTaskRecords(ctx, store, client)
-	counts.pushed += tasksPushed
-	if err != nil {
-		return counts, err
-	}
-	placementsPushed, err := a.pushPlacementRecords(ctx, store, client)
-	counts.pushed += placementsPushed
-	if err != nil {
-		return counts, err
-	}
-	moreErasures, err := a.pushSleepErasures(ctx, store, client)
+	moreErasures, err := a.pushErasures(ctx, store, client)
 	counts.erasuresPushed += moreErasures
 	if err != nil {
 		return counts, err
 	}
-	pulled, skipped, tombstones, err := a.pullSleepRecords(ctx, store, client)
+	pulled, skipped, tombstones, err := a.pullRecords(ctx, store, client)
 	counts.pulled += pulled
 	counts.skipped += skipped
 	counts.tombstonesApplied += tombstones
 	if err == nil {
 		var deferred int
-		deferred, err = store.DeferredSyncCorrectionCount(ctx)
+		deferred, err = store.DeferredSyncRecordCount(ctx)
 		if err == nil && deferred > 0 {
-			err = errors.New("Downloaded corrections are waiting for their source records. They are saved locally; sync will retry.")
+			err = errors.New("Some downloaded records are waiting for the records they belong to. They are saved on this computer; sync will retry.")
 		}
 	}
 	return counts, err
@@ -395,10 +395,10 @@ func (a *App) pushPlacementRecords(ctx context.Context, store *storage.Store, cl
 		})
 }
 
-// pushSleepErasures propagates local hard-deletes, including uncertain uploads, to
-// the backend, which hard-deletes the synced copies and mints tombstones so
-// every other device erases too (ADR-0017).
-func (a *App) pushSleepErasures(ctx context.Context, store *storage.Store, client desktopBackendClient) (int, error) {
+// pushErasures propagates local hard-deletes of any kind, including uncertain
+// uploads, to the backend, which hard-deletes the synced copies and mints
+// tombstones so every other device erases too (ADR-0017).
+func (a *App) pushErasures(ctx context.Context, store *storage.Store, client desktopBackendClient) (int, error) {
 	ids, err := store.PendingSyncErasures(ctx)
 	if err != nil {
 		return 0, err
@@ -423,6 +423,25 @@ func (a *App) pushSleepErasures(ctx context.Context, store *storage.Store, clien
 	return confirmed, nil
 }
 
+// pushMedicationRecords sends medication definitions, doses and dose
+// corrections, definitions first (ADR-0048).
+func (a *App) pushMedicationRecords(ctx context.Context, store *storage.Store, client desktopBackendClient) (int, error) {
+	return pushPendingSyncRecords(ctx, client, storage.MaxMedicationSyncPageSize,
+		store.PendingMedicationSyncRecords, store.MarkMedicationSyncRecordsPushed,
+		func(record storage.MedicationSyncRecord) syncPushRecord {
+			return syncPushRecord{RecordID: record.RecordID, Kind: record.Kind, CreatedAt: record.CreatedAt.UTC(), Payload: record.Payload}
+		})
+}
+
+// pushMarkerRecords sends rhythm context markers (ADR-0048).
+func (a *App) pushMarkerRecords(ctx context.Context, store *storage.Store, client desktopBackendClient) (int, error) {
+	return pushPendingSyncRecords(ctx, client, storage.MaxMarkerSyncPageSize,
+		store.PendingMarkerSyncRecords, store.MarkMarkerSyncRecordsPushed,
+		func(record storage.MarkerSyncRecord) syncPushRecord {
+			return syncPushRecord{RecordID: record.RecordID, Kind: storage.SyncKindContextMarker, CreatedAt: record.CreatedAt.UTC(), Payload: record.Payload}
+		})
+}
+
 func (a *App) pushSleepRecords(ctx context.Context, store *storage.Store, client desktopBackendClient) (int, error) {
 	return pushPendingSyncRecords(ctx, client, storage.MaxSleepSyncPageSize,
 		store.PendingSleepSyncRecords, store.MarkSleepSyncRecordsPushed,
@@ -431,8 +450,8 @@ func (a *App) pushSleepRecords(ctx context.Context, store *storage.Store, client
 		})
 }
 
-// Sleep and task uploads share the same request bounds, acknowledgment checks
-// and durable commit order. Their stores retain ownership of payload encoding
+// Every upload shares the same request bounds, acknowledgment checks and
+// durable commit order. Their stores retain ownership of payload encoding
 // and bookkeeping; no domain records are generalized into untyped maps.
 func pushPendingSyncRecords[T any](ctx context.Context, client desktopBackendClient, pageLimit int,
 	pending func(context.Context, int) ([]T, error),
@@ -506,10 +525,10 @@ func nextSyncPushBatchLength(records []syncPushRecord) (int, error) {
 
 var errSyncMorePages = errors.New("More records are waiting. Sync will continue on the next attempt.")
 
-func (a *App) pullSleepRecords(ctx context.Context, store *storage.Store, client desktopBackendClient) (int, int, int, error) {
+func (a *App) pullRecords(ctx context.Context, store *storage.Store, client desktopBackendClient) (int, int, int, error) {
 	total := storage.SyncPullPageResult{}
 	for page := 0; page < 4; page++ {
-		result, complete, err := a.pullSleepPage(ctx, store, client)
+		result, complete, err := a.pullPage(ctx, store, client)
 		total.Applied += result.Applied
 		total.Skipped += result.Skipped
 		total.TombstonesApplied += result.TombstonesApplied
@@ -523,7 +542,7 @@ func (a *App) pullSleepRecords(ctx context.Context, store *storage.Store, client
 	return total.Applied, total.Skipped, total.TombstonesApplied, errSyncMorePages
 }
 
-func (a *App) pullSleepPage(ctx context.Context, store *storage.Store, client desktopBackendClient) (storage.SyncPullPageResult, bool, error) {
+func (a *App) pullPage(ctx context.Context, store *storage.Store, client desktopBackendClient) (storage.SyncPullPageResult, bool, error) {
 	cursor, err := store.SleepSyncCursor(ctx)
 	if err != nil {
 		return storage.SyncPullPageResult{}, false, err
@@ -544,45 +563,11 @@ func (a *App) pullSleepPage(ctx context.Context, store *storage.Store, client de
 	}
 	records := make([]storage.SyncPullRecord, 0, len(response.Records))
 	for _, record := range response.Records {
-		switch record.Kind {
-		case storage.SleepSyncKindObservation:
-			var observation storage.SleepObservationRecord
-			if err := json.Unmarshal(record.Payload, &observation); err != nil {
-				return storage.SyncPullPageResult{}, false, err
-			}
-			records = append(records, storage.SyncPullObservation{Observation: observation})
-		case storage.SleepSyncKindCorrection:
-			var correction storage.SleepCorrectionRecord
-			if err := json.Unmarshal(record.Payload, &correction); err != nil {
-				return storage.SyncPullPageResult{}, false, err
-			}
-			records = append(records, storage.SyncPullCorrection{Correction: correction})
-		case "task":
-			var task storage.TaskRecord
-			if err := json.Unmarshal(record.Payload, &task); err != nil {
-				return storage.SyncPullPageResult{}, false, err
-			}
-			records = append(records, storage.SyncPullTask{Task: task})
-		case "placement":
-			// This computer authored it; pulling it back confirms the upload.
-			records = append(records, storage.SyncPullPlacement{PlacementID: record.RecordID})
-		case "tombstone":
-			var payload syncTombstonePayload
-			if err := json.Unmarshal(record.Payload, &payload); err != nil {
-				return storage.SyncPullPageResult{}, false, err
-			}
-			id := payload.RecordID
-			if id == "" {
-				id = record.RecordID
-			}
-			// Applied after observations/corrections so a tombstone in the
-			// same batch always wins over the record it erases.
-			records = append(records, storage.SyncPullTombstone{
-				RecordID: id, RecordKind: payload.RecordKind,
-			})
-		default:
-			return storage.SyncPullPageResult{}, false, fmt.Errorf("unsupported synced record kind %q", record.Kind)
+		decoded, err := decodePulledRecord(record)
+		if err != nil {
+			return storage.SyncPullPageResult{}, false, err
 		}
+		records = append(records, decoded)
 	}
 	result, err := store.ApplySyncPullPage(ctx, storage.SyncPullPage{
 		Cursor:  response.Cursor,
@@ -592,6 +577,51 @@ func (a *App) pullSleepPage(ctx context.Context, store *storage.Store, client de
 		return result, false, err
 	}
 	return result, len(response.Records) < storage.MaxSyncPullPageSize, nil
+}
+
+// decodePulledRecord turns one downloaded envelope into the store's typed
+// record. The store validates and applies it; tombstones apply last, so erasure
+// wins over the record it erases even within one page.
+func decodePulledRecord(record syncEnvelope) (storage.SyncPullRecord, error) {
+	decode := func(target any) error { return json.Unmarshal(record.Payload, target) }
+	switch record.Kind {
+	case storage.SleepSyncKindObservation:
+		var value storage.SyncPullObservation
+		return value, decode(&value.Observation)
+	case storage.SleepSyncKindCorrection:
+		var value storage.SyncPullCorrection
+		return value, decode(&value.Correction)
+	case "task":
+		var value storage.SyncPullTask
+		return value, decode(&value.Task)
+	case "placement":
+		// This computer authored it; pulling it back confirms the upload.
+		return storage.SyncPullPlacement{PlacementID: record.RecordID}, nil
+	case storage.SyncKindMedication:
+		var value storage.SyncPullMedication
+		return value, decode(&value.Medication)
+	case storage.SyncKindMedicationEvent:
+		var value storage.SyncPullMedicationEvent
+		return value, decode(&value.Event)
+	case storage.SyncKindMedicationCorrection:
+		var value storage.SyncPullMedicationCorrection
+		return value, decode(&value.Correction)
+	case storage.SyncKindContextMarker:
+		var value storage.SyncPullMarker
+		return value, decode(&value.Marker)
+	case "tombstone":
+		var payload syncTombstonePayload
+		if err := decode(&payload); err != nil {
+			return nil, err
+		}
+		id := payload.RecordID
+		if id == "" {
+			id = record.RecordID
+		}
+		return storage.SyncPullTombstone{RecordID: id, RecordKind: payload.RecordKind}, nil
+	default:
+		return nil, fmt.Errorf("unsupported synced record kind %q", record.Kind)
+	}
 }
 
 func (a *App) serverOverview(ctx context.Context, now time.Time) (OverviewDTO, bool) {
@@ -987,44 +1017,43 @@ func (a *App) backendSyncStatusCounts(cfg backendSyncConfig, counts syncCounts) 
 		}
 	}
 	pending := 0
-	pendingErasures, waitingCorrections, taskConflicts := 0, 0, 0
+	pendingErasures, waitingRecords, taskConflicts := 0, 0, 0
 	cursor := int64(0)
 	if store, err := a.requireStore(); err == nil {
 		ctx := a.applicationContext()
-		if count, err := store.PendingSleepSyncRecordCount(ctx); err == nil {
-			pending += count
-		}
-		if count, err := store.PendingTaskSyncRecordCount(ctx); err == nil {
-			pending += count
-		}
-		if count, err := store.PendingPlacementSyncRecordCount(ctx); err == nil {
-			pending += count
+		for _, count := range []func(context.Context) (int, error){
+			store.PendingSleepSyncRecordCount, store.PendingTaskSyncRecordCount, store.PendingPlacementSyncRecordCount,
+			store.PendingMedicationSyncRecordCount, store.PendingMarkerSyncRecordCount,
+		} {
+			if value, err := count(ctx); err == nil {
+				pending += value
+			}
 		}
 		if value, err := store.SleepSyncCursor(ctx); err == nil {
 			cursor = value
 		}
 		pendingErasures, _ = store.PendingSyncErasureCount(ctx)
-		waitingCorrections, _ = store.DeferredSyncCorrectionCount(ctx)
+		waitingRecords, _ = store.DeferredSyncRecordCount(ctx)
 		taskConflicts, _ = store.TaskSyncConflictCount(ctx)
 	}
 	return BackendSyncStatusDTO{
-		Enabled:                cfg.Enabled,
-		Status:                 status,
-		BackendURL:             cfg.BackendURL,
-		DeviceID:               cfg.DeviceID,
-		InsecureSkipVerify:     cfg.InsecureSkipVerify,
-		LastSyncLabel:          lastSyncLabel(cfg.LastSyncAt),
-		LastError:              cfg.LastError,
-		PendingPushCount:       pending,
-		PendingErasureCount:    pendingErasures,
-		WaitingCorrectionCount: waitingCorrections,
-		TaskConflictCount:      taskConflicts,
-		PushedCount:            counts.pushed,
-		PulledCount:            counts.pulled,
-		SkippedCount:           counts.skipped,
-		ErasuresPushed:         counts.erasuresPushed,
-		TombstonesApplied:      counts.tombstonesApplied,
-		Cursor:                 cursor,
+		Enabled:             cfg.Enabled,
+		Status:              status,
+		BackendURL:          cfg.BackendURL,
+		DeviceID:            cfg.DeviceID,
+		InsecureSkipVerify:  cfg.InsecureSkipVerify,
+		LastSyncLabel:       lastSyncLabel(cfg.LastSyncAt),
+		LastError:           cfg.LastError,
+		PendingPushCount:    pending,
+		PendingErasureCount: pendingErasures,
+		WaitingRecordCount:  waitingRecords,
+		TaskConflictCount:   taskConflicts,
+		PushedCount:         counts.pushed,
+		PulledCount:         counts.pulled,
+		SkippedCount:        counts.skipped,
+		ErasuresPushed:      counts.erasuresPushed,
+		TombstonesApplied:   counts.tombstonesApplied,
+		Cursor:              cursor,
 	}
 }
 

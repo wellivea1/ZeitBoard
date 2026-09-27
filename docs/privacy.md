@@ -42,7 +42,8 @@ Medication data is created only from labels, optional form/strength and
 clinician-rule text, optional owner-recorded start markers, schedules, and
 taken/skipped events the owner explicitly enters. The app does not query a drug
 database, infer a schedule from a name or history, move a scheduled time, or
-upload medication text. Desktop medication
+send medication text anywhere except, with sync on, the owner's own server.
+Desktop medication
 notifications are off by default. Enabling them for an explicit clock schedule
 allows the local operating-system notification surface to display the
 owner-entered label at those times, including forecasted sleep overlaps.
@@ -179,19 +180,25 @@ separately owned ZeitBoard block; rejection creates no event; undo removes only
 that app-owned block. Calendar export contains app-owned placements only and
 never copies imported text.
 
-Medication definitions, optional start markers, schedules, raw events,
-corrections, and reminder claims remain in local SQLite. Derived wake/sleep
-relationships are recomputed and are not included in the medication export.
-Reminder claims contain only an
-opaque occurrence ID, medication ID, and scheduled/claimed UTC instants; they
-are inserted before delivery to prevent duplicate prompts and are excluded
-from export and sync. Exclusion appends a correction and retains the raw
-evidence; typed `DELETE` erasure removes an event and its corrections, or a
-definition and all dependent events, corrections, schedules, and reminder
-claims, then checkpoints and vacuums SQLite. Medication labels, clinician
-rules, and notes are excluded from backend sync, trusted views, MCP/assistant
-context, telemetry, and logs in M-A/M-B/M-C. Future sync requires a new reviewed
-redaction and tombstone path before those records may leave the device.
+Medication definitions, optional start markers, schedules, raw events and
+corrections are stored in local SQLite. When the owner turns sync on, they
+also travel to the owner's own server as encrypted records (ADR-0048), so a
+dose logged on one device appears in the history and clinician report of the
+others. The server stores them encrypted at rest and reads none of them:
+estimation, projections, the portal, the assistant and MCP never decrypt
+them. Derived wake/sleep relationships are recomputed and are not included in
+the medication export. Reminder claims contain only an opaque occurrence ID,
+medication ID, and scheduled/claimed UTC instants; they are inserted before
+delivery to prevent duplicate prompts, stay on the computer that delivered the
+reminder, and are excluded from export and sync. Exclusion appends a
+correction and retains the raw evidence; typed `DELETE` erasure removes an
+event and its corrections, or a definition and all dependent events,
+corrections, schedules, and reminder claims, then checkpoints and vacuums
+SQLite. With sync on, the same erasure is queued for the server, which erases
+the synced copies, tells every other device to erase its copy, and refuses a
+later upload of the erased records from a device that was offline. Medication
+labels, clinician rules, and notes are excluded from trusted views,
+MCP/assistant context, telemetry, and logs.
 Erasing the SQLite record cannot retract a reminder label already delivered to
 Windows notification history; the opt-in disclosure treats that OS-managed
 copy as outside ZeitBoard's erasure boundary.
@@ -206,9 +213,12 @@ or external assets, and makes no network request. Once the owner saves or shares
 an explicitly generated file, that copy is outside ZeitBoard's storage,
 revocation, and erasure boundary.
 
-Rhythm context markers and their notes remain in local SQLite. They are
-excluded from estimation, scheduling, reminders, backend sync, trusted views,
-MCP/assistant context, telemetry, and logs. The owner may deliberately export
+Rhythm context markers and their notes are stored in local SQLite and, with
+sync on, travel to the owner's own server as encrypted records like medication
+records, with the same erasure path (ADR-0048). They are excluded from
+estimation, scheduling, reminders, trusted views, telemetry, and logs; MCP and
+assistant context carry a marker's kind and dates, never its note. The owner
+may deliberately export
 the strict v1 marker set, which includes private notes. Individual erasure
 requires typed `DELETE`, then checkpoints the WAL and vacuums SQLite; tests
 assert that a unique private-note marker no longer exists in either file.

@@ -535,9 +535,9 @@ func (a *App) medicationsAtContext(ctx context.Context, now time.Time) (Medicati
 		estimateMessage = "Rhythm context is unavailable; raw medication records remain usable."
 	}
 	status := "ready"
-	message := fmt.Sprintf("%d %s and %d medication %s stored only on this device.",
+	message := fmt.Sprintf("%d %s and %d recorded %s.",
 		len(medications), plural(len(medications), "medication", "medications"),
-		len(effective), plural(len(effective), "event", "events"),
+		len(effective), plural(len(effective), "dose", "doses"),
 	)
 	if len(medications) == 0 {
 		status = "empty"

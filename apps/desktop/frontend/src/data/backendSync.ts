@@ -19,7 +19,7 @@ export interface BackendSyncStatus {
   lastError: string;
   pendingPushCount: number;
   pendingErasureCount: number;
-  waitingCorrectionCount: number;
+  waitingRecordCount: number;
   taskConflictCount: number;
   pushedCount: number;
   pulledCount: number;
@@ -37,7 +37,7 @@ const unavailableStatus: BackendSyncStatus = {
   lastError: "",
   pendingPushCount: 0,
   pendingErasureCount: 0,
-  waitingCorrectionCount: 0,
+  waitingRecordCount: 0,
   taskConflictCount: 0,
   pushedCount: 0,
   pulledCount: 0,
@@ -75,7 +75,7 @@ export function normalizeBackendSyncStatus(value: unknown): BackendSyncStatus | 
     lastError: str(value.lastError),
     pendingPushCount: count(value.pendingPushCount),
     pendingErasureCount: count(value.pendingErasureCount),
-    waitingCorrectionCount: count(value.waitingCorrectionCount),
+    waitingRecordCount: count(value.waitingRecordCount),
     taskConflictCount: count(value.taskConflictCount),
     pushedCount: count(value.pushedCount),
     pulledCount: count(value.pulledCount),

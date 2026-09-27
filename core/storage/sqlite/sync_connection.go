@@ -130,9 +130,13 @@ func (s *Store) UpdateSyncConnection(ctx context.Context, value SyncConnection) 
 	return nil
 }
 
-func (s *Store) DeferredSyncCorrectionCount(ctx context.Context) (int, error) {
+// DeferredSyncRecordCount counts downloaded records still waiting for the
+// record they belong to: sleep corrections for their source, doses for their
+// medication, dose corrections for their dose.
+func (s *Store) DeferredSyncRecordCount(ctx context.Context) (int, error) {
 	var count int
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM local_sync_deferred_corrections`).Scan(&count)
+	err := s.db.QueryRowContext(ctx, `SELECT (SELECT COUNT(*) FROM local_sync_deferred_corrections)
+		+ (SELECT COUNT(*) FROM local_sync_deferred_medication)`).Scan(&count)
 	return count, err
 }
 
@@ -156,6 +160,8 @@ func (s *Store) FinishSyncReconciliation(ctx context.Context) error {
 		`DELETE FROM local_sleep_sync_records WHERE record_id NOT IN(SELECT record_id FROM local_sync_seen)`,
 		`DELETE FROM local_task_sync_records WHERE record_id NOT IN(SELECT record_id FROM local_sync_seen)`,
 		`DELETE FROM local_placement_sync_records WHERE record_id NOT IN(SELECT record_id FROM local_sync_seen)`,
+		`DELETE FROM local_medication_sync_records WHERE record_id NOT IN(SELECT record_id FROM local_sync_seen)`,
+		`DELETE FROM local_evidence_sync_records WHERE record_id NOT IN(SELECT record_id FROM local_sync_seen)`,
 		`DELETE FROM local_sync_seen`,
 		`DELETE FROM local_sync_state WHERE key='sync_reconcile'`,
 	} {

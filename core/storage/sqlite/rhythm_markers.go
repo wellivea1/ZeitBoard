@@ -41,17 +41,20 @@ func (s *Store) CreateRhythmMarker(ctx context.Context, record RhythmMarkerRecor
 	if err != nil {
 		return err
 	}
+	_, err = s.db.ExecContext(ctx, `INSERT INTO local_rhythm_markers(`+rhythmMarkerColumns+`)
+		VALUES(?, ?, ?, ?, ?, ?, ?)`, rhythmMarkerRow(record, encoded)...)
+	return err
+}
+
+const rhythmMarkerColumns = `marker_id, kind, start_at, end_at, zone_id, recorded_at, payload_json`
+
+func rhythmMarkerRow(record RhythmMarkerRecord, encoded []byte) []any {
 	endAt := ""
 	if record.EndAt != nil {
 		endAt = formatSQLiteTime(*record.EndAt)
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO local_rhythm_markers(
-		marker_id, kind, start_at, end_at, zone_id, recorded_at, payload_json
-	) VALUES(?, ?, ?, ?, ?, ?, ?)`,
-		record.MarkerID, record.Kind, formatSQLiteTime(record.StartAt), endAt,
-		record.ZoneID, formatSQLiteTime(record.Provenance.RecordedAt), encoded,
-	)
-	return err
+	return []any{record.MarkerID, record.Kind, formatSQLiteTime(record.StartAt), endAt,
+		record.ZoneID, formatSQLiteTime(record.Provenance.RecordedAt), encoded}
 }
 
 func (s *Store) ListRhythmMarkers(ctx context.Context) ([]RhythmMarkerRecord, error) {
@@ -83,25 +86,15 @@ func (s *Store) ExportRhythmMarkers(ctx context.Context, generatedAt time.Time) 
 	}, nil
 }
 
-// DeleteRhythmMarker is permanent erasure, not append-only suppression. The
-// post-delete compaction removes deleted private text from SQLite free pages
-// and truncates the write-ahead log.
+// DeleteRhythmMarker is permanent erasure, not append-only suppression. It
+// also queues the erasure for the server, so the owner's other devices lose
+// the marker too (ADR-0048). The post-delete compaction removes deleted
+// private text from SQLite free pages and truncates the write-ahead log.
 func (s *Store) DeleteRhythmMarker(ctx context.Context, markerID string) error {
 	if !contractIdentifier.MatchString(markerID) {
 		return errors.New("marker_id must match the v1 identifier format")
 	}
-	result, err := s.db.ExecContext(ctx, `DELETE FROM local_rhythm_markers WHERE marker_id = ?`, markerID)
-	if err != nil {
-		return err
-	}
-	changed, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if changed == 0 {
-		return ErrRhythmMarkerNotFound
-	}
-	return s.compactDeletedData(ctx)
+	return s.eraseHere(ctx, markerID, eraseMarkerTx, ErrRhythmMarkerNotFound)
 }
 
 func normalizeRhythmMarker(record RhythmMarkerRecord) RhythmMarkerRecord {

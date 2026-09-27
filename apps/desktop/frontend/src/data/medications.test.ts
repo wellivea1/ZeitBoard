@@ -17,7 +17,7 @@ import {
 const medicationResponse = {
   status: "ready",
   empty: false,
-  message: "1 medication and 1 medication event stored only on this device.",
+  message: "1 medication and 1 recorded dose.",
   estimateStatus: "estimated",
   estimateMessage: "Current rhythm estimate available for recent-event context.",
   medications: [
