@@ -34,6 +34,40 @@ describe("DataSourcesScreen structure", () => {
     expect(await within(calendars).findByText("Sample commitments")).toBeVisible();
   });
 
+  // Found while paging the log: the screen started as "empty", so until the
+  // count arrived it said there were no sleep records.
+  it("does not claim there are no sleep records before it has counted them", async () => {
+    let answer!: (value: unknown) => void;
+    (globalThis as { go?: unknown }).go = {
+      main: {
+        App: {
+          GetSleepSources: () => new Promise((resolve) => (answer = resolve)),
+        },
+      },
+    };
+    render(<DataSourcesScreen />);
+    const connected = screen.getByRole("region", { name: "Data source review" });
+    expect(within(connected).queryByText(/None yet/)).toBeNull();
+
+    answer({
+      status: "ready",
+      message: "3 local sleep entries stored on this device.",
+      total: 3,
+      correctedCount: 0,
+      suppressedCount: 0,
+      sources: [
+        {
+          source: "Manual sleep log",
+          provenance: "manual / user reported",
+          total: 3,
+          corrected: 0,
+          suppressed: 0,
+        },
+      ],
+    });
+    expect(await within(connected).findByText(/3 records/)).toBeVisible();
+  });
+
   // Somebody who used to add an entry here must be told where it went rather
   // than left hunting.
   it("says where the sleep log went", () => {

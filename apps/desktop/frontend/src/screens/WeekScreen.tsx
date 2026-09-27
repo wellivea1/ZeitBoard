@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { PlaceholderNotice } from "../components/AppShell";
 import { Icon } from "../components/Icon";
 import { WeekBoard } from "../components/WeekBoard";
@@ -21,7 +21,7 @@ import {
   type MedicationsData,
 } from "../data/medications";
 import type { OverviewData } from "../data/overview";
-import { loadSleepEntries, type SleepEntry } from "../data/sleepEntries";
+import { loadSleepEntriesBetween, type SleepEntry } from "../data/sleepEntries";
 import { sleepDataChangedEvent } from "../data/sleepDataEvents";
 import { useApprovals } from "../state/approvals";
 import { localZone } from "../utils/civilTime";
@@ -97,7 +97,15 @@ function useReloading<T>(load: () => Promise<T>, events: string[], initial: T) {
   return value;
 }
 
-const loadSleep = () => loadSleepEntries().then((data) => data.entries);
+// The nights the board shows: those touching its days, with a day to spare on
+// each side, which covers any time zone's offset from UTC.
+function sleepRange(start: string, days: number) {
+  const from = new Date(`${start}T00:00:00Z`);
+  const to = new Date(from);
+  from.setUTCDate(from.getUTCDate() - 1);
+  to.setUTCDate(to.getUTCDate() + days + 1);
+  return [from.toISOString(), to.toISOString()] as const;
+}
 const loadDoses = () => loadMedications();
 const loadFreshness = () => loadOverview().then((result) => result.data);
 
@@ -350,6 +358,10 @@ export function WeekScreen() {
   const [days, setDays] = useDaysShown();
   const [start, setStart] = useState(today);
   const calendar = useCalendarRange(start, days, zoneId);
+  const loadSleep = useCallback(() => {
+    const [from, to] = sleepRange(start, days);
+    return loadSleepEntriesBetween(from, to).then((data) => data.entries);
+  }, [start, days]);
   const sleep = useReloading(loadSleep, [sleepDataChangedEvent], [] as SleepEntry[]);
   const medications = useReloading<MedicationsData | null>(
     loadDoses,

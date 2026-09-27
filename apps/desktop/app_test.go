@@ -363,13 +363,16 @@ func TestSleepExportAndDeleteRequireExplicitErasure(t *testing.T) {
 		t.Fatalf("native export file is not the contract-shaped sleep data: %s", written)
 	}
 
-	if _, err := app.DeleteSleepObservation(SleepDeleteInput{ObservationID: added.ObservationID, Confirmation: "suppress"}); err == nil {
+	if err := app.DeleteSleepObservation(SleepDeleteInput{ObservationID: added.ObservationID, Confirmation: "suppress"}); err == nil {
 		t.Fatal("delete should require the exact erasure confirmation")
 	}
-	if _, err := app.DeleteSleepObservation(SleepDeleteInput{ObservationID: added.ObservationID, Confirmation: " DELETE "}); err == nil {
+	if err := app.DeleteSleepObservation(SleepDeleteInput{ObservationID: added.ObservationID, Confirmation: " DELETE "}); err == nil {
 		t.Fatal("delete should reject confirmation with surrounding whitespace")
 	}
-	entries, err := app.DeleteSleepObservation(SleepDeleteInput{ObservationID: added.ObservationID, Confirmation: deleteConfirm})
+	if err := app.DeleteSleepObservation(SleepDeleteInput{ObservationID: added.ObservationID, Confirmation: deleteConfirm}); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := app.GetSleepLogPage(SleepLogPageInput{})
 	if err != nil {
 		t.Fatal(err)
 	}

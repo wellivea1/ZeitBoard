@@ -16,6 +16,11 @@ beforeEach(() => {
   metaTheme.setAttribute("content", "#f3f0e9");
 });
 
+// The log reads a page at a time; these tests fit on one.
+function onePage(log: { status: string; empty: boolean; message: string; entries: unknown[] }) {
+  return { ...log, total: log.entries.length, page: 0, pageSize: 50 };
+}
+
 describe("desktop navigation", () => {
   it("opens a new destination at its top with focus inside it, but not a tab", async () => {
     window.location.hash = "#/plan/tasks";
@@ -321,12 +326,19 @@ describe("desktop navigation", () => {
       suppressed: false,
       sourceLabel: "Manual sleep log",
       provenanceLabel: "manual / user reported",
+      // Newest first, as the desktop lists a night's history.
       history: [
         {
           correctionId: "corr_sleep_01",
           createdLabel: "Mar 2, 6:15 AM",
           reason: "user edit",
           summary: "start moved to Mar 1, 10:30 PM",
+        },
+        {
+          correctionId: "corr_sleep_00",
+          createdLabel: "Mar 2, 6:10 AM",
+          reason: "user edit",
+          summary: "start moved to Mar 1, 10:15 PM",
         },
       ],
     };
@@ -365,11 +377,22 @@ describe("desktop navigation", () => {
             yMinHour: 0,
             yMaxHour: 24,
           }),
-          ListSleepEntries: async () => ({
+          GetSleepSources: async () => ({
             status: "ready",
-            empty: false,
             message: "2 local sleep entries stored on this device.",
-            entries: [correctedEntry, suppressedEntry],
+            total: 2,
+            correctedCount: 1,
+            suppressedCount: 1,
+            sources: [
+              {
+                source: suppressedEntry.sourceLabel,
+                provenance: suppressedEntry.provenanceLabel,
+                total: 2,
+                corrected: 1,
+                suppressed: 1,
+              },
+            ],
+            latestCorrected: correctedEntry,
           }),
         },
       },
@@ -390,7 +413,9 @@ describe("desktop navigation", () => {
 
     // Real correction history drives the inspector; the fixture undo button is gone.
     expect(await screen.findByRole("heading", { name: "1 corrected entry" })).toBeVisible();
+    // The latest change, not the first one ever made.
     expect(screen.getByText("start moved to Mar 1, 10:30 PM")).toBeVisible();
+    expect(screen.queryByText("start moved to Mar 1, 10:15 PM")).toBeNull();
     expect(screen.queryByRole("button", { name: "Undo correction" })).toBeNull();
     expect(screen.queryByText("Wearable sleep overlaps desktop activity")).toBeNull();
 
@@ -433,12 +458,13 @@ describe("desktop navigation", () => {
     (globalThis as { go?: unknown }).go = {
       main: {
         App: {
-          ListSleepEntries: async () => ({
-            status: "empty",
-            empty: true,
-            message: "No sleep entries yet.",
-            entries: [],
-          }),
+          GetSleepLogPage: async () =>
+            onePage({
+              status: "empty",
+              empty: true,
+              message: "No sleep entries yet.",
+              entries: [],
+            }),
         },
       },
     };
@@ -488,20 +514,22 @@ describe("desktop navigation", () => {
     (globalThis as { go?: unknown }).go = {
       main: {
         App: {
-          ListSleepEntries: async () =>
-            saved
-              ? {
-                  status: "ready",
-                  empty: false,
-                  message: "1 local sleep entry stored on this device.",
-                  entries: [entry],
-                }
-              : {
-                  status: "empty",
-                  empty: true,
-                  message: "No sleep entries yet.",
-                  entries: [],
-                },
+          GetSleepLogPage: async () =>
+            onePage(
+              saved
+                ? {
+                    status: "ready",
+                    empty: false,
+                    message: "1 local sleep entry stored on this device.",
+                    entries: [entry],
+                  }
+                : {
+                    status: "empty",
+                    empty: true,
+                    message: "No sleep entries yet.",
+                    entries: [],
+                  },
+            ),
           AddSleepEntry: addSleep,
           GetProposals: async () =>
             saved
@@ -621,21 +649,22 @@ describe("desktop navigation", () => {
     let deleted = false;
     const deleteSleep = vi.fn(async () => {
       deleted = true;
-      return empty;
     });
     (globalThis as { go?: unknown }).go = {
       main: {
         App: {
           // The log reloads when sleep data changes, so the store is stateful.
-          ListSleepEntries: async () =>
-            deleted
-              ? empty
-              : {
-                  status: "ready",
-                  empty: false,
-                  message: "1 local sleep entry stored on this device.",
-                  entries: [entry],
-                },
+          GetSleepLogPage: async () =>
+            onePage(
+              deleted
+                ? empty
+                : {
+                    status: "ready",
+                    empty: false,
+                    message: "1 local sleep entry stored on this device.",
+                    entries: [entry],
+                  },
+            ),
           DeleteSleepObservation: deleteSleep,
         },
       },

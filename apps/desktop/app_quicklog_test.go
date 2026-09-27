@@ -27,7 +27,7 @@ func TestTwoTapsReplaceTheForm(t *testing.T) {
 	}
 
 	// Nothing is in the log yet — the first tap is an intent, not evidence.
-	entries, err := app.ListSleepEntries()
+	entries, err := app.GetSleepLogPage(SleepLogPageInput{})
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestTwoTapsReplaceTheForm(t *testing.T) {
 		t.Error("the unfinished sleep survived being recorded")
 	}
 
-	entries, err = app.ListSleepEntries()
+	entries, err = app.GetSleepLogPage(SleepLogPageInput{})
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestWakingWithNothingMarkedAsksRatherThanGuesses(t *testing.T) {
 		t.Error("the wake time the person just reported was not carried into the question")
 	}
 
-	entries, err := app.ListSleepEntries()
+	entries, err := app.GetSleepLogPage(SleepLogPageInput{})
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -168,7 +168,7 @@ func TestConfirmingRecordsWhatThePersonChose(t *testing.T) {
 		t.Fatalf("not recorded: %s", result.Reason)
 	}
 
-	entries, err := app.ListSleepEntries()
+	entries, err := app.GetSleepLogPage(SleepLogPageInput{})
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -242,7 +242,7 @@ func TestErasingEverythingTakesTheUnfinishedSleepToo(t *testing.T) {
 	if _, err := app.BeginQuickSleep(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := app.DeleteAllSleepData(SleepDeleteAllInput{Confirmation: "DELETE"}); err != nil {
+	if err := app.DeleteAllSleepData(SleepDeleteAllInput{Confirmation: "DELETE"}); err != nil {
 		t.Fatalf("delete all: %v", err)
 	}
 	state, err := app.GetQuickLogState()

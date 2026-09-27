@@ -21,6 +21,11 @@ export interface LoadedOptions<T> {
   /** Turns a failed read into a value the view can show. Without it a failed
    * read leaves the last value in place. */
   fallback?: (reason: unknown) => T;
+  /**
+   * What the read depends on, such as a page number. A new key reads again;
+   * the last value stays in view until the new one lands.
+   */
+  key?: string | number;
 }
 
 export interface Loaded<T> {
@@ -45,6 +50,7 @@ export function useLoaded<T>(load: () => Promise<T>, options: LoadedOptions<T> =
 
   const eventKey = (options.events ?? []).join(" ");
   const expires = options.expires ?? false;
+  const readKey = options.key ?? "";
 
   useEffect(() => {
     const refresh = createCoalescedRefresh(
@@ -73,7 +79,7 @@ export function useLoaded<T>(load: () => Promise<T>, options: LoadedOptions<T> =
       refresh.dispose();
       refreshRef.current = null;
     };
-  }, [eventKey, expires]);
+  }, [eventKey, expires, readKey]);
 
   const [actions] = useState(() => ({
     set: (value: T) => {

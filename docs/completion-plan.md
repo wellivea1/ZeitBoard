@@ -1020,3 +1020,28 @@ The real-app run found two faults that were older than this feature:
 With this, C2's acceptance is met. A refresh action on each calendar's row, instead of adding the
 same calendar again, is a UX follow-up.
 
+### C8 sleep history is read a page at a time — 2026-09-27
+
+The architecture review's bounded-history finding (#16) is resolved for sleep. Four screens each
+read the whole sleep history, a record for every night the owner has ever logged, although none
+needed it:
+
+- **Log** shows fifty nights at a time. It now reads that page from SQLite, newest first, with
+  the total. A page past the end, as after deleting the last page's only night, comes back as
+  the last page.
+- **Week** draws the nights that touch its days. It now reads only those, by their corrected
+  times, so a night an edit moved into view is drawn and one moved away is not.
+- **Rhythm › Sources** and **Data Sources** show per-source counts. The desktop now counts them
+  and sends the counts, with the newest corrected night for the correction inspector.
+
+Deleting a night, or all sleep data, no longer returns the whole history either. Each view
+re-reads what it shows when the change is announced. Along the way:
+
+- Data Sources started out "empty", so until the counts arrived it said there were no sleep
+  records. It now waits, like its other rows.
+- Rhythm's correction inspector showed a night's first change as its latest. A night's history
+  lists the newest change first.
+- The sync row read "last Last synced Sep 27, 2:51 PM".
+
+Medication history is next: each dose tap still returns every dose ever logged.
+

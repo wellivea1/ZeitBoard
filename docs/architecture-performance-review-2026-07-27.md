@@ -29,7 +29,7 @@ behavioral hardening pass.
 | 13 | Complete | Calendar source counts and civil-day buckets are single-pass, and report sleep intervals are placed directly into their first/last touched rows. Loaded locations are reused. |
 | 14 | Partial | Desktop-local agent tools now call explicitly local overview/rhythm paths and backend clients share lifecycle-managed transports. Normal UI overview/rhythm remain backend-first by design and can still wait for the bounded backend timeout before local fallback; asynchronous server projection refresh remains future work. |
 | 15 | Partial | New native import/export, proposal, local-agent, sync, and projection paths use the application or request context. Older Wails facade methods still use `context.Background()` and should move behind context-aware feature services as those services are extracted. |
-| 16 | Partial | Sleep, medication, report, and proposal surfaces bound mounted rows or provide client paging; closed report detail is lazy. Some Go DTOs still load complete private histories before the renderer pages them. Repository-backed pages remain necessary for truly long-lived stores. |
+| 16 | Partial | The sleep log is repository-backed (2026-09-27): Log reads one numbered page of 50 nights from SQLite, the Week board reads only the nights its days touch (as corrected), and Rhythm and Data Sources receive per-source counts computed on the desktop. No sleep surface receives the whole history. Medication history still arrives whole in its DTO and is paged by the renderer; report and proposal surfaces were already bounded. |
 | 17 | Complete | Installed desktop import/export uses native file dialogs. Go performs bounded reads, one-use digest-bound preview/commit, and atomic flushed export replacement; React receives only bounded metadata and a short preview. Browser fixture fallback remains bounded. |
 | 18 | Complete | Medication and rhythm-marker mutation owners accept returned DTOs without immediately refetching their own full projection; invalidation is coalesced for other consumers. |
 | 19 | Partial | One backend-proposal provider owns fetch, pagination, token decisions, stale-generation rejection, and assistant/Approvals publication. The unrelated local approvals provider remains broad and can be split when its next feature requires it. |
@@ -84,7 +84,7 @@ The pass is accepted only when these remain green:
 ## Follow-up order
 
 1. Add repository-backed medication and sleep history pages before increasing
-   supported renderer history sizes.
+   supported renderer history sizes. Sleep done 2026-09-27; medication remains.
 2. ~~Introduce one versioned assistant action registry and derive MCP definitions,
    validation, and presentation metadata from it.~~ Done 2026-09-27 (ADR-0050).
 3. Continue ordered migrations with upgrade fixtures; do not rewrite existing

@@ -155,7 +155,12 @@ function ImportResults({ report }: { report: SleepImportReport }) {
   );
 }
 
-export function SleepImportPanel({ onImported }: { onImported: () => Promise<void> }) {
+export function SleepImportPanel({
+  onImported,
+}: {
+  /** Views listening for sleep changes need not pass this: an import announces itself. */
+  onImported?: () => Promise<void>;
+}) {
   const nativeImportAvailable = hasNativeSleepImport();
   const [selection, setSelection] = useState<ImportSelection | null>(null);
   const [report, setReport] = useState<SleepImportReport | null>(null);
@@ -215,7 +220,7 @@ export function SleepImportPanel({ onImported }: { onImported: () => Promise<voi
       setReport(committed);
       if (committed.importedRows > 0) {
         notifySleepDataChanged();
-        await onImported();
+        await onImported?.();
       }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not import sleep data.");

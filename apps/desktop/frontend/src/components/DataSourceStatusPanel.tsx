@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import type { BackendSyncStatus } from "../data/backendSync";
 import type { CalendarSource } from "../data/calendar";
-import { summarizeSleepSources, type SleepEntriesData } from "../data/sleepEntries";
+import type { SleepSourceSummary, SleepSources } from "../data/sleepEntries";
 import { Icon } from "./Icon";
 
 type SourceRowProps = {
@@ -27,7 +27,7 @@ function SourceRow({ detail, icon, name, state = "off", status }: SourceRowProps
   );
 }
 
-function sleepDetail(summary: ReturnType<typeof summarizeSleepSources>[number]) {
+function sleepDetail(summary: SleepSourceSummary) {
   const changed = [
     summary.corrected > 0 ? `${summary.corrected} corrected` : "",
     summary.suppressed > 0 ? `${summary.suppressed} hidden` : "",
@@ -40,17 +40,17 @@ function sleepDetail(summary: ReturnType<typeof summarizeSleepSources>[number]) 
 }
 
 export function DataSourceStatusPanel({
-  entriesData,
+  sleepSources,
   syncStatus,
   calendarSources,
 }: {
-  entriesData: SleepEntriesData;
+  /** Undefined while loading, like each row here: it waits rather than claiming none. */
+  sleepSources?: SleepSources;
   syncStatus?: BackendSyncStatus;
-  /** Undefined while loading; the row waits rather than claiming none. */
   calendarSources?: CalendarSource[];
 }) {
-  const summaries = summarizeSleepSources(entriesData.entries);
-  const localUnavailable = entriesData.status === "unavailable";
+  const summaries = sleepSources?.sources ?? [];
+  const localUnavailable = sleepSources?.status === "unavailable";
   const importedCalendars = calendarSources?.filter((source) => source.readOnly) ?? [];
   return (
     <section className="data-source-registry" aria-labelledby="source-registry-title">
@@ -58,12 +58,12 @@ export function DataSourceStatusPanel({
         <h2 id="source-registry-title">Connected</h2>
       </div>
       <div className="source-ledger">
-        {summaries.length === 0 ? (
+        {!sleepSources ? null : summaries.length === 0 ? (
           <SourceRow
             icon="clock"
             name="Sleep records"
             detail={
-              localUnavailable ? entriesData.message : "None yet. Log a night or import a file."
+              localUnavailable ? sleepSources.message : "None yet. Log a night or import a file."
             }
             status={localUnavailable ? "Unavailable" : "Empty"}
             state={localUnavailable ? "error" : "off"}
@@ -86,8 +86,12 @@ export function DataSourceStatusPanel({
             name="Server sync"
             detail={
               syncStatus.enabled ? (
+                // The label is a whole phrase ("Last synced Sep 27, 2:51 PM"),
+                // set in lower case to sit inside the row.
                 `Your own server · ${syncStatus.pushedCount} sent, ${syncStatus.pulledCount} received${
-                  syncStatus.lastSyncLabel ? ` · last ${syncStatus.lastSyncLabel}` : ""
+                  syncStatus.lastSyncLabel
+                    ? ` · ${syncStatus.lastSyncLabel.charAt(0).toLowerCase()}${syncStatus.lastSyncLabel.slice(1)}`
+                    : ""
                 }`
               ) : (
                 <>

@@ -406,18 +406,6 @@ func (a *App) AddSleepEntry(input SleepEntryInput) (SleepEntryDTO, error) {
 	return a.sleepEntryByID(record.ObservationID)
 }
 
-func (a *App) ListSleepEntries() (SleepEntriesDTO, error) {
-	store, err := a.requireStore()
-	if err != nil {
-		return SleepEntriesDTO{
-			Status:  "unavailable",
-			Empty:   true,
-			Message: "Local storage is unavailable: " + err.Error(),
-		}, nil
-	}
-	return a.listSleepEntriesWithStore(context.Background(), store)
-}
-
 func (a *App) ExportSleepData() (SleepDataExportDTO, error) {
 	payload, err := a.sleepDataExportPayload(a.applicationContext())
 	if err != nil {
@@ -511,34 +499,30 @@ func utf8Preview(value []byte, maxRunes int) (string, bool) {
 	return string(value[:end]), end < len(value)
 }
 
-func (a *App) DeleteSleepObservation(input SleepDeleteInput) (SleepEntriesDTO, error) {
+// DeleteSleepObservation erases one night for good. The views re-read their
+// own pages.
+func (a *App) DeleteSleepObservation(input SleepDeleteInput) error {
 	defer a.requestLocalAnalysis(recompute.ReasonErasure)
 	if err := requireDeleteConfirmation(input.Confirmation); err != nil {
-		return SleepEntriesDTO{}, err
+		return err
 	}
 	store, err := a.requireStore()
 	if err != nil {
-		return SleepEntriesDTO{}, err
+		return err
 	}
-	if err := store.DeleteSleepObservation(context.Background(), input.ObservationID); err != nil {
-		return SleepEntriesDTO{}, err
-	}
-	return a.listSleepEntriesWithStore(context.Background(), store)
+	return store.DeleteSleepObservation(a.applicationContext(), input.ObservationID)
 }
 
-func (a *App) DeleteAllSleepData(input SleepDeleteAllInput) (SleepEntriesDTO, error) {
+func (a *App) DeleteAllSleepData(input SleepDeleteAllInput) error {
 	defer a.requestLocalAnalysis(recompute.ReasonErasure)
 	if err := requireDeleteConfirmation(input.Confirmation); err != nil {
-		return SleepEntriesDTO{}, err
+		return err
 	}
 	store, err := a.requireStore()
 	if err != nil {
-		return SleepEntriesDTO{}, err
+		return err
 	}
-	if err := store.DeleteAllSleepData(context.Background()); err != nil {
-		return SleepEntriesDTO{}, err
-	}
-	return a.listSleepEntriesWithStore(context.Background(), store)
+	return store.DeleteAllSleepData(a.applicationContext())
 }
 
 func (a *App) CorrectSleepEntry(input SleepCorrectionInput) (SleepEntryDTO, error) {
@@ -1164,22 +1148,6 @@ func refusalDTO(refusal *estimation.EstimationRefusal, fallback string) *Refusal
 		return &RefusalDTO{Code: "estimate_unavailable", Message: fallback}
 	}
 	return &RefusalDTO{Code: string(refusal.Code), Message: refusal.Message}
-}
-
-func (a *App) listSleepEntriesWithStore(ctx context.Context, store *storage.Store) (SleepEntriesDTO, error) {
-	reviews, err := store.ReadSleepReviews(ctx)
-	if err != nil {
-		return SleepEntriesDTO{}, err
-	}
-	if len(reviews) == 0 {
-		return SleepEntriesDTO{Status: "empty", Empty: true, Message: "No sleep entries yet. Add a sleep interval to start a local estimate.", Entries: []SleepEntryDTO{}}, nil
-	}
-	sort.Slice(reviews, func(i, j int) bool { return reviews[i].Observation.StartAt.After(reviews[j].Observation.StartAt) })
-	entries := make([]SleepEntryDTO, 0, len(reviews))
-	for _, review := range reviews {
-		entries = append(entries, sleepEntryFromReview(review))
-	}
-	return SleepEntriesDTO{Status: "ready", Message: fmt.Sprintf("%d local sleep %s stored on this device.", len(entries), plural(len(entries), "entry", "entries")), Entries: entries}, nil
 }
 
 func (a *App) sleepEntryByID(observationID string) (SleepEntryDTO, error) {
