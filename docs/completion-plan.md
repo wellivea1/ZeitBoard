@@ -784,3 +784,18 @@ on the phone.
 
 With this, C3's software is complete. The device run is recorded in `verification.md`: a dose tapped
 on an enrolled phone appeared in the real desktop's history and clinician report.
+
+### C4 one registry of agent actions — 2026-09-27
+
+What an agent may ask ZeitBoard to do is now listed once, in `core/agentactions` (ADR-0050).
+Each action records its kind, the surfaces that offer it, its tool wording and its card title.
+The same package holds the task target's schema and rules. The chat assistant's schema prompt and
+validation, both MCP tool lists and budgets, the local endpoint's dispatch and the proposal cards
+all read the registry. A test holds the three contracts' action enums to it.
+
+The copies had already drifted. The local endpoint accepted an empty timing bound the server
+refused, and the two MCP endpoints described the same tool differently. Both now follow the
+registry.
+
+Remaining in C4: propose-only dose logging (the first action added through the registry), and the
+agent smoke tests.

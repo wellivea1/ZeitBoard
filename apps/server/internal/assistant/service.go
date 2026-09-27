@@ -12,6 +12,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"non24.app/core/agentactions"
 	"non24.app/core/agentpolicy"
 	"non24.app/core/domain"
 	"non24.app/core/scheduling"
@@ -144,43 +145,33 @@ func parseModelAction(text string) (modelAction, error) {
 	if err := dec.Decode(&action); err != nil {
 		return modelAction{}, err
 	}
-	if err := validateAction(action); err != nil {
+	if err := validateAction(action, agentactions.ChatAssistant); err != nil {
 		return modelAction{}, err
 	}
 	action.Answer = safeAnswer(action.Answer)
 	return action, nil
 }
 
-func validateAction(action modelAction) error {
+// validateAction accepts an answer, or a proposal the surfaces it came from
+// may make (the action registry decides which) with a valid target.
+func validateAction(action modelAction, surfaces agentactions.Surface) error {
 	if utf8.RuneCountInString(action.Answer) > 2000 {
 		return errors.New("assistant answer is too long")
 	}
 	if action.SchemaVersion != SchemaVersion {
 		return errors.New("unsupported action schema version")
 	}
-	switch action.RecommendedAction {
-	case "answer_only":
+	switch {
+	case action.RecommendedAction == "answer_only":
 		if action.Target != nil {
 			return errors.New("answer_only must not include a target")
 		}
-	case "propose_move_task", "propose_place_task", "propose_reminder_shift":
-		if action.Target == nil || !contextIdentifierPattern.MatchString(action.Target.TaskID) {
+	case agentactions.IsProposal(action.RecommendedAction, surfaces):
+		if action.Target == nil {
 			return errors.New("proposal action requires a task target")
 		}
-		if action.Target.ReminderID != "" && !contextIdentifierPattern.MatchString(action.Target.ReminderID) {
-			return errors.New("proposal reminder id is invalid")
-		}
-		if action.Target.DurationMinutes < 0 || action.Target.DurationMinutes > 1440 {
-			return errors.New("proposal duration is outside the allowed range")
-		}
-		if action.Target.PreferredAfterWakeMinutes != nil && (*action.Target.PreferredAfterWakeMinutes < 0 || *action.Target.PreferredAfterWakeMinutes > 1440) {
-			return errors.New("proposal wake offset is outside the allowed range")
-		}
-		if (action.Target.EarliestStartAt != nil && action.Target.EarliestStartAt.IsZero()) || (action.Target.LatestFinishAt != nil && action.Target.LatestFinishAt.IsZero()) {
-			return errors.New("proposal timing bounds are invalid")
-		}
-		if action.Target.EarliestStartAt != nil && action.Target.LatestFinishAt != nil && !action.Target.EarliestStartAt.Before(*action.Target.LatestFinishAt) {
-			return errors.New("proposal finish must be after its start")
+		if err := action.Target.Validate(); err != nil {
+			return fmt.Errorf("proposal target is invalid: %w", err)
 		}
 	default:
 		return errors.New("unknown recommended action")
@@ -188,20 +179,22 @@ func validateAction(action modelAction) error {
 	return nil
 }
 
+// HandleDirectProposal creates a pending proposal an agent asked for through
+// either MCP endpoint; both relay here.
 func (s *Service) HandleDirectProposal(ctx context.Context, device store.Device, req DirectProposalRequest) (MessageResponse, error) {
 	if req.SchemaVersion != SchemaVersion {
 		return MessageResponse{}, errors.New("unsupported schema version")
+	}
+	if !agentactions.IsProposal(req.RecommendedAction, agentactions.AnyMCP) {
+		return MessageResponse{}, errors.New("direct proposal requires a propose action")
 	}
 	action := modelAction{
 		SchemaVersion:     req.SchemaVersion,
 		RecommendedAction: req.RecommendedAction,
 		Target:            req.Target,
 	}
-	if err := validateAction(action); err != nil {
+	if err := validateAction(action, agentactions.AnyMCP); err != nil {
 		return MessageResponse{}, err
-	}
-	if action.RecommendedAction == "answer_only" {
-		return MessageResponse{}, errors.New("direct proposal requires a propose action")
 	}
 	if req.Context.ZoneID == "" {
 		req.Context.ZoneID = "UTC"

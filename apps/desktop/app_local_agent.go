@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"non24.app/core/agentactions"
 	"non24.app/core/agentpolicy"
 	"non24.app/desktop/internal/localagent"
 )
@@ -34,17 +35,8 @@ type localAgentQuestion struct {
 	Message string `json:"message"`
 }
 
-type localAgentProposalTarget struct {
-	TaskID                    string     `json:"task_id"`
-	EarliestStartAt           *time.Time `json:"earliest_start_at,omitempty"`
-	LatestFinishAt            *time.Time `json:"latest_finish_at,omitempty"`
-	DurationMinutes           int        `json:"duration_minutes,omitempty"`
-	PreferredAfterWakeMinutes *int       `json:"preferred_after_wake_minutes,omitempty"`
-	ReminderID                string     `json:"reminder_id,omitempty"`
-}
-
 type localAgentProposalArguments struct {
-	Target localAgentProposalTarget `json:"target"`
+	Target agentactions.Target `json:"target"`
 }
 
 var localAgentIdentifierPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{2,79}$`)
@@ -211,10 +203,11 @@ func (c desktopLocalCapability) CallTool(ctx context.Context, name string, argum
 		value, err = c.app.applyAppearanceTool(arguments)
 	case "ask_zeitboard_facts":
 		value, err = c.app.answerLocalFacts(ctx, arguments)
-	case "propose_move_task", "propose_place_task", "propose_reminder_shift":
-		value, err = c.app.createLocalAgentProposal(ctx, name, arguments)
 	default:
-		return nil, localagent.UserError("Unknown ZeitBoard tool.")
+		if !agentactions.IsProposal(name, agentactions.LocalMCP) {
+			return nil, localagent.UserError("Unknown ZeitBoard tool.")
+		}
+		value, err = c.app.createLocalAgentProposal(ctx, name, arguments)
 	}
 	if err != nil {
 		return nil, err
@@ -317,14 +310,8 @@ func (a *App) createLocalAgentProposal(ctx context.Context, action string, argum
 	}
 	input.Target.TaskID = strings.TrimSpace(input.Target.TaskID)
 	input.Target.ReminderID = strings.TrimSpace(input.Target.ReminderID)
-	if !localAgentIdentifierPattern.MatchString(input.Target.TaskID) || (input.Target.ReminderID != "" && !localAgentIdentifierPattern.MatchString(input.Target.ReminderID)) {
-		return localAgentProposalResult{}, localagent.UserError("Proposal target fields are invalid. No proposal was created.")
-	}
-	if input.Target.DurationMinutes < 0 || input.Target.DurationMinutes > 1440 || (input.Target.PreferredAfterWakeMinutes != nil && (*input.Target.PreferredAfterWakeMinutes < 0 || *input.Target.PreferredAfterWakeMinutes > 1440)) {
-		return localAgentProposalResult{}, localagent.UserError("Proposal timing fields are outside the allowed range. No proposal was created.")
-	}
-	if input.Target.EarliestStartAt != nil && input.Target.LatestFinishAt != nil && !input.Target.EarliestStartAt.Before(*input.Target.LatestFinishAt) {
-		return localAgentProposalResult{}, localagent.UserError("The proposal finish must be after its start. No proposal was created.")
+	if err := input.Target.Validate(); err != nil {
+		return localAgentProposalResult{}, localagent.UserError("The proposal target is invalid: " + err.Error() + ". No proposal was created.")
 	}
 	cfg, token, err := a.requireBackendSync()
 	if err != nil {
@@ -335,10 +322,10 @@ func (a *App) createLocalAgentProposal(ctx context.Context, action string, argum
 		return localAgentProposalResult{}, err
 	}
 	request := struct {
-		SchemaVersion     string                   `json:"schema_version"`
-		RecommendedAction string                   `json:"recommended_action"`
-		Target            localAgentProposalTarget `json:"target"`
-		Context           assistantContextPayload  `json:"context"`
+		SchemaVersion     string                  `json:"schema_version"`
+		RecommendedAction string                  `json:"recommended_action"`
+		Target            agentactions.Target     `json:"target"`
+		Context           assistantContextPayload `json:"context"`
 	}{"v1", action, input.Target, planning}
 	var response assistantMessageResponse
 	if err := a.newDesktopBackendClient(cfg, token).postJSON(ctx, "/v1/proposals", request, &response); err != nil {

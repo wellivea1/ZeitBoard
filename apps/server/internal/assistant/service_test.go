@@ -7,10 +7,12 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"non24.app/core/agentactions"
 	"non24.app/core/agentpolicy"
 	"non24.app/server/internal/auth"
 	"non24.app/server/internal/provider"
@@ -103,6 +105,31 @@ func TestAssistantRejectsUnknownActionWithoutProposal(t *testing.T) {
 	}
 	if count != 0 {
 		t.Fatalf("proposal count = %d, want 0", count)
+	}
+}
+
+// The model is shown exactly the actions its answer may name.
+func TestModelIsShownExactlyTheActionsItMayName(t *testing.T) {
+	var prompt struct {
+		RecommendedAction string `json:"recommended_action"`
+	}
+	if err := json.Unmarshal(actionSchemaPrompt(), &prompt); err != nil {
+		t.Fatal(err)
+	}
+	shown := strings.Split(prompt.RecommendedAction, "|")
+	for _, id := range shown {
+		action := modelAction{SchemaVersion: SchemaVersion, RecommendedAction: id}
+		if id != "answer_only" {
+			action.Target = &ActionTarget{TaskID: "task_flexible_01"}
+		}
+		if err := validateAction(action, agentactions.ChatAssistant); err != nil {
+			t.Errorf("the model is shown %s, which validation refuses: %v", id, err)
+		}
+	}
+	for _, id := range agentactions.IDs(agentactions.ChatAssistant, agentactions.Proposal) {
+		if !slices.Contains(shown, id) {
+			t.Errorf("%s is offered to the chat assistant but never shown to the model", id)
+		}
 	}
 }
 

@@ -1950,3 +1950,26 @@ The run found four things:
 - the desktop's "Local private data" label no longer holds with sync.
 
 The desktop fixes follow separately.
+
+## One registry of agent actions — 2026-09-27
+
+`core/agentactions` tests:
+
+- every action is complete and unique;
+- every proposal is named `propose_…`, has a card title and says a human must approve it;
+- no action is named for approving, applying, accepting or deciding;
+- direct actions are offered only on the local endpoint;
+- the task target's rules refuse each invalid field;
+- the action enums of `assistant-action`, `direct-proposal-request` and `proposal-response` equal
+  the registry. Removing the chat assistant from one proposal made two enum checks fail.
+
+Each surface is tested against the registry:
+
+- the server connector and the local endpoint list exactly its actions, under its titles and
+  descriptions;
+- the local endpoint shows proposals only while a backend can take them, and charges exactly the
+  registered proposals to the propose budget;
+- every action the model's schema prompt names passes the assistant's validation, and every
+  proposal offered to the chat assistant is named in the prompt.
+
+The core, server and desktop Go suites and the contract fixture check pass.

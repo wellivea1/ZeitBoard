@@ -41,7 +41,9 @@ erase observations.
 `direct-proposal-request.schema.json` and `proposal-response.schema.json` cover the M4
 agent/direct proposal path. The request reuses the assistant action target shape plus a
 request-scoped planning context; the response contains a pending proposal and one-use
-decision token, but no approval/apply operation.
+decision token, but no approval/apply operation. The action enums in these two contracts and in
+`assistant-action.schema.json` must equal the action registry in `core/agentactions` (ADR-0050).
+A test there fails when they differ.
 
 `assistant-snapshot.schema.json` is what an assistant may know about the owner's day, in one
 document (ADR-0049). It covers:

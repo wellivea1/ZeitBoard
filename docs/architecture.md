@@ -72,7 +72,10 @@ store, server-side estimation projections, and the BYOK propose-only assistant
 with one-use approval tokens) and `zeitboard-mcp` (a stateless local adapter
 exposing allowlisted read and propose-only tools to an MCP client; no tool can
 approve or apply). The server may import `non24.app/core` but not Wails. See
-ADR-0009 through ADR-0012 and `self-hosting.md`.
+ADR-0009 through ADR-0012 and `self-hosting.md`. Which actions an agent may ask
+for, on which surface, and what a task proposal may name are defined once in
+`core/agentactions` (ADR-0050). The chat assistant, both MCP tool lists and the
+desktop's proposal cards read that registry.
 
 ### Android
 

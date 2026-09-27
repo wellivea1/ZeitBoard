@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+
+	"non24.app/core/agentactions"
 )
 
 const (
@@ -56,17 +58,25 @@ func ToolDefinitions(proposalsAvailable bool) []ToolDefinition {
 		{Name: "get_medication_timing", Title: "Get Medication Timing Facts", Description: "Read neutral schedule, collision, and aggregate logged-event facts using opaque medication ids. Labels, notes, strengths, clinician text, exact logged timestamps, and event rows are omitted.", InputSchema: emptySchema()},
 		{Name: "list_rhythm_markers", Title: "List Rhythm Markers", Description: "Read marker kind and coarse civil-date ranges. Private notes and exact record timestamps are omitted.", InputSchema: emptySchema()},
 		{Name: "get_appearance", Title: "Get Appearance", Description: "Read the current appearance preset, reduced-stimulation state, and rhythm-linked night rule.", InputSchema: emptySchema()},
-		{Name: "set_appearance", Title: "Set Appearance", Description: "Directly set reversible local display state under ADR-0021. This does not change health or schedule data.", InputSchema: appearanceSchema()},
+		actionTool("set_appearance", appearanceSchema()),
 		{Name: "ask_zeitboard_facts", Title: "Ask ZeitBoard Facts", Description: "Return allowlisted local facts for a question. Medical decisions are refused with the canonical ZeitBoard response.", InputSchema: questionSchema()},
 	}
 	if proposalsAvailable {
-		tools = append(tools,
-			ToolDefinition{Name: "propose_move_task", Title: "Propose Move Task", Description: "Create a pending move-task proposal on the configured self-hosted backend. Human approval is required.", InputSchema: proposalSchema()},
-			ToolDefinition{Name: "propose_place_task", Title: "Propose Place Task", Description: "Create a pending place-task proposal on the configured self-hosted backend. Human approval is required.", InputSchema: proposalSchema()},
-			ToolDefinition{Name: "propose_reminder_shift", Title: "Propose Reminder Shift", Description: "Create a pending reminder-shift proposal on the configured self-hosted backend. Human approval is required.", InputSchema: proposalSchema()},
-		)
+		for _, action := range agentactions.IDs(agentactions.LocalMCP, agentactions.Proposal) {
+			tools = append(tools, actionTool(action, proposalSchema()))
+		}
 	}
 	return tools
+}
+
+// actionTool lists a registered action under the registry's title and
+// description.
+func actionTool(id string, input map[string]any) ToolDefinition {
+	action, ok := agentactions.Lookup(id)
+	if !ok || !action.On(agentactions.LocalMCP) {
+		panic("localagent: " + id + " is not a registered local action")
+	}
+	return ToolDefinition{Name: action.ID, Title: action.Title, Description: action.Description, InputSchema: input}
 }
 
 func KnownTool(name string, proposalsAvailable bool) bool {
@@ -79,12 +89,7 @@ func KnownTool(name string, proposalsAvailable bool) bool {
 }
 
 func IsProposeTool(name string) bool {
-	switch name {
-	case "propose_move_task", "propose_place_task", "propose_reminder_shift":
-		return true
-	default:
-		return false
-	}
+	return agentactions.IsProposal(name, agentactions.LocalMCP)
 }
 
 func emptySchema() map[string]any {
@@ -132,19 +137,7 @@ func proposalSchema() map[string]any {
 		"additionalProperties": false,
 		"required":             []string{"target"},
 		"properties": map[string]any{
-			"target": map[string]any{
-				"type":                 "object",
-				"additionalProperties": false,
-				"required":             []string{"task_id"},
-				"properties": map[string]any{
-					"task_id":                      map[string]any{"type": "string", "pattern": `^[a-z][a-z0-9_-]{2,79}$`},
-					"earliest_start_at":            map[string]any{"type": "string", "format": "date-time"},
-					"latest_finish_at":             map[string]any{"type": "string", "format": "date-time"},
-					"duration_minutes":             map[string]any{"type": "integer", "minimum": 1, "maximum": 1440},
-					"preferred_after_wake_minutes": map[string]any{"type": "integer", "minimum": 0, "maximum": 1440},
-					"reminder_id":                  map[string]any{"type": "string", "pattern": `^[a-z][a-z0-9_-]{2,79}$`},
-				},
-			},
+			"target": agentactions.TargetSchema(),
 		},
 	}
 }
