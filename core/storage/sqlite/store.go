@@ -348,7 +348,7 @@ func (s *Store) initialize(ctx context.Context) error {
 	if err := s.initializeMedicationSync(ctx); err != nil {
 		return err
 	}
-	if err := s.initializeDoseProposals(ctx); err != nil {
+	if err := s.initializeAgentProposals(ctx); err != nil {
 		return err
 	}
 	// Validate the current shape without rewriting development-era records.

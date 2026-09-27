@@ -24,16 +24,17 @@ export function decisionDone(decision: Decision, title: string): string {
   return `${decision === "approved" ? "Accepted" : "Declined"} ${title}.`;
 }
 
-/** The accessible name for deciding on a dose an assistant proposed. */
-export function doseDecisionLabel(decision: Decision, medication: string): string {
+/**
+ * The accessible name for deciding on what an assistant asked for:
+ * "Accept and record the dose of Melatonin", "Decline the task “Taxes”".
+ */
+export function proposalDecisionLabel(decision: Decision, action: string, subject: string): string {
   return decision === "approved"
-    ? `Accept and record the proposed dose of ${medication}`
-    : `Decline the proposed dose of ${medication}`;
+    ? `${decisionButton("approved")} and ${action} ${subject}`
+    : `${decisionButton("rejected")} ${subject}`;
 }
 
-/** What is announced once a proposed dose is decided. */
-export function doseDecisionDone(decision: Decision, medication: string): string {
-  return decision === "approved"
-    ? `Recorded the dose of ${medication}.`
-    : `Declined the dose of ${medication}.`;
+/** What is announced once it is decided: "Recorded the dose of Melatonin." */
+export function proposalDecisionDone(decision: Decision, done: string, subject: string): string {
+  return decision === "approved" ? `${done} ${subject}.` : `Declined ${subject}.`;
 }

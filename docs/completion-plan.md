@@ -909,3 +909,31 @@ Building it found:
 
 With C4's smoke coverage complete, what remains is its wording on "task/calendar operations",
 reviewed next.
+
+configured provider.
+
+### C4 an agent can propose a task — 2026-09-27
+
+"Remind me to call the pharmacy, fifteen minutes, before Friday" now reaches ZeitBoard from a
+voice client. `propose_add_task` names a one-line title in the owner's words, its length and
+optional bounds. Like a proposed dose, it waits on the owner's computer (ADR-0051, extended).
+Accepting adds the task the owner would have typed, and the planner suggests a time for it at
+once.
+
+Doses and tasks now share one local queue (`local_agent_proposals`), one card, one Home entry and
+one history row. A dose's approval records the event, and a task's adds the task, each in the
+same transaction as the decision. The registry names three subjects: schedule changes (resolved
+by the server), doses and new tasks (waiting on the desktop). Its test holds the desktop-only
+subjects to the local endpoint.
+
+Completing, editing or deleting a task stays the owner's. An agent cannot name a task by its
+title, and these are not voice-first acts. With this, every C4 criterion is met:
+
+- the action registry;
+- structured state and proposals for the supported workflows, dose logging and task operations
+  included;
+- no private labels or notes in provider or MCP output;
+- the appearance exception;
+- no self-approval;
+- smoke tests of the local and server paths.
+

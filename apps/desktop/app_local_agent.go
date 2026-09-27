@@ -39,10 +39,6 @@ type localAgentProposalArguments struct {
 	Target agentactions.TaskTarget `json:"target"`
 }
 
-type localAgentDoseArguments struct {
-	Target agentactions.DoseTarget `json:"target"`
-}
-
 var localAgentIdentifierPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{2,79}$`)
 
 type localAgentProposalResult struct {
@@ -214,6 +210,8 @@ func (c desktopLocalCapability) CallTool(ctx context.Context, name string, argum
 			return nil, localagent.UserError("Unknown ZeitBoard tool.")
 		case action.Subject == agentactions.DoseSubject:
 			value, err = c.app.proposeDose(ctx, name, arguments)
+		case action.Subject == agentactions.NewTaskSubject:
+			value, err = c.app.proposeTask(ctx, name, arguments)
 		default:
 			value, err = c.app.createLocalAgentProposal(ctx, name, arguments)
 		}

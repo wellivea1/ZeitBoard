@@ -5,7 +5,7 @@ import { proposalsFixture } from "../data/proposals";
 import { ApprovalsProvider } from "./approvals";
 import { BackendProposalsProvider } from "./backendProposals";
 import { VisitorRequestsProvider, useVisitorRequests } from "./visitorRequests";
-import { DoseProposalsProvider } from "./doseProposals";
+import { AgentProposalsProvider } from "./agentProposals";
 import { ApprovalQueueProvider, useApprovalQueue } from "./approvalQueue";
 import { DecisionHistory, DecisionQueue } from "../components/DecisionQueue";
 import { emptyVisitorRequests, type VisitorRequest } from "../data/visitorRequests";
@@ -44,9 +44,9 @@ function Providers({ children }: { children: ReactNode }) {
     <ApprovalsProvider>
       <BackendProposalsProvider>
         <VisitorRequestsProvider>
-          <DoseProposalsProvider>
+          <AgentProposalsProvider>
             <ApprovalQueueProvider>{children}</ApprovalQueueProvider>
-          </DoseProposalsProvider>
+          </AgentProposalsProvider>
         </VisitorRequestsProvider>
       </BackendProposalsProvider>
     </ApprovalsProvider>
@@ -73,7 +73,7 @@ function install(extra: Record<string, unknown> = {}) {
       pagination: { nextCursor: "backend-page-2", hasMore: true },
     })),
     GetBackendVisitorRequests: vi.fn(async () => visitorPage),
-    GetDoseProposals: vi.fn(async () => ({ pending: [], history: [], nextExpiryAt: "" })),
+    GetAgentProposals: vi.fn(async () => ({ pending: [], history: [], nextExpiryAt: "" })),
     ...extra,
   };
   (globalThis as { go?: unknown }).go = { main: { App: methods } };
@@ -162,33 +162,54 @@ describe("shared approval queue", () => {
     expect(screen.getByText("Email Dr. Okafor")).toBeVisible();
     expect(screen.queryByRole("group", { name: "Filter approvals" })).toBeNull();
   });
-  // A dose an agent proposed is one more decision: counted, shown with the
-  // others, and recorded only when the owner accepts it (ADR-0051).
-  it("counts a proposed dose and records it only when accepted", async () => {
+  // What an agent asked for is one more decision: counted, shown with the
+  // others, and made real only when the owner accepts it (ADR-0051).
+  it("counts an assistant's dose and task and makes them only when accepted", async () => {
+    const base = { state: "pending", createdAt: "2099-01-01T21:12:00Z", expiresAt: expiry };
     const dose = {
-      proposalId: "dose_proposal_01",
+      ...base,
+      proposalId: "agent_proposal_dose",
       title: "Record dose",
-      medicationId: "med_synthetic",
-      medicationLabel: "Synthetic evening tablet",
-      status: "taken",
-      doseAt: "2099-01-01T21:10:00Z",
-      zoneId: "UTC",
-      state: "pending",
-      createdAt: "2099-01-01T21:12:00Z",
-      expiresAt: expiry,
+      dose: {
+        medicationId: "med_synthetic",
+        medicationLabel: "Synthetic evening tablet",
+        status: "taken",
+        doseAt: "2099-01-01T21:10:00Z",
+        zoneId: "UTC",
+      },
     };
-    let queue: Record<string, unknown> = { pending: [dose], history: [], nextExpiryAt: expiry };
-    const decide = vi.fn(async () => {
-      queue = {
-        pending: [],
-        history: [{ ...dose, state: "recorded", decidedAt: "2099-01-01T21:20:00Z" }],
-        nextExpiryAt: "",
-      };
-      return queue;
-    });
+    const task = {
+      ...base,
+      proposalId: "agent_proposal_task",
+      title: "Add task",
+      task: { title: "Call the pharmacy", durationMinutes: 15 },
+    };
+    let queue: Record<string, unknown> = {
+      pending: [dose, task],
+      history: [],
+      nextExpiryAt: expiry,
+    };
+    const decide = vi.fn(
+      async ({ proposalId, decision }: { proposalId: string; decision: string }) => {
+        const decided = proposalId === dose.proposalId ? dose : task;
+        queue = {
+          pending: (queue.pending as (typeof dose | typeof task)[]).filter(
+            (item) => item.proposalId !== proposalId,
+          ),
+          history: [
+            { ...decided, state: decision, decidedAt: "2099-01-01T21:20:00Z" },
+            ...(queue.history as unknown[]),
+          ],
+          nextExpiryAt: expiry,
+        };
+        return queue;
+      },
+    );
     const medicationsChanged = vi.fn();
+    const tasksChanged = vi.fn();
     window.addEventListener("zeitboard:medication-data-changed", medicationsChanged);
-    install({ GetDoseProposals: vi.fn(async () => queue), DecideDoseProposal: decide });
+    window.addEventListener("zeitboard:sleep-data-changed", tasksChanged);
+    install({ GetAgentProposals: vi.fn(async () => queue), DecideAgentProposal: decide });
     render(
       <Providers>
         <Probe />
@@ -196,18 +217,32 @@ describe("shared approval queue", () => {
         <DecisionHistory />
       </Providers>,
     );
-    expect(await screen.findByText("14 ready")).toBeVisible();
+    expect(await screen.findByText("15 ready")).toBeVisible();
     expect(screen.getByText("Synthetic evening tablet")).toBeVisible();
+    expect(screen.getByText("Call the pharmacy")).toBeVisible();
     fireEvent.click(
       screen.getByRole("button", {
-        name: "Accept and record the proposed dose of Synthetic evening tablet",
+        name: "Accept and record the dose of Synthetic evening tablet",
       }),
     );
-    expect(await screen.findByText("13 ready")).toBeVisible();
-    expect(decide).toHaveBeenCalledWith({ proposalId: "dose_proposal_01", decision: "record" });
+    expect(await screen.findByText("14 ready")).toBeVisible();
+    expect(decide).toHaveBeenLastCalledWith({
+      proposalId: "agent_proposal_dose",
+      decision: "approved",
+    });
     expect(medicationsChanged).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Decline the task “Call the pharmacy”" }));
+    expect(await screen.findByText("13 ready")).toBeVisible();
+    expect(decide).toHaveBeenLastCalledWith({
+      proposalId: "agent_proposal_task",
+      decision: "rejected",
+    });
+    // Declining adds no task, so nothing is refreshed for it.
+    expect(tasksChanged).not.toHaveBeenCalled();
     expect(screen.getByText("Record dose · Synthetic evening tablet")).toBeInTheDocument();
+    expect(screen.getByText("Add task · Call the pharmacy")).toBeInTheDocument();
     window.removeEventListener("zeitboard:medication-data-changed", medicationsChanged);
+    window.removeEventListener("zeitboard:sleep-data-changed", tasksChanged);
   });
   it("retains counts and requests during a failed refresh and recovers when disabled", async () => {
     const list = vi

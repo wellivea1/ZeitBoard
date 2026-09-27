@@ -48,6 +48,19 @@ type taskRowQueryer interface {
 }
 
 func (s *Store) AddTask(ctx context.Context, record TaskRecord) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := addTaskTx(ctx, tx, record); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// addTaskTx adds a new task at its first revision.
+func addTaskTx(ctx context.Context, tx *sql.Tx, record TaskRecord) error {
 	record.Revision = 1
 	if record.UpdatedAt.IsZero() {
 		record.UpdatedAt = record.CreatedAt
@@ -59,7 +72,7 @@ func (s *Store) AddTask(ctx context.Context, record TaskRecord) error {
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx,
+	_, err = tx.ExecContext(ctx,
 		`INSERT INTO local_tasks(task_id, status, revision, created_at, payload_json) VALUES(?, ?, ?, ?, ?)`,
 		record.TaskID, record.Status, record.Revision, formatSQLiteTime(record.CreatedAt), encoded,
 	)

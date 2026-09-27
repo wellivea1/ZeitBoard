@@ -167,9 +167,12 @@ type snapshotNeedsYou struct {
 }
 
 type snapshotTasks struct {
-	Count     int            `json:"count"`
-	Truncated bool           `json:"truncated"`
-	Items     []agentTaskDTO `json:"items"`
+	Count     int  `json:"count"`
+	Truncated bool `json:"truncated"`
+	// PendingTaskProposals counts tasks an agent proposed that wait for the
+	// owner (ADR-0051).
+	PendingTaskProposals int            `json:"pending_task_proposals"`
+	Items                []agentTaskDTO `json:"items"`
 }
 
 type snapshotMedication struct {
@@ -229,14 +232,18 @@ func (a *App) assistantSnapshot(ctx context.Context, now time.Time) (assistantSn
 	if err != nil {
 		return assistantSnapshot{}, localAgentProjectionError("snapshot", err)
 	}
-	doseProposals, err := store.DoseProposals(ctx, now)
+	agentProposals, err := store.AgentProposals(ctx, now)
 	if err != nil {
 		return assistantSnapshot{}, localAgentProjectionError("snapshot", err)
 	}
-	waitingDoses := 0
-	for _, proposal := range doseProposals {
-		if proposal.State == storage.DoseProposalPending {
+	waitingDoses, waitingTasks := 0, 0
+	for _, proposal := range agentProposals {
+		switch {
+		case proposal.State != storage.AgentProposalPending:
+		case proposal.Dose != nil:
 			waitingDoses++
+		case proposal.Task != nil:
+			waitingTasks++
 		}
 	}
 	cfg, err := a.loadBackendSyncConfig()
@@ -254,7 +261,7 @@ func (a *App) assistantSnapshot(ctx context.Context, now time.Time) (assistantSn
 		Sleep:         snapshotSleepOf(computed.state, pending != nil, clock),
 		Plans:         snapshotPlansOf(computed, proposals, clock),
 		NeedsYou:      snapshotNeedsYou{Suggestions: len(proposals.pending), TaskConflicts: syncStatus.TaskConflictCount},
-		Tasks:         &snapshotTasks{Count: tasks.Count, Truncated: tasks.Truncated, Items: tasks.Tasks},
+		Tasks:         &snapshotTasks{Count: tasks.Count, Truncated: tasks.Truncated, PendingTaskProposals: waitingTasks, Items: tasks.Tasks},
 		Medication: &snapshotMedication{
 			Status: medication.Status, Count: medication.MedicationCount,
 			Truncated: medication.Truncated, PendingDoseProposals: waitingDoses, Items: medication.Medications,

@@ -15,9 +15,9 @@ const (
 )
 
 type Capability interface {
-	// TaskProposalsAvailable reports whether a server can take task
-	// proposals: its scheduler resolves them. Dose proposals wait on this
-	// computer and are always available.
+	// TaskProposalsAvailable reports whether a server can take schedule
+	// proposals: its scheduler resolves them. Proposals that wait on this
+	// computer, such as a dose or a new task, are always available.
 	TaskProposalsAvailable(context.Context) bool
 	CallTool(context.Context, string, json.RawMessage) (json.RawMessage, error)
 }
@@ -66,11 +66,10 @@ func ToolDefinitions(taskProposals bool) []ToolDefinition {
 		{Name: "ask_zeitboard_facts", Title: "Ask ZeitBoard Facts", Description: "Return allowlisted local facts for a question. Medical decisions are refused with the canonical ZeitBoard response.", InputSchema: questionSchema()},
 	}
 	for _, action := range agentactions.Offered(agentactions.LocalMCP, agentactions.Proposal) {
-		switch {
-		case action.Subject == agentactions.DoseSubject:
-			tools = append(tools, actionTool(action.ID, proposalSchema(agentactions.DoseTargetSchema())))
-		case taskProposals:
-			tools = append(tools, actionTool(action.ID, proposalSchema(agentactions.TaskTargetSchema())))
+		// A proposal that waits on this computer is always offered; a
+		// schedule change needs a server to resolve it.
+		if action.WaitsOnDesktop() || taskProposals {
+			tools = append(tools, actionTool(action.ID, proposalSchema(agentactions.TargetSchema(action.Subject))))
 		}
 	}
 	return tools
