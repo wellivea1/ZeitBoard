@@ -110,6 +110,7 @@ class AppViewModel(
     val backgroundReadState = container.healthConnectRepository.backgroundReadState
     private val syncGuard = AtomicBoolean(false)
     private val localCorrectionSaveGuard = AtomicBoolean(false)
+    private val doseGuard = AtomicBoolean(false)
     private val mutableSyncBusy = MutableStateFlow(false)
     val syncBusy = mutableSyncBusy.asStateFlow()
     private val mutableSyncError = MutableStateFlow<String?>(null)
@@ -214,7 +215,7 @@ class AppViewModel(
     fun uploadNow() = syncOperation {
         val count = container.evidenceSync.uploadNow().getOrThrow()
         mutableMessage.value = if (count == 0) "Sync finished. Downloaded records and server forecast are up to date as of this check."
-        else "Sync finished; uploaded $count sleep records."
+        else "Sync finished; uploaded $count records."
     }
 
     fun onBackgroundPermissionResult(granted: Set<String>) {
@@ -438,6 +439,36 @@ class AppViewModel(
             container.backendSyncRepository.saveSleepReview(review, start, end, classification, excluded).getOrThrow()
             mutableMessage.value = "Correction saved on this phone and queued for your server."
             container.evidenceSync.refreshForeground()
+        }
+    }
+
+    /**
+     * Records a dose of a medication from the owner's computer, taken or
+     * skipped now (ADR-0048), then asks for an upload. The dose is saved on
+     * the phone first, so an upload that cannot run yet loses nothing.
+     */
+    fun logDose(medicationId: String, status: String) {
+        if (!doseGuard.compareAndSet(false, true)) return
+        viewModelScope.launch {
+            try {
+                container.backendSyncRepository.logDose(medicationId, status).getOrThrow()
+                mutableMessage.value = (if (status == "taken") "Taken" else "Skipped") +
+                    ", recorded now. It uploads with the next sync; correct or delete it on your computer."
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                mutableMessage.value = error.message?.takeIf { it.startsWith("That medication") } ?: "The dose could not be recorded."
+                return@launch
+            } finally {
+                doseGuard.set(false)
+            }
+            try {
+                container.evidenceSync.refreshForeground()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                // The dose is queued; the sync status says what is pending.
+            }
         }
     }
 

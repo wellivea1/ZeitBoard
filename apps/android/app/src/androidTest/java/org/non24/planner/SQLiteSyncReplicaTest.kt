@@ -84,6 +84,46 @@ class SQLiteSyncReplicaTest {
         }
     }
 
+    @Test fun medicationsCarryTheirLatestDoseAndLoseQueuedTapsWhenErased() {
+        val provenance = buildJsonObject { put("acquisition_method", "manual"); put("evidence_status", "user_reported"); put("recorded_at", at.toString()) }
+        val medication = buildJsonObject {
+            put("medication_id", "med_synthetic"); put("label", "Synthetic medication"); put("active", true)
+            put("created_at", at.toString()); put("revision", 1); put("updated_at", at.toString())
+            put("schedule", buildJsonObject { put("kind", "fixed_clock"); put("zone_id", "UTC"); put("civil_times", buildJsonArray { add("22:00") }); put("reminder_enabled", false) })
+        }
+        val dose = buildJsonObject {
+            put("event_id", "dose_synthetic"); put("medication_id", "med_synthetic"); put("dose_at", at.minusSeconds(3600).toString()); put("zone_id", "UTC")
+            put("status", "taken"); put("scheduled", true); put("provenance", provenance)
+        }
+        val correction = buildJsonObject {
+            put("correction_id", "medcor_synthetic"); put("target_event_id", "dose_synthetic"); put("created_at", at.toString())
+            put("reason", "user_edit"); put("changes", buildJsonObject { put("status", "skipped") })
+        }
+        SQLiteLocalUserDataStore(context, databaseName).use { store ->
+            val replica = replica(store)
+            val outbox = SQLiteSyncOutboxStore({ store.readableDatabase }, { store.writableDatabase }).apply { activateScope("synthetic-scope") }
+            replica.apply(PullPage(3, listOf(
+                PulledRecord(1, "med_synthetic_r1", "medication", medication), PulledRecord(2, "dose_synthetic", "medication_event", dose),
+                PulledRecord(3, "medcor_synthetic", "medication_correction", correction),
+            )), at)
+            // The downloaded dose, as its correction left it.
+            val listed = replica.state().medications.single()
+            assertEquals(listOf("22:00"), listed.civilTimes)
+            assertEquals("skipped", listed.lastDose?.status)
+            assertEquals(false, listed.lastDose?.pending)
+            // A tap on this phone is the latest, pending until it uploads.
+            val tap = doseRecord("dose-phone01", listed, "taken", at, ZoneId.of("UTC"))
+            outbox.enqueue(listOf(tap))
+            assertEquals("dose-phone01", replica.state().medications.single().lastDose?.eventId)
+            assertEquals(true, replica.state().medications.single().lastDose?.pending)
+            // Deleting the medication on the computer takes the queued tap too.
+            replica.apply(PullPage(4, listOf(PulledRecord(4, "med_synthetic_r1", "tombstone",
+                buildJsonObject { put("record_id", "med_synthetic_r1"); put("record_kind", "medication") }))), at)
+            assertTrue(replica.state().medications.isEmpty())
+            assertFalse(outbox.contains("dose-phone01"))
+        }
+    }
+
     @Test fun invalidPageRollsBackRowsAndCursorTogether() {
         SQLiteLocalUserDataStore(context, databaseName).use { store ->
             val replica = replica(store)

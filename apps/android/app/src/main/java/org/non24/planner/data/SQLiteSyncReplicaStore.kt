@@ -123,7 +123,44 @@ class SQLiteSyncReplicaStore(private val database: () -> SQLiteDatabase) : SyncR
             downloadedAt = meta("downloaded_at")?.let(Instant::parse),
             totalTaskCount = database().rawQuery("SELECT COUNT(DISTINCT target_id) FROM sync_replica WHERE kind = 'task'", null).use { it.moveToFirst(); it.getInt(0) },
             sleepSources = sources, totalSleepSourceCount = totalSleepSources,
+            medications = medications(),
         )
+    }
+
+    /**
+     * The current revision of each active medication, with its latest dose:
+     * downloaded doses after their corrections, and the phone's own taps,
+     * pending until they have uploaded.
+     */
+    private fun medications(): List<CompanionMedication> {
+        val db = database()
+        fun rows(query: String): List<Pair<String, JsonObject>> = db.rawQuery(query, null).use { cursor ->
+            buildList { while (cursor.moveToNext()) add(cursor.getString(0) to Json.parseToJsonElement(cursor.getString(1)).jsonObject) }
+        }
+        val current = rows("""SELECT r.record_id, r.payload FROM sync_replica r WHERE r.kind = 'medication'
+            AND NOT EXISTS (SELECT 1 FROM sync_replica newer WHERE newer.kind = 'medication'
+                AND newer.target_id = r.target_id AND newer.revision > r.revision)
+            ORDER BY r.seq LIMIT 64""").map { (id, payload) -> parseSyncedMedication(id, payload) }.filter { it.active }
+        if (current.isEmpty()) return emptyList()
+        val corrections = rows("SELECT target_id, payload FROM sync_replica WHERE kind = 'medication_correction'")
+            .groupBy({ it.first }, { it.second })
+        val downloaded = rows("SELECT record_id, payload FROM sync_replica WHERE kind = 'medication_event' ORDER BY seq DESC LIMIT 500")
+            .mapNotNull { (id, payload) -> effectiveDose(parseSyncedDose(id, payload), corrections[id].orEmpty()) }
+            .map { CompanionDose(it.eventId, it.status, it.doseAt, it.zoneId, pending = false) to it.medicationId }
+        val downloadedIds = downloaded.map { it.first.eventId }.toSet()
+        val tapped = db.rawQuery("SELECT record_id, payload, synced_at IS NULL FROM sync_outbox WHERE kind = 'medication_event'", null).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    if (cursor.getString(0) in downloadedIds) continue
+                    val dose = parseSyncedDose(cursor.getString(0), Json.parseToJsonElement(cursor.getString(1)).jsonObject)
+                    add(CompanionDose(dose.eventId, dose.status, dose.doseAt, dose.zoneId, pending = cursor.getInt(2) == 1) to dose.medicationId)
+                }
+            }
+        }
+        val latest = (downloaded + tapped).groupBy({ it.second }, { it.first }).mapValues { (_, doses) -> doses.maxBy { it.doseAt } }
+        return current.map {
+            CompanionMedication(it.medicationId, it.label, it.scheduleKind, it.civilTimes, it.scheduleZoneId, latest[it.medicationId])
+        }
     }
 
     override fun cachedReview(observationId: String): SleepReview? = meta("review:$observationId")?.let { parseSleepReview(Json.parseToJsonElement(it).jsonObject) }
@@ -181,7 +218,9 @@ class SQLiteSyncReplicaStore(private val database: () -> SQLiteDatabase) : SyncR
         }
         if (erasedKind == "medication" && revisionOf != null) {
             // Any erased revision means the medication was deleted, with every
-            // dose and dose correction of it (ADR-0048).
+            // dose and dose correction of it (ADR-0048), including a dose
+            // tapped on this phone that has not uploaded yet.
+            db.delete("sync_outbox", "kind = 'medication_event' AND observation_id = ?", arrayOf(revisionOf))
             db.delete("sync_replica", "kind = 'medication_correction' AND target_id IN " +
                 "(SELECT record_id FROM sync_replica WHERE kind = 'medication_event' AND target_id = ?)", arrayOf(revisionOf))
             db.delete("sync_replica", "kind IN ('medication', 'medication_event') AND target_id = ?", arrayOf(revisionOf))

@@ -150,6 +150,24 @@ class BackendSyncRepository(
         result
     }
 
+    /**
+     * Records a dose of a medication from the owner's computer, taken or
+     * skipped now, and queues it for upload (ADR-0048). It shows at once as
+     * pending and uploads with the next sync.
+     */
+    suspend fun logDose(medicationId: String, status: String): Result<Unit> = locked {
+        syncResult {
+            val config = configuration() ?: error("Not enrolled")
+            val medication = replica.state().medications.firstOrNull { it.medicationId == medicationId }
+                ?: error("That medication is no longer on your computer's list.")
+            val record = doseRecord("dose-" + UUID.randomUUID().toString().replace("-", "").take(24), medication, status, now(), config.homeZone())
+            outbox.enqueue(listOf(record))
+            check(outbox.contains(record.recordId)) { "That medication has been deleted." }
+            companionState.value = replica.state()
+            publishIdle(config)
+        }
+    }
+
     suspend fun enqueue(episodes: List<SleepEpisode>): Int = locked {
         val config = configuration() ?: return@locked 0
         enqueueLocked(config, episodes)

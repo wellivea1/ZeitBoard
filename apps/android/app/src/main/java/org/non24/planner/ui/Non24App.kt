@@ -90,6 +90,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import org.non24.planner.data.DurableLocalDataState
 import org.non24.planner.data.SyncState
+import org.non24.planner.data.CompanionMedication
 import org.non24.planner.data.CompanionState
 import org.non24.planner.data.fixturePlans
 import org.non24.planner.data.SleepReview
@@ -221,8 +222,10 @@ fun Non24App(
                 composable(Destination.MEDICATION.route) {
                     MedicationScreen(
                         state = uiState,
+                        medications = companion.medications,
                         saveState = medicationSaveState,
                         onRetryLocalData = viewModel::retryLocalData,
+                        onLogDose = viewModel::logDose,
                         onSave = viewModel::addMedicationEvent,
                         onSaveResultConsumed = viewModel::consumeMedicationSaveResult,
                     )
@@ -805,8 +808,10 @@ private fun SyncedTasksScreen(companion: CompanionState, state: AppUiState, sync
 @Composable
 private fun MedicationScreen(
     state: AppUiState,
+    medications: List<CompanionMedication>,
     saveState: MedicationSaveState,
     onRetryLocalData: () -> Unit,
+    onLogDose: (String, String) -> Unit,
     onSave: (String, String) -> Unit,
     onSaveResultConsumed: (Long) -> Unit,
 ) {
@@ -826,11 +831,22 @@ private fun MedicationScreen(
 
     ScreenColumn {
         ScreenHeader(
-            kicker = "Local record",
-            title = "Medication event",
-            description = "Record what happened without medication or timing advice.",
+            kicker = "Doses",
+            title = if (medications.isEmpty()) "Medication event" else "Record a dose",
+            description = if (medications.isEmpty()) "Record what happened without medication or timing advice."
+                else "Your medications from your computer. A tap records the dose now and uploads it with the next sync.",
         )
         DurableLocalDataNotice(state.localDataState, onRetryLocalData)
+
+        if (medications.isNotEmpty()) {
+            SyncedDoses(medications, state.settings.use24HourTime, onLogDose)
+            SectionHeading("Something not on the list")
+            Text(
+                "Kept on this phone only; it does not upload.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
 
         RuledSection {
             DenseTextField(
@@ -951,8 +967,8 @@ private fun SettingsScreen(
                 "Imported sleep snapshots, corrections, and medication events are stored " +
                     "in ZeitBoard's app-private database.",
             )
-            PrivacyLine("No analytics, telemetry or tracking SDKs. Connecting explicitly enables sleep uploads to your own server over TLS.")
-            PrivacyLine("Health Connect sleep, provider revisions and saved sleep corrections upload, including corrections made before enrollment and their source observations. Sample records and medication events stay on this device.")
+            PrivacyLine("No analytics, telemetry or tracking SDKs. Connecting explicitly enables uploads to your own server over TLS.")
+            PrivacyLine("Health Connect sleep, provider revisions, saved sleep corrections and doses recorded against your computer's medications upload, including corrections made before enrollment and their source observations. Sample records and free-text medication events stay on this device.")
             PrivacyLine("Medication labels and exact behavioral timestamps are never logged.")
         }
     }
@@ -1025,8 +1041,9 @@ private fun BackendConnectionSection(
         (error ?: status.lastError)?.let { InfoStrip(it) }
         if (!connected || editing) {
             Text(
-                "Connect to download your server's forecasts and tasks, and upload permitted recent Health Connect sleep and provider revisions. " +
-                    "Saved sleep corrections also upload, including those made before enrollment and their original source observations. Sample records and medication events are excluded from uploads.",
+                "Connect to download your server's forecasts, tasks and medications, and upload permitted recent Health Connect sleep and provider revisions. " +
+                    "Saved sleep corrections and doses recorded against your computer's medications also upload, including corrections made before enrollment and their original source observations. " +
+                    "Sample records and free-text medication events are excluded from uploads.",
                 style = MaterialTheme.typography.bodySmall,
             )
             if (connected) InfoStrip(
@@ -1186,6 +1203,55 @@ private fun DataRow(label: String, value: String) {
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.Medium,
         )
+    }
+}
+
+/**
+ * The owner's medications from their computer (ADR-0048), each with its usual
+ * time, its latest dose and a Taken and a Skipped button. Nothing here gives
+ * medication or timing advice: it records what the owner says happened.
+ */
+@Composable
+private fun SyncedDoses(
+    medications: List<CompanionMedication>,
+    use24HourTime: Boolean,
+    onLogDose: (String, String) -> Unit,
+) {
+    val zone = ZoneId.systemDefault()
+    val now = Instant.now()
+    RuledSection(verticalPadding = 0.dp, spacing = 0.dp) {
+        medications.forEachIndexed { index, medication ->
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(medication.label, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(
+                    listOfNotNull(usualTimes(medication, zone, use24HourTime), lastDoseText(medication.lastDose, now, zone, use24HourTime))
+                        .joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PrimaryButton(
+                        text = "Taken",
+                        onClick = { onLogDose(medication.medicationId, "taken") },
+                        modifier = Modifier.semantics { contentDescription = "Record ${medication.label} taken now" },
+                    )
+                    SecondaryButton(
+                        text = "Skipped",
+                        onClick = { onLogDose(medication.medicationId, "skipped") },
+                        modifier = Modifier.semantics { contentDescription = "Record ${medication.label} skipped now" },
+                    )
+                }
+            }
+            if (index < medications.lastIndex) {
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 14.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                )
+            }
+        }
     }
 }
 

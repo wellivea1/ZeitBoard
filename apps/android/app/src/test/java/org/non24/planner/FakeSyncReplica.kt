@@ -10,13 +10,15 @@ import org.non24.planner.domain.SleepEpisode
 internal class FakeReplica : SyncReplicaStore {
     private var current = CompanionState()
     var review: SleepReview? = null
+    /** Medications "downloaded" from the owner's computer, for dose logging. */
+    var medications: List<CompanionMedication> = emptyList()
     override fun cachedReview(observationId: String) = review?.takeIf { it.observationId == observationId }
     override fun cacheReview(review: JsonObject) { this.review = parseSleepReview(review) }
     override fun activateScope(scope: String) = Unit
     override fun cursor() = 0L
     override fun apply(page: PullPage, receivedAt: Instant) { check(page.cursor == 0L && page.records.isEmpty()) }
     override fun cache(projection: JsonObject, receivedAt: Instant) { current = CompanionState(parseCompanion(projection), downloadedAt = receivedAt) }
-    override fun state() = current
+    override fun state() = current.copy(medications = medications)
     override fun knownSources() = emptyMap<String, SourceSyncRevision>()
     override fun clear() { current = CompanionState(); review = null }
 }

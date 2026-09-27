@@ -222,7 +222,7 @@ class SQLiteSyncOutboxStore(
         readable().query(
             OUTBOX_TABLE,
             arrayOf(COLUMN_RECORD_ID, COLUMN_KIND, COLUMN_PAYLOAD),
-            null,
+            "$COLUMN_KIND IN ('observation', 'correction')",
             null,
             null,
             null,
@@ -319,5 +319,16 @@ internal fun sourceRevisionFromPayload(kind: String, payload: String): Instant {
     )
 }
 
+/**
+ * What a queued record belongs to, stored as its observation_id: the sleep
+ * source of an observation or correction, and the medication of a dose, so
+ * erasing either removes what is still queued for it.
+ */
 internal fun outboxObservationId(kind: String, payload: String): String =
-    Json.parseToJsonElement(payload).jsonObject.string(if (kind == "correction") "target_observation_id" else "observation_id")
+    Json.parseToJsonElement(payload).jsonObject.string(
+        when (kind) {
+            "correction" -> "target_observation_id"
+            "medication_event" -> "medication_id"
+            else -> "observation_id"
+        },
+    )

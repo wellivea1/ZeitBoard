@@ -768,3 +768,19 @@ The companion now:
 
 It does not show or log them yet. The Doses screen against synced medications is next, followed by
 the recorded device run.
+
+### C3 doses on the phone — 2026-09-27
+
+The companion's Doses screen now lists the medications from the owner's computer, each with its
+usual time and latest dose, and a Taken and a Skipped button, as the design sketches them. A tap
+records the dose now in the home zone as an immutable `medication_event`. It shows as uploading
+until the next sync sends it, and the desktop's history and clinician report pick it up. It is
+corrected or deleted on the computer, and deleting the medication there also removes a tap still
+waiting to upload.
+
+The latest dose is the effective one: downloaded doses are taken after their corrections, applied
+in creation order as the desktop applies them. Free-text events for anything not on the list stay
+on the phone.
+
+With this, C3's software is complete. The device run is recorded in `verification.md`: a dose tapped
+on an enrolled phone appeared in the real desktop's history and clinician report.

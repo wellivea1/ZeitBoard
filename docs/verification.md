@@ -1900,3 +1900,53 @@ JVM:
 Instrumented, on the `ZeitBoard_Completion_Test` emulator (8 replica tests): a medication, its dose,
 the dose's correction and a marker were all kept, and a medication tombstone left only the marker.
 Android unit tests, lint and the debug build pass.
+
+## Doses on the phone — 2026-09-27
+
+JVM:
+
+- a tap produces one valid `medication_event`: now, truncated to the second, in the home zone,
+  user-reported, and never marked scheduled, since adherence counts only explicit marks
+  (ADR-0027), as on the desktop;
+- an unknown status is refused;
+- corrections apply in creation order, and an exclusion hides the dose;
+- the words match the design ("Usually 10:00 PM", "Usually 10:00 PM New York time" when the phone
+  is elsewhere, "Last taken yesterday at 10:05 PM", "…, uploading");
+- the repository queues exactly one dose for a listed medication and none for one no longer on the
+  list.
+
+Instrumented, on the emulator (9 replica tests): a downloaded dose appears as its correction left it,
+a tap on the phone becomes the latest dose and is marked pending, and a medication tombstone removes
+the medication and the queued tap.
+
+## Medications and doses across devices, recorded run — 2026-09-27
+
+The server was a disposable local harness: one synthetic store and API, served over HTTP on the
+phone's loopback (through `adb reverse`) and over self-signed HTTPS for the desktop. The phone was
+the `ZeitBoard_Completion_Test` emulator.
+
+The opt-in integration test `aDoseTappedOnThePhoneReachesTheComputer`:
+
+- a second device uploaded a medication definition;
+- the phone's real repository listed it, recorded a dose and uploaded it;
+- the other device downloaded that dose under the phone's event id.
+
+Then the real apps:
+
+- The desktop (disposable dev profile) enrolled with the harness and uploaded its medication.
+- The phone enrolled through Settings. Its Doses screen listed both medications with their usual
+  time and latest dose.
+- A Taken tap for Melatonin showed "Last taken today at 00:46".
+- The desktop's next sync pulled the tap into Medications, both the quick doses and the history
+  ("Taken · Melatonin · Sun Sep 27, 12:46 AM EDT … inside a predicted sleep window"). It also
+  reached the clinician report, aliased as "Medication 1" and not counted as scheduled.
+
+The run found four things:
+
+- the phone's Settings still said medication events never upload (corrected);
+- "UTC time" should read "UTC" (now fixed);
+- two desktop phrases state another zone's times as if they were local (a schedule in UTC, a dose
+  recorded in UTC);
+- the desktop's "Local private data" label no longer holds with sync.
+
+The desktop fixes follow separately.
