@@ -53,4 +53,25 @@ describe("Wails bridge lookup", () => {
     expect(findWailsMethod(root, ["Run"])).toBeUndefined();
     expect(findWailsMethod({ go: "invalid" }, ["Run"])).toBeUndefined();
   });
+
+  // Found in the running app: Wails rejects with a Go error's bare message,
+  // so every screen showed its generic fallback, never the reason.
+  it("turns a Go error into an Error carrying its message", async () => {
+    const refusal = new Error("already an Error");
+    const root = {
+      go: {
+        main: {
+          App: {
+            Refuse: () => Promise.reject("Your calendar did not accept this sign-in."),
+            Throw: () => Promise.reject(refusal),
+          },
+        },
+      },
+    };
+
+    await expect(findWailsMethod(root, ["Refuse"])?.()).rejects.toEqual(
+      new Error("Your calendar did not accept this sign-in."),
+    );
+    await expect(findWailsMethod(root, ["Throw"])?.()).rejects.toBe(refusal);
+  });
 });

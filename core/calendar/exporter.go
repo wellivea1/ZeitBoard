@@ -50,38 +50,99 @@ func ExportOwnedICS(events []Event, generatedAt time.Time) ([]byte, error) {
 		"X-WR-CALNAME:" + escapeText("ZeitBoard placements"),
 	}
 	for _, event := range owned {
-		startLine, endLine, err := exportInterval(event)
+		eventLines, err := ownedEventLines(event, generatedAt)
 		if err != nil {
-			return nil, fmt.Errorf("event %q: %w", event.EventID, err)
+			return nil, err
 		}
-		transparency := "OPAQUE"
-		if !event.Busy {
-			transparency = "TRANSPARENT"
-		}
-		lines = append(lines,
-			"BEGIN:VEVENT",
-			"UID:"+event.EventID+"@zeitboard.local",
-			"DTSTAMP:"+generatedAt.UTC().Format("20060102T150405Z"),
-			"CREATED:"+event.CreatedAt.UTC().Format("20060102T150405Z"),
-			startLine,
-			endLine,
-			"SUMMARY:"+escapeText(event.Title),
-			"STATUS:CONFIRMED",
-			"TRANSP:"+transparency,
-			"X-ZEITBOARD-TASK-ID:"+event.TaskID,
-			"X-ZEITBOARD-TASK-REVISION:"+fmt.Sprintf("%d", event.TaskRevision),
-			"X-ZEITBOARD-PROPOSAL-ID:"+event.ProposalID,
-		)
-		if event.Location != "" {
-			lines = append(lines, "LOCATION:"+escapeText(event.Location))
-		}
-		if event.Notes != "" {
-			lines = append(lines, "DESCRIPTION:"+escapeText(event.Notes))
-		}
-		lines = append(lines, "END:VEVENT")
+		lines = append(lines, eventLines...)
 	}
 	lines = append(lines, "END:VCALENDAR")
+	return foldLines(lines), nil
+}
 
+// CalendarObject returns one app-owned event as a CalDAV calendar object
+// resource (RFC 4791 section 4.1): a calendar holding only that event, without
+// the METHOD a published calendar carries.
+func CalendarObject(event Event, stamp time.Time) ([]byte, error) {
+	if stamp.IsZero() {
+		return nil, errors.New("calendar object stamp is required")
+	}
+	if event.Ownership != OwnershipAppOwned {
+		return nil, errors.New("only an app-owned event is written to a calendar")
+	}
+	if err := event.Validate(); err != nil {
+		return nil, fmt.Errorf("event %q: %w", event.EventID, err)
+	}
+	eventLines, err := ownedEventLines(event, stamp)
+	if err != nil {
+		return nil, err
+	}
+	lines := append([]string{"BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:" + productID, "CALSCALE:GREGORIAN"}, eventLines...)
+	return foldLines(append(lines, "END:VCALENDAR")), nil
+}
+
+// OwnUID is the UID an app-owned event carries wherever ZeitBoard writes it:
+// the ICS export and a calendar it writes accepted times to.
+func OwnUID(eventID string) string { return eventID + ownUIDSuffix }
+
+const ownUIDSuffix = "@zeitboard.local"
+
+// CalendarObjectUID is the UID of a CalDAV calendar object resource. Every
+// component in one resource shares it (RFC 4791 section 4.1).
+func CalendarObjectUID(data []byte) (string, error) {
+	lines, err := unfoldContentLines(string(data))
+	if err != nil {
+		return "", err
+	}
+	for _, line := range lines {
+		if line.name == "UID" && strings.TrimSpace(line.value) != "" {
+			return strings.TrimSpace(line.value), nil
+		}
+	}
+	return "", errors.New("calendar object has no UID")
+}
+
+// OwnEventID names the app-owned event an imported record copies, when the
+// record is ZeitBoard's own event come back from a calendar.
+func OwnEventID(sourceRecordID string) (string, bool) {
+	uid, _, _ := strings.Cut(sourceRecordID, "/")
+	eventID, found := strings.CutSuffix(uid, ownUIDSuffix)
+	return eventID, found && eventID != ""
+}
+
+func ownedEventLines(event Event, stamp time.Time) ([]string, error) {
+	startLine, endLine, err := exportInterval(event)
+	if err != nil {
+		return nil, fmt.Errorf("event %q: %w", event.EventID, err)
+	}
+	transparency := "OPAQUE"
+	if !event.Busy {
+		transparency = "TRANSPARENT"
+	}
+	lines := []string{
+		"BEGIN:VEVENT",
+		"UID:" + OwnUID(event.EventID),
+		"DTSTAMP:" + stamp.UTC().Format("20060102T150405Z"),
+		"CREATED:" + event.CreatedAt.UTC().Format("20060102T150405Z"),
+		startLine,
+		endLine,
+		"SUMMARY:" + escapeText(event.Title),
+		"STATUS:CONFIRMED",
+		"TRANSP:" + transparency,
+		"X-ZEITBOARD-TASK-ID:" + event.TaskID,
+		"X-ZEITBOARD-TASK-REVISION:" + fmt.Sprintf("%d", event.TaskRevision),
+		"X-ZEITBOARD-PROPOSAL-ID:" + event.ProposalID,
+	}
+	if event.Location != "" {
+		lines = append(lines, "LOCATION:"+escapeText(event.Location))
+	}
+	if event.Notes != "" {
+		lines = append(lines, "DESCRIPTION:"+escapeText(event.Notes))
+	}
+	return append(lines, "END:VEVENT"), nil
+}
+
+func foldLines(lines []string) []byte {
 	var output bytes.Buffer
 	for _, line := range lines {
 		for _, folded := range foldContentLine(line) {
@@ -89,7 +150,7 @@ func ExportOwnedICS(events []Event, generatedAt time.Time) ([]byte, error) {
 			output.WriteString("\r\n")
 		}
 	}
-	return output.Bytes(), nil
+	return output.Bytes()
 }
 
 func exportInterval(event Event) (string, string, error) {

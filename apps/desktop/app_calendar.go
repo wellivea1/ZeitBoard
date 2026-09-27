@@ -183,22 +183,15 @@ func (a *App) PreviewCalendarFile(input CalendarFileInput) (CalendarImportDTO, e
 	if err != nil {
 		return CalendarImportDTO{}, err
 	}
-	return calendarImportDTO(set, false), nil
+	return a.calendarImportResult(context.Background(), set, "", false)
 }
 
 func (a *App) ImportCalendarFile(input CalendarFileInput) (CalendarImportDTO, error) {
-	store, err := a.requireStore()
-	if err != nil {
-		return CalendarImportDTO{}, err
-	}
 	set, err := parseCalendarFile(input, a.currentTime().UTC())
 	if err != nil {
 		return CalendarImportDTO{}, err
 	}
-	if err := store.ReplaceImportedCalendar(context.Background(), set.Sources[0], set.Events, ""); err != nil {
-		return CalendarImportDTO{}, err
-	}
-	return calendarImportDTO(set, true), nil
+	return a.calendarImportResult(context.Background(), set, "", true)
 }
 
 func (a *App) PreviewCalDAVCalendar(input CalDAVInput) (CalendarImportDTO, error) {
@@ -206,22 +199,53 @@ func (a *App) PreviewCalDAVCalendar(input CalDAVInput) (CalendarImportDTO, error
 	if err != nil {
 		return CalendarImportDTO{}, err
 	}
-	return calendarImportDTO(set, false), nil
+	return a.calendarImportResult(context.Background(), set, "", false)
 }
 
 func (a *App) ImportCalDAVCalendar(input CalDAVInput) (CalendarImportDTO, error) {
-	store, err := a.requireStore()
-	if err != nil {
-		return CalendarImportDTO{}, err
-	}
 	set, endpoint, err := a.fetchCalDAVCalendar(context.Background(), input, a.currentTime().UTC())
 	if err != nil {
 		return CalendarImportDTO{}, err
 	}
-	if err := store.ReplaceImportedCalendar(context.Background(), set.Sources[0], set.Events, endpoint); err != nil {
+	return a.calendarImportResult(context.Background(), set, endpoint, true)
+}
+
+// calendarImportResult previews or imports a calendar without ZeitBoard's own
+// accepted times: a calendar ZeitBoard writes to returns them, and each is
+// already on the board. Kept, the copy would be a busy commitment clashing
+// with the very placement it copies.
+func (a *App) calendarImportResult(ctx context.Context, set calendarcore.EventSet, endpoint string, commit bool) (CalendarImportDTO, error) {
+	store, err := a.requireStore()
+	if err != nil && commit {
 		return CalendarImportDTO{}, err
 	}
-	return calendarImportDTO(set, true), nil
+	recognised := 0
+	if store != nil {
+		own, err := store.OwnCalendarEventIDs(ctx)
+		if err != nil {
+			return CalendarImportDTO{}, err
+		}
+		kept := make([]calendarcore.Event, 0, len(set.Events))
+		for _, event := range set.Events {
+			if eventID, ownUID := calendarcore.OwnEventID(event.SourceRecordID); ownUID && own[eventID] {
+				recognised++
+				continue
+			}
+			kept = append(kept, event)
+		}
+		set.Events = kept
+	}
+	if commit {
+		if err := store.ReplaceImportedCalendar(ctx, set.Sources[0], set.Events, endpoint); err != nil {
+			return CalendarImportDTO{}, err
+		}
+	}
+	dto := calendarImportDTO(set, commit)
+	if recognised > 0 {
+		dto.Message += fmt.Sprintf(" %d %s ZeitBoard's own accepted %s, already on the board.",
+			recognised, plural(recognised, "was", "were"), plural(recognised, "time", "times"))
+	}
+	return dto, nil
 }
 
 func (a *App) RemoveCalendarSource(input RemoveCalendarSourceInput) error {
@@ -619,10 +643,13 @@ func calDAVReportBody(start, end time.Time) string {
 		`</C:comp-filter></C:comp-filter></C:filter></C:calendar-query>`
 }
 
+// extractCalendarData returns the calendar objects a calendar-query answered
+// with. A multistatus without responses is an empty calendar, such as one made
+// for ZeitBoard to write accepted times to.
 func extractCalendarData(data []byte) ([]string, error) {
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	var documents []string
-	total := 0
+	total, responses, multistatus := 0, 0, false
 	for {
 		token, err := decoder.Token()
 		if errors.Is(err, io.EOF) {
@@ -632,7 +659,16 @@ func extractCalendarData(data []byte) ([]string, error) {
 			return nil, errors.New("CalDAV response is not valid XML")
 		}
 		start, ok := token.(xml.StartElement)
-		if !ok || start.Name.Local != "calendar-data" {
+		switch {
+		case !ok:
+			continue
+		case start.Name.Local == "multistatus":
+			multistatus = true
+			continue
+		case start.Name.Local == "response":
+			responses++
+			continue
+		case start.Name.Local != "calendar-data":
 			continue
 		}
 		var contents string
@@ -647,7 +683,7 @@ func extractCalendarData(data []byte) ([]string, error) {
 			documents = append(documents, contents)
 		}
 	}
-	if len(documents) == 0 {
+	if !multistatus || (len(documents) == 0 && responses > 0) {
 		return nil, errors.New("CalDAV response did not contain calendar-data")
 	}
 	return documents, nil
@@ -703,7 +739,7 @@ func calendarImportDTO(set calendarcore.EventSet, imported bool) CalendarImportD
 		CoverageLabel:    source.CoverageStartAt.Local().Format("Jan 2, 2006") + " to " + source.CoverageEndAt.Local().Format("Jan 2, 2006"),
 		PreviewTruncated: len(set.Events) > previewCount,
 		Events:           preview,
-		Message:          fmt.Sprintf("%s %d events, %d of them busy.", verb, len(set.Events), busyCount),
+		Message:          fmt.Sprintf("%s %d %s, %d busy.", verb, len(set.Events), plural(len(set.Events), "event", "events"), busyCount),
 	}
 }
 

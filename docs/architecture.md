@@ -22,7 +22,8 @@ take precedence when terminology or field shapes differ.
 ```mermaid
 flowchart LR
   Sources["User-controlled sources"] --> Interfaces["Platform interfaces"]
-  CalendarSources["Selected ICS / read-only CalDAV"] --> Desktop
+  CalendarSources["Selected ICS / CalDAV"] --> Desktop
+  Desktop -->|"opt-in: accepted times only"| OwnerCalendar["Owner's CalDAV calendar"]
   Interfaces --> Core["Go core"]
   Core --> SQLite["Local SQLite"]
   Core --> Projection["Allowlisted projection"]
@@ -62,7 +63,11 @@ Calendar adapters are deliberately device-side (ADR-0023). Imported text is
 stored and rendered only in the local trust zone. Core scheduling receives a
 text-free fixed-event projection. The local SQLite ownership boundary keeps
 imported snapshots immutable and app-owned approved placements separate; only
-the latter are eligible for ICS export.
+the latter are eligible for ICS export, and for writing to the owner's CalDAV
+calendar when the owner turns that on (ADR-0053). Store triggers queue a write
+whenever a placement appears or goes, and a desktop worker carries the queue
+to the calendar with If-None-Match and If-Match preconditions. It shares the
+periodic-worker shape of the background sync loop.
 
 ### Self-hosted backend and agent connector
 

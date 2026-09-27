@@ -68,10 +68,8 @@ type App struct {
 	backendConfigMu     sync.RWMutex
 	backendRunMu        sync.Mutex
 	backendRunCancel    context.CancelFunc
-	backgroundMu        sync.Mutex
-	backgroundCancel    context.CancelFunc
-	backgroundDone      chan struct{}
-	backgroundWake      chan struct{}
+	background          periodicWorker
+	calendarWriter      periodicWorker
 	sleepImportMu       sync.Mutex
 	sleepImportPending  map[string]pendingSleepImportFile
 	nowFn               func() time.Time
@@ -354,6 +352,7 @@ func (a *App) startup(ctx context.Context) {
 	a.startLocalAnalysis()
 	a.startActivityService(ctx)
 	a.startDesktopBackground(ctx, desktopBackgroundInterval)
+	a.startCalendarWriter(ctx)
 	a.startLocalAgent(ctx)
 	a.startDesktopTray(ctx)
 }
@@ -363,6 +362,7 @@ func (a *App) shutdown(ctx context.Context) {
 	a.serviceMu.Lock()
 	defer a.serviceMu.Unlock()
 	a.stopDesktopBackground()
+	a.calendarWriter.stop()
 	a.stopMedicationReminderService()
 	a.stopLocalAgent(ctx)
 	a.stopLocalAnalysis()

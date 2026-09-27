@@ -982,3 +982,40 @@ same ADR-0022 reason.
 
 Remaining in C2: the explicitly enabled CalDAV write-back of approved blocks.
 
+### C2 accepted times can be written to the owner's CalDAV calendar — 2026-09-27
+
+Data Sources › Calendars can write accepted times to an imported CalDAV calendar (ADR-0053).
+It is off until the owner turns it on for one calendar. The offer says what will be written and
+who can see it, then checks the sign-in with a PROPFIND before keeping it: it must open a
+calendar that holds events and may add them.
+
+With writing on, every accepted time that has not ended goes to that calendar as ZeitBoard's own
+event, and undoing it removes it. Store triggers queue each write, so accepting, deciding together
+and undoing need no code of their own. A desktop worker writes at once after a decision, and
+every minute otherwise.
+
+The writes are made safe by the server's own checks, not by trust:
+
+- Creating uses If-None-Match, so it cannot overwrite.
+- A time already there under its own UID is kept, so a lost answer never writes twice.
+- Removing uses If-Match, so an event the owner changed waits for them to choose "Remove it
+  anyway" or "Keep it in the calendar".
+- A failed write retries after 1, 5 and 30 minutes, then every 2 hours, or at once on "Try again
+  now".
+
+Importing or refreshing a calendar now leaves out ZeitBoard's own events, which are already on
+the board. Kept, each would be busy time clashing with the placement it copies. An empty CalDAV
+calendar, such as one made for ZeitBoard, can now be imported.
+
+The real-app run found two faults that were older than this feature:
+
+- **Error reasons never reached the owner.** Wails rejects a Go error with its bare message.
+  Every screen tests for an Error, so each showed its generic fallback, never the reason. The
+  bridge now turns the message into an Error, which fixes every screen at once. With reasons
+  shown, the sync failure in Plan read "backend request failed". It now reads "Could not reach
+  ZeitBoard's server."
+- **The import message said "1 events, 1 of them busy".** It now reads "1 event, 1 busy."
+
+With this, C2's acceptance is met. A refresh action on each calendar's row, instead of adding the
+same calendar again, is a UX follow-up.
+

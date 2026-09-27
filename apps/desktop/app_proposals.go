@@ -123,6 +123,7 @@ func (a *App) decideLocalProposals(proposalIDs []string, decisionKind string) (L
 	if err != nil {
 		return LocalProposalsDecisionDTO{}, err
 	}
+	a.calendarWriter.nudge()
 	result := LocalProposalsDecisionDTO{Decisions: make([]LocalProposalDecisionDTO, 0, len(records))}
 	for _, record := range records {
 		message := "Proposal rejected; no calendar block was written."
@@ -197,6 +198,7 @@ func (a *App) UndoLocalProposalDecision(input LocalProposalUndoInput) (LocalProp
 	if err != nil {
 		return LocalProposalDecisionDTO{}, err
 	}
+	a.calendarWriter.nudge()
 	return LocalProposalDecisionDTO{
 		ProposalID: record.ProposalID,
 		Decision:   record.Decision,

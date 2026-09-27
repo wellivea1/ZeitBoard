@@ -2235,3 +2235,57 @@ runs, and five of the order-sensitive tests, pass.
 
 The core and desktop Go suites and the full web check pass.
 
+## Accepted times written to a CalDAV calendar — 2026-09-27
+
+Store, against SQLite:
+
+- Nothing is queued while writing is off.
+- An ICS file, or a calendar that is not there, cannot be the target.
+- Turning writing on queues only the accepted times that have not ended.
+- Refreshing the calendar keeps writing on.
+- A time undone before it was written leaves nothing to do.
+- Undoing a written time queues its removal with the ETag it was written at.
+- A time undone while its write was in flight is removed once the write lands.
+- Conflicts are never retried on their own.
+- A failed write waits for its retry time, unless "Try again now".
+- Stopping, or removing the calendar, erases the sign-in and every tracked write.
+
+Desktop, against an in-memory CalDAV server that enforces If-None-Match and If-Match:
+
+- A wrong sign-in is refused, and writing stays off.
+- A sign-in that may only read is refused.
+- Three accepted times are written, and the status never carries the password.
+- A refresh recognises the three as ZeitBoard's own and imports none of them.
+- Undoing removes one.
+- An event the owner edited is left in the calendar, and "Remove it anyway" removes it.
+- A lost answer is adopted: the earlier write is kept, not rewritten, and later removed at its
+  own ETag.
+- Someone else's event at ZeitBoard's name is left alone, and cannot be removed from ZeitBoard.
+- A one-off 503 retries after a minute, or at once on "Try again now".
+- A PUT that a 301 turned into a GET is reported as moved, not written.
+- Only resources directly in the collection are ever removed, and weak ETags are dropped.
+
+Three mutations each fail a test: removing without If-Match, adopting any UID, and trusting a
+redirected write. The web tests cover the offer on CalDAV rows only, the refused and accepted
+sign-in, settling a conflict, trying again, the writer's announcement, and stopping only after the
+confirmation. The Wails bridge test covers string rejections.
+
+In the running desktop (disposable dev profile), with a loopback CalDAV server holding one of the
+owner's own events ("Dentist"):
+
+1. Importing the calendar, which held only Dentist, imported that one event.
+2. A wrong sign-in showed "Your calendar did not accept this sign-in." The right one turned
+   writing on.
+3. Accepting two suggestions together wrote both in the same second (two PUTs, 201).
+4. A refresh read "Imported 1 event, 1 busy. 2 were ZeitBoard's own accepted times, already on
+   the board."
+5. Undoing Grocery run removed it (DELETE, 204).
+6. With Taxes focus block edited in the calendar, its undo was refused (DELETE, 412). Data Sources
+   listed it as "Today 3:30 PM · It was changed in your calendar after ZeitBoard wrote it.",
+   with "Remove it anyway" and "Keep it in the calendar".
+7. "Remove it anyway" removed it (DELETE without If-Match, 204). Dentist was never touched.
+8. "Stop writing" asked first, then turned writing off. The database held no sign-in and no
+   tracked writes.
+
+The core and desktop Go suites, the full web check and the UI standards check pass.
+
