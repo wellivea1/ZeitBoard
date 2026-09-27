@@ -234,18 +234,35 @@ func (s *Store) ClaimMedicationReminder(ctx context.Context, claim MedicationRem
 }
 
 func (s *Store) AppendMedicationEvent(ctx context.Context, record MedicationEventRecord) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := appendMedicationEventTx(ctx, tx, record); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// appendMedicationEventTx appends a dose the owner recorded on this computer.
+func appendMedicationEventTx(ctx context.Context, tx *sql.Tx, record MedicationEventRecord) error {
 	record = normalizeMedicationEvent(record)
 	if err := validateMedicationEvent(record); err != nil {
 		return err
 	}
-	if err := s.requireMedication(ctx, record.MedicationID); err != nil {
+	var exists bool
+	if err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM local_medications WHERE medication_id = ?)`, record.MedicationID).Scan(&exists); err != nil {
 		return err
+	}
+	if !exists {
+		return ErrMedicationNotFound
 	}
 	encoded, err := json.Marshal(record)
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO local_medication_events(
+	_, err = tx.ExecContext(ctx, `INSERT INTO local_medication_events(
 		event_id, medication_id, dose_at, status, scheduled, recorded_at, payload_json
 	) VALUES(?, ?, ?, ?, ?, ?, ?)`,
 		record.EventID, record.MedicationID, formatSQLiteTime(record.DoseAt), record.Status,
@@ -490,13 +507,4 @@ func validateMedicationEvent(record MedicationEventRecord) error { return record
 
 func validateMedicationCorrection(record MedicationEventCorrectionRecord) error {
 	return record.Validate()
-}
-
-func (s *Store) requireMedication(ctx context.Context, medicationID string) error {
-	var exists int
-	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM local_medications WHERE medication_id = ?`, medicationID).Scan(&exists)
-	if errors.Is(err, sql.ErrNoRows) {
-		return ErrMedicationNotFound
-	}
-	return err
 }

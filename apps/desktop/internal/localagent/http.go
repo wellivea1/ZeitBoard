@@ -196,7 +196,7 @@ func (h *Handler) handleRequest(ctx context.Context, session *sessionState, req 
 	case "ping":
 		return rpcResult(req.ID, map[string]any{})
 	case "tools/list":
-		return rpcResult(req.ID, map[string]any{"tools": ToolDefinitions(h.capability.ProposalsAvailable(ctx))})
+		return rpcResult(req.ID, map[string]any{"tools": ToolDefinitions(h.capability.TaskProposalsAvailable(ctx))})
 	case "tools/call":
 		return rpcResult(req.ID, h.callTool(ctx, session, req.Params))
 	default:
@@ -209,10 +209,9 @@ func (h *Handler) callTool(ctx context.Context, session *sessionState, params js
 	if len(params) == 0 || decodeOne(params, &call) != nil || call.Name == "" {
 		return textError("Invalid tools/call parameters. No tool was run.")
 	}
-	proposalsAvailable := h.capability.ProposalsAvailable(ctx)
-	if !KnownTool(call.Name, proposalsAvailable) {
+	if !KnownTool(call.Name, h.capability.TaskProposalsAvailable(ctx)) {
 		if IsProposeTool(call.Name) {
-			return textError("Proposal tools need an enabled, enrolled self-hosted backend. No proposal was created.")
+			return textError("Task proposals need an enabled, enrolled self-hosted backend. No proposal was created.")
 		}
 		return textError("Unknown ZeitBoard tool.")
 	}

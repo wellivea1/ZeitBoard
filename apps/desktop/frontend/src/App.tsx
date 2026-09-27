@@ -4,6 +4,7 @@ import { ApprovalsProvider } from "./state/approvals";
 import { VisitorRequestsProvider } from "./state/visitorRequests";
 import { ApprovalQueueProvider } from "./state/approvalQueue";
 import { BackendProposalsProvider } from "./state/backendProposals";
+import { DoseProposalsProvider } from "./state/doseProposals";
 import { HomeScreen } from "./screens/HomeScreen";
 import { ScreenErrorBoundary } from "./components/ScreenErrorBoundary";
 import { subscribeBackendEvents } from "./data/backendEvents";
@@ -54,25 +55,27 @@ export default function App() {
     <ApprovalsProvider>
       <BackendProposalsProvider>
         <VisitorRequestsProvider>
-          <ApprovalQueueProvider>
-            <a
-              className="skip-link"
-              href="#main-content"
-              onClick={(event) => {
-                event.preventDefault();
-                document.getElementById("main-content")?.focus();
-              }}
-            >
-              Skip to content
-            </a>
-            <AppShell screen={route.screen}>
-              {/* Settings tabs are left out of the key: switching one must not
+          <DoseProposalsProvider>
+            <ApprovalQueueProvider>
+              <a
+                className="skip-link"
+                href="#main-content"
+                onClick={(event) => {
+                  event.preventDefault();
+                  document.getElementById("main-content")?.focus();
+                }}
+              >
+                Skip to content
+              </a>
+              <AppShell screen={route.screen}>
+                {/* Settings tabs are left out of the key: switching one must not
                   remount the screen and lose a half-typed sync enrollment. */}
-              <ScreenErrorBoundary key={`${route.screen}/${route.planTab}/${route.logTab}`}>
-                <Suspense fallback={<ScreenLoading />}>{content}</Suspense>
-              </ScreenErrorBoundary>
-            </AppShell>
-          </ApprovalQueueProvider>
+                <ScreenErrorBoundary key={`${route.screen}/${route.planTab}/${route.logTab}`}>
+                  <Suspense fallback={<ScreenLoading />}>{content}</Suspense>
+                </ScreenErrorBoundary>
+              </AppShell>
+            </ApprovalQueueProvider>
+          </DoseProposalsProvider>
         </VisitorRequestsProvider>
       </BackendProposalsProvider>
     </ApprovalsProvider>

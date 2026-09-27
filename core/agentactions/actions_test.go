@@ -24,10 +24,21 @@ func TestEveryActionIsCompleteAndProposalsCannotApplyThemselves(t *testing.T) {
 			if !strings.HasPrefix(action.ID, "propose_") || action.CardTitle == "" || !strings.Contains(action.Description, "must approve") {
 				t.Fatalf("proposal %s must be named, carded and say a human approves it", action.ID)
 			}
+			switch action.Subject {
+			case TaskSubject:
+			case DoseSubject:
+				// The chat model sees no medication, and the server resolves
+				// only tasks: a dose waits on the owner's computer.
+				if action.On(ChatAssistant | ServerMCP) {
+					t.Fatalf("dose proposal %s is offered beyond the local endpoint", action.ID)
+				}
+			default:
+				t.Fatalf("proposal %s has no subject", action.ID)
+			}
 		case Direct:
 			// Direct actions are local and reversible (ADR-0021): never on a
 			// model's or the server's surface.
-			if action.On(ChatAssistant|ServerMCP) || strings.HasPrefix(action.ID, "propose_") {
+			if action.On(ChatAssistant|ServerMCP) || strings.HasPrefix(action.ID, "propose_") || action.Subject != "" {
 				t.Fatalf("direct action %s is offered beyond the local endpoint", action.ID)
 			}
 		default:
@@ -47,17 +58,20 @@ func TestEveryActionIsCompleteAndProposalsCannotApplyThemselves(t *testing.T) {
 		IsProposal("set_appearance", LocalMCP) || IsProposal("propose_retired", AnyMCP) {
 		t.Fatal("IsProposal disagrees with the registry")
 	}
+	if !IsProposal("propose_log_dose", LocalMCP) || IsTaskProposal("propose_log_dose", AnyMCP) || !IsTaskProposal("propose_place_task", AnyMCP) {
+		t.Fatal("IsTaskProposal disagrees with the registry")
+	}
 }
 
 func TestTargetRules(t *testing.T) {
 	start := time.Date(2026, 9, 27, 12, 0, 0, 0, time.UTC)
 	end := start.Add(time.Hour)
 	wake := 60
-	if err := (Target{TaskID: "task_synthetic", EarliestStartAt: &start, LatestFinishAt: &end, DurationMinutes: 30, PreferredAfterWakeMinutes: &wake}).Validate(); err != nil {
+	if err := (TaskTarget{TaskID: "task_synthetic", EarliestStartAt: &start, LatestFinishAt: &end, DurationMinutes: 30, PreferredAfterWakeMinutes: &wake}).Validate(); err != nil {
 		t.Fatal(err)
 	}
 	late := 2000
-	for name, target := range map[string]Target{
+	for name, target := range map[string]TaskTarget{
 		"no task":             {},
 		"bad reminder":        {TaskID: "task_synthetic", ReminderID: "Bad Reminder"},
 		"negative duration":   {TaskID: "task_synthetic", DurationMinutes: -1},
@@ -72,11 +86,49 @@ func TestTargetRules(t *testing.T) {
 	}
 }
 
-// The contracts list the proposals too; they must list exactly the registry's.
-func TestContractsListTheRegisteredProposals(t *testing.T) {
-	chat := union(IDs(ChatAssistant, Proposal))
-	agents := union(IDs(ServerMCP, Proposal), IDs(LocalMCP, Proposal))
-	stored := union(chat, agents)
+func TestDoseTargetRules(t *testing.T) {
+	now := time.Date(2026, 9, 27, 21, 0, 0, 0, time.UTC)
+	at := func(offset time.Duration) *time.Time { value := now.Add(offset); return &value }
+	for name, target := range map[string]DoseTarget{
+		"now":                   {MedicationID: "med_synthetic", Status: "taken"},
+		"an hour ago, skipped":  {MedicationID: "med_synthetic", Status: "skipped", DoseAt: at(-time.Hour)},
+		"within the clock skew": {MedicationID: "med_synthetic", Status: "taken", DoseAt: at(DoseClockSkew)},
+		"a week ago":            {MedicationID: "med_synthetic", Status: "taken", DoseAt: at(-MaxProposedDoseAge)},
+	} {
+		if err := target.Validate(now); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	for name, target := range map[string]DoseTarget{
+		"no medication":     {Status: "taken"},
+		"a label as the id": {MedicationID: "Evening Tablet", Status: "taken"},
+		"no status":         {MedicationID: "med_synthetic"},
+		"a dose amount":     {MedicationID: "med_synthetic", Status: "2 tablets"},
+		"empty time":        {MedicationID: "med_synthetic", Status: "taken", DoseAt: &time.Time{}},
+		"in the future":     {MedicationID: "med_synthetic", Status: "taken", DoseAt: at(DoseClockSkew + time.Second)},
+		"over a week ago":   {MedicationID: "med_synthetic", Status: "taken", DoseAt: at(-MaxProposedDoseAge - time.Second)},
+	} {
+		if target.Validate(now) == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}
+
+// The contracts list the task proposals the server resolves; they must list
+// exactly the registry's.
+func TestContractsListTheRegisteredTaskProposals(t *testing.T) {
+	taskIDs := func(surfaces Surface) []string {
+		var ids []string
+		for _, action := range All() {
+			if IsTaskProposal(action.ID, surfaces) {
+				ids = append(ids, action.ID)
+			}
+		}
+		return union(ids)
+	}
+	chat := taskIDs(ChatAssistant)
+	agents := taskIDs(AnyMCP)
+	stored := taskIDs(ChatAssistant | AnyMCP)
 
 	action := readContract(t, "assistant-action.schema.json")
 	for _, check := range []struct {

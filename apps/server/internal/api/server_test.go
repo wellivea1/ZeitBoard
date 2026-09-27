@@ -317,6 +317,12 @@ func TestDirectProposalEndpointCreatesPendingProposalWithoutLLM(t *testing.T) {
 	if err != nil || count != 0 {
 		t.Fatalf("spoofed proposal text created records: count=%d err=%v", count, err)
 	}
+	// A proposed dose waits on the owner's computer; the server takes none,
+	// even dressed with a task target (ADR-0051).
+	status, body = h.request(t, http.MethodPost, "/v1/proposals", token, directProposalRequestBody("propose_log_dose"))
+	if count, err := h.st.CountProposals(context.Background()); status != http.StatusBadRequest || err != nil || count != 0 {
+		t.Fatalf("dose proposal status = %d body = %s count = %d err = %v", status, body, count, err)
+	}
 
 	status, body = h.request(t, http.MethodPost, "/v1/proposals", token, directProposalRequestBody("propose_place_task"))
 	if status != http.StatusCreated {

@@ -260,6 +260,10 @@
         "status": { "type": "string", "minLength": 1, "maxLength": 32 },
         "count": { "$ref": "#/$defs/count" },
         "truncated": { "type": "boolean" },
+        "pending_dose_proposals": {
+          "description": "Doses an agent proposed that wait for the owner to record or discard them (ADR-0051).",
+          "$ref": "#/$defs/count"
+        },
         "items": {
           "type": "array",
           "maxItems": 32,

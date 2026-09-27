@@ -8,7 +8,17 @@ vi.mock("../state/approvalQueue", () => ({
     pendingCount: 0,
     ready: true,
     incomplete: false,
-    breakdown: { suggestions: 0, conflicts: 0, assistant: 0, requests: 0 },
+    breakdown: { suggestions: 0, conflicts: 0, assistant: 0, doses: 0, requests: 0 },
+    now: Date.now(),
+  }),
+}));
+vi.mock("../state/doseProposals", () => ({
+  useDoseProposals: () => ({
+    data: { status: "off", pending: [], history: [], nextExpiryAt: "" },
+    busyProposalId: null,
+    decisionError: "",
+    announcement: "",
+    decide: vi.fn(),
   }),
 }));
 vi.mock("../state/approvals", () => ({

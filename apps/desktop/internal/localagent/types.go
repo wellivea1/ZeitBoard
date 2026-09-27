@@ -15,7 +15,10 @@ const (
 )
 
 type Capability interface {
-	ProposalsAvailable(context.Context) bool
+	// TaskProposalsAvailable reports whether a server can take task
+	// proposals: its scheduler resolves them. Dose proposals wait on this
+	// computer and are always available.
+	TaskProposalsAvailable(context.Context) bool
 	CallTool(context.Context, string, json.RawMessage) (json.RawMessage, error)
 }
 
@@ -44,13 +47,14 @@ type ToolDefinition struct {
 	InputSchema map[string]any `json:"inputSchema"`
 }
 
-func ToolDefinitions(proposalsAvailable bool) []ToolDefinition {
+func ToolDefinitions(taskProposals bool) []ToolDefinition {
 	tools := []ToolDefinition{
 		{Name: "get_status", Title: "Get Status", Description: "Read desktop-local agent and data availability status.", InputSchema: emptySchema()},
 		{Name: "get_snapshot", Title: "Get Snapshot", Description: "Start here. Read everything ZeitBoard may tell an assistant in one versioned document " +
 			"(assistant-snapshot v1): whether the rhythm estimate can be trusted now and what it says, recent sleep, the next three days " +
 			"(when sleep and waking are likely, reachable hours, commitments, suggested times, tasks that could not be placed), what awaits " +
-			"the owner's decision, tasks, medication timing, context markers and sync state. The other read tools are narrower views of the " +
+			"the owner's decision, tasks, medication timing and doses waiting to be recorded, context markers and sync state. The other " +
+			"read tools are narrower views of the " +
 			"same data. Titles, labels, notes and raw records are never included.", InputSchema: emptySchema()},
 		{Name: "get_overview", Title: "Get Overview", Description: "Read a speakable overview projection. Raw sleep records are never returned.", InputSchema: emptySchema()},
 		{Name: "get_rhythm_summary", Title: "Get Rhythm Summary", Description: "Read predicted sleep-wake timing, drift, confidence, and refusal state without raw records.", InputSchema: emptySchema()},
@@ -61,9 +65,12 @@ func ToolDefinitions(proposalsAvailable bool) []ToolDefinition {
 		actionTool("set_appearance", appearanceSchema()),
 		{Name: "ask_zeitboard_facts", Title: "Ask ZeitBoard Facts", Description: "Return allowlisted local facts for a question. Medical decisions are refused with the canonical ZeitBoard response.", InputSchema: questionSchema()},
 	}
-	if proposalsAvailable {
-		for _, action := range agentactions.IDs(agentactions.LocalMCP, agentactions.Proposal) {
-			tools = append(tools, actionTool(action, proposalSchema()))
+	for _, action := range agentactions.Offered(agentactions.LocalMCP, agentactions.Proposal) {
+		switch {
+		case action.Subject == agentactions.DoseSubject:
+			tools = append(tools, actionTool(action.ID, proposalSchema(agentactions.DoseTargetSchema())))
+		case taskProposals:
+			tools = append(tools, actionTool(action.ID, proposalSchema(agentactions.TaskTargetSchema())))
 		}
 	}
 	return tools
@@ -79,8 +86,8 @@ func actionTool(id string, input map[string]any) ToolDefinition {
 	return ToolDefinition{Name: action.ID, Title: action.Title, Description: action.Description, InputSchema: input}
 }
 
-func KnownTool(name string, proposalsAvailable bool) bool {
-	for _, tool := range ToolDefinitions(proposalsAvailable) {
+func KnownTool(name string, taskProposals bool) bool {
+	for _, tool := range ToolDefinitions(taskProposals) {
 		if tool.Name == name {
 			return true
 		}
@@ -131,13 +138,13 @@ func appearanceSchema() map[string]any {
 	}
 }
 
-func proposalSchema() map[string]any {
+func proposalSchema(target map[string]any) map[string]any {
 	return map[string]any{
 		"type":                 "object",
 		"additionalProperties": false,
 		"required":             []string{"target"},
 		"properties": map[string]any{
-			"target": agentactions.TargetSchema(),
+			"target": target,
 		},
 	}
 }

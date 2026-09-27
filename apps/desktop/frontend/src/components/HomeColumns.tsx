@@ -1,9 +1,12 @@
 import { decisionButton, decisionLabel } from "../data/decisionWords";
+import { doseIsWaiting } from "../data/doseProposals";
+import { DoseProposalEntry } from "./DoseProposalCard";
 import { MedicationQuickTaps } from "./MedicationQuickTaps";
 import type { DiaryDay } from "../data/homeLead";
 import type { MedicationEventInput, MedicationsData } from "../data/medications";
 import { useApprovals } from "../state/approvals";
 import { useApprovalQueue } from "../state/approvalQueue";
+import { useDoseProposals } from "../state/doseProposals";
 import { blockWording } from "../utils/relativeTime";
 
 // Home's three columns, set like a printed page: what is waiting on you, what
@@ -16,8 +19,12 @@ function plural(count: number, one: string, many: string) {
 
 export function NeedsYou() {
   const approvals = useApprovals();
-  const { breakdown, pendingCount, ready, incomplete } = useApprovalQueue();
+  const doses = useDoseProposals();
+  const { breakdown, pendingCount, ready, incomplete, now: queueNow } = useApprovalQueue();
   const now = new Date();
+  // A proposed dose lapses within a day, so it comes first.
+  const waitingDoses = doses.data.pending.filter((item) => doseIsWaiting(item, queueNow));
+  const shownDoses = waitingDoses.slice(0, 3);
   const shown = approvals.pending.slice(0, 3);
   const others = [
     breakdown.conflicts > 0 && {
@@ -40,6 +47,16 @@ export function NeedsYou() {
       text: "Nothing changes until you accept it.",
       link: "Review in Plan",
     },
+    waitingDoses.length > shownDoses.length && {
+      key: "doses",
+      title: plural(
+        waitingDoses.length - shownDoses.length,
+        "more dose to record",
+        "more doses to record",
+      ),
+      text: "Your assistant asked to record them. Nothing is recorded until you accept.",
+      link: "Review in Plan",
+    },
     breakdown.requests > 0 && {
       key: "requests",
       title: plural(breakdown.requests, "time request", "time requests"),
@@ -48,7 +65,7 @@ export function NeedsYou() {
     },
   ].filter(Boolean) as { key: string; title: string; text: string; link: string }[];
   const more = Math.max(0, approvals.pending.length - shown.length);
-  const nothing = shown.length === 0 && others.length === 0;
+  const nothing = shown.length === 0 && shownDoses.length === 0 && others.length === 0;
 
   return (
     <section className="home-column" aria-labelledby="waiting-title">
@@ -56,6 +73,9 @@ export function NeedsYou() {
         Waiting on you
         {pendingCount > 0 && <span className="count">{pendingCount}</span>}
       </h2>
+      {shownDoses.map((proposal) => (
+        <DoseProposalEntry proposal={proposal} now={now} key={`dose-${proposal.proposalId}`} />
+      ))}
       {shown.map((proposal) => (
         <article className="home-entry" key={proposal.id}>
           <h3>{proposal.title}</h3>
@@ -111,6 +131,14 @@ export function NeedsYou() {
               : "Nothing is waiting on you."}
         </p>
       )}
+      {doses.decisionError && (
+        <p className="home-empty" role="alert">
+          {doses.decisionError}
+        </p>
+      )}
+      <p role="status" className="sr-only">
+        {doses.announcement}
+      </p>
     </section>
   );
 }

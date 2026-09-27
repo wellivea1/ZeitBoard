@@ -1,8 +1,8 @@
 // Package agentactions is the one registry of what an agent may ask ZeitBoard
-// to do (completion plan C4). The chat assistant's action schema and its
-// validation, the server's and the desktop's MCP tool lists and dispatch, and
-// the proposal cards all read it, so an action exists on every surface that
-// offers it or on none. A test holds the contracts' action enums to it.
+// to do (completion plan C4, ADR-0050). The chat assistant's action schema and
+// its validation, the server's and the desktop's MCP tool lists and dispatch,
+// and the proposal cards all read it, so an action exists on every surface
+// that offers it or on none. A test holds the contracts' action enums to it.
 package agentactions
 
 import (
@@ -26,6 +26,20 @@ const (
 	Direct Kind = "direct"
 )
 
+// Subject is what a proposal is about. It decides what the proposal names and
+// where it waits for the owner.
+type Subject string
+
+const (
+	// TaskSubject proposals name a TaskTarget. The server's scheduler resolves
+	// them into a pending proposal, wherever they arrive.
+	TaskSubject Subject = "task"
+	// DoseSubject proposals name a DoseTarget. They wait on the owner's
+	// computer until the owner records or discards the dose: a dose is a
+	// health record, so only the owner makes one (ADR-0051).
+	DoseSubject Subject = "dose"
+)
+
 // Surface is a place an action is offered.
 type Surface uint8
 
@@ -37,8 +51,8 @@ const (
 	// LocalMCP is the desktop's loopback MCP endpoint (ADR-0028).
 	LocalMCP
 
-	// AnyMCP is either MCP endpoint. Both relay a proposal to the server's
-	// direct proposal endpoint, which cannot tell them apart.
+	// AnyMCP is either MCP endpoint. Both relay a task proposal to the
+	// server's direct proposal endpoint, which cannot tell them apart.
 	AnyMCP = ServerMCP | LocalMCP
 )
 
@@ -46,12 +60,13 @@ const (
 type Action struct {
 	ID       string
 	Kind     Kind
+	Subject  Subject // proposals only
 	Surfaces Surface
 	// Title and Description are what a tool list shows.
 	Title       string
 	Description string
-	// CardTitle names a pending proposal of this action on a card, before the
-	// task it concerns; empty for a direct action.
+	// CardTitle names a pending proposal of this action on a card; empty for
+	// a direct action.
 	CardTitle string
 }
 
@@ -62,19 +77,27 @@ const approvalRequired = " A human must approve it before anything changes."
 
 var registry = []Action{
 	{
-		ID: "propose_move_task", Kind: Proposal, Surfaces: ChatAssistant | ServerMCP | LocalMCP,
+		ID: "propose_move_task", Kind: Proposal, Subject: TaskSubject, Surfaces: ChatAssistant | ServerMCP | LocalMCP,
 		Title: "Propose Move Task", Description: "Create a pending proposal to move a task." + approvalRequired,
 		CardTitle: "Move task",
 	},
 	{
-		ID: "propose_place_task", Kind: Proposal, Surfaces: ChatAssistant | ServerMCP | LocalMCP,
+		ID: "propose_place_task", Kind: Proposal, Subject: TaskSubject, Surfaces: ChatAssistant | ServerMCP | LocalMCP,
 		Title: "Propose Place Task", Description: "Create a pending proposal to place a task." + approvalRequired,
 		CardTitle: "Place task",
 	},
 	{
-		ID: "propose_reminder_shift", Kind: Proposal, Surfaces: ChatAssistant | ServerMCP | LocalMCP,
+		ID: "propose_reminder_shift", Kind: Proposal, Subject: TaskSubject, Surfaces: ChatAssistant | ServerMCP | LocalMCP,
 		Title: "Propose Reminder Shift", Description: "Create a pending proposal to shift a reminder." + approvalRequired,
 		CardTitle: "Shift reminder",
+	},
+	{
+		ID: "propose_log_dose", Kind: Proposal, Subject: DoseSubject, Surfaces: LocalMCP,
+		Title: "Propose Log Dose",
+		Description: "Create a pending dose for the owner to record: a medication by its opaque id from get_snapshot " +
+			"or get_medication_timing, taken or skipped, and when, if not now. Nothing is recorded until the owner " +
+			"records it on their computer, and it lapses after a day." + approvalRequired,
+		CardTitle: "Record dose",
 	},
 	{
 		ID: "set_appearance", Kind: Direct, Surfaces: LocalMCP,
@@ -116,11 +139,28 @@ func IDs(surface Surface, kind Kind) []string {
 	return ids
 }
 
+// ProposalOn finds a registered proposal offered on a surface, or on any of a
+// set.
+func ProposalOn(id string, surfaces Surface) (Action, bool) {
+	action, ok := Lookup(id)
+	if !ok || action.Kind != Proposal || !action.On(surfaces) {
+		return Action{}, false
+	}
+	return action, true
+}
+
 // IsProposal reports whether id names a registered proposal offered on a
 // surface, or on any of a set.
 func IsProposal(id string, surfaces Surface) bool {
-	action, ok := Lookup(id)
-	return ok && action.Kind == Proposal && action.On(surfaces)
+	_, ok := ProposalOn(id, surfaces)
+	return ok
+}
+
+// IsTaskProposal reports whether id names a registered task proposal offered
+// on a surface, or on any of a set: one the server's scheduler resolves.
+func IsTaskProposal(id string, surfaces Surface) bool {
+	action, ok := ProposalOn(id, surfaces)
+	return ok && action.Subject == TaskSubject
 }
 
 // CardTitle names a pending proposal on a card: "Place task" before the task
@@ -134,9 +174,9 @@ func CardTitle(id string) string {
 
 var identifier = regexp.MustCompile(`^[a-z][a-z0-9_-]{2,79}$`)
 
-// Target is what every task proposal names: the task, optionally its bounds,
-// duration, after-wake preference and the reminder it concerns.
-type Target struct {
+// TaskTarget is what every task proposal names: the task, optionally its
+// bounds, duration, after-wake preference and the reminder it concerns.
+type TaskTarget struct {
 	TaskID                    string     `json:"task_id"`
 	EarliestStartAt           *time.Time `json:"earliest_start_at,omitempty"`
 	LatestFinishAt            *time.Time `json:"latest_finish_at,omitempty"`
@@ -147,7 +187,7 @@ type Target struct {
 
 // Validate applies the target's rules, the same wherever a proposal arrives.
 // Its errors complete the sentence "The proposal target is invalid: ...".
-func (t Target) Validate() error {
+func (t TaskTarget) Validate() error {
 	switch {
 	case !identifier.MatchString(t.TaskID):
 		return errors.New("the task id is missing or invalid")
@@ -166,8 +206,8 @@ func (t Target) Validate() error {
 	return nil
 }
 
-// TargetSchema is the JSON Schema of a Target, for tool input schemas.
-func TargetSchema() map[string]any {
+// TaskTargetSchema is the JSON Schema of a TaskTarget, for tool input schemas.
+func TaskTargetSchema() map[string]any {
 	return map[string]any{
 		"type":                 "object",
 		"additionalProperties": false,
@@ -179,6 +219,60 @@ func TargetSchema() map[string]any {
 			"duration_minutes":             map[string]any{"type": "integer", "minimum": 1, "maximum": 1440},
 			"preferred_after_wake_minutes": map[string]any{"type": "integer", "minimum": 0, "maximum": 1440},
 			"reminder_id":                  map[string]any{"type": "string", "pattern": identifier.String()},
+		},
+	}
+}
+
+// Dose proposal limits. A proposed dose may be up to a week old, since an owner
+// may catch up on a missed entry, but not in the future beyond clock skew, the
+// same allowance as a dose logged by hand.
+const (
+	MaxProposedDoseAge = 7 * 24 * time.Hour
+	DoseClockSkew      = 5 * time.Minute
+)
+
+// DoseTarget is what a dose proposal names: a medication by its opaque id,
+// whether the dose was taken or skipped, and when, if not now. Never a label
+// or a note: those stay on the owner's computer.
+type DoseTarget struct {
+	MedicationID string     `json:"medication_id"`
+	Status       string     `json:"status"`
+	DoseAt       *time.Time `json:"dose_at,omitempty"`
+}
+
+// Validate applies the target's rules at now. Its errors complete the sentence
+// "The proposal target is invalid: ...".
+func (t DoseTarget) Validate(now time.Time) error {
+	switch {
+	case !identifier.MatchString(t.MedicationID):
+		return errors.New("the medication id is missing or invalid")
+	case t.Status != "taken" && t.Status != "skipped":
+		return errors.New("the status must be taken or skipped")
+	case t.DoseAt == nil:
+		return nil
+	case t.DoseAt.IsZero():
+		return errors.New("the dose time is empty")
+	case t.DoseAt.After(now.Add(DoseClockSkew)):
+		return errors.New("the dose time is in the future")
+	case t.DoseAt.Before(now.Add(-MaxProposedDoseAge)):
+		return errors.New("the dose time is more than a week ago")
+	}
+	return nil
+}
+
+// DoseTargetSchema is the JSON Schema of a DoseTarget, for tool input schemas.
+func DoseTargetSchema() map[string]any {
+	return map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"required":             []string{"medication_id", "status"},
+		"properties": map[string]any{
+			"medication_id": map[string]any{"type": "string", "pattern": identifier.String()},
+			"status":        map[string]any{"type": "string", "enum": []string{"taken", "skipped"}},
+			"dose_at": map[string]any{
+				"type": "string", "format": "date-time",
+				"description": "When the dose was taken or skipped; now if omitted. At most a week ago.",
+			},
 		},
 	}
 }

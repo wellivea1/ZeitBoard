@@ -114,7 +114,7 @@ type modelAction struct {
 }
 
 // ActionTarget is what every task proposal names, on every surface.
-type ActionTarget = agentactions.Target
+type ActionTarget = agentactions.TaskTarget
 
 type storedProposalPayload struct {
 	ProposalID        string                   `json:"proposal_id"`

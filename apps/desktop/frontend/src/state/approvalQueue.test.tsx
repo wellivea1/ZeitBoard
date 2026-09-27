@@ -5,6 +5,7 @@ import { proposalsFixture } from "../data/proposals";
 import { ApprovalsProvider } from "./approvals";
 import { BackendProposalsProvider } from "./backendProposals";
 import { VisitorRequestsProvider, useVisitorRequests } from "./visitorRequests";
+import { DoseProposalsProvider } from "./doseProposals";
 import { ApprovalQueueProvider, useApprovalQueue } from "./approvalQueue";
 import { DecisionHistory, DecisionQueue } from "../components/DecisionQueue";
 import { emptyVisitorRequests, type VisitorRequest } from "../data/visitorRequests";
@@ -43,7 +44,9 @@ function Providers({ children }: { children: ReactNode }) {
     <ApprovalsProvider>
       <BackendProposalsProvider>
         <VisitorRequestsProvider>
-          <ApprovalQueueProvider>{children}</ApprovalQueueProvider>
+          <DoseProposalsProvider>
+            <ApprovalQueueProvider>{children}</ApprovalQueueProvider>
+          </DoseProposalsProvider>
         </VisitorRequestsProvider>
       </BackendProposalsProvider>
     </ApprovalsProvider>
@@ -70,6 +73,7 @@ function install(extra: Record<string, unknown> = {}) {
       pagination: { nextCursor: "backend-page-2", hasMore: true },
     })),
     GetBackendVisitorRequests: vi.fn(async () => visitorPage),
+    GetDoseProposals: vi.fn(async () => ({ pending: [], history: [], nextExpiryAt: "" })),
     ...extra,
   };
   (globalThis as { go?: unknown }).go = { main: { App: methods } };
@@ -157,6 +161,53 @@ describe("shared approval queue", () => {
     expect(screen.getByText("Sam asked for a time")).toBeVisible();
     expect(screen.getByText("Email Dr. Okafor")).toBeVisible();
     expect(screen.queryByRole("group", { name: "Filter approvals" })).toBeNull();
+  });
+  // A dose an agent proposed is one more decision: counted, shown with the
+  // others, and recorded only when the owner accepts it (ADR-0051).
+  it("counts a proposed dose and records it only when accepted", async () => {
+    const dose = {
+      proposalId: "dose_proposal_01",
+      title: "Record dose",
+      medicationId: "med_synthetic",
+      medicationLabel: "Synthetic evening tablet",
+      status: "taken",
+      doseAt: "2099-01-01T21:10:00Z",
+      zoneId: "UTC",
+      state: "pending",
+      createdAt: "2099-01-01T21:12:00Z",
+      expiresAt: expiry,
+    };
+    let queue: Record<string, unknown> = { pending: [dose], history: [], nextExpiryAt: expiry };
+    const decide = vi.fn(async () => {
+      queue = {
+        pending: [],
+        history: [{ ...dose, state: "recorded", decidedAt: "2099-01-01T21:20:00Z" }],
+        nextExpiryAt: "",
+      };
+      return queue;
+    });
+    const medicationsChanged = vi.fn();
+    window.addEventListener("zeitboard:medication-data-changed", medicationsChanged);
+    install({ GetDoseProposals: vi.fn(async () => queue), DecideDoseProposal: decide });
+    render(
+      <Providers>
+        <Probe />
+        <DecisionQueue />
+        <DecisionHistory />
+      </Providers>,
+    );
+    expect(await screen.findByText("14 ready")).toBeVisible();
+    expect(screen.getByText("Synthetic evening tablet")).toBeVisible();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Accept and record the proposed dose of Synthetic evening tablet",
+      }),
+    );
+    expect(await screen.findByText("13 ready")).toBeVisible();
+    expect(decide).toHaveBeenCalledWith({ proposalId: "dose_proposal_01", decision: "record" });
+    expect(medicationsChanged).toHaveBeenCalled();
+    expect(screen.getByText("Record dose · Synthetic evening tablet")).toBeInTheDocument();
+    window.removeEventListener("zeitboard:medication-data-changed", medicationsChanged);
   });
   it("retains counts and requests during a failed refresh and recovers when disabled", async () => {
     const list = vi
