@@ -68,6 +68,12 @@ export interface OutlookFreshness {
   trusted: boolean;
 }
 
+/** Two instants, ISO 8601. */
+export interface OutlookRange {
+  start: string;
+  end: string;
+}
+
 export interface OutlookData {
   status: OutlookStatus;
   refusal?: { code: string; message: string };
@@ -78,8 +84,10 @@ export interface OutlookData {
   horizonStart?: string;
   days: OutlookDayMark[];
   segments: OutlookSegment[];
-  nextSleepLabel?: string;
-  nextWakeLabel?: string;
+  /** When the next sleep is likely to begin, as the desktop reads the timeline. */
+  sleepOnset?: OutlookRange;
+  /** When waking is likely to follow it. */
+  wake?: OutlookRange;
   officeHoursLabel: string;
   officeWindows: OutlookOfficeWindow[];
   commitments: OutlookCommitment[];
@@ -98,6 +106,15 @@ function isRecord(value: unknown): value is UnknownRecord {
 
 function str(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
+}
+
+/** Only two parseable instants in order; anything else is no range. */
+function range(value: unknown): OutlookRange | undefined {
+  if (!isRecord(value)) return undefined;
+  const start = str(value.start);
+  const end = str(value.end);
+  if (!start || !end || !(Date.parse(start) < Date.parse(end))) return undefined;
+  return { start, end };
 }
 
 function num(value: unknown): number | undefined {
@@ -309,8 +326,8 @@ export function normalizeOutlook(value: unknown): OutlookData | undefined {
     ...(refusalCode && refusalMessage
       ? { refusal: { code: refusalCode, message: refusalMessage } }
       : {}),
-    ...(str(value.nextSleepLabel) ? { nextSleepLabel: str(value.nextSleepLabel) as string } : {}),
-    ...(str(value.nextWakeLabel) ? { nextWakeLabel: str(value.nextWakeLabel) as string } : {}),
+    ...(range(value.sleepOnset) ? { sleepOnset: range(value.sleepOnset) as OutlookRange } : {}),
+    ...(range(value.wake) ? { wake: range(value.wake) as OutlookRange } : {}),
     ...(str(value.withheldMessage)
       ? { withheldMessage: str(value.withheldMessage) as string }
       : {}),
@@ -351,28 +368,4 @@ const CONFLICT_KINDS = new Set([
 
 export function isCommitmentConflict(commitment: OutlookCommitment) {
   return CONFLICT_KINDS.has(commitment.conflict);
-}
-
-interface SleepAhead {
-  /** The uncertain band in which the next sleep is likely to begin. */
-  onset?: OutlookSegment;
-  /** The uncertain band in which that sleep is likely to end. */
-  wake?: OutlookSegment;
-}
-
-/**
- * Reads the next sleep off the outlook's own bands rather than a separate
- * label, so the words and the timeline beneath them cannot disagree — which is
- * what they used to do.
- */
-export function sleepAhead(segments: OutlookSegment[]): SleepAhead {
-  const ordered = [...segments].sort((a, b) => a.offsetHours - b.offsetHours);
-  const asleepIndex = ordered.findIndex((segment) => segment.presence === "asleep");
-  if (asleepIndex < 0) return {};
-  const before = ordered[asleepIndex - 1];
-  const after = ordered[asleepIndex + 1];
-  return {
-    ...(before?.presence === "uncertain" ? { onset: before } : {}),
-    ...(after?.presence === "uncertain" ? { wake: after } : {}),
-  };
 }

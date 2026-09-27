@@ -180,8 +180,6 @@ export const outlookFixture: OutlookData = {
       durationHours: 2.33,
     },
   ],
-  nextSleepLabel: "Sample day 1, 10:15 PM to 8:05 AM",
-  nextWakeLabel: "Sample day 2, 8:05 AM to 11:05 PM",
   officeHoursLabel: "Typical office hours, Monday to Friday 9:00 AM to 5:00 PM",
   officeWindows: [
     {

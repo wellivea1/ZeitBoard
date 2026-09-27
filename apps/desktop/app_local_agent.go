@@ -174,6 +174,11 @@ func (c desktopLocalCapability) CallTool(ctx context.Context, name string, argum
 	case "get_status":
 		err = requireEmptyToolArguments(arguments)
 		value = c.app.agentStatusProjection()
+	case "get_snapshot":
+		err = requireEmptyToolArguments(arguments)
+		if err == nil {
+			value, err = c.app.assistantSnapshot(ctx, c.app.currentTime())
+		}
 	case "get_overview":
 		err = requireEmptyToolArguments(arguments)
 		if err == nil {

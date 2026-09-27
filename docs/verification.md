@@ -1843,3 +1843,44 @@ marker; a correction made on one changed the other's clinician report;
 concurrent edits converged on one revision carrying both changes; deletions
 travelled both ways with nothing left pending. The core, server and desktop Go
 suites and the web tests (477), types and formatting pass.
+
+## One assistant snapshot — 2026-09-27
+
+The test day is synthetic: ten nights, an imported appointment carrying a private title and
+location, a task whose suggestion was accepted and one still awaiting a decision, a scheduled
+medication with a dose note, and a travel marker with a note.
+
+The local agent's `get_snapshot`:
+
+- validated against `assistant-snapshot.schema.json`;
+- contained none of the private canaries (titles, location, the imported entry's own id, labels,
+  notes);
+- said "awake" exactly as the overview did, with awake-for rounded to five minutes;
+- gave the onset and wake ranges the outlook computes;
+- listed the appointment and the accepted time, the latter carrying its task id;
+- gave the pending suggestion under the same proposal id as the planner, and counted it under
+  needs-you.
+
+With nothing recorded, the snapshot still validated and stated an empty rhythm, an unknown presence
+and a refused plan.
+
+The chat request now carries exactly the planning view's sections, with no sleep section and no
+awake-for. On the server:
+
+- the model context gained the snapshot's rhythm, timeline, reachable hours, commitments, decisions
+  awaiting the owner, unplaced tasks and needs-review flags, all as civil times;
+- no snapshot sentence reached the model, and no raw instant either;
+- unreadable values were dropped or read as the least trusting value;
+- a withheld estimate stated no presence;
+- a chat snapshot carrying a sleep, medication, marker, task or sync section failed strict
+  decoding.
+
+The Home lead's sentences are unchanged now that the lead reads the desktop's ranges.
+
+In the running desktop (disposable profile, synced, records about 17 hours old), an MCP client
+listed `get_snapshot` second and received every section (5.7 KB). It stated a stale estimate: no
+presence, and Home's own explanation. That exposed a defect: Home's synced overview said "cannot
+confirm how recent the underlying records are". It now carries this computer's verdict ("The
+newest sleep record is about 17 hours old…"), matching the snapshot. A test pins it and fails when
+the fix is removed. The core, server and desktop Go suites, the web tests, types, formatting and
+lint pass.

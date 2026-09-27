@@ -993,3 +993,33 @@ func TestPulledTaskRevisionsApplyLWWAndTombstoneDeletes(t *testing.T) {
 		t.Fatalf("tombstone application must not enqueue erasures: %v %v", pending, err)
 	}
 }
+
+// Found by comparing the assistant snapshot with Home: with sync on, Home's
+// overview comes from the server, whose contract has no freshness verdict, so
+// Home read every synced estimate as "cannot confirm how recent" and never
+// said what was happening now, however fresh the records.
+func TestSyncedOverviewCarriesThisComputersFreshnessVerdict(t *testing.T) {
+	app := newTestApp(t)
+	seedSleepEntriesEndingAt(t, app, 10, 2*time.Hour)
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/devices":
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(registerDeviceResponse{SchemaVersion: "v1", DeviceID: "device_desktop", Token: "projection-token"})
+		case "/v1/overview":
+			_ = json.NewEncoder(w).Encode(serverOverviewResponse{SchemaVersion: "v1", Status: "estimated",
+				CurrentEstimatedState: "Likely awake", TimeSinceWake: "2 hours", MedicationEvents: []MedicationEventDTO{}, Disclaimer: disclaimer})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	configureBackendForTest(t, app, server.URL)
+	overview, err := app.GetOverview()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overview.EstimateSource != "synced" || overview.Freshness.State != "current" || !overview.Freshness.Trusted {
+		t.Fatalf("synced overview freshness = %+v (source %s)", overview.Freshness, overview.EstimateSource)
+	}
+}

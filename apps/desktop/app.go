@@ -172,6 +172,7 @@ type ProposalDTO struct {
 }
 
 type UnplacedDTO struct {
+	TaskID     string `json:"taskId"`
 	Title      string `json:"title"`
 	Reason     string `json:"reason"`
 	ReasonCode string `json:"reasonCode"`
@@ -628,6 +629,14 @@ func (a *App) GetOverview() (OverviewDTO, error) {
 	ctx := a.applicationContext()
 	now := a.currentTime().UTC()
 	if overview, ok := a.serverOverview(ctx, now); ok {
+		// The server's overview contract carries no freshness verdict, and
+		// without one Home can never state what is happening now. The same
+		// records are synced here, so their age is judged here.
+		state, err := a.localEstimate(ctx, now)
+		if err != nil {
+			return OverviewDTO{}, err
+		}
+		overview.Freshness = freshnessDTO(assessFreshness(state, now))
 		return overview, nil
 	}
 	return a.localOverview(ctx, now)
@@ -661,18 +670,16 @@ func (a *App) localOverview(ctx context.Context, now time.Time) (OverviewDTO, er
 	// composing one. The shared policy keys on the age of the evidence, not on
 	// when the background snapshot was refreshed. Reassess at the reader's
 	// actual instant so a screen never extends a freshness deadline.
-	assessment := freshness.Default().Assess(desktopFreshnessInputs(state, latest, nextSleep, now))
+	assessment := assessFreshness(state, now)
 
-	currentState := "Likely awake"
+	currentState := map[string]string{
+		presenceAwake: "Likely awake", presenceAsleep: "Likely asleep", presenceUnknown: "Unknown",
+	}[presenceNow(latest, assessment, now)]
 	timeSinceWake := "Not available"
 	if interval.Contains(now) {
-		currentState = "Likely asleep"
 		timeSinceWake = "Sleep entry overlaps the current time"
 	} else if now.After(lastWake.UTC) {
 		timeSinceWake = formatDuration(now.Sub(lastWake.UTC))
-	}
-	if !assessment.MayClaimCurrentState() {
-		currentState = "Unknown"
 	}
 	currentAvailability := domain.AvailabilityWindow{
 		ID:         "current-functional-window",
@@ -738,6 +745,18 @@ func (a *App) localOverview(ctx context.Context, now time.Time) (OverviewDTO, er
 // evidence is the recorded-at of the newest sleep interval, not its clock time:
 // a record entered today about last week is fresh evidence, and the reverse is
 // not.
+// assessFreshness is the shared policy's verdict on this computer's sleep
+// records at now. Synced records are the same on every device, so the verdict
+// holds for a synced estimate as well as a local one.
+func assessFreshness(state localEstimateState, now time.Time) freshness.Assessment {
+	latest, _ := latestPrincipalSession(state.Sessions)
+	var nextSleep domain.TimeRange
+	if len(state.Estimate.PredictedSleepWindows) > 0 {
+		nextSleep = state.Estimate.PredictedSleepWindows[0].Interval
+	}
+	return freshness.Default().Assess(desktopFreshnessInputs(state, latest, nextSleep, now))
+}
+
 func desktopFreshnessInputs(
 	state localEstimateState,
 	latest domain.SleepSession,
@@ -1335,6 +1354,26 @@ func localPlanningAvailability(state localEstimateState, now time.Time) []domain
 	return availability
 }
 
+const (
+	presenceAwake   = "awake"
+	presenceAsleep  = "asleep"
+	presenceUnknown = "unknown"
+)
+
+// presenceNow is the claim Home makes about the present, which the assistant
+// snapshot repeats: asleep while the latest recorded sleep covers now, awake
+// after it, and unknown when the freshness policy will not support a claim.
+func presenceNow(latest domain.SleepSession, assessment freshness.Assessment, now time.Time) string {
+	switch {
+	case !assessment.MayClaimCurrentState() || len(latest.Intervals) == 0:
+		return presenceUnknown
+	case latest.Intervals[0].Interval.Contains(now):
+		return presenceAsleep
+	default:
+		return presenceAwake
+	}
+}
+
 func latestPrincipalSession(sessions []domain.SleepSession) (domain.SleepSession, bool) {
 	for i := len(sessions) - 1; i >= 0; i-- {
 		if !sessions[i].IsPrincipalSleep() || len(sessions[i].Intervals) == 0 {
@@ -1349,6 +1388,7 @@ func unplacedForUnavailableEstimate(tasks []domain.FlexibleTask) []UnplacedDTO {
 	result := make([]UnplacedDTO, 0, len(tasks))
 	for _, task := range tasks {
 		result = append(result, UnplacedDTO{
+			TaskID:     string(task.ID),
 			Title:      task.Title,
 			Reason:     unplacedReasonLabel(scheduling.ReasonEstimateUnavailable),
 			ReasonCode: string(scheduling.ReasonEstimateUnavailable),

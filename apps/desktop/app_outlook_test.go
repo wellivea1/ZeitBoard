@@ -31,8 +31,8 @@ func TestOutlookAnswersTheNextThreeDays(t *testing.T) {
 	if len(view.OfficeWindows) == 0 {
 		t.Error("no office windows over three days")
 	}
-	if view.NextSleepLabel == "" {
-		t.Error("no next sleep range")
+	if view.SleepOnset == nil || view.Wake == nil {
+		t.Error("no range for the next sleep's onset and waking")
 	}
 	if view.AwakeLabel == "" || view.UncertainLabel == "" {
 		t.Error("the awake/uncertain summary is missing")

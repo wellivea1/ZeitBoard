@@ -128,7 +128,7 @@ func TestHandlerLifecycleToolsAndNoApplySurface(t *testing.T) {
 	for _, tool := range listed.Result.Tools {
 		names[tool.Name] = true
 	}
-	for _, required := range []string{"get_status", "get_overview", "get_rhythm_summary", "list_tasks", "get_medication_timing", "list_rhythm_markers", "get_appearance", "set_appearance", "ask_zeitboard_facts"} {
+	for _, required := range []string{"get_status", "get_snapshot", "get_overview", "get_rhythm_summary", "list_tasks", "get_medication_timing", "list_rhythm_markers", "get_appearance", "set_appearance", "ask_zeitboard_facts"} {
 		if !names[required] {
 			t.Errorf("missing tool %q", required)
 		}

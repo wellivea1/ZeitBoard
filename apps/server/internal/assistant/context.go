@@ -27,6 +27,7 @@ type redactedContext struct {
 	Now          string                 `json:"now"`
 	ZoneID       string                 `json:"zone_id"`
 	EstimateID   string                 `json:"estimate_id,omitempty"`
+	Snapshot     *redactedSnapshot      `json:"snapshot,omitempty"`
 	Tasks        []redactedTask         `json:"tasks,omitempty"`
 	Availability []redactedAvailability `json:"availability,omitempty"`
 	FixedEvents  []redactedFixedEvent   `json:"fixed_events,omitempty"`
@@ -40,6 +41,7 @@ type redactedTask struct {
 	Latest                    string `json:"latest,omitempty"`
 	MinimumConfidence         string `json:"minimum_confidence,omitempty"`
 	PreferredAfterWakeMinutes *int   `json:"preferred_after_wake_minutes,omitempty"`
+	NeedsReview               bool   `json:"needs_review,omitempty"`
 }
 
 type redactedAvailability struct {
@@ -92,7 +94,9 @@ func buildRedactedContext(input PlanningContext, compact bool) (json.RawMessage,
 			"Create proposals only; never apply schedule changes.",
 			"Use civil-time ranges and confidence.",
 			"No diagnosis, dosing, treatment timing, or exact phase claims.",
+			"If the snapshot's freshness is not current, say the records are getting old and state no current state; if it is withheld, state no time ahead either.",
 		},
+		Snapshot: sanitizeSnapshot(input.Snapshot, input.Now, zoneID, compact),
 	}
 	if input.EstimateID != "" && contextIdentifierPattern.MatchString(input.EstimateID) {
 		ctx.EstimateID = input.EstimateID
@@ -136,6 +140,7 @@ func sanitizeTaskContext(input TaskContext, zoneID string) (redactedTask, bool) 
 		TaskID: input.TaskID, DurationMinutes: input.DurationMinutes,
 		MinimumConfidence:         allowedValue(input.MinimumConfidence, "", "low", "medium", "high"),
 		PreferredAfterWakeMinutes: input.PreferredAfterWakeMinutes,
+		NeedsReview:               input.NeedsReview,
 	}
 	if input.EarliestStartAt != nil {
 		item.Earliest = civil(*input.EarliestStartAt, zoneID)
@@ -302,7 +307,7 @@ func sanitizeMedicationFact(input MedicationFactContext) (redactedMedicationFact
 		LastLoggedStatus:         allowedValue(input.LastLoggedStatus, "taken", "skipped"),
 		LastWakeRelation:         sanitizedWakeRelation(input.LastWakeRelation),
 		LastSleepRelation:        sanitizedSleepRelation(input.LastSleepRelation),
-		Confidence:               allowedValue(input.Confidence, "Low", "Medium", "High", "Unknown"),
+		Confidence:               allowedValue(strings.ToLower(input.Confidence), "low", "medium", "high", "unknown"),
 	}, true
 }
 
@@ -396,6 +401,7 @@ func assistantSystemPrompt() string {
 	return strings.Join([]string{
 		"You are ZeitBoard's scheduling assistant.",
 		"Return only the assistant action JSON.",
+		"The context's snapshot is the owner's day as their Home screen states it: whether they are likely awake now, when sleep is likely to begin and waking to follow, reachable hours, commitments and whether they fall in predicted sleep, suggested times awaiting their decision, and tasks that could not be placed.",
 		"The server resolves proposals; you never apply changes.",
 		"Use plain civil-time language with uncertainty.",
 		"Do not provide diagnosis, dosing, treatment timing, or exact phase claims.",

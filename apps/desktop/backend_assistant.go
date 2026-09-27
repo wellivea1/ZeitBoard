@@ -22,8 +22,9 @@ const (
 
 // Assistant bindings (roadmap slice 8): the desktop chat surface over the M2
 // propose-only endpoints. The desktop builds a REDACTED planning context —
-// task ids, durations, and bounds only, never titles or any sleep record —
-// and the server resolves model output into pending proposals (ADR-0010).
+// task ids, durations, and bounds, and the assistant snapshot's planning view
+// (ADR-0049); never titles or any sleep record — and the server resolves
+// model output into pending proposals (ADR-0010).
 // There is no apply path here: deciding a proposal goes through the same
 // one-use-token queue endpoint as everywhere else.
 
@@ -73,6 +74,7 @@ type assistantContextPayload struct {
 	FixedEvents     []assistantFixedEventContext `json:"fixed_events,omitempty"`
 	MedicationFacts []assistantMedicationFact    `json:"medication_facts,omitempty"`
 	Markers         []assistantMarkerFact        `json:"markers,omitempty"`
+	Snapshot        *assistantSnapshot           `json:"snapshot,omitempty"`
 }
 
 type assistantTaskContext struct {
@@ -82,6 +84,7 @@ type assistantTaskContext struct {
 	LatestFinishAt            *time.Time `json:"latest_finish_at,omitempty"`
 	PreferredAfterWakeMinutes *int       `json:"preferred_after_wake_minutes,omitempty"`
 	MinimumConfidence         string     `json:"minimum_confidence,omitempty"`
+	NeedsReview               bool       `json:"needs_review,omitempty"`
 }
 
 type assistantAvailabilityEntry struct {
@@ -227,8 +230,10 @@ func (a *App) SendAssistantMessage(input AssistantMessageInput) (AssistantReplyD
 }
 
 // assistantPlanningContext builds the redacted context: zone, now, estimate
-// id, availability windows, and task ids with bounds. Titles never leave the
-// device; the rail re-attaches them locally for display.
+// id, availability windows, task ids with bounds, and the assistant
+// snapshot's planning view — what Home says about now, the night ahead, the
+// next three days and what awaits the owner. Titles never leave the device;
+// the rail re-attaches them locally for display.
 func (a *App) assistantPlanningContext(ctx context.Context, scope assistantFactScope) (assistantContextPayload, error) {
 	now := a.currentTime().UTC().Truncate(time.Minute)
 	payload := assistantContextPayload{ZoneID: defaultZoneID, Now: now}
@@ -236,6 +241,12 @@ func (a *App) assistantPlanningContext(ctx context.Context, scope assistantFactS
 	if err != nil {
 		return payload, err
 	}
+	snapshot, err := a.assistantSnapshot(ctx, now)
+	if err != nil {
+		return payload, err
+	}
+	planningView := snapshot.forChat()
+	payload.Snapshot = &planningView
 	state, err := a.localEstimate(ctx, now)
 	if err != nil {
 		return payload, err
@@ -288,6 +299,10 @@ func (a *App) assistantPlanningContext(ctx context.Context, scope assistantFactS
 	if err != nil {
 		return payload, err
 	}
+	conflicts, err := store.TaskSyncConflictIDs(ctx)
+	if err != nil {
+		return payload, err
+	}
 	for _, record := range records {
 		if record.Status != storage.TaskStatusOpen {
 			continue
@@ -302,6 +317,7 @@ func (a *App) assistantPlanningContext(ctx context.Context, scope assistantFactS
 			LatestFinishAt:            record.LatestFinishAt,
 			PreferredAfterWakeMinutes: record.PreferredAfterWakeMinutes,
 			MinimumConfidence:         record.MinimumConfidence,
+			NeedsReview:               conflicts[record.TaskID],
 		})
 	}
 

@@ -324,6 +324,22 @@ display action (`set_appearance`, reversible and non-health per ADR-0021), and
 propose-only scheduling tools that require an enrolled backend. It has no approve/apply
 tool either.
 
+Both the local endpoint and the chat assistant read one **assistant snapshot** (ADR-0049). It
+is the owner's day as Home states it, built from the same computations as the screens:
+
+- whether the estimate may describe now, and what the owner is doing;
+- when sleep and waking are likely;
+- reachable hours;
+- commitments and whether they fall in predicted sleep;
+- accepted times, suggestions awaiting a decision, and tasks that could not be placed.
+
+It carries no title, label, note, location, clinician text or raw record. It carries no exact
+time of recorded evidence either: sleep is stated as "awake for about so long" and as last
+night's date and length. The local endpoint returns all of it as `get_snapshot`. The chat
+assistant sends its server only the planning view. The model reads enums, counts, opaque ids and
+civil-time ranges from it, never a sleep record, medication or marker. The server refuses a chat
+snapshot that carries any of those sections.
+
 What the local endpoint may return includes **medication timing facts and rhythm context markers**
 drawn from local records - for example how long after waking a dose was logged, or that a travel
 marker exists on a date. These are the same projections the local UI shows, never raw records: no

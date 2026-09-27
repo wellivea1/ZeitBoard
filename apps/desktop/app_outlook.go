@@ -1,13 +1,14 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	calendarcore "non24.app/core/calendar"
 	"non24.app/core/domain"
-	"non24.app/core/freshness"
 	"non24.app/core/outlook"
 )
 
@@ -87,10 +88,14 @@ type OutlookDTO struct {
 	// screen can say "tonight" or "tomorrow" without parsing a sentence.
 	HorizonStart string `json:"horizonStart,omitempty"`
 
-	Days           []OutlookDayMarkDTO `json:"days"`
-	Segments       []OutlookSegmentDTO `json:"segments"`
-	NextSleepLabel string              `json:"nextSleepLabel,omitempty"`
-	NextWakeLabel  string              `json:"nextWakeLabel,omitempty"`
+	Days     []OutlookDayMarkDTO `json:"days"`
+	Segments []OutlookSegmentDTO `json:"segments"`
+
+	// SleepOnset and Wake are when the next sleep is likely to begin and
+	// waking likely to follow (outlook.SleepAhead): the ranges Home's lead
+	// sentence and the assistant snapshot both state.
+	SleepOnset *OutlookRangeDTO `json:"sleepOnset,omitempty"`
+	Wake       *OutlookRangeDTO `json:"wake,omitempty"`
 
 	OfficeHoursLabel string                  `json:"officeHoursLabel"`
 	OfficeWindows    []OutlookOfficeDTO      `json:"officeWindows"`
@@ -106,19 +111,47 @@ type OutlookDTO struct {
 	Disclaimer string `json:"disclaimer"`
 }
 
+type OutlookRangeDTO struct {
+	Start string `json:"start"`
+	End   string `json:"end"`
+}
+
 // GetOutlook builds the 48–72 hour operational view.
 func (a *App) GetOutlook() (OutlookDTO, error) {
-	ctx := a.applicationContext()
-	now := a.currentTime().UTC().Truncate(time.Minute)
-
-	state, err := a.localEstimate(ctx, now)
+	computed, err := a.computeOutlook(a.applicationContext(), a.currentTime().UTC().Truncate(time.Minute))
 	if err != nil {
 		return OutlookDTO{}, err
+	}
+	titles := make(map[domain.CalendarEventID]string, len(computed.events))
+	for id, event := range computed.events {
+		titles[id] = event.Title
+	}
+	return outlookDTO(computed.view, titles, computed.taskTitles, computed.zoneID, reachingSummary(computed.reaching)), nil
+}
+
+// outlookComputation is the operational view together with what it was built
+// from. The Outlook screen and the assistant snapshot both read it, so they
+// cannot disagree about the next three days.
+type outlookComputation struct {
+	view     outlook.Outlook
+	state    localEstimateState
+	zoneID   string
+	reaching ReachingHoursDTO
+	// events are the calendar records behind the view's commitments, keyed by
+	// the commitment's event id; they say which block is a task's accepted time.
+	events     map[domain.CalendarEventID]calendarcore.Event
+	taskTitles map[domain.FlexibleTaskID]string
+}
+
+func (a *App) computeOutlook(ctx context.Context, now time.Time) (outlookComputation, error) {
+	state, err := a.localEstimate(ctx, now)
+	if err != nil {
+		return outlookComputation{}, err
 	}
 
 	zoneID := state.Estimate.AsOf.ZoneID
 	if zoneID == "" {
-		zoneID = time.Now().Location().String()
+		zoneID = localZoneID()
 	}
 
 	reaching := a.currentReachingHours()
@@ -131,16 +164,8 @@ func (a *App) GetOutlook() (OutlookDTO, error) {
 		in.EstimateError = outlookRefusalError(state)
 	}
 
-	var latest domain.SleepSession
-	if session, ok := latestPrincipalSession(state.Sessions); ok {
-		latest = session
-	}
-	var nextSleep domain.TimeRange
-	if len(state.Estimate.PredictedSleepWindows) > 0 {
-		nextSleep = state.Estimate.PredictedSleepWindows[0].Interval
-	}
-	assessment := freshness.Default().Assess(desktopFreshnessInputs(state, latest, nextSleep, now))
-	in.Freshness = assessment
+	latest, _ := latestPrincipalSession(state.Sessions)
+	in.Freshness = assessFreshness(state, now)
 
 	// Recorded sleep reaching into the horizon overrides the forecast, and the
 	// newest wake anchors after-wake task constraints.
@@ -160,12 +185,12 @@ func (a *App) GetOutlook() (OutlookDTO, error) {
 		}
 	}
 
-	titles := map[domain.CalendarEventID]string{}
+	records := map[domain.CalendarEventID]calendarcore.Event{}
 	taskTitles := map[domain.FlexibleTaskID]string{}
 	if store, storeErr := a.requireStore(); storeErr == nil {
 		events, _, eventsErr := store.BusyDomainEvents(ctx, now, horizonEnd, zoneID)
 		if eventsErr != nil {
-			return OutlookDTO{}, eventsErr
+			return outlookComputation{}, eventsErr
 		}
 		in.Events = events
 		// BusyDomainEvents is text-free on purpose — it also fingerprints the
@@ -174,14 +199,14 @@ func (a *App) GetOutlook() (OutlookDTO, error) {
 		// come from the calendar itself; the planner never sees them.
 		titled, titledErr := store.CalendarEvents(ctx, now, horizonEnd)
 		if titledErr != nil {
-			return OutlookDTO{}, titledErr
+			return outlookComputation{}, titledErr
 		}
 		for _, event := range titled {
-			titles[domain.CalendarEventID(event.EventID)] = event.Title
+			records[domain.CalendarEventID(event.EventID)] = event
 		}
 		tasks, _, tasksErr := store.OpenDomainTasks(ctx, zoneID)
 		if tasksErr != nil {
-			return OutlookDTO{}, tasksErr
+			return outlookComputation{}, tasksErr
 		}
 		in.Tasks = tasks
 		for _, task := range tasks {
@@ -191,9 +216,12 @@ func (a *App) GetOutlook() (OutlookDTO, error) {
 
 	view, err := outlook.Build(in)
 	if err != nil {
-		return OutlookDTO{}, err
+		return outlookComputation{}, err
 	}
-	return outlookDTO(view, titles, taskTitles, zoneID, reachingSummary(reaching)), nil
+	return outlookComputation{
+		view: view, state: state, zoneID: zoneID, reaching: reaching,
+		events: records, taskTitles: taskTitles,
+	}, nil
 }
 
 // outlookRefusalError turns the local estimate's state into the typed refusal
@@ -260,12 +288,8 @@ func outlookDTO(
 	}
 	dto.Days = dayMarks(start, view.Horizon.End.UTC, location)
 
-	if view.NextSleep != nil {
-		dto.NextSleepLabel = civilRange(*view.NextSleep, location)
-	}
-	if view.NextWake != nil {
-		dto.NextWakeLabel = civilRange(*view.NextWake, location)
-	}
+	onset, wake := view.SleepAhead()
+	dto.SleepOnset, dto.Wake = outlookRange(onset), outlookRange(wake)
 
 	for _, window := range view.OfficeWindows {
 		dto.OfficeWindows = append(dto.OfficeWindows, officeDTO(window, location, start))
@@ -301,6 +325,13 @@ func outlookDTO(
 	return dto
 }
 
+func outlookRange(value *domain.TimeRange) *OutlookRangeDTO {
+	if value == nil {
+		return nil
+	}
+	return &OutlookRangeDTO{Start: value.Start.UTC.Format(time.RFC3339), End: value.End.UTC.Format(time.RFC3339)}
+}
+
 // clampToHorizon returns where an interval sits on the timeline, in hours from
 // its start, cut to the part inside the horizon.
 func clampToHorizon(interval domain.TimeRange, start, end time.Time) (float64, float64) {
@@ -325,27 +356,36 @@ func officeDTO(window outlook.OfficeWindow, location *time.Location, start time.
 		OffsetHours:   window.Interval.Start.UTC.Sub(start).Hours(),
 		DurationHours: window.Interval.End.UTC.Sub(window.Interval.Start.UTC).Hours(),
 	}
-	switch {
-	case window.ReachableFor > 0:
-		dto.Status = "reachable"
+	dto.Status = officeStatus(window)
+	switch dto.Status {
+	case "reachable":
 		dto.ReachableLabel = clockRange(window.Reachable[0], location)
 		if len(window.Reachable) > 1 {
 			dto.ReachableLabel += fmt.Sprintf(" and %d more", len(window.Reachable)-1)
 		}
 		dto.Detail = fmt.Sprintf("Predicted awake for %s of this window.", formatDuration(window.ReachableFor))
-	case window.PossibleFor > 0:
-		// Deliberately not counted as reachable. The overlap sits on a boundary
-		// the model has not pinned down, and a plan made on it is a plan made on
-		// arithmetic.
-		dto.Status = "partial"
+	case "partial":
 		dto.Detail = fmt.Sprintf(
 			"Possibly awake for up to %s, but this falls where the sleep boundary is uncertain.",
 			formatDuration(window.PossibleFor))
 	default:
-		dto.Status = "unreachable"
 		dto.Detail = "Predicted asleep for all of this window."
 	}
 	return dto
+}
+
+// officeStatus is reachable, partial, or unreachable. An overlap that sits on
+// a boundary the model has not pinned down is deliberately not counted as
+// reachable: a plan made on it is a plan made on arithmetic.
+func officeStatus(window outlook.OfficeWindow) string {
+	switch {
+	case window.ReachableFor > 0:
+		return "reachable"
+	case window.PossibleFor > 0:
+		return "partial"
+	default:
+		return "unreachable"
+	}
 }
 
 func conflictLabel(kind outlook.ConflictKind) string {

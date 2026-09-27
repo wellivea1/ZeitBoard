@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"sort"
+	"strings"
 	"time"
 
 	storage "non24.app/core/storage/sqlite"
@@ -84,10 +85,10 @@ type agentTasksDTO struct {
 }
 
 type agentTaskDTO struct {
-	NeedsReview               bool   `json:"needsReview"`
 	TaskID                    string `json:"task_id"`
 	DurationMinutes           int    `json:"duration_minutes"`
 	Status                    string `json:"status"`
+	NeedsReview               bool   `json:"needs_review"`
 	EarliestStartAt           string `json:"earliest_start_at,omitempty"`
 	LatestFinishAt            string `json:"latest_finish_at,omitempty"`
 	PreferredAfterWakeMinutes *int   `json:"preferred_after_wake_minutes,omitempty"`
@@ -192,6 +193,7 @@ type agentMarkerDTO struct {
 func (a *App) agentStatusProjection() agentStatusDTO {
 	status := a.GetLocalAgentStatus()
 	capabilities := []string{
+		"read_snapshot",
 		"read_overview",
 		"read_rhythm_summary",
 		"read_tasks_without_titles",
@@ -396,7 +398,7 @@ func (a *App) agentMedicationProjection(ctx context.Context) (agentMedicationTim
 				mapped.Forecast.Occurrences = append(mapped.Forecast.Occurrences, agentMedicationOccurrenceDTO{
 					CivilDate: occurrence.CivilDate, CivilTime: occurrence.CivilTime,
 					Status: occurrence.Status, Context: occurrence.Context,
-					Confidence: occurrence.Confidence, Ambiguous: occurrence.Ambiguous, DSTNote: occurrence.DSTNote,
+					Confidence: agentLevel(occurrence.Confidence), Ambiguous: occurrence.Ambiguous, DSTNote: occurrence.DSTNote,
 				})
 			}
 			gapLimit := len(schedule.Forecast.Gaps)
@@ -456,7 +458,7 @@ func medicationLogSummaries(events []storage.EffectiveMedicationEvent, state loc
 		summary.Latest = &agentMedicationLatestFactDTO{
 			Status: projected.Status, Scheduled: projected.Scheduled,
 			WakeRelation: projected.WakeRelation, SleepRelation: projected.SleepRelation,
-			SleepRelationKind: projected.SleepRelationKind, Confidence: projected.Confidence,
+			SleepRelationKind: projected.SleepRelationKind, Confidence: agentLevel(projected.Confidence),
 		}
 		summaries[medicationID] = summary
 	}
@@ -512,6 +514,12 @@ func markerEndCivilDate(marker RhythmMarkerDTO) (string, error) {
 		return "", err
 	}
 	return end.In(location).Format(time.DateOnly), nil
+}
+
+// agentLevel is a confidence level as agents read it everywhere — low,
+// medium, high or unknown — rather than the screen's capitalized label.
+func agentLevel(label string) string {
+	return strings.ToLower(label)
 }
 
 func formatOptionalAgentTime(value *time.Time) string {
