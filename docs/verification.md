@@ -2102,3 +2102,47 @@ The planning question reached the model, but its replies were unusable, and the 
 The server's strict parsing refused all three, as it should. A model that follows the action
 schema needs a larger download, which was not made. The contract fixture check and the server
 suite pass.
+
+## An agent proposes a task — 2026-09-27
+
+Registry: a new task's title must be 1 to 120 characters on one line, and it takes 5 to 720
+minutes. Also refused: an empty bound, a latest finish already past, and bounds too close for
+the task. The desktop-only subjects are held to the local endpoint.
+
+Store (`local_agent_proposals`, synthetic records):
+
+- a proposed task adds nothing until approved;
+- approved, it is an open task at revision 1 with the proposal's title, trimmed, and its length
+  and bounds, created at the decision;
+- a task the store would refuse is refused as a proposal;
+- doses and tasks share the limit of twenty waiting;
+- erasing a medication erases its dose proposals and keeps task proposals;
+- the dose checks carried over unchanged: approval, rejection, lapse and pruning.
+
+Desktop, through the endpoint's dispatch:
+
+- the task waits and the snapshot counts it;
+- accepting adds it, and it appears in Plan's task list;
+- refused, with "Nothing was proposed": no title, a two-line or 121-character title, a 2-minute
+  task, a past finish, a task id, notes, and no duration.
+
+Web: the queue counts a dose and a task, and shows both.
+
+- Accepting the dose sends `approved` and refreshes medication views.
+- Declining the task sends `rejected` and refreshes nothing.
+- Both then appear in the history.
+- Normalizers refuse a proposal with both kinds or neither.
+
+In the running desktop (disposable dev profile), an MCP client:
+
+- found `propose_add_task` listed;
+- was refused a two-line title;
+- proposed "Call the pharmacy", 15 minutes, by three days on, and the snapshot counted it.
+
+Home listed it first under "Waiting on you" (4): "A task your assistant asked to add, 15 minutes,
+by Wednesday at 10:08 AM". Accepting it added the task, and Home at once showed the planner's
+suggestion for it: "Call the pharmacy — A suggested time, Today 11:00 – 11:15 AM".
+
+The core, server and desktop Go suites, the contract fixture check and the full web check pass
+(485 web tests).
+

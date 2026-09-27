@@ -1,13 +1,13 @@
 import { decisionButton, decisionDone, decisionLabel } from "../data/decisionWords";
 import { useState } from "react";
-import { DoseProposalCard, DoseProposalHistoryRow } from "./DoseProposalCard";
+import { AgentProposalCard, AgentProposalHistoryRow } from "./AgentProposalCard";
 import { ProposalCard } from "./ProposalCard";
 import { TaskConflictCard, TaskConflictHistoryCard } from "./TaskConflictCard";
 import { VisitorRequestCard } from "./VisitorRequestCard";
 import { useApprovals } from "../state/approvals";
 import { useBackendProposals } from "../state/backendProposals";
-import { useDoseProposals } from "../state/doseProposals";
-import { doseIsWaiting } from "../data/doseProposals";
+import { useAgentProposals } from "../state/agentProposals";
+import { proposalIsWaiting } from "../data/agentProposals";
 import { useVisitorRequests } from "../state/visitorRequests";
 import { useApprovalQueue } from "../state/approvalQueue";
 import { reviewIsPending, reviewStatus } from "../data/reviewQueue";
@@ -77,15 +77,15 @@ function QueueErrors() {
   const local = useApprovals();
   const backend = useBackendProposals();
   const visitor = useVisitorRequests();
-  const doses = useDoseProposals();
+  const agent = useAgentProposals();
   const messages = [
     local.error,
     backend.decisionError,
     backend.data.status === "error" ? backend.data.message : "",
     visitor.decisionError,
     visitor.data.status === "error" ? visitor.data.message : "",
-    doses.decisionError,
-    doses.data.status === "error" ? doses.data.message : "",
+    agent.decisionError,
+    agent.data.status === "error" ? agent.data.message : "",
   ].filter((message, index, all) => message && all.indexOf(message) === index);
   return (
     <>
@@ -150,16 +150,16 @@ export function DecisionQueue() {
   const local = useApprovals();
   const backend = useBackendProposals();
   const visitor = useVisitorRequests();
-  const doses = useDoseProposals();
+  const agent = useAgentProposals();
   const summary = useApprovalQueue();
   const [announcement, setAnnouncement] = useState("");
   const remotePending = backend.data.proposals.filter((item) => reviewIsPending(item, summary.now));
   const requests = visitor.data.requests.filter((item) => reviewIsPending(item, summary.now));
-  const waitingDoses = doses.data.pending.filter((item) => doseIsWaiting(item, summary.now));
+  const waitingHere = agent.data.pending.filter((item) => proposalIsWaiting(item, summary.now));
   const now = new Date(summary.now);
   const loaded =
     local.taskConflicts.length +
-    waitingDoses.length +
+    waitingHere.length +
     local.pending.length +
     remotePending.length +
     requests.length;
@@ -187,8 +187,8 @@ export function DecisionQueue() {
           {local.taskConflicts.map((conflict) => (
             <TaskConflictCard conflict={conflict} key={conflict.reviewToken} />
           ))}
-          {waitingDoses.map((proposal) => (
-            <DoseProposalCard proposal={proposal} now={now} key={`dose-${proposal.proposalId}`} />
+          {waitingHere.map((proposal) => (
+            <AgentProposalCard proposal={proposal} now={now} key={`agent-${proposal.proposalId}`} />
           ))}
           {local.pending.map((proposal) => (
             <ProposalCard proposal={proposal} key={`local-${proposal.id}`} />
@@ -230,7 +230,7 @@ export function DecisionQueue() {
         </ul>
       )}
       <p role="status" className="sr-only">
-        {announcement || visitor.announcement || doses.announcement}
+        {announcement || visitor.announcement || agent.announcement}
       </p>
     </section>
   );
@@ -240,7 +240,7 @@ export function DecisionHistory() {
   const local = useApprovals();
   const backend = useBackendProposals();
   const visitor = useVisitorRequests();
-  const doses = useDoseProposals();
+  const agent = useAgentProposals();
   const summary = useApprovalQueue();
   const backendHistory = backend.data.proposals.filter(
     (item) => !reviewIsPending(item, summary.now),
@@ -249,18 +249,18 @@ export function DecisionHistory() {
     (item) => !reviewIsPending(item, summary.now),
   );
   // A proposal that lapsed while the list was open reads as history too.
-  const doseHistory = [
-    ...doses.data.pending
-      .filter((item) => !doseIsWaiting(item, summary.now))
+  const agentHistory = [
+    ...agent.data.pending
+      .filter((item) => !proposalIsWaiting(item, summary.now))
       .map((item) => ({ ...item, state: "expired" as const })),
-    ...doses.data.history,
+    ...agent.data.history,
   ];
   const total =
     local.decided.length +
     local.taskConflictHistory.length +
     backendHistory.length +
     visitorHistory.length +
-    doseHistory.length;
+    agentHistory.length;
 
   return (
     <details className="decision-history">
@@ -306,11 +306,11 @@ export function DecisionHistory() {
             </div>
           </div>
         ))}
-        {doseHistory.map((proposal) => (
-          <DoseProposalHistoryRow
+        {agentHistory.map((proposal) => (
+          <AgentProposalHistoryRow
             proposal={proposal}
             now={new Date(summary.now)}
-            key={`dose-${proposal.proposalId}`}
+            key={`agent-${proposal.proposalId}`}
           />
         ))}
         {visitorHistory.map((request) => (

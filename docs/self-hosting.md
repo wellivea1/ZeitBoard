@@ -334,8 +334,9 @@ The endpoint binds `127.0.0.1` on an ephemeral port, requires a bearer token,
 rejects any request carrying an `Origin` header, and exposes allowlisted read
 projections plus one direct display action (`set_appearance`, per ADR-0021).
 Scheduling requests are propose-only and need an enrolled backend. "I took my
-evening tablet" becomes a proposed dose that waits on Home for you to accept
-(ADR-0051). There is no approve or apply tool. Settings shows the endpoint's
+evening tablet" becomes a proposed dose, and "remind me to call the pharmacy"
+a proposed task; both wait on Home for you to accept (ADR-0051). There is no
+approve or apply tool. Settings shows the endpoint's
 status and the descriptor path.
 
 `scripts\smoke-local-mcp.ps1` checks this path end to end against the

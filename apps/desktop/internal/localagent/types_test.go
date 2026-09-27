@@ -8,8 +8,8 @@ import (
 )
 
 // The local endpoint offers exactly the registry's local actions, under the
-// registry's names. Task proposals need a server to resolve them; a dose waits
-// on this computer, so its proposal is always offered.
+// registry's names. Schedule proposals need a server to resolve them; a dose or
+// a new task waits on this computer, so its proposal is always offered.
 func TestToolListOffersExactlyTheRegisteredLocalActions(t *testing.T) {
 	for _, taskProposals := range []bool{false, true} {
 		listed := map[string]ToolDefinition{}
@@ -24,7 +24,7 @@ func TestToolListOffersExactlyTheRegisteredLocalActions(t *testing.T) {
 		for _, action := range agentactions.All() {
 			tool, offered := listed[action.ID]
 			want := action.On(agentactions.LocalMCP) &&
-				(action.Kind == agentactions.Direct || action.Subject == agentactions.DoseSubject || taskProposals)
+				(action.Kind == agentactions.Direct || action.WaitsOnDesktop() || taskProposals)
 			if offered != want {
 				t.Errorf("task proposals available %v: %s offered %v, want %v", taskProposals, action.ID, offered, want)
 			}

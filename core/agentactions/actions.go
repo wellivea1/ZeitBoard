@@ -8,7 +8,9 @@ package agentactions
 import (
 	"errors"
 	"regexp"
+	"strings"
 	"time"
+	"unicode"
 )
 
 // Version names the registry. Adding, removing or reshaping an action is a new
@@ -31,13 +33,15 @@ const (
 type Subject string
 
 const (
-	// TaskSubject proposals name a TaskTarget. The server's scheduler resolves
-	// them into a pending proposal, wherever they arrive.
-	TaskSubject Subject = "task"
-	// DoseSubject proposals name a DoseTarget. They wait on the owner's
-	// computer until the owner records or discards the dose: a dose is a
-	// health record, so only the owner makes one (ADR-0051).
+	// ScheduleSubject proposals change when an existing task happens. They
+	// name a TaskTarget, and the server's scheduler resolves them into a
+	// pending proposal wherever they arrive.
+	ScheduleSubject Subject = "schedule"
+	// DoseSubject proposals name a DoseTarget: a dose is a health record, so
+	// only the owner makes one.
 	DoseSubject Subject = "dose"
+	// NewTaskSubject proposals name a NewTaskTarget, in the owner's words.
+	NewTaskSubject Subject = "new_task"
 )
 
 // Surface is a place an action is offered.
@@ -73,21 +77,26 @@ type Action struct {
 // On reports whether the action is offered on a surface, or on any of a set.
 func (a Action) On(surfaces Surface) bool { return a.Surfaces&surfaces != 0 }
 
+// WaitsOnDesktop reports whether a proposal waits in the owner's computer's
+// own queue until the owner accepts or declines it (ADR-0051), rather than
+// being resolved by the server.
+func (a Action) WaitsOnDesktop() bool { return a.Kind == Proposal && a.Subject != ScheduleSubject }
+
 const approvalRequired = " A human must approve it before anything changes."
 
 var registry = []Action{
 	{
-		ID: "propose_move_task", Kind: Proposal, Subject: TaskSubject, Surfaces: ChatAssistant | ServerMCP | LocalMCP,
+		ID: "propose_move_task", Kind: Proposal, Subject: ScheduleSubject, Surfaces: ChatAssistant | ServerMCP | LocalMCP,
 		Title: "Propose Move Task", Description: "Create a pending proposal to move a task." + approvalRequired,
 		CardTitle: "Move task",
 	},
 	{
-		ID: "propose_place_task", Kind: Proposal, Subject: TaskSubject, Surfaces: ChatAssistant | ServerMCP | LocalMCP,
+		ID: "propose_place_task", Kind: Proposal, Subject: ScheduleSubject, Surfaces: ChatAssistant | ServerMCP | LocalMCP,
 		Title: "Propose Place Task", Description: "Create a pending proposal to place a task." + approvalRequired,
 		CardTitle: "Place task",
 	},
 	{
-		ID: "propose_reminder_shift", Kind: Proposal, Subject: TaskSubject, Surfaces: ChatAssistant | ServerMCP | LocalMCP,
+		ID: "propose_reminder_shift", Kind: Proposal, Subject: ScheduleSubject, Surfaces: ChatAssistant | ServerMCP | LocalMCP,
 		Title: "Propose Reminder Shift", Description: "Create a pending proposal to shift a reminder." + approvalRequired,
 		CardTitle: "Shift reminder",
 	},
@@ -98,6 +107,14 @@ var registry = []Action{
 			"or get_medication_timing, taken or skipped, and when, if not now. Nothing is recorded until the owner " +
 			"records it on their computer, and it lapses after a day." + approvalRequired,
 		CardTitle: "Record dose",
+	},
+	{
+		ID: "propose_add_task", Kind: Proposal, Subject: NewTaskSubject, Surfaces: LocalMCP,
+		Title: "Propose Add Task",
+		Description: "Create a pending new task for the owner to add: a short title in the owner's own words, how many " +
+			"minutes it takes, and optionally the earliest start and latest finish. Once added, ZeitBoard suggests a time " +
+			"for it as for any task. It lapses after a day." + approvalRequired,
+		CardTitle: "Add task",
 	},
 	{
 		ID: "set_appearance", Kind: Direct, Surfaces: LocalMCP,
@@ -156,11 +173,25 @@ func IsProposal(id string, surfaces Surface) bool {
 	return ok
 }
 
-// IsTaskProposal reports whether id names a registered task proposal offered
-// on a surface, or on any of a set: one the server's scheduler resolves.
-func IsTaskProposal(id string, surfaces Surface) bool {
+// IsScheduleProposal reports whether id names a registered schedule proposal
+// offered on a surface, or on any of a set: one the server's scheduler
+// resolves.
+func IsScheduleProposal(id string, surfaces Surface) bool {
 	action, ok := ProposalOn(id, surfaces)
-	return ok && action.Subject == TaskSubject
+	return ok && action.Subject == ScheduleSubject
+}
+
+// TargetSchema is the JSON Schema of what a proposal about subject names, for
+// tool input schemas.
+func TargetSchema(subject Subject) map[string]any {
+	switch subject {
+	case DoseSubject:
+		return DoseTargetSchema()
+	case NewTaskSubject:
+		return NewTaskTargetSchema()
+	default:
+		return TaskTargetSchema()
+	}
 }
 
 // CardTitle names a pending proposal on a card: "Place task" before the task
@@ -174,7 +205,7 @@ func CardTitle(id string) string {
 
 var identifier = regexp.MustCompile(`^[a-z][a-z0-9_-]{2,79}$`)
 
-// TaskTarget is what every task proposal names: the task, optionally its
+// TaskTarget is what every schedule proposal names: the task, optionally its
 // bounds, duration, after-wake preference and the reminder it concerns.
 type TaskTarget struct {
 	TaskID                    string     `json:"task_id"`
@@ -273,6 +304,54 @@ func DoseTargetSchema() map[string]any {
 				"type": "string", "format": "date-time",
 				"description": "When the dose was taken or skipped; now if omitted. At most a week ago.",
 			},
+		},
+	}
+}
+
+// NewTaskTarget is what a task-adding proposal names. The title is the owner's
+// own words, which the agent heard; it is stored on the owner's computer and
+// never read back to an agent. The limits are a task's own.
+type NewTaskTarget struct {
+	Title           string     `json:"title"`
+	DurationMinutes int        `json:"duration_minutes"`
+	EarliestStartAt *time.Time `json:"earliest_start_at,omitempty"`
+	LatestFinishAt  *time.Time `json:"latest_finish_at,omitempty"`
+}
+
+// Validate applies the target's rules at now. Its errors complete the sentence
+// "The proposal target is invalid: ...".
+func (t NewTaskTarget) Validate(now time.Time) error {
+	title := strings.TrimSpace(t.Title)
+	switch {
+	case title == "" || len(title) > 120:
+		return errors.New("the title must be 1 to 120 characters")
+	case strings.IndexFunc(title, unicode.IsControl) >= 0:
+		return errors.New("the title must be one line of text")
+	case t.DurationMinutes < 5 || t.DurationMinutes > 720:
+		return errors.New("the duration must be 5 to 720 minutes")
+	case (t.EarliestStartAt != nil && t.EarliestStartAt.IsZero()) || (t.LatestFinishAt != nil && t.LatestFinishAt.IsZero()):
+		return errors.New("a timing bound is empty")
+	case t.LatestFinishAt != nil && !t.LatestFinishAt.After(now):
+		return errors.New("the latest finish has passed")
+	case t.EarliestStartAt != nil && t.LatestFinishAt != nil &&
+		t.LatestFinishAt.Sub(*t.EarliestStartAt) < time.Duration(t.DurationMinutes)*time.Minute:
+		return errors.New("the task does not fit between its earliest start and latest finish")
+	}
+	return nil
+}
+
+// NewTaskTargetSchema is the JSON Schema of a NewTaskTarget, for tool input
+// schemas.
+func NewTaskTargetSchema() map[string]any {
+	return map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"required":             []string{"title", "duration_minutes"},
+		"properties": map[string]any{
+			"title":             map[string]any{"type": "string", "minLength": 1, "maxLength": 120},
+			"duration_minutes":  map[string]any{"type": "integer", "minimum": 5, "maximum": 720},
+			"earliest_start_at": map[string]any{"type": "string", "format": "date-time"},
+			"latest_finish_at":  map[string]any{"type": "string", "format": "date-time"},
 		},
 	}
 }

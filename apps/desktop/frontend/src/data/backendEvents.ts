@@ -1,16 +1,16 @@
 import { calendarDataChangedEvent } from "./calendar";
-import { doseProposalsChangedEvent } from "./doseProposals";
+import { agentProposalsChangedEvent } from "./agentProposals";
 import { medicationDataChangedEvent } from "./medications";
 import { rhythmMarkersChangedEvent } from "./rhythmMarkers";
 import { sleepDataChangedEvent } from "./sleepDataEvents";
 
 // The backend announces changes it made on its own: a finished analysis, a
-// sync that downloaded or erased records, or a dose an agent proposed. One bridge in the app root turns each
+// sync that downloaded or erased records, or something an agent proposed. One bridge in the app root turns each
 // announcement into the window events the affected views already listen to.
 // Announcements carry no health payload; each view re-reads its own projection.
 const announcements: Record<string, readonly string[]> = {
   "zeitboard:analysis-updated": [sleepDataChangedEvent],
-  "zeitboard:dose-proposed": [doseProposalsChangedEvent],
+  "zeitboard:agent-proposed": [agentProposalsChangedEvent],
   "zeitboard:sync-applied": [
     sleepDataChangedEvent,
     medicationDataChangedEvent,

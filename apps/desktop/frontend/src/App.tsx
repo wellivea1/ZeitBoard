@@ -4,7 +4,7 @@ import { ApprovalsProvider } from "./state/approvals";
 import { VisitorRequestsProvider } from "./state/visitorRequests";
 import { ApprovalQueueProvider } from "./state/approvalQueue";
 import { BackendProposalsProvider } from "./state/backendProposals";
-import { DoseProposalsProvider } from "./state/doseProposals";
+import { AgentProposalsProvider } from "./state/agentProposals";
 import { HomeScreen } from "./screens/HomeScreen";
 import { ScreenErrorBoundary } from "./components/ScreenErrorBoundary";
 import { subscribeBackendEvents } from "./data/backendEvents";
@@ -55,7 +55,7 @@ export default function App() {
     <ApprovalsProvider>
       <BackendProposalsProvider>
         <VisitorRequestsProvider>
-          <DoseProposalsProvider>
+          <AgentProposalsProvider>
             <ApprovalQueueProvider>
               <a
                 className="skip-link"
@@ -75,7 +75,7 @@ export default function App() {
                 </ScreenErrorBoundary>
               </AppShell>
             </ApprovalQueueProvider>
-          </DoseProposalsProvider>
+          </AgentProposalsProvider>
         </VisitorRequestsProvider>
       </BackendProposalsProvider>
     </ApprovalsProvider>

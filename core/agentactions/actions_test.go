@@ -25,12 +25,13 @@ func TestEveryActionIsCompleteAndProposalsCannotApplyThemselves(t *testing.T) {
 				t.Fatalf("proposal %s must be named, carded and say a human approves it", action.ID)
 			}
 			switch action.Subject {
-			case TaskSubject:
-			case DoseSubject:
-				// The chat model sees no medication, and the server resolves
-				// only tasks: a dose waits on the owner's computer.
-				if action.On(ChatAssistant | ServerMCP) {
-					t.Fatalf("dose proposal %s is offered beyond the local endpoint", action.ID)
+			case ScheduleSubject:
+			case DoseSubject, NewTaskSubject:
+				// The server resolves only schedule changes, and the chat
+				// model sees no medication or titles: these wait on the
+				// owner's computer.
+				if action.On(ChatAssistant|ServerMCP) || !action.WaitsOnDesktop() {
+					t.Fatalf("proposal %s is offered beyond the local endpoint", action.ID)
 				}
 			default:
 				t.Fatalf("proposal %s has no subject", action.ID)
@@ -58,8 +59,9 @@ func TestEveryActionIsCompleteAndProposalsCannotApplyThemselves(t *testing.T) {
 		IsProposal("set_appearance", LocalMCP) || IsProposal("propose_retired", AnyMCP) {
 		t.Fatal("IsProposal disagrees with the registry")
 	}
-	if !IsProposal("propose_log_dose", LocalMCP) || IsTaskProposal("propose_log_dose", AnyMCP) || !IsTaskProposal("propose_place_task", AnyMCP) {
-		t.Fatal("IsTaskProposal disagrees with the registry")
+	if !IsProposal("propose_log_dose", LocalMCP) || IsScheduleProposal("propose_log_dose", AnyMCP) ||
+		IsScheduleProposal("propose_add_task", AnyMCP) || !IsScheduleProposal("propose_place_task", AnyMCP) {
+		t.Fatal("IsScheduleProposal disagrees with the registry")
 	}
 }
 
@@ -114,13 +116,41 @@ func TestDoseTargetRules(t *testing.T) {
 	}
 }
 
-// The contracts list the task proposals the server resolves; they must list
-// exactly the registry's.
-func TestContractsListTheRegisteredTaskProposals(t *testing.T) {
+func TestNewTaskTargetRules(t *testing.T) {
+	now := time.Date(2026, 9, 27, 21, 0, 0, 0, time.UTC)
+	at := func(offset time.Duration) *time.Time { value := now.Add(offset); return &value }
+	for name, target := range map[string]NewTaskTarget{
+		"title and duration": {Title: "Call the pharmacy", DurationMinutes: 15},
+		"with bounds":        {Title: "Taxes", DurationMinutes: 90, EarliestStartAt: at(-time.Hour), LatestFinishAt: at(48 * time.Hour)},
+	} {
+		if err := target.Validate(now); err != nil {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	for name, target := range map[string]NewTaskTarget{
+		"no title":             {DurationMinutes: 15},
+		"a blank title":        {Title: "   ", DurationMinutes: 15},
+		"a long title":         {Title: strings.Repeat("x", 121), DurationMinutes: 15},
+		"two lines":            {Title: "Call\nthe pharmacy", DurationMinutes: 15},
+		"too short":            {Title: "Stretch", DurationMinutes: 4},
+		"too long":             {Title: "Sleep study", DurationMinutes: 721},
+		"an empty bound":       {Title: "Taxes", DurationMinutes: 90, LatestFinishAt: &time.Time{}},
+		"a past finish":        {Title: "Taxes", DurationMinutes: 90, LatestFinishAt: at(-time.Minute)},
+		"no room between them": {Title: "Taxes", DurationMinutes: 90, EarliestStartAt: at(time.Hour), LatestFinishAt: at(2 * time.Hour)},
+	} {
+		if target.Validate(now) == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}
+
+// The contracts list the schedule proposals the server resolves; they must
+// list exactly the registry's.
+func TestContractsListTheRegisteredScheduleProposals(t *testing.T) {
 	taskIDs := func(surfaces Surface) []string {
 		var ids []string
 		for _, action := range All() {
-			if IsTaskProposal(action.ID, surfaces) {
+			if IsScheduleProposal(action.ID, surfaces) {
 				ids = append(ids, action.ID)
 			}
 		}
