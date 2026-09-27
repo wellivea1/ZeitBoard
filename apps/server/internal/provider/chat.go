@@ -24,7 +24,9 @@ func (c chatCompletionsClient) Complete(ctx context.Context, input Request) (Res
 	if err != nil {
 		return Response{}, err
 	}
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
 	if c.providerName == OpenRouter {
 		req.Header.Set("HTTP-Referer", "https://zeitboard.local")
 		req.Header.Set("X-Title", "ZeitBoard")

@@ -7,7 +7,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -20,6 +22,10 @@ const (
 	Anthropic   Name = "anthropic"
 	OpenRouter  Name = "openrouter"
 	OpenCodeZen Name = "opencode_zen"
+	// OpenAICompatible is any server speaking OpenAI's chat completions, such
+	// as a model the operator runs themselves. It needs an endpoint; a key only
+	// if that server asks for one.
+	OpenAICompatible Name = "openai_compatible"
 )
 
 var (
@@ -69,12 +75,15 @@ func (DisabledClient) Status() Status {
 
 func New(cfg Config) (LLM, Status, error) {
 	name := normalizeName(cfg.Name)
-	if name == Disabled || cfg.APIKey == "" {
+	if name == Disabled || (cfg.APIKey == "" && name != OpenAICompatible) {
 		client := DisabledClient{}
 		return client, client.Status(), nil
 	}
 	if cfg.Model == "" {
 		return nil, Status{}, fmt.Errorf("model is required for provider %s", name)
+	}
+	if err := checkEndpoint(cfg.Endpoint); err != nil {
+		return nil, Status{}, err
 	}
 	base := httpClient{
 		name:     name,
@@ -96,6 +105,11 @@ func New(cfg Config) (LLM, Status, error) {
 			return nil, Status{}, errors.New("OpenCode Zen provider requires an endpoint")
 		}
 		llm = chatCompletionsClient{httpClient: base, providerName: OpenCodeZen}
+	case OpenAICompatible:
+		if base.endpoint == "" {
+			return nil, Status{}, errors.New("an OpenAI-compatible provider requires an endpoint")
+		}
+		llm = chatCompletionsClient{httpClient: base, providerName: OpenAICompatible}
 	default:
 		return nil, Status{}, fmt.Errorf("unsupported provider %q", name)
 	}
@@ -114,6 +128,8 @@ func normalizeName(name Name) Name {
 		return OpenRouter
 	case "opencode_zen", "opencode-zen", "zen":
 		return OpenCodeZen
+	case "openai_compatible", "openai-compatible":
+		return OpenAICompatible
 	default:
 		return Name(strings.ToLower(strings.TrimSpace(string(name))))
 	}
@@ -134,8 +150,35 @@ func (c httpClient) withDefaultEndpoint(endpoint string) httpClient {
 	return c
 }
 
+// Status of a constructed client: the disabled client stands in for any
+// provider that is not configured.
 func (c httpClient) Status() Status {
-	return Status{Configured: c.apiKey != "", Provider: string(c.name), Model: c.model}
+	return Status{Configured: true, Provider: string(c.name), Model: c.model}
+}
+
+// checkEndpoint keeps the assistant's context off the network in the clear:
+// an endpoint is HTTPS, or plain HTTP only to this machine.
+func checkEndpoint(endpoint string) error {
+	endpoint = strings.TrimSpace(endpoint)
+	if endpoint == "" {
+		return nil
+	}
+	parsed, err := url.Parse(endpoint)
+	if err != nil || parsed.Host == "" || parsed.User != nil {
+		return errors.New("assistant endpoint must be an absolute URL without credentials")
+	}
+	switch parsed.Scheme {
+	case "https":
+		return nil
+	case "http":
+		host := parsed.Hostname()
+		if ip := net.ParseIP(host); host == "localhost" || (ip != nil && ip.IsLoopback()) {
+			return nil
+		}
+		return errors.New("assistant endpoint must use https unless it is on this machine")
+	default:
+		return errors.New("assistant endpoint must use https")
+	}
 }
 
 func (c httpClient) doJSON(ctx context.Context, req *http.Request, target any) error {

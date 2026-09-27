@@ -15,9 +15,11 @@
   runs no service and collects no telemetry. The operator of an instance controls the
   data and is its data controller.
 - **Bring-your-own LLM.** The assistant uses the user's own provider key (OpenCode Zen /
-  OpenRouter / OpenAI / Anthropic, modeled on OpenCode). The project ships no keys; only
-  minimized, redacted context is sent, to the provider the user chose and discloses —
-  that provider relationship and its terms are the user's.
+  OpenRouter / OpenAI / Anthropic, modeled on OpenCode), or a model the user runs
+  themselves behind an OpenAI-compatible endpoint, in which case the context stays on their
+  machines. The project ships no keys; only minimized, redacted context is sent, to the
+  provider the user chose and discloses — that provider relationship and its terms are the
+  user's. Context crosses a network only over HTTPS.
 - No advertising, data brokerage, or third-party tracking SDKs.
 - User-controlled acquisition, correction, export, sharing, and deletion.
 - Data minimization at collection, storage, logging, projection, and testing.

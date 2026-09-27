@@ -52,11 +52,11 @@ Keys:
 | n/a | `ZEITBOARD_DATA_KEY` | Yes, unless key file is set | The at-rest encryption key value. |
 | `enrollmentSecretFile` | `ZEITBOARD_ENROLLMENT_SECRET_FILE` | Yes, unless env secret is set | File containing the device enrollment secret. |
 | n/a | `ZEITBOARD_ENROLLMENT_SECRET` | Yes, unless secret file is set | Secret used only to enroll new devices. |
-| `assistant.provider` | `ZEITBOARD_LLM_PROVIDER` | No | `disabled`, `openai`, `anthropic`, `openrouter`, or `opencode_zen`. |
+| `assistant.provider` | `ZEITBOARD_LLM_PROVIDER` | No | `disabled`, `openai`, `anthropic`, `openrouter`, `opencode_zen`, or `openai_compatible` (a server you run that speaks OpenAI's chat completions, such as Ollama or llama.cpp). |
 | `assistant.model` | `ZEITBOARD_LLM_MODEL` | Required when a provider is enabled | Provider model name. |
-| `assistant.apiKeyFile` | `ZEITBOARD_LLM_API_KEY_FILE` | Required when provider key env is absent | File containing the provider API key. |
-| n/a | `ZEITBOARD_LLM_API_KEY` | Required when a provider is enabled and no key file is set | Provider API key; never returned by status APIs. |
-| `assistant.endpoint` | `ZEITBOARD_LLM_ENDPOINT` | Required for `opencode_zen`, optional override otherwise | Plain HTTPS endpoint for the provider transport. |
+| `assistant.apiKeyFile` | `ZEITBOARD_LLM_API_KEY_FILE` | Required when provider key env is absent, except for `openai_compatible` | File containing the provider API key. |
+| n/a | `ZEITBOARD_LLM_API_KEY` | Required when a provider is enabled and no key file is set, except for `openai_compatible` | Provider API key; never returned by status APIs. |
+| `assistant.endpoint` | `ZEITBOARD_LLM_ENDPOINT` | Required for `opencode_zen` and `openai_compatible`, optional override otherwise | HTTPS, or plain HTTP only to this machine (`127.0.0.1`, `::1`, `localhost`): the assistant's context never crosses a network unencrypted. |
 | `portal.enabled` | `ZEITBOARD_PORTAL_ENABLED` | No | Defaults to `false`. Read the availability-portal section below before changing it. |
 | `portal.publicOrigin` | `ZEITBOARD_PORTAL_ORIGIN` | Required when the portal is enabled | Exact `scheme://host[:port]` visitors reach, e.g. `https://share.example.com`. Scheme and host only. |
 
@@ -196,6 +196,18 @@ network calls. When the operator configures OpenAI, Anthropic, OpenRouter, or Op
 Zen, the daemon sends only the assistant's minimized redacted context to that provider
 using the operator's key. Provider credentials are not returned by `/v1/status`, are not
 placed in model context, and are not written to fixtures.
+
+With `openai_compatible` pointed at a model you run yourself, the context never leaves your
+machines. For example, with Ollama on the server host:
+
+```text
+ZEITBOARD_LLM_PROVIDER=openai_compatible
+ZEITBOARD_LLM_MODEL=<a model you have pulled>
+ZEITBOARD_LLM_ENDPOINT=http://127.0.0.1:11434/v1/chat/completions
+```
+
+The daemon asks the model for JSON. A small model will often answer with something the daemon
+cannot use; the assistant then says so, and no proposal is created.
 
 ## Availability Portal
 
@@ -345,7 +357,16 @@ Use this when the agent should reach your instance rather than one desktop.
 3. Use Claude Desktop's voice mode. The connector exposes only allowlisted read
    projections and propose-only actions with call budgets — there is no approve or
    apply tool (ADR-0012), so spoken requests end as pending proposals you approve in
-   the app.
+   the app. The model never receives a proposal's approval token.
+
+`scripts\smoke-backend-mcp.ps1 -BackendUrl <instance URL> -DeviceTokenFile <token file>`
+checks this path against your instance:
+
+- the tool list, facts, and proposals listed without tokens, read-only by default;
+- `-Propose` also leaves one synthetic proposal for you to decline in Plan;
+- `-Assistant` also asks the chat assistant a dosing question, which must be refused, and a
+  planning question for your configured model;
+- `-Reconnect` waits while you restart the server.
 
 Either way, what the agent can see is the same redacted, speakable projection surface the UI
 uses. Which *model* hears it is the client's configuration and the user's provider
