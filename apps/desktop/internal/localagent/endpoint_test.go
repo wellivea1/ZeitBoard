@@ -208,7 +208,7 @@ func TestRunBridgeReturnsWhenCanceledWhileInputIsIdle(t *testing.T) {
 	defer writer.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { done <- RunBridge(ctx, reader, io.Discard) }()
+	go func() { done <- RunBridge(ctx, reader, io.Discard, io.Discard) }()
 	cancel()
 	select {
 	case err := <-done:

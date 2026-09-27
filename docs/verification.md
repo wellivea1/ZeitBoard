@@ -309,6 +309,8 @@ Verified on Windows 11 on 2026-07-26, after the Phase 4 review:
 Not verified here: the end-to-end voice path through a real MCP client, which
 needs a running desktop app and a GUI session. `scripts/smoke-local-mcp.ps1`
 covers it manually and was confirmed to fail closed when the bridge is absent.
+(It first completed a real session on 2026-09-27; see "The voice-client path
+survives restarts".)
 
 ## Architecture and performance hardening
 
@@ -2032,3 +2034,32 @@ The core, server and desktop Go suites, the contract fixture check and the full 
 - The desktop's tests pin their computer to New York and pass. The package vets for Linux and
   macOS as well.
 - The core and desktop Go suites pass.
+
+## The voice-client path survives restarts — 2026-09-27
+
+Bridge tests, against real endpoint handlers:
+
+- after thirty idle minutes, the next call opens a new session and runs once;
+- after the app restarts on a new port with a new token, the next call reaches the new app;
+- a call that failed after reaching the app (HTTP 500) is not retried;
+- input that starts with a byte-order mark is read;
+- `RunBridge` started before the app answers "ZeitBoard is not running". It then serves once the
+  app starts, answers again while the app is stopped, and carries on after the app restarts,
+  without exiting.
+
+Removing the retry made three of these tests fail.
+
+The real smoke, with a freshly built bridge against the running desktop (disposable dev
+profile), passed every check:
+
+- 14 tools, none deciding;
+- facts, with the rhythm estimated;
+- the refusal;
+- a proposed dose waiting for the owner;
+- after the app was stopped and started again during the run, the same bridge session carried on.
+
+The dose it proposed appeared on Home. Declining it there dropped "Waiting on you" from 4 to 3,
+and recorded nothing: Melatonin still read "Last taken today at 12:46 AM".
+
+The first real run found the byte-order mark: PowerShell wrote EF BB BF before the first message,
+and the bridge answered a parse error.
