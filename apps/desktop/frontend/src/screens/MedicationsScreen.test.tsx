@@ -27,6 +27,7 @@ const response = {
       eventId: "dose_local_01",
       medicationId: "med_local_01",
       medicationLabel: "Evening record",
+      doseAt: "2026-07-22T02:15:00Z",
       doseLocal: "2026-07-21T22:15",
       civilTime: "Tue Jul 21, 10:15 PM EDT",
       zoneId: "America/New_York",

@@ -86,6 +86,8 @@ export interface MedicationLog {
   eventId: string;
   medicationId: string;
   medicationLabel: string;
+  /** The instant, ISO 8601. `doseLocal` and `civilTime` are in the dose's own zone. */
+  doseAt: string;
   doseLocal: string;
   civilTime: string;
   zoneId: string;
@@ -543,6 +545,7 @@ function normalizeLog(value: unknown): MedicationLog | undefined {
   const eventId = identifier(value.eventId);
   const medicationId = identifier(value.medicationId);
   const medicationLabel = text(value.medicationLabel);
+  const doseAt = text(value.doseAt);
   const doseLocal = localDateTime(value.doseLocal);
   const civilTime = text(value.civilTime);
   const zoneId = text(value.zoneId);
@@ -569,6 +572,8 @@ function normalizeLog(value: unknown): MedicationLog | undefined {
     !eventId ||
     !medicationId ||
     !medicationLabel ||
+    !doseAt ||
+    !Number.isFinite(Date.parse(doseAt)) ||
     !doseLocal ||
     !civilTime ||
     !zoneId ||
@@ -588,6 +593,7 @@ function normalizeLog(value: unknown): MedicationLog | undefined {
     eventId,
     medicationId,
     medicationLabel,
+    doseAt,
     doseLocal,
     civilTime,
     zoneId,

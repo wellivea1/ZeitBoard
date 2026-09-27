@@ -9,6 +9,7 @@ function medicationEvent(index: number): MedicationLog {
     eventId: `event_${index}`,
     medicationId: "medication_01",
     medicationLabel: "Recorded medication",
+    doseAt: "2026-07-22T02:15:00Z",
     doseLocal: "2026-07-21T22:15",
     civilTime: `Event time ${index}`,
     zoneId: "America/New_York",

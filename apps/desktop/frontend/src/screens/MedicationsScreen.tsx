@@ -39,8 +39,8 @@ function medicationServiceLabel(
   data: MedicationsData | null,
 ): string {
   if (!localServicePresent) return "Desktop service unavailable";
-  if (!data) return "Loading local private data";
-  return data.status === "unavailable" ? "Desktop service unavailable" : "Local private data";
+  if (!data) return "Loading private data";
+  return data.status === "unavailable" ? "Desktop service unavailable" : "Private data";
 }
 
 function useMedicationWorkspace() {
