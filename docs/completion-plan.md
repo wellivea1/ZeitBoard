@@ -959,3 +959,26 @@ size; longer keys still wrap between words.
 
 With this, C6's acceptance is met.
 
+### C2 suggested times are reviewed and decided together — 2026-09-27
+
+Plan's decision queue can review every planner suggestion at once (ADR-0052). "Review N
+suggestions together" lists each with its title, time and reasons. The owner leaves out any they
+want to decide alone, then accepts or declines the rest in one step.
+
+This was not possible before, and not for want of a button. Each suggestion's evidence includes
+the calendar it was planned against. Accepting one changed that calendar, so every other
+suggestion from the same plan went stale and was re-planned; only the refresh after each decision
+hid it. The batch is one transaction. Every decision is checked against the evidence it was
+planned on before any is recorded, and if anything changed since the review, none is. Each
+decision keeps its own window, reasons and hashes, and each stays undoable on its own.
+
+The feature specification's "approve all low-risk" batch would have trusted confidence buckets
+that ADR-0022 found inverted, so it is not built. Visitor requests, task conflicts, assistant
+proposals, and the doses and tasks an agent proposes keep their own decision paths.
+
+Also reviewed for C2: task constraints. The editor offers the constraints the task contract
+documents, except minimum confidence, which the 2026-09-08 review kept as a hidden policy for the
+same ADR-0022 reason.
+
+Remaining in C2: the explicitly enabled CalDAV write-back of approved blocks.
+

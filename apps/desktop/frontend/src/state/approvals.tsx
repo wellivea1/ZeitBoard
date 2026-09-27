@@ -16,6 +16,7 @@ import {
 } from "react";
 import {
   decideLocalProposal,
+  decideLocalProposals,
   hasLocalProposalService,
   loadProposals,
   proposalsFixture,
@@ -37,7 +38,8 @@ export interface DecidedProposal extends ProposalRecord {
 }
 
 interface LastDecision {
-  id: string;
+  /** One suggestion, or the several reviewed together. */
+  ids: string[];
   title: string;
   decision: ProposalDecision;
 }
@@ -53,6 +55,8 @@ interface ApprovalsContextValue {
   unplaced: UnplacedProposal[];
   source: ProposalsSource;
   decide: (id: string, decision: ProposalDecision) => void;
+  /** Decides suggestions reviewed together; resolves true once recorded. */
+  decideTogether: (ids: string[], decision: ProposalDecision) => Promise<boolean>;
   undo: (id: string) => void;
   undoLast: () => void;
   lastDecision: LastDecision | null;
@@ -139,7 +143,7 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
             : proposal,
         ),
       );
-      setLastDecision({ id, title: target.title, decision });
+      setLastDecision({ ids: [id], title: target.title, decision });
       return;
     }
 
@@ -153,7 +157,7 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
         busyRef.current = null;
         if (!mounted.current) return;
         setBusyProposalId(null);
-        setLastDecision({ id, title: target.title, decision });
+        setLastDecision({ ids: [id], title: target.title, decision });
       },
       (reason: unknown) => {
         busyRef.current = null;
@@ -237,8 +241,76 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const decideTogether = async (ids: string[], decision: ProposalDecision) => {
+    const targets = proposals.filter(
+      (proposal) => ids.includes(proposal.id) && proposal.status === "pending",
+    );
+    if (!ready || busyRef.current || targets.length !== ids.length || ids.length === 0)
+      return false;
+    const title = `${ids.length} suggested time${ids.length === 1 ? "" : "s"}`;
+    if (source === "fixture") {
+      setProposals((current) =>
+        current.map((proposal) =>
+          ids.includes(proposal.id)
+            ? { ...proposal, decision, status: decision, canUndo: true }
+            : proposal,
+        ),
+      );
+      setLastDecision({ ids, title, decision });
+      return true;
+    }
+    busyRef.current = "batch";
+    setBusyProposalId("batch");
+    setDecisionError("");
+    try {
+      await decideLocalProposals(ids, decision);
+      if (decision === "approved") notifyCalendarDataChanged();
+      await refresh();
+      if (mounted.current) setLastDecision({ ids, title, decision });
+      return true;
+    } catch (reason) {
+      // The desktop reports a changed plan as "proposal inputs changed".
+      const message =
+        reason instanceof Error ? reason.message : typeof reason === "string" ? reason : "";
+      if (mounted.current) {
+        setDecisionError(
+          message.includes("inputs changed")
+            ? "Something changed since you reviewed these, so none was decided. Review them again."
+            : message || "The suggestions could not be decided.",
+        );
+      }
+      await refresh();
+      return false;
+    } finally {
+      busyRef.current = null;
+      if (mounted.current) setBusyProposalId(null);
+    }
+  };
+
+  // Undoing a batch undoes each of its decisions, each on its own record.
+  const undoTogether = async (ids: string[]) => {
+    if (!ready || busyRef.current) return;
+    busyRef.current = "batch";
+    setBusyProposalId("batch");
+    setDecisionError("");
+    try {
+      for (const id of ids) await undoLocalProposalDecision(id);
+      if (mounted.current) setLastDecision(null);
+    } catch (reason) {
+      if (mounted.current)
+        setDecisionError(reason instanceof Error ? reason.message : "Proposal undo failed.");
+    } finally {
+      notifyCalendarDataChanged();
+      await refresh();
+      busyRef.current = null;
+      if (mounted.current) setBusyProposalId(null);
+    }
+  };
+
   const undoLast = () => {
-    if (lastDecision) undo(lastDecision.id);
+    if (!lastDecision) return;
+    if (lastDecision.ids.length === 1) undo(lastDecision.ids[0]!);
+    else void undoTogether(lastDecision.ids);
   };
 
   const dismiss = useCallback(() => setLastDecision(null), []);
@@ -256,6 +328,7 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
     unplaced,
     source,
     decide,
+    decideTogether,
     undo,
     undoLast,
     lastDecision,
@@ -273,9 +346,9 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
         {children}
         {lastDecision && (
           <ApprovalUndoToast
-            key={`${lastDecision.id}-${lastDecision.decision}`}
+            key={`${lastDecision.ids.join(",")}-${lastDecision.decision}`}
             decision={lastDecision}
-            busy={busyProposalId === lastDecision.id}
+            busy={busyProposalId !== null}
             onUndo={undoLast}
             onDismiss={dismiss}
           />

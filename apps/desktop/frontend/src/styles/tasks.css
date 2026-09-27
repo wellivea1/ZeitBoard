@@ -199,3 +199,69 @@
     grid-column: 2;
   }
 }
+
+/* Several suggested times reviewed together (ADR-0052): a list in the queue's
+   own column, each row the suggestion's title, time and reasons. */
+.batch-review {
+  padding: 14px 0 18px;
+  display: grid;
+  gap: 12px;
+  border-bottom: 1px solid var(--divider);
+}
+.batch-review h3 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 500;
+}
+.batch-review > p {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--muted);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.45;
+}
+.batch-review ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+.batch-review label {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 12px;
+  row-gap: 2px;
+  align-items: baseline;
+  cursor: pointer;
+}
+.batch-review label input {
+  grid-row: 1 / span 3;
+  align-self: start;
+  margin-top: 4px;
+}
+.batch-review-title {
+  font-family: var(--font-serif);
+  font-size: 17px;
+}
+.batch-review label strong {
+  font-family: var(--font-serif);
+  font-size: 15.5px;
+  font-weight: 600;
+  font-variant-numeric: lining-nums tabular-nums;
+}
+.batch-review label small {
+  color: var(--muted);
+  font-family: var(--font-serif);
+  font-size: 15px;
+}
+.batch-review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.batch-review-actions .button {
+  min-height: 44px;
+}

@@ -2192,3 +2192,46 @@ passes under the opaque header.
 During the run the disposable server's enrollment secret was shown once in a local tool log. It
 was rotated afterwards.
 
+## Suggested times decided together — 2026-09-27
+
+Desktop, with three synthetic tasks planned at a fixed time:
+
+- One at a time, the second acceptance from the same review fails as stale: the first changed
+  the calendar the second was planned against.
+- The three decided together are three approvals, with three app-owned blocks and nothing left
+  pending. Each decision record carries its own suggestion's title, start, calendar hash and
+  reasons.
+- A calendar import between the review and the decision makes the batch fail as stale. No block
+  and no decision is recorded.
+- Two declined together write no block.
+- Refused: an empty batch, the same suggestion twice, and an unknown decision.
+
+The existing single-decision tests pass through the shared path.
+
+Web:
+
+- The queue offers "Review 2 suggestions together".
+- With one suggestion left out, "Accept 1 suggested time" sends exactly the other one, as
+  `approved`. The count drops and the left-out suggestion returns as its own card.
+- A stale batch shows "Something changed since you reviewed these, so none was decided. Review
+  them again." and the count is unchanged.
+
+In the running desktop (disposable dev profile), Plan showed "Review 4 suggestions together". The
+review listed Email Dr. Okafor, Call the pharmacy, Taxes focus block and Grocery run back to back,
+each with its time and reasons. With Grocery run left out, "Accept 3 suggested times" recorded
+three decisions: "Accepted 3 suggested times. Undo". The count fell from 5 to 2, and Grocery run
+returned as its own card at the same time.
+
+The decision history listed an Undo for each of the three. Undoing Taxes focus block brought only
+that suggestion back.
+
+The run found that each checkbox's accessible name ran the row together ("Email Dr.
+OkaforToday 11:00 – 11:30 AMIn…"). It now reads "Taxes focus block, Today 11:45 AM – 1:15 PM".
+
+Running the desktop suite also found a flaky test from the agent-proposal work. Two proposals
+made in the same second were listed in the order of their random ids, and the test assumed one
+order. Ties now list the last made first, and the test finds each proposal by id. Six repeated
+runs, and five of the order-sensitive tests, pass.
+
+The core and desktop Go suites and the full web check pass.
+

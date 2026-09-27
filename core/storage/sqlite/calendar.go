@@ -250,54 +250,109 @@ func (s *Store) BusyDomainEvents(ctx context.Context, start, end time.Time, zone
 // sleep fingerprints in the same transaction that records the decision.
 // Approval also inserts the supplied app-owned block; rejection writes no event.
 func (s *Store) DecideProposal(ctx context.Context, input ProposalDecisionInput, ownedEvent *calendarcore.Event) (ProposalDecisionRecord, error) {
-	if err := validateProposalDecisionInput(input); err != nil {
+	records, err := s.DecideProposals(ctx, []ProposalDecisionItem{{Input: input, OwnedEvent: ownedEvent}})
+	if err != nil {
 		return ProposalDecisionRecord{}, err
+	}
+	return records[0], nil
+}
+
+// ProposalDecisionItem is one decision of a batch: the decision, and for an
+// approval the app-owned block it writes.
+type ProposalDecisionItem struct {
+	Input      ProposalDecisionInput
+	OwnedEvent *calendarcore.Event
+}
+
+// DecideProposals records decisions on proposals of one plan in one
+// transaction. Every decision is checked against the evidence it was planned
+// on before any is recorded, so the proposals are judged together, as they
+// were planned: each reserved the others' time. If any is stale, none is
+// recorded.
+func (s *Store) DecideProposals(ctx context.Context, items []ProposalDecisionItem) ([]ProposalDecisionRecord, error) {
+	if len(items) == 0 {
+		return nil, errors.New("no proposals to decide")
+	}
+	seen := make(map[string]bool, len(items))
+	for _, item := range items {
+		if err := validateProposalDecisionInput(item.Input); err != nil {
+			return nil, err
+		}
+		if seen[item.Input.ProposalID] {
+			return nil, errors.New("a batch decides each proposal once")
+		}
+		seen[item.Input.ProposalID] = true
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return ProposalDecisionRecord{}, err
+		return nil, err
 	}
 	defer tx.Rollback()
 
+	tasks := make([]TaskRecord, len(items))
+	for index, item := range items {
+		if tasks[index], err = checkProposalEvidenceTx(ctx, tx, item.Input); err != nil {
+			return nil, err
+		}
+	}
+	records := make([]ProposalDecisionRecord, len(items))
+	for index, item := range items {
+		if records[index], err = recordProposalDecisionTx(ctx, tx, item.Input, item.OwnedEvent, tasks[index]); err != nil {
+			return nil, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return records, nil
+}
+
+// checkProposalEvidenceTx refuses a decision whose proposal is decided, or
+// whose task, calendar or sleep has changed since it was planned.
+func checkProposalEvidenceTx(ctx context.Context, tx *sql.Tx, input ProposalDecisionInput) (TaskRecord, error) {
 	latest, found, err := latestProposalDecision(ctx, tx, input.ProposalID)
 	if err != nil {
-		return ProposalDecisionRecord{}, err
+		return TaskRecord{}, err
 	}
 	if found && latest.Decision != ProposalUndone {
-		return ProposalDecisionRecord{}, ErrProposalAlreadyDecided
+		return TaskRecord{}, ErrProposalAlreadyDecided
 	}
-
 	task, err := taskByIDTx(ctx, tx, input.TaskID)
 	if err != nil {
 		if errors.Is(err, ErrTaskNotFound) {
-			return ProposalDecisionRecord{}, ErrStaleProposal
+			return TaskRecord{}, ErrStaleProposal
 		}
-		return ProposalDecisionRecord{}, err
+		return TaskRecord{}, err
 	}
 	if err := requireTaskReviewed(ctx, tx, input.TaskID); err != nil {
-		return ProposalDecisionRecord{}, err
+		return TaskRecord{}, err
 	}
 	if task.Status != TaskStatusOpen || effectiveRevision(task) != input.TaskRevision {
-		return ProposalDecisionRecord{}, ErrStaleProposal
+		return TaskRecord{}, ErrStaleProposal
 	}
 	if input.ProposalTitle != task.Title {
-		return ProposalDecisionRecord{}, ErrStaleProposal
+		return TaskRecord{}, ErrStaleProposal
 	}
 	_, fingerprint, err := busyDomainEvents(ctx, tx, input.SnapshotStartAt, input.SnapshotEndAt, "UTC")
 	if err != nil {
-		return ProposalDecisionRecord{}, err
+		return TaskRecord{}, err
 	}
 	if fingerprint != input.EventSnapshotHash {
-		return ProposalDecisionRecord{}, ErrStaleProposal
+		return TaskRecord{}, ErrStaleProposal
 	}
 	sleepFingerprint, err := sleepPlanningFingerprint(ctx, tx)
 	if err != nil {
-		return ProposalDecisionRecord{}, err
+		return TaskRecord{}, err
 	}
 	if sleepFingerprint != input.SleepSnapshotHash {
-		return ProposalDecisionRecord{}, ErrStaleProposal
+		return TaskRecord{}, ErrStaleProposal
 	}
+	return task, nil
+}
 
+// recordProposalDecisionTx records one checked decision and, for an
+// approval, writes its app-owned block.
+func recordProposalDecisionTx(ctx context.Context, tx *sql.Tx, input ProposalDecisionInput, ownedEvent *calendarcore.Event, task TaskRecord) (ProposalDecisionRecord, error) {
 	record := ProposalDecisionRecord{
 		DecisionID:        input.DecisionID,
 		ProposalID:        input.ProposalID,
@@ -335,9 +390,6 @@ func (s *Store) DecideProposal(ctx context.Context, input ProposalDecisionInput,
 		return ProposalDecisionRecord{}, errors.New("rejection cannot include a calendar event")
 	}
 	if err := insertProposalDecision(ctx, tx, record); err != nil {
-		return ProposalDecisionRecord{}, err
-	}
-	if err := tx.Commit(); err != nil {
 		return ProposalDecisionRecord{}, err
 	}
 	return record, nil

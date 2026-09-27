@@ -33,6 +33,19 @@ type LocalProposalDecisionDTO struct {
 	Message    string `json:"message"`
 }
 
+// LocalProposalsDecisionInput decides several suggestions the owner reviewed
+// together, all the same way.
+type LocalProposalsDecisionInput struct {
+	ProposalIDs []string `json:"proposalIds"`
+	Decision    string   `json:"decision"`
+}
+
+// LocalProposalsDecisionDTO is what one batch decision recorded.
+type LocalProposalsDecisionDTO struct {
+	Decisions []LocalProposalDecisionDTO `json:"decisions"`
+	Message   string                     `json:"message"`
+}
+
 type localProposalCandidate struct {
 	proposal          scheduling.Proposal
 	task              storage.TaskRecord
@@ -60,26 +73,83 @@ func (a *App) GetProposals() (ProposalsDTO, error) {
 }
 
 func (a *App) DecideLocalProposal(input LocalProposalDecisionInput) (LocalProposalDecisionDTO, error) {
-	if input.Decision != storage.ProposalApproved && input.Decision != storage.ProposalRejected {
-		return LocalProposalDecisionDTO{}, errors.New("decision must be approved or rejected")
+	decided, err := a.decideLocalProposals([]string{input.ProposalID}, input.Decision)
+	if err != nil {
+		return LocalProposalDecisionDTO{}, err
+	}
+	return decided.Decisions[0], nil
+}
+
+// DecideLocalProposals decides the suggestions the owner reviewed together, in
+// one transaction: each is checked against the plan it came from, and if any
+// has changed since, none is decided (ADR-0052).
+func (a *App) DecideLocalProposals(input LocalProposalsDecisionInput) (LocalProposalsDecisionDTO, error) {
+	if len(input.ProposalIDs) == 0 || len(input.ProposalIDs) > maxLocalProposalBatch {
+		return LocalProposalsDecisionDTO{}, fmt.Errorf("choose 1 to %d suggestions", maxLocalProposalBatch)
+	}
+	return a.decideLocalProposals(input.ProposalIDs, input.Decision)
+}
+
+// maxLocalProposalBatch bounds one reviewed batch; the planner offers fewer.
+const maxLocalProposalBatch = 50
+
+func (a *App) decideLocalProposals(proposalIDs []string, decisionKind string) (LocalProposalsDecisionDTO, error) {
+	if decisionKind != storage.ProposalApproved && decisionKind != storage.ProposalRejected {
+		return LocalProposalsDecisionDTO{}, errors.New("decision must be approved or rejected")
 	}
 	now := a.currentTime().UTC().Truncate(time.Second)
 	built, err := a.buildLocalProposals(now)
 	if err != nil {
-		return LocalProposalDecisionDTO{}, err
+		return LocalProposalsDecisionDTO{}, err
 	}
-	candidate, found := built.pending[input.ProposalID]
-	if !found {
-		return LocalProposalDecisionDTO{}, storage.ErrStaleProposal
+	items := make([]storage.ProposalDecisionItem, 0, len(proposalIDs))
+	for _, proposalID := range proposalIDs {
+		candidate, found := built.pending[proposalID]
+		if !found {
+			return LocalProposalsDecisionDTO{}, storage.ErrStaleProposal
+		}
+		// A block that has already begun is not a plan. The planner no longer
+		// offers one, and this keeps a decision from recording one if it ever did.
+		if decisionKind == storage.ProposalApproved && candidate.proposal.Window.Start.UTC.Before(now) {
+			return LocalProposalsDecisionDTO{}, storage.ErrStaleProposal
+		}
+		items = append(items, localDecisionItem(proposalID, candidate, decisionKind, now))
 	}
-	// A block that has already begun is not a plan. The planner no longer
-	// offers one, and this keeps a decision from recording one if it ever did.
-	if input.Decision == storage.ProposalApproved && candidate.proposal.Window.Start.UTC.Before(now) {
-		return LocalProposalDecisionDTO{}, storage.ErrStaleProposal
+	store, err := a.requireStore()
+	if err != nil {
+		return LocalProposalsDecisionDTO{}, err
 	}
-	decision := storage.ProposalDecisionInput{
+	records, err := store.DecideProposals(context.Background(), items)
+	if err != nil {
+		return LocalProposalsDecisionDTO{}, err
+	}
+	result := LocalProposalsDecisionDTO{Decisions: make([]LocalProposalDecisionDTO, 0, len(records))}
+	for _, record := range records {
+		message := "Proposal rejected; no calendar block was written."
+		if record.Decision == storage.ProposalApproved {
+			message = "Proposal approved and written to ZeitBoard placements."
+		}
+		result.Decisions = append(result.Decisions, LocalProposalDecisionDTO{
+			ProposalID: record.ProposalID, Decision: record.Decision, EventID: record.EventID, Message: message,
+		})
+	}
+	result.Message = result.Decisions[0].Message
+	if len(records) > 1 {
+		verb := "rejected"
+		if decisionKind == storage.ProposalApproved {
+			verb = "approved and written to ZeitBoard placements"
+		}
+		result.Message = fmt.Sprintf("%d proposals %s together.", len(records), verb)
+	}
+	return result, nil
+}
+
+// localDecisionItem is the decision on one suggestion, with the evidence it
+// was planned on and, for an approval, the app-owned block it writes.
+func localDecisionItem(proposalID string, candidate localProposalCandidate, decisionKind string, now time.Time) storage.ProposalDecisionItem {
+	item := storage.ProposalDecisionItem{Input: storage.ProposalDecisionInput{
 		DecisionID:        newLocalID("decision"),
-		ProposalID:        input.ProposalID,
+		ProposalID:        proposalID,
 		TaskID:            candidate.task.TaskID,
 		TaskRevision:      effectiveTaskRevision(candidate.task),
 		EstimateID:        candidate.estimateID,
@@ -89,19 +159,18 @@ func (a *App) DecideLocalProposal(input LocalProposalDecisionInput) (LocalPropos
 		ZoneID:            candidate.proposal.Window.Start.ZoneID,
 		Confidence:        string(candidate.proposal.Confidence.Level),
 		ExplanationCodes:  append([]string(nil), candidate.proposal.ExplanationCodes...),
-		Decision:          input.Decision,
+		Decision:          decisionKind,
 		DecidedAt:         now,
 		SnapshotStartAt:   candidate.snapshotStartAt,
 		SnapshotEndAt:     candidate.snapshotEndAt,
 		EventSnapshotHash: candidate.eventSnapshotHash,
 		SleepSnapshotHash: candidate.sleepSnapshotHash,
-	}
-	var owned *calendarcore.Event
-	if input.Decision == storage.ProposalApproved {
-		event := calendarcore.Event{
-			EventID:        ownedCalendarEventID(input.ProposalID),
+	}}
+	if decisionKind == storage.ProposalApproved {
+		item.OwnedEvent = &calendarcore.Event{
+			EventID:        ownedCalendarEventID(proposalID),
 			SourceID:       storage.ZeitBoardCalendarSourceID,
-			SourceRecordID: input.ProposalID,
+			SourceRecordID: proposalID,
 			Title:          candidate.task.Title,
 			StartAt:        candidate.proposal.Window.Start.UTC,
 			EndAt:          candidate.proposal.Window.End.UTC,
@@ -111,28 +180,10 @@ func (a *App) DecideLocalProposal(input LocalProposalDecisionInput) (LocalPropos
 			CreatedAt:      now,
 			TaskID:         candidate.task.TaskID,
 			TaskRevision:   effectiveTaskRevision(candidate.task),
-			ProposalID:     input.ProposalID,
+			ProposalID:     proposalID,
 		}
-		owned = &event
 	}
-	store, err := a.requireStore()
-	if err != nil {
-		return LocalProposalDecisionDTO{}, err
-	}
-	record, err := store.DecideProposal(context.Background(), decision, owned)
-	if err != nil {
-		return LocalProposalDecisionDTO{}, err
-	}
-	message := "Proposal rejected; no calendar block was written."
-	if record.Decision == storage.ProposalApproved {
-		message = "Proposal approved and written to ZeitBoard placements."
-	}
-	return LocalProposalDecisionDTO{
-		ProposalID: record.ProposalID,
-		Decision:   record.Decision,
-		EventID:    record.EventID,
-		Message:    message,
-	}, nil
+	return item
 }
 
 func (a *App) UndoLocalProposalDecision(input LocalProposalUndoInput) (LocalProposalDecisionDTO, error) {

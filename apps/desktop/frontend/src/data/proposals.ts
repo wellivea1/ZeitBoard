@@ -283,6 +283,32 @@ export async function decideLocalProposal(
   return result;
 }
 
+/**
+ * Decides suggestions the owner reviewed together, all the same way. They were
+ * planned leaving room for each other, so they are decided in one step: all of
+ * them, or none if anything changed since the review (ADR-0052).
+ */
+export async function decideLocalProposals(
+  proposalIds: string[],
+  decision: "approved" | "rejected",
+  root: WailsRoot = globalThis as unknown as WailsRoot,
+): Promise<LocalProposalDecisionResult[]> {
+  const method = findWailsMethod(root, ["DecideLocalProposals"]);
+  if (!method) throw new Error("Local proposal decisions require the ZeitBoard desktop service.");
+  const value = await method({ proposalIds, decision });
+  const decisions =
+    isRecord(value) && Array.isArray(value.decisions)
+      ? value.decisions.map(normalizeDecisionResult)
+      : [];
+  if (
+    decisions.length !== proposalIds.length ||
+    decisions.some((result) => !result || result.decision !== decision)
+  ) {
+    throw new Error("Local proposal decision returned an invalid response.");
+  }
+  return decisions as LocalProposalDecisionResult[];
+}
+
 export async function undoLocalProposalDecision(
   proposalId: string,
   root: WailsRoot = globalThis as unknown as WailsRoot,

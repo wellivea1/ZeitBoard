@@ -89,8 +89,17 @@ func TestAnAgentProposesADoseAndOnlyTheOwnerRecordsIt(t *testing.T) {
 
 	// Declining records nothing.
 	queue, err = app.DecideAgentProposal(AgentProposalDecisionInput{ProposalID: proposed.Proposals[0].ProposalID, Decision: "rejected"})
-	if err != nil || len(queue.Pending) != 0 || queue.History[0].State != storage.AgentProposalRejected {
+	if err != nil || len(queue.Pending) != 0 || len(queue.History) != 2 {
 		t.Fatalf("after declining: %+v, %v", queue, err)
+	}
+	for _, decided := range queue.History {
+		want := storage.AgentProposalApproved
+		if decided.ProposalID == proposed.Proposals[0].ProposalID {
+			want = storage.AgentProposalRejected
+		}
+		if decided.State != want {
+			t.Fatalf("%s is %s, want %s", decided.ProposalID, decided.State, want)
+		}
 	}
 	if doses, err := app.GetMedications(); err != nil || len(doses.Events) != 1 {
 		t.Fatalf("declining recorded a dose: %+v %v", doses.Events, err)
