@@ -2146,3 +2146,49 @@ suggestion for it: "Call the pharmacy — A suggested time, Today 11:00 – 11:1
 The core, server and desktop Go suites, the contract fixture check and the full web check pass
 (485 web tests).
 
+## A time request reaches a phone while the desktop is closed — 2026-09-27
+
+The C6 device run, all with synthetic data and disposable stores:
+
+1. **Server.** The real `zeitboardd` with its portal enabled, on a fresh data directory. A
+   development-only loopback proxy on `127.0.0.1:18790` let the emulator (through `adb reverse`)
+   and a browser visitor reach its self-signed HTTPS over plain loopback HTTP. The portal's
+   public origin was set to the proxy's.
+2. **Owner's desktop.**
+   - Its disposable profile was enrolled with the server; its first sync re-uploaded its records
+     to the new server, as ADR-0045 intends.
+   - In Sharing it created a link for "Sam" with all three permissions and a synthetic passcode.
+   - The desktop was then quit: no ZeitBoard desktop process, and its dev server down.
+3. **Phone.**
+   - The companion (`ZeitBoard_Completion_Test` emulator) was enrolled in Settings with the
+     server's address and enrollment secret.
+   - "Tell me when someone asks for a time" was turned on, and Android's notification permission
+     was allowed. Its first check ran at once and set its starting point.
+4. **Visitor.** In a browser, the link and passcode opened the portal. It said availability was
+   not being shared: the owner's newest sleep record was about 27 hours old, so the estimate was
+   withheld. The visitor asked for "Tomorrow, 2:00 PM to 6:00 PM, for 30 minutes", with a name
+   and a note. The portal confirmed the request and said the date was beyond what an estimate
+   could check.
+5. **Notice.**
+   - Forcing the periodic job early did nothing: WorkManager refuses to run periodic work before
+     its time.
+   - On its natural tick, at 10:35:33, the notice worker ran and succeeded, and the phone showed
+     "ZeitBoard · Time request — Someone asked for a time. Answer it in ZeitBoard on your
+     computer."
+   - The notification record: channel `time_requests`, visibility private with a public version
+     for the lock screen, auto-cancel, and a tag naming the visitor request.
+   - It named no one and carried neither the note nor the window.
+
+About 14 minutes passed between the request and the notice, within the documented 15-minute
+cadence. Retiring the notice once the request is answered elsewhere was not re-run here; its tests
+and the 2026-09-26 record cover it.
+
+On the same phone: the Now screen's "PERMISSION" key broke as "PERMISSIO / N". After the fix it
+reads on one line, and Settings' "HELD ON DEVICE" wraps between words.
+
+The earlier note about content drawing under the status bar did not reproduce: scrolled content
+passes under the opaque header.
+
+During the run the disposable server's enrollment secret was shown once in a local tool log. It
+was rotated afterwards.
+

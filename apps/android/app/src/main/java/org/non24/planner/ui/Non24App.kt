@@ -60,6 +60,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -1186,6 +1187,9 @@ private fun LatestSleepPanel(
 
 @Composable
 private fun DataRow(label: String, value: String) {
+    // Wide enough for the longest word a key uses ("CORRECTIONS"), and sized in
+    // sp so it grows with the font: a key breaks between words, never inside one.
+    val keyWidth = with(LocalDensity.current) { 88.sp.toDp() }
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.Top,
@@ -1193,7 +1197,7 @@ private fun DataRow(label: String, value: String) {
     ) {
         Text(
             label.uppercase(Locale.ROOT),
-            modifier = Modifier.width(68.dp),
+            modifier = Modifier.width(keyWidth),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

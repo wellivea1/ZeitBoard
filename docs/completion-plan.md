@@ -695,7 +695,7 @@ force-stop) are documented in `self-hosting.md`. The optional M-F missed-dose
 signal is dispositioned as not implemented: it needs its own grant and
 projection and is outside this feed. Remaining for C6's acceptance: the
 recorded device run (a portal request raising a notice on an enrolled phone
-with the desktop closed).
+with the desktop closed), recorded on 2026-09-27 below.
 
 ### C3 medication and marker sync, server and desktop — 2026-09-26
 
@@ -936,4 +936,26 @@ title, and these are not voice-first acts. With this, every C4 criterion is met:
 - the appearance exception;
 - no self-approval;
 - smoke tests of the local and server paths.
+
+### C6 the device run: a request reaches a phone while the desktop is closed — 2026-09-27
+
+C6's last acceptance item is recorded (`verification.md`, "A time request reaches a phone").
+
+The setup:
+
+- the real `zeitboardd` with its portal, on a disposable data directory;
+- the owner's desktop enrolled with it and used to create a share link, then closed;
+- the Android companion enrolled with time-request notices on;
+- a visitor who opened the link, entered the passcode and asked for a time.
+
+On its regular 15-minute check the phone raised the notice. It carries no one's name, note or
+requested window, it is private on the lock screen, and it is tagged to the request so that an
+answer can retire it.
+
+The run also found a compact-layout defect on the phone. The key column of its key–value rows was
+a fixed 68 dp, narrower than the words "PERMISSION" and "CORRECTIONS", which broke mid-word
+("PERMISSIO / N"). The column is now sized in sp, so it fits those words and grows with the font
+size; longer keys still wrap between words.
+
+With this, C6's acceptance is met.
 
