@@ -36,7 +36,7 @@ behavioral hardening pass.
 | 20 | Complete | Representative Overview, Rhythm, Settings, appearance, sleep, and proposal refreshes now coalesce in-flight work and reject superseded completions. Polling schedules the next read after settlement and pauses where visibility is nonessential. |
 | 21 | Complete | Hash-route screens, the assistant rail, and clinician report implementation are lazy chunks with synchronous shell/loading states. Production bundle output verifies separate chunks. |
 | 22 | Deferred | Splitting the desktop `App`, sync, and medication facades into services remains directionally correct. A bulk file move would add review risk without changing behavior, so extraction should occur at the next feature boundary with narrow interfaces and context ownership. |
-| 23 | Partial | Sleep wire/fold ownership is shared, fixture/schema mappings use one manifest, and live projection producers are schema-validated. Assistant action definitions remain copied across prompts, MCP tools, validation, dispatch, and presentation; one versioned action registry is still required. |
+| 23 | Complete | Sleep wire/fold ownership is shared, fixture/schema mappings use one manifest, and live projection producers are schema-validated. Agent actions have one versioned registry, `core/agentactions` (ADR-0050), from which the chat prompt, validation, both MCP tool lists, dispatch and card titles derive; a test holds the contracts' action enums to it. |
 | 24 | Partial | Boundary validation remains strict, paged responses reduce its largest copies, and common refresh/parsing helpers were extracted where used. The large calendar/medication/report validators are still handwritten and outside generated schema ownership. |
 | 25 | Partial | New local task/index changes use ordered transactional migrations and are recorded only after success. Legacy local baseline DDL and server DDL still run idempotently at startup and should be converted incrementally, with upgrade fixtures, rather than rewritten in one risky migration. |
 | 26 | Partial | Android persistence has repository/store boundaries, fixture generation has one manifest, and installer publication paths share policy helpers. The desktop/server stores and large UI/script modules still merit domain-boundary extraction when changed. |
@@ -85,8 +85,8 @@ The pass is accepted only when these remain green:
 
 1. Add repository-backed medication and sleep history pages before increasing
    supported renderer history sizes.
-2. Introduce one versioned assistant action registry and derive MCP definitions,
-   validation, and presentation metadata from it.
+2. ~~Introduce one versioned assistant action registry and derive MCP definitions,
+   validation, and presentation metadata from it.~~ Done 2026-09-27 (ADR-0050).
 3. Continue ordered migrations with upgrade fixtures; do not rewrite existing
    databases merely to make migration code aesthetically uniform.
 4. Extract context-aware desktop feature services as adjacent behavior changes
