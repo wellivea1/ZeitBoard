@@ -1884,3 +1884,19 @@ confirm how recent the underlying records are". It now carries this computer's v
 newest sleep record is about 17 hours old…"), matching the snapshot. A test pins it and fails when
 the fix is removed. The core, server and desktop Go suites, the web tests, types, formatting and
 lint pass.
+
+## The companion reads medication records — 2026-09-27
+
+JVM:
+
+- the contracts' own schema-validated fixtures parse as the pulled records the desktop uploads: a
+  medication definition revision, a dose, a dose correction and a context marker;
+- tombstones naming each of the four kinds validate;
+- a page carrying every kind parses in order;
+- refused: another revision's id, an unknown schedule kind, an unknown dose status, a field the
+  contract does not carry, a correction that changes nothing, an unknown marker kind, and a tombstone
+  naming a kind that does not sync.
+
+Instrumented, on the `ZeitBoard_Completion_Test` emulator (8 replica tests): a medication, its dose,
+the dose's correction and a marker were all kept, and a medication tombstone left only the marker.
+Android unit tests, lint and the debug build pass.

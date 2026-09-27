@@ -57,10 +57,15 @@ class SQLiteSyncReplicaStore(private val database: () -> SQLiteDatabase) : SyncR
                 val target = when (record.kind) {
                     "correction" -> record.payload.string("target_observation_id")
                     "task", "placement" -> record.payload.string("task_id")
+                    // A medication's revisions and doses share its id as target,
+                    // so erasing the medication finds them; a dose correction
+                    // targets its dose.
+                    "medication", "medication_event" -> record.payload.string("medication_id")
+                    "medication_correction" -> record.payload.string("target_event_id")
                     else -> record.recordId
                 }
                 val erased = exists("sync_erased_records", "record_id", record.recordId) ||
-                    (record.kind == "correction" && exists("sync_erased_records", "record_id", target)) ||
+                    (record.kind in CORRECTION_KINDS && exists("sync_erased_records", "record_id", target)) ||
                     (record.kind in setOf("task", "placement") && exists("sync_erased_tasks", "task_id", target)) ||
                     exists("erased_health_sources", "observation_id", target)
                 if (erased) return@forEach
@@ -72,7 +77,7 @@ class SQLiteSyncReplicaStore(private val database: () -> SQLiteDatabase) : SyncR
                     put("record_id", record.recordId); put("kind", record.kind); put("target_id", target)
                     put("observation_kind", if (record.kind == "observation") record.payload.string("kind") else "")
                     put("task_status", if (record.kind == "task") record.payload.string("status") else "")
-                    put("revision", if (record.kind == "task") record.payload.integer("revision") else 0L)
+                    put("revision", if (record.kind in REVISED_KINDS) record.payload.integer("revision") else 0L)
                     put("seq", record.seq); put("payload", record.payload.toString())
                 })
             }
@@ -169,12 +174,19 @@ class SQLiteSyncReplicaStore(private val database: () -> SQLiteDatabase) : SyncR
                 if (it.moveToFirst()) it.getString(0) else null
             }
         db.insertWithOnConflict("sync_erased_records", null, ContentValues().apply { put("record_id", id) }, SQLiteDatabase.CONFLICT_IGNORE)
-        val taskId = if (erasedKind == "task") Regex("^(.+)_r[1-9][0-9]*$").matchEntire(id)?.groupValues?.get(1) else null
-        if (taskId != null) {
-            db.insertWithOnConflict("sync_erased_tasks", null, ContentValues().apply { put("task_id", taskId) }, SQLiteDatabase.CONFLICT_IGNORE)
-            db.delete("sync_replica", "kind IN ('task', 'placement') AND target_id = ?", arrayOf(taskId))
+        val revisionOf = if (erasedKind in REVISED_KINDS) Regex("^(.+)_r[1-9][0-9]*$").matchEntire(id)?.groupValues?.get(1) else null
+        if (erasedKind == "task" && revisionOf != null) {
+            db.insertWithOnConflict("sync_erased_tasks", null, ContentValues().apply { put("task_id", revisionOf) }, SQLiteDatabase.CONFLICT_IGNORE)
+            db.delete("sync_replica", "kind IN ('task', 'placement') AND target_id = ?", arrayOf(revisionOf))
         }
-        db.delete("sync_replica", "record_id = ? OR (kind = 'correction' AND target_id = ?)", arrayOf(id, id))
+        if (erasedKind == "medication" && revisionOf != null) {
+            // Any erased revision means the medication was deleted, with every
+            // dose and dose correction of it (ADR-0048).
+            db.delete("sync_replica", "kind = 'medication_correction' AND target_id IN " +
+                "(SELECT record_id FROM sync_replica WHERE kind = 'medication_event' AND target_id = ?)", arrayOf(revisionOf))
+            db.delete("sync_replica", "kind IN ('medication', 'medication_event') AND target_id = ?", arrayOf(revisionOf))
+        }
+        db.delete("sync_replica", "record_id = ? OR (kind IN ('correction', 'medication_correction') AND target_id = ?)", arrayOf(id, id))
         db.delete("sync_outbox", "record_id = ? OR observation_id = ?", arrayOf(id, id))
         db.delete("sleep_corrections", "id = ?", arrayOf(id))
         if ((erasedKind == null || erasedKind == "observation") && Regex("^hc-[a-f0-9]{24}$").matches(id)) {
@@ -208,6 +220,10 @@ class SQLiteSyncReplicaStore(private val database: () -> SQLiteDatabase) : SyncR
     }
 
     companion object {
+        /** Mutable records that travel as revisions "<id>_r<n>"; the highest is current. */
+        private val REVISED_KINDS = setOf("task", "medication")
+        private val CORRECTION_KINDS = setOf("correction", "medication_correction")
+
         internal fun createSchema(db: SQLiteDatabase) {
             db.execSQL("CREATE TABLE sync_replica(record_id TEXT PRIMARY KEY NOT NULL, kind TEXT NOT NULL, observation_kind TEXT NOT NULL, target_id TEXT NOT NULL, task_status TEXT NOT NULL, revision INTEGER NOT NULL, seq INTEGER NOT NULL, payload TEXT NOT NULL)")
             db.execSQL("CREATE INDEX sync_replica_target_revision ON sync_replica(kind, target_id, revision)")

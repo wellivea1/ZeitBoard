@@ -749,3 +749,22 @@ Along the way:
 
 Remaining in C4: the versioned action registry, propose-only dose logging, and the agent smoke
 tests.
+
+### C3 the companion reads medication records — 2026-09-27
+
+Since the desktop half landed, desktops upload medication definitions, doses, dose corrections and
+context markers. The companion refused every record kind it did not know, so an owner with medication
+data would have had a companion that could no longer pull. ADR-0048 says clients must accept these
+kinds before any device uploads them; merging the desktop half first broke that order, and this
+restores it.
+
+The companion now:
+
+- checks each kind exactly as its contract defines it; a record it cannot read fails the page rather
+  than being kept half-understood;
+- stores definition revisions as it stores tasks (the highest revision is current), and keeps doses,
+  corrections and markers against their targets;
+- applies their tombstones: an erased revision takes the medication with its doses and corrections.
+
+It does not show or log them yet. The Doses screen against synced medications is next, followed by
+the recorded device run.

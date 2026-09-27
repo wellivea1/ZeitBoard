@@ -107,14 +107,24 @@ internal fun validatePulledPayload(id: String, kind: String, payload: JsonObject
         }
         "task" -> parseSyncedTask(id, payload)
         "placement" -> parseSyncedPlacement(id, payload)
+        "medication" -> parseSyncedMedication(id, payload)
+        "medication_event" -> parseSyncedDose(id, payload)
+        "medication_correction" -> validateSyncedDoseCorrection(id, payload)
+        "context_marker" -> validateSyncedMarker(id, payload)
         "tombstone" -> {
             payload.exactKeys(setOf("record_id"), setOf("record_kind"))
             require(payload.string("record_id") == id)
-            if (payload.containsKey("record_kind")) require(payload.string("record_kind") in setOf("observation", "correction", "task", "placement"))
+            if (payload.containsKey("record_kind")) require(payload.string("record_kind") in SYNC_RECORD_KINDS)
         }
         else -> error("Unsupported sync record kind.")
     }
 }
+
+/** Every kind a pulled tombstone may name (ADR-0017, ADR-0047, ADR-0048). */
+internal val SYNC_RECORD_KINDS = setOf(
+    "observation", "correction", "task", "placement",
+    "medication", "medication_event", "medication_correction", "context_marker",
+)
 
 internal fun parseSyncedPlacement(recordId: String, payload: JsonObject): SyncedPlacement {
     payload.exactKeys(setOf("placement_id", "task_id", "start_at", "end_at", "zone_id", "created_at"))
