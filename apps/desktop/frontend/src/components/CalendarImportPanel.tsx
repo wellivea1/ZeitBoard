@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import {
   importCalDAVCalendar,
   importCalendarFile,
@@ -193,23 +193,38 @@ function CalDAVForm({
   );
 }
 
+export interface CalDAVRefill {
+  endpoint: string;
+  label: string;
+}
+
 export function CalendarImportPanel({
   available,
   zoneId,
   onChanged,
+  refill,
 }: {
   available: boolean;
   zoneId: string;
   onChanged: () => void;
+  /** A calendar to import again: its address and name, ready for a sign-in. */
+  refill?: CalDAVRefill;
 }) {
-  const [mode, setMode] = useState<"file" | "caldav">("file");
+  const [mode, setMode] = useState<"file" | "caldav">(refill ? "caldav" : "file");
   const [file, setFile] = useState<CalendarFileSelection | null>(null);
   const [caldav, setCalDAV] = useState<CalDAVFields>({
-    endpoint: "",
-    label: "",
+    endpoint: refill?.endpoint ?? "",
+    label: refill?.label ?? "",
     username: "",
     password: "",
   });
+  const panelRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!refill) return;
+    const panel = panelRef.current;
+    panel?.scrollIntoView?.({ block: "nearest" });
+    panel?.querySelector<HTMLInputElement>('input[autocomplete="username"]')?.focus();
+  }, [refill]);
   const [report, setReport] = useState<CalendarImportReport | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -308,8 +323,12 @@ export function CalendarImportPanel({
   };
 
   return (
-    <section className="calendar-import-panel" aria-labelledby="calendar-import-title">
-      <h3 id="calendar-import-title">Add a calendar</h3>
+    <section
+      className="calendar-import-panel"
+      aria-labelledby="calendar-import-title"
+      ref={panelRef}
+    >
+      <h3 id="calendar-import-title">{refill ? `Refresh ${refill.label}` : "Add a calendar"}</h3>
       <div className="calendar-import-tabs" role="tablist" aria-label="Calendar source type">
         <button
           type="button"

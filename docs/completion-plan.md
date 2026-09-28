@@ -1018,7 +1018,7 @@ The real-app run found two faults that were older than this feature:
 - **The import message said "1 events, 1 of them busy".** It now reads "1 event, 1 busy."
 
 With this, C2's acceptance is met. A refresh action on each calendar's row, instead of adding the
-same calendar again, is a UX follow-up.
+same calendar again, followed the same day (below).
 
 ### C8 sleep history is read a page at a time — 2026-09-27
 
@@ -1120,6 +1120,20 @@ The same walk found how an unreachable server was worded:
   its own "Last sync" label and Data Sources reworded. The desktop now sends the instant, and
   both word it as the app words every time: "Today at 2:51 PM", "last synced today at 2:51 PM".
 
+### C2 calendars refresh from their row — 2026-09-27
+
+Refreshing a CalDAV calendar used to mean adding it again, address and all. Each CalDAV calendar's
+row now has Refresh:
+
+- **The calendar ZeitBoard writes accepted times to** keeps its sign-in, so Refresh imports it again
+  at once and says what came back. ZeitBoard's own events are recognised as usual.
+- **Any other calendar** has no kept sign-in, by design. Refresh opens the form titled "Refresh"
+  with its address and name filled in and the cursor in the username, so the owner only signs in.
+  The password is used once and cleared, as always.
+
+A calendar file is refreshed by importing the updated file again, as before; the same name
+replaces it.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and
@@ -1145,7 +1159,7 @@ or deferred with its reason.
 | # | Limitation | Disposition |
 |---|---|---|
 | 1 | The local database is not encrypted at rest. Owner-only file permissions protect it, and Settings says so (ADR-0035). | Accepted. Whole-database encryption waits for a CGo-free driver with an encryption hook. |
-| 2 | Refreshing an imported calendar means adding it again: there is no Refresh on its row. | Accepted, low. A follow-up UX improvement. |
+| 2 | A calendar file is refreshed by importing the updated file again, under the same name. | Accepted. CalDAV calendars refresh from their row. |
 | 3 | Accepted times go to one CalDAV calendar at a time, and the calendar's host can read their task names (ADR-0053; disclosed in the offer). | Accepted by design. |
 | 4 | Estimates use recorded sleep only. Multi-source inference stays in shadow mode after a negative promotion decision (ADR-0031). | Deferred analysis work. It ships only after a candidate passes the measured gate. |
 | 5 | The server's projection folds all relevant sleep history on each request (review #2). | Accepted at the current scale. Revisit with production profiles. |
