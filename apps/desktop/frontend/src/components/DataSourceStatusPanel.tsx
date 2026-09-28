@@ -3,6 +3,7 @@ import type { BackendSyncStatus } from "../data/backendSync";
 import type { CalendarSource } from "../data/calendar";
 import type { SleepSourceSummary, SleepSources } from "../data/sleepEntries";
 import { Icon } from "./Icon";
+import { momentInSentence } from "../utils/relativeTime";
 
 type SourceRowProps = {
   detail: ReactNode;
@@ -86,12 +87,10 @@ export function DataSourceStatusPanel({
             name="Server sync"
             detail={
               syncStatus.enabled ? (
-                // The label is a whole phrase ("Last synced Sep 27, 2:51 PM"),
-                // set in lower case to sit inside the row.
-                `Your own server · ${syncStatus.pushedCount} sent, ${syncStatus.pulledCount} received${
-                  syncStatus.lastSyncLabel
-                    ? ` · ${syncStatus.lastSyncLabel.charAt(0).toLowerCase()}${syncStatus.lastSyncLabel.slice(1)}`
-                    : ""
+                `Your own server · ${syncStatus.pushedCount} sent, ${syncStatus.pulledCount} received · ${
+                  syncStatus.lastSyncAt
+                    ? `last synced ${momentInSentence(new Date(syncStatus.lastSyncAt), new Date())}`
+                    : "not synced yet"
                 }`
               ) : (
                 <>

@@ -15,7 +15,8 @@ export interface BackendSyncStatus {
   backendUrl: string;
   deviceId: string;
   insecureSkipVerify: boolean;
-  lastSyncLabel: string;
+  /** When sync last completed, ISO 8601; absent before the first. */
+  lastSyncAt?: string;
   lastError: string;
   pendingPushCount: number;
   pendingErasureCount: number;
@@ -33,7 +34,6 @@ const unavailableStatus: BackendSyncStatus = {
   backendUrl: "",
   deviceId: "",
   insecureSkipVerify: false,
-  lastSyncLabel: "Not synced yet",
   lastError: "",
   pendingPushCount: 0,
   pendingErasureCount: 0,
@@ -46,6 +46,10 @@ const unavailableStatus: BackendSyncStatus = {
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null;
+}
+
+function instant(value: unknown): string | undefined {
+  return typeof value === "string" && Number.isFinite(Date.parse(value)) ? value : undefined;
 }
 
 function str(value: unknown): string {
@@ -71,7 +75,7 @@ export function normalizeBackendSyncStatus(value: unknown): BackendSyncStatus | 
     backendUrl: str(value.backendUrl),
     deviceId: str(value.deviceId),
     insecureSkipVerify: value.insecureSkipVerify === true,
-    lastSyncLabel: str(value.lastSyncLabel) || "Not synced yet",
+    ...(instant(value.lastSyncAt) ? { lastSyncAt: instant(value.lastSyncAt) } : {}),
     lastError: str(value.lastError),
     pendingPushCount: count(value.pendingPushCount),
     pendingErasureCount: count(value.pendingErasureCount),

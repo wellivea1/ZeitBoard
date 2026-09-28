@@ -4,21 +4,26 @@ import { describe, expect, it } from "vitest";
 import type { BackendSyncStatus } from "../data/backendSync";
 import { DataSourceStatusPanel } from "./DataSourceStatusPanel";
 
+const lastSync = new Date();
+lastSync.setHours(14, 51, 0, 0);
 const sync = {
   enabled: true,
   status: "connected",
   pushedCount: 3,
   pulledCount: 2,
-  lastSyncLabel: "Last synced Sep 27, 2:51 PM",
+  lastSyncAt: lastSync.toISOString(),
 } as BackendSyncStatus;
 
 describe("DataSourceStatusPanel", () => {
   // Found in the running app: the row read "last Last synced Sep 27, 2:51 PM".
-  it("says when sync last ran once", () => {
-    render(<DataSourceStatusPanel syncStatus={sync} />);
+  it("says when sync last ran, once, as the app says times", () => {
+    const { unmount } = render(<DataSourceStatusPanel syncStatus={sync} />);
     expect(
-      screen.getByText("Your own server · 3 sent, 2 received · last synced Sep 27, 2:51 PM"),
+      screen.getByText("Your own server · 3 sent, 2 received · last synced today at 2:51 PM"),
     ).toBeVisible();
+    unmount();
+    render(<DataSourceStatusPanel syncStatus={{ ...sync, lastSyncAt: undefined }} />);
+    expect(screen.getByText("Your own server · 3 sent, 2 received · not synced yet")).toBeVisible();
   });
 
   it("counts sleep records only once it has read them", () => {

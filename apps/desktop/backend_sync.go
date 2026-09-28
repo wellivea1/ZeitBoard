@@ -55,7 +55,7 @@ type BackendSyncStatusDTO struct {
 	BackendURL          string `json:"backendUrl"`
 	DeviceID            string `json:"deviceId"`
 	InsecureSkipVerify  bool   `json:"insecureSkipVerify"`
-	LastSyncLabel       string `json:"lastSyncLabel"`
+	LastSyncAt          string `json:"lastSyncAt,omitempty"`
 	LastError           string `json:"lastError"`
 	PendingPushCount    int    `json:"pendingPushCount"`
 	PendingErasureCount int    `json:"pendingErasureCount"`
@@ -1044,7 +1044,7 @@ func (a *App) backendSyncStatusCounts(cfg backendSyncConfig, counts syncCounts) 
 		BackendURL:          cfg.BackendURL,
 		DeviceID:            cfg.DeviceID,
 		InsecureSkipVerify:  cfg.InsecureSkipVerify,
-		LastSyncLabel:       lastSyncLabel(cfg.LastSyncAt),
+		LastSyncAt:          lastSyncAt(cfg.LastSyncAt),
 		LastError:           cfg.LastError,
 		PendingPushCount:    pending,
 		PendingErasureCount: pendingErasures,
@@ -1310,9 +1310,11 @@ func nonEmptyStrings(values []string, fallback string) []string {
 	return result
 }
 
-func lastSyncLabel(value time.Time) string {
+// lastSyncAt is when sync last completed, RFC 3339, or "" before the first.
+// The window words it as it words every time.
+func lastSyncAt(value time.Time) string {
 	if value.IsZero() {
-		return "Not synced yet"
+		return ""
 	}
-	return value.Local().Format("Last synced Jan 2, 3:04 PM")
+	return value.UTC().Format(time.RFC3339)
 }

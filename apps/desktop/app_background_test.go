@@ -60,7 +60,7 @@ func TestDesktopBackgroundSyncRetriesWithoutAViewAndStops(t *testing.T) {
 	configureBackendForTest(t, app, server.URL)
 	waitBackground(t, func() bool {
 		s, err := app.GetBackendSyncStatus()
-		return err == nil && s.PendingPushCount == 0 && s.LastSyncLabel != "Not synced yet"
+		return err == nil && s.PendingPushCount == 0 && s.LastSyncAt != ""
 	})
 	if pushes.Load() != 2 {
 		t.Fatalf("retry did not retain then acknowledge outbox: %d", pushes.Load())

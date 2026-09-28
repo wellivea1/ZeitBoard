@@ -72,6 +72,11 @@ export function dayInSentence(date: Date, now: Date) {
     : `on ${day}`;
 }
 
+/** "today at 2:51 PM", "on Monday at 9:00 AM": a moment, for a sentence. */
+export function momentInSentence(date: Date, now: Date) {
+  return `${dayInSentence(date, now)} at ${clockTime(date)}`;
+}
+
 /** "Tonight 11:30 PM – 1:35 AM", named by the day the range begins. */
 export function relativeRange(start: Date, end: Date, now: Date) {
   return `${relativeDay(start, now)} ${clockRange(start, end)}`;

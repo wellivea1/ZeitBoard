@@ -1116,3 +1116,6 @@ The same walk found how an unreachable server was worded:
   server". Everything now says the latter.
 - Sharing's list said links would appear "once sync is set up" whenever it could not show them.
   It now says why: sync is off, the portal is off, or the server has not answered.
+- The last sync arrived as a phrase ("Last synced Sep 27, 2:51 PM"), which Settings set beside
+  its own "Last sync" label and Data Sources reworded. The desktop now sends the instant, and
+  both word it as the app words every time: "Today at 2:51 PM", "last synced today at 2:51 PM".
