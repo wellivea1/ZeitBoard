@@ -132,7 +132,7 @@ export function BackendProposalsProvider({ children }: { children: ReactNode }) 
           publish({
             ...dataRef.current,
             status: "error",
-            message: "Could not reach the synced backend.",
+            message: "Could not reach ZeitBoard's server.",
             proposals: dataRef.current.proposals,
             pagination: dataRef.current.pagination,
           });

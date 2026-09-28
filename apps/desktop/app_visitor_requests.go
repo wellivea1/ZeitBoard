@@ -141,7 +141,11 @@ func (a *App) fetchBackendVisitorRequests(ctx context.Context, cfg backendSyncCo
 }
 
 func (a *App) fetchBackendVisitorRequestPage(ctx context.Context, cfg backendSyncConfig, token, cursor string) BackendVisitorRequestsDTO {
+	// The first page loads on its own; an older page is asked for by name.
 	client := a.newDesktopBackendClient(cfg, token)
+	if cursor == "" {
+		client = a.newPassiveBackendClient(cfg, token)
+	}
 	var response backendVisitorRequestListResponse
 	path := "/v1/portal/requests"
 	if cursor != "" {

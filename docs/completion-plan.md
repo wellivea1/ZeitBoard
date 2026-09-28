@@ -1089,14 +1089,30 @@ own.
 
 ### C8 a server that is off is not waited on again — 2026-09-27
 
-The architecture review's finding #14 hid a daily-use defect. With sync on and the server's
-machine off, Home's overview and Rhythm's actogram each asked the server first. Each waited out the
-whole ten-second request timeout before showing the local estimate, on every visit and every
-minute's refresh. A refused connection fails at once, which is why test runs never showed it; a
-machine that is off does not refuse.
+The architecture review's finding #14 hid a daily-use defect, and walking the app found its reach.
+With sync on and the server's machine off, several reads waited out the whole ten-second request
+timeout before showing what they could, on every visit and every refresh:
 
-Now a request that gets no answer marks the server down for two minutes. For that time both reads
-go straight to the local estimate, which is built from the same synced records. Sync keeps
-trying every minute, and its first success, or a read's, ends the outage. An error answer, such
-as a revoked device, returns quickly and marks nothing.
+- Home's overview;
+- Rhythm's actogram;
+- the decision queue's synced proposals and visitor requests, which also held back Plan's count;
+- the Sharing screen's list of links.
 
+A refused connection fails at once, which is why test runs never showed it; a machine that is off
+does not refuse.
+
+Now every request through the desktop's backend client says whether the server answered. No
+answer marks it down for two minutes; any answer, even an error status, ends that. Reads that
+happen on their own give up at once while it is down, and Home and Rhythm show the local estimate,
+built from the same synced records. What the owner does, an older page they ask for, and sync
+always try, so the server's return is noticed within a minute.
+
+The same walk found how an unreachable server was worded:
+
+- Plan's queue showed it as a red alert above the owner's own suggestions, the style kept for a
+  decision that failed. It is now one calm line: "Could not reach ZeitBoard's server. Anything
+  waiting there appears here once it answers."
+- The window called it "the synced backend" and "your server" where the desktop said "ZeitBoard's
+  server". Everything now says the latter.
+- Sharing's list said links would appear "once sync is set up" whenever it could not show them.
+  It now says why: sync is off, the portal is off, or the server has not answered.

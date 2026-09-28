@@ -186,6 +186,11 @@ type desktopBackendClient struct {
 	baseURL string
 	token   string
 	client  *http.Client
+	// Every request tells the outage whether the server answered. A passive
+	// read, one nobody asked for by name, skips a server known to be down.
+	outage  *backendOutage
+	now     func() time.Time
+	passive bool
 }
 
 func (a *App) GetBackendSyncStatus() (BackendSyncStatusDTO, error) {
@@ -304,12 +309,10 @@ func (a *App) syncNowLocked(parent context.Context) (BackendSyncStatusDTO, error
 	a.backendConfigMu.Lock()
 	defer a.backendConfigMu.Unlock()
 	if syncErr != nil {
-		a.backendOutage.note(syncErr, a.currentTime())
 		cfg.LastError = sanitizeBackendError(syncErr)
 		_ = a.saveBackendSyncConfig(cfg)
 		return a.backendSyncStatusCounts(cfg, counts), nil
 	}
-	a.backendOutage.clear()
 	cfg.LastSyncAt = a.currentTime().UTC()
 	cfg.LastError = ""
 	if err := a.saveBackendSyncConfig(cfg); err != nil {
@@ -629,31 +632,27 @@ func decodePulledRecord(record syncEnvelope) (storage.SyncPullRecord, error) {
 
 func (a *App) serverOverview(ctx context.Context, now time.Time) (OverviewDTO, bool) {
 	cfg, token, err := a.requireBackendSync()
-	if err != nil || a.backendOutage.active(now) {
+	if err != nil {
 		return OverviewDTO{}, false
 	}
 	var response serverOverviewResponse
-	if err := a.newDesktopBackendClient(cfg, token).getJSON(ctx, "/v1/overview", &response); err != nil {
-		a.backendOutage.note(err, now)
+	if err := a.newPassiveBackendClient(cfg, token).getJSON(ctx, "/v1/overview", &response); err != nil {
 		a.recordBackendSyncError(cfg, err)
 		return OverviewDTO{}, false
 	}
-	a.backendOutage.clear()
 	return overviewDTOFromServer(response, now), true
 }
 
 func (a *App) serverRhythm(ctx context.Context, now time.Time) (estimation.RhythmProjection, bool) {
 	cfg, token, err := a.requireBackendSync()
-	if err != nil || a.backendOutage.active(now) {
+	if err != nil {
 		return estimation.RhythmProjection{}, false
 	}
 	var response serverRhythmResponse
-	if err := a.newDesktopBackendClient(cfg, token).getJSON(ctx, "/v1/rhythm", &response); err != nil {
-		a.backendOutage.note(err, now)
+	if err := a.newPassiveBackendClient(cfg, token).getJSON(ctx, "/v1/rhythm", &response); err != nil {
 		a.recordBackendSyncError(cfg, err)
 		return estimation.RhythmProjection{}, false
 	}
-	a.backendOutage.clear()
 	if response.Projection != nil {
 		projection := *response.Projection
 		projection.FixtureMode = false
@@ -884,7 +883,11 @@ func (a *App) DecideBackendProposal(input BackendProposalDecisionInput) (Backend
 }
 
 func (a *App) fetchBackendProposals(ctx context.Context, cfg backendSyncConfig, token, cursor string) BackendProposalsDTO {
+	// The first page loads on its own; an older page is asked for by name.
 	client := a.newDesktopBackendClient(cfg, token)
+	if cursor == "" {
+		client = a.newPassiveBackendClient(cfg, token)
+	}
 	path := "/v1/proposals"
 	if cursor != "" {
 		path += "?" + url.Values{"cursor": []string{cursor}}.Encode()
@@ -1129,7 +1132,19 @@ func (a *App) newDesktopBackendClient(cfg backendSyncConfig, token string) deskt
 		baseURL: strings.TrimRight(cfg.BackendURL, "/"),
 		token:   token,
 		client:  a.backendHTTPClient(cfg.InsecureSkipVerify),
+		outage:  &a.backendOutage,
+		now:     a.currentTime,
 	}
+}
+
+// newPassiveBackendClient is for reads that happen on their own: Home's
+// overview, Rhythm, the decision queue's synced sources, the list of share
+// links. While the server is known to be down they give up at once instead of
+// waiting out the request timeout. What the owner does, and sync, always try.
+func (a *App) newPassiveBackendClient(cfg backendSyncConfig, token string) desktopBackendClient {
+	client := a.newDesktopBackendClient(cfg, token)
+	client.passive = true
+	return client
 }
 
 func (c desktopBackendClient) getJSON(ctx context.Context, path string, target any) error {
@@ -1147,6 +1162,9 @@ func (c desktopBackendClient) postJSON(ctx context.Context, path string, payload
 func (c desktopBackendClient) doJSON(ctx context.Context, method, path string, payload []byte, target any) error {
 	if c.baseURL == "" {
 		return errors.New("backend URL is not configured")
+	}
+	if c.passive && c.outage.active(c.now()) {
+		return errBackendUnreachable
 	}
 	var body io.Reader
 	if len(payload) > 0 {
@@ -1168,9 +1186,12 @@ func (c desktopBackendClient) doJSON(ctx context.Context, method, path string, p
 			// Given up on, not unanswered.
 			return ctx.Err()
 		}
+		c.outage.start(c.now())
 		return errBackendUnreachable
 	}
 	defer resp.Body.Close()
+	// Any answer, even an error status, means the server is there.
+	c.outage.clear()
 	const responseLimit = 2 * 1024 * 1024
 	data, err := io.ReadAll(io.LimitReader(resp.Body, responseLimit+1))
 	if err != nil {

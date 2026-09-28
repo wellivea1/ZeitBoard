@@ -24,7 +24,15 @@ export function ShareLinkList({
   // The state header already explains why there is nothing here. Repeating its
   // sentence under the heading would say the same thing twice on one screen.
   if (data.status !== "ok") {
-    return <p className="sharing-empty">Links you make appear here once sync is set up.</p>;
+    return (
+      <p className="sharing-empty">
+        {data.status === "off"
+          ? "Links you make appear here once sync is set up."
+          : data.status === "unavailable"
+            ? "Links you make appear here once your server's portal is on."
+            : "Links you have made appear here when ZeitBoard's server answers."}
+      </p>
+    );
   }
   if (data.links.length === 0) {
     return (

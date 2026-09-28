@@ -150,7 +150,7 @@ func (a *App) GetBackendShareLinks() (ShareLinksDTO, error) {
 }
 
 func (a *App) fetchBackendShareLinks(ctx context.Context, cfg backendSyncConfig, token string) ShareLinksDTO {
-	client := a.newDesktopBackendClient(cfg, token)
+	client := a.newPassiveBackendClient(cfg, token)
 	var response backendShareProfileListResponse
 	if err := client.getJSON(ctx, "/v1/portal/profiles", &response); err != nil {
 		if isBackendRouteAbsent(err) {
