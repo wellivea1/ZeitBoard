@@ -75,13 +75,11 @@ function doseSentence(medication: MedicationDefinition, last: MedicationLog | un
 
 export function MedicationQuickTaps({
   medications,
-  events,
   available,
   busy,
   onLog,
 }: {
   medications: MedicationDefinition[];
-  events: MedicationLog[];
   available: boolean;
   busy: boolean;
   onLog: (input: MedicationEventInput) => Promise<void>;
@@ -107,10 +105,7 @@ export function MedicationQuickTaps({
   return (
     <ul className="medication-taps">
       {active.map((medication) => {
-        const last = events
-          .filter((event) => event.medicationId === medication.medicationId)
-          .sort((a, b) => Date.parse(b.doseAt) - Date.parse(a.doseAt))[0];
-        const details = doseSentence(medication, last);
+        const details = doseSentence(medication, medication.lastDose);
         return (
           <li key={medication.medicationId}>
             <div>

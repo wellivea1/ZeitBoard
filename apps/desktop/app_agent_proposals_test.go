@@ -43,8 +43,8 @@ func TestAnAgentProposesADoseAndOnlyTheOwnerRecordsIt(t *testing.T) {
 		t.Fatalf("the result carried the private label: %s", raw)
 	}
 	proposed := proposeThroughTheEndpoint(t, capability, "propose_log_dose", `{"target":{"medication_id":"`+medicationID+`","status":"skipped"}}`)
-	if doses, err := app.GetMedications(); err != nil || len(doses.Events) != 0 {
-		t.Fatalf("a proposal recorded a dose: %+v %v", doses.Events, err)
+	if doses := doseHistory(t, app); len(doses) != 0 {
+		t.Fatalf("a proposal recorded a dose: %+v", doses)
 	}
 	snapshot, err := app.assistantSnapshot(context.Background(), now)
 	if err != nil || snapshot.Medication.PendingDoseProposals != 2 || snapshot.Tasks.PendingTaskProposals != 0 {
@@ -74,11 +74,11 @@ func TestAnAgentProposesADoseAndOnlyTheOwnerRecordsIt(t *testing.T) {
 	if err != nil || len(queue.Pending) != 1 || len(queue.History) != 1 || queue.History[0].State != storage.AgentProposalApproved {
 		t.Fatalf("after accepting: %+v, %v", queue, err)
 	}
-	doses, err := app.GetMedications()
-	if err != nil || len(doses.Events) != 1 {
-		t.Fatalf("doses = %+v, %v", doses.Events, err)
+	doses := doseHistory(t, app)
+	if len(doses) != 1 {
+		t.Fatalf("doses = %+v", doses)
 	}
-	if dose := doses.Events[0]; dose.MedicationID != medicationID || dose.Status != "taken" || dose.Scheduled ||
+	if dose := doses[0]; dose.MedicationID != medicationID || dose.Status != "taken" || dose.Scheduled ||
 		dose.DoseAt != doseAt.Format(time.RFC3339) {
 		t.Fatalf("recorded dose = %+v", dose)
 	}
@@ -101,8 +101,8 @@ func TestAnAgentProposesADoseAndOnlyTheOwnerRecordsIt(t *testing.T) {
 			t.Fatalf("%s is %s, want %s", decided.ProposalID, decided.State, want)
 		}
 	}
-	if doses, err := app.GetMedications(); err != nil || len(doses.Events) != 1 {
-		t.Fatalf("declining recorded a dose: %+v %v", doses.Events, err)
+	if doses := doseHistory(t, app); len(doses) != 1 {
+		t.Fatalf("declining recorded a dose: %+v", doses)
 	}
 	if snapshot, err := app.assistantSnapshot(context.Background(), later); err != nil || snapshot.Medication.PendingDoseProposals != 0 {
 		t.Fatalf("snapshot still counts waiting doses: %v", err)

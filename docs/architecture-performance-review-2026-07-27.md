@@ -25,11 +25,11 @@ behavioral hardening pass.
 | 9 | Complete | A transactionally consistent sleep snapshot now derives raw, corrected, and effective views from one observation query and one correction query. Mutation follow-up uses a point snapshot instead of rebuilding the full list. |
 | 10 | Complete | Sleep and task pending counts/pages use SQL anti-joins over stored payloads rather than reconstructing every domain record and hash in memory. |
 | 11 | Complete | One ordered pull page and its cursor apply atomically. Tombstones are applied last, hard erasures are compacted once after commit, and a durable pending marker retries compaction after an interruption without replaying the page. |
-| 12 | Partial | Medication context uses one sorted sleep interval index with binary search, and local-agent/assistant summaries are bounded before presentation. The private desktop DTO still materializes all medication events; repository-backed history paging is the remaining long-history improvement. |
+| 12 | Complete | Medication context uses one sorted sleep interval index with binary search, and local-agent/assistant summaries are bounded before presentation. Since 2026-09-27 the desktop DTO carries each medication's newest dose instead of every event, and the history is read a page of 50 at a time: the effective events are folded once, and only the page's doses are placed against the rhythm and sent. |
 | 13 | Complete | Calendar source counts and civil-day buckets are single-pass, and report sleep intervals are placed directly into their first/last touched rows. Loaded locations are reused. |
 | 14 | Partial | Desktop-local agent tools now call explicitly local overview/rhythm paths and backend clients share lifecycle-managed transports. Normal UI overview/rhythm remain backend-first by design and can still wait for the bounded backend timeout before local fallback; asynchronous server projection refresh remains future work. |
 | 15 | Partial | New native import/export, proposal, local-agent, sync, and projection paths use the application or request context. Older Wails facade methods still use `context.Background()` and should move behind context-aware feature services as those services are extracted. |
-| 16 | Partial | The sleep log is repository-backed (2026-09-27): Log reads one numbered page of 50 nights from SQLite, the Week board reads only the nights its days touch (as corrected), and Rhythm and Data Sources receive per-source counts computed on the desktop. No sleep surface receives the whole history. Medication history still arrives whole in its DTO and is paged by the renderer; report and proposal surfaces were already bounded. |
+| 16 | Complete | The sleep log is repository-backed (2026-09-27): Log reads one numbered page of 50 nights from SQLite, the Week board reads only the nights its days touch (as corrected), and Rhythm and Data Sources receive per-source counts computed on the desktop. No sleep surface receives the whole history, and neither does any medication surface (see #12); report and proposal surfaces were already bounded. |
 | 17 | Complete | Installed desktop import/export uses native file dialogs. Go performs bounded reads, one-use digest-bound preview/commit, and atomic flushed export replacement; React receives only bounded metadata and a short preview. Browser fixture fallback remains bounded. |
 | 18 | Complete | Medication and rhythm-marker mutation owners accept returned DTOs without immediately refetching their own full projection; invalidation is coalesced for other consumers. |
 | 19 | Partial | One backend-proposal provider owns fetch, pagination, token decisions, stale-generation rejection, and assistant/Approvals publication. The unrelated local approvals provider remains broad and can be split when its next feature requires it. |
@@ -84,7 +84,7 @@ The pass is accepted only when these remain green:
 ## Follow-up order
 
 1. Add repository-backed medication and sleep history pages before increasing
-   supported renderer history sizes. Sleep done 2026-09-27; medication remains.
+   supported renderer history sizes. Done 2026-09-27 for both.
 2. ~~Introduce one versioned assistant action registry and derive MCP definitions,
    validation, and presentation metadata from it.~~ Done 2026-09-27 (ADR-0050).
 3. Continue ordered migrations with upgrade fixtures; do not rewrite existing

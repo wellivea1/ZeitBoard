@@ -39,34 +39,25 @@ function dose(
 describe("the one-tap dose row", () => {
   it("names a schedule's zone when this computer is elsewhere", () => {
     render(
-      <MedicationQuickTaps
-        medications={[medication]}
-        events={[]}
-        available
-        busy={false}
-        onLog={vi.fn()}
-      />,
+      <MedicationQuickTaps medications={[medication]} available busy={false} onLog={vi.fn()} />,
     );
     expect(screen.getByText(/Usually at 9:00 PM Tokyo time/)).toBeVisible();
+    expect(screen.queryByText(/Last (taken|skipped)/)).toBeNull();
   });
 
-  it("takes the latest dose by its instant, not by each zone's own clock", () => {
-    // Recorded on two devices in different zones: the later dose has the
-    // earlier civil clock, so ordering by the civil strings picks the wrong one.
-    const events = [
-      dose("dose_utc", "taken", "2026-09-27T04:41:00Z", "2026-09-27T04:41", "UTC"),
-      dose(
-        "dose_new_york",
-        "skipped",
-        "2026-09-27T04:46:00Z",
-        "2026-09-27T00:46",
-        "America/New_York",
-      ),
-    ];
+  // The desktop picks the newest dose, by its instant (the Go tests pin that);
+  // the row words the one it is given.
+  it("words the medication's newest dose", () => {
+    const lastDose = dose(
+      "dose_new_york",
+      "skipped",
+      "2026-09-27T04:46:00Z",
+      "2026-09-27T00:46",
+      "America/New_York",
+    );
     render(
       <MedicationQuickTaps
-        medications={[medication]}
-        events={events}
+        medications={[{ ...medication, eventCount: 2, lastDose }]}
         available
         busy={false}
         onLog={vi.fn()}

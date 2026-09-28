@@ -15,6 +15,16 @@ import (
 	"non24.app/desktop/platform/tray"
 )
 
+// doseHistory is the newest page of the dose history.
+func doseHistory(t *testing.T, app *App) []MedicationLogDTO {
+	t.Helper()
+	page, err := app.GetMedicationHistoryPage(MedicationHistoryPageInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return page.Events
+}
+
 func TestMedicationLoggingUsesRealSleepContextAndAppendOnlyCorrections(t *testing.T) {
 	app := newTestApp(t)
 	fixedNow := time.Now().UTC().Truncate(time.Minute)
@@ -25,7 +35,7 @@ func TestMedicationLoggingUsesRealSleepContextAndAppendOnlyCorrections(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !initial.Empty || initial.FixtureMode || len(initial.Medications) != 0 || len(initial.Events) != 0 {
+	if !initial.Empty || initial.FixtureMode || len(initial.Medications) != 0 || len(doseHistory(t, app)) != 0 {
 		t.Fatalf("initial medications = %#v", initial)
 	}
 	created, err := app.AddMedication(MedicationInput{
@@ -53,13 +63,18 @@ func TestMedicationLoggingUsesRealSleepContextAndAppendOnlyCorrections(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(logged.Events) != 1 || logged.Events[0].MedicationLabel != "Private test label" || logged.Events[0].Status != storage.MedicationEventTaken {
-		t.Fatalf("logged event = %#v", logged.Events)
+	history := doseHistory(t, app)
+	if len(history) != 1 || history[0].MedicationLabel != "Private test label" || history[0].Status != storage.MedicationEventTaken {
+		t.Fatalf("logged event = %#v", history)
 	}
-	if !strings.Contains(logged.Events[0].WakeRelation, "after recorded wake") || logged.Events[0].SleepRelationKind != "predicted" {
-		t.Fatalf("rhythm context = %#v", logged.Events[0])
+	if !strings.Contains(history[0].WakeRelation, "after recorded wake") || history[0].SleepRelationKind != "predicted" {
+		t.Fatalf("rhythm context = %#v", history[0])
 	}
-	event := logged.Events[0]
+	// The quick taps read the newest dose from the medication itself.
+	if last := logged.Medications[0].LastDose; last == nil || *last != history[0] {
+		t.Fatalf("last dose = %#v, want %#v", last, history[0])
+	}
+	event := history[0]
 	corrected, err := app.CorrectMedicationEvent(MedicationEventCorrectionInput{
 		EventID:   event.EventID,
 		DoseLocal: event.DoseLocal,
@@ -72,8 +87,9 @@ func TestMedicationLoggingUsesRealSleepContextAndAppendOnlyCorrections(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(corrected.Events) != 1 || corrected.Events[0].Status != storage.MedicationEventSkipped || corrected.Events[0].Note != "corrected note" || !corrected.Events[0].Excluded || corrected.Events[0].CorrectionCount != 1 {
-		t.Fatalf("corrected event = %#v", corrected.Events)
+	history = doseHistory(t, app)
+	if len(history) != 1 || history[0].Status != storage.MedicationEventSkipped || history[0].Note != "corrected note" || !history[0].Excluded || history[0].CorrectionCount != 1 {
+		t.Fatalf("corrected event = %#v", history)
 	}
 	if corrected.Medications[0].EventCount != 1 {
 		t.Fatalf("excluded evidence changed the stored event count: %#v", corrected.Medications[0])
@@ -90,7 +106,7 @@ func TestMedicationLoggingUsesRealSleepContextAndAppendOnlyCorrections(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if updated.Medications[0].Active || updated.Medications[0].Revision != 2 || updated.Events[0].MedicationLabel != "Renamed private label" {
+	if updated.Medications[0].Active || updated.Medications[0].Revision != 2 || doseHistory(t, app)[0].MedicationLabel != "Renamed private label" {
 		t.Fatalf("updated medication = %#v", updated)
 	}
 
@@ -122,8 +138,8 @@ func TestMedicationLoggingUsesRealSleepContextAndAppendOnlyCorrections(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(withoutEvent.Events) != 0 {
-		t.Fatalf("hard-deleted event remained visible: %#v", withoutEvent.Events)
+	if history := doseHistory(t, app); len(history) != 0 || withoutEvent.Medications[0].LastDose != nil {
+		t.Fatalf("hard-deleted event remained visible: %#v", history)
 	}
 	if _, err := app.DeleteMedication(MedicationDeleteInput{MedicationID: medicationID, Confirmation: "DELETE"}); err != nil {
 		t.Fatal(err)
@@ -154,7 +170,7 @@ func TestMedicationLoggingRemainsUsableWithoutAnEstimate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if logged.EstimateStatus != "empty" || logged.Events[0].WakeRelation != "No prior recorded wake" || logged.Events[0].SleepRelationKind != "unavailable" {
+	if dose := doseHistory(t, app)[0]; logged.EstimateStatus != "empty" || dose.WakeRelation != "No prior recorded wake" || dose.SleepRelationKind != "unavailable" {
 		t.Fatalf("no-estimate medications = %#v", logged)
 	}
 	if !strings.Contains(logged.InteractionDisclaimer, "does not check medication interactions") {

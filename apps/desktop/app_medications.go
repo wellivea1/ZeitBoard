@@ -95,6 +95,9 @@ type MedicationDTO struct {
 	StartedLocal             string                 `json:"startedLocal,omitempty"`
 	StartedZoneID            string                 `json:"startedZoneId,omitempty"`
 	StartedLabel             string                 `json:"startedLabel,omitempty"`
+	// LastDose is the newest dose recorded for it, for "Last taken today at
+	// 8:02 AM". The whole history is read a page at a time.
+	LastDose *MedicationLogDTO `json:"lastDose,omitempty"`
 }
 
 type MedicationScheduleDTO struct {
@@ -163,19 +166,18 @@ type MedicationLogDTO struct {
 }
 
 type MedicationsDTO struct {
-	Status                string             `json:"status"`
-	Empty                 bool               `json:"empty"`
-	Message               string             `json:"message"`
-	EstimateStatus        string             `json:"estimateStatus"`
-	EstimateMessage       string             `json:"estimateMessage"`
-	Medications           []MedicationDTO    `json:"medications"`
-	Events                []MedicationLogDTO `json:"events"`
-	FixtureMode           bool               `json:"fixtureMode"`
-	Disclaimer            string             `json:"disclaimer"`
-	InteractionDisclaimer string             `json:"interactionDisclaimer"`
-	ReminderStatus        string             `json:"reminderStatus"`
-	ReminderMessage       string             `json:"reminderMessage"`
-	UpdatedLabel          string             `json:"updatedLabel"`
+	Status                string          `json:"status"`
+	Empty                 bool            `json:"empty"`
+	Message               string          `json:"message"`
+	EstimateStatus        string          `json:"estimateStatus"`
+	EstimateMessage       string          `json:"estimateMessage"`
+	Medications           []MedicationDTO `json:"medications"`
+	FixtureMode           bool            `json:"fixtureMode"`
+	Disclaimer            string          `json:"disclaimer"`
+	InteractionDisclaimer string          `json:"interactionDisclaimer"`
+	ReminderStatus        string          `json:"reminderStatus"`
+	ReminderMessage       string          `json:"reminderMessage"`
+	UpdatedLabel          string          `json:"updatedLabel"`
 }
 
 type MedicationExportDTO struct {
@@ -497,19 +499,26 @@ func (a *App) medicationsAtContext(ctx context.Context, now time.Time) (Medicati
 	if err != nil {
 		return MedicationsDTO{}, err
 	}
-	medicationByID := make(map[string]storage.MedicationRecord, len(medications))
 	eventCounts := make(map[string]int, len(medications))
-	for _, record := range medications {
-		medicationByID[record.MedicationID] = record
-	}
+	lastDoses := make(map[string]storage.EffectiveMedicationEvent, len(medications))
 	for _, item := range effective {
+		// Oldest first, so the last seen is the newest.
 		eventCounts[item.Event.MedicationID]++
+		lastDoses[item.Event.MedicationID] = item
 	}
+	projection := newMedicationProjection(medications, state)
 	medicationDTOs := make([]MedicationDTO, 0, len(medications))
 	for _, record := range medications {
 		item, err := medicationDTO(record, eventCounts[record.MedicationID], state, now)
 		if err != nil {
 			return MedicationsDTO{}, fmt.Errorf("project medication %s: %w", record.MedicationID, err)
+		}
+		if last, found := lastDoses[record.MedicationID]; found {
+			dose, err := projection.dose(last)
+			if err != nil {
+				return MedicationsDTO{}, err
+			}
+			item.LastDose = &dose
 		}
 		medicationDTOs = append(medicationDTOs, item)
 	}
@@ -519,18 +528,6 @@ func (a *App) medicationsAtContext(ctx context.Context, now time.Time) (Medicati
 		}
 		return strings.ToLower(medicationDTOs[i].Label) < strings.ToLower(medicationDTOs[j].Label)
 	})
-	eventDTOs := make([]MedicationLogDTO, 0, len(effective))
-	anchors := medicationWakeAnchors(state.Sessions)
-	sleepIndex := newMedicationSleepIndex(state.Sessions)
-	latestWake := latestMedicationWake(anchors)
-	for index := len(effective) - 1; index >= 0; index-- {
-		item := effective[index]
-		medication, exists := medicationByID[item.Event.MedicationID]
-		if !exists {
-			return MedicationsDTO{}, fmt.Errorf("medication event %s has no definition", item.Event.EventID)
-		}
-		eventDTOs = append(eventDTOs, medicationEventDTO(item, medication.Label, state, sleepIndex, anchors, latestWake))
-	}
 	estimateMessage := state.Message
 	if state.Status == "estimated" {
 		estimateMessage = "Current rhythm estimate available for recent-event context."
@@ -554,7 +551,6 @@ func (a *App) medicationsAtContext(ctx context.Context, now time.Time) (Medicati
 		EstimateStatus:        state.Status,
 		EstimateMessage:       estimateMessage,
 		Medications:           medicationDTOs,
-		Events:                eventDTOs,
 		FixtureMode:           false,
 		Disclaimer:            "Medication timing shown here is user-entered or derived context, not medical advice.",
 		InteractionDisclaimer: medicationInteractionDisclaimer,

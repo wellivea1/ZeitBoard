@@ -2331,3 +2331,36 @@ In the running desktop (disposable dev profile), with 42 imported and 9 added sy
 
 The core and desktop Go suites and the full web check pass.
 
+## Dose history read a page at a time — 2026-09-27
+
+Desktop:
+
+- Fifty-five doses of two medications, an hour apart, read as a page of 50 and a page of 5,
+  newest first, meeting without a gap. A page past the end reads as the last.
+- Each medication carries its own newest dose. A skipped dose logged in New York at 00:46 is
+  newer than a taken dose logged in UTC at 04:41, and is the one carried.
+- The existing medication, agent-proposal, report and sync tests now read doses from the history
+  page. The newest dose on the medication equals the history's first.
+- Deleting the only dose clears it from both.
+
+Web:
+
+- The history reads a page at a time through the desktop, and re-reads when medication data
+  changes.
+- The quick taps word the dose they are given.
+- The data reader requires a medication's newest dose to be its own, and present exactly when it
+  has doses.
+- The Medications screen's correction and deletion flow runs against a desktop serving the
+  history page.
+
+In the running desktop (disposable dev profile), with 50 synthetic doses added to 5:
+
+1. The medications read carried no dose list, and each medication had its newest dose.
+2. Log › Medications read "55 stored", "Events 1-50 of 55". "Next events" showed the five oldest,
+   newest first.
+3. One tap on "Melatonin taken now" changed its line to "Last taken tonight at 8:10 PM", and the
+   history to "56 stored".
+4. Home's taps read the same.
+
+The desktop Go suite and the full web check pass.
+

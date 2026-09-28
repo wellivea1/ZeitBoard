@@ -1,18 +1,25 @@
 import { ConfirmDelete } from "./ConfirmDelete";
+import { Loading } from "./Loading";
 import { useState, type FormEvent } from "react";
-import { type MedicationEventCorrectionInput, type MedicationLog } from "../data/medications";
-
-const medicationEventsPerPage = 50;
+import {
+  loadMedicationHistoryPage,
+  medicationDataChangedEvent,
+  type MedicationEventCorrectionInput,
+  type MedicationLog,
+} from "../data/medications";
+import { useLoaded } from "../state/useLoaded";
 
 function MedicationHistoryPagination({
   eventCount,
   firstEvent,
+  shown,
   page,
   pageCount,
   onPageChange,
 }: {
   eventCount: number;
   firstEvent: number;
+  shown: number;
   page: number;
   pageCount: number;
   onPageChange: (page: number) => void;
@@ -22,8 +29,7 @@ function MedicationHistoryPagination({
   return (
     <nav className="medication-history-pagination" aria-label="Medication event pages">
       <span>
-        Events {firstEvent + 1}-{Math.min(firstEvent + medicationEventsPerPage, eventCount)} of{" "}
-        {eventCount}
+        Events {firstEvent + 1}-{firstEvent + shown} of {eventCount}
       </span>
       <button
         className="button ghost compact"
@@ -36,7 +42,7 @@ function MedicationHistoryPagination({
       <button
         className="button ghost compact"
         type="button"
-        disabled={page === pageCount - 1}
+        disabled={page >= pageCount - 1}
         onClick={() => onPageChange(Math.min(pageCount - 1, page + 1))}
       >
         Next events
@@ -45,24 +51,31 @@ function MedicationHistoryPagination({
   );
 }
 
+// The dose history, read a page at a time from the desktop and again after any
+// change to medication data.
 export function MedicationHistory({
-  events,
   busy,
   onCorrect,
   onDelete,
 }: {
-  events: MedicationLog[];
   busy: boolean;
   onCorrect: (input: MedicationEventCorrectionInput) => Promise<void>;
   onDelete: (eventId: string) => Promise<void>;
 }) {
   const [editing, setEditing] = useState<MedicationLog | null>(null);
   const [erasing, setErasing] = useState<MedicationLog | null>(null);
-  const [page, setPage] = useState(0);
-  const pageCount = Math.max(1, Math.ceil(events.length / medicationEventsPerPage));
-  const safePage = Math.min(page, pageCount - 1);
-  const firstEvent = safePage * medicationEventsPerPage;
-  const visibleEvents = events.slice(firstEvent, firstEvent + medicationEventsPerPage);
+  const [requestedPage, setPage] = useState(0);
+  const { data: history } = useLoaded(() => loadMedicationHistoryPage(requestedPage), {
+    events: [medicationDataChangedEvent],
+    key: requestedPage,
+  });
+  // The desktop says which page it read: one asked for past the end, as
+  // after deleting the last page's only dose, comes back as the last.
+  const events = history?.events ?? [];
+  const total = history?.total ?? 0;
+  const page = history?.page ?? 0;
+  const pageSize = history?.pageSize ?? 0;
+  const pageCount = pageSize > 0 ? Math.max(1, Math.ceil(total / pageSize)) : 1;
 
   const save = (event: FormEvent) => {
     event.preventDefault();
@@ -87,9 +100,11 @@ export function MedicationHistory({
         <div>
           <h2 id="medication-history-title">History</h2>
         </div>
-        <span>{events.length} stored</span>
+        {history && <span>{total} stored</span>}
       </header>
-      {events.length === 0 ? (
+      {!history ? (
+        <Loading />
+      ) : total === 0 ? (
         <div className="medication-history-empty">
           <strong>No events recorded</strong>
           <p>
@@ -99,9 +114,10 @@ export function MedicationHistory({
       ) : (
         <>
           <MedicationHistoryPagination
-            eventCount={events.length}
-            firstEvent={firstEvent}
-            page={safePage}
+            eventCount={total}
+            firstEvent={page * pageSize}
+            shown={events.length}
+            page={page}
             pageCount={pageCount}
             onPageChange={setPage}
           />
@@ -112,7 +128,7 @@ export function MedicationHistory({
               <span>Rhythm context</span>
               <span>Record controls</span>
             </div>
-            {visibleEvents.map((item) => (
+            {events.map((item) => (
               <article
                 data-status={item.status}
                 data-relation={item.sleepRelationKind}

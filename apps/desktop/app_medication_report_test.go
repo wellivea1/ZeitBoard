@@ -42,7 +42,7 @@ func TestMedicationClinicianReportUsesRealRecordsAndEnforcesRedaction(t *testing
 			t.Fatal(err)
 		}
 	}
-	excluded, err := app.LogMedicationEvent(MedicationEventInput{
+	_, err = app.LogMedicationEvent(MedicationEventInput{
 		MedicationID: medication.MedicationID,
 		DoseLocal:    "2026-07-04T20:30",
 		ZoneID:       "UTC",
@@ -53,7 +53,7 @@ func TestMedicationClinicianReportUsesRealRecordsAndEnforcesRedaction(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	excludedEvent := excluded.Events[0]
+	excludedEvent := doseHistory(t, app)[0]
 	if _, err := app.CorrectMedicationEvent(MedicationEventCorrectionInput{
 		EventID: excludedEvent.EventID, DoseLocal: excludedEvent.DoseLocal, ZoneID: excludedEvent.ZoneID,
 		Status: excludedEvent.Status, Scheduled: excludedEvent.Scheduled, Note: excludedEvent.Note, Excluded: true,
