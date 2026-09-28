@@ -10,17 +10,16 @@ import {
   addSleepEntry,
   correctSleepEntry,
   deleteSleepObservation,
-  loadSleepEntries,
-  sleepEntriesUnavailable,
+  loadSleepLogPage,
+  sleepLogUnavailable,
   suppressSleepEntry,
   type SleepCorrectionInput,
-  type SleepEntriesData,
   type SleepEntry,
   type SleepEntryInput,
+  type SleepLogPage,
 } from "../data/sleepEntries";
 
 const fallbackSleepZone = "America/New_York";
-const sleepEntriesPerPage = 50;
 
 function browserZone() {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || fallbackSleepZone;
@@ -47,7 +46,15 @@ function endAfterStart(input: SleepEntryInput) {
   return new Date(input.endLocal).getTime() > new Date(input.startLocal).getTime();
 }
 
-const noEntries: SleepEntriesData = { status: "empty", empty: true, message: "", entries: [] };
+const noEntries: SleepLogPage = {
+  status: "empty",
+  empty: true,
+  message: "",
+  entries: [],
+  total: 0,
+  page: 0,
+  pageSize: 0,
+};
 
 /** Log › Sleep with "Add a past night" already open. */
 const addNightHash = "#/log/sleep/add";
@@ -59,9 +66,11 @@ const addNightHash = "#/log/sleep/add";
 // 593-line screen because they had both grown there. Data Sources keeps the
 // sources; this is the log.
 export function SleepLogPanel() {
-  const { data: loadedEntries, set: setEntriesData } = useLoaded(loadSleepEntries, {
+  const [entryPage, setEntryPage] = useState(0);
+  const { data: loadedEntries } = useLoaded(() => loadSleepLogPage(entryPage), {
     events: [sleepDataChangedEvent],
-    fallback: sleepEntriesUnavailable,
+    fallback: sleepLogUnavailable,
+    key: entryPage,
   });
   const entriesData = loadedEntries ?? noEntries;
   const [form, setForm] = useState<SleepEntryInput>(initialSleepForm);
@@ -74,12 +83,7 @@ export function SleepLogPanel() {
   const [formError, setFormError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
 
-  const [entryPage, setEntryPage] = useState(0);
   const addRef = useRef<HTMLDetailsElement>(null);
-  const refreshEntries = async () => {
-    const loaded = await loadSleepEntries();
-    setEntriesData(loaded);
-  };
 
   // "Add a past night" elsewhere (Home, before a forecast) arrives here with
   // the form open and its first field ready.
@@ -107,7 +111,6 @@ export function SleepLogPanel() {
       notifySleepDataChanged();
       setStatusMessage("Night saved.");
       setForm(initialSleepForm());
-      await refreshEntries();
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Could not save sleep entry.");
     } finally {
@@ -148,7 +151,6 @@ export function SleepLogPanel() {
       notifySleepDataChanged();
       setStatusMessage("Correction saved. The original stays in its history.");
       setEditingId(null);
-      await refreshEntries();
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Could not append correction.");
     } finally {
@@ -164,7 +166,6 @@ export function SleepLogPanel() {
       await suppressSleepEntry(entry.observationId, entry.reviewToken);
       notifySleepDataChanged();
       setStatusMessage("Night excluded from estimates.");
-      await refreshEntries();
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Could not suppress entry.");
     } finally {
@@ -182,8 +183,7 @@ export function SleepLogPanel() {
     setBusy(true);
     setFormError("");
     try {
-      const loaded = await deleteSleepObservation(entry.observationId, deleteWord);
-      setEntriesData(loaded);
+      await deleteSleepObservation(entry.observationId, deleteWord);
       notifySleepDataChanged();
       setStatusMessage("Night deleted.");
       setDeletingId(null);
@@ -194,10 +194,11 @@ export function SleepLogPanel() {
     }
   };
 
-  const entryPageCount = Math.max(1, Math.ceil(entriesData.entries.length / sleepEntriesPerPage));
-  const safeEntryPage = Math.min(entryPage, entryPageCount - 1);
-  const entryStart = safeEntryPage * sleepEntriesPerPage;
-  const visibleEntries = entriesData.entries.slice(entryStart, entryStart + sleepEntriesPerPage);
+  // The desktop says which page it read: one asked for past the end, as
+  // after deleting the last page's only night, comes back as the last.
+  const { page, pageSize, total } = entriesData;
+  const entryPageCount = pageSize > 0 ? Math.max(1, Math.ceil(total / pageSize)) : 1;
+  const entryStart = page * pageSize;
 
   return (
     <section className="sleep-log-workspace" aria-label="Sleep log">
@@ -234,9 +235,7 @@ export function SleepLogPanel() {
         <div className="plan-section-head">
           <h2 id="sleep-log-title">
             Sleep log
-            {entriesData.entries.length > 0 && (
-              <span className="count">{entriesData.entries.length}</span>
-            )}
+            {total > 0 && <span className="count">{total}</span>}
           </h2>
           <small>Edits keep the original. Delete removes a night for good.</small>
         </div>
@@ -247,7 +246,7 @@ export function SleepLogPanel() {
             <h2>The sleep log could not be read</h2>
             <p>{entriesData.message} Nothing saved has changed.</p>
           </div>
-        ) : entriesData.entries.length === 0 ? (
+        ) : total === 0 ? (
           <div className="sleep-log-empty">
             <h2>No sleep entries yet</h2>
             <p>
@@ -269,30 +268,28 @@ export function SleepLogPanel() {
             {entryPageCount > 1 && (
               <nav className="sleep-log-pagination" aria-label="Sleep log pages">
                 <span>
-                  Entries {entryStart + 1}-
-                  {Math.min(entryStart + sleepEntriesPerPage, entriesData.entries.length)} of{" "}
-                  {entriesData.entries.length}
+                  Entries {entryStart + 1}-{entryStart + entriesData.entries.length} of {total}
                 </span>
                 <button
                   className="button secondary compact"
                   type="button"
-                  disabled={safeEntryPage === 0}
-                  onClick={() => setEntryPage((page) => Math.max(0, page - 1))}
+                  disabled={page === 0}
+                  onClick={() => setEntryPage(Math.max(0, page - 1))}
                 >
                   Previous entries
                 </button>
                 <button
                   className="button secondary compact"
                   type="button"
-                  disabled={safeEntryPage === entryPageCount - 1}
-                  onClick={() => setEntryPage((page) => Math.min(entryPageCount - 1, page + 1))}
+                  disabled={page >= entryPageCount - 1}
+                  onClick={() => setEntryPage(Math.min(entryPageCount - 1, page + 1))}
                 >
                   Next entries
                 </button>
               </nav>
             )}
             <ul className="sleep-night-list">
-              {visibleEntries.map((entry) => (
+              {entriesData.entries.map((entry) => (
                 <SleepNightRow
                   key={entry.observationId}
                   entry={entry}

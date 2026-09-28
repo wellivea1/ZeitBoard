@@ -587,7 +587,7 @@ func TestLocalHardDeletePropagatesErasureToBackend(t *testing.T) {
 	}
 
 	// Hard-delete locally, then sync: the erasure must reach the backend.
-	if _, err := app.DeleteSleepObservation(SleepDeleteInput{ObservationID: added.ObservationID, Confirmation: "DELETE"}); err != nil {
+	if err := app.DeleteSleepObservation(SleepDeleteInput{ObservationID: added.ObservationID, Confirmation: "DELETE"}); err != nil {
 		t.Fatal(err)
 	}
 	second, err := app.SyncNow()

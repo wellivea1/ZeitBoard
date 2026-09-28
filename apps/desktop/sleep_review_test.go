@@ -29,7 +29,7 @@ func TestSleepLogReviewsConflictAndRejectsStaleForm(t *testing.T) {
 	if _, err := store.ReadSleepSnapshot(context.Background()); err == nil {
 		t.Fatal("conflict entered the estimator snapshot")
 	}
-	listed, err := app.ListSleepEntries()
+	listed, err := app.GetSleepLogPage(SleepLogPageInput{})
 	if err != nil || len(listed.Entries) != 1 {
 		t.Fatal("conflict made the editable log unavailable")
 	}

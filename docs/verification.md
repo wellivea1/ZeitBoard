@@ -2289,3 +2289,45 @@ owner's own events ("Dentist"):
 
 The core and desktop Go suites, the full web check and the UI standards check pass.
 
+## Sleep history read a page at a time — 2026-09-27
+
+Store:
+
+- Seven nights read three at a time come newest first with the total. The last page holds the
+  seventh, and a page past the end holds none.
+- A week's range finds a night recorded inside it, and one a correction moved into it. It leaves
+  out one a correction moved away, and one recorded outside it.
+
+Desktop:
+
+- Sixty nights read as a page of fifty and a page of ten, meeting without a gap. A page asked for
+  past the end reads as the last.
+- A week reads only the nights it touches. A backward range, one longer than 45 days, and one
+  that is not RFC 3339 are refused.
+- Source counts:
+  - five nights, one excluded and one reclassified, count as five, two corrected and one
+    excluded;
+  - the newest corrected night is the one the inspector shows;
+  - two imported nights, one observed and one reported, count as two sources.
+
+Web:
+
+- The log pages through the desktop, and the loaded-data hook reads again for a new page without
+  a flash of loading, dropping a late answer for the old page.
+- Data Sources does not claim "None yet" before the counts arrive.
+- Rhythm's inspector shows a night's newest change.
+- The sync row reads "last synced Sep 27, 2:51 PM" once.
+
+In the running desktop (disposable dev profile), with 42 imported and 9 added synthetic nights:
+
+1. Log read "Entries 1-50 of 51". "Next entries" showed only 5 January 2025, "Entries 51-51
+   of 51".
+2. Deleting that night returned the log to one page of 50, newest first.
+3. Rhythm › Sources counted 42 imported and 8 manual nights. After two edits to one night, it
+   showed the second edit, matching the effective interval.
+4. Data Sources listed "8 records · manual / user reported · 1 corrected".
+5. The Week board for 23–26 September drew seven recorded bands. The first was a night that began
+   the evening before the first day shown.
+
+The core and desktop Go suites and the full web check pass.
+

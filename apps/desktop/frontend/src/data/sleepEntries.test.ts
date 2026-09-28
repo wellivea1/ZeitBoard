@@ -5,12 +5,12 @@ import {
   deleteAllSleepData,
   deleteSleepObservation,
   exportSleepData,
-  latestCorrectedEntry,
-  loadSleepEntries,
+  loadSleepEntriesBetween,
+  loadSleepLogPage,
+  loadSleepSources,
   normalizeSleepDataExport,
   normalizeSleepEntries,
-  summarizeSleepSources,
-  type SleepEntry,
+  normalizeSleepSources,
 } from "./sleepEntries";
 
 const entry = {
@@ -96,24 +96,54 @@ describe("sleep entry adapter", () => {
     ).toBeUndefined();
   });
 
-  it("loads and adds through Wails methods", async () => {
+  it("reads a page, a range, and adds through Wails methods", async () => {
+    let pageInput: unknown;
+    let rangeInput: unknown;
     const root = {
       go: {
         main: {
           App: {
-            ListSleepEntries: async () => ({
-              status: "ready",
-              empty: false,
-              message: "1 local sleep entry stored on this device.",
-              entries: [entry],
-            }),
+            GetSleepLogPage: async (input: unknown) => {
+              pageInput = input;
+              return {
+                status: "ready",
+                empty: false,
+                message: "51 local sleep entries stored on this device.",
+                entries: [entry],
+                total: 51,
+                page: 1,
+                pageSize: 50,
+              };
+            },
+            GetSleepEntriesBetween: async (input: unknown) => {
+              rangeInput = input;
+              return {
+                status: "ready",
+                empty: false,
+                message: "1 night in these days.",
+                entries: [entry],
+              };
+            },
             AddSleepEntry: async () => entry,
           },
         },
       },
     };
 
-    await expect(loadSleepEntries(root)).resolves.toMatchObject({ entries: [entry] });
+    await expect(loadSleepLogPage(1, root)).resolves.toMatchObject({
+      entries: [entry],
+      total: 51,
+      page: 1,
+      pageSize: 50,
+    });
+    expect(pageInput).toEqual({ page: 1 });
+    await expect(
+      loadSleepEntriesBetween("2026-03-01T00:00:00.000Z", "2026-03-09T00:00:00.000Z", root),
+    ).resolves.toMatchObject({ entries: [entry] });
+    expect(rangeInput).toEqual({
+      startAt: "2026-03-01T00:00:00.000Z",
+      endAt: "2026-03-09T00:00:00.000Z",
+    });
     await expect(
       addSleepEntry(
         {
@@ -128,12 +158,6 @@ describe("sleep entry adapter", () => {
   });
 
   it("exports and deletes through Wails methods", async () => {
-    const deleted = {
-      status: "empty",
-      empty: true,
-      message: "No sleep entries yet.",
-      entries: [],
-    };
     let singleDeleteInput: unknown;
     let deleteAllInput: unknown;
     const root = {
@@ -149,11 +173,9 @@ describe("sleep entry adapter", () => {
             }),
             DeleteSleepObservation: async (input: unknown) => {
               singleDeleteInput = input;
-              return deleted;
             },
             DeleteAllSleepData: async (input: unknown) => {
               deleteAllInput = input;
-              return deleted;
             },
           },
         },
@@ -164,70 +186,22 @@ describe("sleep entry adapter", () => {
       observationCount: 1,
       correctionCount: 1,
     });
-    await expect(deleteSleepObservation("obs_sleep_01", "DELETE", root)).resolves.toMatchObject({
-      empty: true,
-      entries: [],
-    });
-    await expect(deleteAllSleepData("DELETE", root)).resolves.toMatchObject({
-      empty: true,
-      entries: [],
-    });
+    // Deleting returns nothing: each view re-reads what it shows.
+    await expect(deleteSleepObservation("obs_sleep_01", "DELETE", root)).resolves.toBeUndefined();
+    await expect(deleteAllSleepData("DELETE", root)).resolves.toBeUndefined();
     expect(singleDeleteInput).toEqual({ observationId: "obs_sleep_01", confirmation: "DELETE" });
     expect(deleteAllInput).toEqual({ confirmation: "DELETE" });
   });
 });
 
 describe("source summaries", () => {
-  const typed = entry as SleepEntry;
-  const uncorrected: SleepEntry = {
-    ...typed,
-    observationId: "obs_sleep_02",
-    sourceLabel: "Manual sleep log",
-    history: [],
-  };
-  const suppressedWearable: SleepEntry = {
-    ...typed,
-    observationId: "obs_sleep_03",
-    sourceLabel: "Wearable import",
-    suppressed: true,
-    history: [],
-  };
-
-  it("summarizes real per-source composition with corrected and suppressed counts", () => {
-    const summary = summarizeSleepSources([typed, uncorrected, suppressedWearable]);
-    expect(summary).toEqual([
-      {
-        source: "Manual sleep log",
-        provenance: "manual / user reported",
-        total: 2,
-        corrected: 1,
-        suppressed: 0,
-      },
-      {
-        source: "Wearable import",
-        provenance: "manual / user reported",
-        total: 1,
-        corrected: 0,
-        suppressed: 1,
-      },
-    ]);
-    expect(summarizeSleepSources([])).toEqual([]);
-  });
-
-  it("keeps distinct imported evidence provenance in separate summaries", () => {
-    const observed: SleepEntry = {
-      ...uncorrected,
-      observationId: "obs_sleep_import_observed",
-      sourceLabel: "Imported sleep",
-      provenanceLabel: "file import / directly observed",
-    };
-    const reported: SleepEntry = {
-      ...observed,
-      observationId: "obs_sleep_import_reported",
-      provenanceLabel: "file import / user reported",
-    };
-
-    expect(summarizeSleepSources([observed, reported])).toEqual([
+  const summary = {
+    status: "ready",
+    message: "2 local sleep entries stored on this device.",
+    total: 2,
+    correctedCount: 1,
+    suppressedCount: 0,
+    sources: [
       {
         source: "Imported sleep",
         provenance: "file import / directly observed",
@@ -236,17 +210,41 @@ describe("source summaries", () => {
         suppressed: 0,
       },
       {
-        source: "Imported sleep",
-        provenance: "file import / user reported",
+        source: "Manual sleep log",
+        provenance: "manual / user reported",
         total: 1,
-        corrected: 0,
+        corrected: 1,
         suppressed: 0,
       },
-    ]);
+    ],
+    latestCorrected: entry,
+  };
+
+  it("reads the counts the desktop made, with the newest corrected night", () => {
+    expect(normalizeSleepSources(summary)).toMatchObject({
+      total: 2,
+      correctedCount: 1,
+      sources: summary.sources,
+      latestCorrected: { observationId: "obs_sleep_01" },
+    });
+    const uncorrected = { ...summary, correctedCount: 0, latestCorrected: undefined };
+    expect(normalizeSleepSources(uncorrected)?.latestCorrected).toBeUndefined();
   });
 
-  it("finds the newest corrected entry (log is newest-first)", () => {
-    expect(latestCorrectedEntry([uncorrected, typed])?.observationId).toBe("obs_sleep_01");
-    expect(latestCorrectedEntry([uncorrected, suppressedWearable])).toBeUndefined();
+  it("refuses counts it cannot show truthfully", () => {
+    expect(normalizeSleepSources({ ...summary, total: -1 })).toBeUndefined();
+    expect(
+      normalizeSleepSources({ ...summary, sources: [{ source: "Imported sleep" }] }),
+    ).toBeUndefined();
+    expect(
+      normalizeSleepSources({ ...summary, latestCorrected: { observationId: "x" } }),
+    ).toBeUndefined();
+  });
+
+  it("is unavailable, not empty, outside the desktop app", async () => {
+    await expect(loadSleepSources({})).resolves.toMatchObject({
+      status: "unavailable",
+      sources: [],
+    });
   });
 });

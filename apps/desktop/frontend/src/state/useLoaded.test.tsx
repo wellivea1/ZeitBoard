@@ -56,6 +56,26 @@ describe("useLoaded", () => {
     expect(await screen.findByText("read 2")).toBeVisible();
   });
 
+  it("reads again for a new key, keeping the last value in view meanwhile", async () => {
+    const pages = { 0: deferred<string>(), 1: deferred<string>() };
+    const { rerender } = render(<Probe load={() => pages[0].promise} options={{ key: 0 }} />);
+    await act(async () => pages[0].resolve("page one"));
+    rerender(<Probe load={() => pages[1].promise} options={{ key: 1 }} />);
+    // No flash of loading between pages.
+    expect(screen.getByText("page one")).toBeVisible();
+    await act(async () => pages[1].resolve("page two"));
+    expect(screen.getByText("page two")).toBeVisible();
+  });
+
+  it("drops a read for a key it has moved on from", async () => {
+    const pages = { 0: deferred<string>(), 1: deferred<string>() };
+    const { rerender } = render(<Probe load={() => pages[0].promise} options={{ key: 0 }} />);
+    rerender(<Probe load={() => pages[1].promise} options={{ key: 1 }} />);
+    await act(async () => pages[1].resolve("page two"));
+    await act(async () => pages[0].resolve("page one, late"));
+    expect(screen.getByText("page two")).toBeVisible();
+  });
+
   it("keeps a value a mutation returned over a read that started earlier", async () => {
     const first = deferred<string>();
     const second = deferred<string>();

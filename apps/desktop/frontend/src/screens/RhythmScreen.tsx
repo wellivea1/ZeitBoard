@@ -10,12 +10,7 @@ import type { RhythmTab } from "../types";
 import { ActogramPanel, DriftPanel } from "../components/RhythmVisuals";
 import { estimateSourceLabel, explainRefusal, inEstimatorWords } from "../data/estimateStatus";
 import { loadRhythm, type RhythmData, type RhythmSource } from "../data/rhythm";
-import {
-  latestCorrectedEntry,
-  loadSleepEntries,
-  sleepEntriesUnavailable,
-  summarizeSleepSources,
-} from "../data/sleepEntries";
+import { loadSleepSources, sleepSourcesUnavailable } from "../data/sleepEntries";
 import { sleepDataChangedEvent } from "../data/sleepDataEvents";
 
 // Context markers moved to Log in slice U-H. Recording that you travelled or
@@ -29,18 +24,16 @@ const rhythmTabs: ScreenTab<RhythmTab>[] = [
 // The evidence behind the charts: the actual correction history and the
 // per-source composition of the log, never a synthetic example.
 function SourcesPanel() {
-  const { data } = useLoaded(loadSleepEntries, {
+  const { data } = useLoaded(loadSleepSources, {
     events: [sleepDataChangedEvent],
-    fallback: sleepEntriesUnavailable,
+    fallback: sleepSourcesUnavailable,
   });
   if (!data) return <Loading />;
 
-  const entries = data.entries;
-  const sources = summarizeSleepSources(entries);
-  const corrected = latestCorrectedEntry(entries);
-  const correctedCount = entries.filter((entry) => entry.history.length > 0).length;
-  const suppressedCount = entries.filter((entry) => entry.suppressed).length;
-  const latestChange = corrected?.history[corrected.history.length - 1];
+  const { sources, correctedCount, suppressedCount } = data;
+  const corrected = data.latestCorrected;
+  // A night's history lists its newest change first.
+  const latestChange = corrected?.history[0];
 
   return (
     <>
@@ -98,7 +91,7 @@ function SourcesPanel() {
         ) : sources.length > 0 ? (
           <div className="conflict-list" aria-labelledby="local-sources-title">
             {sources.map((source) => (
-              <article className="conflict-row" key={source.source}>
+              <article className="conflict-row" key={`${source.source}-${source.provenance}`}>
                 <div>
                   <p className="section-kicker">{source.provenance}</p>
                   <h3>{source.source}</h3>

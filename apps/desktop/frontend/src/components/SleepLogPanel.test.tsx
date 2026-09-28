@@ -53,11 +53,15 @@ describe("SleepLogPanel", () => {
     (globalThis as { go?: unknown }).go = {
       main: {
         App: {
-          ListSleepEntries: async () => ({
+          // Pages of fifty, as the desktop reads them.
+          GetSleepLogPage: async ({ page }: { page: number }) => ({
             status: "ready",
             empty: false,
             message: "51 local sleep entries stored on this device.",
-            entries,
+            entries: entries.slice(page * 50, page * 50 + 50),
+            total: entries.length,
+            page,
+            pageSize: 50,
           }),
         },
       },
@@ -80,8 +84,9 @@ describe("SleepLogPanel", () => {
     expect(screen.getByText("Created 051")).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "Next entries" }));
-    expect(screen.getByText("Entries 51-51 of 51")).toBeVisible();
+    expect(await screen.findByText("Entries 51-51 of 51")).toBeVisible();
     expect(screen.getByText("Fri, Feb 20")).toBeVisible();
+    expect(screen.queryByText("Thu, Jan 1")).not.toBeInTheDocument();
   });
 
   it("carries the entry form and the log together", () => {

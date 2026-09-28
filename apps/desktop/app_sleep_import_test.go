@@ -52,7 +52,7 @@ func TestSleepImportBindingPreviewsThenCommitsContractData(t *testing.T) {
 	if committed.ImportedRows != 1 || committed.Rows[0].Status != "imported" {
 		t.Fatalf("unexpected binding commit: %#v", committed)
 	}
-	entries, err := app.ListSleepEntries()
+	entries, err := app.GetSleepLogPage(SleepLogPageInput{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestSleepImportBindingReturnsRowErrorsWithoutWriting(t *testing.T) {
 	if report.InvalidRows != 1 || report.ImportedRows != 0 || len(report.Rows[0].Errors) == 0 {
 		t.Fatalf("binding hid validation errors: %#v", report)
 	}
-	entries, err := app.ListSleepEntries()
+	entries, err := app.GetSleepLogPage(SleepLogPageInput{})
 	if err != nil {
 		t.Fatal(err)
 	}

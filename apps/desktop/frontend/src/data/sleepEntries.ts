@@ -80,38 +80,42 @@ export interface SleepSourceSummary {
   suppressed: number;
 }
 
-// Real evidence composition for the Rhythm Sources tab: counts per source of
-// what the estimator actually sees. No synthetic conflicts — overlap
-// resolution happens inside the estimation engine.
-export function summarizeSleepSources(entries: SleepEntry[]): SleepSourceSummary[] {
-  const bySource = new Map<string, SleepSourceSummary>();
-  for (const entry of entries) {
-    const key = `${entry.sourceLabel}\u0000${entry.provenanceLabel}`;
-    const summary = bySource.get(key) ?? {
-      source: entry.sourceLabel,
-      provenance: entry.provenanceLabel,
-      total: 0,
-      corrected: 0,
-      suppressed: 0,
-    };
-    summary.total += 1;
-    if (entry.history.length > 0) summary.corrected += 1;
-    if (entry.suppressed) summary.suppressed += 1;
-    bySource.set(key, summary);
-  }
-  return [...bySource.values()].sort(
-    (a, b) =>
-      b.total - a.total ||
-      a.source.localeCompare(b.source) ||
-      a.provenance.localeCompare(b.provenance),
-  );
+/** A numbered page of the log, newest night first. */
+export interface SleepLogPage extends SleepEntriesData {
+  total: number;
+  /** Zero-based; a page asked for past the end comes back as the last one. */
+  page: number;
+  pageSize: number;
 }
 
-// The most recently corrected entry drives the real correction inspector;
-// the desktop log is ordered newest episode first. Undefined when no
-// corrections exist yet.
-export function latestCorrectedEntry(entries: SleepEntry[]): SleepEntry | undefined {
-  return entries.find((entry) => entry.history.length > 0);
+/**
+ * What the log is made of, per source, as the estimator sees it. The desktop
+ * counts it; the window never receives the whole history to count itself.
+ */
+export interface SleepSources {
+  status: "ready" | "empty" | "unavailable";
+  message: string;
+  total: number;
+  correctedCount: number;
+  suppressedCount: number;
+  sources: SleepSourceSummary[];
+  /** The newest night with an edit, for the correction inspector. */
+  latestCorrected?: SleepEntry;
+}
+
+export function sleepLogUnavailable(reason: unknown): SleepLogPage {
+  return { ...sleepEntriesUnavailable(reason), total: 0, page: 0, pageSize: 0 };
+}
+
+export function sleepSourcesUnavailable(reason: unknown): SleepSources {
+  return {
+    status: "unavailable",
+    message: reason instanceof Error ? reason.message : "The sleep log could not be read.",
+    total: 0,
+    correctedCount: 0,
+    suppressedCount: 0,
+    sources: [],
+  };
 }
 
 type UnknownRecord = Record<string, unknown>;
@@ -256,6 +260,70 @@ export function normalizeSleepEntries(value: unknown): SleepEntriesData | undefi
   return { status, empty: value.empty, message, entries };
 }
 
+export function normalizeSleepLogPage(value: unknown): SleepLogPage | undefined {
+  const entries = normalizeSleepEntries(value);
+  if (!entries || !isRecord(value)) return undefined;
+  const total = nonNegativeInteger(value.total);
+  const page = nonNegativeInteger(value.page);
+  const pageSize = nonNegativeInteger(value.pageSize);
+  if (total === undefined || page === undefined || pageSize === undefined) return undefined;
+  return { ...entries, total, page, pageSize };
+}
+
+function normalizeSourceSummary(value: unknown): SleepSourceSummary | undefined {
+  if (!isRecord(value)) return undefined;
+  const source = str(value.source);
+  const provenance = str(value.provenance);
+  const total = nonNegativeInteger(value.total);
+  const corrected = nonNegativeInteger(value.corrected);
+  const suppressed = nonNegativeInteger(value.suppressed);
+  if (
+    !source ||
+    !provenance ||
+    total === undefined ||
+    corrected === undefined ||
+    suppressed === undefined
+  ) {
+    return undefined;
+  }
+  return { source, provenance, total, corrected, suppressed };
+}
+
+export function normalizeSleepSources(value: unknown): SleepSources | undefined {
+  if (!isRecord(value) || !Array.isArray(value.sources)) return undefined;
+  const status =
+    value.status === "ready" || value.status === "empty" || value.status === "unavailable"
+      ? value.status
+      : undefined;
+  const total = nonNegativeInteger(value.total);
+  const correctedCount = nonNegativeInteger(value.correctedCount);
+  const suppressedCount = nonNegativeInteger(value.suppressedCount);
+  if (
+    !status ||
+    total === undefined ||
+    correctedCount === undefined ||
+    suppressedCount === undefined
+  ) {
+    return undefined;
+  }
+  const sources = value.sources.map(normalizeSourceSummary);
+  if (sources.some((source) => !source)) return undefined;
+  const latestCorrected =
+    value.latestCorrected === undefined || value.latestCorrected === null
+      ? undefined
+      : normalizeEntry(value.latestCorrected);
+  if (value.latestCorrected && !latestCorrected) return undefined;
+  return {
+    status,
+    message: str(value.message) ?? "",
+    total,
+    correctedCount,
+    suppressedCount,
+    sources: sources as SleepSourceSummary[],
+    ...(latestCorrected ? { latestCorrected } : {}),
+  };
+}
+
 export function normalizeSleepDataExport(value: unknown): SleepDataExport | undefined {
   if (!isRecord(value)) return undefined;
   const fileName = str(value.fileName);
@@ -275,14 +343,39 @@ export function normalizeSleepDataExport(value: unknown): SleepDataExport | unde
   return { fileName, json, generatedLabel, observationCount, correctionCount };
 }
 
-export async function loadSleepEntries(
+/** One page of the log, which shows fifty nights at a time. */
+export async function loadSleepLogPage(
+  page: number,
+  root: WailsRoot = globalThis as unknown as WailsRoot,
+): Promise<SleepLogPage> {
+  const method = findWailsMethod(root, ["GetSleepLogPage"]);
+  if (!method) return { ...emptySleepEntries, total: 0, page: 0, pageSize: 0 };
+  const result = normalizeSleepLogPage(await method({ page }));
+  if (!result) throw new Error("The sleep log returned an invalid page.");
+  return result;
+}
+
+/** The nights that, as corrected, touch a range of at most 45 days. */
+export async function loadSleepEntriesBetween(
+  startAt: string,
+  endAt: string,
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ): Promise<SleepEntriesData> {
-  const method = findWailsMethod(root, ["ListSleepEntries"]);
+  const method = findWailsMethod(root, ["GetSleepEntriesBetween"]);
   if (!method) return emptySleepEntries;
+  const result = normalizeSleepEntries(await method({ startAt, endAt }));
+  if (!result) throw new Error("The sleep log returned an invalid range.");
+  return result;
+}
 
-  const result = await method();
-  return normalizeSleepEntries(result) ?? emptySleepEntries;
+export async function loadSleepSources(
+  root: WailsRoot = globalThis as unknown as WailsRoot,
+): Promise<SleepSources> {
+  const method = findWailsMethod(root, ["GetSleepSources"]);
+  if (!method) return sleepSourcesUnavailable(new Error(emptySleepEntries.message));
+  const result = normalizeSleepSources(await method());
+  if (!result) throw new Error("The sleep log returned an invalid summary.");
+  return result;
 }
 
 export async function addSleepEntry(
@@ -308,29 +401,24 @@ export async function exportSleepData(
   return exported;
 }
 
+// Deleting returns nothing: each view re-reads what it shows.
 export async function deleteSleepObservation(
   observationId: string,
   confirmation: string,
   root: WailsRoot = globalThis as unknown as WailsRoot,
-): Promise<SleepEntriesData> {
+): Promise<void> {
   const method = findWailsMethod(root, ["DeleteSleepObservation"]);
   if (!method) throw new Error("Sleep data deletion service is unavailable.");
-  const result = await method({ observationId, confirmation });
-  const entries = normalizeSleepEntries(result);
-  if (!entries) throw new Error("Sleep data deletion service returned an invalid entry list.");
-  return entries;
+  await method({ observationId, confirmation });
 }
 
 export async function deleteAllSleepData(
   confirmation: string,
   root: WailsRoot = globalThis as unknown as WailsRoot,
-): Promise<SleepEntriesData> {
+): Promise<void> {
   const method = findWailsMethod(root, ["DeleteAllSleepData"]);
   if (!method) throw new Error("Sleep data deletion service is unavailable.");
-  const result = await method({ confirmation });
-  const entries = normalizeSleepEntries(result);
-  if (!entries) throw new Error("Sleep data deletion service returned an invalid entry list.");
-  return entries;
+  await method({ confirmation });
 }
 
 export async function correctSleepEntry(

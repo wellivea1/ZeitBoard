@@ -11,7 +11,9 @@ import {
   todayCivilDate,
   type CalendarSource,
 } from "../data/calendar";
-import { loadSleepEntries, type SleepEntriesData } from "../data/sleepEntries";
+import { loadSleepSources, sleepSourcesUnavailable } from "../data/sleepEntries";
+import { sleepDataChangedEvent } from "../data/sleepDataEvents";
+import { useLoaded } from "../state/useLoaded";
 
 // Data Sources is about where records come from: what is connected, and how to
 // bring more in. Recording last night is in Log. Calendars moved here from
@@ -66,34 +68,16 @@ function useCalendarSources(): CalendarSources {
 }
 
 export function DataSourcesScreen() {
-  const [entriesData, setEntriesData] = useState<SleepEntriesData>({
-    status: "empty",
-    empty: true,
-    message: "Loading local sleep entries.",
-    entries: [],
+  // What the sleep log is made of, counted by the desktop.
+  const { data: sleepSources } = useLoaded(loadSleepSources, {
+    events: [sleepDataChangedEvent],
+    fallback: sleepSourcesUnavailable,
   });
   const [syncStatus, setSyncStatus] = useState<BackendSyncStatus | undefined>(undefined);
   const calendars = useCalendarSources();
 
-  const refreshEntries = async () => {
-    setEntriesData(await loadSleepEntries());
-  };
-
   useEffect(() => {
     let current = true;
-    void loadSleepEntries()
-      .then((loaded) => {
-        if (current) setEntriesData(loaded);
-      })
-      .catch((error: unknown) => {
-        if (!current) return;
-        setEntriesData({
-          status: "unavailable",
-          empty: true,
-          message: error instanceof Error ? error.message : "Manual sleep log is unavailable.",
-          entries: [],
-        });
-      });
     void loadBackendSyncStatus()
       .then((loaded) => {
         if (current) setSyncStatus(loaded);
@@ -111,7 +95,7 @@ export function DataSourcesScreen() {
       <PageHeader title="Data Sources" />
       <section className="data-source-workspace" aria-label="Data source review">
         <DataSourceStatusPanel
-          entriesData={entriesData}
+          sleepSources={sleepSources}
           syncStatus={syncStatus}
           calendarSources={calendars.ready ? calendars.sources : undefined}
         />
@@ -121,7 +105,7 @@ export function DataSourcesScreen() {
           zoneId={calendars.zoneId}
           onChanged={notifyCalendarDataChanged}
         />
-        <SleepImportPanel onImported={refreshEntries} />
+        <SleepImportPanel />
         <p className="data-source-log-pointer">
           Individual nights, their corrections, and deleting them are in{" "}
           <a href="#/log/sleep">Log</a>.
