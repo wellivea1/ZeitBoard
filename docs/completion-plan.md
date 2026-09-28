@@ -1119,3 +1119,43 @@ The same walk found how an unreachable server was worded:
 - The last sync arrived as a phrase ("Last synced Sep 27, 2:51 PM"), which Settings set beside
   its own "Last sync" label and Data Sources reworded. The desktop now sends the instant, and
   both word it as the app words every time: "Today at 2:51 PM", "last synced today at 2:51 PM".
+
+## Where the completion goal stands — 2026-09-27
+
+Each milestone's own record above says what was done; this is the summary, with what remains and
+who it waits on.
+
+| Milestone | Software | Remaining | Waits on |
+|---|---|---|---|
+| C0 baseline | Done | — | — |
+| C1 connected foundation | Done | Native login-start, suspend and resume evidence on the owner's machine; supported-device resource measurements | The owner's machine and phone |
+| C2 planning and approval | Acceptance met | — | — |
+| C3 medication and context | Done, device run recorded | — | — |
+| C4 assistant and agents | Every criterion met | — | — |
+| C5 live portal | Done | The independent review and the exposure gate (`portal-design.md` section 12); the portal stays off by default until then | An independent reviewer |
+| C6 notifications | Acceptance met | — | — |
+| C7 daily-use UX | Done but for one check | A screen-reader pass on real assistive technology: NVDA or Narrator on the desktop, TalkBack on the phone | The owner's permission to install or turn on a screen reader |
+| C8 release | Material review findings resolved; upgrade regressions in CI | Clean-machine install, update across two published commits with rollback, Android bootstrap, service install and purge ceremony (`install-update-design.md`); production APK signing; private pilot and its measures; release artifacts and disposition | A clean Windows 11 VM, the owner's keystore, pilot participants |
+
+### Known limitations and their dispositions
+
+None of these is a critical, high or core-workflow defect. Each is accepted for release as stated,
+or deferred with its reason.
+
+| # | Limitation | Disposition |
+|---|---|---|
+| 1 | The local database is not encrypted at rest. Owner-only file permissions protect it, and Settings says so (ADR-0035). | Accepted. Whole-database encryption waits for a CGo-free driver with an encryption hook. |
+| 2 | Refreshing an imported calendar means adding it again: there is no Refresh on its row. | Accepted, low. A follow-up UX improvement. |
+| 3 | Accepted times go to one CalDAV calendar at a time, and the calendar's host can read their task names (ADR-0053; disclosed in the offer). | Accepted by design. |
+| 4 | Estimates use recorded sleep only. Multi-source inference stays in shadow mode after a negative promotion decision (ADR-0031). | Deferred analysis work. It ships only after a candidate passes the measured gate. |
+| 5 | The server's projection folds all relevant sleep history on each request (review #2). | Accepted at the current scale. Revisit with production profiles. |
+| 6 | Older desktop methods pass `context.Background()` rather than the app's context (review #15). | Accepted. Converted as each area changes; no one sees the difference. |
+| 7 | The desktop `App` facade is not yet split into services (review #22). | Accepted. Extraction happens at feature boundaries, as the sleep log's reads did. |
+| 8 | The calendar, medication and report validators are handwritten, outside generated schema ownership (review #24). | Accepted. They are strict and tested. |
+| 9 | There are no ordered migrations yet. Every schema change so far was additive or an explicit drop (review #25). | Accepted. The upgrade tests fail on the first change that is neither, which then needs its migration. |
+| 10 | The clinical chart prints, or saves as PDF, but produces no PNG directly. | Accepted. |
+| 11 | English only. Onboarding is the first-run setup. | Accepted for the private release. |
+| 12 | Google Takeout and My Activity import are not implemented. | Deferred, with slice 7's multi-source work. |
+| 13 | A correction is undone by adding another, not with one click; the history shows both. | Accepted. |
+| 14 | Notices reach a phone through the OS push transport, which the owner's own server does not replace (C6, disclosed). | Accepted and disclosed. |
+
