@@ -37,6 +37,10 @@ The 2026-07-27 architecture and performance hardening review is tracked in
 
 ## Where things stand (delivered)
 
+For the current state against the completion goal, what remains and who it waits on, see
+[`completion-plan.md`](completion-plan.md#where-the-completion-goal-stands--2026-09-27). The list
+below records what each earlier slice delivered.
+
 **Desktop (data + estimate)**
 
 - Manual sleep entry with immutable observations, append-only corrections (edit/suppress),

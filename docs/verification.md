@@ -2415,3 +2415,21 @@ Web:
 In the running desktop (disposable dev profile, its server off), Plan's queue read "Could not
 reach ZeitBoard's server. Anything waiting there appears here once it answers." in the queue's
 muted style, above the two suggestions.
+
+## Calendars refresh from their row — 2026-09-27
+
+- Desktop, against the in-memory CalDAV server:
+  - A calendar without a kept sign-in is refused a one-step refresh.
+  - With writing on and one accepted time written, the owner adds an event in their own calendar
+    app. Refresh then imports that event and recognises ZeitBoard's own.
+- Web:
+  - Refresh on the calendar written to refreshes at once and says what came back.
+  - Refresh on any other calendar opens the form titled for it, with its address and name, and
+    makes no request.
+- In the running desktop (disposable dev profile, loopback CalDAV server):
+  - With writing off, Refresh on "Owner calendar" opened "Refresh Owner calendar" on the CalDAV
+    tab. The address and name were filled in, the cursor was in the username, and the password was
+    empty.
+  - With writing on, Refresh read "Owner calendar: Imported 1 event, 1 busy." without asking for a
+    sign-in.
+
