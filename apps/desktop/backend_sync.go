@@ -304,10 +304,12 @@ func (a *App) syncNowLocked(parent context.Context) (BackendSyncStatusDTO, error
 	a.backendConfigMu.Lock()
 	defer a.backendConfigMu.Unlock()
 	if syncErr != nil {
+		a.backendOutage.note(syncErr, a.currentTime())
 		cfg.LastError = sanitizeBackendError(syncErr)
 		_ = a.saveBackendSyncConfig(cfg)
 		return a.backendSyncStatusCounts(cfg, counts), nil
 	}
+	a.backendOutage.clear()
 	cfg.LastSyncAt = a.currentTime().UTC()
 	cfg.LastError = ""
 	if err := a.saveBackendSyncConfig(cfg); err != nil {
@@ -627,27 +629,31 @@ func decodePulledRecord(record syncEnvelope) (storage.SyncPullRecord, error) {
 
 func (a *App) serverOverview(ctx context.Context, now time.Time) (OverviewDTO, bool) {
 	cfg, token, err := a.requireBackendSync()
-	if err != nil {
+	if err != nil || a.backendOutage.active(now) {
 		return OverviewDTO{}, false
 	}
 	var response serverOverviewResponse
 	if err := a.newDesktopBackendClient(cfg, token).getJSON(ctx, "/v1/overview", &response); err != nil {
+		a.backendOutage.note(err, now)
 		a.recordBackendSyncError(cfg, err)
 		return OverviewDTO{}, false
 	}
+	a.backendOutage.clear()
 	return overviewDTOFromServer(response, now), true
 }
 
 func (a *App) serverRhythm(ctx context.Context, now time.Time) (estimation.RhythmProjection, bool) {
 	cfg, token, err := a.requireBackendSync()
-	if err != nil {
+	if err != nil || a.backendOutage.active(now) {
 		return estimation.RhythmProjection{}, false
 	}
 	var response serverRhythmResponse
 	if err := a.newDesktopBackendClient(cfg, token).getJSON(ctx, "/v1/rhythm", &response); err != nil {
+		a.backendOutage.note(err, now)
 		a.recordBackendSyncError(cfg, err)
 		return estimation.RhythmProjection{}, false
 	}
+	a.backendOutage.clear()
 	if response.Projection != nil {
 		projection := *response.Projection
 		projection.FixtureMode = false
@@ -1158,7 +1164,11 @@ func (c desktopBackendClient) doJSON(ctx context.Context, method, path string, p
 	}
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return errors.New("Could not reach ZeitBoard's server.")
+		if ctx.Err() != nil {
+			// Given up on, not unanswered.
+			return ctx.Err()
+		}
+		return errBackendUnreachable
 	}
 	defer resp.Body.Close()
 	const responseLimit = 2 * 1024 * 1024

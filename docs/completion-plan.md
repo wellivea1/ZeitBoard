@@ -1087,3 +1087,16 @@ Changing one column's default without a migration fails the desktop test by name
 change that is neither an addition nor a drop will need an ordered migration and a fixture of its
 own.
 
+### C8 a server that is off is not waited on again — 2026-09-27
+
+The architecture review's finding #14 hid a daily-use defect. With sync on and the server's
+machine off, Home's overview and Rhythm's actogram each asked the server first. Each waited out the
+whole ten-second request timeout before showing the local estimate, on every visit and every
+minute's refresh. A refused connection fails at once, which is why test runs never showed it; a
+machine that is off does not refuse.
+
+Now a request that gets no answer marks the server down for two minutes. For that time both reads
+go straight to the local estimate, which is built from the same synced records. Sync keeps
+trying every minute, and its first success, or a read's, ends the outage. An error answer, such
+as a revoked device, returns quickly and marks nothing.
+

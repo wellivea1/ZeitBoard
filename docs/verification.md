@@ -2390,3 +2390,17 @@ Standing tests:
 - A column default changed in the current desktop schema without a migration fails the test, and
   names the table.
 
+## An unreachable server is not waited on again — 2026-09-27
+
+Desktop, against a server that drops each request without answering, as a machine that is off
+does:
+
+- The first overview falls back to the local estimate and marks the outage.
+- The next overview, and the rhythm, go straight to the local estimate, asking nothing.
+- After the two-minute hold the server is asked again, and its answer is shown.
+- That answer ends the outage at once, so the next failure is noticed on the next read.
+- An error answer marks no outage, and the hold lasts exactly two minutes.
+
+Removing the check from the overview read makes the test fail, asking the server again while it
+is down. The backend suite passes.
+
