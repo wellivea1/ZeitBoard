@@ -2364,3 +2364,29 @@ In the running desktop (disposable dev profile), with 50 synthetic doses added t
 
 The desktop Go suite and the full web check pass.
 
+## Upgrades from earlier builds — 2026-09-27
+
+Schema comparison of every table, index and trigger, with whitespace folded, between each earlier
+build and the current one:
+
+| Store | From | Added | Changed | Removed |
+|---|---|---|---|---|
+| Desktop | 2026-09-08 (465c26e) | 34 | 0 | 2, dropped by medication sync |
+| Desktop | 2026-09-21 (7a423d7) | 22 | 0 | 2, the same |
+| Desktop | 2026-09-25 (39d4823) | 15 | 0 | 2, the same |
+| Desktop | 2026-09-26 (b888d54) | 7 | 0 | 0 |
+| Desktop | 2026-09-27 (7714397) | 5 | 0 | 0 |
+| Server sync | 2026-09-08 (465c26e) | 5 | 0 | 0 |
+| Server portal | 2026-09-08 (465c26e) | 3 | 0 | 0 |
+
+Standing tests:
+
+- `core/storage/sqlite`: `testdata/upgrade-from-2026-09-08.sql` was written by that build's own
+  store, with synthetic records. It opens with exactly a new database's schema. Both nights, the
+  corrected start, the task, the medication, its skipped dose with one correction, the marker and
+  the imported calendar all read back, and a new night appends.
+- `apps/server/internal/store` and `apps/server/internal/portal`: each 8 September schema opens
+  with exactly a new database's schema.
+- A column default changed in the current desktop schema without a migration fails the test, and
+  names the table.
+

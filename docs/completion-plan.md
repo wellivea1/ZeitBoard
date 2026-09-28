@@ -1060,3 +1060,30 @@ logged, each placed against the rhythm. Two things used them:
 
 The Week board needed neither: it draws schedules. The clinician report has its own bounded read.
 
+### C8 databases from earlier builds upgrade cleanly — 2026-09-27
+
+Software completion needs migration regressions to pass, and the owner's own profile was made by
+an earlier build. The stores upgrade by creating whatever is missing (`CREATE ... IF NOT EXISTS`).
+That adds new tables and indexes, but silently keeps an old definition if an existing one ever
+changes.
+
+So the schemas the stores created at five points were compared with today's, from 8 September
+(the build this plan started from) to this morning:
+
+- **Desktop store:** every change was an addition. The two exceptions were the unique indexes
+  that allowed one correction chain per dose, which medication sync (ADR-0048) drops explicitly
+  because two devices may each correct a dose.
+- **Both server stores:** additions only.
+
+That finding is now a standing test in each store:
+
+- **Desktop:** a database written by the 8 September build's own store, with synthetic nights, a
+  correction, a task, a medication with a corrected dose, a marker and an imported calendar,
+  opens in the current build. Its schema matches a new database's exactly, every record reads as
+  it did, and it takes new records.
+- **Server:** the same schema check for both of its stores, from the same build.
+
+Changing one column's default without a migration fails the desktop test by name. The first
+change that is neither an addition nor a drop will need an ordered migration and a fixture of its
+own.
+
