@@ -68,6 +68,7 @@ type App struct {
 	backendConfigMu     sync.RWMutex
 	backendRunMu        sync.Mutex
 	backendRunCancel    context.CancelFunc
+	backendOutage       backendOutage
 	background          periodicWorker
 	calendarWriter      periodicWorker
 	sleepImportMu       sync.Mutex

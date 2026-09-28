@@ -199,7 +199,7 @@ export async function loadVisitorRequests(
   return {
     ...emptyVisitorRequests,
     status: "error",
-    message: "Could not reach the synced backend.",
+    message: "Could not reach ZeitBoard's server.",
     requests: [],
   };
 }
@@ -294,7 +294,7 @@ async function threadAction(
   return {
     ...emptyVisitorRequests,
     status: "error",
-    message: "Could not reach your server. Nothing was sent.",
+    message: "Could not reach ZeitBoard's server. Nothing was sent.",
   };
 }
 

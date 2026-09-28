@@ -162,7 +162,7 @@ func (a *App) GetAssistantStatus() (AssistantStatusDTO, error) {
 		}
 		return AssistantStatusDTO{Enabled: false, Message: sanitizeBackendError(err)}, nil
 	}
-	client := a.newDesktopBackendClient(cfg, token)
+	client := a.newPassiveBackendClient(cfg, token)
 	var response assistantStatusResponse
 	if err := client.getJSON(context.Background(), "/v1/status", &response); err != nil {
 		return AssistantStatusDTO{Enabled: false, Message: sanitizeBackendError(err)}, nil

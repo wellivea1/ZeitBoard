@@ -319,6 +319,29 @@ describe("shared approval queue", () => {
     window.removeEventListener("zeitboard:medication-data-changed", medicationsChanged);
     window.removeEventListener("zeitboard:sleep-data-changed", tasksChanged);
   });
+  // Found walking the app: with the server's machine off, Plan showed "Could
+  // not reach ZeitBoard's server." as a red alert over the owner's own
+  // suggestions, the style kept for a decision that failed.
+  it("says calmly, once, that a source could not be checked", async () => {
+    const unreachable = async () => {
+      throw new Error("Could not reach ZeitBoard's server.");
+    };
+    install({ GetBackendProposals: unreachable, GetBackendVisitorRequests: unreachable });
+    render(
+      <Providers>
+        <DecisionQueue />
+      </Providers>,
+    );
+
+    expect(await screen.findByText("Email Dr. Okafor")).toBeVisible();
+    const note = await screen.findByText(/Anything waiting there appears here once it answers\.$/);
+    expect(note).toHaveAttribute("role", "status");
+    expect(note).toHaveTextContent("Could not reach ZeitBoard's server.");
+    expect(screen.queryByRole("alert")).toBeNull();
+    // Said once, though two sources failed the same way.
+    expect(screen.getAllByText(/Anything waiting there/)).toHaveLength(1);
+  });
+
   it("retains counts and requests during a failed refresh and recovers when disabled", async () => {
     const list = vi
       .fn()

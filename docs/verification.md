@@ -2390,3 +2390,28 @@ Standing tests:
 - A column default changed in the current desktop schema without a migration fails the test, and
   names the table.
 
+## An unreachable server is not waited on again — 2026-09-27
+
+Desktop, against a server that drops each request without answering, as a machine that is off
+does:
+
+- The first overview falls back to the local estimate and marks the outage.
+- While it is down, nothing asks the server again: the next overview, the rhythm, the synced
+  proposals, the visitor requests and the share links.
+- Sync still tries.
+- Once the server answers a sync, even with an error status, the next overview is the server's.
+- After the two-minute hold a read asks again by itself.
+- The hold lasts exactly two minutes, and an answer ends it.
+
+Removing the check from the backend client makes the test fail, asking the server again while it
+is down. Twenty repeated runs, and three runs of the backend suite, pass.
+
+Web:
+
+- With the synced sources unreachable and the owner's suggestions listed, the queue shows one
+  calm status line naming the server, and no alert.
+- Sharing's list words each reason it has no links to show.
+
+In the running desktop (disposable dev profile, its server off), Plan's queue read "Could not
+reach ZeitBoard's server. Anything waiting there appears here once it answers." in the queue's
+muted style, above the two suggestions.

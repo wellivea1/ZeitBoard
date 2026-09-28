@@ -777,7 +777,6 @@ describe("desktop navigation", () => {
       backendUrl: "",
       deviceId: "",
       insecureSkipVerify: false,
-      lastSyncLabel: "Not synced yet",
       lastError: "",
       pendingPushCount: 0,
       pushedCount: 0,
@@ -791,7 +790,6 @@ describe("desktop navigation", () => {
       backendUrl: "https://localhost:8443",
       deviceId: "device_desktop",
       insecureSkipVerify: true,
-      lastSyncLabel: "Not synced yet",
       pendingPushCount: 1,
     };
     const getStatus = vi.fn(async () => offStatus);
@@ -801,7 +799,7 @@ describe("desktop navigation", () => {
       pendingPushCount: 0,
       pushedCount: 1,
       pulledCount: 2,
-      lastSyncLabel: "Last synced Mar 2, 6:00 AM",
+      lastSyncAt: "2026-03-02T11:00:00Z",
     }));
     const disable = vi.fn(async () => offStatus);
     (globalThis as { go?: unknown }).go = {

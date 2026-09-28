@@ -74,27 +74,43 @@ function SyncedProposalCard({
   );
 }
 
+const distinct = (
+  message: string | undefined,
+  index: number,
+  all: (string | undefined)[],
+): message is string => Boolean(message) && all.indexOf(message) === index;
+
+// A decision that failed is the owner's to know at once. A source that could
+// not be checked, such as the server while its machine is off, is routine: it
+// is said once, calmly, with what the queue still shows.
 function QueueErrors() {
   const local = useApprovals();
   const backend = useBackendProposals();
   const visitor = useVisitorRequests();
   const agent = useAgentProposals();
-  const messages = [
+  const failed = [
     local.error,
     backend.decisionError,
-    backend.data.status === "error" ? backend.data.message : "",
     visitor.decisionError,
-    visitor.data.status === "error" ? visitor.data.message : "",
     agent.decisionError,
+  ].filter(distinct);
+  const unchecked = [
+    backend.data.status === "error" ? backend.data.message : "",
+    visitor.data.status === "error" ? visitor.data.message : "",
     agent.data.status === "error" ? agent.data.message : "",
-  ].filter((message, index, all) => message && all.indexOf(message) === index);
+  ].filter(distinct);
   return (
     <>
-      {messages.map((message) => (
+      {failed.map((message) => (
         <p className="approval-error" role="alert" key={message}>
           {message}
         </p>
       ))}
+      {unchecked.length > 0 && (
+        <p className="plan-empty" role="status">
+          {unchecked.join(" ")} Anything waiting there appears here once it answers.
+        </p>
+      )}
     </>
   );
 }
@@ -189,11 +205,9 @@ export function DecisionQueue() {
       </div>
       <QueueErrors />
       {!summary.ready && <p role="status">Loading…</p>}
-      {summary.ready && loaded === 0 && (
+      {summary.ready && loaded === 0 && !summary.incomplete && (
         <p className="plan-empty">
-          {summary.incomplete
-            ? "Some sources could not be checked. They will be retried shortly."
-            : "Nothing is waiting for you. New tasks get a suggested time here."}
+          Nothing is waiting for you. New tasks get a suggested time here.
         </p>
       )}
       {loaded > 0 && (

@@ -55,7 +55,7 @@ type BackendSyncStatusDTO struct {
 	BackendURL          string `json:"backendUrl"`
 	DeviceID            string `json:"deviceId"`
 	InsecureSkipVerify  bool   `json:"insecureSkipVerify"`
-	LastSyncLabel       string `json:"lastSyncLabel"`
+	LastSyncAt          string `json:"lastSyncAt,omitempty"`
 	LastError           string `json:"lastError"`
 	PendingPushCount    int    `json:"pendingPushCount"`
 	PendingErasureCount int    `json:"pendingErasureCount"`
@@ -186,6 +186,11 @@ type desktopBackendClient struct {
 	baseURL string
 	token   string
 	client  *http.Client
+	// Every request tells the outage whether the server answered. A passive
+	// read, one nobody asked for by name, skips a server known to be down.
+	outage  *backendOutage
+	now     func() time.Time
+	passive bool
 }
 
 func (a *App) GetBackendSyncStatus() (BackendSyncStatusDTO, error) {
@@ -631,7 +636,7 @@ func (a *App) serverOverview(ctx context.Context, now time.Time) (OverviewDTO, b
 		return OverviewDTO{}, false
 	}
 	var response serverOverviewResponse
-	if err := a.newDesktopBackendClient(cfg, token).getJSON(ctx, "/v1/overview", &response); err != nil {
+	if err := a.newPassiveBackendClient(cfg, token).getJSON(ctx, "/v1/overview", &response); err != nil {
 		a.recordBackendSyncError(cfg, err)
 		return OverviewDTO{}, false
 	}
@@ -644,7 +649,7 @@ func (a *App) serverRhythm(ctx context.Context, now time.Time) (estimation.Rhyth
 		return estimation.RhythmProjection{}, false
 	}
 	var response serverRhythmResponse
-	if err := a.newDesktopBackendClient(cfg, token).getJSON(ctx, "/v1/rhythm", &response); err != nil {
+	if err := a.newPassiveBackendClient(cfg, token).getJSON(ctx, "/v1/rhythm", &response); err != nil {
 		a.recordBackendSyncError(cfg, err)
 		return estimation.RhythmProjection{}, false
 	}
@@ -878,7 +883,11 @@ func (a *App) DecideBackendProposal(input BackendProposalDecisionInput) (Backend
 }
 
 func (a *App) fetchBackendProposals(ctx context.Context, cfg backendSyncConfig, token, cursor string) BackendProposalsDTO {
+	// The first page loads on its own; an older page is asked for by name.
 	client := a.newDesktopBackendClient(cfg, token)
+	if cursor == "" {
+		client = a.newPassiveBackendClient(cfg, token)
+	}
 	path := "/v1/proposals"
 	if cursor != "" {
 		path += "?" + url.Values{"cursor": []string{cursor}}.Encode()
@@ -1035,7 +1044,7 @@ func (a *App) backendSyncStatusCounts(cfg backendSyncConfig, counts syncCounts) 
 		BackendURL:          cfg.BackendURL,
 		DeviceID:            cfg.DeviceID,
 		InsecureSkipVerify:  cfg.InsecureSkipVerify,
-		LastSyncLabel:       lastSyncLabel(cfg.LastSyncAt),
+		LastSyncAt:          lastSyncAt(cfg.LastSyncAt),
 		LastError:           cfg.LastError,
 		PendingPushCount:    pending,
 		PendingErasureCount: pendingErasures,
@@ -1123,7 +1132,19 @@ func (a *App) newDesktopBackendClient(cfg backendSyncConfig, token string) deskt
 		baseURL: strings.TrimRight(cfg.BackendURL, "/"),
 		token:   token,
 		client:  a.backendHTTPClient(cfg.InsecureSkipVerify),
+		outage:  &a.backendOutage,
+		now:     a.currentTime,
 	}
+}
+
+// newPassiveBackendClient is for reads that happen on their own: Home's
+// overview, Rhythm, the decision queue's synced sources, the list of share
+// links. While the server is known to be down they give up at once instead of
+// waiting out the request timeout. What the owner does, and sync, always try.
+func (a *App) newPassiveBackendClient(cfg backendSyncConfig, token string) desktopBackendClient {
+	client := a.newDesktopBackendClient(cfg, token)
+	client.passive = true
+	return client
 }
 
 func (c desktopBackendClient) getJSON(ctx context.Context, path string, target any) error {
@@ -1142,6 +1163,9 @@ func (c desktopBackendClient) doJSON(ctx context.Context, method, path string, p
 	if c.baseURL == "" {
 		return errors.New("backend URL is not configured")
 	}
+	if c.passive && c.outage.active(c.now()) {
+		return errBackendUnreachable
+	}
 	var body io.Reader
 	if len(payload) > 0 {
 		body = bytes.NewReader(payload)
@@ -1158,9 +1182,16 @@ func (c desktopBackendClient) doJSON(ctx context.Context, method, path string, p
 	}
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return errors.New("Could not reach ZeitBoard's server.")
+		if ctx.Err() != nil {
+			// Given up on, not unanswered.
+			return ctx.Err()
+		}
+		c.outage.start(c.now())
+		return errBackendUnreachable
 	}
 	defer resp.Body.Close()
+	// Any answer, even an error status, means the server is there.
+	c.outage.clear()
 	const responseLimit = 2 * 1024 * 1024
 	data, err := io.ReadAll(io.LimitReader(resp.Body, responseLimit+1))
 	if err != nil {
@@ -1279,9 +1310,11 @@ func nonEmptyStrings(values []string, fallback string) []string {
 	return result
 }
 
-func lastSyncLabel(value time.Time) string {
+// lastSyncAt is when sync last completed, RFC 3339, or "" before the first.
+// The window words it as it words every time.
+func lastSyncAt(value time.Time) string {
 	if value.IsZero() {
-		return "Not synced yet"
+		return ""
 	}
-	return value.Local().Format("Last synced Jan 2, 3:04 PM")
+	return value.UTC().Format(time.RFC3339)
 }

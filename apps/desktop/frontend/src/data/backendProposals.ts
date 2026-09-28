@@ -163,7 +163,7 @@ export async function loadBackendProposals(
   return {
     ...emptyReviewSummary,
     status: "error",
-    message: "Could not reach the synced backend.",
+    message: "Could not reach ZeitBoard's server.",
     proposals: [],
     pagination: terminalReviewPage(),
   };

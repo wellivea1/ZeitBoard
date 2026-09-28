@@ -45,7 +45,6 @@ const initialBackendSyncStatus: BackendSyncStatus = {
   backendUrl: "",
   deviceId: "",
   insecureSkipVerify: false,
-  lastSyncLabel: "Not synced yet",
   lastError: "",
   pendingPushCount: 0,
   pendingErasureCount: 0,

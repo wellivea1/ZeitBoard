@@ -1,4 +1,5 @@
 import type { BackendSyncInput, BackendSyncStatus } from "../../data/backendSync";
+import { momentInSentence } from "../../utils/relativeTime";
 
 interface BackendSyncSettingsProps {
   status: BackendSyncStatus;
@@ -10,6 +11,13 @@ interface BackendSyncSettingsProps {
   onConfigure: () => void;
   onDisable: () => void;
   onSyncNow: () => void;
+}
+
+// The value beside "Last sync": "Today at 2:51 PM", or "Not yet".
+function lastSyncWording(lastSyncAt: string | undefined) {
+  if (!lastSyncAt) return "Not yet";
+  const moment = momentInSentence(new Date(lastSyncAt), new Date());
+  return moment.charAt(0).toUpperCase() + moment.slice(1);
 }
 
 function statusLabel(status: BackendSyncStatus) {
@@ -176,7 +184,7 @@ export function BackendSyncSettings({
             </div>
             <div>
               <dt>Last sync</dt>
-              <dd>{status.lastSyncLabel}</dd>
+              <dd>{lastSyncWording(status.lastSyncAt)}</dd>
             </div>
           </dl>
           <button

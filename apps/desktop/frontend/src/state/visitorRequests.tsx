@@ -236,7 +236,7 @@ export function VisitorRequestsProvider({ children }: { children: ReactNode }) {
         const result = await run();
         if (!active.current) return false;
         if (result.status !== "ok") {
-          setDecisionError(result.message ?? "That did not reach your server.");
+          setDecisionError(result.message ?? "That did not reach ZeitBoard's server.");
           if (result.requests.length > 0) publish(result);
           return false;
         }
