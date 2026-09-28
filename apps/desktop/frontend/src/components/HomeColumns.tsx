@@ -194,7 +194,6 @@ export function Doses({
       {active.length > 0 ? (
         <MedicationQuickTaps
           medications={data?.medications ?? []}
-          events={data?.events ?? []}
           available={available}
           busy={busy}
           onLog={onLog}

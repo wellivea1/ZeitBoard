@@ -8,7 +8,9 @@ import {
   exportMedicationData,
   hasLocalMedicationService,
   loadMedications,
+  loadMedicationHistoryPage,
   logMedicationEvent,
+  normalizeMedicationHistoryPage,
   normalizeMedications,
   updateMedication,
   updateMedicationSchedule,
@@ -32,27 +34,25 @@ const medicationResponse = {
       scheduleKind: "none",
       createdLabel: "Added Jul 21, 2026",
       eventCount: 1,
-    },
-  ],
-  events: [
-    {
-      eventId: "dose_local_01",
-      medicationId: "med_local_01",
-      medicationLabel: "Evening record",
-      doseAt: "2026-07-22T02:15:00Z",
-      doseLocal: "2026-07-21T22:15",
-      civilTime: "Tue Jul 21, 10:15 PM EDT",
-      zoneId: "America/New_York",
-      status: "taken",
-      scheduled: false,
-      note: "With water",
-      recordedLabel: "Recorded Jul 21, 10:16 PM",
-      wakeRelation: "8 h 15 min after recorded wake",
-      sleepRelation: "1 h 45 min before predicted sleep",
-      sleepRelationKind: "predicted",
-      confidence: "Medium",
-      excluded: false,
-      correctionCount: 0,
+      lastDose: {
+        eventId: "dose_local_01",
+        medicationId: "med_local_01",
+        medicationLabel: "Evening record",
+        doseAt: "2026-07-22T02:15:00Z",
+        doseLocal: "2026-07-21T22:15",
+        civilTime: "Tue Jul 21, 10:15 PM EDT",
+        zoneId: "America/New_York",
+        status: "taken",
+        scheduled: false,
+        note: "With water",
+        recordedLabel: "Recorded Jul 21, 10:16 PM",
+        wakeRelation: "8 h 15 min after recorded wake",
+        sleepRelation: "1 h 45 min before predicted sleep",
+        sleepRelationKind: "predicted",
+        confidence: "Medium",
+        excluded: false,
+        correctionCount: 0,
+      },
     },
   ],
   fixtureMode: false,
@@ -141,12 +141,17 @@ describe("medication data adapter", () => {
     expect(normalizeMedications(medicationResponse)).toMatchObject({
       status: "ready",
       fixtureMode: false,
-      medications: [{ scheduleKind: "none", eventCount: 1 }],
-      events: [{ sleepRelationKind: "predicted", confidence: "Medium" }],
+      medications: [
+        {
+          scheduleKind: "none",
+          eventCount: 1,
+          lastDose: { sleepRelationKind: "predicted", confidence: "Medium" },
+        },
+      ],
     });
 
     const excluded = structuredClone(medicationResponse);
-    excluded.events[0]!.excluded = true;
+    excluded.medications[0]!.lastDose.excluded = true;
     expect(normalizeMedications(excluded)).toBeDefined();
   });
 
@@ -173,26 +178,62 @@ describe("medication data adapter", () => {
   });
 
   it("rejects contradictory ownership, counts, identifiers, and civil times", () => {
+    // A medication's newest dose must be its own.
     const unknownMedication = structuredClone(medicationResponse);
-    unknownMedication.events[0]!.medicationId = "med_missing_01";
+    unknownMedication.medications[0]!.lastDose.medicationId = "med_missing_01";
     expect(normalizeMedications(unknownMedication)).toBeUndefined();
 
     const labelMismatch = structuredClone(medicationResponse);
-    labelMismatch.events[0]!.medicationLabel = "Different private label";
+    labelMismatch.medications[0]!.lastDose.medicationLabel = "Different private label";
     expect(normalizeMedications(labelMismatch)).toBeUndefined();
 
+    // And there exactly when it has doses.
     const countMismatch = structuredClone(medicationResponse);
     countMismatch.medications[0]!.eventCount = 0;
     expect(normalizeMedications(countMismatch)).toBeUndefined();
 
+    const missingDose = structuredClone(medicationResponse);
+    delete (missingDose.medications[0] as Record<string, unknown>).lastDose;
+    expect(normalizeMedications(missingDose)).toBeUndefined();
+
     const duplicate = structuredClone(medicationResponse);
-    duplicate.events.push(structuredClone(duplicate.events[0]!));
-    duplicate.medications[0]!.eventCount = 2;
+    duplicate.medications.push(structuredClone(duplicate.medications[0]!));
     expect(normalizeMedications(duplicate)).toBeUndefined();
 
     const impossibleTime = structuredClone(medicationResponse);
-    impossibleTime.events[0]!.doseLocal = "2026-02-30T22:15";
+    impossibleTime.medications[0]!.lastDose.doseLocal = "2026-02-30T22:15";
     expect(normalizeMedications(impossibleTime)).toBeUndefined();
+  });
+
+  it("reads the dose history a page at a time", async () => {
+    const dose = medicationResponse.medications[0]!.lastDose;
+    const page = {
+      status: "ready",
+      message: "51 recorded doses.",
+      total: 51,
+      page: 1,
+      pageSize: 50,
+      events: [dose],
+    };
+    expect(normalizeMedicationHistoryPage(page)).toMatchObject({
+      total: 51,
+      page: 1,
+      events: [{ eventId: "dose_local_01" }],
+    });
+    expect(normalizeMedicationHistoryPage({ ...page, status: "empty" })).toBeUndefined();
+    expect(normalizeMedicationHistoryPage({ ...page, total: 0 })).toBeUndefined();
+    expect(
+      normalizeMedicationHistoryPage({ ...page, events: [{ ...dose, doseLocal: "soon" }] }),
+    ).toBeUndefined();
+
+    const read = vi.fn(async () => page);
+    const root = { go: { main: { App: { GetMedicationHistoryPage: read } } } };
+    await expect(loadMedicationHistoryPage(1, root)).resolves.toMatchObject({ total: 51 });
+    expect(read).toHaveBeenCalledWith({ page: 1 });
+    await expect(loadMedicationHistoryPage(0, {})).resolves.toMatchObject({
+      status: "empty",
+      events: [],
+    });
   });
 
   it("reconciles schedule shape, horizon counts, context, and reminder state", () => {
@@ -234,7 +275,6 @@ describe("medication data adapter", () => {
       empty: true,
       fixtureMode: false,
       medications: [],
-      events: [],
     });
     await expect(
       addMedication({ label: "Private", form: "", strengthLabel: "" }, {}),

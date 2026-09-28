@@ -1045,3 +1045,18 @@ re-reads what it shows when the change is announced. Along the way:
 
 Medication history is next: each dose tap still returns every dose ever logged.
 
+### C8 dose history is read a page at a time — 2026-09-27
+
+The medication half of bounded history (review #12) is done, so no surface receives a whole
+private history any more. Every medication read and every dose tap used to return every dose ever
+logged, each placed against the rhythm. Two things used them:
+
+- **The quick taps** on Home and Medications need only each medication's newest dose, for "Last
+  taken today at 8:02 AM". Each medication now carries it. The desktop picks it by instant, so a
+  dose logged in another zone with an earlier clock reading still counts as the newer one.
+- **The history** shows fifty doses at a time. It now reads its page from the desktop, and again
+  whenever medication data changes. The desktop folds the corrections once, then places only
+  that page's doses against the rhythm.
+
+The Week board needed neither: it draws schedules. The clinician report has its own bounded read.
+

@@ -80,6 +80,8 @@ export interface MedicationDefinition {
   startedLocal?: string;
   startedZoneId?: string;
   startedLabel?: string;
+  /** The newest dose recorded for it, for "Last taken today at 8:02 AM". */
+  lastDose?: MedicationLog;
 }
 
 export interface MedicationLog {
@@ -110,13 +112,23 @@ export interface MedicationsData {
   estimateStatus: MedicationEstimateStatus;
   estimateMessage: string;
   medications: MedicationDefinition[];
-  events: MedicationLog[];
   fixtureMode: false;
   disclaimer: string;
   interactionDisclaimer: string;
   reminderStatus: MedicationReminderStatus;
   reminderMessage: string;
   updatedLabel: string;
+}
+
+/** One page of the dose history, newest first. */
+export interface MedicationHistoryPage {
+  status: "ready" | "empty";
+  message: string;
+  total: number;
+  /** Zero-based; a page asked for past the end comes back as the last one. */
+  page: number;
+  pageSize: number;
+  events: MedicationLog[];
 }
 
 export interface MedicationInput {
@@ -185,7 +197,6 @@ const unavailableMedications: MedicationsData = {
   estimateStatus: "unavailable",
   estimateMessage: "Rhythm context is unavailable in this browser preview.",
   medications: [],
-  events: [],
   fixtureMode: false,
   disclaimer:
     "Medication timing shown here is user-entered or derived context, not medical advice.",
@@ -540,6 +551,26 @@ function normalizeMedication(value: unknown): MedicationDefinition | undefined {
   };
 }
 
+// A definition with its newest dose, which must be its own and must be there
+// exactly when it has doses.
+function normalizeMedicationWithLastDose(value: unknown): MedicationDefinition | undefined {
+  const medication = normalizeMedication(value);
+  if (!medication || !isRecord(value)) return undefined;
+  if (value.lastDose === undefined || value.lastDose === null) {
+    return medication.eventCount === 0 ? medication : undefined;
+  }
+  const lastDose = normalizeLog(value.lastDose);
+  if (
+    !lastDose ||
+    medication.eventCount === 0 ||
+    lastDose.medicationId !== medication.medicationId ||
+    lastDose.medicationLabel !== medication.label
+  ) {
+    return undefined;
+  }
+  return { ...medication, lastDose };
+}
+
 function normalizeLog(value: unknown): MedicationLog | undefined {
   if (!isRecord(value)) return undefined;
   const eventId = identifier(value.eventId);
@@ -611,7 +642,7 @@ function normalizeLog(value: unknown): MedicationLog | undefined {
 }
 
 export function normalizeMedications(value: unknown): MedicationsData | undefined {
-  if (!isRecord(value) || !Array.isArray(value.medications) || !Array.isArray(value.events)) {
+  if (!isRecord(value) || !Array.isArray(value.medications)) {
     return undefined;
   }
   const status =
@@ -656,39 +687,16 @@ export function normalizeMedications(value: unknown): MedicationsData | undefine
   const medications: MedicationDefinition[] = [];
   const medicationIds = new Set<string>();
   for (const item of value.medications) {
-    const medication = normalizeMedication(item);
+    const medication = normalizeMedicationWithLastDose(item);
     if (!medication || medicationIds.has(medication.medicationId)) return undefined;
     medicationIds.add(medication.medicationId);
     medications.push(medication);
   }
-  const labels = new Map(
-    medications.map((medication) => [medication.medicationId, medication.label]),
-  );
-  const actualCounts = new Map<string, number>();
-  const events: MedicationLog[] = [];
-  const eventIds = new Set<string>();
-  for (const item of value.events) {
-    const event = normalizeLog(item);
-    if (
-      !event ||
-      eventIds.has(event.eventId) ||
-      labels.get(event.medicationId) !== event.medicationLabel
-    ) {
-      return undefined;
-    }
-    eventIds.add(event.eventId);
-    actualCounts.set(event.medicationId, (actualCounts.get(event.medicationId) ?? 0) + 1);
-    events.push(event);
-  }
   if (
-    medications.some(
-      (medication) => (actualCounts.get(medication.medicationId) ?? 0) !== medication.eventCount,
-    ) ||
     value.empty !== (medications.length === 0) ||
     (status === "ready" && value.empty) ||
     (status === "empty" && !value.empty) ||
-    (status === "unavailable" && (!value.empty || events.length > 0)) ||
-    (medications.length === 0 && events.length > 0) ||
+    (status === "unavailable" && !value.empty) ||
     (status !== "unavailable" &&
       medications.some(
         (medication) => medication.active && medication.schedule?.reminderEnabled === true,
@@ -704,7 +712,6 @@ export function normalizeMedications(value: unknown): MedicationsData | undefine
     estimateStatus,
     estimateMessage,
     medications,
-    events,
     fixtureMode: false,
     disclaimer,
     interactionDisclaimer,
@@ -727,6 +734,47 @@ export async function loadMedications(
   if (!method) return unavailableMedications;
   const result = normalizeMedications(await method());
   if (!result) throw new Error("Medication service returned an invalid response.");
+  return result;
+}
+
+export function normalizeMedicationHistoryPage(value: unknown): MedicationHistoryPage | undefined {
+  if (!isRecord(value) || !Array.isArray(value.events)) return undefined;
+  const status = value.status === "ready" || value.status === "empty" ? value.status : undefined;
+  const message = text(value.message);
+  const total = nonNegativeInteger(value.total);
+  const page = nonNegativeInteger(value.page);
+  const pageSize = nonNegativeInteger(value.pageSize);
+  if (!status || !message || total === undefined || page === undefined || pageSize === undefined) {
+    return undefined;
+  }
+  const events: MedicationLog[] = [];
+  for (const item of value.events) {
+    const event = normalizeLog(item);
+    if (!event) return undefined;
+    events.push(event);
+  }
+  if ((status === "empty") !== (total === 0) || events.length > total) return undefined;
+  return { status, message, total, page, pageSize, events };
+}
+
+/** One page of the dose history, which shows fifty doses at a time. */
+export async function loadMedicationHistoryPage(
+  page: number,
+  root: WailsRoot = globalThis as unknown as WailsRoot,
+): Promise<MedicationHistoryPage> {
+  const method = findWailsMethod(root, ["GetMedicationHistoryPage"]);
+  if (!method) {
+    return {
+      status: "empty",
+      message: unavailableMedications.message,
+      total: 0,
+      page: 0,
+      pageSize: 0,
+      events: [],
+    };
+  }
+  const result = normalizeMedicationHistoryPage(await method({ page }));
+  if (!result) throw new Error("The dose history returned an invalid page.");
   return result;
 }
 

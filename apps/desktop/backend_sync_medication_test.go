@@ -45,14 +45,14 @@ func TestMedicationRecordsTravelBetweenComputers(t *testing.T) {
 	must(err)
 	markersOnB, err := b.GetRhythmMarkers()
 	must(err)
-	if len(onB.Medications) != 1 || onB.Medications[0].Label != "Synthetic evening tablet" || len(onB.Events) != 1 ||
+	if len(onB.Medications) != 1 || onB.Medications[0].Label != "Synthetic evening tablet" || len(doseHistory(t, b)) != 1 ||
 		len(markersOnB.Markers) != 1 || markersOnB.Markers[0].Note != "Synthetic trip" {
 		t.Fatalf("second computer holds %+v and %+v", onB, markersOnB)
 	}
 
 	// A correction made on one computer changes the other's clinician report.
 	tick()
-	dose := onB.Events[0]
+	dose := doseHistory(t, b)[0]
 	_, err = b.CorrectMedicationEvent(MedicationEventCorrectionInput{EventID: dose.EventID, DoseLocal: dose.DoseLocal, ZoneID: dose.ZoneID,
 		Status: storage.MedicationEventSkipped, Scheduled: dose.Scheduled, Note: dose.Note})
 	must(err)
@@ -99,7 +99,7 @@ func TestMedicationRecordsTravelBetweenComputers(t *testing.T) {
 	must(err)
 	markersOnA, err := a.GetRhythmMarkers()
 	must(err)
-	if len(onA.Medications) != 0 || len(onB.Medications) != 0 || len(onB.Events) != 0 || len(markersOnA.Markers) != 0 {
+	if len(onA.Medications) != 0 || len(onB.Medications) != 0 || len(doseHistory(t, b)) != 0 || len(markersOnA.Markers) != 0 {
 		t.Fatalf("deletions did not travel: %+v / %+v / %+v", onA, onB, markersOnA)
 	}
 	if statusA.PendingPushCount != 0 || statusA.PendingErasureCount != 0 || statusA.WaitingRecordCount != 0 {

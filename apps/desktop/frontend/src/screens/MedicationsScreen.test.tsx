@@ -3,6 +3,26 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MedicationsScreen } from "./MedicationsScreen";
 
+const dose = {
+  eventId: "dose_local_01",
+  medicationId: "med_local_01",
+  medicationLabel: "Evening record",
+  doseAt: "2026-07-22T02:15:00Z",
+  doseLocal: "2026-07-21T22:15",
+  civilTime: "Tue Jul 21, 10:15 PM EDT",
+  zoneId: "America/New_York",
+  status: "taken",
+  scheduled: false,
+  note: "Original factual note",
+  recordedLabel: "Recorded Jul 21, 10:16 PM",
+  wakeRelation: "8 h 15 min after recorded wake",
+  sleepRelation: "1 h 45 min before predicted sleep",
+  sleepRelationKind: "predicted",
+  confidence: "Medium",
+  excluded: false,
+  correctionCount: 0,
+};
+
 const response = {
   status: "ready",
   empty: false,
@@ -20,27 +40,7 @@ const response = {
       scheduleKind: "none",
       createdLabel: "Added Jul 21, 2026",
       eventCount: 1,
-    },
-  ],
-  events: [
-    {
-      eventId: "dose_local_01",
-      medicationId: "med_local_01",
-      medicationLabel: "Evening record",
-      doseAt: "2026-07-22T02:15:00Z",
-      doseLocal: "2026-07-21T22:15",
-      civilTime: "Tue Jul 21, 10:15 PM EDT",
-      zoneId: "America/New_York",
-      status: "taken",
-      scheduled: false,
-      note: "Original factual note",
-      recordedLabel: "Recorded Jul 21, 10:16 PM",
-      wakeRelation: "8 h 15 min after recorded wake",
-      sleepRelation: "1 h 45 min before predicted sleep",
-      sleepRelationKind: "predicted",
-      confidence: "Medium",
-      excluded: false,
-      correctionCount: 0,
+      lastDose: dose,
     },
   ],
   fixtureMode: false,
@@ -152,17 +152,30 @@ describe("MedicationsScreen", () => {
   });
 
   it("appends corrections and gates real event erasure behind typed confirmation", async () => {
-    const current = structuredClone(response);
+    const current: { medications: Array<Record<string, unknown>> } & Record<string, unknown> =
+      structuredClone(response);
+    const history = [structuredClone(dose)];
     const getMedications = vi.fn(async () => structuredClone(current));
+    // The history is read a page at a time, and again after each change.
+    const readHistory = vi.fn(async () => ({
+      status: history.length > 0 ? "ready" : "empty",
+      message: history.length > 0 ? "1 recorded dose." : "No doses recorded yet.",
+      total: history.length,
+      page: 0,
+      pageSize: 50,
+      events: structuredClone(history),
+    }));
     const correct = vi.fn(async (input: unknown) => {
       const correction = input as { note: string };
-      current.events[0]!.note = correction.note;
-      current.events[0]!.correctionCount = 1;
+      history[0]!.note = correction.note;
+      history[0]!.correctionCount = 1;
+      current.medications[0]!.lastDose = structuredClone(history[0]);
       return structuredClone(current);
     });
     const erase = vi.fn(async () => {
-      current.events = [];
+      history.splice(0);
       current.medications[0]!.eventCount = 0;
+      delete current.medications[0]!.lastDose;
       current.message = "1 medication and 0 recorded doses.";
       return structuredClone(current);
     });
@@ -170,6 +183,7 @@ describe("MedicationsScreen", () => {
       main: {
         App: {
           GetMedications: getMedications,
+          GetMedicationHistoryPage: readHistory,
           CorrectMedicationEvent: correct,
           DeleteMedicationEvent: erase,
         },

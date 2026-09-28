@@ -181,7 +181,6 @@ function MedicationWorkspaceView({
         </div>
         <MedicationQuickTaps
           medications={data?.medications ?? []}
-          events={data?.events ?? []}
           available={available}
           busy={busy}
           onLog={(input: MedicationEventInput) =>
@@ -207,7 +206,6 @@ function MedicationWorkspaceView({
         </div>
       ) : (
         <MedicationHistory
-          events={data?.events ?? []}
           busy={busy}
           onCorrect={(input: MedicationEventCorrectionInput) =>
             mutate(() => correctMedicationEvent(input), "Medication event correction appended.")
