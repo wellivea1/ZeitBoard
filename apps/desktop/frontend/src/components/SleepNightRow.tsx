@@ -6,8 +6,9 @@ import { ConfirmDelete } from "./ConfirmDelete";
 import { clockRange } from "../utils/relativeTime";
 
 // One night in the sleep log: what was recorded, and quiet actions to edit it,
-// leave it out of estimates, or delete it. The log used to give every night
-// three full-size buttons; a month of nights was a wall of them.
+// take the last edit back, leave it out of estimates, or delete it. The log
+// used to give every night three full-size buttons; a month of nights was a
+// wall of them.
 
 const correctionHistoryPerPage = 50;
 
@@ -49,6 +50,7 @@ export function SleepNightRow({
   onSaveEdit,
   editExcluded,
   onEditExcluded,
+  onUndo,
   onSuppress,
   onBeginDelete,
   onCancelDelete,
@@ -65,6 +67,7 @@ export function SleepNightRow({
   onSaveEdit: () => void;
   editExcluded: boolean;
   onEditExcluded: (value: boolean) => void;
+  onUndo: () => void;
   onSuppress: () => void;
   onBeginDelete: () => void;
   onCancelDelete: () => void;
@@ -131,6 +134,18 @@ export function SleepNightRow({
             >
               Edit
             </button>
+            {entry.canUndo && (
+              <button
+                className="button ghost compact"
+                type="button"
+                aria-label={`Undo the last edit to ${name}`}
+                title="Take back the last edit. It stays in the history."
+                onClick={onUndo}
+                disabled={busy}
+              >
+                Undo
+              </button>
+            )}
             <button
               className="button ghost compact"
               type="button"

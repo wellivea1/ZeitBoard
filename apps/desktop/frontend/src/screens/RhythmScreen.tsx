@@ -74,8 +74,8 @@ function SourcesPanel() {
           </>
         ) : null}
         <Notice id="rhythm.corrections">
-          A recorded night is never overwritten. Editing one adds a correction on top, and another
-          correction undoes it, so every change can be traced.
+          A recorded night is never overwritten. Editing one adds a correction on top, and Undo in
+          the sleep log adds one that takes it back, so every change can be traced.
         </Notice>
       </aside>
 

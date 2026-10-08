@@ -13,6 +13,7 @@ import {
   loadSleepLogPage,
   sleepLogUnavailable,
   suppressSleepEntry,
+  undoSleepCorrection,
   type SleepCorrectionInput,
   type SleepEntry,
   type SleepEntryInput,
@@ -153,6 +154,21 @@ export function SleepLogPanel() {
       setEditingId(null);
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "Could not append correction.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const undoEdit = async (entry: SleepEntry) => {
+    setBusy(true);
+    setFormError("");
+    setDeletingId(null);
+    try {
+      await undoSleepCorrection(entry.observationId, entry.reviewToken);
+      notifySleepDataChanged();
+      setStatusMessage("Edit undone. It stays in the night's history.");
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "Could not undo the edit.");
     } finally {
       setBusy(false);
     }
@@ -303,6 +319,7 @@ export function SleepLogPanel() {
                   onSaveEdit={saveEdit}
                   editExcluded={editExcluded}
                   onEditExcluded={setEditExcluded}
+                  onUndo={() => void undoEdit(entry)}
                   onSuppress={() => void suppressEntry(entry)}
                   onBeginDelete={() => beginDelete(entry)}
                   onCancelDelete={() => setDeletingId(null)}
