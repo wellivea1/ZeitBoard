@@ -2461,3 +2461,13 @@ structural; the pass with real assistive technology is still the owner's step (C
   - Undo moved it from 11:45 PM back to 11:30 PM.
   - A second Undo restored 11:00 PM to 7:00 AM. The "Corrected" tag and Undo went away, and the
     history's newest line read "Restored the night as recorded".
+
+## A server test that expired with its fixture — 2026-10-08
+
+From 2026-10-05, `TestABurstOfPushesPublishesOnce` failed every run. The test is not flaky. It
+runs the real recompute worker, which had no clock of its own and read the real time. The
+fixture's share link expires sixty days after the fixture's fixed instant, on 2026-10-05. After
+that date the worker found no link to publish to, so the startup pass never published. The worker
+now runs on the fixture's clock, advancing in real time, because its timers are real. The test
+passes, and so does the rest of the server suite. The other fixed-clock tests already give the
+code under test their own clock.
