@@ -458,8 +458,9 @@ Largely delivered (see "Where things stand"). Remaining in scope:
   ADR-0022; Takeout/activity import remains slice 7).
 - Source-specific missingness remains open. Manual forced-schedule, travel, illness, and disruption
   markers are delivered in ADR-0026.
-- Correction _undo_ as a one-click affordance (the Sources tab now shows the real correction history
-  and diff; reversal today means appending another correction in Data Sources).
+- ~~Correction _undo_ as a one-click affordance.~~ Delivered 2026-10-08: Undo on a night's row in
+  Log › Sleep appends the correction that restores the night as it was before its latest edit, and
+  undoing again reaches the night as recorded.
 - Onboarding beyond the empty state; localization readiness.
 - Local DB encryption at rest. _Partly addressed 2026-08-10 (slice 17, ADR-0035):_ every private
   local file — the database, its write-ahead log, the backend token, the settings files and exports

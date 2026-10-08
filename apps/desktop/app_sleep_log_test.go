@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
+
+	storage "non24.app/core/storage/sqlite"
 )
 
 func TestTheSleepLogIsReadByPage(t *testing.T) {
@@ -125,5 +128,130 @@ func TestSleepSourcesKeepEachProvenanceApart(t *testing.T) {
 		sources.Sources[0].Provenance == sources.Sources[1].Provenance ||
 		sources.Sources[0].Total != 1 || sources.Sources[1].Total != 1 {
 		t.Fatalf("provenances were counted together: %+v", sources.Sources)
+	}
+}
+
+// The roadmap's one-click correction undo: taking back an edit adds a
+// correction, as every edit does, and restores the night as it was before.
+func TestUndoTakesBackANightsLatestEdit(t *testing.T) {
+	app := newTestApp(t)
+	seedSleepEntries(t, app, 3)
+	page, err := app.GetSleepLogPage(SleepLogPageInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	night := page.Entries[0]
+	if night.CanUndo {
+		t.Fatal("a night without edits offers an undo")
+	}
+	if _, err := app.UndoSleepCorrection(SleepUndoInput{ObservationID: night.ObservationID, ReviewToken: night.ReviewToken}); err == nil {
+		t.Fatal("a night without edits was undone")
+	}
+
+	recordedStart, _ := time.Parse(time.RFC3339Nano, night.StartLocal)
+	edit := func(entry SleepEntryDTO, start time.Time) SleepEntryDTO {
+		t.Helper()
+		edited, err := app.CorrectSleepEntry(SleepCorrectionInput{
+			ObservationID: entry.ObservationID, ReviewToken: entry.ReviewToken, ZoneID: entry.ZoneID,
+			StartLocal: start.Format("2006-01-02T15:04"), EndLocal: entry.EffectiveEndLocal[:16], Classification: "principal",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return edited
+	}
+	first := edit(night, recordedStart.Add(30*time.Minute))
+	second := edit(first, recordedStart.Add(45*time.Minute))
+
+	// Undoing the second edit restores the first.
+	undone, err := app.UndoSleepCorrection(SleepUndoInput{ObservationID: second.ObservationID, ReviewToken: second.ReviewToken})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if undone.EffectiveStartLocal[:16] != recordedStart.Add(30*time.Minute).Format("2006-01-02T15:04") || len(undone.History) != 3 || !undone.CanUndo {
+		t.Fatalf("after one undo: starts %s with %d corrections", undone.EffectiveStartLocal, len(undone.History))
+	}
+	// Undoing that restores the night as recorded, and says so.
+	restored, err := app.UndoSleepCorrection(SleepUndoInput{ObservationID: undone.ObservationID, ReviewToken: undone.ReviewToken})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored.EffectiveStartLocal != restored.StartLocal || restored.Suppressed || len(restored.History) != 4 ||
+		restored.History[0].Summary != "Restored the night as recorded" || restored.CanUndo {
+		t.Fatalf("after two undos: %+v", restored)
+	}
+	// A stale form cannot undo.
+	if _, err := app.UndoSleepCorrection(SleepUndoInput{ObservationID: undone.ObservationID, ReviewToken: undone.ReviewToken}); err == nil {
+		t.Fatal("an undo from a stale review was accepted")
+	}
+}
+
+func TestUndoingAnExclusionIncludesTheNightAgain(t *testing.T) {
+	app := newTestApp(t)
+	seedSleepEntries(t, app, 2)
+	page, err := app.GetSleepLogPage(SleepLogPageInput{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	excluded, err := app.SuppressSleepEntry(SleepSuppressInput{ObservationID: page.Entries[0].ObservationID, ReviewToken: page.Entries[0].ReviewToken})
+	if err != nil || !excluded.Suppressed {
+		t.Fatalf("excluded = %+v, %v", excluded.Suppressed, err)
+	}
+	undone, err := app.UndoSleepCorrection(SleepUndoInput{ObservationID: excluded.ObservationID, ReviewToken: excluded.ReviewToken})
+	if err != nil || undone.Suppressed || undone.CanUndo {
+		t.Fatalf("undoing the exclusion: %+v, %v", undone, err)
+	}
+}
+
+// A night as recorded is the source's own latest word: undoing the owner's
+// edit keeps a revision the provider made, rather than going back past it.
+func TestUndoKeepsTheSourcesOwnRevision(t *testing.T) {
+	app := newTestApp(t)
+	ctx := context.Background()
+	start := time.Now().UTC().Add(-36 * time.Hour).Truncate(time.Minute)
+	observation := storage.SleepObservationRecord{
+		ObservationID: "obs_provider_01",
+		Kind:          storage.SleepKindEpisode,
+		StartAt:       start,
+		EndAt:         start.Add(8 * time.Hour),
+		ZoneID:        defaultZoneID,
+		Sleep:         storage.SleepObservationDetails{Classification: storage.SleepClassificationPrincipal},
+		Provenance: storage.SleepObservationProvenance{
+			AcquisitionMethod: storage.ProvenanceAcquisitionHealthConnect,
+			EvidenceStatus:    storage.ProvenanceEvidenceDirectlyObserved,
+			RecordedAt:        start.Add(8 * time.Hour),
+			SourceRecordID:    "synthetic-provider-record",
+		},
+	}
+	if err := app.store.AppendSleepObservation(ctx, observation); err != nil {
+		t.Fatal(err)
+	}
+	revised := start.Add(20 * time.Minute)
+	if err := app.store.AppendSleepCorrection(ctx, storage.SleepCorrectionRecord{
+		CorrectionID: "corr_provider_01", TargetObservationID: observation.ObservationID,
+		AcquisitionMethod: storage.ProvenanceAcquisitionHealthConnect, Reason: storage.CorrectionReasonSourceConflict,
+		CreatedAt: start.Add(9 * time.Hour), Changes: storage.SleepCorrectionChanges{StartAt: &revised},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	night, err := app.sleepEntryByID(observation.ObservationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	location, _ := time.LoadLocation(defaultZoneID)
+	edited, err := app.CorrectSleepEntry(SleepCorrectionInput{
+		ObservationID: night.ObservationID, ReviewToken: night.ReviewToken, ZoneID: night.ZoneID,
+		StartLocal: start.Add(50 * time.Minute).In(location).Format("2006-01-02T15:04"), EndLocal: night.EffectiveEndLocal[:16], Classification: "principal",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored, err := app.UndoSleepCorrection(SleepUndoInput{ObservationID: edited.ObservationID, ReviewToken: edited.ReviewToken})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restored.EffectiveStartLocal != night.EffectiveStartLocal || restored.CanUndo ||
+		restored.History[0].Summary != "Restored the night as recorded" {
+		t.Fatalf("undo went past the provider's revision: starts %s, want %s", restored.EffectiveStartLocal, night.EffectiveStartLocal)
 	}
 }

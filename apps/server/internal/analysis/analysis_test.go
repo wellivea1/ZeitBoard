@@ -366,6 +366,10 @@ func TestABurstOfPushesPublishesOnce(t *testing.T) {
 	materializer := f.materializer()
 	materializer.Sink = sink
 
+	// The fixture's clock, running. The timers are real, but the share link
+	// expires sixty days after the fixture's instant: on the real clock the
+	// worker found no link to publish to once that day had passed.
+	started := time.Now()
 	worker := &recompute.Worker{
 		Orchestrator: recompute.Orchestrator{
 			Analysis: analysis.Portal{Materializer: materializer},
@@ -378,6 +382,7 @@ func TestABurstOfPushesPublishesOnce(t *testing.T) {
 			MaxBackoff:  time.Second,
 			Heartbeat:   time.Hour,
 		},
+		Now:  func() time.Time { return f.clock.Add(time.Since(started)) },
 		Logf: func(string, ...any) {},
 	}
 

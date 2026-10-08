@@ -249,6 +249,7 @@ type SleepEntryDTO struct {
 	NeedsReview             bool                 `json:"needsReview"`
 	SourceWindowLabel       string               `json:"sourceWindowLabel"`
 	ActiveEdits             []SleepCorrectionDTO `json:"activeEdits"`
+	CanUndo                 bool                 `json:"canUndo"`
 	ObservationID           string               `json:"observationId"`
 	StartLocal              string               `json:"startLocal"`
 	EndLocal                string               `json:"endLocal"`
@@ -1165,8 +1166,9 @@ func (a *App) sleepEntryByID(observationID string) (SleepEntryDTO, error) {
 
 func sleepEntryFromReview(review sleepv1.ReviewContext) SleepEntryDTO {
 	raw, _ := sleepv1.SessionFromObservation(review.Observation) // Review already validated the original.
-	result := sleepEntryDTO(review.Observation, raw, review.Effective, review.Corrections)
+	result := sleepEntryDTO(review.Observation, raw, review.Effective, review.Corrections, recordedNight(review))
 	result.ReviewToken, result.NeedsReview = review.Token(), review.NeedsReview
+	_, result.CanUndo = undoTarget(review)
 	interval := review.Source.Intervals[0].Interval
 	result.SourceWindowLabel = formatInstant(interval.Start) + " to " + formatInstant(interval.End)
 	result.ActiveEdits = []SleepCorrectionDTO{}
@@ -1176,7 +1178,7 @@ func sleepEntryFromReview(review sleepv1.ReviewContext) SleepEntryDTO {
 	return result
 }
 
-func sleepEntryDTO(observation storage.SleepObservationRecord, rawSession, correctedSession domain.SleepSession, corrections []storage.SleepCorrectionRecord) SleepEntryDTO {
+func sleepEntryDTO(observation storage.SleepObservationRecord, rawSession, correctedSession domain.SleepSession, corrections []storage.SleepCorrectionRecord, recorded nightState) SleepEntryDTO {
 	rawInterval := rawSession.Intervals[0].Interval
 	effectiveInterval := correctedSession.Intervals[0].Interval
 	sort.Slice(corrections, func(i, j int) bool {
@@ -1184,7 +1186,12 @@ func sleepEntryDTO(observation storage.SleepObservationRecord, rawSession, corre
 	})
 	history := make([]SleepCorrectionDTO, 0, len(corrections))
 	for _, correction := range corrections {
-		history = append(history, correctionDTO(correction, observation.ZoneID))
+		item := correctionDTO(correction, observation.ZoneID)
+		if recorded.statedBy(correction.Changes) {
+			// What undoing a night's first edit writes, said as what it does.
+			item.Summary = "Restored the night as recorded"
+		}
+		history = append(history, item)
 	}
 	return SleepEntryDTO{
 		ObservationID:           observation.ObservationID,

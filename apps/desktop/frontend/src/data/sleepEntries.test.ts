@@ -11,6 +11,7 @@ import {
   normalizeSleepDataExport,
   normalizeSleepEntries,
   normalizeSleepSources,
+  undoSleepCorrection,
 } from "./sleepEntries";
 
 const entry = {
@@ -155,6 +156,41 @@ describe("sleep entry adapter", () => {
         root,
       ),
     ).resolves.toMatchObject({ observationId: "obs_sleep_01" });
+  });
+
+  it("undoes a night's last edit through the desktop", async () => {
+    let undoInput: unknown;
+    const root = {
+      go: {
+        main: {
+          App: {
+            UndoSleepCorrection: async (input: unknown) => {
+              undoInput = input;
+              return { ...entry, canUndo: true };
+            },
+          },
+        },
+      },
+    };
+
+    await expect(
+      undoSleepCorrection("obs_sleep_01", "synthetic-review-token", root),
+    ).resolves.toMatchObject({ observationId: "obs_sleep_01", canUndo: true });
+    expect(undoInput).toEqual({
+      observationId: "obs_sleep_01",
+      reviewToken: "synthetic-review-token",
+    });
+    // A night the desktop says nothing about has nothing to undo.
+    const unsaid = normalizeSleepEntries({
+      status: "ready",
+      empty: false,
+      message: "1 local sleep entry stored on this device.",
+      entries: [entry],
+    });
+    expect(unsaid?.entries[0]?.canUndo).toBe(false);
+    await expect(undoSleepCorrection("obs_sleep_01", "token", {})).rejects.toThrow(
+      "Undoing a sleep edit is unavailable.",
+    );
   });
 
   it("exports and deletes through Wails methods", async () => {

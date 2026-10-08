@@ -1134,6 +1134,30 @@ row now has Refresh:
 A calendar file is refreshed by importing the updated file again, as before; the same name
 replaces it.
 
+### C7 every screen is checked as a screen reader meets it — 2026-10-08
+
+A structural test renders all sixteen screens and tabs. On each, every control must have an
+accessible name, no id may repeat, and there must be exactly one top heading. It uses Testing
+Library's own role queries, so it adds no dependency. Removing the name from one icon button fails
+every screen that shows it. The pass with real assistive technology is still the owner's step.
+
+### A night's last edit is undone in one click — 2026-10-08
+
+Taking back an edit used to mean opening the night and typing its old times in again. A night
+with an edit to take back now has **Undo** beside Edit in Log › Sleep.
+
+- **Undo adds a correction and removes none,** like every edit. The new correction supersedes the
+  latest one and restores the night as it was before that edit.
+- **Undoing again steps back further,** to the night as recorded. The history then reads "Restored
+  the night as recorded", and Undo goes away.
+- **Undo never redoes.** The earlier state is found by replaying the night's edits from the
+  recorded night. An edit that returns the night to its state before the current one counts as a
+  step back.
+- **"As recorded" is the source's latest version.** If Health Connect revised a time, undoing the
+  owner's edit keeps the revision.
+- **Undo is offered only on a single line of edits with nothing waiting for review.** A night whose
+  edits disagree with its source is still settled by editing it.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and
@@ -1170,6 +1194,28 @@ or deferred with its reason.
 | 10 | The clinical chart prints, or saves as PDF, but produces no PNG directly. | Accepted. |
 | 11 | English only. Onboarding is the first-run setup. | Accepted for the private release. |
 | 12 | Google Takeout and My Activity import are not implemented. | Deferred, with slice 7's multi-source work. |
-| 13 | A correction is undone by adding another, not with one click; the history shows both. | Accepted. |
+| 13 | ~~A correction is undone by adding another, not with one click.~~ | Resolved 2026-10-08: Undo on the night's row takes back its latest edit. |
 | 14 | Notices reach a phone through the OS push transport, which the owner's own server does not replace (C6, disclosed). | Accepted and disclosed. |
 
+## The planned functions — 2026-10-08
+
+The goal now covers every planned function, not only the release milestones. This table lists
+each function the roadmap and the plans above still name. A function stays open until it ships with
+tests and a verification entry. Where it waits on something outside the code, the table says what.
+
+| Function | Named in | Status |
+|---|---|---|
+| Undo a night's last edit in one click | Roadmap, phase 2 | Delivered 2026-10-08 |
+| A real list of nights where two sources disagree, in Rhythm › Sources | Roadmap, slice 5 | Open. Several sources now exist: manual, file import and Health Connect |
+| Missingness recorded per source | Roadmap, phase 2 | Open |
+| The clinical chart saved directly as PNG | Roadmap, phase 2; limitation 10 | Open |
+| A self-hosted server trusted through its own CA certificate rather than skipped verification | Roadmap, small debts | Open |
+| Reaching hours for more than one contact, and per-day hours | Roadmap, slice 16 | Open |
+| Onboarding beyond the first-run setup | Roadmap, phase 2; limitation 11 | Open |
+| Localization readiness | Roadmap, phase 2; limitation 11 | Open |
+| Google Takeout and My Activity import, with inference kept in shadow mode | Roadmap, slice 7; limitation 12 | Open. Inference reaches the estimate only after it passes the backtest gate |
+| Missed-dose sharing, off by default per link | Medication plan, M-F | Open. It needs an ADR, and it must never show a dose that was not logged as missed |
+| Activity collected while the app is closed | Roadmap, slice 11 | Open |
+| OAuth calendar providers | Roadmap, slice 6 and phase 3 | Waits on provider app registrations in the owner's name |
+| Packaged cloud skills for assistants | Roadmap, phase 4 | Open. It needs its own privacy and threat review |
+| Encrypting the local database | Roadmap, phase 2; limitation 1 | Blocked on a CGo-free driver with an encryption hook |

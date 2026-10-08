@@ -6,6 +6,10 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"non24.app/core/recompute"
+	"non24.app/core/sleepv1"
+	storage "non24.app/core/storage/sqlite"
 )
 
 // The sleep log's reads, each shaped for the view that asks: a numbered page
@@ -194,4 +198,144 @@ func (a *App) GetSleepSources() (SleepSourcesDTO, error) {
 		return left.Provenance < right.Provenance
 	})
 	return dto, nil
+}
+
+type SleepUndoInput struct {
+	ObservationID string `json:"observationId"`
+	ReviewToken   string `json:"reviewToken"`
+}
+
+// UndoSleepCorrection takes back a night's latest change. Like every edit it
+// adds a correction and removes none: the new one supersedes the latest and
+// restores the night as it was before that change. Undoing again steps back
+// further, to the night as recorded.
+func (a *App) UndoSleepCorrection(input SleepUndoInput) (SleepEntryDTO, error) {
+	defer a.requestLocalAnalysis(recompute.ReasonEvidence)
+	store, err := a.requireStore()
+	if err != nil {
+		return SleepEntryDTO{}, err
+	}
+	ctx := a.applicationContext()
+	review, err := store.SleepReview(ctx, input.ObservationID)
+	if err != nil {
+		return SleepEntryDTO{}, err
+	}
+	if input.ReviewToken != review.Token() {
+		return SleepEntryDTO{}, errors.New("This sleep record changed. Reload the log and review its current source and edits before undoing.")
+	}
+	target, ok := undoTarget(review)
+	if !ok {
+		return SleepEntryDTO{}, errors.New("Nothing on this night is left to undo.")
+	}
+	record := storage.SleepCorrectionRecord{
+		CorrectionID:            newLocalID("corr_sleep"),
+		TargetObservationID:     input.ObservationID,
+		SupersedesCorrectionIDs: review.CorrectionIDs(),
+		BasedOnSourceRevision:   &review.SourceRevision,
+		AcquisitionMethod:       storage.ProvenanceAcquisitionManual,
+		CreatedAt:               a.currentTime().UTC(),
+		Reason:                  storage.CorrectionReasonUserEdit,
+		Changes:                 target.changes(),
+	}
+	if err := store.AppendSleepCorrection(ctx, record); err != nil {
+		return SleepEntryDTO{}, err
+	}
+	return a.sleepEntryByID(input.ObservationID)
+}
+
+// nightState is a night as an edit leaves it.
+type nightState struct {
+	start, end     time.Time
+	classification string
+	excluded       bool
+}
+
+func (n nightState) changes() storage.SleepCorrectionChanges {
+	start, end, classification, excluded := n.start, n.end, n.classification, n.excluded
+	return storage.SleepCorrectionChanges{StartAt: &start, EndAt: &end, SleepClassification: &classification, Excluded: &excluded}
+}
+
+// over is the night an edit's changes leave, on top of the night as recorded.
+func (n nightState) over(changes storage.SleepCorrectionChanges) nightState {
+	if changes.StartAt != nil {
+		n.start = changes.StartAt.UTC()
+	}
+	if changes.EndAt != nil {
+		n.end = changes.EndAt.UTC()
+	}
+	if changes.SleepClassification != nil {
+		n.classification = *changes.SleepClassification
+	}
+	if changes.Excluded != nil {
+		n.excluded = *changes.Excluded
+	}
+	return n
+}
+
+func (n nightState) equal(other nightState) bool {
+	return n.start.Equal(other.start) && n.end.Equal(other.end) &&
+		n.classification == other.classification && n.excluded == other.excluded
+}
+
+// statedBy reports whether a correction states this night in full: every
+// field given, and each as the night has it.
+func (n nightState) statedBy(changes storage.SleepCorrectionChanges) bool {
+	complete := changes.StartAt != nil && changes.EndAt != nil && changes.SleepClassification != nil && changes.Excluded != nil
+	return complete && n.equal(n.over(changes))
+}
+
+// recordedNight is the night as its source has it, provider revisions
+// included and no edit of the owner's.
+func recordedNight(review sleepv1.ReviewContext) nightState {
+	interval := review.Source.Intervals[0].Interval
+	return nightState{start: interval.Start.UTC, end: interval.End.UTC, classification: review.Observation.Sleep.Classification}
+}
+
+// undoTarget replays a night's edits from the first to the latest. An edit
+// that returns the night to the state before the current one is a step back,
+// any other a step forward; undo goes to the state below the latest. It is
+// false when the night has no single line of edits to undo.
+func undoTarget(review sleepv1.ReviewContext) (nightState, bool) {
+	if review.NeedsReview || len(review.ManualCorrections) != 1 {
+		return nightState{}, false
+	}
+	recorded := recordedNight(review)
+	manual := map[string]storage.SleepCorrectionRecord{}
+	for _, correction := range review.Corrections {
+		if correction.AcquisitionMethod != storage.ProvenanceAcquisitionHealthConnect {
+			manual[correction.CorrectionID] = correction
+		}
+	}
+	// The line of edits, latest first, back to the first. A merge of edits
+	// made apart ends the line: there the earlier state is not one state.
+	var line []storage.SleepCorrectionRecord
+	seen := map[string]bool{}
+	current := review.ManualCorrections[0]
+	for !seen[current.CorrectionID] {
+		seen[current.CorrectionID] = true
+		line = append(line, current)
+		var parents []storage.SleepCorrectionRecord
+		for _, id := range current.SupersedesCorrectionIDs {
+			if parent, ok := manual[id]; ok {
+				parents = append(parents, parent)
+			}
+		}
+		if len(parents) != 1 {
+			break
+		}
+		current = parents[0]
+	}
+	states := []nightState{recorded}
+	for index := len(line) - 1; index >= 0; index-- {
+		next := recorded.over(line[index].Changes)
+		if len(states) >= 2 && next.equal(states[len(states)-2]) {
+			states = states[:len(states)-1]
+			continue
+		}
+		states = append(states, next)
+	}
+	if len(states) < 2 {
+		return nightState{}, false
+	}
+	return states[len(states)-2], true
 }

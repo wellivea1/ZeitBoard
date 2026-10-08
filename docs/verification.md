@@ -2433,3 +2433,41 @@ muted style, above the two suggestions.
   - With writing on, Refresh read "Owner calendar: Imported 1 event, 1 busy." without asking for a
     sign-in.
 
+## Every screen as a screen reader meets it — 2026-10-08
+
+`apps/desktop/frontend/src/accessibility.test.tsx` renders each of the sixteen screens and tabs.
+It checks that every control (button, link, field, tab, switch and so on) has an accessible name,
+that no id repeats, and that each page has exactly one top heading. All sixteen pass. Removing the
+name from the notice's close button fails the six screens that show a notice. The check is
+structural; the pass with real assistive technology is still the owner's step (C7).
+
+## A night's last edit is undone in one click — 2026-10-08
+
+- Desktop:
+  - A night without edits offers no undo, and an undo request for it is refused.
+  - After two edits, Undo brings back the first edit, with three corrections in the history.
+    Undoing again restores the night as recorded and not excluded. Its newest history line reads
+    "Restored the night as recorded", no further undo is offered, and an undo from the stale review
+    is refused.
+  - Undoing an exclusion includes the night again.
+  - A Health Connect night whose start the provider revised: undoing the owner's edit returns to
+    the revised start. Taking the unrevised observation as the baseline fails this test.
+- Web:
+  - Only the night with an edit to take back shows Undo. It sends that night's id and review token,
+    says "Edit undone. It stays in the night's history.", and the row loses Undo once the log is
+    read again. Showing Undo on every night fails the test.
+  - The adapter reads a missing flag as nothing to undo.
+- In the running desktop (disposable dev profile), on a night edited twice on Sep 27:
+  - Undo moved it from 11:45 PM back to 11:30 PM.
+  - A second Undo restored 11:00 PM to 7:00 AM. The "Corrected" tag and Undo went away, and the
+    history's newest line read "Restored the night as recorded".
+
+## A server test that expired with its fixture — 2026-10-08
+
+From 2026-10-05, `TestABurstOfPushesPublishesOnce` failed every run. The test is not flaky. It
+runs the real recompute worker, which had no clock of its own and read the real time. The
+fixture's share link expires sixty days after the fixture's fixed instant, on 2026-10-05. After
+that date the worker found no link to publish to, so the startup pass never published. The worker
+now runs on the fixture's clock, advancing in real time, because its timers are real. The test
+passes, and so does the rest of the server suite. The other fixed-clock tests already give the
+code under test their own clock.

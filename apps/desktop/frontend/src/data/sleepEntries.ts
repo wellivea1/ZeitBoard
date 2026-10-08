@@ -20,6 +20,8 @@ export interface SleepEntry {
   needsReview: boolean;
   sourceWindowLabel: string;
   activeEdits: SleepCorrection[];
+  /** Whether the night has an earlier state for an undo to restore. */
+  canUndo: boolean;
   observationId: string;
   startLocal: string;
   endLocal: string;
@@ -224,6 +226,7 @@ function normalizeEntry(value: unknown): SleepEntry | undefined {
     sourceWindowLabel,
     needsReview: value.needsReview,
     activeEdits: activeEdits as SleepCorrection[],
+    canUndo: value.canUndo === true,
     startLocal,
     endLocal,
     startLabel,
@@ -430,6 +433,19 @@ export async function correctSleepEntry(
   const result = await method(input);
   const entry = normalizeEntry(result);
   if (!entry) throw new Error("Manual sleep correction service returned an invalid entry.");
+  return entry;
+}
+
+/** Takes back the night's latest edit; the edit stays in its history. */
+export async function undoSleepCorrection(
+  observationId: string,
+  reviewToken: string,
+  root: WailsRoot = globalThis as unknown as WailsRoot,
+): Promise<SleepEntry> {
+  const method = findWailsMethod(root, ["UndoSleepCorrection"]);
+  if (!method) throw new Error("Undoing a sleep edit is unavailable.");
+  const entry = normalizeEntry(await method({ observationId, reviewToken }));
+  if (!entry) throw new Error("Undoing a sleep edit returned an invalid entry.");
   return entry;
 }
 
