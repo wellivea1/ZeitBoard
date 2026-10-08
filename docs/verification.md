@@ -2433,3 +2433,11 @@ muted style, above the two suggestions.
   - With writing on, Refresh read "Owner calendar: Imported 1 event, 1 busy." without asking for a
     sign-in.
 
+## Every screen as a screen reader meets it — 2026-10-08
+
+`apps/desktop/frontend/src/accessibility.test.tsx` renders each of the sixteen screens and tabs.
+It checks that every control (button, link, field, tab, switch and so on) has an accessible name,
+that no id repeats, and that each page has exactly one top heading. All sixteen pass. Removing the
+name from the notice's close button fails the six screens that show a notice. The check is
+structural; the pass with real assistive technology is still the owner's step (C7).
+
