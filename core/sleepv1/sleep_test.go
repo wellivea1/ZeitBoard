@@ -230,6 +230,41 @@ func TestResolveOverlapsDoesNotPromoteUnknownOrSuppressedSleep(t *testing.T) {
 	}
 }
 
+func TestOverlapsNameTheRecordsTheEstimatorMerges(t *testing.T) {
+	start := time.Date(2026, 3, 3, 4, 0, 0, 0, time.UTC)
+	session := func(id string, from, to time.Duration, classification string) domain.SleepSession {
+		t.Helper()
+		result, err := SessionFromObservation(testObservation(id, start.Add(from), start.Add(to), classification))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return result
+	}
+	logged := session("obs_logged", 0, 8*time.Hour, ClassificationPrincipal)
+	worn := session("obs_worn", 30*time.Minute, 8*time.Hour+10*time.Minute, ClassificationPrincipal)
+	// Neither an excluded record nor one of another kind is merged in.
+	excluded := session("obs_excluded", time.Hour, 7*time.Hour, ClassificationPrincipal)
+	excluded.Suppressed = true
+	unknown := session("obs_unknown", 2*time.Hour, 6*time.Hour, ClassificationUnknown)
+	nextNight := session("obs_next", 25*time.Hour, 33*time.Hour, ClassificationPrincipal)
+
+	overlaps, err := Overlaps([]domain.SleepSession{nextNight, unknown, worn, excluded, logged})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(overlaps) != 1 {
+		t.Fatalf("overlaps = %d, want the one night two records describe", len(overlaps))
+	}
+	if got := overlaps[0].ObservationIDs; len(got) != 2 || got[0] != "obs_logged" || got[1] != "obs_worn" {
+		t.Fatalf("records = %v, want the logged night then the worn one", got)
+	}
+	// The estimator's night is the middle of the two.
+	merged := overlaps[0].Merged.Intervals[0].Interval
+	if !merged.Start.UTC.Equal(start.Add(15*time.Minute)) || !merged.End.UTC.Equal(start.Add(8*time.Hour+5*time.Minute)) {
+		t.Fatalf("merged = %s to %s", merged.Start.UTC, merged.End.UTC)
+	}
+}
+
 func TestUnknownClassificationDoesNotEnterEstimation(t *testing.T) {
 	base := time.Date(2026, 3, 1, 5, 0, 0, 0, time.UTC)
 	principal := make([]domain.SleepSession, 0, 8)

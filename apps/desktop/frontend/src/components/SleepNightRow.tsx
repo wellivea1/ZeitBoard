@@ -3,7 +3,7 @@ import { Icon } from "./Icon";
 import { SleepEntryForm } from "./SleepEntryForm";
 import type { SleepEntry, SleepEntryInput } from "../data/sleepEntries";
 import { ConfirmDelete } from "./ConfirmDelete";
-import { clockRange } from "../utils/relativeTime";
+import { nightWording, sourceWording } from "../utils/sleepWording";
 
 // One night in the sleep log: what was recorded, and quiet actions to edit it,
 // take the last edit back, leave it out of estimates, or delete it. The log
@@ -11,32 +11,6 @@ import { clockRange } from "../utils/relativeTime";
 // wall of them.
 
 const correctionHistoryPerPage = 50;
-
-/** The civil clock of a stored time, ignoring any UTC offset it carries. */
-function civilClock(value: string) {
-  const date = new Date(value.slice(0, 16));
-  return Number.isNaN(date.getTime()) ? undefined : date;
-}
-
-// "Wed, Sep 23" and "11:01 PM – 8:08 AM" in the entry's own zone. The stored
-// labels ("Wed Sep 23, 11:01 PM EDT to Thu Sep 24, 8:08 AM EDT") stay on hover.
-function nightWording(entry: SleepEntry) {
-  const start = civilClock(entry.effectiveStartLocal);
-  const end = civilClock(entry.effectiveEndLocal);
-  if (!start || !end) {
-    return { day: entry.effectiveStartLabel, time: `to ${entry.effectiveEndLabel}` };
-  }
-  return {
-    day: start.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }),
-    time: clockRange(start, end),
-  };
-}
-
-function sourceWording(entry: SleepEntry) {
-  if (entry.provenanceLabel.startsWith("manual")) return "Logged by you";
-  if (entry.provenanceLabel.startsWith("file import")) return "Imported";
-  return entry.provenanceLabel;
-}
 
 export function SleepNightRow({
   entry,
@@ -83,7 +57,12 @@ export function SleepNightRow({
   const safeHistoryPage = Math.min(historyPage, historyPageCount - 1);
   const historyStart = safeHistoryPage * correctionHistoryPerPage;
   const visibleHistory = entry.history.slice(historyStart, historyStart + correctionHistoryPerPage);
-  const night = nightWording(entry);
+  const night = nightWording({
+    startLocal: entry.effectiveStartLocal,
+    endLocal: entry.effectiveEndLocal,
+    startLabel: entry.effectiveStartLabel,
+    endLabel: entry.effectiveEndLabel,
+  });
   const name = `${night.day}, ${night.time}`;
   const state = entry.needsReview
     ? "Needs review"
@@ -99,7 +78,7 @@ export function SleepNightRow({
       : entry.effectiveClassification === "unknown"
         ? "Unclassified"
         : "",
-    sourceWording(entry),
+    sourceWording(entry.provenanceLabel),
   ].filter(Boolean);
 
   return (

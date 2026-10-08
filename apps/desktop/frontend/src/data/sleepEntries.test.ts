@@ -267,6 +267,37 @@ describe("source summaries", () => {
     expect(normalizeSleepSources(uncorrected)?.latestCorrected).toBeUndefined();
   });
 
+  it("reads the nights recorded more than once", () => {
+    const overlap = {
+      startLocal: "2026-03-01T22:15",
+      endLocal: "2026-03-02T06:00",
+      startLabel: "Sun Mar 1, 10:15 PM EST",
+      endLabel: "Mon Mar 2, 6:00 AM EST",
+      startApartMinutes: 30,
+      endApartMinutes: 0,
+      records: [entry, { ...entry, observationId: "obs_sleep_02" }],
+    };
+    expect(
+      normalizeSleepSources({ ...summary, overlapCount: 3, overlaps: [overlap] }),
+    ).toMatchObject({
+      overlapCount: 3,
+      overlaps: [{ startApartMinutes: 30, records: [{}, { observationId: "obs_sleep_02" }] }],
+    });
+    // A desktop that says nothing of overlaps has none to show.
+    expect(normalizeSleepSources(summary)).toMatchObject({ overlapCount: 0, overlaps: [] });
+    // One record is not an overlap, and a count below the list is not true.
+    expect(
+      normalizeSleepSources({
+        ...summary,
+        overlapCount: 1,
+        overlaps: [{ ...overlap, records: [entry] }],
+      }),
+    ).toBeUndefined();
+    expect(
+      normalizeSleepSources({ ...summary, overlapCount: 0, overlaps: [overlap] }),
+    ).toBeUndefined();
+  });
+
   it("refuses counts it cannot show truthfully", () => {
     expect(normalizeSleepSources({ ...summary, total: -1 })).toBeUndefined();
     expect(

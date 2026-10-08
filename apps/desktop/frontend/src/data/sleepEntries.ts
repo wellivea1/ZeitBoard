@@ -103,6 +103,26 @@ export interface SleepSources {
   sources: SleepSourceSummary[];
   /** The newest night with an edit, for the correction inspector. */
   latestCorrected?: SleepEntry;
+  /** How many nights more than one record describes. */
+  overlapCount: number;
+  /** The newest of them. */
+  overlaps: SleepOverlap[];
+}
+
+/**
+ * A night more than one record describes. The estimator merges the records at
+ * the middle of their times; excluding all but one leaves that one to stand.
+ */
+export interface SleepOverlap {
+  /** The night the estimator uses in the records' place. */
+  startLocal: string;
+  endLocal: string;
+  startLabel: string;
+  endLabel: string;
+  startApartMinutes: number;
+  endApartMinutes: number;
+  /** The records merged, earliest first. */
+  records: SleepEntry[];
 }
 
 export function sleepLogUnavailable(reason: unknown): SleepLogPage {
@@ -117,6 +137,8 @@ export function sleepSourcesUnavailable(reason: unknown): SleepSources {
     correctedCount: 0,
     suppressedCount: 0,
     sources: [],
+    overlapCount: 0,
+    overlaps: [],
   };
 }
 
@@ -292,6 +314,39 @@ function normalizeSourceSummary(value: unknown): SleepSourceSummary | undefined 
   return { source, provenance, total, corrected, suppressed };
 }
 
+function normalizeOverlap(value: unknown): SleepOverlap | undefined {
+  if (!isRecord(value) || !Array.isArray(value.records) || value.records.length < 2) {
+    return undefined;
+  }
+  const startLocal = str(value.startLocal);
+  const endLocal = str(value.endLocal);
+  const startLabel = str(value.startLabel);
+  const endLabel = str(value.endLabel);
+  const startApartMinutes = nonNegativeInteger(value.startApartMinutes);
+  const endApartMinutes = nonNegativeInteger(value.endApartMinutes);
+  const records = value.records.map(normalizeEntry);
+  if (
+    !startLocal ||
+    !endLocal ||
+    !startLabel ||
+    !endLabel ||
+    startApartMinutes === undefined ||
+    endApartMinutes === undefined ||
+    records.some((record) => !record)
+  ) {
+    return undefined;
+  }
+  return {
+    startLocal,
+    endLocal,
+    startLabel,
+    endLabel,
+    startApartMinutes,
+    endApartMinutes,
+    records: records as SleepEntry[],
+  };
+}
+
 export function normalizeSleepSources(value: unknown): SleepSources | undefined {
   if (!isRecord(value) || !Array.isArray(value.sources)) return undefined;
   const status =
@@ -316,6 +371,11 @@ export function normalizeSleepSources(value: unknown): SleepSources | undefined 
       ? undefined
       : normalizeEntry(value.latestCorrected);
   if (value.latestCorrected && !latestCorrected) return undefined;
+  // A desktop that reports no overlaps has none to show.
+  const overlapList = Array.isArray(value.overlaps) ? value.overlaps : [];
+  const overlaps = overlapList.map(normalizeOverlap);
+  const overlapCount = nonNegativeInteger(value.overlapCount) ?? 0;
+  if (overlaps.some((overlap) => !overlap) || overlapCount < overlaps.length) return undefined;
   return {
     status,
     message: str(value.message) ?? "",
@@ -324,6 +384,8 @@ export function normalizeSleepSources(value: unknown): SleepSources | undefined 
     suppressedCount,
     sources: sources as SleepSourceSummary[],
     ...(latestCorrected ? { latestCorrected } : {}),
+    overlapCount,
+    overlaps: overlaps as SleepOverlap[],
   };
 }
 

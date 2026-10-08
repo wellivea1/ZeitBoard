@@ -167,9 +167,9 @@ itself is designed in [`portal-design.md`](portal-design.md).
    the dead fixture undo button is gone), and the real per-source composition with
    corrected/suppressed counts; Data Sources gained a real server-sync source row. The synthetic
    conflict/correction/refusal previews survive only in the browser-preview fixture mode, which is
-   labeled "Sample data". A real _conflict_ list still needs an engine-surfaced overlap DTO —
-   deferred until multiple sources exist (slice 7), rather than faking overlap logic in the chart
-   layer.
+   labeled "Sample data". _Conflict list delivered 2026-10-08:_ `sleepv1.Overlaps` reports the
+   nights the estimator merges from more than one record. Rhythm › Sources draws each record beside
+   the night the estimator uses, and offers one-click exclusion.
 6. ~~**Calendar import and local placement materialization.**~~ Delivered (ADR-0023): device-side
    bounded ICS and read-only CalDAV snapshots, a strict event-set contract, recurrence expansion
    with DST handling, atomic local persistence and revocable source erasure, real fixed events in
