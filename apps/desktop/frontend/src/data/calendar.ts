@@ -639,7 +639,7 @@ export async function loadCalendar(
 
 async function importCall(
   methodName: string,
-  input: CalendarFileInput | CalDAVInput,
+  input: CalendarFileInput | CalDAVInput | { sourceId: string },
   root: WailsRoot,
 ): Promise<CalendarImportReport> {
   const method = findWailsMethod(root, [methodName]);
@@ -675,6 +675,14 @@ export function importCalDAVCalendar(
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ) {
   return importCall("ImportCalDAVCalendar", input, root);
+}
+
+/** Imports again the calendar accepted times are written to, with its kept sign-in. */
+export function refreshCalendarSource(
+  sourceId: string,
+  root: WailsRoot = globalThis as unknown as WailsRoot,
+) {
+  return importCall("RefreshCalendarSource", { sourceId }, root);
 }
 
 export async function removeCalendarSource(

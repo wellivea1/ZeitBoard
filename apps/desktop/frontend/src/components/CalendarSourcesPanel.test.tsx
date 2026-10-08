@@ -212,4 +212,50 @@ describe("CalendarSourcesPanel", () => {
       await screen.findByRole("button", { name: "Write accepted times to Work" }),
     ).toBeInTheDocument();
   });
+
+  // Adding the calendar again, address and all, was the only way to refresh it.
+  it("refreshes the calendar written to at once, and any other at its address", async () => {
+    const refresh = vi.fn(async () => ({
+      sourceId: work.sourceId,
+      label: "Work",
+      kind: "caldav",
+      readOnly: true,
+      imported: true,
+      eventCount: 3,
+      busyCount: 2,
+      allDayCount: 0,
+      coverageStartAt: "2026-09-01T00:00:00Z",
+      coverageEndAt: "2026-11-01T00:00:00Z",
+      coverageLabel: "Sep 1 to Oct 31",
+      previewTruncated: true,
+      events: [],
+      message: "Imported 3 events, 2 busy.",
+    }));
+    const onChanged = vi.fn();
+    const home: CalendarSource = {
+      ...work,
+      sourceId: "calendar_source_caldav_home",
+      label: "Home",
+      endpoint: "https://calendar.example/dav/owner/home/",
+    };
+    (globalThis as { go?: unknown }).go = {
+      main: {
+        App: { GetCalendarWriteBack: vi.fn(async () => writing), RefreshCalendarSource: refresh },
+      },
+    };
+    render(<CalendarSourcesPanel sources={[work, home]} available onChanged={onChanged} />);
+
+    // The calendar written to keeps its sign-in.
+    fireEvent.click(await screen.findByRole("button", { name: "Refresh Work" }));
+    expect(await screen.findByText("Work: Imported 3 events, 2 busy.")).toBeVisible();
+    expect(refresh).toHaveBeenCalledWith({ sourceId: work.sourceId });
+    expect(onChanged).toHaveBeenCalledOnce();
+
+    // Any other opens the form at its address, for its sign-in.
+    fireEvent.click(screen.getByRole("button", { name: "Refresh Home" }));
+    const form = screen.getByRole("region", { name: "Refresh Home" });
+    expect(form).toContainElement(screen.getByDisplayValue(home.endpoint!));
+    expect(screen.getByDisplayValue("Home")).toBeInTheDocument();
+    expect(refresh).toHaveBeenCalledOnce();
+  });
 });

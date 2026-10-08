@@ -115,6 +115,36 @@ func (a *App) EnableCalendarWriteBack(input CalendarWriteBackInput) (CalendarWri
 	return a.calendarWriteBack(ctx, store)
 }
 
+type CalendarRefreshInput struct {
+	SourceID string `json:"sourceId"`
+}
+
+// RefreshCalendarSource imports again the calendar accepted times are written
+// to, with the sign-in kept for writing. Any other calendar is refreshed by
+// adding it again, since its sign-in is never kept.
+func (a *App) RefreshCalendarSource(input CalendarRefreshInput) (CalendarImportDTO, error) {
+	ctx := a.applicationContext()
+	store, err := a.requireStore()
+	if err != nil {
+		return CalendarImportDTO{}, err
+	}
+	target, on, err := store.CalendarWriteTarget(ctx)
+	if err != nil {
+		return CalendarImportDTO{}, err
+	}
+	if !on || target.SourceID != strings.TrimSpace(input.SourceID) {
+		return CalendarImportDTO{}, errors.New("only the calendar accepted times are written to keeps a sign-in; add any other again with its address")
+	}
+	set, endpoint, err := a.fetchCalDAVCalendar(ctx, CalDAVInput{
+		Endpoint: target.CollectionURL, Label: target.Label,
+		Username: target.Username, Password: target.Password,
+	}, a.currentTime().UTC())
+	if err != nil {
+		return CalendarImportDTO{}, err
+	}
+	return a.calendarImportResult(ctx, set, endpoint, true)
+}
+
 // DisableCalendarWriteBack stops writing and erases the sign-in. What was
 // written stays in the owner's calendar.
 func (a *App) DisableCalendarWriteBack() (CalendarWriteBackDTO, error) {

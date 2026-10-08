@@ -66,30 +66,32 @@ acceptance clause or of its real-device qualification.
   reachable enrollment, opt-in background scheduling and source-provenance/retry repairs. ADR-0038
   adds pull/erasure, cached Go forecasts, read-only task revisions and restore reconciliation.
   Phone-authored sleep correction sync is connected, including pre-enrollment handoff (ADR-0040/0041).
-  Medication sync and desktop lifecycle implementation remain open. Prototype compatibility is unnecessary (ADR-0039).
+  Medications, doses, corrections and context markers sync across devices (ADR-0048), and the
+  companion shows and records doses. Native lifecycle qualification remains an owner-machine check.
+  Prototype compatibility is unnecessary (ADR-0039).
   Synthetic modes are explicitly separated from personal projections.
 
 ## Partially implemented (UI ahead of or behind data)
 
-- **Approvals:** local scheduler proposals and backend assistant/agent proposals are both real.
-  Local decisions persist with visible history, per-item undo, and app-owned placement
-  materialization; backend proposals retain one-use tokens. They still appear as distinct queue
-  sections; batch review, combined presentation, and surfaced backend expiry remain open.
+- **Approvals:** implemented. One queue under Plan lists planner suggestions, assistant and agent
+  proposals, doses and tasks an agent proposed, task conflicts and visitor requests, each with its
+  origin, expiry and own decision path; suggested times can be reviewed and decided together
+  (ADR-0046, ADR-0051, ADR-0052). The history keeps per-decision undo.
 - **Rhythm "Sources" tab and Data Sources:** driven by real local data in the desktop app (real
   refusal, real correction history, real per-source composition, real sync status); synthetic
   previews remain only in the labeled browser-preview fixture mode. A real cross-source conflict
   list still awaits an engine-surfaced overlap DTO.
 - **Tasks:** user-owned tasks are real and synced (contract, local CRUD, real Tasks screen,
   scheduler plans only stored open tasks — ADR-0018; cross-device revision sync with erasure-grade
-  deletion — ADR-0020). Approved placements now materialize in the app-owned local calendar;
-  external-provider write-back remains future work (Phase 3c).
+  deletion — ADR-0020). Approved placements materialize in the app-owned local calendar, and can
+  be written to one CalDAV calendar the owner chooses (ADR-0053).
 - **Appearance and visual system:** U-A through U-H and the ADR-0028 desktop-local direct appearance
   action are implemented. ADR-0036 adds service-failure recovery, keyboard fixes and task-editing
   UX.
 - **Medications:** M-A local logging, M-B user-authored schedules and neutral collision forecasts,
-  and M-C adherence plus clinician context export are implemented; the sample preview is retired.
-  M-D sync, completion of M-E beyond its delivered factual projections, and M-F's separately
-  permissioned signal remain open; these are not ordinary availability-sharing fields.
+  M-C adherence plus clinician context export, and M-D sync (ADR-0048) are implemented; the sample
+  preview is retired. M-E beyond its delivered factual projections, and M-F's separately
+  permissioned signal, remain open; these are not ordinary availability-sharing fields.
 
 ## Deferred analysis work
 
@@ -118,9 +120,9 @@ acceptance clause or of its real-device qualification.
   blank sleep log prints from Data Sources. The selected-range clinical
   chart, in the 24-hour or the 48-hour double-plot orientation, and its report already export as
   standalone, printable HTML under ADR-0027.
-- The remaining live portal transport, message threads, audit UI and notification delivery;
-  passcodes and remote revocation already exist. Public exposure still requires the documented
-  independent review and technical gates.
+- Public exposure of the portal. Its live transport, request threads, audit view and
+  notifications are delivered (C5, C6); exposure still requires the documented independent review
+  and technical gates, and the portal stays off by default until then.
 - Local database encryption is not a completion requirement: ADR-0035 accepts OS file protection and
   honest at-rest claims instead. Verify that boundary during installation and upgrade rather than
   reviving the superseded claim.

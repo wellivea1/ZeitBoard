@@ -1,9 +1,9 @@
 import { ConfirmDelete } from "./ConfirmDelete";
 import { useEffect, useState } from "react";
 import { Notice } from "./Notice";
-import { CalendarImportPanel } from "./CalendarImportPanel";
+import { CalendarImportPanel, type CalDAVRefill } from "./CalendarImportPanel";
 import { CalendarWriteBackForm, CalendarWriteBackStatus } from "./CalendarWriteBack";
-import { removeCalendarSource, type CalendarSource } from "../data/calendar";
+import { refreshCalendarSource, removeCalendarSource, type CalendarSource } from "../data/calendar";
 import {
   calendarWriteBackChangedEvent,
   loadCalendarWriteBack,
@@ -62,6 +62,8 @@ export function CalendarSourcesPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [adding, setAdding] = useState(false);
+  const [refill, setRefill] = useState<CalDAVRefill | undefined>();
+  const [refreshed, setRefreshed] = useState("");
   const [offering, setOffering] = useState<string | null>(null);
   const [writeBack, setWriteBack] = useCalendarWriteBack(sources);
   const sourceBeingRemoved = sources.find((source) => source.sourceId === removing);
@@ -84,6 +86,31 @@ export function CalendarSourcesPanel({
     );
   };
 
+  // The calendar written to keeps its sign-in and refreshes at once; any other
+  // opens the form at its address, and the owner signs in again.
+  const refresh = (source: CalendarSource) => {
+    if (busy) return;
+    setError("");
+    setRefreshed("");
+    if (writingTo !== source.sourceId) {
+      setRefill({ endpoint: source.endpoint ?? "", label: source.label });
+      setAdding(true);
+      return;
+    }
+    setBusy(true);
+    void refreshCalendarSource(source.sourceId).then(
+      (report) => {
+        setBusy(false);
+        setRefreshed(`${source.label}: ${report.message}`);
+        onChanged();
+      },
+      (reason: unknown) => {
+        setBusy(false);
+        setError(reason instanceof Error ? reason.message : "The calendar could not be refreshed.");
+      },
+    );
+  };
+
   return (
     <section className="calendar-sources-panel" aria-labelledby="calendar-sources-title">
       <div className="data-source-section-heading">
@@ -93,7 +120,10 @@ export function CalendarSourcesPanel({
             className="button secondary compact"
             type="button"
             aria-expanded={adding}
-            onClick={() => setAdding((current) => !current)}
+            onClick={() => {
+              setRefill(undefined);
+              setAdding((current) => !current);
+            }}
           >
             {adding ? "Done adding" : "Add a calendar"}
           </button>
@@ -129,6 +159,17 @@ export function CalendarSourcesPanel({
                   )}
                 </div>
                 <div className="calendar-source-actions">
+                  {source.kind === "caldav" && available && (
+                    <button
+                      className="button ghost compact"
+                      type="button"
+                      disabled={busy}
+                      aria-label={`Refresh ${source.label}`}
+                      onClick={() => refresh(source)}
+                    >
+                      Refresh
+                    </button>
+                  )}
                   {canOffer && offering !== source.sourceId && (
                     <button
                       className="button ghost compact"
@@ -196,8 +237,19 @@ export function CalendarSourcesPanel({
           {error}
         </p>
       )}
+      {refreshed && (
+        <p className="form-status" role="status">
+          {refreshed}
+        </p>
+      )}
       {adding && (
-        <CalendarImportPanel available={available} zoneId={zoneId} onChanged={onChanged} />
+        <CalendarImportPanel
+          key={refill ? `refill-${refill.endpoint}` : "add"}
+          available={available}
+          zoneId={zoneId}
+          onChanged={onChanged}
+          refill={refill}
+        />
       )}
     </section>
   );

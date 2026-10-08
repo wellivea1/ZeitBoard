@@ -464,3 +464,34 @@ func TestTheSummarySaysWhereAcceptedTimesAre(t *testing.T) {
 		}
 	}
 }
+
+// The calendar ZeitBoard writes to keeps its sign-in, so it refreshes in one
+// step; any other calendar is added again, since its sign-in is never kept.
+func TestTheCalendarWrittenToRefreshesWithItsKeptSignIn(t *testing.T) {
+	app, fake, _, sourceID, ids := writeBackApp(t)
+	if _, err := app.RefreshCalendarSource(CalendarRefreshInput{SourceID: sourceID}); err == nil {
+		t.Fatal("a calendar without a kept sign-in was refreshed")
+	}
+	turnOnWriting(t, app, sourceID)
+	if _, err := app.DecideLocalProposals(LocalProposalsDecisionInput{ProposalIDs: ids[:1], Decision: storage.ProposalApproved}); err != nil {
+		t.Fatal(err)
+	}
+	app.writeCalendarPass(context.Background())
+
+	// The owner adds an event of their own in their calendar app.
+	start := time.Now().UTC().Add(30 * time.Hour).Truncate(time.Hour)
+	fake.mu.Lock()
+	fake.store(fakeCollectionPath+"owner-meeting.ics", "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Owner//EN\r\nBEGIN:VEVENT\r\n"+
+		"UID:owner-meeting@example.test\r\nDTSTAMP:"+start.Format("20060102T150405Z")+"\r\nDTSTART:"+start.Format("20060102T150405Z")+
+		"\r\nDTEND:"+start.Add(time.Hour).Format("20060102T150405Z")+"\r\nSUMMARY:Synthetic meeting\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n")
+	fake.mu.Unlock()
+
+	refreshed, err := app.RefreshCalendarSource(CalendarRefreshInput{SourceID: sourceID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !refreshed.Imported || refreshed.SourceID != sourceID || refreshed.EventCount != 1 ||
+		!strings.HasSuffix(refreshed.Message, " 1 was ZeitBoard's own accepted time, already on the board.") {
+		t.Fatalf("refreshed = %+v", refreshed)
+	}
+}
