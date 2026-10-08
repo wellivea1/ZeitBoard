@@ -39,9 +39,42 @@ describe("DataSourceStatusPanel", () => {
           correctedCount: 0,
           suppressedCount: 0,
           sources: [],
+          overlapCount: 0,
+          overlaps: [],
         }}
       />,
     );
     expect(screen.getByText("None yet. Log a night or import a file.")).toBeVisible();
+  });
+
+  it("points to the nights with more than one record", () => {
+    const sources = {
+      status: "ready" as const,
+      message: "3 local sleep entries stored on this device.",
+      total: 3,
+      correctedCount: 0,
+      suppressedCount: 1,
+      sources: [
+        {
+          source: "Manual sleep log",
+          provenance: "manual / user reported",
+          total: 3,
+          corrected: 0,
+          suppressed: 1,
+        },
+      ],
+      overlapCount: 2,
+      overlaps: [],
+    };
+    const { rerender } = render(<DataSourceStatusPanel sleepSources={sources} />);
+    // An excluded night is said the way the rest of the app says it.
+    expect(screen.getByText("3 records · manual / user reported · 1 excluded")).toBeVisible();
+    expect(screen.getByText(/2 nights have more than one record\./)).toBeVisible();
+    expect(
+      screen.getByRole("link", { name: "See how the estimator combines them" }),
+    ).toHaveAttribute("href", "#/rhythm/sources");
+
+    rerender(<DataSourceStatusPanel sleepSources={{ ...sources, overlapCount: 0 }} />);
+    expect(screen.queryByText(/more than one record/)).toBeNull();
   });
 });

@@ -133,6 +133,82 @@ func TestSleepSourcesKeepEachProvenanceApart(t *testing.T) {
 
 // The roadmap's one-click correction undo: taking back an edit adds a
 // correction, as every edit does, and restores the night as it was before.
+func TestTheSourcesListTheNightsRecordedMoreThanOnce(t *testing.T) {
+	app := newTestApp(t)
+	location, _ := time.LoadLocation(defaultZoneID)
+	night := time.Now().In(location).Add(-48 * time.Hour).Truncate(time.Minute)
+	add := func(start time.Time, hours time.Duration) SleepEntryDTO {
+		t.Helper()
+		entry, err := app.AddSleepEntry(SleepEntryInput{
+			StartLocal: start.Format("2006-01-02T15:04"), EndLocal: start.Add(hours).Format("2006-01-02T15:04"),
+			ZoneID: defaultZoneID, Classification: storage.SleepClassificationPrincipal,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return entry
+	}
+	// The same night twice, half an hour apart at the start and ten minutes
+	// at the end, and a night of its own the day before.
+	add(night.Add(-25*time.Hour), 8*time.Hour)
+	first := add(night, 8*time.Hour)
+	second := add(night.Add(30*time.Minute), 7*time.Hour+40*time.Minute)
+
+	sources, err := app.GetSleepSources()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sources.OverlapCount != 1 || len(sources.Overlaps) != 1 {
+		t.Fatalf("overlaps = %d listed of %d, want the one night recorded twice", len(sources.Overlaps), sources.OverlapCount)
+	}
+	overlap := sources.Overlaps[0]
+	if len(overlap.Records) != 2 || overlap.Records[0].ObservationID != first.ObservationID || overlap.Records[1].ObservationID != second.ObservationID {
+		t.Fatalf("records = %+v", overlap.Records)
+	}
+	if overlap.StartApartMinutes != 30 || overlap.EndApartMinutes != 10 {
+		t.Fatalf("apart = %d and %d minutes, want 30 and 10", overlap.StartApartMinutes, overlap.EndApartMinutes)
+	}
+	// The estimator's night is the middle of the two.
+	if want := night.Add(15 * time.Minute).Format("2006-01-02T15:04"); overlap.StartLocal[:16] != want {
+		t.Fatalf("merged start = %s, want %s", overlap.StartLocal, want)
+	}
+
+	// Excluding one leaves the other to stand alone.
+	if _, err := app.SuppressSleepEntry(SleepSuppressInput{ObservationID: second.ObservationID, ReviewToken: overlap.Records[1].ReviewToken}); err != nil {
+		t.Fatal(err)
+	}
+	if sources, err = app.GetSleepSources(); err != nil || sources.OverlapCount != 0 || len(sources.Overlaps) != 0 {
+		t.Fatalf("after excluding one: %d overlaps, %v", sources.OverlapCount, err)
+	}
+}
+
+func TestTheSourcesListOnlyTheNewestOverlaps(t *testing.T) {
+	app := newTestApp(t)
+	location, _ := time.LoadLocation(defaultZoneID)
+	newest := time.Now().In(location).Add(-12 * time.Hour).Truncate(time.Minute)
+	for night := 0; night < sleepOverlapsShown+3; night++ {
+		start := newest.Add(-time.Duration(night) * 25 * time.Hour)
+		for _, offset := range []time.Duration{0, 20 * time.Minute} {
+			if _, err := app.AddSleepEntry(SleepEntryInput{
+				StartLocal: start.Add(offset).Format("2006-01-02T15:04"), EndLocal: start.Add(8 * time.Hour).Format("2006-01-02T15:04"),
+				ZoneID: defaultZoneID, Classification: storage.SleepClassificationPrincipal,
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	sources, err := app.GetSleepSources()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sources.OverlapCount != sleepOverlapsShown+3 || len(sources.Overlaps) != sleepOverlapsShown {
+		t.Fatalf("overlaps = %d listed of %d", len(sources.Overlaps), sources.OverlapCount)
+	}
+	if got := sources.Overlaps[0].Records[0].EffectiveStartLocal[:16]; got != newest.Format("2006-01-02T15:04") {
+		t.Fatalf("first listed starts %s, want the newest night", got)
+	}
+}
+
 func TestUndoTakesBackANightsLatestEdit(t *testing.T) {
 	app := newTestApp(t)
 	seedSleepEntries(t, app, 3)
