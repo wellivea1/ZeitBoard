@@ -29,6 +29,7 @@ import org.non24.planner.data.SourceCheck
 import org.non24.planner.data.EstimateRepository
 import org.non24.planner.data.HealthConnectRepository
 import org.non24.planner.data.BackendSyncClient
+import org.non24.planner.data.SyncServer
 import org.non24.planner.data.BackendSyncRepository
 import org.non24.planner.data.MedicationRepository
 import org.non24.planner.data.OutboxRecord
@@ -228,13 +229,13 @@ class AppViewModelMedicationTest {
     }
 
     private class NoSyncClient : BackendSyncClient {
-        override suspend fun sleepReview(baseUrl: String, token: String, observationId: String): Result<kotlinx.serialization.json.JsonObject> = error("Not configured")
-        override suspend fun pull(baseUrl: String, token: String, since: Long): Result<org.non24.planner.data.PullPage> = error("Not configured")
-        override suspend fun companion(baseUrl: String, token: String): Result<kotlinx.serialization.json.JsonObject> = error("Not configured")
-        override suspend fun enroll(baseUrl: String, enrollmentSecret: String, label: String) =
+        override suspend fun sleepReview(server: SyncServer, token: String, observationId: String): Result<kotlinx.serialization.json.JsonObject> = error("Not configured")
+        override suspend fun pull(server: SyncServer, token: String, since: Long): Result<org.non24.planner.data.PullPage> = error("Not configured")
+        override suspend fun companion(server: SyncServer, token: String): Result<kotlinx.serialization.json.JsonObject> = error("Not configured")
+        override suspend fun enroll(server: SyncServer, enrollmentSecret: String, label: String) =
             Result.failure<String>(IllegalStateException("Sync is not configured in this test."))
 
-        override suspend fun push(baseUrl: String, token: String, records: List<OutboxRecord>) =
+        override suspend fun push(server: SyncServer, token: String, records: List<OutboxRecord>) =
             Result.failure<List<String>>(IllegalStateException("Sync is not configured in this test."))
     }
 

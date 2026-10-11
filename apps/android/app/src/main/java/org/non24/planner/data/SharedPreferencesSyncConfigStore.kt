@@ -36,6 +36,7 @@ class SharedPreferencesSyncConfigStore(
             token = token,
             homeZoneId = zone,
             queueScope = scope,
+            serverCertificate = preferences.getString(KEY_SERVER_CERTIFICATE, null)?.takeIf { it.isNotBlank() },
         )
     }
 
@@ -45,6 +46,8 @@ class SharedPreferencesSyncConfigStore(
             putString(KEY_TOKEN, config.token)
             putString(KEY_HOME_ZONE, config.homeZoneId)
             putString(KEY_SCOPE, config.queueScope)
+            if (config.serverCertificate != null) putString(KEY_SERVER_CERTIFICATE, config.serverCertificate)
+            else remove(KEY_SERVER_CERTIFICATE)
         }) { "Enrollment could not be saved on this device." }
     }
 
@@ -58,5 +61,6 @@ class SharedPreferencesSyncConfigStore(
         private const val KEY_TOKEN = "token"
         private const val KEY_HOME_ZONE = "home_zone"
         private const val KEY_SCOPE = "queue_scope"
+        private const val KEY_SERVER_CERTIFICATE = "server_certificate"
     }
 }

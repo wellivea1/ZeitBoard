@@ -549,6 +549,7 @@
 }
 
 .backend-sync-certificate code {
+  display: grid;
   overflow-wrap: anywhere;
   color: var(--muted);
   font-family: var(--font-mono, ui-monospace, monospace);

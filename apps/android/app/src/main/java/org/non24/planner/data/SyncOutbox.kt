@@ -63,6 +63,8 @@ data class SyncStatus(
     val lastSyncedAt: Instant? = null,
     val lastError: String? = null,
     val serverUrl: String? = null,
+    /** The certificate the server is trusted by beside the system's roots (ADR-0055). */
+    val serverCertificate: ServerCertificate? = null,
 ) {
     /**
      * Queue bookkeeping only. This is never evidence of estimate freshness

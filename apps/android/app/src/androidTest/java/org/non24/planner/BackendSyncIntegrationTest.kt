@@ -46,8 +46,8 @@ class BackendSyncIntegrationTest {
         }
         context.deleteDatabase(name); config.clear()
         try {
-            val computer = client.enroll(address, "synthetic-completion-secret", "Synthetic computer").getOrThrow()
-            client.push(address, computer, listOf(OutboxRecord("${medicationId}_r1", "medication", now, now, definition.toString()))).getOrThrow()
+            val computer = client.enroll(SyncServer(address), "synthetic-completion-secret", "Synthetic computer").getOrThrow()
+            client.push(SyncServer(address), computer, listOf(OutboxRecord("${medicationId}_r1", "medication", now, now, definition.toString()))).getOrThrow()
             SQLiteLocalUserDataStore(context, name).use { store ->
                 val sync = BackendSyncRepository(
                     SQLiteSyncOutboxStore({ store.readableDatabase }, { store.writableDatabase }), config, client,
@@ -67,7 +67,7 @@ class BackendSyncIntegrationTest {
                 var since = 0L
                 val doses = mutableListOf<PulledRecord>()
                 while (true) {
-                    val page = client.pull(address, computer, since).getOrThrow()
+                    val page = client.pull(SyncServer(address), computer, since).getOrThrow()
                     doses += page.records.filter { it.kind == "medication_event" && it.payload.string("medication_id") == medicationId }
                     if (page.records.size < SYNC_PULL_LIMIT) break
                     since = page.cursor
@@ -106,12 +106,12 @@ class BackendSyncIntegrationTest {
                 store.replaceHealthConnectSleepSnapshot(emptyList())
                 assertEquals(0, SQLiteSyncOutboxStore({ store.readableDatabase }, { store.writableDatabase }).pendingCount())
             }
-            val remoteToken = client.enroll(address, "synthetic-completion-secret", "Synthetic other device").getOrThrow()
+            val remoteToken = client.enroll(SyncServer(address), "synthetic-completion-secret", "Synthetic other device").getOrThrow()
             cleanupToken = remoteToken
             val changedSource = source.copy(start = source.start.plusSeconds(120), provenance = source.provenance.copy(sourceUpdatedAt = source.provenance.sourceUpdatedAt!!.plusSeconds(600)))
-            client.push(address, remoteToken, SyncContract.map(listOf(changedSource), java.time.ZoneId.of("UTC"), emptyMap(), Instant.now()).records).getOrThrow()
-            val remoteReview = parseSleepReview(client.sleepReview(address, remoteToken, id).getOrThrow())
-            client.push(address, remoteToken, listOf(manualCorrection(remoteReview, "cor-remote-${UUID.randomUUID()}", Instant.now(), changedSource.start, changedSource.end, "nap", false))).getOrThrow()
+            client.push(SyncServer(address), remoteToken, SyncContract.map(listOf(changedSource), java.time.ZoneId.of("UTC"), emptyMap(), Instant.now()).records).getOrThrow()
+            val remoteReview = parseSleepReview(client.sleepReview(SyncServer(address), remoteToken, id).getOrThrow())
+            client.push(SyncServer(address), remoteToken, listOf(manualCorrection(remoteReview, "cor-remote-${UUID.randomUUID()}", Instant.now(), changedSource.start, changedSource.end, "nap", false))).getOrThrow()
             SQLiteLocalUserDataStore(context, name).use { store ->
                 val queue = SQLiteSyncOutboxStore({ store.readableDatabase }, { store.writableDatabase })
                 val sync = BackendSyncRepository(queue, config, client, replica = SQLiteSyncReplicaStore { store.writableDatabase })
@@ -178,7 +178,7 @@ class BackendSyncIntegrationTest {
                 assertEquals(source.end.plusNanos(1), review.effective.end)
                 val token = requireNotNull(config.load()).token
                 val competing = manualCorrection(requireNotNull(initial), "cor-competing-${UUID.randomUUID()}", Instant.now(), source.start.plusSeconds(60), source.end, "principal", false)
-                client.push(address, token, listOf(competing)).getOrThrow()
+                client.push(SyncServer(address), token, listOf(competing)).getOrThrow()
                 sync.synchronize().getOrThrow()
                 assertTrue(sync.sleepReview.value.stale)
                 assertTrue(sync.saveSleepReview(review, source.start, source.end, "principal", false).isFailure)
@@ -241,12 +241,12 @@ class BackendSyncIntegrationTest {
                     put("duration_minutes", 30); put("status", if (revision == 1) "open" else "done")
                     put("created_at", lastStart.toString()); put("updated_at", lastStart.plusSeconds(revision.toLong()).toString())
                 }.toString())
-                client.push("http://127.0.0.1:18767", token, listOf(task(1))).getOrThrow()
+                client.push(SyncServer("http://127.0.0.1:18767"), token, listOf(task(1))).getOrThrow()
                 sync.synchronize().getOrThrow()
                 assertEquals("estimated", sync.companion.value.projection?.status)
                 assertNotNull(sync.companion.value.projection?.estimate(Instant.now()))
                 assertEquals("open", sync.companion.value.tasks.single { it.id == taskId }.status)
-                client.push("http://127.0.0.1:18767", token, listOf(task(2))).getOrThrow()
+                client.push(SyncServer("http://127.0.0.1:18767"), token, listOf(task(2))).getOrThrow()
                 sync.synchronize().getOrThrow()
                 assertEquals("done", sync.companion.value.tasks.single { it.id == taskId }.status)
                 val erasedIds = sources.map { SyncContract.observationId(it.logicalSourceId) } + "${taskId}_r1"

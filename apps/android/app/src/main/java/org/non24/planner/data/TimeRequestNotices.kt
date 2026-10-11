@@ -112,14 +112,14 @@ class TimeRequestNotifier(
         val start = cursors.load(scope)
         if (start == null) {
             // Turning notices on is about what happens next, not the past week.
-            val head = parseNotificationFeed(client.notifications(config.baseUrl, config.token, "latest").getOrThrow())
+            val head = parseNotificationFeed(client.notifications(config.server(), config.token, "latest").getOrThrow())
             cursors.save(scope, head.cursor)
             return@syncResult 0
         }
         var cursor: Long = start
         var shown = 0
         for (page in 1..MAX_PAGES_PER_CHECK) {
-            val feed = parseNotificationFeed(client.notifications(config.baseUrl, config.token, cursor.toString()).getOrThrow())
+            val feed = parseNotificationFeed(client.notifications(config.server(), config.token, cursor.toString()).getOrThrow())
             for (action in planNotices(feed.events, now())) {
                 when (action) {
                     is NoticeAction.Show -> { poster.show(action.subject, action.kind); shown++ }

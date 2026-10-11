@@ -21,6 +21,11 @@ interface BackendSyncSettingsProps {
   onSyncNow: () => void;
 }
 
+function fingerprintLines(fingerprint: string) {
+  const bytes = fingerprint.split(":");
+  return [bytes.slice(0, 16).join(":"), bytes.slice(16).join(":")].filter(Boolean);
+}
+
 // A server with its own certificate or authority is trusted by that
 // certificate, with verification on (ADR-0055). The fingerprint is shown in
 // full: it is how the owner checks it against what the server prints.
@@ -51,7 +56,12 @@ function CertificateRow({
             <small>
               {certificate.subject || "Unnamed"}, until {until}
             </small>
-            <code aria-label="SHA-256 fingerprint">SHA-256 {certificate.fingerprint}</code>
+            {/* Two lines of sixteen bytes, so a line never breaks inside one. */}
+            <code aria-label={`SHA-256 fingerprint ${certificate.fingerprint}`}>
+              {fingerprintLines(certificate.fingerprint).map((line) => (
+                <span key={line}>{line}</span>
+              ))}
+            </code>
           </>
         ) : (
           <small>

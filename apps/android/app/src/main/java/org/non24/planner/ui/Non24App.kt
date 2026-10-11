@@ -1,5 +1,7 @@
 package org.non24.planner.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -60,12 +62,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
@@ -90,6 +94,7 @@ import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import org.non24.planner.data.DurableLocalDataState
+import org.non24.planner.data.ServerCertificate
 import org.non24.planner.data.SyncState
 import org.non24.planner.data.CompanionMedication
 import org.non24.planner.data.CompanionState
@@ -994,9 +999,29 @@ private fun BackendConnectionSection(
     // Secrets deliberately use remember, never rememberSaveable or persistent UI state.
     var secret by remember { mutableStateOf("") }
     var homeZone by remember { mutableStateOf(ZoneId.systemDefault().id) }
+    // The server's own certificate (ADR-0055): the kept one until the owner
+    // chooses another or removes it.
+    var certificate by remember { mutableStateOf<ServerCertificate?>(null) }
+    var certificateChanged by remember { mutableStateOf(false) }
+    var certificateError by remember { mutableStateOf<String?>(null) }
+    val context = LocalContext.current
+    val chooseCertificate = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        certificateError = null
+        try {
+            certificate = context.contentResolver.openInputStream(uri)?.use(ServerCertificate::read)
+                ?: error("That file could not be opened.")
+            certificateChanged = true
+        } catch (error: Exception) {
+            certificateError = error.message ?: "That file is not a certificate."
+        }
+    }
 
     LaunchedEffect(status.serverUrl) {
         if (address.isBlank()) address = status.serverUrl.orEmpty()
+    }
+    LaunchedEffect(status.serverCertificate) {
+        if (!certificateChanged) certificate = status.serverCertificate
     }
     LaunchedEffect(enrollmentRevision) {
         if (enrollmentRevision > 0) {
@@ -1054,9 +1079,16 @@ private fun BackendConnectionSection(
             DenseTextField(address, { address = it }, "Server address", placeholder = "https://zeitboard.example", imeAction = ImeAction.Next)
             DenseTextField(secret, { secret = it }, "Enrollment secret", imeAction = ImeAction.Next, secret = true)
             DenseTextField(homeZone, { homeZone = it }, "Home time zone", helper = "IANA zone, for example America/New_York", imeAction = ImeAction.Done)
+            CertificateRow(
+                certificate = certificate,
+                error = certificateError,
+                enabled = !busy,
+                onChoose = { chooseCertificate.launch(arrayOf("*/*")) },
+                onRemove = { certificate = null; certificateChanged = true },
+            )
             PrimaryButton(
                 text = if (busy) "Connecting…" else "Connect and sync",
-                onClick = { viewModel.enrollBackend(address, secret, homeZone) },
+                onClick = { viewModel.enrollBackend(address, secret, homeZone, certificate) },
                 enabled = !busy && address.isNotBlank() && secret.isNotBlank() && homeZone.isNotBlank(),
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -1568,6 +1600,45 @@ private fun DurableLocalDataNotice(
                 )
             }
         }
+    }
+}
+
+/**
+ * The server's own certificate, trusted beside the system's roots with
+ * verification on (ADR-0055). The fingerprint is shown whole: it is how the
+ * owner checks it against what the server prints.
+ */
+@Composable
+private fun CertificateRow(
+    certificate: ServerCertificate?,
+    error: String?,
+    enabled: Boolean,
+    onChoose: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("Server certificate", style = MaterialTheme.typography.labelLarge)
+        if (certificate == null) {
+            Text(
+                "Only for a server with its own certificate or authority. Verification stays on.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            SecondaryButton("Choose certificate", onChoose, enabled = enabled)
+        } else {
+            val until = DateTimeFormatter.ofPattern("MMM d, yyyy", LocalConfiguration.current.locales[0])
+                .withZone(ZoneId.systemDefault()).format(certificate.expiresAt)
+            Text("${certificate.subject}, until $until", style = MaterialTheme.typography.bodySmall)
+            // Two lines of sixteen bytes, so a line never breaks inside one.
+            val bytes = certificate.fingerprint.split(':')
+            Text("SHA-256 fingerprint", style = MaterialTheme.typography.labelSmall)
+            Text(
+                bytes.chunked(16).joinToString("\n") { it.joinToString(":") },
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                modifier = Modifier.semantics { contentDescription = "SHA-256 fingerprint ${certificate.fingerprint}" },
+            )
+            SecondaryButton("Remove", onRemove, enabled = enabled)
+        }
+        error?.let { InfoStrip(it) }
     }
 }
 

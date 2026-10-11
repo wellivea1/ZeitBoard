@@ -12,6 +12,8 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.non24.planner.data.BackendSyncClient
+import org.non24.planner.data.ServerCertificate
+import org.non24.planner.data.SyncServer
 import org.non24.planner.data.BackendSyncRepository
 import org.non24.planner.data.OutboxRecord
 import org.non24.planner.data.SYNC_BATCH_LIMIT
@@ -109,15 +111,19 @@ internal class FakeClient(
 ) : BackendSyncClient {
     val pushedBatches = mutableListOf<List<OutboxRecord>>()
     var reviewResponse: Result<kotlinx.serialization.json.JsonObject> = Result.failure(IllegalStateException("No review configured"))
-    override suspend fun sleepReview(baseUrl: String, token: String, observationId: String) = reviewResponse
-    override suspend fun pull(baseUrl: String, token: String, since: Long) = Result.success(org.non24.planner.data.PullPage(since, emptyList()))
-    override suspend fun companion(baseUrl: String, token: String) = Result.success(emptyServerProjection())
+    override suspend fun sleepReview(server: SyncServer, token: String, observationId: String) = reviewResponse
+    override suspend fun pull(server: SyncServer, token: String, since: Long) = Result.success(org.non24.planner.data.PullPage(since, emptyList()))
+    override suspend fun companion(server: SyncServer, token: String) = Result.success(emptyServerProjection())
 
-    override suspend fun enroll(baseUrl: String, enrollmentSecret: String, label: String): Result<String> =
-        failEnroll?.let { Result.failure(it) } ?: Result.success(enrollToken)
+    val servers = mutableListOf<SyncServer>()
+
+    override suspend fun enroll(server: SyncServer, enrollmentSecret: String, label: String): Result<String> {
+        servers += server
+        return failEnroll?.let { Result.failure(it) } ?: Result.success(enrollToken)
+    }
 
     override suspend fun push(
-        baseUrl: String,
+        server: SyncServer,
         token: String,
         records: List<OutboxRecord>,
     ): Result<List<String>> {
@@ -140,6 +146,26 @@ class BackendSyncRepositoryTest {
         assertEquals(1, outbox.pendingCount())
         client.failEnroll = null
         assertEquals(1, repository.synchronize().getOrNull())
+    }
+
+    @Test
+    fun `a server is enrolled with and kept trusting its own certificate`() = runTest {
+        val certificate = ServerCertificate.parse(
+            requireNotNull(javaClass.classLoader?.getResourceAsStream("certificates/owner.pem")).use { it.readBytes() },
+        )
+        val config = FakeConfigStore()
+        val client = FakeClient()
+        val (repository, _, _) = repository(config = config, client = client)
+        assertTrue(repository.enroll("https://zeitboard.home.test", "secret", zone, "phone", certificate.pem).isSuccess)
+        // Enrollment itself already trusts it (ADR-0055).
+        assertEquals(SyncServer("https://zeitboard.home.test", certificate.pem), client.servers.single())
+        assertEquals(certificate.pem, config.load()?.serverCertificate)
+        assertEquals(SyncServer("https://zeitboard.home.test", certificate.pem), config.load()?.server())
+        assertEquals(certificate.fingerprint, repository.status.value.serverCertificate?.fingerprint)
+        // Enrolling again without one stops trusting it.
+        assertTrue(repository.enroll("https://zeitboard.home.test", "secret", zone, "phone").isSuccess)
+        assertEquals(null, config.load()?.serverCertificate)
+        assertEquals(null, repository.status.value.serverCertificate)
     }
 
     @Test
