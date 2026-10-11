@@ -13,6 +13,7 @@ import {
 } from "../data/medicationReport";
 import { rhythmMarkersChangedEvent } from "../data/rhythmMarkers";
 import { sleepDataChangedEvent } from "../data/sleepDataEvents";
+import { saveClinicalChartImage } from "../utils/clinicalChartImage";
 import {
   MedicationReportControls,
   MedicationReportPreviewBody,
@@ -131,15 +132,25 @@ export function MedicationClinicalReport({ available }: { available: boolean }) 
     if (opening && !report && serviceAvailable) void generate();
   };
 
-  // Both ways out regenerate the page from the settings on the service, after
-  // the same typed confirmation: a printed or saved PDF leaves ZeitBoard too.
-  const exportReport = async (mode: "print" | "save") => {
+  // Every way out regenerates the report from the settings on the service,
+  // after the same typed confirmation: a printed page, a saved file and an
+  // image of the chart all leave ZeitBoard.
+  const exportReport = async (mode: "print" | "save" | "png") => {
     if (!report || stale || exporting || confirmation !== medicationReportExportConfirmation) {
       return;
     }
     setExporting(true);
     setError("");
     try {
+      if (mode === "png") {
+        // Regenerated from the service like the other ways out, then drawn.
+        const saved = await saveClinicalChartImage(await loadMedicationClinicalReport(input));
+        if (!saved) throw new Error("The chart image could not be made on this computer.");
+        setAnnouncement(`Clinician chart saved as ${saved}.`);
+        setExportOpen(false);
+        setConfirmation("");
+        return;
+      }
       const value = await exportMedicationClinicalReport(input, confirmation);
       if (mode === "print") {
         printMedicationClinicalReport(value);
