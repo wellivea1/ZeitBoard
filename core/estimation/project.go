@@ -6,6 +6,7 @@ import (
 	"math"
 	"time"
 
+	"non24.app/core/civilfmt"
 	"non24.app/core/domain"
 )
 
@@ -154,7 +155,7 @@ func (e RobustEstimator) Project(ctx context.Context, sessions []domain.SleepSes
 			FitHour:      round2(fitPlot[i]),
 			BandLowHour:  round2(low),
 			BandHighHour: round2(high),
-			OnsetLabel:   mustLocal(onset).Format("3:04 PM"),
+			OnsetLabel:   e.Clock.Time(mustLocal(onset)),
 			Source:       sourceLabel(episode),
 			Confidence:   conf,
 		}
@@ -163,7 +164,7 @@ func (e RobustEstimator) Project(ctx context.Context, sessions []domain.SleepSes
 	// Actogram observed rows, newest first (matches the design's top-down read).
 	observed := make([]RhythmBand, 0, len(episodes))
 	for i := len(episodes) - 1; i >= 0; i-- {
-		observed = append(observed, observedBand(episodes[i]))
+		observed = append(observed, observedBand(episodes[i], e.Clock))
 	}
 
 	// Forecast rows from the engine's widening predicted sleep windows.
@@ -179,8 +180,8 @@ func (e RobustEstimator) Project(ctx context.Context, sessions []domain.SleepSes
 			StartHour:     round2(clockHour(start)),
 			DurationHours: round2(window.Interval.Duration().Hours()),
 			Kind:          "forecast",
-			StartLabel:    start.Format("Jan 2, 3:04 PM") + " earliest",
-			WakeLabel:     end.Format("Jan 2, 3:04 PM") + " latest",
+			StartLabel:    e.Clock.Format(start, "Jan 2, 3:04 PM") + " earliest",
+			WakeLabel:     e.Clock.Format(end, "Jan 2, 3:04 PM") + " latest",
 			DurationLabel: durationLabel(window.Interval.Duration()) + " window",
 			Source:        fmt.Sprintf("Forecast cycle %d", i+1),
 			Confidence:    confidenceLabel(window.Confidence.Level),
@@ -214,7 +215,7 @@ func (e RobustEstimator) Project(ctx context.Context, sessions []domain.SleepSes
 	}, nil
 }
 
-func observedBand(episode domain.SleepSession) RhythmBand {
+func observedBand(episode domain.SleepSession, clock civilfmt.Clock) RhythmBand {
 	interval := episode.Intervals[0].Interval
 	start := mustLocal(interval.Start)
 	end := mustLocal(interval.End)
@@ -227,8 +228,8 @@ func observedBand(episode domain.SleepSession) RhythmBand {
 		StartHour:     round2(clockHour(start)),
 		DurationHours: round2(interval.Duration().Hours()),
 		Kind:          kind,
-		StartLabel:    start.Format("Jan 2, 3:04 PM"),
-		WakeLabel:     end.Format("Jan 2, 3:04 PM"),
+		StartLabel:    clock.Format(start, "Jan 2, 3:04 PM"),
+		WakeLabel:     clock.Format(end, "Jan 2, 3:04 PM"),
 		DurationLabel: durationLabel(interval.Duration()),
 		Source:        sourceLabel(episode),
 		Confidence:    conf,

@@ -501,8 +501,9 @@ func weekPlace(day int) int {
 }
 
 func reachingClockPhrase(startLocal, endLocal string) string {
-	start := formatCivilClock(startLocal)
-	end := formatCivilClock(endLocal)
+	clock := displayClock()
+	start := clock.Civil(startLocal)
+	end := clock.Civil(endLocal)
 	if startLocal == endLocal {
 		return "all day"
 	}
@@ -519,14 +520,6 @@ func reachingZonePhrase(zoneID string) string {
 		return ""
 	}
 	return "(" + zoneID + " time)"
-}
-
-func formatCivilClock(value string) string {
-	parsed, err := time.Parse("15:04", value)
-	if err != nil {
-		return value
-	}
-	return parsed.Format("3:04 PM")
 }
 
 func civilClockIsAfter(a, b string) bool {

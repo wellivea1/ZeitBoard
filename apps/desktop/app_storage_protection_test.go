@@ -58,6 +58,12 @@ func TestSettingsFilesAreOwnerOnly(t *testing.T) {
 		t.Fatalf("save reaching hours: %v", err)
 	}
 	assertOwnerOnly(t, filepath.Join(app.configDir, reachingFileName), "the reaching-hours file")
+
+	restoreClockAfter(t)
+	if _, err := app.SaveClockSetting(ClockSettingInput{Preference: clock24}); err != nil {
+		t.Fatalf("save clock: %v", err)
+	}
+	assertOwnerOnly(t, filepath.Join(app.configDir, regionalFileName), "the clock file")
 }
 
 // An export is the whole sleep history in one file, which is the most

@@ -59,7 +59,7 @@ func (a *App) attachTaskConflictReview(dto *ProposalsDTO) error {
 		if record.ChosenID == "local" {
 			choice = "Local version"
 		}
-		dto.TaskConflictHistory = append(dto.TaskConflictHistory, TaskConflictHistoryDTO{ReviewToken: record.ReviewToken, TaskID: record.TaskID, Choice: choice, DecidedLabel: record.DecidedAt.Local().Format("Jan 2, 2006, 3:04 PM"), Result: taskDTO(record.Result), Before: taskConflictDTO(record.Before)})
+		dto.TaskConflictHistory = append(dto.TaskConflictHistory, TaskConflictHistoryDTO{ReviewToken: record.ReviewToken, TaskID: record.TaskID, Choice: choice, DecidedLabel: displayClock().Format(record.DecidedAt.Local(), "Jan 2, 2006, 3:04 PM"), Result: taskDTO(record.Result), Before: taskConflictDTO(record.Before)})
 	}
 	return nil
 }
@@ -79,5 +79,5 @@ func (a *App) ResolveTaskConflict(input ResolveTaskConflictInput) (TaskConflictH
 	if result.ChosenID == "local" {
 		choice = "Local version"
 	}
-	return TaskConflictHistoryDTO{ReviewToken: result.ReviewToken, TaskID: result.TaskID, Choice: choice, DecidedLabel: result.DecidedAt.Local().Format("Jan 2, 2006, 3:04 PM"), Result: taskDTO(result.Result), Before: taskConflictDTO(result.Before)}, nil
+	return TaskConflictHistoryDTO{ReviewToken: result.ReviewToken, TaskID: result.TaskID, Choice: choice, DecidedLabel: displayClock().Format(result.DecidedAt.Local(), "Jan 2, 2006, 3:04 PM"), Result: taskDTO(result.Result), Before: taskConflictDTO(result.Before)}, nil
 }

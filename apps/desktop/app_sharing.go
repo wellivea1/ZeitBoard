@@ -212,7 +212,7 @@ func shareLinkDTO(record backendShareProfileRecord) ShareLinkDTO {
 			Count: entry.Count,
 		}
 		if !entry.LastAccess.IsZero() {
-			access.LastLabel = "last " + entry.LastAccess.Local().Format("Jan 2, 3:04 PM")
+			access.LastLabel = "last " + displayClock().Format(entry.LastAccess.Local(), "Jan 2, 3:04 PM")
 		}
 		dto.Access = append(dto.Access, access)
 	}

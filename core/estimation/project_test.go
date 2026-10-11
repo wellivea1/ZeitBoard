@@ -3,9 +3,11 @@ package estimation
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
+	"non24.app/core/civilfmt"
 	"non24.app/core/domain"
 )
 
@@ -118,5 +120,36 @@ func TestProjectPassesThroughRefusal(t *testing.T) {
 	var refusal *EstimationRefusal
 	if !errors.As(err, &refusal) || refusal.Code != RefusalInsufficientData {
 		t.Fatalf("error = %#v", err)
+	}
+}
+
+// The projection's labels are written on the clock its caller reads, and the
+// zero clock is the twelve-hour one a caller that cannot know gets (ADR-0057).
+func TestProjectWritesItsLabelsOnTheCallersClock(t *testing.T) {
+	sessions := syntheticSessions(12, time.Date(2026, 1, 1, 14, 0, 0, 0, time.UTC), 25*time.Hour, 8*time.Hour, "UTC")
+	asOf := time.Date(2026, 1, 13, 18, 0, 0, 0, time.UTC)
+	twelve, err := (RobustEstimator{}).Project(context.Background(), sessions, asOf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	twentyFour, err := (RobustEstimator{Clock: civilfmt.TwentyFourHour}).Project(context.Background(), sessions, asOf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The first night began at 14:00 on January 1.
+	oldest := len(twelve.ObservedRows) - 1
+	if got := twelve.ObservedRows[oldest].StartLabel; got != "Jan 1, 2:00 PM" {
+		t.Errorf("twelve-hour start = %q", got)
+	}
+	if got := twentyFour.ObservedRows[oldest].StartLabel; got != "Jan 1, 14:00" {
+		t.Errorf("twenty-four-hour start = %q", got)
+	}
+	if got := twentyFour.DriftPoints[0].OnsetLabel; got != "14:00" {
+		t.Errorf("twenty-four-hour onset = %q", got)
+	}
+	for _, row := range twentyFour.ForecastRows {
+		if strings.Contains(row.StartLabel, "M ") || strings.HasSuffix(row.WakeLabel, "M latest") {
+			t.Errorf("forecast row on a twelve-hour clock: %q, %q", row.StartLabel, row.WakeLabel)
+		}
 	}
 }

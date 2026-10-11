@@ -2,8 +2,10 @@ import type { CalendarData, CalendarEventSegment } from "../data/calendar";
 import type { MedicationsData } from "../data/medications";
 import type { ProposalRecord } from "../data/proposals";
 import type { SleepEntry } from "../data/sleepEntries";
-import { clockRange, clockTime } from "../utils/relativeTime";
+import { clockRange, clockTime, timeOfDay } from "../utils/relativeTime";
+import { windowClock } from "../utils/windowClock";
 import { rhythmSegments, type RhythmState } from "./calendarLayout";
+import { appLocale } from "../utils/appLocale";
 
 // Plan › Week lays days out as columns on one vertical clock, the way a
 // calendar app does, and paints the rhythm into them: what was recorded
@@ -328,9 +330,9 @@ export function weekColumns({ calendar, suggestions, sleep, medications, now }: 
 
     return {
       civilDate: date,
-      weekday: noon.toLocaleDateString(undefined, { weekday: "short" }),
+      weekday: noon.toLocaleDateString(appLocale, { weekday: "short" }),
       dayNumber: String(noon.getDate()),
-      spokenDate: `${noon.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" })}${isToday ? ", today" : ""}`,
+      spokenDate: `${noon.toLocaleDateString(appLocale, { weekday: "long", day: "numeric", month: "long" })}${isToday ? ", today" : ""}`,
       isToday,
       isPast,
       bands,
@@ -347,24 +349,21 @@ export function weekColumns({ calendar, suggestions, sleep, medications, now }: 
 export function weekTitle(first: string, last: string) {
   const a = new Date(`${first}T12:00:00`);
   const b = new Date(`${last}T12:00:00`);
-  const month = (date: Date) => date.toLocaleDateString(undefined, { month: "long" });
+  const month = (date: Date) => date.toLocaleDateString(appLocale, { month: "long" });
   if (first === last)
-    return `${a.toLocaleDateString(undefined, { weekday: "long" })} ${a.getDate()} ${month(a)}`;
+    return `${a.toLocaleDateString(appLocale, { weekday: "long" })} ${a.getDate()} ${month(a)}`;
   if (a.getMonth() === b.getMonth()) return `${a.getDate()} – ${b.getDate()} ${month(b)}`;
   return `${a.getDate()} ${month(a)} – ${b.getDate()} ${month(b)}`;
 }
 
-/** "3 AM", "Noon", "9 PM": the gutter's labels. */
-/** A minute of the day as a clock time, with the day's edges named. */
+/**
+ * A minute of the day as a clock time. The twelve-hour clock names the day's
+ * edges, "midnight" and "noon"; the 24-hour clock writes them, 00:00 to 24:00.
+ */
 export function minuteClock(minute: number) {
-  if (minute <= 0 || minute >= DAY_MINUTES) return "midnight";
-  if (minute === 12 * 60) return "noon";
-  const hour = Math.floor(minute / 60);
-  return `${((hour + 11) % 12) + 1}:${String(minute % 60).padStart(2, "0")} ${hour < 12 ? "AM" : "PM"}`;
-}
-
-export function hourLabel(hour: number) {
-  if (hour === 12) return "Noon";
-  if (hour === 0 || hour === 24) return "Midnight";
-  return `${((hour + 11) % 12) + 1} ${hour < 12 ? "AM" : "PM"}`;
+  const twentyFour = windowClock() === "24";
+  if (minute >= DAY_MINUTES) return twentyFour ? "24:00" : "midnight";
+  if (minute <= 0) return twentyFour ? "00:00" : "midnight";
+  if (minute === 12 * 60 && !twentyFour) return "noon";
+  return timeOfDay(Math.floor(minute / 60), minute % 60);
 }

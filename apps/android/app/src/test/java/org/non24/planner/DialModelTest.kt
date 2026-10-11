@@ -14,6 +14,7 @@ import org.non24.planner.domain.TimeWindow
 import org.non24.planner.ui.dialPlans
 import org.non24.planner.ui.DialState
 import org.non24.planner.ui.ForecastPair
+import org.non24.planner.ui.dayClock
 import org.non24.planner.ui.dialCenter
 import org.non24.planner.ui.dialSegments
 import org.non24.planner.ui.leadParts
@@ -36,6 +37,14 @@ class DialModelTest {
     fun restoreLocale() = Locale.setDefault(locale)
 
     private fun at(hours: Double): Instant = now.plusSeconds((hours * 3600).toLong())
+
+    // Times follow the phone's own 24-hour setting everywhere (ADR-0057).
+    @Test fun `a day and a time are written on the phone's clock`() {
+        val moment = now.atZone(zone)
+        assertEquals("Sep 24, 4:10 PM", dayClock(moment, use24HourTime = false))
+        assertEquals("Sep 24, 16:10", dayClock(moment, use24HourTime = true))
+        assertEquals("Sep 24, 16:10 EDT", dayClock(moment, use24HourTime = true, withZone = true))
+    }
 
     // Awake until the evening's uncertain onset, asleep, then an uncertain
     // morning edge: the sleep window and the waking windows overlap at both.

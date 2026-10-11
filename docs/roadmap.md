@@ -467,7 +467,9 @@ Largely delivered (see "Where things stand"). Remaining in scope:
   undoing again reaches the night as recorded.
 - ~~Onboarding beyond the empty state~~ (delivered 2026-10-11: after the first forecast, Home lists
   the optional steps that let it say more, marks the ones done, and goes once they all are);
-  localization readiness.
+  ~~localization readiness~~ (delivered 2026-10-11 for times, ADR-0057: the desktop and the
+  window write times on Windows' clock or the one chosen in Settings, through one formatter per
+  runtime; translated text waits for a message catalog).
 - Local DB encryption at rest. _Partly addressed 2026-08-10 (slice 17, ADR-0035):_ every private
   local file — the database, its write-ahead log, the backend token, the settings files and exports
   — now carries a real owner-only DACL that is read back and asserted, and privacy.md no longer

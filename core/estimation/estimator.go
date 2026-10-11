@@ -9,6 +9,7 @@ import (
 	"sort"
 	"time"
 
+	"non24.app/core/civilfmt"
 	"non24.app/core/domain"
 )
 
@@ -64,6 +65,11 @@ type Estimator interface {
 
 type RobustEstimator struct {
 	Config Config
+
+	// Clock is the clock the rhythm projection's labels are written on
+	// (ADR-0057). The zero value is the twelve-hour clock, for a caller that
+	// does not know its reader.
+	Clock civilfmt.Clock
 }
 
 func (e RobustEstimator) Estimate(ctx context.Context, sessions []domain.SleepSession, asOf time.Time) (domain.PhaseEstimate, error) {

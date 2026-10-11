@@ -8,7 +8,8 @@ import {
 } from "../data/rhythmMarkers";
 import { RhythmMarkerGlyph } from "./RhythmMarkerGlyph";
 import { TimeProbe } from "./TimeProbe";
-import { civilProbeLabel, formatCivilDate, formatClock24, useTimeProbe } from "./timeProbeLogic";
+import { civilProbeLabel, formatCivilDate, formatClock, useTimeProbe } from "./timeProbeLogic";
+import { hourOfDay } from "../utils/relativeTime";
 
 const DOUBLE_PLOT_HOURS = 48;
 const DAY_HOURS = 24;
@@ -291,11 +292,7 @@ function formatClockHour(hour: number) {
     display = (display + 1) % 24;
     minute = 0;
   }
-  const period = display >= 12 ? "PM" : "AM";
-  const hour12 = display % 12 === 0 ? 12 : display % 12;
-  return minute === 0
-    ? `${hour12} ${period}`
-    : `${hour12}:${String(minute).padStart(2, "0")} ${period}`;
+  return hourOfDay(display, minute);
 }
 
 // Whole hours at a step that gives three to six lines across the data's range,
@@ -342,8 +339,8 @@ export function DriftPanel({ drift }: { drift: RhythmDrift }) {
       });
       const point = points[nearestIndex];
       if (!point) return undefined;
-      const onset = formatClock24(point.onsetHour);
-      const fit = formatClock24(point.fitHour);
+      const onset = formatClock(point.onsetHour);
+      const fit = formatClock(point.fitHour);
       const fitLabel = fit === onset ? "" : ` (fit ${fit})`;
       return {
         position: scaleDriftX(nearestIndex, points) / 100,
@@ -498,7 +495,7 @@ export function DriftPanel({ drift }: { drift: RhythmDrift }) {
               <td>{point.day}</td>
               <td>{point.onsetLabel}</td>
               <td>{point.source}</td>
-              <td>{formatClock24(point.fitHour)}</td>
+              <td>{formatClock(point.fitHour)}</td>
             </tr>
           ))}
         </tbody>

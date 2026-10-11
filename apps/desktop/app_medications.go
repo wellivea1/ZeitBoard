@@ -469,7 +469,7 @@ func (a *App) ExportMedicationData() (MedicationExportDTO, error) {
 		FileName:        "zeitboard-medication-data-v2-" + now.Format("20060102") + ".json",
 		JSON:            string(encoded),
 		GeneratedAt:     now.Format(time.RFC3339),
-		GeneratedLabel:  now.Local().Format("Jan 2, 2006, 3:04 PM"),
+		GeneratedLabel:  displayClock().Format(now.Local(), "Jan 2, 2006, 3:04 PM"),
 		MedicationCount: len(exported.MedicationSet.Medications),
 		EventCount:      len(exported.EventSet.Events),
 	}, nil
@@ -556,7 +556,7 @@ func (a *App) medicationsAtContext(ctx context.Context, now time.Time) (Medicati
 		InteractionDisclaimer: medicationInteractionDisclaimer,
 		ReminderStatus:        reminderStatus,
 		ReminderMessage:       reminderMessage,
-		UpdatedLabel:          now.Local().Format("Updated Jan 2, 3:04 PM"),
+		UpdatedLabel:          displayClock().Format(now.Local(), "Updated Jan 2, 3:04 PM"),
 	}, nil
 }
 
@@ -597,7 +597,7 @@ func medicationDTO(record storage.MedicationRecord, eventCount int, state localE
 		local := record.StartedAt.In(location)
 		startedAt = record.StartedAt.UTC().Format(time.RFC3339)
 		startedLocal = local.Format("2006-01-02T15:04")
-		startedLabel = local.Format("Jan 2, 2006, 3:04 PM MST")
+		startedLabel = displayClock().Format(local, "Jan 2, 2006, 3:04 PM MST")
 	}
 	return MedicationDTO{
 		MedicationID:             record.MedicationID,
@@ -683,7 +683,7 @@ func medicationScheduleDTO(schedule storage.MedicationSchedule, state localEstim
 			At:         assessment.Occurrence.At.UTC.Format(time.RFC3339),
 			CivilDate:  assessment.Occurrence.CivilDate,
 			CivilTime:  assessment.Occurrence.CivilTime,
-			CivilLabel: assessment.Occurrence.At.UTC.In(location).Format("Mon Jan 2, 3:04 PM MST"),
+			CivilLabel: displayClock().Format(assessment.Occurrence.At.UTC.In(location), "Mon Jan 2, 3:04 PM MST"),
 			Status:     assessment.Status,
 			Context:    contextLabel,
 			Confidence: medicationForecastConfidence(assessment.Confidence),
@@ -711,7 +711,7 @@ func medicationScheduleDTO(schedule storage.MedicationSchedule, state localEstim
 	}
 	if forecast.CoverageEndsAt != nil {
 		projectedForecast.CoverageEndsAt = forecast.CoverageEndsAt.UTC().Format(time.RFC3339)
-		projectedForecast.CoverageLabel = forecast.CoverageEndsAt.In(location).Format("Jan 2, 3:04 PM MST")
+		projectedForecast.CoverageLabel = displayClock().Format(forecast.CoverageEndsAt.In(location), "Jan 2, 3:04 PM MST")
 	}
 	return MedicationScheduleDTO{
 		Kind:            schedule.Kind,
@@ -837,12 +837,12 @@ func medicationEventDTO(
 		MedicationLabel:   label,
 		DoseAt:            event.DoseAt.UTC().Format(time.RFC3339),
 		DoseLocal:         local.Format("2006-01-02T15:04"),
-		CivilTime:         local.Format("Mon Jan 2, 3:04 PM MST"),
+		CivilTime:         displayClock().Format(local, "Mon Jan 2, 3:04 PM MST"),
 		ZoneID:            event.ZoneID,
 		Status:            event.Status,
 		Scheduled:         event.Scheduled,
 		Note:              event.Note,
-		RecordedLabel:     "Recorded " + event.Provenance.RecordedAt.Local().Format("Jan 2, 3:04 PM"),
+		RecordedLabel:     "Recorded " + displayClock().Format(event.Provenance.RecordedAt.Local(), "Jan 2, 3:04 PM"),
 		WakeRelation:      wakeRelation,
 		SleepRelation:     sleepRelation,
 		SleepRelationKind: sleepRelationKind,

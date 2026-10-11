@@ -257,7 +257,7 @@ func importTimeLabel(value time.Time, zoneID string) string {
 	if err != nil {
 		location = time.UTC
 	}
-	return value.In(location).Format("Jan 2, 2006, 3:04 PM")
+	return displayClock().Format(value.In(location), "Jan 2, 2006, 3:04 PM")
 }
 
 func nonNilStrings(values []string) []string {

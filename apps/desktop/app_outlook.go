@@ -488,22 +488,24 @@ func loadLocationOrUTC(zoneID string) *time.Location {
 // clockRange renders times of day only, for a range the reader already knows
 // the day of.
 func clockRange(interval domain.TimeRange, location *time.Location) string {
+	clock := displayClock()
 	start := interval.Start.UTC.In(location)
 	end := interval.End.UTC.In(location)
 	if sameCivilDay(start, end) {
-		return start.Format("3:04 PM") + " to " + end.Format("3:04 PM")
+		return clock.Time(start) + " to " + clock.Time(end)
 	}
-	return start.Format("3:04 PM") + " to " + end.Format("3:04 PM on Mon, Jan 2")
+	return clock.Time(start) + " to " + clock.Format(end, "3:04 PM on Mon, Jan 2")
 }
 
 // civilRange includes the day, for ranges that stand alone.
 func civilRange(interval domain.TimeRange, location *time.Location) string {
+	clock := displayClock()
 	start := interval.Start.UTC.In(location)
 	end := interval.End.UTC.In(location)
 	if sameCivilDay(start, end) {
-		return start.Format("Mon, Jan 2, 3:04 PM") + " to " + end.Format("3:04 PM")
+		return clock.Format(start, "Mon, Jan 2, 3:04 PM") + " to " + clock.Time(end)
 	}
-	return start.Format("Mon, Jan 2, 3:04 PM") + " to " + end.Format("Mon, Jan 2, 3:04 PM")
+	return clock.Format(start, "Mon, Jan 2, 3:04 PM") + " to " + clock.Format(end, "Mon, Jan 2, 3:04 PM")
 }
 
 func sameCivilDay(left, right time.Time) bool {
