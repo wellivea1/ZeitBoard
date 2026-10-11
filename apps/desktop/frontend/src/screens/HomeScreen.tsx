@@ -2,6 +2,7 @@ import { Fragment, useEffect, useState } from "react";
 import { estimateSourceLabel } from "../data/estimateStatus";
 import { Diary, Doses, NeedsYou } from "../components/HomeColumns";
 import { HomeSetup } from "../components/HomeSetup";
+import { HomeSetupGuide } from "../components/HomeSetupGuide";
 import { Notice } from "../components/Notice";
 import { OutlookPanel } from "../components/OutlookPanel";
 import { QuickLogBar } from "../components/QuickLogBar";
@@ -182,6 +183,7 @@ export function HomeScreen() {
       {hasEstimate ? (
         <>
           <OutlookPanel data={outlook} />
+          <HomeSetupGuide />
           <section className="home-columns" aria-label="Today and the days ahead">
             <NeedsYou />
             <Diary days={diaryDays(calendar, outlook, medications.data)} />

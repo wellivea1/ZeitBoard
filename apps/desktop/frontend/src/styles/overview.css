@@ -179,6 +179,44 @@
   font-style: italic;
 }
 
+/* After the first forecast, the steps that let Home say more stand on a note
+   under the figure until every one is done or the note is closed. A done step
+   keeps its place with a mark in ink instead of its number. */
+.almanac > .notice.home-setup-guide {
+  max-width: none;
+  margin: 30px 0 0;
+  gap: 10px;
+}
+
+.home-setup-guide .home-ways {
+  gap: 0 32px;
+}
+
+.home-setup-guide .home-way {
+  padding: 4px 0 6px;
+}
+
+.home-setup-guide .home-way h3 {
+  font-size: 18px;
+}
+
+.home-setup-guide .home-way p {
+  font-size: 14.5px;
+}
+
+.home-way[data-done] h3 {
+  color: var(--muted);
+}
+
+.home-way[data-done] .home-way-number {
+  color: var(--ink);
+}
+
+.home-way-number svg {
+  width: 16px;
+  height: 16px;
+}
+
 /* The note about what the forecast is sits under the columns until closed. */
 .almanac > .notice {
   max-width: 72ch;

@@ -465,7 +465,9 @@ Largely delivered (see "Where things stand"). Remaining in scope:
 - ~~Correction _undo_ as a one-click affordance.~~ Delivered 2026-10-08: Undo on a night's row in
   Log › Sleep appends the correction that restores the night as it was before its latest edit, and
   undoing again reaches the night as recorded.
-- Onboarding beyond the empty state; localization readiness.
+- ~~Onboarding beyond the empty state~~ (delivered 2026-10-11: after the first forecast, Home lists
+  the optional steps that let it say more, marks the ones done, and goes once they all are);
+  localization readiness.
 - Local DB encryption at rest. _Partly addressed 2026-08-10 (slice 17, ADR-0035):_ every private
   local file — the database, its write-ahead log, the backend token, the settings files and exports
   — now carries a real owner-only DACL that is read back and asserted, and privacy.md no longer
