@@ -2698,3 +2698,15 @@ figure. The phone does not show reaching hours, as before.
     Home.
   - "Show again" brought it back.
 
+## No stretch shorter than a minute — 2026-10-11
+
+Seen in the running desktop: Home's figure listed "Likely awake, Sun 7:19 PM to 7:19 PM, lasting 0
+minutes". The window asks for the outlook at a whole minute, but the forecast's boundaries carry
+seconds, so a boundary twenty seconds after now left a twenty-second stretch.
+
+The outlook now puts its boundaries on the minute before it classifies the stretches between them,
+and clamps them to the horizon so the timeline still starts at now and ends at the horizon. A test
+moves the first predicted sleep to twenty seconds after now. It failed with a 20-second first
+segment, and now passes with no stretch under a minute and no gap. The other outlook tests, and
+the desktop and server suites, pass unchanged.
+

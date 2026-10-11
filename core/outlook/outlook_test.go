@@ -1069,3 +1069,32 @@ func TestSleepAheadBracketsTheFirstSleep(t *testing.T) {
 		t.Fatalf("empty timeline: onset %v, wake %v", onset, wake)
 	}
 }
+
+// The timeline is read to the minute. A forecast boundary a few seconds after
+// now once left a stretch Home listed as "7:19 PM to 7:19 PM, lasting 0
+// minutes".
+func TestNoStretchIsShorterThanAMinute(t *testing.T) {
+	f := newFixture(t)
+	in := f.input()
+	first := in.Estimate.PredictedSleepWindows[0]
+	start, err := domain.NewZonedInstant(f.now.Add(20*time.Second), zone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first.Interval.Start = start
+	in.Estimate.PredictedSleepWindows = append([]domain.AvailabilityWindow{first}, in.Estimate.PredictedSleepWindows[1:]...)
+
+	view := build(t, in)
+	if len(view.Segments) == 0 || !view.Segments[0].Interval.Start.UTC.Equal(f.now) {
+		t.Fatalf("the timeline no longer starts at now: %+v", view.Segments)
+	}
+	for index, segment := range view.Segments {
+		if segment.Duration() < time.Minute {
+			t.Errorf("segment %d is %s long: %s to %s", index, segment.Duration(),
+				segment.Interval.Start.UTC, segment.Interval.End.UTC)
+		}
+		if index > 0 && !segment.Interval.Start.UTC.Equal(view.Segments[index-1].Interval.End.UTC) {
+			t.Errorf("gap before segment %d", index)
+		}
+	}
+}
