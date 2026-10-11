@@ -2589,3 +2589,29 @@ halves are kept.
     fingerprint openssl prints. The fingerprint first wrapped mid-byte, so it is now shown on both
     clients as two lines of sixteen bytes, and named whole for screen readers.
   - Remove returned the row to its empty state. The file was deleted from the emulator afterwards.
+
+## The clinical chart saves as an image — 2026-10-11
+
+- Layout:
+  - The observed night sits a sixth of the way in, a third of the track long.
+  - Taken, started, skipped (dashed) and context marks each keep the printed page's colour at their
+    own positions.
+  - Month headings, "no data", the axis labels, the report's boundary and the generated line are
+    drawn.
+  - A double plot gets its firm middle rule.
+  - A range of 1,520 days keeps the newest 1,500 and says so.
+- Painting: every shape is replayed once onto white paper at the scale asked, and no dash is left
+  set.
+- Report screen:
+  - "Save chart as PNG" waits for the typed EXPORT.
+  - It regenerates the report from the service and saves no HTML file.
+  - It announces the saved file name. Where no image can be made, it says so.
+- In the running desktop (disposable dev profile), the image was drawn from the real report of
+  Aug 15 to Sep 27 (44 rows) and viewed in the window:
+  - It came out as a 2560 × 2276 PNG of 371 KB.
+  - The sleep bars drift later each day and wrap around the clinical day.
+  - The dose marks, the dashed forecast band over the two days without data, and the legend all
+    show.
+  - The boundary text is legible at actual size.
+
+  The download itself was not clicked, so that no file was written to the owner's Downloads.

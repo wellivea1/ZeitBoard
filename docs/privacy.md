@@ -231,7 +231,10 @@ diagnosis, calendar/location information, and clinician-entered medication
 guidance are always omitted; medication labels/forms/strengths are aliases by
 default; medication notes and marker notes require separate opt-ins. Export
 requires typed `EXPORT`, has an offline content-security policy and no scripts
-or external assets, and makes no network request. Once the owner saves or shares
+or external assets, and makes no network request. The chart can also be saved
+alone as a PNG, after the same confirmation. The image is drawn in the window
+from the same redacted report, carries the report's interpretation boundary,
+and is made without any network request. Once the owner saves or shares
 an explicitly generated file, that copy is outside ZeitBoard's storage,
 revocation, and erasure boundary.
 

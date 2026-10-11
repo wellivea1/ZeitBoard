@@ -258,7 +258,7 @@ export function MedicationReportPreviewBody({
   onOpenExport: () => void;
   onCancelExport: () => void;
   onConfirmationChange: (value: string) => void;
-  onExport: (mode: "print" | "save") => void;
+  onExport: (mode: "print" | "save" | "png") => void;
 }) {
   return (
     <div className="medication-report-preview" aria-busy={loading || undefined}>
@@ -297,7 +297,8 @@ export function MedicationReportPreviewBody({
           <h3 id="report-export-title">Take the report out</h3>
           <p>
             Print it, or choose Save as PDF in the print dialog. The standalone HTML file prints the
-            same way later. Both use the preview settings.
+            same way later, and the chart can also be saved alone as an image. All use the preview
+            settings.
           </p>
         </div>
         {!exportOpen ? (
@@ -328,6 +329,14 @@ export function MedicationReportPreviewBody({
                 onClick={onCancelExport}
               >
                 Cancel
+              </button>
+              <button
+                className="button secondary compact"
+                type="button"
+                disabled={exporting || stale || confirmation !== medicationReportExportConfirmation}
+                onClick={() => onExport("png")}
+              >
+                Save chart as PNG
               </button>
               <button
                 className="button secondary compact"

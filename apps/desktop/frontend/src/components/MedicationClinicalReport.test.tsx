@@ -9,7 +9,11 @@ import {
   medicationClinicalReportExportFixture,
   medicationClinicalReportFixture,
 } from "../test/medicationReportFixture";
+import { saveClinicalChartImage } from "../utils/clinicalChartImage";
 import { MedicationClinicalReport } from "./MedicationClinicalReport";
+
+// jsdom draws no canvas; the drawing itself is tested in clinicalChartImage.
+vi.mock("../utils/clinicalChartImage", () => ({ saveClinicalChartImage: vi.fn() }));
 import { MedicationReportDrift, MedicationReportTables } from "./MedicationClinicalReportPreview";
 
 type GlobalWithGo = typeof globalThis & { go?: unknown };
@@ -189,6 +193,54 @@ describe("MedicationClinicalReport", () => {
     expect(printed).toHaveBeenCalledTimes(1);
     expect(await screen.findByText(/sent to the print dialog/)).toBeInTheDocument();
     vi.restoreAllMocks();
+  });
+
+  it("saves the chart alone as an image, behind the same confirmation", async () => {
+    const getReport = vi.fn(async () => structuredClone(medicationClinicalReportFixture()));
+    const exportReport = vi.fn();
+    (globalThis as GlobalWithGo).go = {
+      main: {
+        App: {
+          GetMedicationClinicianReport: getReport,
+          ExportMedicationClinicianReport: exportReport,
+        },
+      },
+    };
+    const save = vi.mocked(saveClinicalChartImage);
+    save.mockResolvedValueOnce("zeitboard-clinician-chart-2026-06-20-to-2026-07-21.png");
+
+    render(<MedicationClinicalReport available />);
+    fireEvent.click(screen.getByRole("button", { name: "Build report" }));
+    expect(await screen.findByText("Adherence summary")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Print or save…" }));
+    const exportRegion = screen.getByRole("region", { name: "Take the report out" });
+    const pngButton = within(exportRegion).getByRole("button", { name: "Save chart as PNG" });
+    expect(pngButton).toBeDisabled();
+    fireEvent.change(within(exportRegion).getByLabelText("Type EXPORT to print or save it"), {
+      target: { value: "EXPORT" },
+    });
+    fireEvent.click(pngButton);
+
+    expect(
+      await screen.findByText(
+        "Clinician chart saved as zeitboard-clinician-chart-2026-06-20-to-2026-07-21.png.",
+      ),
+    ).toBeInTheDocument();
+    // Regenerated from the service before it is drawn; no HTML file is made.
+    expect(getReport).toHaveBeenCalledTimes(2);
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ generatedAt: expect.any(String) }));
+    expect(exportReport).not.toHaveBeenCalled();
+
+    // Where no image can be made, it says so.
+    save.mockResolvedValueOnce(undefined);
+    fireEvent.click(screen.getByRole("button", { name: "Print or save…" }));
+    fireEvent.change(screen.getByLabelText("Type EXPORT to print or save it"), {
+      target: { value: "EXPORT" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save chart as PNG" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The chart image could not be made on this computer.",
+    );
   });
 
   it.each([

@@ -1235,6 +1235,22 @@ ADR-0055 changes all three.
   system's picker, and shows the same name, expiry and fingerprint. The phone keeps the certificate
   with the enrollment and uses it only for the server.
 
+### The clinical chart saves as an image — 2026-10-11
+
+A clinician who takes an image rather than a printed page can now have one. After the same typed
+EXPORT confirmation, "Save chart as PNG" regenerates the report from the service and draws its
+chart.
+
+- **The image matches the printed page.** It uses the same colours, the same quarter or double-plot
+  rules, the same marks for taken, skipped and started doses and for context, and the same legend.
+  It draws at twice the resolution while the image stays within what a canvas can hold.
+- **The boundary goes with it.** The report's interpretation boundary and the generated time are
+  printed beneath the chart.
+- **Long ranges are cut, and the image says so.** A range longer than 1,500 days keeps the newest
+  1,500 and states how many it drew.
+- **Layout is separate from painting.** The chart is laid out as plain shapes, so its geometry is
+  tested without a canvas; painting only replays them.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and
@@ -1268,7 +1284,7 @@ or deferred with its reason.
 | 7 | The desktop `App` facade is not yet split into services (review #22). | Accepted. Extraction happens at feature boundaries, as the sleep log's reads did. |
 | 8 | The calendar, medication and report validators are handwritten, outside generated schema ownership (review #24). | Accepted. They are strict and tested. |
 | 9 | There are no ordered migrations yet. Every schema change so far was additive or an explicit drop (review #25). | Accepted. The upgrade tests fail on the first change that is neither, which then needs its migration. |
-| 10 | The clinical chart prints, or saves as PDF, but produces no PNG directly. | Accepted. |
+| 10 | ~~The clinical chart prints, or saves as PDF, but produces no PNG directly.~~ | Resolved 2026-10-11: "Save chart as PNG". |
 | 11 | English only. Onboarding is the first-run setup. | Accepted for the private release. |
 | 12 | Google Takeout and My Activity import are not implemented. | Deferred, with slice 7's multi-source work. |
 | 13 | ~~A correction is undone by adding another, not with one click.~~ | Resolved 2026-10-08: Undo on the night's row takes back its latest edit. |
@@ -1285,7 +1301,7 @@ tests and a verification entry. Where it waits on something outside the code, th
 | Undo a night's last edit in one click | Roadmap, phase 2 | Delivered 2026-10-08 |
 | A real list of nights where two sources disagree, in Rhythm › Sources | Roadmap, slice 5 | Delivered 2026-10-08 |
 | Missingness recorded per source | Roadmap, phase 2 | Delivered 2026-10-11 for Health Connect (ADR-0054). Manual nights have no coverage to state |
-| The clinical chart saved directly as PNG | Roadmap, phase 2; limitation 10 | Open |
+| The clinical chart saved directly as PNG | Roadmap, phase 2; limitation 10 | Delivered 2026-10-11 |
 | A self-hosted server trusted through its own CA certificate rather than skipped verification | Roadmap, small debts | Delivered 2026-10-11 for the desktop, the phone and the MCP connector (ADR-0055) |
 | Reaching hours for more than one contact, and per-day hours | Roadmap, slice 16 | Open |
 | Onboarding beyond the first-run setup | Roadmap, phase 2; limitation 11 | Open |
