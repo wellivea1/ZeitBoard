@@ -8,6 +8,8 @@ import { AgentProposalsProvider } from "./state/agentProposals";
 import { HomeScreen } from "./screens/HomeScreen";
 import { ScreenErrorBoundary } from "./components/ScreenErrorBoundary";
 import { subscribeBackendEvents } from "./data/backendEvents";
+import { loadClockSetting } from "./data/clock";
+import { setWindowClock, useWindowClock } from "./utils/windowClock";
 
 const PlanScreen = lazy(() =>
   import("./screens/PlanScreen").then((module) => ({ default: module.PlanScreen })),
@@ -40,6 +42,14 @@ export default function App() {
   const { route, selectPlanTab, selectRhythmTab, selectLogTab, selectSettingsTab } =
     useScreenNavigation();
   useEffect(subscribeBackendEvents, []);
+  // The remembered clock draws the first page; the desktop's answer replaces
+  // it if the owner or Windows has since changed it (ADR-0057).
+  useEffect(() => {
+    void loadClockSetting().then((setting) => {
+      if (setting) setWindowClock(setting.clock);
+    });
+  }, []);
+  const clock = useWindowClock();
 
   const content: ReactNode = {
     home: <HomeScreen />,
@@ -69,8 +79,12 @@ export default function App() {
               </a>
               <AppShell screen={route.screen}>
                 {/* Settings tabs are left out of the key: switching one must not
-                  remount the screen and lose a half-typed sync enrollment. */}
-                <ScreenErrorBoundary key={`${route.screen}/${route.planTab}/${route.logTab}`}>
+                  remount the screen and lose a half-typed sync enrollment. The
+                  clock is in it everywhere else, so every label, the desktop's
+                  and the window's, is drawn again on a new one. */}
+                <ScreenErrorBoundary
+                  key={`${route.screen}/${route.planTab}/${route.logTab}/${route.screen === "settings" ? "" : clock}`}
+                >
                   <Suspense fallback={<ScreenLoading />}>{content}</Suspense>
                 </ScreenErrorBoundary>
               </AppShell>

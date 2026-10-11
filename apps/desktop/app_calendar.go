@@ -277,7 +277,7 @@ func (a *App) ExportOwnedCalendar() (CalendarExportDTO, error) {
 		FileName:       "zeitboard-placements-" + now.Format("20060102") + ".ics",
 		ICS:            string(data),
 		GeneratedAt:    now.Format(time.RFC3339),
-		GeneratedLabel: now.Local().Format("Jan 2, 2006, 3:04 PM"),
+		GeneratedLabel: displayClock().Format(now.Local(), "Jan 2, 2006, 3:04 PM"),
 		EventCount:     len(events),
 	}, nil
 }
@@ -440,7 +440,7 @@ func (a *App) getCalendar(ctx context.Context, input CalendarQueryInput) (Calend
 		ZoneID:         zoneID,
 		StartCivilDate: start.Format("2006-01-02"),
 		EndCivilDate:   end.AddDate(0, 0, -1).Format("2006-01-02"),
-		UpdatedLabel:   now.In(location).Format("Updated Jan 2, 3:04 PM MST"),
+		UpdatedLabel:   displayClock().Format(now.In(location), "Updated Jan 2, 3:04 PM MST"),
 		Sources:        sourceDTOs,
 		Days:           dayDTOs,
 		Warnings:       warnings,
@@ -756,7 +756,7 @@ func calendarTimeLabel(value time.Time, zoneID string, allDay bool) string {
 	if allDay {
 		return value.In(location).Format("Jan 2, 2006")
 	}
-	return value.In(location).Format("Jan 2, 2006, 3:04 PM MST")
+	return displayClock().Format(value.In(location), "Jan 2, 2006, 3:04 PM MST")
 }
 
 func calendarCivilDate(raw string, now time.Time, location *time.Location) (time.Time, error) {

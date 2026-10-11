@@ -1,4 +1,5 @@
 import { clockRange } from "./relativeTime";
+import { appLocale } from "./appLocale";
 
 // How a night is said on a glanceable surface: its day and clock range in the
 // night's own zone, and where it came from. The stored labels ("Wed Sep 23,
@@ -24,7 +25,7 @@ export function nightWording(night: NightTimes) {
   const end = civilClock(night.endLocal);
   if (!start || !end) return { day: night.startLabel, time: `to ${night.endLabel}` };
   return {
-    day: start.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" }),
+    day: start.toLocaleDateString(appLocale, { weekday: "short", month: "short", day: "numeric" }),
     time: clockRange(start, end),
   };
 }

@@ -1291,6 +1291,28 @@ Home say more. Home now lists them under the figure, on a note:
   number, and the note counts the steps done. Once every step is done the note goes by itself.
   Closed with its ×, it stays closed, and Settings › Display can show it again.
 
+### Times on the reader's clock — 2026-10-11
+
+The desktop wrote every time on a twelve-hour clock, from about seventy fixed layouts in Go and a
+few hand-built ones in the window (ADR-0057).
+
+- **The clock follows Windows** by default, from its regional short-time format.
+- **Settings › Display can choose instead.** Its three choices each show the same afternoon,
+  "3:40 PM" or "15:40", on their own clock. The choice is kept on this computer, and changing it
+  redraws the window at once.
+- **One formatter per runtime.** `core/civilfmt` writes the time of day of any Go layout on a
+  given clock. Core's rhythm projection takes the clock from its caller, and the server keeps the
+  twelve-hour clock because it does not know its readers. In the window, every time goes through
+  `utils/relativeTime.ts`: ranges, gutters, axes, the chart's hover readout and the printable
+  blank log. The hover readout used to be 24-hour regardless.
+- **One language for names.** Days, months and day periods are named in one place in the window
+  (`utils/appLocale.ts`), so the browser's language no longer mixes with English.
+- **The phone already followed its own setting.** Its two fixed layouts now do too.
+- **Guards.** A Go test fails on a twelve-hour layout written directly in core or the desktop, and
+  the UI lint fails on a time with AM or PM spelled out in the window.
+- **Not done.** Translated text, other languages' day and month names, and plural rules need a
+  message catalog. The visitor's availability page on the server still writes the twelve-hour clock.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and
@@ -1325,7 +1347,7 @@ or deferred with its reason.
 | 8 | The calendar, medication and report validators are handwritten, outside generated schema ownership (review #24). | Accepted. They are strict and tested. |
 | 9 | There are no ordered migrations yet. Every schema change so far was additive or an explicit drop (review #25). | Accepted. The upgrade tests fail on the first change that is neither, which then needs its migration. |
 | 10 | ~~The clinical chart prints, or saves as PDF, but produces no PNG directly.~~ | Resolved 2026-10-11: "Save chart as PNG". |
-| 11 | English only. ~~Onboarding is the first-run setup.~~ | English only is accepted for the private release. Onboarding resolved 2026-10-11: after the first forecast, Home lists what else there is to set up. |
+| 11 | English only. ~~Onboarding is the first-run setup.~~ | English only is accepted for the private release. Times have followed the reader's 12- or 24-hour clock since 2026-10-11 (ADR-0057). Onboarding resolved 2026-10-11: after the first forecast, Home lists what else there is to set up. |
 | 12 | Google Takeout and My Activity import are not implemented. | Deferred, with slice 7's multi-source work. |
 | 13 | ~~A correction is undone by adding another, not with one click.~~ | Resolved 2026-10-08: Undo on the night's row takes back its latest edit. |
 | 14 | Notices reach a phone through the OS push transport, which the owner's own server does not replace (C6, disclosed). | Accepted and disclosed. |
@@ -1345,7 +1367,7 @@ tests and a verification entry. Where it waits on something outside the code, th
 | A self-hosted server trusted through its own CA certificate rather than skipped verification | Roadmap, small debts | Delivered 2026-10-11 for the desktop, the phone and the MCP connector (ADR-0055) |
 | Reaching hours for more than one contact, and per-day hours | Roadmap, slice 16 | Delivered 2026-10-11 (ADR-0056) |
 | Onboarding beyond the first-run setup | Roadmap, phase 2; limitation 11 | Delivered 2026-10-11 |
-| Localization readiness | Roadmap, phase 2; limitation 11 | Open |
+| Localization readiness | Roadmap, phase 2; limitation 11 | Delivered 2026-10-11 for times (ADR-0057). Translated text waits for a message catalog |
 | Google Takeout and My Activity import, with inference kept in shadow mode | Roadmap, slice 7; limitation 12 | Open. Inference reaches the estimate only after it passes the backtest gate |
 | Missed-dose sharing, off by default per link | Medication plan, M-F | Open. It needs an ADR, and it must never show a dose that was not logged as missed |
 | Activity collected while the app is closed | Roadmap, slice 11 | Open |

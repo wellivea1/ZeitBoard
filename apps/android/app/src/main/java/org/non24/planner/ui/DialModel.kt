@@ -120,6 +120,16 @@ internal fun clock(time: ZonedDateTime, use24HourTime: Boolean, withPeriod: Bool
     return DateTimeFormatter.ofPattern(pattern, Locale.getDefault()).format(time)
 }
 
+/**
+ * "Sep 24, 4:10 PM", or "Sep 24, 16:10" on the 24-hour clock, with the zone's
+ * short name when the reader may be in another one.
+ */
+internal fun dayClock(time: ZonedDateTime, use24HourTime: Boolean, withZone: Boolean = false): String {
+    val day = DateTimeFormatter.ofPattern("MMM d", Locale.getDefault()).format(time)
+    val zone = if (withZone) " " + DateTimeFormatter.ofPattern("z", Locale.getDefault()).format(time) else ""
+    return "$day, ${clock(time, use24HourTime)}$zone"
+}
+
 /** "7:15" and "10:10 AM" when both halves of the day agree, as a sentence says it. */
 internal fun betweenClocks(start: Instant, end: Instant, zone: ZoneId, use24HourTime: Boolean): Pair<String, String> {
     val a = start.atZone(zone)

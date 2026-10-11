@@ -1,4 +1,5 @@
 import { findWailsMethod, type WailsRoot } from "./wailsBridge";
+import { timeOfDay } from "../utils/relativeTime";
 
 export const calendarDataChangedEvent = "zeitboard:calendar-data-changed";
 
@@ -792,8 +793,8 @@ function calendarFixture(query: CalendarQuery): CalendarData {
                 title: "Sample fixed event",
                 startAt: `${date}T18:00:00Z`,
                 endAt: `${date}T19:00:00Z`,
-                startLabel: `${label}, 6:00 PM UTC`,
-                endLabel: `${label}, 7:00 PM UTC`,
+                startLabel: `${label}, ${timeOfDay(18)} UTC`,
+                endLabel: `${label}, ${timeOfDay(19)} UTC`,
                 startMinute: 1080,
                 endMinute: 1140,
                 allDay: false,
@@ -813,8 +814,8 @@ function calendarFixture(query: CalendarQuery): CalendarData {
           title: "Predicted sleep window",
           startAt: `${date}T01:00:00Z`,
           endAt: `${date}T08:00:00Z`,
-          startLabel: `${label}, 1:00 AM UTC`,
-          endLabel: `${label}, 8:00 AM UTC`,
+          startLabel: `${label}, ${timeOfDay(1)} UTC`,
+          endLabel: `${label}, ${timeOfDay(8)} UTC`,
           startMinute: 60,
           endMinute: 480,
           confidence: "medium",
@@ -827,8 +828,8 @@ function calendarFixture(query: CalendarQuery): CalendarData {
           title: "Predicted waking window",
           startAt: `${date}T09:00:00Z`,
           endAt: `${date}T22:00:00Z`,
-          startLabel: `${label}, 9:00 AM UTC`,
-          endLabel: `${label}, 10:00 PM UTC`,
+          startLabel: `${label}, ${timeOfDay(9)} UTC`,
+          endLabel: `${label}, ${timeOfDay(22)} UTC`,
           startMinute: 540,
           endMinute: 1320,
           confidence: "medium",

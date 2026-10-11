@@ -2698,3 +2698,49 @@ figure. The phone does not show reaching hours, as before.
     Home.
   - "Show again" brought it back.
 
+## Times on the reader's clock — 2026-10-11
+
+ADR-0057. Verified on Windows 11, whose regional format here writes "h:mm tt", the 12-hour clock.
+
+- `core/civilfmt`:
+  - It writes only a layout's time of day on the chosen clock and leaves the rest alone.
+  - The zero clock is the twelve-hour one.
+  - Hours and stored "HH:MM" times are written on either clock.
+- Core's rhythm projection writes its labels on the caller's clock, and on the twelve-hour clock
+  when given none.
+- The guard test walks core and the desktop and passed with no direct twelve-hour layout left. A
+  file added with one failed it.
+- The Windows reader treats a capital H as the 24-hour clock and ignores quoted text. Ten patterns
+  are tested, among them United States, United Kingdom, Korean and Canadian French.
+- Desktop, five Go tests:
+  - The clock follows the computer until one is chosen.
+  - Labels move with it, here the reaching summary's "09:00 to 13:00".
+  - A choice survives a restart.
+  - An unknown clock is refused.
+  - A stale edit loses.
+
+  The settings file is owner-only like the others.
+- Web:
+  - The shared formatter writes ranges, times, axis hours and gutter labels on both clocks, with no
+    day period to repeat on the 24-hour one.
+  - The adapter, the remembered window clock and the Settings control are tested.
+  - The rhythm chart's hover readout, which was 24-hour regardless, now follows the clock.
+  - The UI lint failed on a probe file with `${hour} PM` and with "AM" in quotes, then passed on the
+    real tree.
+- The phone writes the review screen's snapshot time and "Last upload" on its own clock. A unit
+  test covers both clocks.
+- In the running desktop (disposable dev profile):
+  - Settings › Display showed three choices, "3:40 PM" (As Windows does, selected), "3:40 PM" and
+    "15:40".
+  - Choosing 24-hour stored it and put it in use without a restart.
+  - Home then read "before 22:40 tonight … between 03:05 and 06:55 tomorrow". The figure's text
+    read "Sun 22:41 to 03:04 on Mon, Oct 12", and the reaching row "09:00 to 13:00; Friday, 22:00
+    to 02:00 the next day". The diary read 17:00.
+  - Rhythm's records read "Oct 10, 22:30". Plan read "Tomorrow 03:04 – 03:49" and "Finish by Oct
+    2, 18:00".
+  - The week board's gutter read 03:00 to 21:00, with bands spoken as "22:41 to 24:00".
+  - Setting it back to "As Windows does" returned the 12-hour clock.
+- A layout defect found on the same page and fixed: a rule from the old two-column settings
+  layout put each settings row in a second grid column. On windows wider than 800 px, that
+  squeezed the appearance presets into a 190 px strip. They now fill the section, three to a row.
+

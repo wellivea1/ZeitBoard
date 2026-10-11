@@ -125,7 +125,7 @@ func (a *App) ExportRhythmMarkers() (RhythmMarkerExportDTO, error) {
 		FileName:       "zeitboard-rhythm-context-v1-" + now.Format("20060102") + ".json",
 		JSON:           string(encoded),
 		GeneratedAt:    now.Format(time.RFC3339),
-		GeneratedLabel: now.Local().Format("Jan 2, 2006, 3:04 PM"),
+		GeneratedLabel: displayClock().Format(now.Local(), "Jan 2, 2006, 3:04 PM"),
 		MarkerCount:    len(exported.Markers),
 	}, nil
 }
@@ -174,7 +174,7 @@ func (a *App) rhythmMarkersAtContext(ctx context.Context, now time.Time) (Rhythm
 		Message:      message,
 		Markers:      markers,
 		FixtureMode:  false,
-		UpdatedLabel: now.Local().Format("Updated Jan 2, 3:04 PM"),
+		UpdatedLabel: displayClock().Format(now.Local(), "Updated Jan 2, 3:04 PM"),
 	}, nil
 }
 
@@ -184,14 +184,14 @@ func rhythmMarkerDTO(record storage.RhythmMarkerRecord) (RhythmMarkerDTO, error)
 		return RhythmMarkerDTO{}, fmt.Errorf("load marker time zone %q: %w", record.ZoneID, err)
 	}
 	start := record.StartAt.In(location)
-	startLabel := start.Format("Jan 2, 2006, 3:04 PM")
+	startLabel := displayClock().Format(start, "Jan 2, 2006, 3:04 PM")
 	endAt := ""
 	endLabel := ""
 	rangeLabel := startLabel + " onward"
 	if record.EndAt != nil {
 		end := record.EndAt.In(location)
 		endAt = record.EndAt.UTC().Format(time.RFC3339)
-		endLabel = end.Format("Jan 2, 2006, 3:04 PM")
+		endLabel = displayClock().Format(end, "Jan 2, 2006, 3:04 PM")
 		rangeLabel = startLabel + " to " + endLabel
 	}
 	return RhythmMarkerDTO{
@@ -207,7 +207,7 @@ func rhythmMarkerDTO(record storage.RhythmMarkerRecord) (RhythmMarkerDTO, error)
 		EndLabel:      endLabel,
 		RangeLabel:    rangeLabel,
 		Note:          record.Note,
-		RecordedLabel: record.Provenance.RecordedAt.In(location).Format("Jan 2, 2006, 3:04 PM"),
+		RecordedLabel: displayClock().Format(record.Provenance.RecordedAt.In(location), "Jan 2, 2006, 3:04 PM"),
 	}, nil
 }
 

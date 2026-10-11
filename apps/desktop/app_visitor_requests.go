@@ -188,8 +188,8 @@ func backendVisitorRequestDTO(record backendVisitorRequestRecord) BackendVisitor
 		WindowEndAt:        record.WindowEndAt.UTC().Format(time.RFC3339Nano),
 		DurationMinutes:    record.DurationMinutes,
 		BeyondHorizon:      record.BeyondHorizon,
-		CreatedLabel:       "Asked " + record.CreatedAt.Local().Format("Jan 2, 3:04 PM"),
-		ExpiresLabel:       "expires " + record.ExpiresAt.Local().Format("Jan 2, 3:04 PM"),
+		CreatedLabel:       "Asked " + displayClock().Format(record.CreatedAt.Local(), "Jan 2, 3:04 PM"),
+		ExpiresLabel:       "expires " + displayClock().Format(record.ExpiresAt.Local(), "Jan 2, 3:04 PM"),
 		ApprovalDisclosure: record.Disclosure,
 		DecisionToken:      record.DecisionToken,
 	}
@@ -207,7 +207,7 @@ func backendVisitorRequestDTO(record backendVisitorRequestRecord) BackendVisitor
 			Author:       message.Author,
 			AuthorLabel:  author,
 			Body:         message.Body,
-			CreatedLabel: message.CreatedAt.Local().Format("Jan 2, 3:04 PM"),
+			CreatedLabel: displayClock().Format(message.CreatedAt.Local(), "Jan 2, 3:04 PM"),
 		})
 	}
 	if record.BeyondHorizon {

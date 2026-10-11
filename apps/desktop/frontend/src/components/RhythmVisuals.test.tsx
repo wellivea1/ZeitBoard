@@ -46,13 +46,13 @@ describe("chronological time probes", () => {
 
     fireEvent.pointerMove(track as Element, { clientX: 360 });
 
-    expect(visibleProbeLabel(container)).toHaveTextContent("Fri Jun 19 · 12:00 · predicted");
+    expect(visibleProbeLabel(container)).toHaveTextContent("Fri Jun 19 · 12:00 PM · predicted");
     expect(commits).toBe(commitsAfterToggle);
 
     fireEvent.pointerMove(observedTrack as Element, { clientX: 120 });
 
     expect(container.querySelectorAll(".time-probe:not([hidden])")).toHaveLength(1);
-    expect(visibleProbeLabel(container)).toHaveTextContent("Mon Jun 15 · 12:00");
+    expect(visibleProbeLabel(container)).toHaveTextContent("Mon Jun 15 · 12:00 PM");
     expect(commits).toBe(commitsAfterToggle);
 
     fireEvent.pointerLeave(observedTrack as Element);
@@ -131,6 +131,6 @@ describe("chronological time probes", () => {
 
     fireEvent.pointerMove(plot as Element, { clientX: 40 });
 
-    expect(visibleProbeLabel(container)).toHaveTextContent("Jun 10 · onset 17:48 (fit 17:45)");
+    expect(visibleProbeLabel(container)).toHaveTextContent("Jun 10 · onset 5:48 PM (fit 5:45 PM)");
   });
 });

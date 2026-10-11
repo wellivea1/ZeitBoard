@@ -178,6 +178,26 @@ for (const name of ["outlook.ts", "reachingHours.ts"]) {
   }
 }
 
+// ADR-0057: the window writes every time through utils/relativeTime.ts, on the
+// reader's clock. A time spelled out with AM or PM in the source is a
+// twelve-hour clock nobody chose. Tests and the sample payloads that stand in
+// for the desktop's labels (fixture.ts) are left out.
+for (const path of [...filesUnder(frontend, ".ts"), ...filesUnder(frontend, ".tsx")]) {
+  if (/\.test\.tsx?$/.test(path) || basename(path) === "fixture.ts") continue;
+  if (relative(frontend, path).split(/[\\/]/)[0] === "test") continue;
+  const source = readFileSync(path, "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, (comment) => comment.replace(/[^\n]/g, " "))
+    .replace(/\/\/[^\n]*/g, "");
+  source.split(/\r?\n/).forEach((line, index) => {
+    if (/[\d}] ?[AP]M\b|["'`][AP]M["'`]/.test(line)) {
+      fail(
+        path,
+        `line ${index + 1} spells out a twelve-hour time; write it through utils/relativeTime.ts.`,
+      );
+    }
+  });
+}
+
 const reachingPanelPath = join(frontend, "screens", "settings", "ReachingHoursSettings.tsx");
 const reachingPanel = readFileSync(reachingPanelPath, "utf8");
 if (!reachingPanel.includes("saveReachingHours") || !reachingPanel.includes("loadReachingHours")) {

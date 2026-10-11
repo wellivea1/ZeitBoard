@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, type PointerEventHandler, type RefObject } from "react";
+import { timeOfDay } from "../utils/relativeTime";
 
 const MINUTES_PER_DAY = 24 * 60;
 let activeProbe: HTMLDivElement | undefined;
@@ -50,12 +51,11 @@ export function formatCivilDate(civilDate: string, dayOffset = 0, includeWeekday
   return `${prefix}${MONTHS[date.getUTCMonth()]} ${date.getUTCDate()}`;
 }
 
-export function formatClock24(hour: number) {
+/** An hour of the day, which may run past either midnight, on the window's clock. */
+export function formatClock(hour: number) {
   let totalMinutes = Math.round(hour * 60);
   totalMinutes = ((totalMinutes % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+  return timeOfDay(Math.floor(totalMinutes / 60), totalMinutes % 60);
 }
 
 export function civilProbeLabel(
@@ -65,7 +65,7 @@ export function civilProbeLabel(
 ) {
   const roundedMinutes = Math.max(0, Math.round(minuteOffset));
   const dayOffset = Math.floor(roundedMinutes / MINUTES_PER_DAY);
-  const time = formatClock24((roundedMinutes % MINUTES_PER_DAY) / 60);
+  const time = formatClock((roundedMinutes % MINUTES_PER_DAY) / 60);
   const approximate = options.approximate ? "~" : "";
   const qualifier = options.predicted ? " · predicted" : "";
   return `${formatCivilDate(civilDate, dayOffset, options.includeWeekday !== false)} · ${approximate}${time}${qualifier}`;

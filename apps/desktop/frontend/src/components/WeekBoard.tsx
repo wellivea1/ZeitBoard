@@ -3,8 +3,8 @@ import { useEffect, useRef, type CSSProperties } from "react";
 import type { CalendarEventSegment } from "../data/calendar";
 import type { ProposalDecision } from "../state/approvals";
 import { Icon } from "./Icon";
+import { axisHour } from "../utils/relativeTime";
 import {
-  hourLabel,
   minuteClock,
   MIN_BLOCK_MINUTES,
   type WeekBand,
@@ -257,7 +257,7 @@ export function WeekBoard({
           <div className="week-gutter" aria-hidden="true">
             {gutterHours.map((value) => (
               <span style={{ top: `${value * hour}px` }} key={value}>
-                {hourLabel(value)}
+                {axisHour(value)}
               </span>
             ))}
             {today?.nowMinute !== undefined && (

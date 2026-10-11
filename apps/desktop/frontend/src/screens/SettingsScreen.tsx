@@ -26,6 +26,7 @@ import { StartupSettings } from "./settings/StartupSettings";
 import { BackendSyncSettings } from "./settings/BackendSyncSettings";
 import { LocalAgentSettings } from "./settings/LocalAgentSettings";
 import { ReachingHoursSettings } from "./settings/ReachingHoursSettings";
+import { ClockSettings } from "./settings/ClockSettings";
 import { SleepDataSettings } from "./settings/SleepDataSettings";
 import { createCoalescedRefresh, type CoalescedRefresh } from "../utils/coalescedRefresh";
 import type { SettingsTab } from "../types";
@@ -275,6 +276,7 @@ export function SettingsScreen({
         <ScreenTabPanel name="settings" id="display" active={tab}>
           <div className="settings-stack">
             <AppearanceSettings />
+            <ClockSettings />
             <HiddenNotesSettings />
           </div>
         </ScreenTabPanel>

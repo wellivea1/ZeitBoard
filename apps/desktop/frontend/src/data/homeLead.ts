@@ -10,6 +10,7 @@ import {
   dayInSentence,
   roundToMinutes,
 } from "../utils/relativeTime";
+import { appLocale } from "../utils/appLocale";
 
 // The words at the top of Home. The Almanac design leads with a sentence
 // rather than a status tile: "You have been awake for about 8 hours. Sleep is
@@ -181,7 +182,7 @@ function dayLabel(date: Date, now: Date) {
   if (offset === 0) return "Today";
   if (offset === 1) return "Tomorrow";
   // "Sunday 27": the locale's own order put the number first.
-  return `${date.toLocaleDateString(undefined, { weekday: "long" })} ${date.getDate()}`;
+  return `${date.toLocaleDateString(appLocale, { weekday: "long" })} ${date.getDate()}`;
 }
 
 /**

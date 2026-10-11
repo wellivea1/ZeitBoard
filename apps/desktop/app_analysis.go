@@ -252,5 +252,5 @@ func analysisUpdatedLabel(state localEstimateState) string {
 	if state.ChangedAt.IsZero() {
 		return "Local estimate unavailable"
 	}
-	return "Estimate content changed " + state.ChangedAt.Local().Format("Jan 2, 3:04 PM")
+	return "Estimate content changed " + displayClock().Format(state.ChangedAt.Local(), "Jan 2, 3:04 PM")
 }
