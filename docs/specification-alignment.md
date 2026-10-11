@@ -79,8 +79,9 @@ acceptance clause or of its real-device qualification.
   (ADR-0046, ADR-0051, ADR-0052). The history keeps per-decision undo.
 - **Rhythm "Sources" tab and Data Sources:** driven by real local data in the desktop app (real
   refusal, real correction history, real per-source composition, real sync status); synthetic
-  previews remain only in the labeled browser-preview fixture mode. A real cross-source conflict
-  list still awaits an engine-surfaced overlap DTO.
+  previews remain only in the labeled browser-preview fixture mode. Nights recorded more than once
+  are listed with each record, the night the estimator uses in their place, and one-click
+  exclusion.
 - **Tasks:** user-owned tasks are real and synced (contract, local CRUD, real Tasks screen,
   scheduler plans only stored open tasks — ADR-0018; cross-device revision sync with erasure-grade
   deletion — ADR-0020). Approved placements materialize in the app-owned local calendar, and can

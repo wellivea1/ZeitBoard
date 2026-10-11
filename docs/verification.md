@@ -2471,3 +2471,25 @@ that date the worker found no link to publish to, so the startup pass never publ
 now runs on the fixture's clock, advancing in real time, because its timers are real. The test
 passes, and so does the rest of the server suite. The other fixed-clock tests already give the
 code under test their own clock.
+
+## Nights recorded more than once are listed — 2026-10-08
+
+- Core: of five sessions, two describe one night and are merged. The other three are not merged:
+  one is excluded, one is unclassified, and one is the next night. `Overlaps` names exactly the
+  two merged records, earliest first, and the night between them.
+- Desktop:
+  - Two logs of one night, 30 minutes apart at the start and 10 at the end, are listed once. Both
+    records are shown, earliest first, with the middle start. Excluding one empties the list.
+  - With 23 such nights, twenty are listed, newest first, and all 23 are counted.
+- Web:
+  - Each record and the estimator's night are drawn on the night's own scale. The estimator's
+    night is marked apart.
+  - Exclude sends that record's id and review token, and announces the change to the other views.
+  - A list cut short says so.
+  - The adapter refuses an overlap of one record, and a count below the list's length.
+  - Data Sources links to the list only when some night has more than one record.
+- In the running desktop (disposable dev profile, two synthetic logs added over imported nights):
+  - Sep 24 read "Starts 32 minutes apart, ends 8 minutes apart", and Sep 22 read "Starts 2 hours
+    4 minutes apart, ends 2 hours 17 minutes apart". The Sep 22 bars visibly disagreed.
+  - Exclude on Sep 22's log removed that night from the list and said Undo is in the sleep log.
+  - Undo on that row in Log › Sleep brought the night back to the list.

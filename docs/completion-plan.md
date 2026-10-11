@@ -1158,6 +1158,29 @@ with an edit to take back now has **Undo** beside Edit in Log › Sleep.
 - **Undo is offered only on a single line of edits with nothing waiting for review.** A night whose
   edits disagree with its source is still settled by editing it.
 
+### Nights recorded more than once are listed — 2026-10-08
+
+When two records describe one night, the estimator merges them at the middle of their times. Say
+Health Connect and the owner's log both have it, or the night was logged twice. That was invisible:
+the night counted once, at times neither record gave. Rhythm › Sources now lists these nights under
+"Nights recorded more than once".
+
+- **Each night shows every record and what the estimator uses.** For each record it gives the
+  source and the times. It also gives the night the estimator uses in their place, and how far
+  apart the starts and the ends are.
+- **The disagreement is drawn.** Each record's bar sits on its own line, on one scale per night.
+  The records are solid and the estimator's night is outlined, so they read apart without colour.
+- **Exclude leaves a record out of estimates.** It writes the same correction as Exclude in the log,
+  so Undo on that night's row takes it back.
+- **The list shows the newest twenty and counts the rest.**
+- **Data Sources links to the list** when any night has more than one record. It now also says
+  "excluded" where it used to say "hidden".
+- **The logic lives in the engine.** `sleepv1.Overlaps` reports what `ResolveOverlaps` merges, so
+  the list cannot drift from the estimator. A suppressed record is never merged, and neither is a
+  record of another kind.
+- **Agents do not see it.** The list carries raw record times, which the agent projections never
+  return.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and
@@ -1206,7 +1229,7 @@ tests and a verification entry. Where it waits on something outside the code, th
 | Function | Named in | Status |
 |---|---|---|
 | Undo a night's last edit in one click | Roadmap, phase 2 | Delivered 2026-10-08 |
-| A real list of nights where two sources disagree, in Rhythm › Sources | Roadmap, slice 5 | Open. Several sources now exist: manual, file import and Health Connect |
+| A real list of nights where two sources disagree, in Rhythm › Sources | Roadmap, slice 5 | Delivered 2026-10-08 |
 | Missingness recorded per source | Roadmap, phase 2 | Open |
 | The clinical chart saved directly as PNG | Roadmap, phase 2; limitation 10 | Open |
 | A self-hosted server trusted through its own CA certificate rather than skipped verification | Roadmap, small debts | Open |

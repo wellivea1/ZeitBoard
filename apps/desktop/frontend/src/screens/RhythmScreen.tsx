@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Notice } from "../components/Notice";
+import { SleepOverlapList } from "../components/SleepOverlapList";
 import { Icon } from "../components/Icon";
 import { Loading } from "../components/Loading";
 import { PageHeader } from "../components/AppShell";
@@ -120,6 +121,7 @@ function SourcesPanel() {
             , each recorded without altering the original.
           </p>
         )}
+        <SleepOverlapList overlaps={data.overlaps} count={data.overlapCount} />
       </section>
     </>
   );

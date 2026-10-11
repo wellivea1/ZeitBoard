@@ -410,6 +410,47 @@ func ResolveOverlaps(sessions []domain.SleepSession) ([]domain.SleepSession, err
 	return result, nil
 }
 
+// Overlap is a night that more than one record describes: the records
+// ResolveOverlaps merged, earliest first, and the session that stands in
+// their place.
+type Overlap struct {
+	ObservationIDs []string
+	Merged         domain.SleepSession
+}
+
+// Overlaps lists the sessions ResolveOverlaps forms from more than one record,
+// earliest first, exactly as the estimator receives them.
+func Overlaps(sessions []domain.SleepSession) ([]Overlap, error) {
+	resolved, err := ResolveOverlaps(sessions)
+	if err != nil {
+		return nil, err
+	}
+	var overlaps []Overlap
+	for _, session := range resolved {
+		if ids := mergedObservationIDs(session); len(ids) > 1 {
+			overlaps = append(overlaps, Overlap{ObservationIDs: ids, Merged: session})
+		}
+	}
+	return overlaps, nil
+}
+
+// mergedObservationIDs is each record a session's evidence names, once.
+func mergedObservationIDs(session domain.SleepSession) []string {
+	seen := map[domain.ObservationID]bool{}
+	var ids []string
+	for _, interval := range session.Intervals {
+		for _, evidence := range []domain.Evidence{interval.StartEvidence, interval.EndEvidence} {
+			for _, id := range evidence.ObservationIDs {
+				if !seen[id] {
+					seen[id] = true
+					ids = append(ids, string(id))
+				}
+			}
+		}
+	}
+	return ids
+}
+
 func applyCorrection(session *domain.SleepSession, correction Correction, zoneID string) error {
 	if len(session.Intervals) == 0 {
 		return errors.New("target session has no intervals")

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"non24.app/core/domain"
 	"non24.app/core/recompute"
 	"non24.app/core/sleepv1"
 	storage "non24.app/core/storage/sqlite"
@@ -21,6 +22,8 @@ const (
 	sleepLogPageSize = 50
 	maxSleepRange    = 45 * 24 * time.Hour
 	noSleepEntries   = "No sleep entries yet. Add a sleep interval to start a local estimate."
+	// The Sources tab lists the newest nights recorded more than once.
+	sleepOverlapsShown = 20
 )
 
 type SleepLogPageInput struct {
@@ -55,6 +58,26 @@ type SleepSourcesDTO struct {
 	// LatestCorrected is the newest night with an edit, for the correction
 	// inspector.
 	LatestCorrected *SleepEntryDTO `json:"latestCorrected,omitempty"`
+	// OverlapCount is how many nights more than one record describes, and
+	// Overlaps the newest of them.
+	OverlapCount int               `json:"overlapCount"`
+	Overlaps     []SleepOverlapDTO `json:"overlaps"`
+}
+
+// SleepOverlapDTO is a night that more than one record describes. The
+// estimator merges the records, at the middle of their times; excluding all
+// but one leaves that one to stand alone.
+type SleepOverlapDTO struct {
+	// The night the estimator uses in their place.
+	StartLocal string `json:"startLocal"`
+	EndLocal   string `json:"endLocal"`
+	StartLabel string `json:"startLabel"`
+	EndLabel   string `json:"endLabel"`
+	// How far apart the records put the night's start, and its end.
+	StartApartMinutes int `json:"startApartMinutes"`
+	EndApartMinutes   int `json:"endApartMinutes"`
+	// Records are the nights merged, earliest first.
+	Records []SleepEntryDTO `json:"records"`
 }
 
 type SleepSourceSummaryDTO struct {
@@ -141,14 +164,15 @@ func (a *App) GetSleepSources() (SleepSourcesDTO, error) {
 	store, err := a.requireStore()
 	if err != nil {
 		return SleepSourcesDTO{
-			Status: "unavailable", Message: "Local storage is unavailable: " + err.Error(), Sources: []SleepSourceSummaryDTO{},
+			Status: "unavailable", Message: "Local storage is unavailable: " + err.Error(),
+			Sources: []SleepSourceSummaryDTO{}, Overlaps: []SleepOverlapDTO{},
 		}, nil
 	}
 	reviews, err := store.ReadSleepReviews(a.applicationContext())
 	if err != nil {
 		return SleepSourcesDTO{}, err
 	}
-	dto := SleepSourcesDTO{Status: "ready", Total: len(reviews), Sources: []SleepSourceSummaryDTO{}}
+	dto := SleepSourcesDTO{Status: "ready", Total: len(reviews), Sources: []SleepSourceSummaryDTO{}, Overlaps: []SleepOverlapDTO{}}
 	if len(reviews) == 0 {
 		dto.Status, dto.Message = "empty", noSleepEntries
 		return dto, nil
@@ -197,7 +221,63 @@ func (a *App) GetSleepSources() (SleepSourcesDTO, error) {
 		}
 		return left.Provenance < right.Provenance
 	})
+	if err := addSleepOverlaps(&dto, reviews); err != nil {
+		return SleepSourcesDTO{}, err
+	}
 	return dto, nil
+}
+
+// addSleepOverlaps finds the nights the estimator merges from more than one
+// record, as it merges them, and lists the newest.
+func addSleepOverlaps(dto *SleepSourcesDTO, reviews []sleepv1.ReviewContext) error {
+	sessions := make([]domain.SleepSession, len(reviews))
+	byID := make(map[string]sleepv1.ReviewContext, len(reviews))
+	for index, review := range reviews {
+		sessions[index] = review.Effective
+		byID[review.ObservationID] = review
+	}
+	overlaps, err := sleepv1.Overlaps(sessions)
+	if err != nil {
+		return err
+	}
+	dto.OverlapCount = len(overlaps)
+	// Overlaps come earliest first; the tab lists the newest first.
+	for index := len(overlaps) - 1; index >= 0 && len(dto.Overlaps) < sleepOverlapsShown; index-- {
+		dto.Overlaps = append(dto.Overlaps, sleepOverlapDTO(overlaps[index], byID))
+	}
+	return nil
+}
+
+func sleepOverlapDTO(overlap sleepv1.Overlap, reviews map[string]sleepv1.ReviewContext) SleepOverlapDTO {
+	merged := overlap.Merged.Intervals[0].Interval
+	dto := SleepOverlapDTO{
+		StartLocal: inputValue(merged.Start), EndLocal: inputValue(merged.End),
+		StartLabel: formatInstant(merged.Start), EndLabel: formatInstant(merged.End),
+		Records: make([]SleepEntryDTO, 0, len(overlap.ObservationIDs)),
+	}
+	var starts, ends []time.Time
+	for _, id := range overlap.ObservationIDs {
+		review := reviews[id]
+		interval := review.Effective.Intervals[0].Interval
+		starts, ends = append(starts, interval.Start.UTC), append(ends, interval.End.UTC)
+		dto.Records = append(dto.Records, sleepEntryFromReview(review))
+	}
+	dto.StartApartMinutes, dto.EndApartMinutes = spreadMinutes(starts), spreadMinutes(ends)
+	return dto
+}
+
+// spreadMinutes is how far apart the earliest and latest instants are.
+func spreadMinutes(instants []time.Time) int {
+	earliest, latest := instants[0], instants[0]
+	for _, instant := range instants[1:] {
+		if instant.Before(earliest) {
+			earliest = instant
+		}
+		if instant.After(latest) {
+			latest = instant
+		}
+	}
+	return int(latest.Sub(earliest).Round(time.Minute) / time.Minute)
 }
 
 type SleepUndoInput struct {

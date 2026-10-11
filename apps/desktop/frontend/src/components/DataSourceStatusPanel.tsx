@@ -31,13 +31,27 @@ function SourceRow({ detail, icon, name, state = "off", status }: SourceRowProps
 function sleepDetail(summary: SleepSourceSummary) {
   const changed = [
     summary.corrected > 0 ? `${summary.corrected} corrected` : "",
-    summary.suppressed > 0 ? `${summary.suppressed} hidden` : "",
+    summary.suppressed > 0 ? `${summary.suppressed} excluded` : "",
   ].filter(Boolean);
   return [
     `${summary.total} ${summary.total === 1 ? "record" : "records"}`,
     summary.provenance,
     ...changed,
   ].join(" · ");
+}
+
+// The nights more than one record describes are listed where the estimator's
+// view of the sources is: Rhythm › Sources.
+function OverlapNote({ count }: { count: number }) {
+  if (count === 0) return null;
+  return (
+    <p className="diff-note">
+      {count === 1
+        ? "1 night has more than one record."
+        : `${count} nights have more than one record.`}{" "}
+      <a href="#/rhythm/sources">See how the estimator combines them</a>
+    </p>
+  );
 }
 
 export function DataSourceStatusPanel({
@@ -129,6 +143,7 @@ export function DataSourceStatusPanel({
         )}
         <SourceRow icon="sources" name="Device activity" detail="Not connected" status="Off" />
       </div>
+      <OverlapNote count={sleepSources?.overlapCount ?? 0} />
     </section>
   );
 }
