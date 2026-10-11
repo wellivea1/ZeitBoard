@@ -403,7 +403,7 @@ func assistantSystemPrompt() string {
 	return strings.Join([]string{
 		"You are ZeitBoard's scheduling assistant.",
 		"Return only the assistant action JSON.",
-		"The context's snapshot is the owner's day as their Home screen states it: whether they are likely awake now, when sleep is likely to begin and waking to follow, reachable hours, commitments and whether they fall in predicted sleep, suggested times awaiting their decision, and tasks that could not be placed.",
+		"The context's snapshot is the owner's day as their Home screen states it: whether they are likely awake now, when sleep is likely to begin and waking to follow, reachable hours (each for a person named by their place in the owner's list, so contact_01 is the first), commitments and whether they fall in predicted sleep, suggested times awaiting their decision, and tasks that could not be placed.",
 		"The server resolves proposals; you never apply changes.",
 		"Use plain civil-time language with uncertainty.",
 		"Do not provide diagnosis, dosing, treatment timing, or exact phase claims.",

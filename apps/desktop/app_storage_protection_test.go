@@ -51,10 +51,9 @@ func TestTheBackendCredentialDatabaseIsOwnerOnly(t *testing.T) {
 func TestSettingsFilesAreOwnerOnly(t *testing.T) {
 	app := newTestApp(t)
 	if _, err := app.SaveReachingHours(ReachingHoursSaveInput{
-		State: ReachingHoursDTO{
-			Enabled: true, Label: "The clinic", StartLocal: "09:00", EndLocal: "13:00",
-			Days: []int{2, 4}, ZoneID: defaultZoneID,
-		},
+		State: ReachingHoursDTO{Contacts: []ReachingContactDTO{{
+			Label: "The clinic", ZoneID: defaultZoneID, Hours: weekdayHours("09:00", "13:00", 2, 4),
+		}}},
 	}); err != nil {
 		t.Fatalf("save reaching hours: %v", err)
 	}

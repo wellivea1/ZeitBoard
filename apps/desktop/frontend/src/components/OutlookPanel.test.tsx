@@ -38,25 +38,31 @@ const base: OutlookData = {
       durationHours: 6.33,
     },
   ],
-  officeHoursLabel: "Typical office hours, Monday to Friday 9:00 AM to 5:00 PM",
-  officeWindows: [
+  reaching: [
     {
-      dayLabel: "Thu, Aug 6",
-      hoursLabel: "9:00 AM to 5:00 PM",
-      status: "reachable",
-      reachableLabel: "10:40 AM to 5:00 PM",
-      detail: "Predicted awake for 6 hours 20 minutes of this window.",
-      offsetHours: 15,
-      durationHours: 8,
-    },
-    {
-      dayLabel: "Fri, Aug 7",
-      hoursLabel: "9:00 AM to 5:00 PM",
-      status: "partial",
-      detail:
-        "Possibly awake for up to 1 hour 10 minutes, but this falls where the sleep boundary is uncertain.",
-      offsetHours: 39,
-      durationHours: 8,
+      contactId: "contact-office",
+      label: "Typical office hours",
+      hoursLabel: "Typical office hours: you set Monday to Friday, 9:00 AM to 5:00 PM.",
+      windows: [
+        {
+          dayLabel: "Thu, Aug 6",
+          hoursLabel: "9:00 AM to 5:00 PM",
+          status: "reachable",
+          reachableLabel: "10:40 AM to 5:00 PM",
+          detail: "Predicted awake for 6 hours 20 minutes of this window.",
+          offsetHours: 15,
+          durationHours: 8,
+        },
+        {
+          dayLabel: "Fri, Aug 7",
+          hoursLabel: "9:00 AM to 5:00 PM",
+          status: "partial",
+          detail:
+            "Possibly awake for up to 1 hour 10 minutes, but this falls where the sleep boundary is uncertain.",
+          offsetHours: 39,
+          durationHours: 8,
+        },
+      ],
     },
   ],
   commitments: [
@@ -113,11 +119,43 @@ describe("OutlookPanel", () => {
   // the strip already showed. They are rows on the same axis now.
   it("draws reachable hours and events on the timeline's own axis", () => {
     const { container } = render(<OutlookPanel data={base} />);
-    expect(container.querySelectorAll(".outlook-reach")).toHaveLength(base.officeWindows.length);
+    expect(container.querySelectorAll(".outlook-reach")).toHaveLength(
+      base.reaching[0]!.windows.length,
+    );
     const event = container.querySelector(".outlook-event") as HTMLElement | null;
     expect(event).not.toBeNull();
     expect(event?.style.left).toBe(`${(38.5 / base.horizonHours) * 100}%`);
     expect(container.querySelector(".outlook-office, .outlook-commitments")).toBeNull();
+  });
+
+  // Each person on the reaching list gets a row of their own, named for them,
+  // in the order of the list; someone with no hours in the days shown keeps
+  // theirs, and the words say why it is empty.
+  it("gives each person shown a row of their own", () => {
+    const pharmacy = {
+      contactId: "contact-pharmacy",
+      label: "The pharmacy",
+      hoursLabel: "The pharmacy: you set Sunday, 10:00 AM to 4:00 PM.",
+      windows: [],
+    };
+    const { container } = render(
+      <OutlookPanel data={{ ...base, reaching: [...base.reaching, pharmacy] }} />,
+    );
+    const names = [...container.querySelectorAll(".outlook-row-name")];
+    expect(names.map((name) => name.textContent)).toEqual(["Typical office hours", "The pharmacy"]);
+    expect(names[1]).toHaveAttribute("title", pharmacy.hoursLabel);
+    const pharmacyTrack = names[1]?.nextElementSibling;
+    expect(pharmacyTrack?.querySelectorAll(".outlook-reach")).toHaveLength(0);
+    expect(
+      screen.getByText("The pharmacy is not available in the days shown."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: pharmacy.hoursLabel })).toBeInTheDocument();
+  });
+
+  it("draws no reaching row or legend when nobody is shown", () => {
+    const { container } = render(<OutlookPanel data={{ ...base, reaching: [] }} />);
+    expect(container.querySelector(".outlook-row-name")).toBeNull();
+    expect(container.querySelector('[data-legend="reach"]')).toBeNull();
   });
 
   // The strip is a drawing; the same facts have to be readable without it, and
@@ -164,7 +202,7 @@ describe("OutlookPanel", () => {
       ...base,
       status: "withheld",
       segments: [],
-      officeWindows: [],
+      reaching: [],
       commitments: [],
       opportunities: [],
       withheldMessage: "Sleep was expected by now and none has been recorded.",
@@ -188,7 +226,7 @@ describe("OutlookPanel", () => {
       ...base,
       status: "refused",
       segments: [],
-      officeWindows: [],
+      reaching: [],
       commitments: [],
       opportunities: [],
       refusal: { code: "insufficient_data", message: "need at least 7 usable sleep episodes" },

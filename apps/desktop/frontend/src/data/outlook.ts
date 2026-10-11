@@ -42,6 +42,16 @@ export interface OutlookOfficeWindow {
   durationHours: number;
 }
 
+/** One person on the reaching list, with their windows in the horizon (ADR-0056). */
+export interface OutlookReaching {
+  contactId: string;
+  label: string;
+  /** When they are available, as the owner set it. */
+  hoursLabel: string;
+  /** None means they are not available in the days shown; the row stays. */
+  windows: OutlookOfficeWindow[];
+}
+
 export interface OutlookCommitment {
   title: string;
   whenLabel: string;
@@ -88,8 +98,8 @@ export interface OutlookData {
   sleepOnset?: OutlookRange;
   /** When waking is likely to follow it. */
   wake?: OutlookRange;
-  officeHoursLabel: string;
-  officeWindows: OutlookOfficeWindow[];
+  /** One row for each person shown, in the order of the owner's list. */
+  reaching: OutlookReaching[];
   commitments: OutlookCommitment[];
   opportunities: OutlookOpportunity[];
   awakeLabel: string;
@@ -135,10 +145,9 @@ export const outlookUnavailable: OutlookData = {
   horizonHours: 72,
   days: [],
   segments: [],
-  // Not a schedule: the preview has none to read, and inventing a working week
-  // here is exactly the assumption the reaching-hours setting exists to remove.
-  officeHoursLabel: "Reaching hours are set in the desktop app.",
-  officeWindows: [],
+  // Nobody: the preview has no list to read, and inventing a working week here
+  // is exactly the assumption the reaching-hours setting exists to remove.
+  reaching: [],
   commitments: [],
   opportunities: [],
   awakeLabel: "0 minutes",
@@ -205,6 +214,21 @@ function normalizeOffice(value: unknown): OutlookOfficeWindow | undefined {
     durationHours,
     ...(reachableLabel ? { reachableLabel } : {}),
   };
+}
+
+function normalizeReaching(value: unknown): OutlookReaching | undefined {
+  if (!isRecord(value) || !Array.isArray(value.windows)) return undefined;
+  const contactId = str(value.contactId);
+  const label = str(value.label);
+  const hoursLabel = str(value.hoursLabel);
+  if (!contactId || !label || !hoursLabel) return undefined;
+  const windows: OutlookOfficeWindow[] = [];
+  for (const item of value.windows) {
+    const window = normalizeOffice(item);
+    if (!window) return undefined;
+    windows.push(window);
+  }
+  return { contactId, label, hoursLabel, windows };
 }
 
 function normalizeCommitment(value: unknown): OutlookCommitment | undefined {
@@ -278,11 +302,11 @@ export function normalizeOutlook(value: unknown): OutlookData | undefined {
     if (!segment) return undefined;
     segments.push(segment);
   }
-  const officeWindows: OutlookOfficeWindow[] = [];
-  for (const item of Array.isArray(value.officeWindows) ? value.officeWindows : []) {
-    const window = normalizeOffice(item);
-    if (!window) return undefined;
-    officeWindows.push(window);
+  const reaching: OutlookReaching[] = [];
+  for (const item of Array.isArray(value.reaching) ? value.reaching : []) {
+    const row = normalizeReaching(item);
+    if (!row) return undefined;
+    reaching.push(row);
   }
   const commitments: OutlookCommitment[] = [];
   for (const item of Array.isArray(value.commitments) ? value.commitments : []) {
@@ -316,8 +340,7 @@ export function normalizeOutlook(value: unknown): OutlookData | undefined {
     horizonHours,
     days,
     segments,
-    officeHoursLabel: str(value.officeHoursLabel) ?? outlookUnavailable.officeHoursLabel,
-    officeWindows,
+    reaching,
     commitments,
     opportunities,
     awakeLabel: str(value.awakeLabel) ?? "0 minutes",

@@ -1,39 +1,32 @@
 import { Loading } from "../../components/Loading";
 import { useEffect, useState } from "react";
 import {
-  WEEKDAY_LABELS,
+  MAX_REACHING_CONTACTS,
   loadReachingHours,
+  newReachingContact,
   reachingHoursUnavailable,
   saveReachingHours,
   timeZones,
-  type ReachingHours,
+  type ReachingContact,
   type ReachingHoursEnvelope,
 } from "../../data/reachingHours";
+import { ReachingContactEditor } from "./ReachingContactEditor";
 
 // The hours belong to whoever the person needs to reach, not to them. Everything
 // on this panel is worded that way, because the difference is the whole point:
 // a drifting rhythm makes "when is the clinic open, and will I be awake" a
-// different question every day.
-
-const RUN_PRESETS: { label: string; days: number[] }[] = [
-  { label: "Weekdays", days: [1, 2, 3, 4, 5] },
-  { label: "Every day", days: [0, 1, 2, 3, 4, 5, 6] },
-  { label: "Weekends", days: [0, 6] },
-];
-
-function sameDays(a: number[], b: number[]) {
-  return a.length === b.length && a.every((day, index) => day === b[index]);
-}
+// different question every day. The list is edited as a whole and saved once,
+// so Discard puts back exactly what Home is using.
 
 export function ReachingHoursSettings() {
   const [envelope, setEnvelope] = useState<ReachingHoursEnvelope>(reachingHoursUnavailable);
-  const [draft, setDraft] = useState<ReachingHours>(reachingHoursUnavailable.state);
+  const [draft, setDraft] = useState<ReachingContact[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [zones] = useState(timeZones);
-  // The form waits for the saved hours: typing into placeholder office hours
-  // that the first read then replaces would lose the edit.
+  // The form waits for the saved list: editing a placeholder that the first
+  // read then replaces would lose the edit.
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
@@ -41,7 +34,7 @@ export function ReachingHoursSettings() {
     void loadReachingHours().then((result) => {
       if (!current) return;
       setEnvelope(result);
-      setDraft(result.state);
+      setDraft(result.state.contacts);
       setLoaded(true);
     });
     return () => {
@@ -49,38 +42,42 @@ export function ReachingHoursSettings() {
     };
   }, []);
 
-  const change = (changes: Partial<ReachingHours>) => {
-    setDraft((state) => ({ ...state, ...changes }));
+  const edit = (change: (contacts: ReachingContact[]) => ReachingContact[]) => {
+    setDraft(change);
     setMessage("");
   };
-
-  const toggleDay = (day: number) =>
-    change({
-      days: draft.days.includes(day)
-        ? draft.days.filter((value) => value !== day)
-        : [...draft.days, day].sort((a, b) => a - b),
+  const replace = (contact: ReachingContact) =>
+    edit((contacts) => contacts.map((known) => (known.id === contact.id ? contact : known)));
+  const moveUp = (index: number) =>
+    edit((contacts) => {
+      const moved = [...contacts];
+      const [person] = moved.splice(index, 1);
+      if (person) moved.splice(index - 1, 0, person);
+      return moved;
     });
+  const remove = (id: string) => edit((contacts) => contacts.filter((known) => known.id !== id));
+  const add = () => edit((contacts) => [...contacts, newReachingContact(zones[0] ?? "UTC")]);
 
   const submit = async () => {
     setBusy(true);
     setError("");
     try {
-      const saved = await saveReachingHours(draft, envelope.revision);
+      const saved = await saveReachingHours({ contacts: draft }, envelope.revision);
       setEnvelope(saved);
-      setDraft(saved.state);
+      setDraft(saved.state.contacts);
       setMessage(
         saved.conflict
-          ? "These hours were changed elsewhere, so that edit was kept and yours was not applied."
-          : "Saved. The next three days now use these hours.",
+          ? "The list was changed elsewhere, so that version was kept and your edit was not applied."
+          : "Saved. Home now uses this list.",
       );
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The schedule could not be saved.");
+      setError(reason instanceof Error ? reason.message : "The list could not be saved.");
     } finally {
       setBusy(false);
     }
   };
 
-  const overnight = draft.endLocal <= draft.startLocal;
+  const full = draft.length >= MAX_REACHING_CONTACTS;
 
   return (
     <section className="settings-section reaching-panel">
@@ -88,9 +85,10 @@ export function ReachingHoursSettings() {
         <p className="section-kicker">Reaching people</p>
         <h2>When the people you need are available</h2>
         <p className="settings-copy">
-          These are someone else&apos;s hours, not yours &mdash; a clinic, a pharmacy, an employer,
-          family in another country. The next three days use them to work out how much of your
-          predicted waking time overlaps. Nothing here is shared or sent anywhere.
+          These are other people&apos;s hours, not yours &mdash; a clinic, a pharmacy, an employer,
+          family in another country. Home draws a row for each person shown, marking how much of
+          your predicted waking time overlaps their hours. Names stay on this computer: the
+          assistant knows people only by their place in this list.
         </p>
       </div>
 
@@ -98,112 +96,43 @@ export function ReachingHoursSettings() {
         <Loading />
       ) : (
         <div className="reaching-form">
-          <label className="reaching-toggle">
-            <input
-              type="checkbox"
-              checked={draft.enabled}
-              onChange={(event) => change({ enabled: event.target.checked })}
-            />
-            <span>
-              Show reaching hours
-              <small>
-                Turn this off if there is nobody you need to reach on a schedule. The outlook then
-                says nothing rather than assuming a working week.
-              </small>
-            </span>
-          </label>
-
-          <label className="reaching-field">
-            <span>Whose hours are these?</span>
-            <input
-              type="text"
-              value={draft.label}
-              maxLength={60}
-              placeholder="The clinic"
-              disabled={!draft.enabled}
-              onChange={(event) => change({ label: event.target.value })}
-            />
-          </label>
-
-          <div className="reaching-clocks">
-            <label className="reaching-field">
-              <span>Opens</span>
-              <input
-                type="time"
-                value={draft.startLocal}
-                disabled={!draft.enabled}
-                onChange={(event) => change({ startLocal: event.target.value })}
-              />
-            </label>
-            <label className="reaching-field">
-              <span>Closes</span>
-              <input
-                type="time"
-                value={draft.endLocal}
-                disabled={!draft.enabled}
-                onChange={(event) => change({ endLocal: event.target.value })}
-              />
-            </label>
-          </div>
-          {draft.enabled && overnight && (
-            <p className="reaching-note">
-              {draft.startLocal === draft.endLocal
-                ? "Open all day, every day you choose below."
-                : "Closes the next morning, so this counts as one overnight stretch."}
+          {draft.length === 0 ? (
+            <p className="reaching-empty">
+              Nobody is on the list, so Home does not say when anyone is available.
             </p>
+          ) : (
+            <ol className="reaching-people">
+              {draft.map((contact, index) => (
+                <li key={contact.id}>
+                  <ReachingContactEditor
+                    contact={contact}
+                    position={index + 1}
+                    zones={zones}
+                    canMoveUp={index > 0}
+                    onChange={replace}
+                    onMoveUp={() => moveUp(index)}
+                    onRemove={() => remove(contact.id)}
+                  />
+                </li>
+              ))}
+            </ol>
           )}
 
-          <fieldset className="reaching-days" disabled={!draft.enabled}>
-            <legend>Open on</legend>
-            <div className="reaching-day-buttons">
-              {WEEKDAY_LABELS.map((name, day) => (
-                <label key={name}>
-                  <input
-                    type="checkbox"
-                    checked={draft.days.includes(day)}
-                    onChange={() => toggleDay(day)}
-                  />
-                  <span>{name.slice(0, 3)}</span>
-                </label>
-              ))}
-            </div>
-            <div className="reaching-presets">
-              {RUN_PRESETS.map((preset) => (
-                <button
-                  key={preset.label}
-                  type="button"
-                  className="button secondary compact"
-                  aria-pressed={sameDays(draft.days, preset.days)}
-                  onClick={() => change({ days: preset.days })}
-                >
-                  {preset.label}
-                </button>
-              ))}
-            </div>
-          </fieldset>
-
-          <label className="reaching-field">
-            <span>
-              Their time zone
-              <small>Set this to theirs, not yours, if they are somewhere else.</small>
-            </span>
-            <select
-              value={draft.zoneId}
-              disabled={!draft.enabled}
-              onChange={(event) => change({ zoneId: event.target.value })}
+          <div className="reaching-add">
+            <button
+              type="button"
+              className="button secondary compact"
+              disabled={full}
+              onClick={add}
             >
-              {!zones.includes(draft.zoneId) && draft.zoneId && (
-                <option value={draft.zoneId}>{draft.zoneId}</option>
-              )}
-              {zones.map((zone) => (
-                <option key={zone} value={zone}>
-                  {zone}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <p className="reaching-summary">{envelope.summary}</p>
+              Add someone
+            </button>
+            {full && (
+              <small>
+                Home has room for {MAX_REACHING_CONTACTS} people. Remove someone to add another.
+              </small>
+            )}
+          </div>
 
           <div className="reaching-actions">
             <button
@@ -219,7 +148,7 @@ export function ReachingHoursSettings() {
               type="button"
               disabled={busy}
               onClick={() => {
-                setDraft(envelope.state);
+                setDraft(envelope.state.contacts);
                 setMessage("");
                 setError("");
               }}

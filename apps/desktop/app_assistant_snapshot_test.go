@@ -71,6 +71,7 @@ func TestAssistantSnapshotCoalescesTheDayWithoutPrivateText(t *testing.T) {
 		clinicianRule   = "CANARY clinician rule"
 		doseNote        = "CANARY dose note"
 		markerNote      = "CANARY marker note"
+		contactLabel    = "CANARY contact label"
 	)
 	start := now.Add(5 * time.Hour).Truncate(time.Hour)
 	ics := "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//ZeitBoard Test//EN\r\n" +
@@ -125,10 +126,17 @@ func TestAssistantSnapshotCoalescesTheDayWithoutPrivateText(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// The second person on the list never closes, so the next three days hold
+	// their windows; the first is switched off and holds none.
+	saveReaching(t, app,
+		ReachingContactDTO{Label: "Off for now", ZoneID: "UTC", Off: true, Hours: everyDay("09:00", "17:00")},
+		ReachingContactDTO{Label: contactLabel, ZoneID: "UTC", Hours: everyDay("00:00", "00:00")},
+	)
+
 	encoded := callLocalAgentTool(t, desktopLocalCapability{app: app}, "get_snapshot", `{}`)
 	requireSnapshotContract(t, snapshotContract(t), encoded)
 	for _, private := range []string{eventTitle, eventLocation, "canary-uid", acceptedTitle, pendingTitle,
-		medicationLabel, medicationForm, clinicianRule, doseNote, markerNote} {
+		medicationLabel, medicationForm, clinicianRule, doseNote, markerNote, contactLabel} {
 		if strings.Contains(encoded, private) {
 			t.Fatalf("snapshot leaked %q: %s", private, encoded)
 		}
@@ -165,6 +173,12 @@ func TestAssistantSnapshotCoalescesTheDayWithoutPrivateText(t *testing.T) {
 	plans := snapshot.Plans
 	if plans.Status != "available" || len(plans.Segments) == 0 || len(plans.ReachableHours) == 0 {
 		t.Fatalf("plans = %+v", plans)
+	}
+	// People are named by their place in the list, never by label.
+	for _, window := range plans.ReachableHours {
+		if window.Contact != "contact_02" {
+			t.Fatalf("reaching window names %q, want the second person on the list", window.Contact)
+		}
 	}
 	var appointment, acceptedTime bool
 	for _, commitment := range plans.Commitments {

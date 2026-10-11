@@ -1251,6 +1251,28 @@ chart.
 - **Layout is separate from painting.** The chart is laid out as plain shapes, so its geometry is
   tested without a canvas; painting only replays them.
 
+### Several people to reach, each on their own hours — 2026-10-11
+
+Reaching hours were one schedule with the same hours on every chosen day. They are now a list of up
+to five people, each with their own zone and their own hours on each weekday (ADR-0056).
+
+- **Settings edits the list as a whole.** Each person has a name, a zone, a row for each day of the
+  week and a switch for Home. A day that opens takes the hours of the open day before it, so a run
+  of days with the same hours is one click each. Every day carries a small 24-hour bar on a shared
+  axis, so a week reads as a shape, and a closing time typed as 05:00 instead of 17:00 shows as the
+  overnight stretch it would be. People can be moved up the list, which is the order of Home's rows.
+- **Home draws a row for each person shown**, named for them, with their hours on hover. Someone
+  with no hours in the three days keeps an empty row, and the words say so.
+- **Switching someone off keeps their hours** without a row on Home. Only removing them drops the
+  hours.
+- **The old schedule carries over as one person**, with the same hours on each of its days. If it
+  was off, the person is off. The list is written before the old file is removed.
+- **Names stay on this computer.** The assistant snapshot names people as `contact_01` and so on,
+  by their place in the list. The server's assistant passes that ref to the model and still accepts
+  a snapshot without one.
+- **`core/outlook` takes several schedules**, each with an opaque id that every window carries. It
+  knows no names.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and
@@ -1303,7 +1325,7 @@ tests and a verification entry. Where it waits on something outside the code, th
 | Missingness recorded per source | Roadmap, phase 2 | Delivered 2026-10-11 for Health Connect (ADR-0054). Manual nights have no coverage to state |
 | The clinical chart saved directly as PNG | Roadmap, phase 2; limitation 10 | Delivered 2026-10-11 |
 | A self-hosted server trusted through its own CA certificate rather than skipped verification | Roadmap, small debts | Delivered 2026-10-11 for the desktop, the phone and the MCP connector (ADR-0055) |
-| Reaching hours for more than one contact, and per-day hours | Roadmap, slice 16 | Open |
+| Reaching hours for more than one contact, and per-day hours | Roadmap, slice 16 | Delivered 2026-10-11 (ADR-0056) |
 | Onboarding beyond the first-run setup | Roadmap, phase 2; limitation 11 | Open |
 | Localization readiness | Roadmap, phase 2; limitation 11 | Open |
 | Google Takeout and My Activity import, with inference kept in shadow mode | Roadmap, slice 7; limitation 12 | Open. Inference reaches the estimate only after it passes the backtest gate |

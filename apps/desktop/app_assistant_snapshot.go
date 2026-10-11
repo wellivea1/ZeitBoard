@@ -39,13 +39,14 @@ import (
 const (
 	assistantSnapshotVersion = "v1"
 	maxSnapshotSegments      = 48
-	maxSnapshotReachable     = 16
+	maxSnapshotReachable     = 24
 	maxSnapshotCommitments   = 64
 	maxSnapshotSuggestions   = 32
 	maxSnapshotUnplaced      = 32
 
 	snapshotPrivateFields = "Titles, labels, notes, locations, clinician text and raw records are never included. " +
-		"Task, proposal and medication ids are opaque; calendar entries are numbered within this snapshot."
+		"Task, proposal and medication ids are opaque; calendar entries are numbered within this snapshot, " +
+		"and the people to reach by their place in the owner's list."
 	snapshotFitNote = "The fit rating says how closely the model matches recent records; it has not ranked " +
 		"forecasts reliably, so go by the ranges and the age of the records."
 )
@@ -127,9 +128,11 @@ type snapshotSegment struct {
 	Observed bool      `json:"observed"`
 }
 
-// snapshotReachable is one span of the owner's reaching hours: when the
-// people they need are open, and the part of it the owner is likely awake for.
+// snapshotReachable is one span of the owner's reaching hours: when someone
+// they need is available, and the part of it the owner is likely awake for.
+// Contact names that someone by place in the owner's list, never by label.
 type snapshotReachable struct {
+	Contact   string          `json:"contact"`
 	Start     time.Time       `json:"start"`
 	End       time.Time       `json:"end"`
 	Status    string          `json:"status"`
@@ -439,6 +442,7 @@ func snapshotPlansOf(computed outlookComputation, proposals localProposalBuild, 
 				Presence: string(segment.Presence), Start: span.Start, End: span.End, Observed: segment.Observed,
 			})
 		}
+		contacts := computed.reaching.contactRefs()
 		for _, window := range view.OfficeWindows {
 			if len(plans.ReachableHours) == maxSnapshotReachable {
 				plans.Truncated = true
@@ -446,7 +450,7 @@ func snapshotPlansOf(computed outlookComputation, proposals localProposalBuild, 
 			}
 			span := clock.span(window.Interval)
 			entry := snapshotReachable{
-				Start: span.Start, End: span.End, Status: officeStatus(window),
+				Contact: contacts[window.HoursID], Start: span.Start, End: span.End, Status: officeStatus(window),
 				Reachable: []snapshotRange{}, Possible: []snapshotRange{},
 			}
 			for _, part := range window.Reachable {

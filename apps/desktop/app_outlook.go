@@ -52,6 +52,17 @@ type OutlookOfficeDTO struct {
 	DurationHours  float64 `json:"durationHours"`
 }
 
+// OutlookReachingDTO is one person Home shows, with the windows the horizon
+// holds for them.
+type OutlookReachingDTO struct {
+	ContactID string `json:"contactId"`
+	Label     string `json:"label"`
+
+	// HoursLabel says when they are available, as the owner set it.
+	HoursLabel string             `json:"hoursLabel"`
+	Windows    []OutlookOfficeDTO `json:"windows"`
+}
+
 type OutlookCommitmentDTO struct {
 	Title         string `json:"title"`
 	WhenLabel     string `json:"whenLabel"`
@@ -97,10 +108,10 @@ type OutlookDTO struct {
 	SleepOnset *OutlookRangeDTO `json:"sleepOnset,omitempty"`
 	Wake       *OutlookRangeDTO `json:"wake,omitempty"`
 
-	OfficeHoursLabel string                  `json:"officeHoursLabel"`
-	OfficeWindows    []OutlookOfficeDTO      `json:"officeWindows"`
-	Commitments      []OutlookCommitmentDTO  `json:"commitments"`
-	Opportunities    []OutlookOpportunityDTO `json:"opportunities"`
+	// Reaching is one row for each person shown, in the order of the list.
+	Reaching      []OutlookReachingDTO    `json:"reaching"`
+	Commitments   []OutlookCommitmentDTO  `json:"commitments"`
+	Opportunities []OutlookOpportunityDTO `json:"opportunities"`
 
 	AwakeLabel     string `json:"awakeLabel"`
 	UncertainLabel string `json:"uncertainLabel"`
@@ -126,7 +137,7 @@ func (a *App) GetOutlook() (OutlookDTO, error) {
 	for id, event := range computed.events {
 		titles[id] = event.Title
 	}
-	return outlookDTO(computed.view, titles, computed.taskTitles, computed.zoneID, reachingSummary(computed.reaching)), nil
+	return outlookDTO(computed.view, titles, computed.taskTitles, computed.zoneID, computed.reaching.shown()), nil
 }
 
 // outlookComputation is the operational view together with what it was built
@@ -242,27 +253,26 @@ func outlookDTO(
 	eventTitles map[domain.CalendarEventID]string,
 	taskTitles map[domain.FlexibleTaskID]string,
 	zoneID string,
-	officeHoursLabel string,
+	contacts []ReachingContactDTO,
 ) OutlookDTO {
 	location := loadLocationOrUTC(zoneID)
 	start := view.Horizon.Start.UTC
 	horizonHours := view.Horizon.End.UTC.Sub(start).Hours()
 
 	dto := OutlookDTO{
-		Status:           string(view.Status),
-		Freshness:        freshnessDTO(view.Freshness),
-		HorizonLabel:     fmt.Sprintf("Next %d hours", int(horizonHours+0.5)),
-		HorizonHours:     horizonHours,
-		HorizonStart:     start.UTC().Format(time.RFC3339),
-		Days:             []OutlookDayMarkDTO{},
-		Segments:         []OutlookSegmentDTO{},
-		OfficeWindows:    []OutlookOfficeDTO{},
-		Commitments:      []OutlookCommitmentDTO{},
-		Opportunities:    []OutlookOpportunityDTO{},
-		OfficeHoursLabel: officeHoursLabel,
-		AwakeLabel:       formatDuration(view.AwakeFor),
-		UncertainLabel:   formatDuration(view.UncertainFor),
-		Disclaimer:       disclaimer,
+		Status:         string(view.Status),
+		Freshness:      freshnessDTO(view.Freshness),
+		HorizonLabel:   fmt.Sprintf("Next %d hours", int(horizonHours+0.5)),
+		HorizonHours:   horizonHours,
+		HorizonStart:   start.UTC().Format(time.RFC3339),
+		Days:           []OutlookDayMarkDTO{},
+		Segments:       []OutlookSegmentDTO{},
+		Reaching:       []OutlookReachingDTO{},
+		Commitments:    []OutlookCommitmentDTO{},
+		Opportunities:  []OutlookOpportunityDTO{},
+		AwakeLabel:     formatDuration(view.AwakeFor),
+		UncertainLabel: formatDuration(view.UncertainFor),
+		Disclaimer:     disclaimer,
 	}
 	if view.Refusal != nil {
 		dto.Refusal = &RefusalDTO{Code: view.Refusal.Code, Message: view.Refusal.Message}
@@ -291,9 +301,7 @@ func outlookDTO(
 	onset, wake := view.SleepAhead()
 	dto.SleepOnset, dto.Wake = outlookRange(onset), outlookRange(wake)
 
-	for _, window := range view.OfficeWindows {
-		dto.OfficeWindows = append(dto.OfficeWindows, officeDTO(window, location, start))
-	}
+	dto.Reaching = reachingRows(view.OfficeWindows, contacts, location, start)
 	for _, commitment := range view.Commitments {
 		title := eventTitles[commitment.EventID]
 		if strings.TrimSpace(title) == "" {
@@ -347,6 +355,35 @@ func clampToHorizon(interval domain.TimeRange, start, end time.Time) (float64, f
 		return from.Sub(start).Hours(), 0
 	}
 	return from.Sub(start).Hours(), to.Sub(from).Hours()
+}
+
+// reachingRows gives each person shown their own row, in list order, with the
+// windows the outlook found for them. Someone with no window in the horizon
+// keeps their row: an empty row says they are not available in the days shown,
+// where a missing one would leave the reader wondering whether the setting took.
+func reachingRows(
+	windows []outlook.OfficeWindow,
+	contacts []ReachingContactDTO,
+	location *time.Location,
+	start time.Time,
+) []OutlookReachingDTO {
+	rows := make([]OutlookReachingDTO, 0, len(contacts))
+	place := make(map[string]int, len(contacts))
+	for _, contact := range contacts {
+		place[contact.ID] = len(rows)
+		rows = append(rows, OutlookReachingDTO{
+			ContactID:  contact.ID,
+			Label:      contact.Label,
+			HoursLabel: reachingSummary(contact),
+			Windows:    []OutlookOfficeDTO{},
+		})
+	}
+	for _, window := range windows {
+		if row, ok := place[window.HoursID]; ok {
+			rows[row].Windows = append(rows[row].Windows, officeDTO(window, location, start))
+		}
+	}
+	return rows
 }
 
 func officeDTO(window outlook.OfficeWindow, location *time.Location, start time.Time) OutlookOfficeDTO {

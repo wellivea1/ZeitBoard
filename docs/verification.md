@@ -1110,7 +1110,7 @@ is what makes the extraction safe to claim.
 
 **What this does not establish.** One schedule, and the same hours on every selected day. Someone
 who must reach a clinic on Tuesday mornings _and_ an employer on weekday afternoons can express only
-one of them.
+one of them. (Lifted 2026-10-11: see "Several people to reach, each on their own hours" below.)
 
 ## Local file protection (roadmap slice 17, ADR-0035)
 
@@ -2615,3 +2615,60 @@ halves are kept.
   - The boundary text is legible at actual size.
 
   The download itself was not clicked, so that no file was written to the owner's Downloads.
+
+## Several people to reach, each on their own hours — 2026-10-11
+
+ADR-0056. Verified on Windows 11.
+
+- `core/outlook`, four new tests:
+  - no schedules means no reaching windows;
+  - each day keeps its own hours;
+  - several schedules each produce their windows, earliest first, each carrying its schedule's id;
+  - a day listed twice is refused.
+
+  The existing tests moved to the list form unchanged in what they assert.
+- Desktop, thirteen Go tests:
+  - The default list is one person on the working week.
+  - Each person reaches the outlook with their own hours and comes back as their own row, in list
+    order.
+  - Someone switched off keeps their hours and has no row. An empty list means no rows.
+  - Someone with no window in the three days keeps an empty row.
+  - Ten invalid lists are refused, each with a message that says what is wrong: six people, no
+    name, two people with one name, an unknown zone, a clock that is not a clock, a weekday that
+    does not exist, a day listed twice, someone shown with no day, a malformed id, a shared id.
+  - A save trims names, takes a missing zone as the owner's, orders days, and gives only a new
+    person an id. A stale edit loses to what is stored.
+  - The summary reads seven week shapes in week order, and a foreign zone is named.
+  - The list survives a restart.
+  - The old schedule carries over as one person, whether it was on or off, and the old file is
+    removed. If the old file outlived the move, the list wins.
+- The assistant snapshot names each window's person by place in the list (`contact_02` when the
+  first person is off). A canary label never appears, and the snapshot still validates against the
+  contract.
+- Server: the model receives `"contact":"contact_01"`. A malformed ref drops the window. A window
+  with no ref, from a desktop built before the list, is kept.
+- Web: 19 adapter tests, 11 for the editor, and four new ones for Home's figure and its adapter.
+  They cover parsing, the editing helpers, the day bars across midnight, adding up to five,
+  removing, moving up, switching off, conflict and failure, one row per person, and an empty row.
+- In the running desktop (disposable dev profile, synthetic data):
+  - A synthetic v1 file (The clinic, Tuesday and Thursday 9 AM to 1 PM, New York) was carried over
+    at start. `reaching.json` held it at revision 4, and the old file was gone.
+  - A new person started on weekday hours. For My sister (Europe/Berlin), closing Monday to Friday
+    and opening Saturday then Sunday copied Saturday's 6 to 10 PM to Sunday.
+  - The clinic's Friday 10 PM to 2 AM read "next day". Its bar ended Friday, and a lighter carried
+    bar opened Saturday.
+  - Fifteen synthetic nights were added so that a forecast could be drawn. Home then drew a row for
+    "The clinic" and one for "My sister". The clinic's row showed Tuesday 9 AM to 1 PM. The
+    sister's Berlin evening showed as 2:42 PM (now) to 4:00 PM, New York time. Hovering her name
+    read "My sister: you set Saturday and Sunday, 6:00 PM to 10:00 PM (Europe/Berlin time)."
+  - With her hours moved to Thursday, beyond the three days, her row stayed, empty. The text
+    alternative read "My sister is not available in the days shown."
+  - Switched off, she left Home, her Thursday hours stayed stored, and her week dimmed in Settings.
+  - A cleared name was refused with "Give each person a name, so Home can tell them apart."
+  - Two layout defects were found there and fixed. The generic settings label rule stacked each
+    checkbox over its day's name, and "next day" wrapped. At 600 px wide, the bars move under their
+    days and nothing overflows.
+
+**What this does not establish.** The assistant sees people only as `contact_01` and so on, so it
+can say "the first person on your list" but not "the clinic". Five people is a limit of Home's
+figure. The phone does not show reaching hours, as before.

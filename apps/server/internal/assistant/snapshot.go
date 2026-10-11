@@ -70,7 +70,11 @@ type SnapshotSegment struct {
 	Observed bool      `json:"observed"`
 }
 
+// SnapshotReachable is one window when someone the owner needs is available.
+// Contact names that someone by place in the owner's list (ADR-0056); a
+// snapshot from before there was a list has none.
 type SnapshotReachable struct {
+	Contact   string          `json:"contact,omitempty"`
 	Start     time.Time       `json:"start"`
 	End       time.Time       `json:"end"`
 	Status    string          `json:"status"`
@@ -137,6 +141,7 @@ type redactedSegment struct {
 }
 
 type redactedReachable struct {
+	Contact     string   `json:"contact,omitempty"`
 	Window      string   `json:"window"`
 	Status      string   `json:"status"`
 	LikelyAwake []string `json:"likely_awake,omitempty"`
@@ -163,11 +168,14 @@ type redactedUnplaced struct {
 	Reason string `json:"reason"`
 }
 
-var commitmentRefPattern = regexp.MustCompile(`^commitment_[0-9]{2,4}$`)
+var (
+	commitmentRefPattern = regexp.MustCompile(`^commitment_[0-9]{2,4}$`)
+	contactRefPattern    = regexp.MustCompile(`^contact_[0-9]{2}$`)
+)
 
 const (
 	maxSnapshotSegments    = 48
-	maxSnapshotReachable   = 16
+	maxSnapshotReachable   = 24
 	maxSnapshotCommitments = 64
 	maxSnapshotSuggestions = 32
 	maxSnapshotUnplaced    = 32
@@ -250,10 +258,10 @@ func sanitizeSnapshot(input *SnapshotContext, now time.Time, zoneID string, comp
 		}
 		status := allowedValue(reachable.Status, "reachable", "partial", "unreachable")
 		span, ok := window(SnapshotRange{Start: reachable.Start, End: reachable.End})
-		if !ok || status == "" {
+		if !ok || status == "" || (reachable.Contact != "" && !contactRefPattern.MatchString(reachable.Contact)) {
 			continue
 		}
-		entry := redactedReachable{Window: span, Status: status}
+		entry := redactedReachable{Contact: reachable.Contact, Window: span, Status: status}
 		for _, part := range reachable.Reachable {
 			if text, ok := window(part); ok {
 				entry.LikelyAwake = append(entry.LikelyAwake, text)

@@ -79,7 +79,7 @@ func (f fixture) input() outlook.Input {
 			NewestEvidence: f.now.Add(-2 * time.Hour),
 			LatestSleepEnd: f.now.Add(-2 * time.Hour),
 		}),
-		OfficeHours: outlook.DefaultOfficeHours(zone),
+		OfficeHours: []outlook.OfficeHours{outlook.DefaultOfficeHours(zone)},
 	}
 }
 
@@ -310,7 +310,7 @@ func TestOfficeHoursSkipTheWeekend(t *testing.T) {
 		Freshness: freshness.Default().Assess(freshness.Inputs{
 			Now: now, NewestEvidence: now.Add(-2 * time.Hour), LatestSleepEnd: now.Add(-2 * time.Hour),
 		}),
-		OfficeHours: outlook.DefaultOfficeHours(zone),
+		OfficeHours: []outlook.OfficeHours{outlook.DefaultOfficeHours(zone)},
 	})
 
 	location, err := time.LoadLocation(zone)
@@ -531,7 +531,7 @@ func TestARefusedEstimateKeepsItsOwnReason(t *testing.T) {
 func TestNoEstimateIsRefusedRatherThanEmpty(t *testing.T) {
 	view := build(t, outlook.Input{
 		Now:         time.Date(2026, 8, 5, 12, 0, 0, 0, time.UTC),
-		OfficeHours: outlook.DefaultOfficeHours(zone),
+		OfficeHours: []outlook.OfficeHours{outlook.DefaultOfficeHours(zone)},
 	})
 	if view.Status != outlook.StatusRefused {
 		t.Errorf("status = %q, want refused", view.Status)
@@ -586,7 +586,7 @@ func TestTheViewSurvivesDaylightSaving(t *testing.T) {
 		Freshness: freshness.Default().Assess(freshness.Inputs{
 			Now: now, NewestEvidence: now.Add(-2 * time.Hour), LatestSleepEnd: now.Add(-2 * time.Hour),
 		}),
-		OfficeHours: outlook.DefaultOfficeHours(zone),
+		OfficeHours: []outlook.OfficeHours{outlook.DefaultOfficeHours(zone)},
 	})
 
 	location, err := time.LoadLocation(zone)
@@ -657,7 +657,7 @@ func TestADriftingRhythmLosesAndRegainsOfficeAccess(t *testing.T) {
 			Freshness: freshness.Default().Assess(freshness.Inputs{
 				Now: now, NewestEvidence: now.Add(-time.Hour), LatestSleepEnd: newest,
 			}),
-			OfficeHours: outlook.DefaultOfficeHours(zone),
+			OfficeHours: []outlook.OfficeHours{outlook.DefaultOfficeHours(zone)},
 		})
 		if err != nil {
 			t.Fatalf("day %d: %v", day, err)
@@ -698,15 +698,7 @@ func durationOf(ranges []domain.TimeRange) time.Duration {
 func TestAServiceThatNeverClosesIsOpenAllHorizon(t *testing.T) {
 	f := newFixture(t)
 	in := f.input()
-	in.OfficeHours = outlook.OfficeHours{
-		StartLocal: "00:00",
-		EndLocal:   "00:00",
-		Days: []time.Weekday{
-			time.Sunday, time.Monday, time.Tuesday, time.Wednesday,
-			time.Thursday, time.Friday, time.Saturday,
-		},
-		ZoneID: zone,
-	}
+	in.OfficeHours = []outlook.OfficeHours{outlook.Uniform("", "00:00", "00:00", []time.Weekday{time.Sunday, time.Monday, time.Tuesday, time.Wednesday, time.Thursday, time.Friday, time.Saturday}, zone)}
 	view := build(t, in)
 
 	if len(view.OfficeWindows) == 0 {
@@ -737,15 +729,7 @@ func TestAServiceThatNeverClosesIsOpenAllHorizon(t *testing.T) {
 func TestAnOvernightScheduleCrossesMidnight(t *testing.T) {
 	f := newFixture(t)
 	in := f.input()
-	in.OfficeHours = outlook.OfficeHours{
-		StartLocal: "22:00",
-		EndLocal:   "06:00",
-		Days: []time.Weekday{
-			time.Sunday, time.Monday, time.Tuesday, time.Wednesday,
-			time.Thursday, time.Friday, time.Saturday,
-		},
-		ZoneID: zone,
-	}
+	in.OfficeHours = []outlook.OfficeHours{outlook.Uniform("", "22:00", "06:00", []time.Weekday{time.Sunday, time.Monday, time.Tuesday, time.Wednesday, time.Thursday, time.Friday, time.Saturday}, zone)}
 	view := build(t, in)
 
 	if len(view.OfficeWindows) == 0 {
@@ -795,12 +779,7 @@ func TestAWindowOpenedLastNightIsStillOpenNow(t *testing.T) {
 			Now: now, NewestEvidence: now.Add(-90 * time.Minute),
 			LatestSleepEnd: now.Add(-90 * time.Minute),
 		}),
-		OfficeHours: outlook.OfficeHours{
-			StartLocal: "22:00",
-			EndLocal:   "06:00",
-			Days:       []time.Weekday{time.Wednesday},
-			ZoneID:     zone,
-		},
+		OfficeHours: []outlook.OfficeHours{outlook.Uniform("", "22:00", "06:00", []time.Weekday{time.Wednesday}, zone)},
 	})
 
 	if len(view.OfficeWindows) == 0 {
@@ -845,12 +824,7 @@ func TestYesterdaysDaytimeWindowDoesNotReappear(t *testing.T) {
 func TestNoOpenDaysMeansNoWindows(t *testing.T) {
 	f := newFixture(t)
 	in := f.input()
-	in.OfficeHours = outlook.OfficeHours{
-		StartLocal: "09:00",
-		EndLocal:   "17:00",
-		Days:       []time.Weekday{},
-		ZoneID:     zone,
-	}
+	in.OfficeHours = []outlook.OfficeHours{outlook.Uniform("", "09:00", "17:00", []time.Weekday{}, zone)}
 	view := build(t, in)
 
 	if len(view.OfficeWindows) != 0 {
@@ -858,17 +832,93 @@ func TestNoOpenDaysMeansNoWindows(t *testing.T) {
 	}
 }
 
-// TestAnUnsetScheduleStillTakesTheDefault. The convenience default has to
-// survive the change above, because Input.OfficeHours left blank is how every
-// caller that does not care about reaching hours asks for the ordinary case.
-func TestAnUnsetScheduleStillTakesTheDefault(t *testing.T) {
+// TestNoSchedulesMeanNobodyToReach. A caller with nobody to reach passes no
+// schedules, and the view reports no reaching windows rather than a working
+// week the person never chose (ADR-0056).
+func TestNoSchedulesMeanNobodyToReach(t *testing.T) {
 	f := newFixture(t)
 	in := f.input()
-	in.OfficeHours = outlook.OfficeHours{}
+	in.OfficeHours = nil
 	view := build(t, in)
 
-	if len(view.OfficeWindows) == 0 {
-		t.Fatal("an unset schedule produced no windows")
+	if len(view.OfficeWindows) != 0 {
+		t.Fatalf("%d windows with nobody to reach", len(view.OfficeWindows))
+	}
+}
+
+// TestEachDayKeepsItsOwnHours. A clinic open Tuesday mornings and Thursday
+// afternoons is two different windows, not one set of hours on two days.
+func TestEachDayKeepsItsOwnHours(t *testing.T) {
+	f := newFixture(t) // a Wednesday, 18:00 UTC
+	in := f.input()
+	in.Horizon = 72 * time.Hour
+	in.OfficeHours = []outlook.OfficeHours{{
+		ID:     "clinic",
+		ZoneID: zone,
+		Open: []outlook.DayHours{
+			{Day: time.Thursday, StartLocal: "13:00", EndLocal: "19:00"},
+			{Day: time.Friday, StartLocal: "08:30", EndLocal: "11:00"},
+		},
+	}}
+	view := build(t, in)
+
+	location, err := time.LoadLocation(zone)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(view.OfficeWindows) != 2 {
+		t.Fatalf("%d windows, want Thursday's and Friday's", len(view.OfficeWindows))
+	}
+	for index, want := range []struct {
+		day         time.Weekday
+		open, close int
+	}{{time.Thursday, 13*60 + 0, 19 * 60}, {time.Friday, 8*60 + 30, 11 * 60}} {
+		window := view.OfficeWindows[index]
+		start, end := window.Interval.Start.UTC.In(location), window.Interval.End.UTC.In(location)
+		if start.Weekday() != want.day || start.Hour()*60+start.Minute() != want.open || end.Hour()*60+end.Minute() != want.close {
+			t.Errorf("window %d runs %s to %s", index, start, end)
+		}
+		if window.HoursID != "clinic" {
+			t.Errorf("window %d belongs to %q", index, window.HoursID)
+		}
+	}
+}
+
+// TestSeveralPeopleEachHaveTheirWindows. Each schedule's windows say whose
+// they are, and all of them come earliest first.
+func TestSeveralPeopleEachHaveTheirWindows(t *testing.T) {
+	f := newFixture(t)
+	in := f.input()
+	in.OfficeHours = []outlook.OfficeHours{
+		outlook.Uniform("pharmacy", "09:00", "20:00", []time.Weekday{time.Thursday}, zone),
+		// Six hours ahead, and open evenings their time.
+		outlook.Uniform("family", "18:00", "22:00", []time.Weekday{time.Wednesday, time.Thursday}, "Europe/Lisbon"),
+	}
+	view := build(t, in)
+
+	whose := map[string]int{}
+	for index, window := range view.OfficeWindows {
+		whose[window.HoursID]++
+		if index > 0 && window.Interval.Start.UTC.Before(view.OfficeWindows[index-1].Interval.Start.UTC) {
+			t.Fatalf("window %d opens before window %d", index, index-1)
+		}
+	}
+	if whose["pharmacy"] != 1 || whose["family"] == 0 || len(whose) != 2 {
+		t.Fatalf("windows by schedule = %v", whose)
+	}
+}
+
+// TestADayListedTwiceIsRefused. Two hours for one day is ambiguous, and
+// guessing which one was meant would misstate when someone is there.
+func TestADayListedTwiceIsRefused(t *testing.T) {
+	f := newFixture(t)
+	in := f.input()
+	in.OfficeHours = []outlook.OfficeHours{{ZoneID: zone, Open: []outlook.DayHours{
+		{Day: time.Thursday, StartLocal: "09:00", EndLocal: "12:00"},
+		{Day: time.Thursday, StartLocal: "13:00", EndLocal: "17:00"},
+	}}}
+	if _, err := outlook.Build(in); err == nil {
+		t.Fatal("a day listed twice was accepted")
 	}
 }
 
