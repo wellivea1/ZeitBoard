@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { isCommitmentConflict } from "../data/outlook";
 import type { OutlookData, OutlookSegment, Presence } from "../data/outlook";
 
@@ -13,7 +14,8 @@ import type { OutlookData, OutlookSegment, Presence } from "../data/outlook";
 // each restating days and times the strip already showed. They are rows on the
 // same axis now, so "can I ring the clinic while I'm awake" and "does Monday's
 // appointment land in sleep" are read off the picture rather than cross-checked
-// between three lists.
+// between three lists. Each person on the reaching list has a row of their own,
+// named for them, and keeps it when the days shown hold none of their hours.
 
 const PRESENCE_LABELS: Record<Presence, string> = {
   awake: "Likely awake",
@@ -74,18 +76,18 @@ function OutlookTimeline({ data }: { data: OutlookData }) {
           <span className="outlook-now" title="Now" />
         </div>
 
-        {data.officeWindows.length > 0 && (
-          <>
-            <span className="outlook-row-label" title={data.officeHoursLabel}>
-              Reachable
+        {data.reaching.map((person) => (
+          <Fragment key={person.contactId}>
+            <span className="outlook-row-label outlook-row-name" title={person.hoursLabel}>
+              {person.label}
             </span>
             <div className="outlook-track outlook-track-thin" aria-hidden="true">
-              {data.officeWindows.map((window) => (
+              {person.windows.map((window) => (
                 <span
                   key={`${window.dayLabel}-${window.offsetHours}`}
                   className="outlook-reach"
                   data-status={window.status}
-                  title={`${window.dayLabel}, ${window.hoursLabel}. ${window.detail}`}
+                  title={`${person.label}, ${window.dayLabel}, ${window.hoursLabel}. ${window.detail}`}
                   style={{
                     left: percent(window.offsetHours, data.horizonHours),
                     width: percent(window.durationHours, data.horizonHours),
@@ -93,8 +95,8 @@ function OutlookTimeline({ data }: { data: OutlookData }) {
                 />
               ))}
             </div>
-          </>
-        )}
+          </Fragment>
+        ))}
 
         {placedEvents.length > 0 && (
           <>
@@ -143,22 +145,26 @@ function OutlookTimeline({ data }: { data: OutlookData }) {
             </li>
           ))}
         </ol>
-        {data.officeWindows.length > 0 && (
-          <ol aria-label={data.officeHoursLabel}>
-            {data.officeWindows.map((window) => (
-              <li key={`text-${window.dayLabel}-${window.offsetHours}`}>
-                {window.dayLabel}, {window.hoursLabel}: {window.detail}
-              </li>
-            ))}
+        {data.reaching.map((person) => (
+          <ol key={`text-${person.contactId}`} aria-label={person.hoursLabel}>
+            {person.windows.length === 0 ? (
+              <li>{person.label} is not available in the days shown.</li>
+            ) : (
+              person.windows.map((window) => (
+                <li key={`text-${window.dayLabel}-${window.offsetHours}`}>
+                  {window.dayLabel}, {window.hoursLabel}: {window.detail}
+                </li>
+              ))
+            )}
           </ol>
-        )}
+        ))}
       </div>
 
       <figcaption className="outlook-legend">
         <span data-presence="awake">Awake</span>
         <span data-presence="uncertain">Uncertain</span>
         <span data-presence="asleep">Asleep</span>
-        {data.officeWindows.length > 0 && <span data-legend="reach">Reachable</span>}
+        {data.reaching.length > 0 && <span data-legend="reach">Reachable</span>}
         {placedEvents.length > 0 && <span data-legend="event">Event</span>}
         <small>
           {data.awakeLabel} likely awake · {data.uncertainLabel} uncertain

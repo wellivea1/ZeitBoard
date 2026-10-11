@@ -1,11 +1,17 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
+	"fmt"
+	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"non24.app/core/outlook"
 )
@@ -13,12 +19,14 @@ import (
 // Reaching hours: when the people this person needs to reach are available.
 //
 // The outlook has always intersected predicted waking time with a set of office
-// hours, and until now those hours were Monday to Friday, 09:00 to 17:00, in the
+// hours, and at first those were Monday to Friday, 09:00 to 17:00, in the
 // user's own zone, with no way to say otherwise. For a great many people with a
 // drifting rhythm that is simply false — the pharmacy is open until eight, the
-// clinic runs Tuesday and Thursday, the family who answer the phone are six
-// time zones away — and the "reachable for three hours" figure derived from it
-// was false with them.
+// clinic runs Tuesday mornings and Thursday afternoons, the family who answer
+// the phone are six time zones away — and the "reachable for three hours"
+// figure derived from it was false with them. So the setting is a short list of
+// people, each with their own zone and their own hours on each weekday
+// (ADR-0056).
 //
 // Two properties matter more than the flexibility. The hours belong to the
 // other party, not the user, so the zone is theirs. And the setting is a
@@ -26,39 +34,67 @@ import (
 // surface says so instead of presenting it as a fact about the world.
 
 const (
-	reachingFileName = "reaching-hours.json"
-	reachingSchema   = "v1"
+	reachingFileName = "reaching.json"
+	reachingSchema   = "v2"
+
+	// legacyReachingFileName held the single schedule kept before ADR-0056. It
+	// is read once, to carry that schedule over, and removed once the list has
+	// been written in its place.
+	legacyReachingFileName = "reaching-hours.json"
+	legacyReachingSchema   = "v1"
+
+	// maxReachingContacts is a display limit, not a data one: Home draws a row
+	// for each person shown.
+	maxReachingContacts = 5
+	maxReachingLabel    = 60
 )
 
-// ReachingHoursDTO is the stored schedule.
-type ReachingHoursDTO struct {
-	// Enabled is false when the person has no schedule worth showing. The
-	// outlook then reports no reaching windows at all, which is more honest
-	// than a default nobody chose.
-	Enabled bool `json:"enabled"`
+var reachingContactIDPattern = regexp.MustCompile(`^[a-z0-9-]{1,40}$`)
 
-	// Label names whose hours these are, for the person's own benefit.
+// ReachingHoursDTO is the list of people to reach, in the order the owner
+// arranged them. An empty list means nobody to reach, and the outlook then
+// says nothing about reaching anyone.
+type ReachingHoursDTO struct {
+	Contacts []ReachingContactDTO `json:"contacts"`
+}
+
+// ReachingContactDTO is one person, or place, the owner needs to reach.
+type ReachingContactDTO struct {
+	// ID is stable across edits and never shown. The assistant snapshot does
+	// not use it either: it names people by their place in the list.
+	ID string `json:"id"`
+
+	// Label names whose hours these are, for the owner's own benefit. It stays
+	// on this computer.
 	Label string `json:"label"`
 
-	// StartLocal and EndLocal are "HH:MM" in ZoneID. An end at or before the
-	// start crosses midnight; equal times mean the whole day.
+	// ZoneID is their zone, which need not be the owner's.
+	ZoneID string `json:"zoneId"`
+
+	// Off keeps the hours without showing them, for someone the owner does not
+	// need to reach for now.
+	Off bool `json:"off"`
+
+	// Hours are the weekdays they are available, each at most once.
+	Hours []ReachingDayHoursDTO `json:"hours"`
+}
+
+// ReachingDayHoursDTO is when someone is available on one weekday.
+type ReachingDayHoursDTO struct {
+	// Day is the weekday number, Sunday 0 through Saturday 6. Hours that run
+	// past midnight belong to the day they open.
+	Day int `json:"day"`
+
+	// StartLocal and EndLocal are "HH:MM" in the person's zone. An end at or
+	// before the start crosses midnight; equal times mean the whole day.
 	StartLocal string `json:"startLocal"`
 	EndLocal   string `json:"endLocal"`
-
-	// Days are weekday numbers, Sunday 0 through Saturday 6.
-	Days []int `json:"days"`
-
-	// ZoneID is the other party's zone, which need not be the user's.
-	ZoneID string `json:"zoneId"`
 }
 
 type ReachingHoursEnvelopeDTO struct {
 	State    ReachingHoursDTO `json:"state"`
 	Revision uint64           `json:"revision"`
 	Conflict bool             `json:"conflict"`
-
-	// Summary is the sentence the outlook shows.
-	Summary string `json:"summary"`
 
 	// Message reports a storage problem without pretending the setting saved.
 	Message string `json:"message,omitempty"`
@@ -69,52 +105,112 @@ type ReachingHoursSaveInput struct {
 	BaseRevision uint64           `json:"baseRevision"`
 }
 
+// defaultReachingHours is what a new install shows: the working week the
+// outlook has always assumed, in the owner's own zone, as one person they can
+// rename, change, switch off or remove.
 func defaultReachingHours(zoneID string) ReachingHoursDTO {
 	defaults := outlook.DefaultOfficeHours(zoneID)
-	days := make([]int, 0, len(defaults.Days))
-	for _, day := range defaults.Days {
-		days = append(days, int(day))
+	contact := ReachingContactDTO{
+		ID:     newReachingContactID(),
+		Label:  "Typical office hours",
+		ZoneID: defaults.ZoneID,
+		Hours:  make([]ReachingDayHoursDTO, 0, len(defaults.Open)),
 	}
-	return ReachingHoursDTO{
-		Enabled:    true,
-		Label:      "Typical office hours",
-		StartLocal: defaults.StartLocal,
-		EndLocal:   defaults.EndLocal,
-		Days:       days,
-		ZoneID:     defaults.ZoneID,
+	for _, day := range defaults.Open {
+		contact.Hours = append(contact.Hours, ReachingDayHoursDTO{
+			Day: int(day.Day), StartLocal: day.StartLocal, EndLocal: day.EndLocal,
+		})
 	}
+	return ReachingHoursDTO{Contacts: []ReachingContactDTO{contact}}
+}
+
+// newReachingContactID names a new person for the app's own bookkeeping.
+func newReachingContactID() string {
+	var raw [5]byte
+	_, _ = rand.Read(raw[:]) // crypto/rand.Read does not fail
+	return "contact-" + hex.EncodeToString(raw[:])
+}
+
+// tidyReachingHours puts a submitted list into its stored form: names trimmed,
+// a missing zone taken as the owner's, a new person given an id, and each
+// person's days in order.
+func tidyReachingHours(state ReachingHoursDTO) ReachingHoursDTO {
+	tidy := ReachingHoursDTO{Contacts: make([]ReachingContactDTO, 0, len(state.Contacts))}
+	for _, contact := range state.Contacts {
+		contact.Label = strings.TrimSpace(contact.Label)
+		if contact.ZoneID == "" {
+			contact.ZoneID = localZoneID()
+		}
+		if contact.ID == "" {
+			contact.ID = newReachingContactID()
+		}
+		hours := append([]ReachingDayHoursDTO{}, contact.Hours...)
+		sort.SliceStable(hours, func(i, j int) bool { return hours[i].Day < hours[j].Day })
+		contact.Hours = hours
+		tidy.Contacts = append(tidy.Contacts, contact)
+	}
+	return tidy
 }
 
 func validateReachingHours(state ReachingHoursDTO) error {
-	if len(strings.TrimSpace(state.Label)) > 60 {
-		return errors.New("the label must be 60 characters or fewer")
+	if len(state.Contacts) > maxReachingContacts {
+		return fmt.Errorf("home has room for %d people; remove someone first", maxReachingContacts)
 	}
-	if !civilClockPattern.MatchString(state.StartLocal) || state.StartLocal == "" {
-		return errors.New("the opening time must be a civil time like 09:00")
+	ids := make(map[string]bool, len(state.Contacts))
+	names := make(map[string]bool, len(state.Contacts))
+	for _, contact := range state.Contacts {
+		if !reachingContactIDPattern.MatchString(contact.ID) || ids[contact.ID] {
+			return errors.New("each person needs an id of their own")
+		}
+		ids[contact.ID] = true
+		if err := validateReachingContact(contact); err != nil {
+			return err
+		}
+		// Two rows with one name would leave Home unable to say which is which.
+		name := strings.ToLower(contact.Label)
+		if names[name] {
+			return fmt.Errorf("two people are called %s; give them different names so Home can tell them apart", contact.Label)
+		}
+		names[name] = true
 	}
-	if !civilClockPattern.MatchString(state.EndLocal) || state.EndLocal == "" {
-		return errors.New("the closing time must be a civil time like 17:00")
+	return nil
+}
+
+func validateReachingContact(contact ReachingContactDTO) error {
+	label := contact.Label
+	if strings.TrimSpace(label) == "" {
+		return errors.New("give each person a name, so Home can tell them apart")
 	}
-	if state.ZoneID == "" {
-		return errors.New("a time zone is required")
+	if utf8.RuneCountInString(label) > maxReachingLabel {
+		return fmt.Errorf("keep each name to %d characters or fewer", maxReachingLabel)
 	}
-	if _, err := time.LoadLocation(state.ZoneID); err != nil {
-		return errors.New("that time zone is not one this computer knows")
+	if contact.ZoneID == "" {
+		return fmt.Errorf("choose a time zone for %s", label)
 	}
-	seen := make(map[int]bool, len(state.Days))
-	for _, day := range state.Days {
-		if day < int(time.Sunday) || day > int(time.Saturday) {
+	if _, err := time.LoadLocation(contact.ZoneID); err != nil {
+		return fmt.Errorf("the time zone for %s is not one this computer knows", label)
+	}
+	seen := make(map[int]bool, len(contact.Hours))
+	for _, hours := range contact.Hours {
+		if hours.Day < int(time.Sunday) || hours.Day > int(time.Saturday) {
 			return errors.New("days must be Sunday through Saturday")
 		}
-		if seen[day] {
-			return errors.New("a day was listed twice")
+		day := weekdayNames[hours.Day]
+		if seen[hours.Day] {
+			return fmt.Errorf("%s is listed twice for %s", day, label)
 		}
-		seen[day] = true
+		seen[hours.Day] = true
+		if hours.StartLocal == "" || !civilClockPattern.MatchString(hours.StartLocal) {
+			return fmt.Errorf("the opening time for %s on %s must be a civil time like 09:00", label, day)
+		}
+		if hours.EndLocal == "" || !civilClockPattern.MatchString(hours.EndLocal) {
+			return fmt.Errorf("the closing time for %s on %s must be a civil time like 17:00", label, day)
+		}
 	}
-	// An enabled schedule with no open day would report nothing while claiming
-	// to be on. Turning it off is the way to say "nobody to reach".
-	if state.Enabled && len(state.Days) == 0 {
-		return errors.New("choose at least one day, or turn reaching hours off")
+	// Someone shown with no open day would leave a row that never fills.
+	// Switching them off keeps the hours without showing them.
+	if !contact.Off && len(contact.Hours) == 0 {
+		return fmt.Errorf("choose at least one day for %s, or switch them off", label)
 	}
 	return nil
 }
@@ -123,28 +219,23 @@ func reachingStore(path string) localSettingsStore[ReachingHoursDTO] {
 	return localSettingsStore[ReachingHoursDTO]{
 		Path:     path,
 		Schema:   reachingSchema,
-		Name:     "reaching-hours",
+		Name:     "reaching",
 		Validate: validateReachingHours,
 	}
 }
 
-// GetReachingHours returns the stored schedule, or the default when none has
-// been saved.
+// GetReachingHours returns the stored list, or the default when none has been
+// saved.
 func (a *App) GetReachingHours() (ReachingHoursEnvelopeDTO, error) {
 	a.reachingMu.RLock()
 	defer a.reachingMu.RUnlock()
 	return a.reachingEnvelopeLocked(false), nil
 }
 
-// SaveReachingHours stores a schedule the person chose. A stale base revision
+// SaveReachingHours stores the list the person arranged. A stale base revision
 // loses to whatever is stored rather than overwriting it.
 func (a *App) SaveReachingHours(input ReachingHoursSaveInput) (ReachingHoursEnvelopeDTO, error) {
-	state := input.State
-	state.Label = strings.TrimSpace(state.Label)
-	if state.ZoneID == "" {
-		state.ZoneID = localZoneID()
-	}
-	sort.Ints(state.Days)
+	state := tidyReachingHours(input.State)
 	if err := validateReachingHours(state); err != nil {
 		return ReachingHoursEnvelopeDTO{}, err
 	}
@@ -156,7 +247,7 @@ func (a *App) SaveReachingHours(input ReachingHoursSaveInput) (ReachingHoursEnve
 	}
 	next := a.reachingRevision + 1
 	if err := a.persistReachingLocked(state, next); err != nil {
-		a.reachingErr = "Reaching hours could not be stored, so the previous schedule is still in use."
+		a.reachingErr = "Reaching hours could not be stored, so the previous list is still in use."
 		return a.reachingEnvelopeLocked(false), errors.New("reaching hours could not be stored")
 	}
 	a.reaching = state
@@ -170,7 +261,6 @@ func (a *App) reachingEnvelopeLocked(conflict bool) ReachingHoursEnvelopeDTO {
 		State:    a.reaching,
 		Revision: a.reachingRevision,
 		Conflict: conflict,
-		Summary:  reachingSummary(a.reaching),
 		Message:  a.reachingErr,
 	}
 }
@@ -181,39 +271,66 @@ func (a *App) currentReachingHours() ReachingHoursDTO {
 	return a.reaching
 }
 
-// officeHours converts the stored schedule into what core/outlook consumes. A
-// disabled schedule yields no open days, so no window is produced.
-func (state ReachingHoursDTO) officeHours(fallbackZoneID string) outlook.OfficeHours {
-	zoneID := state.ZoneID
-	if zoneID == "" {
-		zoneID = fallbackZoneID
+// shown is everyone Home draws, in list order.
+func (state ReachingHoursDTO) shown() []ReachingContactDTO {
+	shown := make([]ReachingContactDTO, 0, len(state.Contacts))
+	for _, contact := range state.Contacts {
+		if !contact.Off {
+			shown = append(shown, contact)
+		}
 	}
-	hours := outlook.OfficeHours{
-		StartLocal: state.StartLocal,
-		EndLocal:   state.EndLocal,
-		ZoneID:     zoneID,
-		Days:       []time.Weekday{},
+	return shown
+}
+
+// officeHours is everyone shown as core/outlook reads them, each schedule
+// carrying the person's id. Someone switched off is left out, so produces no
+// window, and an empty list produces none at all.
+func (state ReachingHoursDTO) officeHours(fallbackZoneID string) []outlook.OfficeHours {
+	shown := state.shown()
+	schedules := make([]outlook.OfficeHours, 0, len(shown))
+	for _, contact := range shown {
+		zoneID := contact.ZoneID
+		if zoneID == "" {
+			zoneID = fallbackZoneID
+		}
+		hours := outlook.OfficeHours{
+			ID: contact.ID, ZoneID: zoneID, Open: make([]outlook.DayHours, 0, len(contact.Hours)),
+		}
+		for _, day := range contact.Hours {
+			hours.Open = append(hours.Open, outlook.DayHours{
+				Day: time.Weekday(day.Day), StartLocal: day.StartLocal, EndLocal: day.EndLocal,
+			})
+		}
+		schedules = append(schedules, hours)
 	}
-	if !state.Enabled {
-		return hours
+	return schedules
+}
+
+// contactRefs names each person as the assistant snapshot does: by place in
+// the list, never by label (ADR-0056).
+func (state ReachingHoursDTO) contactRefs() map[string]string {
+	refs := make(map[string]string, len(state.Contacts))
+	for index, contact := range state.Contacts {
+		refs[contact.ID] = fmt.Sprintf("contact_%02d", index+1)
 	}
-	for _, day := range state.Days {
-		hours.Days = append(hours.Days, time.Weekday(day))
-	}
-	return hours
+	return refs
 }
 
 func (a *App) loadReachingFromDisk() error {
 	if a.configDir == "" {
 		return nil
 	}
-	path := filepath.Join(a.configDir, reachingFileName)
-	store := reachingStore(path)
+	store := reachingStore(filepath.Join(a.configDir, reachingFileName))
 	stored, revision, found, recovered, err := store.read()
-	if err != nil || !found {
+	if err != nil {
 		return err
 	}
-	if recovered {
+	if !found {
+		stored, revision, found, err = a.migrateLegacyReaching()
+		if err != nil || !found {
+			return err
+		}
+	} else if recovered {
 		if err := store.restorePrimary(stored, revision); err != nil {
 			return err
 		}
@@ -226,6 +343,26 @@ func (a *App) loadReachingFromDisk() error {
 	return nil
 }
 
+// migrateLegacyReaching carries the single schedule kept before ADR-0056 over
+// as one person. The list is written before the old file is removed, so an
+// interruption leaves one or the other and never neither. If the list cannot
+// be written the hours are used all the same, and the move is tried again at
+// the next start.
+func (a *App) migrateLegacyReaching() (ReachingHoursDTO, uint64, bool, error) {
+	legacyPath := filepath.Join(a.configDir, legacyReachingFileName)
+	legacy, revision, found, _, err := legacyReachingStore(legacyPath).read()
+	if err != nil || !found {
+		return ReachingHoursDTO{}, 0, false, err
+	}
+	state := ReachingHoursDTO{Contacts: []ReachingContactDTO{legacy.contact()}}
+	if err := reachingStore(filepath.Join(a.configDir, reachingFileName)).write(state, revision); err == nil {
+		for _, path := range []string{legacyPath, legacyPath + ".bak"} {
+			_ = os.Remove(path)
+		}
+	}
+	return state, revision, true, nil
+}
+
 func (a *App) persistReachingLocked(state ReachingHoursDTO, revision uint64) error {
 	if a.configDir == "" {
 		return nil
@@ -233,57 +370,134 @@ func (a *App) persistReachingLocked(state ReachingHoursDTO, revision uint64) err
 	return reachingStore(filepath.Join(a.configDir, reachingFileName)).write(state, revision)
 }
 
+// legacyReachingHours is the single schedule kept before ADR-0056: the same
+// hours on each chosen day, with one switch for the whole of it.
+type legacyReachingHours struct {
+	Enabled    bool   `json:"enabled"`
+	Label      string `json:"label"`
+	StartLocal string `json:"startLocal"`
+	EndLocal   string `json:"endLocal"`
+	Days       []int  `json:"days"`
+	ZoneID     string `json:"zoneId"`
+}
+
+// legacyReachingStore reads the old file. Its rules were a subset of a
+// person's, so a schedule that becomes a valid person was a valid schedule.
+func legacyReachingStore(path string) localSettingsStore[legacyReachingHours] {
+	return localSettingsStore[legacyReachingHours]{
+		Path:   path,
+		Schema: legacyReachingSchema,
+		Name:   "reaching-hours",
+		Validate: func(legacy legacyReachingHours) error {
+			return validateReachingContact(legacy.contact())
+		},
+	}
+}
+
+// contact is the old schedule as one person, with the same hours on each of
+// its days. A schedule that was off becomes a person who is off, so no hours
+// are lost.
+func (legacy legacyReachingHours) contact() ReachingContactDTO {
+	label := strings.TrimSpace(legacy.Label)
+	if label == "" {
+		label = "Reaching hours"
+	}
+	days := append([]int(nil), legacy.Days...)
+	sort.Ints(days)
+	contact := ReachingContactDTO{
+		ID:     newReachingContactID(),
+		Label:  label,
+		ZoneID: legacy.ZoneID,
+		Off:    !legacy.Enabled,
+		Hours:  make([]ReachingDayHoursDTO, 0, len(days)),
+	}
+	for _, day := range days {
+		contact.Hours = append(contact.Hours, ReachingDayHoursDTO{
+			Day: day, StartLocal: legacy.StartLocal, EndLocal: legacy.EndLocal,
+		})
+	}
+	return contact
+}
+
 var weekdayNames = [...]string{
 	"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday",
 }
 
-// reachingSummary describes the schedule in the reader's words. It never states
-// the hours as a fact about the world: they are what this person recorded, and
-// saying so is the difference between a setting and a claim.
-func reachingSummary(state ReachingHoursDTO) string {
-	if !state.Enabled || len(state.Days) == 0 {
-		return "No reaching hours are set, so the outlook does not say when anyone is available."
+// mondayFirst is the week as the summary reads it, so the working week and the
+// weekend each read as one run.
+var mondayFirst = [...]int{1, 2, 3, 4, 5, 6, 0}
+
+// reachingSummary is what Home says about one person's hours. It never states
+// them as a fact about the world: they are what the owner recorded, and saying
+// so is the difference between a setting and a claim.
+func reachingSummary(contact ReachingContactDTO) string {
+	if len(contact.Hours) == 0 {
+		return contact.Label + ": no hours are set."
 	}
-	label := state.Label
-	if label == "" {
-		label = "Reaching hours"
-	}
-	parts := []string{label, "you set:", reachingDayPhrase(state.Days)}
-	parts = append(parts, reachingClockPhrase(state.StartLocal, state.EndLocal))
-	summary := strings.Join(parts, " ")
-	if zone := reachingZonePhrase(state.ZoneID); zone != "" {
+	summary := contact.Label + ": you set " + reachingHoursPhrase(contact.Hours)
+	if zone := reachingZonePhrase(contact.ZoneID); zone != "" {
 		summary += " " + zone
 	}
 	return summary + "."
 }
 
-func reachingDayPhrase(days []int) string {
-	sorted := append([]int(nil), days...)
-	sort.Ints(sorted)
-	if len(sorted) == 7 {
-		return "every day,"
+// reachingHoursPhrase reads a week of hours in week order. Days with the same
+// hours share a phrase: "Monday to Friday, 9:00 AM to 5:00 PM; Saturday,
+// 10:00 AM to 1:00 PM".
+func reachingHoursPhrase(hours []ReachingDayHoursDTO) string {
+	type opening struct{ start, end string }
+	byDay := make(map[int]opening, len(hours))
+	for _, day := range hours {
+		byDay[day.Day] = opening{day.StartLocal, day.EndLocal}
 	}
-	names := make([]string, 0, len(sorted))
-	for _, day := range sorted {
-		if day >= 0 && day < len(weekdayNames) {
-			names = append(names, weekdayNames[day])
+	var order []opening
+	days := make(map[opening][]int, len(hours))
+	for _, day := range mondayFirst {
+		open, isOpen := byDay[day]
+		if !isOpen {
+			continue
 		}
+		if _, seen := days[open]; !seen {
+			order = append(order, open)
+		}
+		days[open] = append(days[open], day)
 	}
-	// A contiguous run reads as a range; anything else is listed, because
-	// "Monday, Thursday" is a real pattern and compressing it would lie.
-	if len(sorted) > 2 && sorted[len(sorted)-1]-sorted[0] == len(sorted)-1 {
-		return names[0] + " to " + names[len(names)-1] + ","
+	phrases := make([]string, 0, len(order))
+	for _, open := range order {
+		phrases = append(phrases, reachingDayPhrase(days[open])+", "+reachingClockPhrase(open.start, open.end))
+	}
+	return strings.Join(phrases, "; ")
+}
+
+// reachingDayPhrase names days given in week order.
+func reachingDayPhrase(days []int) string {
+	if len(days) == len(mondayFirst) {
+		return "every day"
+	}
+	names := make([]string, 0, len(days))
+	for _, day := range days {
+		names = append(names, weekdayNames[day])
+	}
+	// A run of three or more reads as a range; anything else is listed, because
+	// "Monday and Thursday" is a real pattern and compressing it would lie.
+	if len(days) > 2 && weekPlace(days[len(days)-1])-weekPlace(days[0]) == len(days)-1 {
+		return names[0] + " to " + names[len(names)-1]
 	}
 	switch len(names) {
 	case 0:
 		return ""
 	case 1:
-		return names[0] + ","
+		return names[0]
 	case 2:
-		return names[0] + " and " + names[1] + ","
+		return names[0] + " and " + names[1]
 	default:
-		return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1] + ","
+		return strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
 	}
+}
+
+// weekPlace is a weekday's place in mondayFirst.
+func weekPlace(day int) int {
+	return (day + 6) % 7
 }
 
 func reachingClockPhrase(startLocal, endLocal string) string {

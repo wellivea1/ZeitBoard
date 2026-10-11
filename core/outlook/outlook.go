@@ -104,7 +104,8 @@ func (s Segment) Duration() time.Duration {
 	return s.Interval.End.UTC.Sub(s.Interval.Start.UTC)
 }
 
-// OfficeHours is when the rest of the world is reachable. It is civil-clock
+// OfficeHours is when someone the person needs to reach is available: one
+// schedule, with its own hours on each weekday (ADR-0056). It is civil-clock
 // arithmetic, not a claim about the user.
 //
 // The hours belong to whoever the person needs to reach, which is why ZoneID is
@@ -112,18 +113,38 @@ func (s Segment) Duration() time.Duration {
 // can sit in a different one, and the whole value of this view is knowing when
 // their clock and the user's waking hours overlap.
 type OfficeHours struct {
-	// StartLocal and EndLocal are "HH:MM" in ZoneID. EndLocal at or before
-	// StartLocal means the window crosses midnight and closes on the following
-	// day; equal times mean the whole 24 hours, which is how a service that
-	// never closes is expressed.
-	StartLocal string
-	EndLocal   string
+	// ID names the schedule for the caller. Every window carries it; this
+	// package reads nothing into it, and knows no names.
+	ID string
 
-	// Days are the weekdays the hours apply to. For a window that crosses
-	// midnight, the weekday is the day it opens.
-	Days []time.Weekday
+	// Open is each weekday the schedule opens, at most once a day.
+	Open []DayHours
 
 	ZoneID string
+}
+
+// DayHours is when a schedule is open on one weekday.
+type DayHours struct {
+	// Day is the weekday the window opens. A window that crosses midnight
+	// belongs to the day it opened.
+	Day time.Weekday
+
+	// StartLocal and EndLocal are "HH:MM" in the schedule's zone. EndLocal at
+	// or before StartLocal means the window crosses midnight and closes on the
+	// following day; equal times mean the whole 24 hours, which is how a
+	// service that never closes is expressed.
+	StartLocal string
+	EndLocal   string
+}
+
+// Uniform is the same hours on each of the given days, the commonest shape of
+// a schedule.
+func Uniform(id, startLocal, endLocal string, days []time.Weekday, zoneID string) OfficeHours {
+	hours := OfficeHours{ID: id, ZoneID: zoneID, Open: make([]DayHours, 0, len(days))}
+	for _, day := range days {
+		hours.Open = append(hours.Open, DayHours{Day: day, StartLocal: startLocal, EndLocal: endLocal})
+	}
+	return hours
 }
 
 // DefaultOfficeHours is the ordinary Monday-to-Friday working day, matching the
@@ -132,14 +153,9 @@ type OfficeHours struct {
 // many people with a drifting rhythm need to reach someone on entirely
 // different hours, and the app must be told rather than assume.
 func DefaultOfficeHours(zoneID string) OfficeHours {
-	return OfficeHours{
-		StartLocal: "09:00",
-		EndLocal:   "17:00",
-		Days: []time.Weekday{
-			time.Monday, time.Tuesday, time.Wednesday, time.Thursday, time.Friday,
-		},
-		ZoneID: zoneID,
-	}
+	return Uniform("", "09:00", "17:00", []time.Weekday{
+		time.Monday, time.Tuesday, time.Wednesday, time.Thursday, time.Friday,
+	}, zoneID)
 }
 
 // OfficeWindow is one stretch of office-open time inside the horizon, with how
@@ -150,6 +166,8 @@ func DefaultOfficeHours(zoneID string) OfficeHours {
 // down, and treating it as usable is how someone ends up asleep through the one
 // call they needed to make this week.
 type OfficeWindow struct {
+	// HoursID is the ID of the schedule the window belongs to.
+	HoursID  string           `json:"hoursId"`
 	Interval domain.TimeRange `json:"interval"`
 
 	Reachable []domain.TimeRange `json:"reachable"`
@@ -269,7 +287,10 @@ type Input struct {
 	// constraints. Optional.
 	WakeAnchor *domain.WakeAnchor
 
-	OfficeHours OfficeHours
+	// OfficeHours are the schedules of the people the person needs to reach.
+	// None means nobody: the view then reports no reaching windows, which is
+	// more honest than a working week nobody chose.
+	OfficeHours []OfficeHours
 
 	// MaximumOpportunities caps how many tasks are placed. Zero means the
 	// default; a screen that lists everything is a screen nobody reads.
@@ -295,9 +316,10 @@ func Build(in Input) (Outlook, error) {
 		horizon = MaximumHorizon
 	}
 
-	zoneID := in.OfficeHours.ZoneID
-	if zoneID == "" {
-		zoneID = in.Estimate.AsOf.ZoneID
+	// The horizon is the person's own; a schedule's zone is its owner's.
+	zoneID := in.Estimate.AsOf.ZoneID
+	if zoneID == "" && len(in.OfficeHours) > 0 {
+		zoneID = in.OfficeHours[0].ZoneID
 	}
 	if zoneID == "" {
 		zoneID = "UTC"
@@ -604,12 +626,28 @@ func nextWindowAfter(windows []domain.AvailabilityWindow, now, end time.Time) *d
 	return best
 }
 
-// officeWindows walks the civil calendar day by day and intersects each
-// office-open stretch with the timeline.
-func officeWindows(hours OfficeHours, segments []Segment, now, end time.Time, zoneID string) ([]OfficeWindow, error) {
-	if hours.StartLocal == "" && hours.EndLocal == "" && len(hours.Days) == 0 {
-		hours = DefaultOfficeHours(zoneID)
+// officeWindows gives every schedule's windows, earliest first; windows that
+// open together keep the schedules' order.
+func officeWindows(schedules []OfficeHours, segments []Segment, now, end time.Time, zoneID string) ([]OfficeWindow, error) {
+	awake := spansWithPresence(segments, PresenceAwake)
+	uncertain := spansWithPresence(segments, PresenceUncertain)
+	windows := make([]OfficeWindow, 0, 4*len(schedules))
+	for _, hours := range schedules {
+		found, err := scheduleWindows(hours, awake, uncertain, now, end, zoneID)
+		if err != nil {
+			return nil, err
+		}
+		windows = append(windows, found...)
 	}
+	sort.SliceStable(windows, func(i, j int) bool {
+		return windows[i].Interval.Start.UTC.Before(windows[j].Interval.Start.UTC)
+	})
+	return windows, nil
+}
+
+// scheduleWindows walks the civil calendar day by day and intersects each of
+// one schedule's open stretches with the timeline.
+func scheduleWindows(hours OfficeHours, awake, uncertain []span, now, end time.Time, zoneID string) ([]OfficeWindow, error) {
 	if hours.ZoneID == "" {
 		hours.ZoneID = zoneID
 	}
@@ -617,25 +655,24 @@ func officeWindows(hours OfficeHours, segments []Segment, now, end time.Time, zo
 	if err != nil {
 		return nil, fmt.Errorf("office hours zone %q: %w", hours.ZoneID, err)
 	}
-	startClock, err := parseClock(hours.StartLocal, "09:00")
-	if err != nil {
-		return nil, err
+	// A day without hours is closed. Nothing here substitutes a working week
+	// the person never chose, which is the assumption the setting undoes.
+	type opening struct{ start, end clock }
+	open := make(map[time.Weekday]opening, len(hours.Open))
+	for _, day := range hours.Open {
+		if _, twice := open[day.Day]; twice {
+			return nil, fmt.Errorf("office hours list %s twice", day.Day)
+		}
+		start, err := parseClock(day.StartLocal)
+		if err != nil {
+			return nil, err
+		}
+		closing, err := parseClock(day.EndLocal)
+		if err != nil {
+			return nil, err
+		}
+		open[day.Day] = opening{start, closing}
 	}
-	endClock, err := parseClock(hours.EndLocal, "17:00")
-	if err != nil {
-		return nil, err
-	}
-	// No open days means no open days. Only a wholly unset OfficeHours takes the
-	// default, above: substituting Monday-to-Friday here would turn "there is
-	// nobody I need to reach on a schedule" into a working week the person
-	// never chose, which is the assumption this whole setting exists to undo.
-	open := make(map[time.Weekday]bool, len(hours.Days))
-	for _, day := range hours.Days {
-		open[day] = true
-	}
-
-	awake := spansWithPresence(segments, PresenceAwake)
-	uncertain := spansWithPresence(segments, PresenceUncertain)
 
 	windows := make([]OfficeWindow, 0, 4)
 	localStart := now.In(location)
@@ -650,10 +687,12 @@ func officeWindows(hours OfficeHours, segments []Segment, now, end time.Time, zo
 	last := time.Date(lastLocal.Year(), lastLocal.Month(), lastLocal.Day(), 0, 0, 0, 0, location)
 
 	for !day.After(last) {
-		if !open[day.Weekday()] {
+		today, isOpen := open[day.Weekday()]
+		if !isOpen {
 			day = day.AddDate(0, 0, 1)
 			continue
 		}
+		startClock, endClock := today.start, today.end
 		// Constructed in the location so a daylight-saving transition shifts
 		// the office day with the civil clock, which is what an office does.
 		openAt := time.Date(day.Year(), day.Month(), day.Day(), startClock.hour, startClock.minute, 0, 0, location).UTC()
@@ -682,6 +721,7 @@ func officeWindows(hours OfficeHours, segments []Segment, now, end time.Time, zo
 			continue
 		}
 		window := OfficeWindow{
+			HoursID:   hours.ID,
 			Interval:  interval,
 			Reachable: intersect(awake, openAt, closeAt, hours.ZoneID),
 			Possible:  intersect(uncertain, openAt, closeAt, hours.ZoneID),
@@ -704,10 +744,7 @@ func afterClock(a, b clock) bool {
 	return a.hour*60+a.minute > b.hour*60+b.minute
 }
 
-func parseClock(value, fallback string) (clock, error) {
-	if value == "" {
-		value = fallback
-	}
+func parseClock(value string) (clock, error) {
 	parsed, err := time.Parse("15:04", value)
 	if err != nil {
 		return clock{}, fmt.Errorf("office hours clock %q: %w", value, err)

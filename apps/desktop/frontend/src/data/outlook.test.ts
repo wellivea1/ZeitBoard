@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { loadOutlook, normalizeOutlook, outlookUnavailable } from "./outlook";
 
+function person(windows: unknown[], label = "The clinic") {
+  return {
+    contactId: "contact-1",
+    label,
+    hoursLabel: `${label}: you set Thursday, 9:00 AM to 5:00 PM.`,
+    windows,
+  };
+}
+
 function available(overrides: Record<string, unknown> = {}) {
   return {
     status: "available",
@@ -19,17 +28,18 @@ function available(overrides: Record<string, unknown> = {}) {
         durationHours: 5.33,
       },
     ],
-    officeHoursLabel: "Typical office hours, Monday to Friday 9:00 AM to 5:00 PM",
-    officeWindows: [
-      {
-        dayLabel: "Thu, Aug 6",
-        hoursLabel: "9:00 AM to 5:00 PM",
-        status: "reachable",
-        reachableLabel: "9:00 AM to 12:40 PM",
-        detail: "Predicted awake for 3 hours 40 minutes of this window.",
-        offsetHours: 15,
-        durationHours: 8,
-      },
+    reaching: [
+      person([
+        {
+          dayLabel: "Thu, Aug 6",
+          hoursLabel: "9:00 AM to 5:00 PM",
+          status: "reachable",
+          reachableLabel: "9:00 AM to 12:40 PM",
+          detail: "Predicted awake for 3 hours 40 minutes of this window.",
+          offsetHours: 15,
+          durationHours: 8,
+        },
+      ]),
     ],
     commitments: [],
     opportunities: [],
@@ -45,7 +55,8 @@ describe("normalizeOutlook", () => {
     const view = normalizeOutlook(available());
     expect(view?.status).toBe("available");
     expect(view?.segments).toHaveLength(1);
-    expect(view?.officeWindows[0]?.status).toBe("reachable");
+    expect(view?.reaching[0]?.label).toBe("The clinic");
+    expect(view?.reaching[0]?.windows[0]?.status).toBe("reachable");
     expect(view?.days[0]?.offsetHours).toBe(6);
   });
 
@@ -73,19 +84,35 @@ describe("normalizeOutlook", () => {
   it("rejects an office status outside the closed set", () => {
     const view = normalizeOutlook(
       available({
-        officeWindows: [
-          {
-            dayLabel: "Thu",
-            hoursLabel: "9 to 5",
-            status: "maybe",
-            detail: "d",
-            offsetHours: 1,
-            durationHours: 8,
-          },
+        reaching: [
+          person([
+            {
+              dayLabel: "Thu",
+              hoursLabel: "9 to 5",
+              status: "maybe",
+              detail: "d",
+              offsetHours: 1,
+              durationHours: 8,
+            },
+          ]),
         ],
       }),
     );
     expect(view).toBeUndefined();
+  });
+
+  // A row needs a name to stand beside; a person without one, or without a list
+  // of windows, is a payload this build does not understand.
+  it("rejects a person it cannot name or draw", () => {
+    expect(normalizeOutlook(available({ reaching: [person([], "")] }))).toBeUndefined();
+    expect(
+      normalizeOutlook(available({ reaching: [{ ...person([]), windows: undefined }] })),
+    ).toBeUndefined();
+  });
+
+  it("keeps someone with no window in the days shown", () => {
+    const view = normalizeOutlook(available({ reaching: [person([])] }));
+    expect(view?.reaching).toEqual([person([])]);
   });
 
   it("keeps a withheld view's reason", () => {
@@ -93,7 +120,7 @@ describe("normalizeOutlook", () => {
       available({
         status: "withheld",
         segments: [],
-        officeWindows: [],
+        reaching: [],
         withheldMessage: "Sleep was expected by now and none has been recorded.",
         freshness: {
           state: "withheld",
@@ -113,7 +140,7 @@ describe("normalizeOutlook", () => {
       available({
         status: "refused",
         segments: [],
-        officeWindows: [],
+        reaching: [],
         refusal: { code: "insufficient_data", message: "need at least 7 episodes" },
       }),
     );
@@ -139,6 +166,6 @@ describe("loadOutlook", () => {
     const root = { go: { main: { App: { GetOutlook: async () => available() } } } };
     const view = await loadOutlook(root);
     expect(view.status).toBe("available");
-    expect(view.officeWindows[0]?.reachableLabel).toBe("9:00 AM to 12:40 PM");
+    expect(view.reaching[0]?.windows[0]?.reachableLabel).toBe("9:00 AM to 12:40 PM");
   });
 });

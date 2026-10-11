@@ -367,21 +367,68 @@
   }
 }
 
-/* Reaching hours: when the people this person needs are available. */
+/* Reaching hours: a ruled list of the people this person needs to reach, each
+   with a week of hours. Every day carries a thin 24-hour bar on one shared
+   axis, so a week reads as a shape and an overnight stretch is plain to see. */
 .reaching-form {
   display: grid;
   gap: var(--space-4);
-  max-width: 46rem;
+  max-width: 52rem;
 }
 
-.reaching-toggle {
+.reaching-people {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+}
+
+.reaching-people > li {
+  padding-block: var(--space-4);
+  border-top: 1px solid var(--divider);
+}
+
+.reaching-people > li:last-child {
+  border-bottom: 1px solid var(--divider);
+}
+
+.reaching-person {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.reaching-person-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+  align-items: end;
+}
+
+/* Scoped to the panel: the generic settings label is a grid of small muted
+   capitals, which would stack each checkbox over its words. */
+.reaching-panel .reaching-toggle {
   display: flex;
   gap: var(--space-3);
   align-items: flex-start;
+  color: var(--ink);
+  font-size: var(--type-label);
+  font-weight: 600;
 }
 
-.reaching-toggle input {
-  margin-top: 4px;
+.reaching-panel input[type="checkbox"] {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--ink);
+}
+
+.reaching-panel .reaching-toggle input {
+  margin-top: 2px;
 }
 
 .reaching-toggle span,
@@ -391,10 +438,15 @@
 }
 
 .reaching-toggle small,
-.reaching-field small,
-.reaching-note {
+.reaching-add small,
+.reaching-day small {
   color: var(--muted);
   font-size: var(--type-label);
+  font-weight: 400;
+}
+
+.reaching-day small {
+  white-space: nowrap;
 }
 
 .reaching-field {
@@ -402,66 +454,123 @@
   gap: var(--space-1);
 }
 
-.reaching-field input,
 .reaching-field select {
-  max-width: 22rem;
+  max-width: 18rem;
 }
 
-.reaching-clocks {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-4);
+/* The name is the entry's title, so it is set like one. */
+.reaching-name input {
+  width: 18rem;
+  max-width: 100%;
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 500;
 }
 
-.reaching-clocks .reaching-field input {
-  max-width: 9rem;
-}
-
-.reaching-note {
-  margin: 0;
-}
-
-.reaching-days {
-  border: 0;
-  margin: 0;
-  padding: 0;
+.reaching-week {
+  --reaching-columns: 8rem 19.5rem minmax(0, 1fr);
   display: grid;
+  gap: 2px;
+}
+
+.reaching-day,
+.reaching-week-axis {
+  display: grid;
+  grid-template-columns: var(--reaching-columns);
+  column-gap: var(--space-3);
+  align-items: center;
+}
+
+.reaching-day {
+  min-height: 34px;
+}
+
+.reaching-panel .reaching-day-name {
+  display: inline-flex;
   gap: var(--space-2);
-}
-
-.reaching-days legend {
-  padding: 0;
-  color: var(--muted);
+  align-items: center;
+  color: var(--ink);
   font-size: var(--type-label);
+  font-weight: 600;
 }
 
-.reaching-day-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3);
+.reaching-panel .reaching-day:not([data-open]) .reaching-day-name {
+  color: var(--muted);
+  font-weight: 500;
 }
 
-.reaching-day-buttons label {
+.reaching-day-clocks {
   display: inline-flex;
   gap: var(--space-2);
   align-items: center;
 }
 
-.reaching-presets {
+.reaching-day-clocks input {
+  width: 6.75rem;
+  min-height: 30px;
+}
+
+.reaching-day-track {
+  position: relative;
+  height: 8px;
+  border-inline: 1px solid var(--divider);
+  background:
+    linear-gradient(to right, var(--divider) 1px, transparent 1px) 0 0 / 25% 100% repeat-x,
+    var(--panel-alt);
+}
+
+.reaching-day-track > span {
+  position: absolute;
+  inset-block: 0;
+  background: var(--muted);
+}
+
+/* The part of the day before's hours that runs past midnight. */
+.reaching-day-track > span[data-carried] {
+  opacity: 0.55;
+}
+
+.reaching-week-scale {
+  grid-column: 3;
+  position: relative;
+  height: 16px;
+}
+
+.reaching-week-scale small {
+  position: absolute;
+  top: 2px;
+  color: var(--muted);
+  font-size: var(--type-micro);
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.reaching-week-scale small:first-child {
+  transform: none;
+}
+
+.reaching-week-scale small:last-child {
+  transform: translateX(-100%);
+}
+
+.reaching-person[data-off] .reaching-week {
+  opacity: 0.5;
+}
+
+.reaching-person-foot {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
+  gap: var(--space-2) var(--space-4);
+  align-items: flex-start;
+  justify-content: space-between;
 }
 
-.reaching-presets .button[aria-pressed="true"] {
-  color: var(--button-primary-text);
-  background: var(--button-primary-bg);
-  border-color: var(--button-primary-bg);
+.reaching-person-actions {
+  display: inline-flex;
+  gap: var(--space-3);
 }
 
-/* The summary is the sentence the outlook prints, shown here so the effect of
-   an edit is visible before leaving the screen. */
-.reaching-summary {
+.reaching-empty {
   margin: 0;
   padding: 10px 0;
   color: var(--ink);
@@ -471,14 +580,33 @@
   font-style: italic;
 }
 
+.reaching-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+
 .reaching-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
 }
 
-.reaching-days[disabled] {
-  opacity: 0.55;
+@media (max-width: 640px) {
+  .reaching-week {
+    --reaching-columns: 7rem minmax(0, 1fr);
+  }
+
+  .reaching-day {
+    row-gap: 4px;
+    padding-block: 4px;
+  }
+
+  .reaching-day-track,
+  .reaching-week-scale {
+    grid-column: 1 / -1;
+  }
 }
 
 /* Who can read the local files. An owner-only permission is not encryption, and

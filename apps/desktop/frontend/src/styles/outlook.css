@@ -65,6 +65,17 @@
   text-transform: uppercase;
 }
 
+/* A person's name can be longer than the gutter: two lines, then an ellipsis,
+   with the whole of it and their hours on hover. */
+.outlook-row-name {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
 .outlook-track {
   position: relative;
   height: 20px;

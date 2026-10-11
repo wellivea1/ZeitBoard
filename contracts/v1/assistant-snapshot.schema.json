@@ -134,12 +134,13 @@
         },
         "reachable_hours": {
           "type": "array",
-          "maxItems": 16,
+          "maxItems": 24,
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["start", "end", "status", "reachable", "possible"],
+            "required": ["contact", "start", "end", "status", "reachable", "possible"],
             "properties": {
+              "contact": { "type": "string", "pattern": "^contact_[0-9]{2}$" },
               "start": { "$ref": "#/$defs/instant" },
               "end": { "$ref": "#/$defs/instant" },
               "status": { "type": "string", "enum": ["reachable", "partial", "unreachable"] },

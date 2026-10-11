@@ -30,8 +30,11 @@ func planningSnapshot() *SnapshotContext {
 		Plans: SnapshotPlans{
 			Status:   "available",
 			Segments: []SnapshotSegment{{Presence: "awake", Start: at(14, 0), End: at(23, 0)}},
-			ReachableHours: []SnapshotReachable{{Start: at(14, 0), End: at(22, 0), Status: "reachable",
-				Reachable: []SnapshotRange{{Start: at(14, 0), End: at(22, 0)}}}},
+			ReachableHours: []SnapshotReachable{
+				{Contact: "contact_01", Start: at(14, 0), End: at(22, 0), Status: "reachable",
+					Reachable: []SnapshotRange{{Start: at(14, 0), End: at(22, 0)}}},
+				{Contact: "CANARY-not-a-contact", Start: at(15, 0), End: at(16, 0), Status: "unreachable"},
+			},
 			Commitments: []SnapshotCommitment{
 				{Ref: "commitment_01", Start: at(16, 0), End: at(17, 0), Conflict: "none"},
 				{Ref: "commitment_02", Start: at(18, 0), End: at(18, 30), Conflict: "none", TaskID: "task_accepted_01"},
@@ -69,7 +72,7 @@ func TestAssistantSnapshotReachesTheModelAsEnumsIdsAndCivilTime(t *testing.T) {
 	}
 	for _, required := range []string{
 		`"snapshot"`, `"presence":"awake"`, `"freshness":"current"`, `"sleep_likely_begins"`, `"waking_likely"`,
-		`"drift_minutes_per_cycle":50`, `"fit_rating":"medium"`, `"timeline"`, `"reachable_hours"`,
+		`"drift_minutes_per_cycle":50`, `"fit_rating":"medium"`, `"timeline"`, `"reachable_hours"`, `"contact":"contact_01"`,
 		`"ref":"commitment_01"`, `"accepted_time_of_task":"task_accepted_01"`, `"awaiting_decision"`,
 		`"proposal_pending_01"`, `"task_unplaced_01"`, `"task_conflicts":1`, `"needs_review":true`,
 		`Mar 5, 2026 6:00 PM EST`,
@@ -103,8 +106,19 @@ func TestSnapshotSanitizingDropsWhatAModelMustNotRead(t *testing.T) {
 		t.Fatalf("sanitized snapshot kept unreadable text: %s", encoded)
 	}
 	if out.Rhythm.Presence != "unknown" || out.Rhythm.Status != "unavailable" || out.Rhythm.DriftMinutesPerCycle != nil ||
-		len(out.Timeline) != 1 || len(out.Commitments) != 1 || len(out.AwaitingDecision) != 0 || len(out.Unplaced) != 0 {
+		len(out.Timeline) != 1 || len(out.ReachableHours) != 1 || len(out.Commitments) != 1 ||
+		len(out.AwaitingDecision) != 0 || len(out.Unplaced) != 0 {
 		t.Fatalf("sanitized snapshot = %s", encoded)
+	}
+
+	// A desktop from before the list of people names nobody, and its windows
+	// still count.
+	older := planningSnapshot()
+	older.Plans.ReachableHours = older.Plans.ReachableHours[:1]
+	older.Plans.ReachableHours[0].Contact = ""
+	if got := sanitizeSnapshot(older, fixedNow(), "America/New_York", false); len(got.ReachableHours) != 1 ||
+		got.ReachableHours[0].Contact != "" {
+		t.Fatalf("a window naming nobody became %+v", got.ReachableHours)
 	}
 
 	// An estimate that is not current states no current state, whatever the

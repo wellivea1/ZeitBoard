@@ -28,8 +28,8 @@ func TestOutlookAnswersTheNextThreeDays(t *testing.T) {
 	if len(view.Segments) < 3 {
 		t.Errorf("timeline has %d stretches; three days should hold more", len(view.Segments))
 	}
-	if len(view.OfficeWindows) == 0 {
-		t.Error("no office windows over three days")
+	if len(view.Reaching) != 1 || len(view.Reaching[0].Windows) == 0 {
+		t.Errorf("reaching rows %+v; the default working week should have windows over three days", view.Reaching)
 	}
 	if view.SleepOnset == nil || view.Wake == nil {
 		t.Error("no range for the next sleep's onset and waking")
@@ -97,7 +97,7 @@ func TestOutlookIsWithheldOnStaleEvidence(t *testing.T) {
 	if view.Status != "withheld" {
 		t.Fatalf("status = %q after four days without a record, want withheld", view.Status)
 	}
-	if len(view.Segments) != 0 || len(view.OfficeWindows) != 0 {
+	if len(view.Segments) != 0 || len(view.Reaching) != 0 {
 		t.Error("a withheld view still drew a timeline")
 	}
 	if view.WithheldMessage == "" {
@@ -142,7 +142,10 @@ func TestOutlookOfficeWindowsAreLabelledHonestly(t *testing.T) {
 	if view.Status != "available" {
 		t.Skipf("estimator refused on this fixture (%s)", view.Status)
 	}
-	for i, window := range view.OfficeWindows {
+	if len(view.Reaching) != 1 {
+		t.Fatalf("reaching rows %+v, want the default's one", view.Reaching)
+	}
+	for i, window := range view.Reaching[0].Windows {
 		switch window.Status {
 		case "reachable":
 			if window.ReachableLabel == "" {

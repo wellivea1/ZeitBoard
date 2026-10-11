@@ -395,9 +395,10 @@ M-E's separately reviewed local agent projection.
     validate-or-discard — was extracted from the appearance file rather than
     copied, and appearance moved onto it unchanged.
 
-    Not done: one schedule at a time, and the same hours on every selected day.
-    Several named contacts, and per-day hours, are a larger change to what
-    `core/outlook` returns and to what Home draws.
+    ~~Not done: one schedule at a time, and the same hours on every selected day.~~
+    Done 2026-10-11 (ADR-0056): a list of up to five people, each with their own
+    zone and their own hours on each weekday. Home draws a row for each person
+    shown, and the old schedule carried over as one person.
 
 17. ~~**Local file protection, and an honest at-rest claim.**~~ ✅ Delivered 2026-08-10 (ADR-0035).
     `privacy.md` said in bold that at-rest encryption was required _locally and on the instance_.
