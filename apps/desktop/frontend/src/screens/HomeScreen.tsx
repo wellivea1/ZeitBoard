@@ -26,6 +26,8 @@ import {
 import { loadOutlook, outlookUnavailable } from "../data/outlook";
 import { overviewUnavailable } from "../data/overview";
 import { sleepDataChangedEvent, notifySleepDataChanged } from "../data/sleepDataEvents";
+import { loadSourceStatuses, sourceNote } from "../data/sourceStatus";
+import { useLoaded } from "../state/useLoaded";
 import { hasDesktopBridge } from "../data/wailsBridge";
 import { localZone } from "../utils/civilTime";
 import { createCoalescedRefresh } from "../utils/coalescedRefresh";
@@ -139,7 +141,13 @@ export function HomeScreen() {
   const medications = useHomeMedications();
   const hasEstimate = overview.status === "estimated";
   const tone = stateTone(overview.state);
-  const parts = loading ? [{ text: "Reading your records…" }] : leadParts(overview, outlook);
+  const { data: sourceStatuses } = useLoaded(loadSourceStatuses, {
+    events: [sleepDataChangedEvent],
+    fallback: () => [],
+  });
+  const parts = loading
+    ? [{ text: "Reading your records…" }]
+    : leadParts(overview, outlook, new Date(), sourceNote(sourceStatuses ?? []));
 
   return (
     <div className="almanac">

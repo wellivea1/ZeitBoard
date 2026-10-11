@@ -25,6 +25,7 @@ import org.junit.Test
 import org.junit.rules.TestWatcher
 import org.junit.runner.Description
 import org.non24.planner.data.DurableLocalDataState
+import org.non24.planner.data.SourceCheck
 import org.non24.planner.data.EstimateRepository
 import org.non24.planner.data.HealthConnectRepository
 import org.non24.planner.data.BackendSyncClient
@@ -200,6 +201,7 @@ class AppViewModelMedicationTest {
     private class NoOutbox : SyncOutboxStore {
         override fun queueLocalCorrections(homeZone: java.time.ZoneId, knownSources: Map<String, SourceSyncRevision>, now: Instant, limit: Int) = org.non24.planner.data.LocalCorrectionQueueResult(false, 0)
         override fun contains(recordId: String) = false
+        override fun lastQueued(kind: String): OutboxRecord? = null
         override fun hasPendingManualCorrection(observationId: String) = false
         override fun activateScope(scope: String) = Unit
         override fun pending(limit: Int): List<OutboxRecord> = emptyList()
@@ -261,6 +263,7 @@ class AppViewModelMedicationTest {
         override val permissionState = MutableStateFlow(HealthPermissionState.UNAVAILABLE)
         override val requiredPermissions: Set<String> = emptySet()
         override val lastRefreshError = MutableStateFlow<String?>(null)
+        override val lastCheck = MutableStateFlow<SourceCheck?>(null)
         var refreshPermissionCalls = 0
 
         override suspend fun refreshPermissionState() {

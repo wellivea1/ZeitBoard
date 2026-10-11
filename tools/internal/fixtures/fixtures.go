@@ -60,6 +60,7 @@ var fixtureManifest = []fixtureSpec{
 	{"v1/task-set", ManifestEntry{Version: "v1", Name: "task-set.json", Schema: "task-set.schema.json"}},
 	{"v1/calendar-event-set", ManifestEntry{Version: "v1", Name: "calendar-event-set.json", Schema: "calendar-event-set.schema.json"}},
 	{"v1/rhythm-marker-set", ManifestEntry{Version: "v1", Name: "rhythm-marker-set.json", Schema: "rhythm-marker-set.schema.json"}},
+	{"v1/source-report-set", ManifestEntry{Version: "v1", Name: "source-report-set.json", Schema: "source-report-set.schema.json"}},
 	{"v1/clinical-chart-request", ManifestEntry{Version: "v1", Name: "clinical-chart-request.json", Schema: "clinical-chart-request.schema.json"}},
 	{"v1/assistant-action", ManifestEntry{Version: "v1", Name: "assistant-action.json", Schema: "assistant-action.schema.json"}},
 	{"v1/direct-proposal-request", ManifestEntry{Version: "v1", Name: "direct-proposal-request.json", Schema: "direct-proposal-request.schema.json"}},
@@ -332,6 +333,28 @@ type rhythmMarkerSet struct {
 	SchemaVersion string             `json:"schema_version"`
 	GeneratedAt   string             `json:"generated_at"`
 	Markers       []rhythmMarkerItem `json:"markers"`
+}
+
+// sourceReport is what a device found when it checked a source (ADR-0054).
+type sourceReport struct {
+	ReportID        string              `json:"report_id"`
+	Source          string              `json:"source"`
+	Outcome         string              `json:"outcome"`
+	ReportedAt      string              `json:"reported_at"`
+	BackgroundReads bool                `json:"background_reads"`
+	Covered         *sourceReportWindow `json:"covered,omitempty"`
+	Held            *int                `json:"held,omitempty"`
+}
+
+type sourceReportWindow struct {
+	StartAt string `json:"start_at"`
+	EndAt   string `json:"end_at"`
+}
+
+type sourceReportSet struct {
+	SchemaVersion string         `json:"schema_version"`
+	GeneratedAt   string         `json:"generated_at"`
+	Reports       []sourceReport `json:"reports"`
 }
 
 type clinicalChartRange struct {
@@ -783,9 +806,10 @@ func Build() ([]File, error) {
 		CorrectionSet:  correctionsFixture,
 	}
 
+	syncHeld := 0
 	syncBatchFixture := syncBatch{
 		SchemaVersion: "v1",
-		Cursor:        5,
+		Cursor:        6,
 		Records: []syncRecord{
 			{
 				Seq:       1,
@@ -841,6 +865,19 @@ func Build() ([]File, error) {
 					EndAt:       ts(generatedAt.Add(minutes(24*60 + 60))),
 					ZoneID:      "America/New_York",
 					CreatedAt:   ts(generatedAt),
+				},
+			},
+			{
+				Seq:       6,
+				RecordID:  "srcrep-5f60718293a4b5c6d7e8f90a",
+				Kind:      "source_report",
+				DeviceID:  "device_android_01",
+				CreatedAt: ts(generatedAt),
+				Payload: sourceReport{
+					ReportID: "srcrep-5f60718293a4b5c6d7e8f90a", Source: "health_connect", Outcome: "read",
+					ReportedAt: ts(generatedAt), BackgroundReads: true,
+					Covered: &sourceReportWindow{StartAt: ts(generatedAt.Add(-30 * 24 * time.Hour)), EndAt: ts(generatedAt)},
+					Held:    &syncHeld,
 				},
 			},
 		},
@@ -905,6 +942,40 @@ func Build() ([]File, error) {
 			},
 		},
 	}
+	// A phone's Health Connect checks over two days: a read, the permission
+	// taken away, and a read again once it is back, with one record held.
+	noneHeld, oneHeld := 0, 1
+	sourceReportSetFixture := sourceReportSet{
+		SchemaVersion: "v1",
+		GeneratedAt:   ts(generatedAt),
+		Reports: []sourceReport{
+			{
+				ReportID: "srcrep-0a1b2c3d4e5f60718293a4b5", Source: "health_connect", Outcome: "read",
+				ReportedAt: "2026-03-13T09:00:00Z", BackgroundReads: true,
+				Covered: &sourceReportWindow{StartAt: "2026-02-11T09:00:00Z", EndAt: "2026-03-13T09:00:00Z"},
+				Held:    &noneHeld,
+			},
+			{
+				ReportID: "srcrep-1b2c3d4e5f60718293a4b5c6", Source: "health_connect", Outcome: "permission_missing",
+				ReportedAt: "2026-03-13T15:00:00Z", BackgroundReads: false,
+			},
+			{
+				ReportID: "srcrep-2c3d4e5f60718293a4b5c6d7", Source: "health_connect", Outcome: "read",
+				ReportedAt: "2026-03-14T08:30:00Z", BackgroundReads: true,
+				Covered: &sourceReportWindow{StartAt: "2026-02-12T08:30:00Z", EndAt: "2026-03-14T08:30:00Z"},
+				Held:    &oneHeld,
+			},
+			{
+				ReportID: "srcrep-3d4e5f60718293a4b5c6d7e8", Source: "health_connect", Outcome: "read_failed",
+				ReportedAt: "2026-03-14T09:30:00Z", BackgroundReads: true,
+			},
+			{
+				ReportID: "srcrep-4e5f60718293a4b5c6d7e8f9", Source: "health_connect", Outcome: "unavailable",
+				ReportedAt: "2026-03-14T10:30:00Z", BackgroundReads: false,
+			},
+		},
+	}
+
 	rhythmMarkerSetFixture := rhythmMarkerSet{
 		SchemaVersion: "v1",
 		GeneratedAt:   ts(generatedAt),
@@ -1432,6 +1503,7 @@ func Build() ([]File, error) {
 		"v1/task-set":                     taskSetFixture,
 		"v1/calendar-event-set":           calendarEventSetFixture,
 		"v1/rhythm-marker-set":            rhythmMarkerSetFixture,
+		"v1/source-report-set":            sourceReportSetFixture,
 		"v1/clinical-chart-request":       clinicalChartRequestFixture,
 		"v1/assistant-action":             assistantActionFixture,
 		"v1/direct-proposal-request":      directProposalRequestFixture,

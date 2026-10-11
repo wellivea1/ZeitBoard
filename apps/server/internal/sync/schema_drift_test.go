@@ -78,6 +78,31 @@ func TestPushValidatorAndSchemaDriftGuard(t *testing.T) {
 			valid: false,
 		},
 		{
+			name:  "valid source report push",
+			body:  `{"schema_version":"v1","records":[{"recordId":"srcrep-0a1b2c3d4e5f60718293a4b5","kind":"source_report","createdAt":"2026-03-05T12:40:00Z","payload":{"report_id":"srcrep-0a1b2c3d4e5f60718293a4b5","source":"health_connect","outcome":"read","reported_at":"2026-03-05T12:40:00Z","background_reads":true,"covered":{"start_at":"2026-02-03T12:40:00Z","end_at":"2026-03-05T12:40:00Z"},"held":0}}]}`,
+			valid: true,
+		},
+		{
+			name:  "valid source outage push",
+			body:  `{"schema_version":"v1","records":[{"recordId":"srcrep-1b2c3d4e5f60718293a4b5c6","kind":"source_report","createdAt":"2026-03-05T12:40:00Z","payload":{"report_id":"srcrep-1b2c3d4e5f60718293a4b5c6","source":"health_connect","outcome":"permission_missing","reported_at":"2026-03-05T12:40:00Z","background_reads":false}}]}`,
+			valid: true,
+		},
+		{
+			name:  "source read without its window",
+			body:  `{"schema_version":"v1","records":[{"recordId":"srcrep-2c3d4e5f60718293a4b5c6d7","kind":"source_report","createdAt":"2026-03-05T12:40:00Z","payload":{"report_id":"srcrep-2c3d4e5f60718293a4b5c6d7","source":"health_connect","outcome":"read","reported_at":"2026-03-05T12:40:00Z","background_reads":true,"held":0}}]}`,
+			valid: false,
+		},
+		{
+			name:  "source outage carrying a window",
+			body:  `{"schema_version":"v1","records":[{"recordId":"srcrep-3d4e5f60718293a4b5c6d7e8","kind":"source_report","createdAt":"2026-03-05T12:40:00Z","payload":{"report_id":"srcrep-3d4e5f60718293a4b5c6d7e8","source":"health_connect","outcome":"read_failed","reported_at":"2026-03-05T12:40:00Z","background_reads":true,"covered":{"start_at":"2026-02-03T12:40:00Z","end_at":"2026-03-05T12:40:00Z"}}}]}`,
+			valid: false,
+		},
+		{
+			name:  "source report of another source",
+			body:  `{"schema_version":"v1","records":[{"recordId":"srcrep-4e5f60718293a4b5c6d7e8f9","kind":"source_report","createdAt":"2026-03-05T12:40:00Z","payload":{"report_id":"srcrep-4e5f60718293a4b5c6d7e8f9","source":"fitbit_cloud","outcome":"unavailable","reported_at":"2026-03-05T12:40:00Z","background_reads":false}}]}`,
+			valid: false,
+		},
+		{
 			name:  "task without revision",
 			body:  `{"schema_version":"v1","records":[{"recordId":"task_paperwork_01_r1","kind":"task","createdAt":"2026-03-05T12:40:00Z","payload":{"task_id":"task_paperwork_01","title":"File paperwork","duration_minutes":45,"status":"open","created_at":"2026-03-05T12:00:00Z","updated_at":"2026-03-05T12:02:00Z"}}]}`,
 			valid: false,
@@ -111,6 +136,7 @@ func loadSyncBatchSchema(t *testing.T) *jsonschema.Schema {
 		"v1/correction-set.schema.json",
 		"v1/task-set.schema.json",
 		"v1/rhythm-marker-set.schema.json",
+		"v1/source-report-set.schema.json",
 		"v1/sync-batch.schema.json",
 		"v2/common.schema.json",
 		"v2/medication-set.schema.json",

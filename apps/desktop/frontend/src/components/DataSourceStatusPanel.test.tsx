@@ -47,6 +47,32 @@ describe("DataSourceStatusPanel", () => {
     expect(screen.getByText("None yet. Log a night or import a file.")).toBeVisible();
   });
 
+  it("says what the phone found when it last read Health Connect", () => {
+    const since = new Date();
+    since.setHours(9, 5, 0, 0);
+    render(
+      <DataSourceStatusPanel
+        sourceStatuses={[
+          {
+            source: "health_connect",
+            outcome: "permission_missing",
+            reportedAt: since.toISOString(),
+            since: since.toISOString(),
+            backgroundReads: false,
+            held: 0,
+          },
+        ]}
+      />,
+    );
+    const row = screen
+      .getByRole("heading", { name: "Health Connect on your phone" })
+      .closest("article");
+    expect(row).toHaveTextContent("Permission off");
+    expect(row).toHaveTextContent(
+      "The phone has not been allowed to read sleep since today at 9:05 AM. Allow it in ZeitBoard on the phone.",
+    );
+  });
+
   it("points to the nights with more than one record", () => {
     const sources = {
       status: "ready" as const,

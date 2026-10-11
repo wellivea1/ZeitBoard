@@ -678,6 +678,11 @@ func (s *Store) DeleteAllSleepData(ctx context.Context) error {
 		_ = tx.Rollback()
 		return err
 	}
+	// What the phone said about reading its sleep goes with the sleep.
+	if err := eraseAllSourceReportsTx(ctx, tx); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
 	for _, table := range []string{
 		"local_sleep_analysis", "local_recompute_runs",
 		"local_sync_deferred_corrections",

@@ -39,6 +39,10 @@ const (
 	// KindContextMarker carries an immutable, user-reported rhythm context
 	// marker (ADR-0026). It is never an estimator input.
 	KindContextMarker Kind = "context_marker"
+	// KindSourceReport carries what a device found when it checked a source
+	// of sleep records (ADR-0054): read in full over a window, or not read
+	// and why. It holds no sleep, and the server reads none of it.
+	KindSourceReport Kind = "source_report"
 	// KindTombstone marks an erased record in the pull stream. Tombstones are
 	// minted only by the server's erase endpoint — clients cannot push them —
 	// and their metadata-only payload carries the erased id plus its original

@@ -113,6 +113,7 @@ internal fun validatePulledPayload(id: String, kind: String, payload: JsonObject
         "medication_event" -> parseSyncedDose(id, payload)
         "medication_correction" -> validateSyncedDoseCorrection(id, payload)
         "context_marker" -> validateSyncedMarker(id, payload)
+        SourceReporting.KIND -> validateSyncedSourceReport(id, payload)
         "tombstone" -> {
             payload.exactKeys(setOf("record_id"), setOf("record_kind"))
             require(payload.string("record_id") == id)
@@ -122,11 +123,31 @@ internal fun validatePulledPayload(id: String, kind: String, payload: JsonObject
     }
 }
 
-/** Every kind a pulled tombstone may name (ADR-0017, ADR-0047, ADR-0048). */
+/** Every kind a pulled tombstone may name (ADR-0017, ADR-0047, ADR-0048, ADR-0054). */
 internal val SYNC_RECORD_KINDS = setOf(
     "observation", "correction", "task", "placement",
-    "medication", "medication_event", "medication_correction", "context_marker",
+    "medication", "medication_event", "medication_correction", "context_marker", SourceReporting.KIND,
 )
+
+/** A source report a phone sent (ADR-0054): a read states its window and held count, nothing else does. */
+internal fun validateSyncedSourceReport(recordId: String, payload: JsonObject) {
+    val outcome = payload.string("outcome")
+    val read = outcome == SourceOutcome.READ.wire
+    val required = setOf("report_id", "source", "outcome", "reported_at", "background_reads")
+    payload.exactKeys(if (read) required + setOf("covered", "held") else required)
+    require(validSyncId(recordId) && payload.string("report_id") == recordId)
+    require(payload.string("source") == "health_connect")
+    require(SourceOutcome.entries.any { it.wire == outcome })
+    val reportedAt = payload.instant("reported_at")
+    payload.getValue("background_reads").jsonPrimitive.boolean
+    if (read) {
+        val covered = payload.getValue("covered").jsonObject
+        covered.exactKeys(setOf("start_at", "end_at"))
+        val window = ReadWindow(covered.instant("start_at"), covered.instant("end_at"))
+        require(!window.end.isAfter(reportedAt))
+        require(payload.getValue("held").jsonPrimitive.int in 0..10_000)
+    }
+}
 
 internal fun parseSyncedPlacement(recordId: String, payload: JsonObject): SyncedPlacement {
     payload.exactKeys(setOf("placement_id", "task_id", "start_at", "end_at", "zone_id", "created_at"))

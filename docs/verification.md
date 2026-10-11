@@ -2493,3 +2493,46 @@ code under test their own clock.
     4 minutes apart, ends 2 hours 17 minutes apart". The Sep 22 bars visibly disagreed.
   - Exclude on Sep 22's log removed that night from the list and said Undo is in the sleep log.
   - Undo on that row in Log › Sleep brought the night back to the list.
+
+## Sources say what they covered — 2026-10-11
+
+- Contracts:
+  - Every report outcome validates.
+  - The schema refuses a read without its window or held count, an outage with either, another
+    source, and any extra field such as a sleep time.
+  - The sync batch carries a report.
+- Core: validation refuses each malformed report. A status gives:
+  - since when its outcome has held;
+  - how far the newest read reaches, and what it held;
+  - the device that reported last, among several.
+- Server: pushes of reports validate, and the drift guard holds the schema and validator to the
+  same verdicts. The exact bytes the companion emits validate too.
+- Desktop store:
+  - Reports arrive once and refuse an altered copy.
+  - Erasure removes a report, and an erased report is not kept again.
+  - Deleting all sleep data removes the reports and queues their erasure.
+  - The upgrade test still passes.
+- Desktop app:
+  - A page of reports runs through the real envelope validation and decoding into a status with
+    the newest record's end.
+  - The snapshot with a source validates against its contract and carries no time of sleep.
+- Window:
+  - Each outcome is worded on Data Sources.
+  - The likely cause follows the age only when the estimate is not current.
+  - "since" and "after" take the moment without "on".
+- Companion (JVM tests, lint and debug build):
+  - Each check produces its outcome, and only reads state a window.
+  - An unchanged check is not reported again within six hours. It is reported again after six
+    hours, and a failure is reported at once.
+  - Nothing is reported without enrollment or in sample mode.
+  - What the phone sends, it accepts back.
+- In the running desktop (disposable dev profile, synthetic reports added to its store and removed
+  after):
+  - Data Sources showed "Health Connect on your phone", "Permission off", since 8:26 AM, and where
+    to allow it.
+  - Home's lead read: "The newest sleep record is 3 days old, so the current state is not shown. An
+    out-of-date answer is worse than none. The phone has not been allowed to read Health Connect
+    since today at 8:26 AM."
+  - After a newer read report, the lead read: "… The phone read Health Connect today at 9:07 AM and
+    found no sleep in the last 30 days. 2 nights are held on the phone: their time zone differs
+    from home."

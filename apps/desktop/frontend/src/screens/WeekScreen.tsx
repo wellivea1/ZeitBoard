@@ -23,6 +23,8 @@ import {
 import type { OverviewData } from "../data/overview";
 import { loadSleepEntriesBetween, type SleepEntry } from "../data/sleepEntries";
 import { sleepDataChangedEvent } from "../data/sleepDataEvents";
+import { loadSourceStatuses, sourceNote } from "../data/sourceStatus";
+import { useLoaded } from "../state/useLoaded";
 import { useApprovals } from "../state/approvals";
 import { localZone } from "../utils/civilTime";
 
@@ -248,10 +250,13 @@ function WeekNotes({
   data,
   error,
   overview,
+  sourceNote,
 }: {
   data: CalendarData | null;
   error: string;
   overview: OverviewData | null;
+  /** The likely cause of a stale estimate, from the phone's source reports. */
+  sourceNote?: string;
 }) {
   // Home withholds its figure when the records are too old to anchor a
   // forecast. The calendar still draws the last estimate, so it says so.
@@ -274,6 +279,7 @@ function WeekNotes({
           {overview.freshness.ageLabel
             ? `${overview.freshness.ageLabel}, so these bands come from an older estimate and may have drifted.`
             : `${overview.freshness.explanation.replace(/\.?$/, ".")} These bands may have drifted.`}
+          {sourceNote && ` ${sourceNote}`}
         </p>
       )}
       {data && data.status !== "estimated" && (
@@ -369,6 +375,10 @@ export function WeekScreen() {
     null,
   );
   const overview = useReloading<OverviewData | null>(loadFreshness, [sleepDataChangedEvent], null);
+  const { data: sourceStatuses } = useLoaded(loadSourceStatuses, {
+    events: [sleepDataChangedEvent],
+    fallback: () => [],
+  });
   const approvals = useApprovals();
   const now = useNow();
   const [selected, setSelected] = useState<CalendarEventSegment | null>(null);
@@ -398,7 +408,12 @@ export function WeekScreen() {
         </PlaceholderNotice>
       )}
       <WeekToolbar start={start} days={days} today={today} onStart={setStart} onDays={setDays} />
-      <WeekNotes data={data} error={calendar.error} overview={overview} />
+      <WeekNotes
+        data={data}
+        error={calendar.error}
+        overview={overview}
+        sourceNote={sourceNote(sourceStatuses ?? [])}
+      />
       {data ? (
         <WeekBoard
           columns={columns}

@@ -67,6 +67,14 @@ const androidCorrectionPayload = `{"correction_id":"cor-c5f66660febe533547745cd3
 	`"acquisition_method":"health_connect",` +
 	`"changes":{"start_at":"2026-08-04T04:30:00Z","end_at":"2026-08-04T12:00:00Z"}}`
 
+// The phone's source reports (ADR-0054), as SyncContractTest pins them.
+const androidSourceReadPayload = `{"report_id":"srcrep-b660e86eecf313b7b6062447","source":"health_connect","outcome":"read",` +
+	`"reported_at":"2026-09-01T12:00:00Z","background_reads":true,` +
+	`"covered":{"start_at":"2026-08-02T12:00:00Z","end_at":"2026-09-01T12:00:00Z"},"held":1}`
+
+const androidSourceMissingPayload = `{"report_id":"srcrep-e838fda25037eedb0f2f0072","source":"health_connect",` +
+	`"outcome":"permission_missing","reported_at":"2026-09-01T18:00:00Z","background_reads":false}`
+
 func androidBatch(t *testing.T) *PushRequest {
 	t.Helper()
 	return &PushRequest{
@@ -83,6 +91,18 @@ func androidBatch(t *testing.T) *PushRequest {
 				Kind:      KindCorrection,
 				CreatedAt: time.Date(2026, 8, 4, 13, 10, 0, 0, time.UTC),
 				Payload:   json.RawMessage(androidCorrectionPayload),
+			},
+			{
+				RecordID:  "srcrep-b660e86eecf313b7b6062447",
+				Kind:      KindSourceReport,
+				CreatedAt: time.Date(2026, 9, 1, 12, 0, 0, 0, time.UTC),
+				Payload:   json.RawMessage(androidSourceReadPayload),
+			},
+			{
+				RecordID:  "srcrep-e838fda25037eedb0f2f0072",
+				Kind:      KindSourceReport,
+				CreatedAt: time.Date(2026, 9, 1, 18, 0, 0, 0, time.UTC),
+				Payload:   json.RawMessage(androidSourceMissingPayload),
 			},
 		},
 	}
@@ -103,6 +123,7 @@ func TestAndroidRecordIdsMatchTheIdentifierRule(t *testing.T) {
 	for _, id := range []string{
 		"hc-6735800bfc6c2f403e72d700",
 		"cor-c5f66660febe533547745cd3",
+		"srcrep-b660e86eecf313b7b6062447",
 	} {
 		if !identifierPattern.MatchString(id) {
 			t.Errorf("Android id %q does not satisfy the server identifier rule", id)

@@ -199,6 +199,19 @@ type snapshotSync struct {
 	PendingUploads  int        `json:"pending_uploads"`
 	PendingErasures int        `json:"pending_erasures"`
 	WaitingRecords  int        `json:"waiting_records"`
+	// Sources says what a phone found when it last checked each source
+	// (ADR-0054): instants of checks, never of sleep.
+	Sources []snapshotSource `json:"sources"`
+}
+
+type snapshotSource struct {
+	Source          string     `json:"source"`
+	Outcome         string     `json:"outcome"`
+	ReportedAt      time.Time  `json:"reported_at"`
+	Since           time.Time  `json:"since"`
+	ReadThrough     *time.Time `json:"read_through,omitempty"`
+	BackgroundReads bool       `json:"background_reads"`
+	Held            int        `json:"held"`
 }
 
 // assistantSnapshot builds the whole snapshot at now.
@@ -251,6 +264,10 @@ func (a *App) assistantSnapshot(ctx context.Context, now time.Time) (assistantSn
 		return assistantSnapshot{}, localAgentProjectionError("snapshot", err)
 	}
 	syncStatus := a.backendSyncStatusCounts(cfg, syncCounts{})
+	statuses, err := sourceStatuses(ctx, store)
+	if err != nil {
+		return assistantSnapshot{}, localAgentProjectionError("snapshot", err)
+	}
 
 	clock := snapshotClock{location: loadLocationOrUTC(computed.zoneID)}
 	snapshot := assistantSnapshot{
@@ -271,6 +288,7 @@ func (a *App) assistantSnapshot(ctx context.Context, now time.Time) (assistantSn
 			Enabled: syncStatus.Enabled, Status: syncStatus.Status,
 			PendingUploads: syncStatus.PendingPushCount, PendingErasures: syncStatus.PendingErasureCount,
 			WaitingRecords: syncStatus.WaitingRecordCount,
+			Sources:        snapshotSourcesOf(statuses, clock),
 		},
 		PrivateFields: snapshotPrivateFields,
 		Disclaimer:    disclaimer + " " + snapshotFitNote,
@@ -294,6 +312,23 @@ func (s assistantSnapshot) forChat() assistantSnapshot {
 }
 
 // snapshotClock renders instants in the owner's zone, to the minute.
+func snapshotSourcesOf(statuses []sourceStatus, clock snapshotClock) []snapshotSource {
+	result := make([]snapshotSource, 0, len(statuses))
+	for _, status := range statuses {
+		item := snapshotSource{
+			Source: status.Source, Outcome: status.Outcome,
+			ReportedAt: clock.at(status.ReportedAt), Since: clock.at(status.Since),
+			BackgroundReads: status.BackgroundReads, Held: status.Held,
+		}
+		if !status.ReadThrough.IsZero() {
+			through := clock.at(status.ReadThrough)
+			item.ReadThrough = &through
+		}
+		result = append(result, item)
+	}
+	return result
+}
+
 type snapshotClock struct{ location *time.Location }
 
 func (c snapshotClock) at(value time.Time) time.Time {

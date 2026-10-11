@@ -100,8 +100,10 @@ acceptance clause or of its real-device qualification.
   ADR-0031 delivered shadow inference and a negative promotion decision; inferred episodes must
   remain shadow-only until a new candidate passes the measured gate. Takeout/My Activity remains an
   extension.
-- Explicit missingness records, source reliability learning, conflict scoring, and inferred
-  forced-schedule qualification. Owner-entered travel, illness, disruption, and forced-schedule
+- Source reliability learning, conflict scoring, and inferred forced-schedule qualification.
+  Explicit missingness records exist for Health Connect (ADR-0054). They distinguish an unavailable
+  source, a missing permission, a failed read, no record in a read window, and silence. The
+  estimator does not read them yet. Owner-entered travel, illness, disruption, and forced-schedule
   context markers are implemented under ADR-0026; source-derived marker inference is not.
 - Multi-window change-point classification and operating-state history. The ADR-0022 real-history
   baseline justifies evaluating an explicit calibration/misfit candidate (the high-confidence bucket

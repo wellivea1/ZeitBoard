@@ -83,6 +83,8 @@ func validatePullEnvelopePage(page syncPullResponse, since int64) error {
 			field = "correction_id"
 		case storage.SyncKindContextMarker:
 			field = "marker_id"
+		case storage.SyncKindSourceReport:
+			field = "report_id"
 		case "task", storage.SyncKindMedication:
 			// A revision's record id is its owner's id plus _r<revision>.
 			owner := "task_id"

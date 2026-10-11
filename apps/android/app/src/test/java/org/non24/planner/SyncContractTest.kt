@@ -12,16 +12,81 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.non24.planner.data.ReadWindow
+import org.non24.planner.data.SourceCheck
+import org.non24.planner.data.SourceOutcome
+import org.non24.planner.data.SourceReporting
 import org.non24.planner.data.SyncContract
 import org.non24.planner.data.SourceSyncRevision
+import org.non24.planner.data.validatePulledPayload
 import org.non24.planner.domain.AcquisitionMethod
 import org.non24.planner.domain.EvidenceStatus
 import org.non24.planner.domain.Provenance
 import org.non24.planner.domain.SleepEpisode
 
 class SyncContractTest {
+
+    // The same bytes are validated by the server in
+    // apps/server/internal/sync/android_contract_test.go.
+    @Test
+    fun `a source report states what the check found and never a sleep time`() {
+        val read = SyncContract.sourceReport(
+            SourceCheck(
+                outcome = SourceOutcome.READ,
+                checkedAt = Instant.parse("2026-09-01T12:00:00Z"),
+                backgroundReads = true,
+                covered = ReadWindow(Instant.parse("2026-08-02T12:00:00Z"), Instant.parse("2026-09-01T12:00:00Z")),
+            ),
+            held = 1,
+        )
+        assertEquals("srcrep-b660e86eecf313b7b6062447", read.recordId)
+        assertEquals(SourceReporting.KIND, read.kind)
+        assertEquals(
+            "{\"report_id\":\"srcrep-b660e86eecf313b7b6062447\",\"source\":\"health_connect\",\"outcome\":\"read\"," +
+                "\"reported_at\":\"2026-09-01T12:00:00Z\",\"background_reads\":true," +
+                "\"covered\":{\"start_at\":\"2026-08-02T12:00:00Z\",\"end_at\":\"2026-09-01T12:00:00Z\"},\"held\":1}",
+            read.payload,
+        )
+        val missing = SyncContract.sourceReport(
+            SourceCheck(SourceOutcome.PERMISSION_MISSING, Instant.parse("2026-09-01T18:00:00Z"), backgroundReads = false),
+            held = 0,
+        )
+        assertEquals(
+            "{\"report_id\":\"srcrep-e838fda25037eedb0f2f0072\",\"source\":\"health_connect\",\"outcome\":\"permission_missing\"," +
+                "\"reported_at\":\"2026-09-01T18:00:00Z\",\"background_reads\":false}",
+            missing.payload,
+        )
+        assertTrue(SyncContract.isValidIdentifier(read.recordId) && SyncContract.isValidIdentifier(missing.recordId))
+        // What the phone sends, it would accept back.
+        validatePulledPayload(read.recordId, read.kind, Json.parseToJsonElement(read.payload).jsonObject)
+        validatePulledPayload(missing.recordId, missing.kind, Json.parseToJsonElement(missing.payload).jsonObject)
+    }
+
+    @Test
+    fun `a check that does not read cannot claim a window`() {
+        val window = ReadWindow(Instant.parse("2026-08-02T12:00:00Z"), Instant.parse("2026-09-01T12:00:00Z"))
+        assertThrows(IllegalArgumentException::class.java) {
+            SourceCheck(SourceOutcome.READ_FAILED, Instant.parse("2026-09-01T12:00:00Z"), true, window)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            SourceCheck(SourceOutcome.READ, Instant.parse("2026-09-01T12:00:00Z"), true, covered = null)
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            // A read cannot cover time after it.
+            SourceCheck(SourceOutcome.READ, Instant.parse("2026-09-01T11:00:00Z"), true, window)
+        }
+        // A pulled report that is not one is refused.
+        val tampered = Json.parseToJsonElement(
+            "{\"report_id\":\"srcrep-e838fda25037eedb0f2f0072\",\"source\":\"health_connect\",\"outcome\":\"permission_missing\"," +
+                "\"reported_at\":\"2026-09-01T18:00:00Z\",\"background_reads\":false,\"held\":3}",
+        ).jsonObject
+        assertThrows(IllegalArgumentException::class.java) {
+            validatePulledPayload("srcrep-e838fda25037eedb0f2f0072", SourceReporting.KIND, tampered)
+        }
+    }
 
     @Test
     fun `Kotlin emits the shared Go wire fixture including nanosecond revision provenance`() {

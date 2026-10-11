@@ -102,6 +102,17 @@ Windows; it leaves all data-source and sync grants unchanged. The registry entry
 is authoritative, and the app does not recreate it automatically after removal.
 An explicit quit stops background work even when close-to-tray is available.
 
+With sync on, the companion also sends a short report after it checks Health
+Connect (ADR-0054). Each report says whether it read, may not read, found Health
+Connect unavailable, or failed. It also gives when the check happened, whether
+the phone reads in the background and how many records it held back for their
+time zone. A report holds no sleep time. Reports go only to the owner's own
+server, where they are encrypted at rest like every record. They tell the
+desktop why records stopped, and they are not an estimate input. An assistant
+connected to the desktop sees the same outcome and check times, never a time
+of sleep. Deleting all sleep data on the desktop erases the reports kept there
+and asks the server to erase them too.
+
 This evidence is one input to sleep inference and is not a sleep record on its
 own. Inferred sleep is marked as such, never overwrites a raw observation, and
 does not reach planning until a documented validation decision allows it.

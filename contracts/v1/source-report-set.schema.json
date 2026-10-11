@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Source report set v1",
+  "description": "What a device found when it checked a source (ADR-0054). A report holds instants of checks and a count, never a sleep time.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "generated_at", "reports"],
+  "properties": {
+    "schema_version": {
+      "$ref": "common.schema.json#/$defs/schemaVersion"
+    },
+    "generated_at": {
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
+    "reports": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/report"
+      }
+    }
+  },
+  "$defs": {
+    "report": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["report_id", "source", "outcome", "reported_at", "background_reads"],
+      "properties": {
+        "report_id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "source": {
+          "type": "string",
+          "enum": ["health_connect"]
+        },
+        "outcome": {
+          "description": "read: read in full over covered. permission_missing: the device may not read it. unavailable: the source cannot be used on the device. read_failed: a read was attempted and failed.",
+          "type": "string",
+          "enum": ["read", "permission_missing", "unavailable", "read_failed"]
+        },
+        "reported_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "background_reads": {
+          "description": "Whether the device reads the source without being opened.",
+          "type": "boolean"
+        },
+        "covered": {
+          "description": "The window read in full, [start_at, end_at). Only with outcome read.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["start_at", "end_at"],
+          "properties": {
+            "start_at": {
+              "$ref": "common.schema.json#/$defs/timestamp"
+            },
+            "end_at": {
+              "$ref": "common.schema.json#/$defs/timestamp"
+            }
+          }
+        },
+        "held": {
+          "description": "Records in the covered window the device read but did not send, because their offset disagrees with the home zone. Only with outcome read.",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 10000
+        }
+      },
+      "if": {
+        "properties": {
+          "outcome": {
+            "const": "read"
+          }
+        }
+      },
+      "then": {
+        "required": ["covered", "held"]
+      },
+      "else": {
+        "not": {
+          "anyOf": [{ "required": ["covered"] }, { "required": ["held"] }]
+        }
+      }
+    }
+  }
+}

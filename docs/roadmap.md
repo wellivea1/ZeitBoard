@@ -456,8 +456,10 @@ Largely delivered (see "Where things stand"). Remaining in scope:
 
 - Import adapters beyond sleep observation-set JSON/CSV (the local sleep path is hardened by
   ADR-0022; Takeout/activity import remains slice 7).
-- Source-specific missingness remains open. Manual forced-schedule, travel, illness, and disruption
-  markers are delivered in ADR-0026.
+- ~~Source-specific missingness.~~ Delivered 2026-10-11 for Health Connect (ADR-0054): after each
+  check, the companion reports whether it read, may not read, found Health Connect unavailable, or
+  failed. The desktop words the cause beside a stale estimate and on Data Sources. Manual
+  forced-schedule, travel, illness, and disruption markers are delivered in ADR-0026.
 - ~~Correction _undo_ as a one-click affordance.~~ Delivered 2026-10-08: Undo on a night's row in
   Log › Sleep appends the correction that restores the night as it was before its latest edit, and
   undoing again reaches the night as recorded.

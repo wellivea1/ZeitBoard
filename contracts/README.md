@@ -52,13 +52,18 @@ document (ADR-0049). It covers:
 - recent sleep, stated as Home states it;
 - the next three days;
 - what awaits the owner;
-- tasks, medication timing, context markers and sync state.
+- tasks, medication timing, context markers and sync state, including what the phone last found
+  when it checked Health Connect.
 
 It carries no title, label, note, location or raw record, and no exact time of recorded
 evidence. The desktop's local agent endpoint returns every section as `get_snapshot`. The chat
 assistant sends its server only the planning view (rhythm, plans, needs_you), whose model reads
 enums, counts, opaque ids and civil-time ranges only. The desktop's tests validate its real output
 against this schema.
+
+`source-report-set.schema.json` defines what a device found when it checked a source of sleep
+records (ADR-0054): read in full over a window, or not read and why. A report carries instants of
+checks and a held count, never a sleep time. It syncs as the `source_report` kind.
 
 `calendar-event-set.schema.json` is a private, device-local contract. Imported
 event text may be displayed locally but must never be copied into schedule requests,
