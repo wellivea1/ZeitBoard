@@ -99,12 +99,21 @@ openssl rand -base64 32 > secrets/enrollment-secret.txt
 
 ## TLS
 
-For local development, binding to `127.0.0.1` or `localhost` without certificate paths
-uses a runtime-generated self-signed localhost certificate. Clients must explicitly
-trust or skip verification for that development setup.
-
 For any non-local listen address, provide `tlsCertPath` and `tlsKeyPath`. Use normal
-certificate rotation and host hardening for the machine running the daemon.
+certificate rotation and host hardening for the machine running the daemon. The certificate
+can come from a public authority, or from your own authority or a self-signed one (ADR-0055).
+In the second case, give each client the certificate, PEM or DER, and it trusts your server
+with verification on:
+
+- **Desktop:** Settings › Sync › Server certificate. Check that the fingerprint it shows is
+  your server's.
+- **MCP connector:** set `ZEITBOARD_MCP_SERVER_CERTIFICATE_FILE` to the file.
+
+For local development, binding to `127.0.0.1` or `localhost` without certificate paths uses a
+self-signed localhost certificate. The daemon keeps it in `<dataDir>/tls/localhost-certificate.pem`
+and reuses it until a month before it expires. At start it logs the path and the SHA-256
+fingerprint. Give clients that file rather than skipping verification. Skipping verification
+remains possible for localhost only.
 
 ## Run
 
@@ -123,13 +132,13 @@ go run ./cmd/zeitboardd -config ./config.local.json
 Health check:
 
 ```bash
-curl -k https://127.0.0.1:8765/healthz
+curl --cacert data/tls/localhost-certificate.pem https://localhost:8765/healthz
 ```
 
 Enroll a device:
 
 ```bash
-curl -k https://127.0.0.1:8765/v1/devices \
+curl --cacert data/tls/localhost-certificate.pem https://localhost:8765/v1/devices \
   -H 'Content-Type: application/json' \
   -d '{"enrollmentSecret":"<secret from operator>","label":"desktop"}'
 ```
@@ -354,14 +363,16 @@ Use this when the agent should reach your instance rather than one desktop.
 1. Build the connector: `go build ./cmd/zeitboard-mcp` (in `apps/server`).
 2. Register it in Claude Desktop's MCP configuration as a stdio server, pointing it
    at your instance URL and a device token you enrolled for it (same enrollment flow
-   as any device; revoke it like any device).
+   as any device; revoke it like any device). If your server's certificate is your own,
+   also set `ZEITBOARD_MCP_SERVER_CERTIFICATE_FILE` to it.
 3. Use Claude Desktop's voice mode. The connector exposes only allowlisted read
    projections and propose-only actions with call budgets — there is no approve or
    apply tool (ADR-0012), so spoken requests end as pending proposals you approve in
    the app. The model never receives a proposal's approval token.
 
 `scripts\smoke-backend-mcp.ps1 -BackendUrl <instance URL> -DeviceTokenFile <token file>`
-checks this path against your instance:
+checks this path against your instance (add `-ServerCertificateFile <file>` for your own
+certificate):
 
 - the tool list, facts, and proposals listed without tokens, read-only by default;
 - `-Propose` also leaves one synthetic proposal for you to decline in Plan;

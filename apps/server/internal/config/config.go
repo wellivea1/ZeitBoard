@@ -22,6 +22,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"non24.app/core/platform/privatefile"
 )
 
 const (
@@ -224,12 +226,65 @@ func (c Config) TLSConfig() (*tls.Config, error) {
 		tlsConfig.Certificates = []tls.Certificate{cert}
 		return tlsConfig, nil
 	}
-	cert, err := selfSignedLocalhostCertificate()
+	cert, err := keptLocalhostCertificate(c.LocalhostCertificatePath(), c.localhostKeyPath(), time.Now())
 	if err != nil {
 		return nil, err
 	}
 	tlsConfig.Certificates = []tls.Certificate{cert}
 	return tlsConfig, nil
+}
+
+// localhostCertificateRenewBefore is how long before it expires the kept
+// localhost certificate is replaced, so a client that trusts it has a month
+// to notice a new one.
+const localhostCertificateRenewBefore = 30 * 24 * time.Hour
+
+// LocalhostCertificatePath is where the daemon keeps the certificate it makes
+// for a localhost bind without one. A client given this file trusts the
+// daemon without skipping verification (ADR-0055).
+func (c Config) LocalhostCertificatePath() string {
+	return filepath.Join(c.DataDir, "tls", "localhost-certificate.pem")
+}
+
+func (c Config) localhostKeyPath() string {
+	return filepath.Join(c.DataDir, "tls", "localhost-key.pem")
+}
+
+// keptLocalhostCertificate reuses the kept localhost certificate while it is
+// valid for localhost for more than a month, and otherwise makes and keeps a
+// new one. Both files are readable by the owner only.
+func keptLocalhostCertificate(certPath, keyPath string, now time.Time) (tls.Certificate, error) {
+	if cert, err := tls.LoadX509KeyPair(certPath, keyPath); err == nil {
+		leaf, err := x509.ParseCertificate(cert.Certificate[0])
+		if err == nil && leaf.VerifyHostname("localhost") == nil && leaf.NotAfter.After(now.Add(localhostCertificateRenewBefore)) {
+			cert.Leaf = leaf
+			return cert, nil
+		}
+	}
+	certPEM, keyPEM, err := selfSignedLocalhostCertificate(now)
+	if err != nil {
+		return tls.Certificate{}, err
+	}
+	if err := os.MkdirAll(filepath.Dir(certPath), 0o700); err != nil {
+		return tls.Certificate{}, fmt.Errorf("keep localhost TLS certificate: %w", err)
+	}
+	for _, file := range []struct {
+		path string
+		data []byte
+	}{{keyPath, keyPEM}, {certPath, certPEM}} {
+		if err := os.WriteFile(file.path, file.data, 0o600); err != nil {
+			return tls.Certificate{}, fmt.Errorf("keep localhost TLS certificate: %w", err)
+		}
+		if err := privatefile.Restrict(file.path); err != nil {
+			return tls.Certificate{}, fmt.Errorf("restrict localhost TLS certificate: %w", err)
+		}
+	}
+	cert, err := tls.X509KeyPair(certPEM, keyPEM)
+	if err != nil {
+		return tls.Certificate{}, fmt.Errorf("parse localhost TLS key pair: %w", err)
+	}
+	cert.Leaf, err = x509.ParseCertificate(cert.Certificate[0])
+	return cert, err
 }
 
 func loadFile(path string, cfg *Config) error {
@@ -369,21 +424,21 @@ func isLocalAddress(addr string) bool {
 	}
 }
 
-func selfSignedLocalhostCertificate() (tls.Certificate, error) {
+func selfSignedLocalhostCertificate(now time.Time) (certPEM, keyPEM []byte, err error) {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return tls.Certificate{}, fmt.Errorf("generate dev TLS key: %w", err)
+		return nil, nil, fmt.Errorf("generate dev TLS key: %w", err)
 	}
 	serialLimit := new(big.Int).Lsh(big.NewInt(1), 128)
 	serial, err := rand.Int(rand.Reader, serialLimit)
 	if err != nil {
-		return tls.Certificate{}, fmt.Errorf("generate dev TLS serial: %w", err)
+		return nil, nil, fmt.Errorf("generate dev TLS serial: %w", err)
 	}
 	template := x509.Certificate{
 		SerialNumber: serial,
 		Subject:      pkix.Name{CommonName: "localhost"},
-		NotBefore:    time.Now().Add(-time.Minute),
-		NotAfter:     time.Now().Add(365 * 24 * time.Hour),
+		NotBefore:    now.Add(-time.Minute),
+		NotAfter:     now.Add(365 * 24 * time.Hour),
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		DNSNames:     []string{"localhost"},
@@ -391,17 +446,12 @@ func selfSignedLocalhostCertificate() (tls.Certificate, error) {
 	}
 	certDER, err := x509.CreateCertificate(rand.Reader, &template, &template, &key.PublicKey, key)
 	if err != nil {
-		return tls.Certificate{}, fmt.Errorf("create dev TLS cert: %w", err)
+		return nil, nil, fmt.Errorf("create dev TLS cert: %w", err)
 	}
 	keyDER, err := x509.MarshalECPrivateKey(key)
 	if err != nil {
-		return tls.Certificate{}, fmt.Errorf("marshal dev TLS key: %w", err)
+		return nil, nil, fmt.Errorf("marshal dev TLS key: %w", err)
 	}
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER})
-	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER})
-	cert, err := tls.X509KeyPair(certPEM, keyPEM)
-	if err != nil {
-		return tls.Certificate{}, fmt.Errorf("parse dev TLS key pair: %w", err)
-	}
-	return cert, nil
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: certDER}),
+		pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Bytes: keyDER}), nil
 }

@@ -31,7 +31,11 @@ param(
     [string]$ConnectorPath = (Join-Path $env:LOCALAPPDATA 'Programs\ZeitBoard\zeitboard-mcp.exe'),
     [Parameter(Mandatory)][string]$BackendUrl,
     [Parameter(Mandatory)][string]$DeviceTokenFile,
-    # Only for a development server with a self-signed certificate.
+    # The server's own certificate or authority, PEM or DER (ADR-0055):
+    # trusted with verification on. The daemon keeps its localhost one in
+    # <dataDir>\tls\localhost-certificate.pem.
+    [string]$ServerCertificateFile,
+    # Only for a localhost development server, when no certificate is given.
     [switch]$InsecureSkipVerify,
     [ValidateRange(1, 120)][int]$TimeoutSeconds = 30,
     [switch]$Propose,
@@ -61,6 +65,9 @@ $startInfo.RedirectStandardError = $true
 $startInfo.EnvironmentVariables['ZEITBOARD_MCP_BACKEND_URL'] = $backend
 $startInfo.EnvironmentVariables['ZEITBOARD_MCP_DEVICE_TOKEN_FILE'] = (Resolve-Path -LiteralPath $DeviceTokenFile).Path
 $startInfo.EnvironmentVariables['ZEITBOARD_MCP_INSECURE_SKIP_VERIFY'] = if ($InsecureSkipVerify) { 'true' } else { 'false' }
+if ($ServerCertificateFile) {
+    $startInfo.EnvironmentVariables['ZEITBOARD_MCP_SERVER_CERTIFICATE_FILE'] = (Resolve-Path -LiteralPath $ServerCertificateFile).Path
+}
 
 $process = [Diagnostics.Process]::new()
 $process.StartInfo = $startInfo
@@ -127,7 +134,21 @@ function Invoke-Assistant {
         -Headers @{ Authorization = "Bearer $token" } -Body ([Text.Encoding]::UTF8.GetBytes($body)) -TimeoutSec 120
 }
 
-if ($InsecureSkipVerify) {
+if ($ServerCertificateFile) {
+    # Trust the given certificate where it appears in the server's chain, for
+    # this process only; a name that does not match still fails.
+    $trusted = [Convert]::ToBase64String(
+        [Security.Cryptography.X509Certificates.X509Certificate2]::new((Resolve-Path -LiteralPath $ServerCertificateFile).Path).RawData)
+    [Net.ServicePointManager]::ServerCertificateValidationCallback = {
+        param($sender, $certificate, $chain, $errors)
+        if ($errors -eq [Net.Security.SslPolicyErrors]::None) { return $true }
+        if ($errors -band [Net.Security.SslPolicyErrors]::RemoteCertificateNameMismatch) { return $false }
+        foreach ($element in $chain.ChainElements) {
+            if ([Convert]::ToBase64String($element.Certificate.RawData) -eq $trusted) { return $true }
+        }
+        return $false
+    }.GetNewClosure()
+} elseif ($InsecureSkipVerify) {
     # Windows PowerShell has no -SkipCertificateCheck; this trusts the dev
     # server's self-signed certificate for this process only.
     [Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }

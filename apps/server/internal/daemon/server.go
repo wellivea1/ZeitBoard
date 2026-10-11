@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"non24.app/core/recompute"
+	"non24.app/core/tlstrust"
 	"non24.app/server/internal/analysis"
 	"non24.app/server/internal/api"
 	"non24.app/server/internal/config"
@@ -161,8 +162,11 @@ func serve(configPath string, stop <-chan struct{}, ready chan<- struct{}) error
 		return fmt.Errorf("listen: %w", err)
 	}
 	log.Printf("zeitboardd listening on %s", cfg.ListenAddress)
-	if cfg.UsesSelfSignedDevCert {
-		log.Printf("using runtime-generated localhost TLS certificate")
+	if cfg.UsesSelfSignedDevCert && len(tlsConfig.Certificates) > 0 && tlsConfig.Certificates[0].Leaf != nil {
+		// A client given this file trusts the daemon without skipping
+		// verification (ADR-0055); the fingerprint is how a person checks it.
+		log.Printf("using the localhost TLS certificate kept at %s (SHA-256 %s)",
+			cfg.LocalhostCertificatePath(), tlstrust.Fingerprint(tlsConfig.Certificates[0].Leaf))
 	}
 
 	serveErr := make(chan error, 1)

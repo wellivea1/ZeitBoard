@@ -2536,3 +2536,34 @@ code under test their own clock.
   - After a newer read report, the lead read: "… The phone read Health Connect today at 9:07 AM and
     found no sleep in the last 30 days. 2 nights are held on the phone: their time zone differs
     from home."
+
+## Clients trust the owner's server by its certificate — 2026-10-11
+
+- Core:
+  - The system's roots alone refuse a self-signed server. The server's own certificate admits it,
+    and admits no other server.
+  - Only certificates are accepted: a private key, text after the chain, an unreadable payload and
+    an oversized file are each refused.
+  - A DER certificate reads as PEM.
+  - The fingerprint is the certificate's SHA-256.
+- Daemon: the localhost certificate is kept. It is reused while good for more than a month and
+  replaced within a month of its end, a damaged file is replaced, and the file holds the
+  certificate in use.
+- MCP connector:
+  - A self-signed server is reached by its own certificate and refused without it.
+  - Skipping verification works for 127.0.0.1 and is refused for a remote host, naming the
+    certificate setting.
+  - A missing file, a key or a directory leaves the connector unconfigured.
+- Desktop:
+  - Enrolling with a self-signed server fails without its certificate and refuses a key offered
+    as one.
+  - With the certificate, enrollment succeeds. The status gives the certificate's fingerprint and
+    PEM, and the connection keeps it.
+  - The chooser reads PEM and DER, returns cancel as cancel, and refuses a key.
+  - The client cache keeps strict, skipping and pinned clients apart.
+- Window: choosing a certificate shows its name, expiry and full fingerprint, and enabling sync
+  sends it. Removed, it is not sent.
+- Real daemon, run twice on the disposable development configuration:
+  - Both starts logged the same kept certificate (SHA-256 08:5F:3B:…:13:F4).
+  - `curl --cacert` with that file and verification on got 200 both times.
+  - Without the file, the connection was refused (curl exit 60).

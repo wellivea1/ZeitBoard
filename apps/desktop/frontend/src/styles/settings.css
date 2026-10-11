@@ -520,3 +520,38 @@
   color: var(--muted);
   font-size: var(--type-label);
 }
+
+/* The certificate trusted for the owner's server (ADR-0055), laid out like
+ * the toggle beside it. The fingerprint is shown whole, in the mono face, so
+ * it can be read against what the server prints. */
+.backend-sync-certificate {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.backend-sync-certificate span {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.settings-section .backend-sync-certificate strong {
+  color: var(--ink);
+  font-size: var(--type-body);
+}
+
+.settings-section .backend-sync-certificate small {
+  color: var(--muted);
+  font-size: var(--type-label);
+  line-height: 1.4;
+}
+
+.backend-sync-certificate code {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--type-micro);
+  line-height: 1.5;
+}

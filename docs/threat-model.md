@@ -105,7 +105,10 @@ its cursor, invalidates affected cached forecasts, and persists Health Connect r
 across re-enrollment. Android has separately consented background sleep sync, durable bounded retry
 and enrollment generations; HTTP redirects cannot forward credentials, and uploads cannot promote
 provider revisions to human confirmation. The server rejects new corrections targeting erased
-observations and removes retained dependent revisions during erasure (ADR-0038). Source reports
+observations and removes retained dependent revisions during erasure (ADR-0038). Clients trust the owner's server through
+the system's roots plus at most one certificate the owner chose (ADR-0055), with verification on.
+Skipping verification is refused everywhere except localhost. The daemon's kept localhost key is
+readable by the owner only. Source reports
 (ADR-0054) carry only check outcomes, check instants and a held count. The server validates them
 with the same `core/sources` code the desktop uses and reads none of them. A forged report could
 only misstate why records stopped. It cannot add, move or hide a sleep record. The **local v1

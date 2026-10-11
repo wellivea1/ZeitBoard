@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { AppearanceProvider } from "./theme/AppearanceProvider";
@@ -839,6 +839,7 @@ describe("desktop navigation", () => {
       enrollmentSecret: "enroll-secret",
       deviceLabel: "Desktop test",
       insecureSkipVerify: true,
+      serverCertificate: "",
     });
     expect(screen.getByText("Connected")).toBeVisible();
 
@@ -848,6 +849,86 @@ describe("desktop navigation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Disable sync" }));
     expect(await screen.findByText(/Backend sync disabled/)).toBeVisible();
     expect(disable).toHaveBeenCalled();
+  });
+
+  // ADR-0055: a server with its own certificate is trusted by it, with
+  // verification on, and the owner sees the fingerprint they check it by.
+  it("trusts a server by the certificate the owner chooses", async () => {
+    window.location.hash = "#/settings/sync";
+    const fingerprint = Array.from({ length: 32 }, (_, index) =>
+      (index * 7).toString(16).padStart(2, "0").toUpperCase(),
+    ).join(":");
+    const certificate = {
+      pem: ["-----BEGIN CERTIFICATE-----", "c3ludGhldGlj", "-----END CERTIFICATE-----", ""].join(
+        "\n",
+      ),
+      fingerprint,
+      subject: "zeitboard.home.test",
+      expiresAt: "2027-10-11T12:00:00Z",
+    };
+    const offStatus = {
+      enabled: false,
+      status: "off",
+      backendUrl: "",
+      deviceId: "",
+      insecureSkipVerify: false,
+      lastError: "",
+      pendingPushCount: 0,
+      pushedCount: 0,
+      pulledCount: 0,
+      cursor: 0,
+    };
+    const choose = vi.fn(async () => certificate);
+    const configure = vi.fn(async () => ({
+      ...offStatus,
+      enabled: true,
+      status: "connected",
+      backendUrl: "https://zeitboard.home.test:8765",
+      deviceId: "device_desktop",
+      serverCertificate: certificate,
+    }));
+    (globalThis as { go?: unknown }).go = {
+      main: {
+        App: {
+          GetBackendSyncStatus: vi.fn(async () => offStatus),
+          ChooseServerCertificate: choose,
+          ConfigureBackendSync: configure,
+        },
+      },
+    };
+
+    render(
+      <AppearanceProvider>
+        <App />
+      </AppearanceProvider>,
+    );
+
+    expect(await screen.findByText(/Only for a server with its own certificate/)).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Choose certificate" }));
+    expect(await screen.findByText(`SHA-256 ${fingerprint}`)).toBeVisible();
+    expect(screen.getByText(/zeitboard\.home\.test, until/)).toBeVisible();
+
+    fireEvent.change(screen.getByLabelText("Backend URL"), {
+      target: { value: "https://zeitboard.home.test:8765" },
+    });
+    fireEvent.change(screen.getByLabelText("Enrollment secret"), {
+      target: { value: "synthetic-secret" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Enable backend sync" }));
+    expect(await screen.findByText(/Backend sync enabled/)).toBeVisible();
+    expect(configure).toHaveBeenCalledWith(
+      expect.objectContaining({ insecureSkipVerify: false, serverCertificate: certificate.pem }),
+    );
+
+    // Removed, it is no longer sent.
+    fireEvent.click(screen.getByRole("button", { name: "Remove" }));
+    expect(screen.queryByText(`SHA-256 ${fingerprint}`)).toBeNull();
+    fireEvent.change(screen.getByLabelText("Enrollment secret"), {
+      target: { value: "synthetic-secret" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Enable backend sync" }));
+    await waitFor(() => expect(configure).toHaveBeenCalledTimes(2));
+    expect(configure).toHaveBeenLastCalledWith(expect.objectContaining({ serverCertificate: "" }));
   });
 
   it("exports and erases all local sleep data from Settings", async () => {

@@ -438,9 +438,10 @@ M-E's separately reviewed local agent projection.
 → domain decoder (now duplicated across desktop storage, server readmodel, and
 the sync validator);~~ establish one versioned assistant action registry; extract
 context-aware desktop feature services at behavior boundaries; add
-repository-backed long-history pages; prefer a CA-cert path over localhost
+repository-backed long-history pages; ~~prefer a CA-cert path over localhost
 skip-verify for the
-MCP client; medication tracking M-A..M-C is delivered and M-D..M-F remain specified
+MCP client~~ (delivered 2026-10-11, ADR-0055: the desktop and the MCP connector trust a chosen
+certificate, and the daemon keeps its localhost one); medication tracking M-A..M-C is delivered and M-D..M-F remain specified
 ([`medication-feature-plan.md`](medication-feature-plan.md), slices M-A..M-F:
 benchmarked against Medisafe; fixed-clock regimens + wake-relative display,
 reminder collision forecasts, adherence-in-rhythm-context, association-not-

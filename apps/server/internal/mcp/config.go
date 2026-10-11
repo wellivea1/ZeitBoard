@@ -1,15 +1,17 @@
 package mcp
 
 import (
-	"crypto/tls"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"non24.app/core/tlstrust"
 )
 
 const (
@@ -20,6 +22,9 @@ const (
 	EnvProposeCallBudget  = "ZEITBOARD_MCP_PROPOSE_CALL_BUDGET"
 	EnvRequestTimeoutMS   = "ZEITBOARD_MCP_REQUEST_TIMEOUT_MS"
 	EnvInsecureSkipVerify = "ZEITBOARD_MCP_INSECURE_SKIP_VERIFY"
+	// EnvServerCertificateFile names a PEM file holding the backend's own
+	// certificate, or the authority that issued it (ADR-0055).
+	EnvServerCertificateFile = "ZEITBOARD_MCP_SERVER_CERTIFICATE_FILE"
 
 	defaultTotalCallBudget   = 20
 	defaultProposeCallBudget = 5
@@ -33,8 +38,11 @@ type Config struct {
 	ProposeCallBudget  int
 	RequestTimeout     time.Duration
 	InsecureSkipVerify bool
-	Configured         bool
-	UnavailableReason  string
+	// ServerCertificatePEM is trusted for the backend beside the system's
+	// roots; verification stays on.
+	ServerCertificatePEM string
+	Configured           bool
+	UnavailableReason    string
 }
 
 func LoadConfigFromEnv() Config {
@@ -49,6 +57,18 @@ func LoadConfigFromEnv() Config {
 		cfg.DeviceToken = strings.TrimSpace(readOptionalSecretFile(os.Getenv(EnvDeviceTokenFile)))
 	}
 	cfg.InsecureSkipVerify = boolEnv(EnvInsecureSkipVerify)
+	if path := strings.TrimSpace(os.Getenv(EnvServerCertificateFile)); path != "" {
+		data, err := readBounded(path, tlstrust.MaxPEMBytes)
+		if err != nil {
+			cfg.UnavailableReason = "the server certificate file could not be read"
+			return cfg
+		}
+		// PEM or a single DER certificate; anything else fails validation below.
+		if converted, err := tlstrust.PEM(data); err == nil {
+			data = []byte(converted)
+		}
+		cfg.ServerCertificatePEM = string(data)
+	}
 	if err := cfg.validate(); err != nil {
 		cfg.Configured = false
 		cfg.UnavailableReason = err.Error()
@@ -60,8 +80,10 @@ func LoadConfigFromEnv() Config {
 
 func (c Config) HTTPClient() *http.Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
-	if c.InsecureSkipVerify {
-		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // Explicit local/self-hosted dev escape hatch.
+	// validate already refused a certificate file that is not one.
+	if tlsConfig, err := tlstrust.Config(c.ServerCertificatePEM); err == nil {
+		tlsConfig.InsecureSkipVerify = c.InsecureSkipVerify //nolint:gosec // Localhost development only; validate refuses it elsewhere.
+		transport.TLSClientConfig = tlsConfig
 	}
 	timeout := c.RequestTimeout
 	if timeout <= 0 {
@@ -88,6 +110,17 @@ func (c Config) validate() error {
 	}
 	if c.DeviceToken == "" {
 		return errors.New("device token is not configured")
+	}
+	if c.ServerCertificatePEM != "" {
+		if _, err := tlstrust.Certificates([]byte(c.ServerCertificatePEM)); err != nil {
+			return fmt.Errorf("server certificate: %w", err)
+		}
+	}
+	switch host := parsed.Hostname(); {
+	case !c.InsecureSkipVerify, host == "localhost", host == "127.0.0.1", host == "::1":
+	default:
+		return errors.New("skipping TLS verification is for localhost development only; set " +
+			EnvServerCertificateFile + " to the server's certificate instead")
 	}
 	if c.TotalCallBudget <= 0 {
 		return errors.New("total call budget must be positive")
@@ -129,6 +162,23 @@ func boolEnv(name string) bool {
 	default:
 		return false
 	}
+}
+
+// readBounded reads at most limit bytes of a file, refusing a longer one.
+func readBounded(path string, limit int64) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, limit+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > limit {
+		return nil, errors.New("file is too large")
+	}
+	return data, nil
 }
 
 func readOptionalSecretFile(path string) string {

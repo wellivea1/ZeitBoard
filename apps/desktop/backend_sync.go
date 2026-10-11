@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,6 +19,7 @@ import (
 	"non24.app/core/platform/privatefile"
 	"non24.app/core/recompute"
 	storage "non24.app/core/storage/sqlite"
+	"non24.app/core/tlstrust"
 )
 
 const (
@@ -28,11 +28,28 @@ const (
 	maxSyncPushRequestBytes = 1024 * 1024
 )
 
-var newBackendHTTPClient = func(insecureSkipVerify bool) *http.Client {
+// backendTrust is how the desktop verifies the owner's server (ADR-0055):
+// the system's roots plus a certificate the owner chose, or, for localhost
+// development only, no verification at all.
+type backendTrust struct {
+	insecureSkipVerify bool
+	certificatePEM     string
+}
+
+func trustOf(cfg backendSyncConfig) backendTrust {
+	return backendTrust{insecureSkipVerify: cfg.InsecureSkipVerify, certificatePEM: cfg.ServerCertificate}
+}
+
+var newBackendHTTPClient = func(trust backendTrust) *http.Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
-	if insecureSkipVerify {
-		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} //nolint:gosec // Explicit localhost/self-hosted dev escape hatch.
+	tlsConfig, err := tlstrust.Config(trust.certificatePEM)
+	if err != nil {
+		// Checked when it was chosen; a certificate that no longer reads
+		// trusts nothing beyond the system's roots.
+		tlsConfig, _ = tlstrust.Config("")
 	}
+	tlsConfig.InsecureSkipVerify = trust.insecureSkipVerify //nolint:gosec // Localhost development only; validateBackendTLS refuses it elsewhere.
+	transport.TLSClientConfig = tlsConfig
 	return &http.Client{Timeout: backendRequestTimeout, Transport: transport,
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return errors.New("backend redirects are not supported; use the final HTTPS address")
@@ -46,26 +63,32 @@ type BackendSyncInput struct {
 	EnrollmentSecret   string `json:"enrollmentSecret"`
 	DeviceLabel        string `json:"deviceLabel"`
 	InsecureSkipVerify bool   `json:"insecureSkipVerify"`
+	// ServerCertificate is the PEM of the certificate the owner chose for
+	// their server, from ChooseServerCertificate; empty for none.
+	ServerCertificate string `json:"serverCertificate"`
 }
 
 type BackendSyncStatusDTO struct {
-	TaskConflictCount   int    `json:"taskConflictCount"`
-	Enabled             bool   `json:"enabled"`
-	Status              string `json:"status"`
-	BackendURL          string `json:"backendUrl"`
-	DeviceID            string `json:"deviceId"`
-	InsecureSkipVerify  bool   `json:"insecureSkipVerify"`
-	LastSyncAt          string `json:"lastSyncAt,omitempty"`
-	LastError           string `json:"lastError"`
-	PendingPushCount    int    `json:"pendingPushCount"`
-	PendingErasureCount int    `json:"pendingErasureCount"`
-	WaitingRecordCount  int    `json:"waitingRecordCount"`
-	PushedCount         int    `json:"pushedCount"`
-	PulledCount         int    `json:"pulledCount"`
-	SkippedCount        int    `json:"skippedCount"`
-	ErasuresPushed      int    `json:"erasuresPushed"`
-	TombstonesApplied   int    `json:"tombstonesApplied"`
-	Cursor              int64  `json:"cursor"`
+	TaskConflictCount  int    `json:"taskConflictCount"`
+	Enabled            bool   `json:"enabled"`
+	Status             string `json:"status"`
+	BackendURL         string `json:"backendUrl"`
+	DeviceID           string `json:"deviceId"`
+	InsecureSkipVerify bool   `json:"insecureSkipVerify"`
+	// ServerCertificate describes the certificate trusted for the server,
+	// when the owner chose one.
+	ServerCertificate   *ServerCertificateDTO `json:"serverCertificate,omitempty"`
+	LastSyncAt          string                `json:"lastSyncAt,omitempty"`
+	LastError           string                `json:"lastError"`
+	PendingPushCount    int                   `json:"pendingPushCount"`
+	PendingErasureCount int                   `json:"pendingErasureCount"`
+	WaitingRecordCount  int                   `json:"waitingRecordCount"`
+	PushedCount         int                   `json:"pushedCount"`
+	PulledCount         int                   `json:"pulledCount"`
+	SkippedCount        int                   `json:"skippedCount"`
+	ErasuresPushed      int                   `json:"erasuresPushed"`
+	TombstonesApplied   int                   `json:"tombstonesApplied"`
+	Cursor              int64                 `json:"cursor"`
 }
 
 type backendSyncConfig = storage.SyncConnection
@@ -236,7 +259,14 @@ func (a *App) ConfigureBackendSync(input BackendSyncInput) (BackendSyncStatusDTO
 	if err != nil {
 		return BackendSyncStatusDTO{}, errors.New("Saved backend settings could not be read.")
 	}
-	cfg := backendSyncConfig{Enabled: true, BackendURL: baseURL, InsecureSkipVerify: input.InsecureSkipVerify}
+	certificate := strings.TrimSpace(input.ServerCertificate)
+	if certificate != "" {
+		if _, err := tlstrust.Certificates([]byte(certificate)); err != nil {
+			return BackendSyncStatusDTO{}, fmt.Errorf("The server certificate cannot be used: %w", err)
+		}
+		certificate = input.ServerCertificate
+	}
+	cfg := backendSyncConfig{Enabled: true, BackendURL: baseURL, InsecureSkipVerify: input.InsecureSkipVerify, ServerCertificate: certificate}
 	label := strings.TrimSpace(input.DeviceLabel)
 	if label == "" {
 		label = "ZeitBoard desktop"
@@ -1047,6 +1077,7 @@ func (a *App) backendSyncStatusCounts(cfg backendSyncConfig, counts syncCounts) 
 		BackendURL:          cfg.BackendURL,
 		DeviceID:            cfg.DeviceID,
 		InsecureSkipVerify:  cfg.InsecureSkipVerify,
+		ServerCertificate:   describedServerCertificate(cfg.ServerCertificate),
 		LastSyncAt:          lastSyncAt(cfg.LastSyncAt),
 		LastError:           cfg.LastError,
 		PendingPushCount:    pending,
@@ -1103,16 +1134,16 @@ func ensurePrivateDir(dir string) error {
 	return privatefile.RestrictDir(dir)
 }
 
-func (a *App) backendHTTPClient(insecureSkipVerify bool) *http.Client {
+func (a *App) backendHTTPClient(trust backendTrust) *http.Client {
 	a.backendHTTPMu.Lock()
 	defer a.backendHTTPMu.Unlock()
 	if a.backendHTTPClients == nil {
-		a.backendHTTPClients = make(map[bool]*http.Client, 2)
+		a.backendHTTPClients = make(map[backendTrust]*http.Client, 2)
 	}
-	client := a.backendHTTPClients[insecureSkipVerify]
+	client := a.backendHTTPClients[trust]
 	if client == nil {
-		client = newBackendHTTPClient(insecureSkipVerify)
-		a.backendHTTPClients[insecureSkipVerify] = client
+		client = newBackendHTTPClient(trust)
+		a.backendHTTPClients[trust] = client
 	}
 	return client
 }
@@ -1134,7 +1165,7 @@ func (a *App) newDesktopBackendClient(cfg backendSyncConfig, token string) deskt
 	return desktopBackendClient{
 		baseURL: strings.TrimRight(cfg.BackendURL, "/"),
 		token:   token,
-		client:  a.backendHTTPClient(cfg.InsecureSkipVerify),
+		client:  a.backendHTTPClient(trustOf(cfg)),
 		outage:  &a.backendOutage,
 		now:     a.currentTime,
 	}
