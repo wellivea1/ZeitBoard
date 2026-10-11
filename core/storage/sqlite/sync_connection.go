@@ -11,15 +11,15 @@ import (
 // SyncConnection is non-secret display/configuration state. The bearer token
 // lives in a separate column and is never part of this serializable value.
 type SyncConnection struct {
-	Enabled            bool      `json:"enabled"`
-	BackendURL         string    `json:"backendUrl"`
-	DeviceID           string    `json:"deviceId"`
-	InsecureSkipVerify bool      `json:"insecureSkipVerify,omitempty"`
+	Enabled            bool   `json:"enabled"`
+	BackendURL         string `json:"backendUrl"`
+	DeviceID           string `json:"deviceId"`
+	InsecureSkipVerify bool   `json:"insecureSkipVerify,omitempty"`
 	// ServerCertificate is a certificate the owner chose for their server,
 	// as PEM, trusted beside the system's roots (ADR-0055). It is public.
-	ServerCertificate string `json:"serverCertificate,omitempty"`
-	LastSyncAt         time.Time `json:"lastSyncAt,omitempty"`
-	LastError          string    `json:"lastError,omitempty"`
+	ServerCertificate string    `json:"serverCertificate,omitempty"`
+	LastSyncAt        time.Time `json:"lastSyncAt,omitempty"`
+	LastError         string    `json:"lastError,omitempty"`
 }
 
 func (s *Store) initializeSyncConnection(ctx context.Context) error {
