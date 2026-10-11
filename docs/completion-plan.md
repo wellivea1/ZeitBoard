@@ -1213,6 +1213,26 @@ taken away, or Health Connect needs an update. ADR-0054 makes each one explicit.
   check times, and no time of sleep.
 - **Deleting all sleep data takes the reports with it,** here and on the server.
 
+### Clients trust the owner's server by its certificate — 2026-10-11
+
+A server with its own authority or a self-signed certificate could only be reached by skipping
+verification. The desktop allowed that only for localhost; the MCP connector allowed it for any
+address. The daemon also made a new localhost certificate on every start, so nothing could pin it.
+ADR-0055 changes all three.
+
+- **The desktop trusts a certificate the owner chooses.** Settings › Sync has a "Server
+  certificate" row. The owner chooses a PEM or DER file and sees its name, its expiry and its full
+  fingerprint. The desktop trusts it beside the system's roots, for the server only, with
+  verification on. Enrolling again keeps it until the owner removes it.
+- **The MCP connector takes a certificate file** in `ZEITBOARD_MCP_SERVER_CERTIFICATE_FILE`. It
+  now refuses to skip verification for anything but localhost, and says which setting to use
+  instead.
+- **The daemon keeps its localhost certificate** in its data folder. It reuses it until a month
+  before expiry, and logs the path and fingerprint at start, so local clients trust the file.
+- **One definition.** `core/tlstrust` reads a certificate, builds the trust and gives the
+  fingerprint, for the daemon, the connector and the desktop.
+- **The phone is next.** It takes a certificate at enrollment under the same rules.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and
@@ -1264,7 +1284,7 @@ tests and a verification entry. Where it waits on something outside the code, th
 | A real list of nights where two sources disagree, in Rhythm › Sources | Roadmap, slice 5 | Delivered 2026-10-08 |
 | Missingness recorded per source | Roadmap, phase 2 | Delivered 2026-10-11 for Health Connect (ADR-0054). Manual nights have no coverage to state |
 | The clinical chart saved directly as PNG | Roadmap, phase 2; limitation 10 | Open |
-| A self-hosted server trusted through its own CA certificate rather than skipped verification | Roadmap, small debts | Open |
+| A self-hosted server trusted through its own CA certificate rather than skipped verification | Roadmap, small debts | Delivered 2026-10-11 for the desktop and the MCP connector (ADR-0055); the phone is next |
 | Reaching hours for more than one contact, and per-day hours | Roadmap, slice 16 | Open |
 | Onboarding beyond the first-run setup | Roadmap, phase 2; limitation 11 | Open |
 | Localization readiness | Roadmap, phase 2; limitation 11 | Open |

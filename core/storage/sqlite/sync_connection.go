@@ -15,6 +15,9 @@ type SyncConnection struct {
 	BackendURL         string    `json:"backendUrl"`
 	DeviceID           string    `json:"deviceId"`
 	InsecureSkipVerify bool      `json:"insecureSkipVerify,omitempty"`
+	// ServerCertificate is a certificate the owner chose for their server,
+	// as PEM, trusted beside the system's roots (ADR-0055). It is public.
+	ServerCertificate string `json:"serverCertificate,omitempty"`
 	LastSyncAt         time.Time `json:"lastSyncAt,omitempty"`
 	LastError          string    `json:"lastError,omitempty"`
 }

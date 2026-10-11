@@ -1,16 +1,80 @@
-import type { BackendSyncInput, BackendSyncStatus } from "../../data/backendSync";
+import type {
+  BackendSyncInput,
+  BackendSyncStatus,
+  ServerCertificate,
+} from "../../data/backendSync";
 import { momentInSentence } from "../../utils/relativeTime";
 
 interface BackendSyncSettingsProps {
   status: BackendSyncStatus;
   form: BackendSyncInput;
+  /** The certificate trusted for the server, chosen or kept; none when absent. */
+  certificate?: ServerCertificate;
   busy: boolean;
   error: string;
   message: string;
   onFormChange: (changes: Partial<BackendSyncInput>) => void;
+  onChooseCertificate: () => void;
+  onRemoveCertificate: () => void;
   onConfigure: () => void;
   onDisable: () => void;
   onSyncNow: () => void;
+}
+
+// A server with its own certificate or authority is trusted by that
+// certificate, with verification on (ADR-0055). The fingerprint is shown in
+// full: it is how the owner checks it against what the server prints.
+function CertificateRow({
+  certificate,
+  busy,
+  onChoose,
+  onRemove,
+}: {
+  certificate?: ServerCertificate;
+  busy: boolean;
+  onChoose: () => void;
+  onRemove: () => void;
+}) {
+  const until = certificate
+    ? new Date(certificate.expiresAt).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      })
+    : "";
+  return (
+    <div className="backend-sync-certificate">
+      <span>
+        <strong>Server certificate</strong>
+        {certificate ? (
+          <>
+            <small>
+              {certificate.subject || "Unnamed"}, until {until}
+            </small>
+            <code aria-label="SHA-256 fingerprint">SHA-256 {certificate.fingerprint}</code>
+          </>
+        ) : (
+          <small>
+            Only for a server with its own certificate or authority. Verification stays on.
+          </small>
+        )}
+      </span>
+      {certificate ? (
+        <button className="button ghost compact" type="button" disabled={busy} onClick={onRemove}>
+          Remove
+        </button>
+      ) : (
+        <button
+          className="button secondary compact"
+          type="button"
+          disabled={busy}
+          onClick={onChoose}
+        >
+          Choose certificate
+        </button>
+      )}
+    </div>
+  );
 }
 
 // The value beside "Last sync": "Today at 2:51 PM", or "Not yet".
@@ -29,10 +93,13 @@ function statusLabel(status: BackendSyncStatus) {
 export function BackendSyncSettings({
   status,
   form,
+  certificate,
   busy,
   error,
   message,
   onFormChange,
+  onChooseCertificate,
+  onRemoveCertificate,
   onConfigure,
   onDisable,
   onSyncNow,
@@ -110,6 +177,12 @@ export function BackendSyncSettings({
                 onChange={(event) => onFormChange({ deviceLabel: event.target.value })}
               />
             </label>
+            <CertificateRow
+              certificate={certificate}
+              busy={busy}
+              onChoose={onChooseCertificate}
+              onRemove={onRemoveCertificate}
+            />
             <label className="toggle-row backend-sync-dev-toggle" htmlFor="backend-sync-insecure">
               <span>
                 <strong>Allow self-signed localhost TLS</strong>

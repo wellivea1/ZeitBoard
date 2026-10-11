@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	"non24.app/core/estimation"
 	storage "non24.app/core/storage/sqlite"
+	"non24.app/core/tlstrust"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -33,7 +35,7 @@ func TestBackendSyncOffMakesNoNetworkCalls(t *testing.T) {
 	app := newTestApp(t)
 	calls := 0
 	previousClient := newBackendHTTPClient
-	newBackendHTTPClient = func(bool) *http.Client {
+	newBackendHTTPClient = func(backendTrust) *http.Client {
 		return &http.Client{
 			Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 				calls++
@@ -67,7 +69,7 @@ func TestBackendHTTPClientsAreReusedAndClosed(t *testing.T) {
 	previousClient := newBackendHTTPClient
 	created := 0
 	closed := 0
-	newBackendHTTPClient = func(bool) *http.Client {
+	newBackendHTTPClient = func(backendTrust) *http.Client {
 		created++
 		return &http.Client{Transport: closeTrackingTransport{closed: &closed}}
 	}
@@ -76,20 +78,21 @@ func TestBackendHTTPClientsAreReusedAndClosed(t *testing.T) {
 		newBackendHTTPClient = previousClient
 	})
 
-	strict := app.backendHTTPClient(false)
-	if again := app.backendHTTPClient(false); again != strict {
+	strict := app.backendHTTPClient(backendTrust{})
+	if again := app.backendHTTPClient(backendTrust{}); again != strict {
 		t.Fatal("strict backend HTTP client was not reused")
 	}
-	insecure := app.backendHTTPClient(true)
-	if insecure == strict || created != 2 {
-		t.Fatalf("backend client pools = strict %p insecure %p created %d", strict, insecure, created)
+	insecure := app.backendHTTPClient(backendTrust{insecureSkipVerify: true})
+	pinned := app.backendHTTPClient(backendTrust{certificatePEM: "synthetic certificate"})
+	if insecure == strict || pinned == strict || pinned == insecure || created != 3 {
+		t.Fatalf("backend client pools = strict %p insecure %p pinned %p created %d", strict, insecure, pinned, created)
 	}
 
 	app.closeBackendHTTPClients()
-	if closed != 2 {
-		t.Fatalf("closed idle transports = %d, want 2", closed)
+	if closed != 3 {
+		t.Fatalf("closed idle transports = %d, want 3", closed)
 	}
-	if replacement := app.backendHTTPClient(false); replacement == strict || created != 3 {
+	if replacement := app.backendHTTPClient(backendTrust{}); replacement == strict || created != 4 {
 		t.Fatalf("client cache was not reset after close: replacement %p created %d", replacement, created)
 	}
 }
@@ -146,6 +149,42 @@ func TestConfigureBackendSyncStoresTokenOutsideConfig(t *testing.T) {
 	}
 	if strings.Contains(status.LastError, token) {
 		t.Fatal("backend token leaked into sync status")
+	}
+}
+
+// A server with its own certificate is reached with verification on, by the
+// certificate the owner chose, rather than by skipping it (ADR-0055).
+func TestAServerIsTrustedByTheCertificateTheOwnerChose(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(registerDeviceResponse{SchemaVersion: "v1", DeviceID: "device_desktop", Token: "synthetic-device-token"})
+	}))
+	defer server.Close()
+	certificate := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: server.Certificate().Raw}))
+	input := BackendSyncInput{Enabled: true, BackendURL: server.URL, EnrollmentSecret: "synthetic-secret"}
+
+	app := newTestApp(t)
+	if _, err := app.ConfigureBackendSync(input); err == nil {
+		t.Fatal("a self-signed server was enrolled without its certificate or skipping verification")
+	}
+	refused := input
+	refused.ServerCertificate = string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: []byte("synthetic")}))
+	if _, err := app.ConfigureBackendSync(refused); err == nil || !strings.Contains(err.Error(), "certificate") {
+		t.Fatalf("a private key was taken for a certificate: %v", err)
+	}
+
+	input.ServerCertificate = certificate
+	status, err := app.ConfigureBackendSync(input)
+	if err != nil {
+		t.Fatalf("the server's own certificate was not trusted: %v", err)
+	}
+	if status.ServerCertificate == nil || status.ServerCertificate.Fingerprint != tlstrust.Fingerprint(server.Certificate()) ||
+		status.ServerCertificate.PEM != certificate || status.InsecureSkipVerify {
+		t.Fatalf("status = %+v", status.ServerCertificate)
+	}
+	saved, _, err := app.store.LoadSyncConnection(context.Background())
+	if err != nil || saved.ServerCertificate != certificate {
+		t.Fatalf("the chosen certificate was not kept: %v", err)
 	}
 }
 
@@ -523,7 +562,7 @@ func TestBackendProposalsOffWhenSyncDisabled(t *testing.T) {
 	app := newTestApp(t)
 	calls := 0
 	previousClient := newBackendHTTPClient
-	newBackendHTTPClient = func(bool) *http.Client {
+	newBackendHTTPClient = func(backendTrust) *http.Client {
 		return &http.Client{
 			Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 				calls++

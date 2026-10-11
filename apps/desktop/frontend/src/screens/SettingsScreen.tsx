@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { PageHeader } from "../components/AppShell";
 import { ScreenTabPanel, ScreenTabs, type ScreenTab } from "../components/ScreenTabs";
 import {
+  chooseServerCertificate,
   configureBackendSync,
   disableBackendSync,
   loadBackendSyncStatus,
   syncNow,
   type BackendSyncInput,
   type BackendSyncStatus,
+  type ServerCertificate,
 } from "../data/backendSync";
 import { loadLocalAgentStatus, type LocalAgentStatus } from "../data/localAgent";
 import {
@@ -62,6 +64,7 @@ function initialBackendSyncForm(status = initialBackendSyncStatus): BackendSyncI
     enrollmentSecret: "",
     deviceLabel: "ZeitBoard desktop",
     insecureSkipVerify: status.insecureSkipVerify,
+    serverCertificate: "",
   };
 }
 
@@ -76,6 +79,10 @@ export function SettingsScreen({
   const [dataControlBusy, setDataControlBusy] = useState(false);
   const [backendSyncStatus, setBackendSyncStatus] =
     useState<BackendSyncStatus>(initialBackendSyncStatus);
+  // Unset until the status says what is kept; null once the owner removes it.
+  const [serverCertificate, setServerCertificate] = useState<
+    ServerCertificate | null | undefined
+  >();
   const [backendSyncForm, setBackendSyncForm] = useState<BackendSyncInput>(() =>
     initialBackendSyncForm(),
   );
@@ -128,6 +135,11 @@ export function SettingsScreen({
           backendUrl: status.backendUrl || form.backendUrl,
           insecureSkipVerify: status.insecureSkipVerify,
         }));
+        // The kept certificate seeds the form once; the owner's own choice,
+        // or removal, is never overwritten by a refresh.
+        setServerCertificate((current) =>
+          current === undefined ? (status.serverCertificate ?? null) : current,
+        );
       },
       (error) => {
         setBackendSyncError(
@@ -207,9 +219,25 @@ export function SettingsScreen({
     }
   };
 
+  const handleChooseServerCertificate = async () => {
+    setBackendSyncError("");
+    try {
+      const chosen = await chooseServerCertificate();
+      if (chosen) setServerCertificate(chosen);
+    } catch (error) {
+      setBackendSyncError(
+        error instanceof Error ? error.message : "The certificate could not be read.",
+      );
+    }
+  };
+
   const handleConfigureBackendSync = () => {
     void runBackendSyncAction(
-      () => configureBackendSync(backendSyncForm),
+      () =>
+        configureBackendSync({
+          ...backendSyncForm,
+          serverCertificate: serverCertificate?.pem ?? "",
+        }),
       () =>
         "Backend sync enabled. Synced server estimates are available when the backend is reachable.",
     ).finally(() => {
@@ -260,10 +288,13 @@ export function SettingsScreen({
             <BackendSyncSettings
               status={backendSyncStatus}
               form={backendSyncForm}
+              certificate={serverCertificate ?? undefined}
               busy={backendSyncBusy}
               error={backendSyncError}
               message={backendSyncMessage}
               onFormChange={(changes) => setBackendSyncForm((form) => ({ ...form, ...changes }))}
+              onChooseCertificate={() => void handleChooseServerCertificate()}
+              onRemoveCertificate={() => setServerCertificate(null)}
               onConfigure={handleConfigureBackendSync}
               onDisable={handleDisableBackendSync}
               onSyncNow={handleSyncNow}

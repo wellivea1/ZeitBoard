@@ -3,10 +3,12 @@ package config
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/pem"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLoadResolvesFilePathsRelativeToConfig(t *testing.T) {
@@ -90,5 +92,51 @@ func writeConfigTestFile(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// The daemon keeps the certificate it makes for localhost, so a client that
+// trusts the file keeps trusting the daemon across restarts (ADR-0055).
+func TestTheLocalhostCertificateIsKeptAndRenewedBeforeItExpires(t *testing.T) {
+	dir := t.TempDir()
+	cfg := Config{DataDir: dir}
+	now := time.Date(2026, 10, 11, 12, 0, 0, 0, time.UTC)
+	first, err := keptLocalhostCertificate(cfg.LocalhostCertificatePath(), cfg.localhostKeyPath(), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Leaf.VerifyHostname("localhost"); err != nil {
+		t.Fatalf("the kept certificate is not for localhost: %v", err)
+	}
+	// Reused while it is good for more than a month.
+	again, err := keptLocalhostCertificate(cfg.LocalhostCertificatePath(), cfg.localhostKeyPath(), now.Add(300*24*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !again.Leaf.Equal(first.Leaf) {
+		t.Fatal("a valid kept certificate was replaced")
+	}
+	// Replaced within a month of its end, and the new one is kept.
+	renewed, err := keptLocalhostCertificate(cfg.LocalhostCertificatePath(), cfg.localhostKeyPath(), now.Add(340*24*time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if renewed.Leaf.Equal(first.Leaf) {
+		t.Fatal("a certificate a month from its end was kept")
+	}
+	kept, err := os.ReadFile(cfg.LocalhostCertificatePath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	block, _ := pem.Decode(kept)
+	if block == nil || !bytes.Equal(block.Bytes, renewed.Leaf.Raw) {
+		t.Fatal("the file does not hold the certificate in use")
+	}
+	// A damaged file is replaced rather than served.
+	if err := os.WriteFile(cfg.LocalhostCertificatePath(), []byte("damaged"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := keptLocalhostCertificate(cfg.LocalhostCertificatePath(), cfg.localhostKeyPath(), now); err != nil {
+		t.Fatalf("a damaged certificate was not replaced: %v", err)
 	}
 }

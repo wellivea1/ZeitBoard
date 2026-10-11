@@ -63,7 +63,7 @@ type App struct {
 	configDir           string
 	calendarHTTPClient  calendarHTTPDoer
 	backendHTTPMu       sync.Mutex
-	backendHTTPClients  map[bool]*http.Client
+	backendHTTPClients  map[backendTrust]*http.Client
 	backendSyncMu       sync.Mutex
 	backendConfigMu     sync.RWMutex
 	backendRunMu        sync.Mutex
