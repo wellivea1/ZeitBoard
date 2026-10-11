@@ -8,17 +8,24 @@ import { Icon } from "./Icon";
 export function Notice({
   id,
   tone = "info",
+  className,
   children,
 }: {
   id: NoticeId;
   tone?: "info" | "caution";
+  /** Places the note on its page; the sheet itself looks the same everywhere. */
+  className?: string;
   children: ReactNode;
 }) {
   const { hidden, hide } = useNotice(id);
   if (hidden) return null;
   const { title } = noticeCatalog[id];
   return (
-    <aside className="notice" data-tone={tone} aria-label={title}>
+    <aside
+      className={className ? `notice ${className}` : "notice"}
+      data-tone={tone}
+      aria-label={title}
+    >
       <p className="notice-title">{title}</p>
       <div className="notice-body">{children}</div>
       <button

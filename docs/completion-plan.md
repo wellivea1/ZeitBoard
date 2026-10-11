@@ -1273,6 +1273,24 @@ to five people, each with their own zone and their own hours on each weekday (AD
 - **`core/outlook` takes several schedules**, each with an opaque id that every window carries. It
   knows no names.
 
+### More to set up after the first forecast — 2026-10-11
+
+The first-run setup ends at the first forecast. After it, nothing pointed at the steps that let
+Home say more. Home now lists them under the figure, on a note:
+
+- **Four steps, each optional.** Nights from the phone, the people to reach, a calendar, and
+  starting with Windows. Each has one sentence and a link to where it is done.
+- **Done means done.** The desktop says which steps are done:
+  - the phone step, once a night or a report has come from the phone;
+  - the people step, once the list has been saved, since the working week a new install starts
+    with is a placeholder;
+  - the calendar step, once a calendar has been added;
+  - the Windows step, once the login entry starts this copy of ZeitBoard.
+- **A step the computer cannot take is left out.** Away from Windows there is no login step.
+- **It reads as progress, then goes.** A done step keeps its place with a mark instead of its
+  number, and the note counts the steps done. Once every step is done the note goes by itself.
+  Closed with its ×, it stays closed, and Settings › Display can show it again.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and
@@ -1307,7 +1325,7 @@ or deferred with its reason.
 | 8 | The calendar, medication and report validators are handwritten, outside generated schema ownership (review #24). | Accepted. They are strict and tested. |
 | 9 | There are no ordered migrations yet. Every schema change so far was additive or an explicit drop (review #25). | Accepted. The upgrade tests fail on the first change that is neither, which then needs its migration. |
 | 10 | ~~The clinical chart prints, or saves as PDF, but produces no PNG directly.~~ | Resolved 2026-10-11: "Save chart as PNG". |
-| 11 | English only. Onboarding is the first-run setup. | Accepted for the private release. |
+| 11 | English only. ~~Onboarding is the first-run setup.~~ | English only is accepted for the private release. Onboarding resolved 2026-10-11: after the first forecast, Home lists what else there is to set up. |
 | 12 | Google Takeout and My Activity import are not implemented. | Deferred, with slice 7's multi-source work. |
 | 13 | ~~A correction is undone by adding another, not with one click.~~ | Resolved 2026-10-08: Undo on the night's row takes back its latest edit. |
 | 14 | Notices reach a phone through the OS push transport, which the owner's own server does not replace (C6, disclosed). | Accepted and disclosed. |
@@ -1326,7 +1344,7 @@ tests and a verification entry. Where it waits on something outside the code, th
 | The clinical chart saved directly as PNG | Roadmap, phase 2; limitation 10 | Delivered 2026-10-11 |
 | A self-hosted server trusted through its own CA certificate rather than skipped verification | Roadmap, small debts | Delivered 2026-10-11 for the desktop, the phone and the MCP connector (ADR-0055) |
 | Reaching hours for more than one contact, and per-day hours | Roadmap, slice 16 | Delivered 2026-10-11 (ADR-0056) |
-| Onboarding beyond the first-run setup | Roadmap, phase 2; limitation 11 | Open |
+| Onboarding beyond the first-run setup | Roadmap, phase 2; limitation 11 | Delivered 2026-10-11 |
 | Localization readiness | Roadmap, phase 2; limitation 11 | Open |
 | Google Takeout and My Activity import, with inference kept in shadow mode | Roadmap, slice 7; limitation 12 | Open. Inference reaches the estimate only after it passes the backtest gate |
 | Missed-dose sharing, off by default per link | Medication plan, M-F | Open. It needs an ADR, and it must never show a dose that was not logged as missed |

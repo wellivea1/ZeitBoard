@@ -10,6 +10,10 @@ import { useMemo, useSyncExternalStore } from "react";
 // note cannot be added without a title to list it under.
 
 export const noticeCatalog = {
+  "home.setup": {
+    title: "More you can set up",
+    where: "Home",
+  },
   "home.estimate": {
     title: "What the forecast is",
     where: "Home",

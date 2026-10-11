@@ -2672,3 +2672,29 @@ ADR-0056. Verified on Windows 11.
 **What this does not establish.** The assistant sees people only as `contact_01` and so on, so it
 can say "the first person on your list" but not "the clinic". Five people is a limit of Home's
 figure. The phone does not show reaching hours, as before.
+
+## More to set up after the first forecast — 2026-10-11
+
+- Desktop, three Go tests:
+  - In a new profile, no step is done.
+  - Each step is done by doing it: a night from Health Connect, saving the list of people, adding
+    a calendar, and a login entry for this copy.
+  - A login entry for another copy is not done.
+  - Away from Windows the login step is not offered.
+- Web, nine tests:
+  - The adapter keeps each known step once, in the desktop's order, and treats an absent flag as
+    not done.
+  - It offers no steps outside the desktop or when the read fails.
+  - Every step has a title, a sentence and a link.
+  - The note counts the steps done and marks them. A done step drops its sentence and offers
+    "Change".
+  - The note goes once every step is done and shows nothing outside the desktop.
+  - Closed, it stays closed after a remount.
+- In the running desktop (disposable dev profile):
+  - The note stood under the figure with "2 of 4 done". The saved list of people and the
+    profile's calendar were marked done; the phone and Windows steps kept their explanation and
+    link.
+  - Closing it removed it from Home, and Settings › Display listed "More you can set up" under
+    Home.
+  - "Show again" brought it back.
+
