@@ -905,7 +905,10 @@ describe("desktop navigation", () => {
 
     expect(await screen.findByText(/Only for a server with its own certificate/)).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Choose certificate" }));
-    expect(await screen.findByText(`SHA-256 ${fingerprint}`)).toBeVisible();
+    // Shown in two lines of sixteen bytes, and named whole for a screen reader.
+    const shown = await screen.findByLabelText(`SHA-256 fingerprint ${fingerprint}`);
+    expect(shown).toHaveTextContent(fingerprint.split(":").slice(0, 16).join(":"));
+    expect(shown).toHaveTextContent(fingerprint.split(":").slice(16).join(":"));
     expect(screen.getByText(/zeitboard\.home\.test, until/)).toBeVisible();
 
     fireEvent.change(screen.getByLabelText("Backend URL"), {
@@ -922,7 +925,7 @@ describe("desktop navigation", () => {
 
     // Removed, it is no longer sent.
     fireEvent.click(screen.getByRole("button", { name: "Remove" }));
-    expect(screen.queryByText(`SHA-256 ${fingerprint}`)).toBeNull();
+    expect(screen.queryByLabelText(`SHA-256 fingerprint ${fingerprint}`)).toBeNull();
     fireEvent.change(screen.getByLabelText("Enrollment secret"), {
       target: { value: "synthetic-secret" },
     });

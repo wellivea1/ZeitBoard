@@ -32,8 +32,9 @@ localhost certificate was not possible either, because the daemon made a new one
      It is public, so the status carries it, and enrolling again keeps it unless the owner removes
      it.
    - **MCP connector.** `ZEITBOARD_MCP_SERVER_CERTIFICATE_FILE` names the file.
-   - **Phone.** The companion takes a certificate at enrollment and uses it only for the server.
-     It ships separately, with the same rules.
+   - **Phone.** The companion's enrollment form takes a certificate file, through the system's
+     file picker, and shows the same name, expiry and fingerprint. The certificate is kept with the
+     enrollment and used only for that server's connections.
 2. **The daemon keeps its localhost certificate.** For a localhost bind without certificate paths,
    it keeps the certificate in `<dataDir>/tls/`, readable by the owner only. It reuses the
    certificate until a month before it expires, then makes a new one. At start it logs the path

@@ -1231,7 +1231,9 @@ ADR-0055 changes all three.
   before expiry, and logs the path and fingerprint at start, so local clients trust the file.
 - **One definition.** `core/tlstrust` reads a certificate, builds the trust and gives the
   fingerprint, for the daemon, the connector and the desktop.
-- **The phone is next.** It takes a certificate at enrollment under the same rules.
+- **The phone trusts it too.** The companion's enrollment form picks a certificate file with the
+  system's picker, and shows the same name, expiry and fingerprint. The phone keeps the certificate
+  with the enrollment and uses it only for the server.
 
 ## Where the completion goal stands — 2026-09-27
 
@@ -1284,7 +1286,7 @@ tests and a verification entry. Where it waits on something outside the code, th
 | A real list of nights where two sources disagree, in Rhythm › Sources | Roadmap, slice 5 | Delivered 2026-10-08 |
 | Missingness recorded per source | Roadmap, phase 2 | Delivered 2026-10-11 for Health Connect (ADR-0054). Manual nights have no coverage to state |
 | The clinical chart saved directly as PNG | Roadmap, phase 2; limitation 10 | Open |
-| A self-hosted server trusted through its own CA certificate rather than skipped verification | Roadmap, small debts | Delivered 2026-10-11 for the desktop and the MCP connector (ADR-0055); the phone is next |
+| A self-hosted server trusted through its own CA certificate rather than skipped verification | Roadmap, small debts | Delivered 2026-10-11 for the desktop, the phone and the MCP connector (ADR-0055) |
 | Reaching hours for more than one contact, and per-day hours | Roadmap, slice 16 | Open |
 | Onboarding beyond the first-run setup | Roadmap, phase 2; limitation 11 | Open |
 | Localization readiness | Roadmap, phase 2; limitation 11 | Open |

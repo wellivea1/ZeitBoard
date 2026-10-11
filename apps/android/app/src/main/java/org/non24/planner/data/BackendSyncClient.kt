@@ -1,6 +1,7 @@
 package org.non24.planner.data
 
 import java.net.HttpURLConnection
+import javax.net.ssl.HttpsURLConnection
 import java.net.URI
 import java.net.URL
 import kotlinx.coroutines.CancellationException
@@ -18,18 +19,18 @@ import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
 
 interface BackendSyncClient {
-    suspend fun enroll(baseUrl: String, enrollmentSecret: String, label: String): Result<String>
+    suspend fun enroll(server: SyncServer, enrollmentSecret: String, label: String): Result<String>
 
-    suspend fun push(baseUrl: String, token: String, records: List<OutboxRecord>): Result<List<String>>
+    suspend fun push(server: SyncServer, token: String, records: List<OutboxRecord>): Result<List<String>>
 
-    suspend fun pull(baseUrl: String, token: String, since: Long): Result<PullPage>
+    suspend fun pull(server: SyncServer, token: String, since: Long): Result<PullPage>
 
-    suspend fun companion(baseUrl: String, token: String): Result<JsonObject>
+    suspend fun companion(server: SyncServer, token: String): Result<JsonObject>
 
-    suspend fun sleepReview(baseUrl: String, token: String, observationId: String): Result<JsonObject>
+    suspend fun sleepReview(server: SyncServer, token: String, observationId: String): Result<JsonObject>
 
     /** The time-request notice feed after a cursor, or "latest" for its head. */
-    suspend fun notifications(baseUrl: String, token: String, after: String): Result<JsonObject> =
+    suspend fun notifications(server: SyncServer, token: String, after: String): Result<JsonObject> =
         Result.failure(UnsupportedOperationException("This client does not read notices."))
 }
 
@@ -73,38 +74,38 @@ class HttpBackendSyncClient(
     private val readTimeoutMillis: Int = 30_000,
     private val openConnection: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection },
 ) : BackendSyncClient {
-    override suspend fun sleepReview(baseUrl: String, token: String, observationId: String): Result<JsonObject> = syncResult {
+    override suspend fun sleepReview(server: SyncServer, token: String, observationId: String): Result<JsonObject> = syncResult {
         require(validSyncId(observationId))
-        request(baseUrl, "/v1/sleep/$observationId/review", token, null, 256 * 1024).also { require(parseSleepReview(it).observationId == observationId) }
+        request(server, "/v1/sleep/$observationId/review", token, null, 256 * 1024).also { require(parseSleepReview(it).observationId == observationId) }
     }
 
-    override suspend fun pull(baseUrl: String, token: String, since: Long): Result<PullPage> = syncResult {
+    override suspend fun pull(server: SyncServer, token: String, since: Long): Result<PullPage> = syncResult {
         require(since >= 0)
         try {
-            parsePullPage(request(baseUrl, "/v1/sync/pull?since=$since&limit=$SYNC_PULL_LIMIT", token, null, 8 * 1024 * 1024), since)
+            parsePullPage(request(server, "/v1/sync/pull?since=$since&limit=$SYNC_PULL_LIMIT", token, null, 8 * 1024 * 1024), since)
         } catch (error: BackendSyncException) {
             if (error.status == 409) throw SyncServerResetException()
             throw error
         }
     }
 
-    override suspend fun notifications(baseUrl: String, token: String, after: String): Result<JsonObject> = syncResult {
+    override suspend fun notifications(server: SyncServer, token: String, after: String): Result<JsonObject> = syncResult {
         require(after == "latest" || (after.toLongOrNull() ?: -1) >= 0)
-        request(baseUrl, "/v1/notifications?after=$after", token, null, TimeRequestNotifier.FEED_LIMIT_BYTES)
+        request(server, "/v1/notifications?after=$after", token, null, TimeRequestNotifier.FEED_LIMIT_BYTES)
             .also { parseNotificationFeed(it) }
     }
 
-    override suspend fun companion(baseUrl: String, token: String): Result<JsonObject> = syncResult {
-        request(baseUrl, "/v2/companion", token, null, 256 * 1024).also { parseCompanion(it) }
+    override suspend fun companion(server: SyncServer, token: String): Result<JsonObject> = syncResult {
+        request(server, "/v2/companion", token, null, 256 * 1024).also { parseCompanion(it) }
     }
-    override suspend fun enroll(baseUrl: String, enrollmentSecret: String, label: String): Result<String> =
+    override suspend fun enroll(server: SyncServer, enrollmentSecret: String, label: String): Result<String> =
         syncResult {
             require(enrollmentSecret.isNotBlank() && label.isNotBlank()) { "An enrollment secret and device label are required." }
             val body = buildJsonObject {
                 put("enrollmentSecret", enrollmentSecret)
                 put("label", label)
             }
-            val response = request(baseUrl, "/v1/devices", null, body.toString())
+            val response = request(server, "/v1/devices", null, body.toString())
             require(response.string("schema_version") == "v1") { "The server uses an unsupported enrollment contract." }
             response.string("token").also {
                 require(it.isNotBlank() && it.length <= 4096 && it.none(Char::isISOControl)) {
@@ -113,7 +114,7 @@ class HttpBackendSyncClient(
             }
         }
 
-    override suspend fun push(baseUrl: String, token: String, records: List<OutboxRecord>): Result<List<String>> =
+    override suspend fun push(server: SyncServer, token: String, records: List<OutboxRecord>): Result<List<String>> =
         syncResult {
             if (records.isEmpty()) return@syncResult emptyList()
             require(records.size <= SYNC_BATCH_LIMIT)
@@ -130,7 +131,7 @@ class HttpBackendSyncClient(
                     }
                 })
             }
-            val response = request(baseUrl, "/v1/sync/push", token, body.toString())
+            val response = request(server, "/v1/sync/push", token, body.toString())
             val accepted = response["accepted"]?.jsonPrimitive?.takeUnless { it.isString }?.intOrNull
             val cursor = response["cursor"]?.jsonPrimitive?.takeUnless { it.isString }?.longOrNull
             require(response.string("schema_version") == SyncContract.SCHEMA_VERSION &&
@@ -142,12 +143,16 @@ class HttpBackendSyncClient(
             records.map { it.recordId }
         }
 
-    private suspend fun request(baseUrl: String, path: String, token: String?, body: String?, responseLimit: Int = MAX_SYNC_RESPONSE_BYTES): JsonObject =
+    private suspend fun request(server: SyncServer, path: String, token: String?, body: String?, responseLimit: Int = MAX_SYNC_RESPONSE_BYTES): JsonObject =
         withContext(Dispatchers.IO) {
             val bytes = body?.toByteArray(Charsets.UTF_8) ?: byteArrayOf()
             require(bytes.size <= 1024 * 1024) { "The upload exceeds the server's request limit." }
-            val connection = openConnection(URL(normalizeSyncUrl(baseUrl) + path))
+            val connection = openConnection(URL(normalizeSyncUrl(server.baseUrl) + path))
             try {
+                // The owner's own certificate, beside the system's roots (ADR-0055).
+                server.certificate?.let { certificate ->
+                    if (connection is HttpsURLConnection) connection.sslSocketFactory = ServerTrust.socketFactory(certificate)
+                }
                 connection.requestMethod = if (body == null) "GET" else "POST"
                 connection.instanceFollowRedirects = false
                 connection.connectTimeout = connectTimeoutMillis

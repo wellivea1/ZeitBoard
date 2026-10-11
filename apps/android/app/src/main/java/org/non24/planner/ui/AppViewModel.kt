@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.non24.planner.AppDependencies
 import org.non24.planner.data.DurableLocalDataState
+import org.non24.planner.data.ServerCertificate
 import org.non24.planner.data.safeSyncError
 import org.non24.planner.data.normalizeSyncUrl
 import org.non24.planner.data.SleepRepository
@@ -156,7 +157,7 @@ class AppViewModel(
         }
     }
 
-    fun enrollBackend(address: String, secret: String, homeZone: String) {
+    fun enrollBackend(address: String, secret: String, homeZone: String, certificate: ServerCertificate? = null) {
         try {
             normalizeSyncUrl(address)
             ZoneId.of(homeZone.trim())
@@ -166,7 +167,7 @@ class AppViewModel(
             return
         }
         syncOperation {
-            container.backendSyncRepository.enroll(address, secret, homeZone, "ZeitBoard Android").getOrThrow()
+            container.backendSyncRepository.enroll(address, secret, homeZone, "ZeitBoard Android", certificate?.pem).getOrThrow()
             container.settingsRepository.update { it.copy(dataMode = DataMode.HEALTH_CONNECT) }
             mutableEnrollmentRevision.value += 1
             mutableMessage.value = "Connected to your server."

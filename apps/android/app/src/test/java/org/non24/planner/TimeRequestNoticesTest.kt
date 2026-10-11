@@ -11,6 +11,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.non24.planner.data.BackendSyncClient
+import org.non24.planner.data.SyncServer
 import org.non24.planner.data.BackendSyncException
 import org.non24.planner.data.FeedEvent
 import org.non24.planner.data.NoticeAction
@@ -167,7 +168,7 @@ class TimeRequestNoticesTest {
         val asked = mutableListOf<String>()
         var failNext = false
 
-        override suspend fun notifications(baseUrl: String, token: String, after: String): Result<JsonObject> {
+        override suspend fun notifications(server: SyncServer, token: String, after: String): Result<JsonObject> {
             asked += after
             if (failNext) {
                 failNext = false
@@ -176,10 +177,10 @@ class TimeRequestNoticesTest {
             return Result.success(pages.removeFirst())
         }
 
-        override suspend fun enroll(baseUrl: String, enrollmentSecret: String, label: String): Result<String> = error("unused")
-        override suspend fun push(baseUrl: String, token: String, records: List<OutboxRecord>): Result<List<String>> = error("unused")
-        override suspend fun pull(baseUrl: String, token: String, since: Long): Result<PullPage> = error("unused")
-        override suspend fun companion(baseUrl: String, token: String): Result<JsonObject> = error("unused")
-        override suspend fun sleepReview(baseUrl: String, token: String, observationId: String): Result<JsonObject> = error("unused")
+        override suspend fun enroll(server: SyncServer, enrollmentSecret: String, label: String): Result<String> = error("unused")
+        override suspend fun push(server: SyncServer, token: String, records: List<OutboxRecord>): Result<List<String>> = error("unused")
+        override suspend fun pull(server: SyncServer, token: String, since: Long): Result<PullPage> = error("unused")
+        override suspend fun companion(server: SyncServer, token: String): Result<JsonObject> = error("unused")
+        override suspend fun sleepReview(server: SyncServer, token: String, observationId: String): Result<JsonObject> = error("unused")
     }
 }

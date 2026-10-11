@@ -20,8 +20,12 @@ data class SyncConfig(
     val token: String,
     val homeZoneId: String,
     val queueScope: String,
+    /** PEM of the certificate the server is trusted by beside the system's roots (ADR-0055). */
+    val serverCertificate: String? = null,
 ) {
     fun homeZone(): ZoneId = ZoneId.of(homeZoneId)
+
+    fun server(): SyncServer = SyncServer(baseUrl, serverCertificate)
 }
 
 interface SyncConfigStore {
@@ -76,20 +80,27 @@ class BackendSyncRepository(
         }
     }
 
-    suspend fun enroll(baseUrl: String, enrollmentSecret: String, homeZoneId: String, label: String): Result<Unit> =
+    suspend fun enroll(
+        baseUrl: String,
+        enrollmentSecret: String,
+        homeZoneId: String,
+        label: String,
+        serverCertificate: String? = null,
+    ): Result<Unit> =
         locked {
             syncResult {
                 val address = normalizeSyncUrl(baseUrl)
                 val zone = ZoneId.of(homeZoneId.trim())
                 val existing = configStore.load()
                 // No durable state changes until enrollment succeeds.
-                val token = client.enroll(address, enrollmentSecret, label.trim()).getOrThrow()
+                val token = client.enroll(SyncServer(address, serverCertificate), enrollmentSecret, label.trim()).getOrThrow()
                 val sameServer = existing != null && normalizeSyncUrl(existing.baseUrl) == address
                 val config = SyncConfig(
                     baseUrl = address,
                     token = token,
                     homeZoneId = zone.id,
                     queueScope = if (sameServer) existing.queueScope else UUID.randomUUID().toString(),
+                    serverCertificate = serverCertificate,
                 )
                 // The saved generation makes a crash between these steps safe:
                 // every queue access reselects it and discards obsolete generations.
@@ -122,7 +133,7 @@ class BackendSyncRepository(
                 return@syncResult
             }
             reviewState.value = SleepReviewState(selectedId = observationId, context = replica.cachedReview(observationId), loading = true)
-            val raw = client.sleepReview(config.baseUrl, config.token, observationId).getOrThrow()
+            val raw = client.sleepReview(config.server(), config.token, observationId).getOrThrow()
             require(parseSleepReview(raw).observationId == observationId)
             replica.cacheReview(raw)
             reviewState.value = SleepReviewState(selectedId = observationId, context = parseSleepReview(raw))
@@ -192,7 +203,7 @@ class BackendSyncRepository(
         val result = try { syncResult {
             suspend fun pullUntilCaughtUp() {
                 repeat(4) {
-                    val page = client.pull(config.baseUrl, config.token, cache.cursor()).getOrThrow()
+                    val page = client.pull(config.server(), config.token, cache.cursor()).getOrThrow()
                     try { cache.apply(page, now()) } finally {
                         if (page.records.isNotEmpty()) {
                             val erased = page.records.any { it.kind == "tombstone" }
@@ -211,7 +222,7 @@ class BackendSyncRepository(
             }
             pullUntilCaughtUp()
             // Validate server generation before replaying locally accepted data.
-            val beforeUpload = parseCompanion(client.companion(config.baseUrl, config.token).getOrThrow())
+            val beforeUpload = parseCompanion(client.companion(config.server(), config.token).getOrThrow())
             if (beforeUpload.cursor < cache.cursor()) throw SyncServerResetException()
             if (beforeUpload.cursor > cache.cursor()) throw SyncMorePagesException()
             outbox.reconcileAccepted()
@@ -220,7 +231,7 @@ class BackendSyncRepository(
             val uploaded = pushLocked(config)
             if (outbox.pendingCount() > 0) throw SyncMorePagesException()
             pullUntilCaughtUp()
-            val projection = client.companion(config.baseUrl, config.token).getOrThrow()
+            val projection = client.companion(config.server(), config.token).getOrThrow()
             val projectionCursor = parseCompanion(projection).cursor
             if (projectionCursor < cache.cursor()) throw SyncServerResetException()
             if (projectionCursor > cache.cursor()) throw SyncMorePagesException()
@@ -252,7 +263,7 @@ class BackendSyncRepository(
             if (batch.isEmpty()) {
                 if (outbox.pendingCount() == 0) return accepted
             } else {
-                val ids = client.push(config.baseUrl, config.token, batch).getOrThrow()
+                val ids = client.push(config.server(), config.token, batch).getOrThrow()
                 require(ids.size == batch.size && ids.toSet() == batch.map { it.recordId }.toSet()) {
                     "The server did not acknowledge the complete batch."
                 }
@@ -291,6 +302,7 @@ class BackendSyncRepository(
             heldLocalCorrectionCount = statusState.value.heldLocalCorrectionCount,
             lastSyncedAt = lastUpload,
             serverUrl = config.baseUrl,
+            serverCertificate = config.serverCertificate?.let { runCatching { ServerCertificate.parse(it.toByteArray()) }.getOrNull() },
         )
     }
 

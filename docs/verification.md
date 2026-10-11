@@ -2567,3 +2567,25 @@ code under test their own clock.
   - Both starts logged the same kept certificate (SHA-256 08:5F:3B:…:13:F4).
   - `curl --cacert` with that file and verification on got 200 both times.
   - Without the file, the connection was refused (curl exit 60).
+
+## The phone trusts the owner's server by its certificate — 2026-10-11
+
+Companion JVM tests, lint, the debug build and the instrumentation compile all pass (125 tests).
+They use two synthetic self-signed certificates for one name, made with openssl; only their public
+halves are kept.
+
+- A chosen PEM is described with the fingerprint openssl prints. DER reads the same, and so does
+  the bounded reader.
+- A key, junk, an empty file and an oversized file are refused.
+- The trust manager accepts the owner's certificate and refuses the other with the same name.
+- An HTTPS connection to a server given with a certificate uses that certificate's socket factory.
+  One without a certificate keeps the system default.
+- Enrollment already uses the certificate. The enrollment keeps it, and the status describes it.
+  Enrolling again without one stops trusting it.
+- On the test emulator, with the debug build:
+  - Settings › Your server showed the empty Server certificate row.
+  - "Choose certificate" opened the system's file picker, and the synthetic certificate was picked
+    from Downloads. The row then read "zeitboard.home.test, until Sep 17, 2126", with the
+    fingerprint openssl prints. The fingerprint first wrapped mid-byte, so it is now shown on both
+    clients as two lines of sixteen bytes, and named whole for screen readers.
+  - Remove returned the row to its empty state. The file was deleted from the emulator afterwards.

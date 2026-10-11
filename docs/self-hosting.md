@@ -107,6 +107,7 @@ with verification on:
 
 - **Desktop:** Settings › Sync › Server certificate. Check that the fingerprint it shows is
   your server's.
+- **Phone:** choose the file under Server certificate when connecting the companion.
 - **MCP connector:** set `ZEITBOARD_MCP_SERVER_CERTIFICATE_FILE` to the file.
 
 For local development, binding to `127.0.0.1` or `localhost` without certificate paths uses a
