@@ -4,6 +4,7 @@ import type {
   ServerCertificate,
 } from "../../data/backendSync";
 import { momentInSentence } from "../../utils/relativeTime";
+import { appLocale } from "../../utils/appLocale";
 
 interface BackendSyncSettingsProps {
   status: BackendSyncStatus;
@@ -41,7 +42,7 @@ function CertificateRow({
   onRemove: () => void;
 }) {
   const until = certificate
-    ? new Date(certificate.expiresAt).toLocaleDateString(undefined, {
+    ? new Date(certificate.expiresAt).toLocaleDateString(appLocale, {
         month: "short",
         day: "numeric",
         year: "numeric",

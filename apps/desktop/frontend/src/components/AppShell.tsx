@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { usePendingApprovalsCount } from "../state/approvalQueue";
 import type { LogTab, PlanTab, RhythmTab, ScreenId, SettingsTab } from "../types";
+import { appLocale } from "../utils/appLocale";
 
 const AssistantRail = lazy(() =>
   import("./AssistantRail").then((module) => ({ default: module.AssistantRail })),
@@ -164,7 +165,7 @@ function useToday() {
     const timer = window.setInterval(() => setToday(new Date()), 60_000);
     return () => window.clearInterval(timer);
   }, []);
-  return today.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long" });
+  return today.toLocaleDateString(appLocale, { weekday: "long", day: "numeric", month: "long" });
 }
 
 export function AppShell({ screen, children }: { screen: ScreenId; children: ReactNode }) {

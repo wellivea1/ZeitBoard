@@ -27,6 +27,7 @@ import { loadSourceStatuses, sourceNote } from "../data/sourceStatus";
 import { useLoaded } from "../state/useLoaded";
 import { useApprovals } from "../state/approvals";
 import { localZone } from "../utils/civilTime";
+import { appLocale } from "../utils/appLocale";
 
 // Plan › Week: the calendar-native view, for arranging things rather than
 // glancing at them. Home says when sleep is likely in a sentence; here the
@@ -162,7 +163,7 @@ function sourceSummary(data: CalendarData) {
 }
 
 function shortWeekday(civilDate: string) {
-  return new Date(`${civilDate}T12:00:00`).toLocaleDateString(undefined, { weekday: "short" });
+  return new Date(`${civilDate}T12:00:00`).toLocaleDateString(appLocale, { weekday: "short" });
 }
 
 function WeekToolbar({

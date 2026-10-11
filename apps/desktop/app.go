@@ -17,6 +17,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"non24.app/core/civilfmt"
 	"non24.app/core/domain"
 	"non24.app/core/estimation"
 	"non24.app/core/freshness"
@@ -91,6 +92,11 @@ type App struct {
 	reaching            ReachingHoursDTO
 	reachingRevision    uint64
 	reachingErr         string
+	regionalMu          sync.RWMutex
+	regional            RegionalSettingsDTO
+	regionalRevision    uint64
+	regionalErr         string
+	systemClock         civilfmt.Clock
 }
 
 type RefusalDTO struct {
@@ -301,6 +307,12 @@ func NewApp() *App {
 	} else if app.storeErr == nil {
 		app.storeErr = dirErr
 	}
+	// The clock is put in use even without a data directory: it is then the
+	// computer's own.
+	app.systemClock = systemClock()
+	if regionalErr := app.loadRegionalFromDisk(); regionalErr != nil {
+		app.regionalErr = "The stored clock could not be read, so Windows' own is in use."
+	}
 	return app
 }
 
@@ -312,6 +324,7 @@ func newAppWithStore(store *storage.Store, storeErr error) *App {
 		storeErr:           storeErr,
 		calendarHTTPClient: newCalendarHTTPClient(),
 		reaching:           defaultReachingHours(localZoneID()),
+		regional:           defaultRegionalSettings(),
 		nowFn:              time.Now,
 		appearance:         defaultLocalAppearanceState(),
 	}
@@ -486,7 +499,7 @@ func (a *App) sleepDataExportPayload(ctx context.Context) (sleepDataExportPayloa
 	return sleepDataExportPayload{
 		fileName:         "zeitboard-sleep-export-" + exported.GeneratedAt.Format("20060102-150405") + ".json",
 		encoded:          encoded,
-		generatedLabel:   exported.GeneratedAt.Local().Format("Jan 2, 2006, 3:04 PM"),
+		generatedLabel:   displayClock().Format(exported.GeneratedAt.Local(), "Jan 2, 2006, 3:04 PM"),
 		observationCount: len(exported.ObservationSet.Observations),
 		correctionCount:  len(exported.CorrectionSet.Corrections),
 	}, nil
@@ -803,7 +816,7 @@ func (a *App) localRhythm(ctx context.Context, now time.Time) (estimation.Rhythm
 	if state.Status != "estimated" {
 		return emptyRhythmProjection(state, now), nil
 	}
-	projection, err := (estimation.RobustEstimator{}).Project(ctx, state.Sessions, now)
+	projection, err := (estimation.RobustEstimator{Clock: displayClock()}).Project(ctx, state.Sessions, now)
 	if err != nil {
 		return estimation.RhythmProjection{}, err
 	}
@@ -1048,12 +1061,12 @@ func taskDTO(record storage.TaskRecord) TaskDTO {
 	}
 	switch {
 	case record.EarliestStartAt != nil && record.LatestFinishAt != nil:
-		dto.WindowLabel = "Between " + record.EarliestStartAt.Local().Format("Jan 2, 3:04 PM") +
-			" and " + record.LatestFinishAt.Local().Format("Jan 2, 3:04 PM")
+		dto.WindowLabel = "Between " + displayClock().Format(record.EarliestStartAt.Local(), "Jan 2, 3:04 PM") +
+			" and " + displayClock().Format(record.LatestFinishAt.Local(), "Jan 2, 3:04 PM")
 	case record.EarliestStartAt != nil:
-		dto.WindowLabel = "Not before " + record.EarliestStartAt.Local().Format("Jan 2, 3:04 PM")
+		dto.WindowLabel = "Not before " + displayClock().Format(record.EarliestStartAt.Local(), "Jan 2, 3:04 PM")
 	case record.LatestFinishAt != nil:
-		dto.WindowLabel = "Finish by " + record.LatestFinishAt.Local().Format("Jan 2, 3:04 PM")
+		dto.WindowLabel = "Finish by " + displayClock().Format(record.LatestFinishAt.Local(), "Jan 2, 3:04 PM")
 	}
 	if record.PreferredAfterWakeMinutes != nil {
 		dto.PreferredAfterWakeMinutes = *record.PreferredAfterWakeMinutes
@@ -1218,7 +1231,7 @@ func correctionDTO(correction storage.SleepCorrectionRecord, zoneID string) Slee
 	return SleepCorrectionDTO{
 		CorrectionID:            correction.CorrectionID,
 		SupersedesCorrectionIDs: correction.SupersedesCorrectionIDs,
-		CreatedLabel:            correction.CreatedAt.In(locationOrUTC(zoneID)).Format("Jan 2, 3:04 PM"),
+		CreatedLabel:            displayClock().Format(correction.CreatedAt.In(locationOrUTC(zoneID)), "Jan 2, 3:04 PM"),
 		Reason:                  strings.ReplaceAll(correction.Reason, "_", " "),
 		Summary:                 correctionSummary(correction.Changes, zoneID),
 	}
@@ -1228,10 +1241,10 @@ func correctionSummary(changes storage.SleepCorrectionChanges, zoneID string) st
 	var parts []string
 	location := locationOrUTC(zoneID)
 	if changes.StartAt != nil {
-		parts = append(parts, "start "+changes.StartAt.In(location).Format("Jan 2, 3:04 PM"))
+		parts = append(parts, "start "+displayClock().Format(changes.StartAt.In(location), "Jan 2, 3:04 PM"))
 	}
 	if changes.EndAt != nil {
-		parts = append(parts, "wake "+changes.EndAt.In(location).Format("Jan 2, 3:04 PM"))
+		parts = append(parts, "wake "+displayClock().Format(changes.EndAt.In(location), "Jan 2, 3:04 PM"))
 	}
 	if changes.SleepClassification != nil {
 		parts = append(parts, "classification "+*changes.SleepClassification)
@@ -1386,7 +1399,7 @@ func formatInstant(value domain.ZonedInstant) string {
 	if err != nil {
 		return value.UTC.Format(time.RFC3339)
 	}
-	return local.Format("Mon Jan 2, 3:04 PM MST")
+	return displayClock().Format(local, "Mon Jan 2, 3:04 PM MST")
 }
 
 func formatRange(value domain.TimeRange) string {

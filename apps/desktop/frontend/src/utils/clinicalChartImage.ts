@@ -2,6 +2,7 @@ import type {
   MedicationClinicalReport,
   MedicationClinicalActogramRow,
 } from "../data/medicationReport";
+import { appLocale } from "./appLocale";
 
 // The clinical chart as a PNG, for a clinician who takes an image rather than
 // a printed page (limitation 10). It is drawn from the same report the preview
@@ -112,7 +113,7 @@ function wrap(text: string, fontSpec: string, maxWidth: number, measure: Measure
 function monthName(row: MedicationClinicalActogramRow) {
   return (
     row.monthLabel ||
-    new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric", timeZone: "UTC" }).format(
+    new Intl.DateTimeFormat(appLocale, { month: "long", year: "numeric", timeZone: "UTC" }).format(
       new Date(`${row.civilDate}T12:00:00Z`),
     )
   );

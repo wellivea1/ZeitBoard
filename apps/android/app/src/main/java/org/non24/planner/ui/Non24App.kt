@@ -218,7 +218,7 @@ fun Non24App(
                 }
                 composable(Destination.CORRECT.route) {
                     if (uiState.settings.dataMode != DataMode.FIXTURE && syncStatus.state != SyncState.OFF) {
-                        ServerSleepReviewScreen(companion, sleepReview, syncBusy, viewModel::loadSleepReview, viewModel::saveServerSleepCorrection, viewModel::uploadNow)
+                        ServerSleepReviewScreen(companion, sleepReview, syncBusy, uiState.settings.use24HourTime, viewModel::loadSleepReview, viewModel::saveServerSleepCorrection, viewModel::uploadNow)
                     } else CorrectionScreen(
                         state = uiState,
                         onRetryLocalData = viewModel::retryLocalData,
@@ -569,7 +569,7 @@ private fun HealthConnectPanel(
 
 @Composable
 private fun ServerSleepReviewScreen(
-    companion: CompanionState, state: SleepReviewState, busy: Boolean,
+    companion: CompanionState, state: SleepReviewState, busy: Boolean, use24HourTime: Boolean,
     onReview: (String) -> Unit, onSave: (SleepReview, String, String, String, Boolean) -> Unit, onSync: () -> Unit,
 ) {
     var visibleCount by remember { mutableStateOf(15) }
@@ -588,7 +588,7 @@ private fun ServerSleepReviewScreen(
             RuledSection {
                 Text("Review in ${review.effective.zoneId}", style = MaterialTheme.typography.titleMedium)
                 Text("Source: ${formatReviewInput(review.source.start, review.source.zoneId)} → ${formatReviewInput(review.source.end, review.source.zoneId)}", style = MaterialTheme.typography.bodySmall)
-                Text("Snapshot: ${DateTimeFormatter.ofPattern("MMM d, HH:mm z").format(review.generatedAt.atZone(ZoneId.of(review.source.zoneId)))}", style = MaterialTheme.typography.labelSmall)
+                Text("Snapshot: ${dayClock(review.generatedAt.atZone(ZoneId.of(review.source.zoneId)), use24HourTime, withZone = true)}", style = MaterialTheme.typography.labelSmall)
                 if (review.needsReview) InfoStrip("The source or manual edits disagree. Forecasts are withheld until you review all changes and save a resolution.")
                 review.edits.forEachIndexed { index, edit ->
                     val values = buildList {
@@ -1050,8 +1050,7 @@ private fun BackendConnectionSection(
             if (status.heldLocalCorrectionCount > 0) DataRow("Held local corrections", status.heldLocalCorrectionCount.toString())
             Text(
                 status.lastSyncedAt?.let {
-                    "Last upload: " + DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
-                        .withZone(ZoneId.systemDefault()).format(it)
+                    "Last upload: " + dayClock(it.atZone(ZoneId.systemDefault()), state.settings.use24HourTime)
                 } ?: "No successful upload is recorded on this device.",
                 style = MaterialTheme.typography.bodySmall,
             )

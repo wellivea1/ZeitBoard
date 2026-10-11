@@ -87,7 +87,7 @@ func (a *App) quickLogState(ctx context.Context, store *storage.Store) QuickLogS
 	return QuickLogStateDTO{
 		Status:       "ok",
 		Pending:      true,
-		PendingLabel: "Sleep marked " + pending.StartedAt.Local().Format("Mon 3:04 PM"),
+		PendingLabel: "Sleep marked " + displayClock().Format(pending.StartedAt.Local(), "Mon 3:04 PM"),
 		PendingSince: pending.StartedAt.Local().Format(quickLogLocalLayout),
 		PendingStale: elapsed >= quicklog.StaleAfter,
 	}

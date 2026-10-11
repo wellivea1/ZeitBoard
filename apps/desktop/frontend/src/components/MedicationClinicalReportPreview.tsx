@@ -7,6 +7,7 @@ import type {
   MedicationClinicalReport,
   MedicationClinicalSleepKind,
 } from "../data/medicationReport";
+import { appLocale } from "../utils/appLocale";
 
 const rowsPerPage = 31;
 const driftVisualPointLimit = 180;
@@ -48,7 +49,7 @@ function sleepKindLabel(kind: MedicationClinicalSleepKind): string {
 }
 
 function monthLabel(civilDate: string): string {
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat(appLocale, {
     month: "long",
     year: "numeric",
     timeZone: "UTC",

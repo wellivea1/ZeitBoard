@@ -4,10 +4,16 @@
 // goes into it and nothing is read back from it: the nights are entered in
 // Log, or copied into the CSV template, by the person who wrote them.
 
+import { axisHour } from "../utils/relativeTime";
+import { windowClock } from "../utils/windowClock";
+
 const rows = 31;
 const firstHour = 18;
 
+// Twenty-four narrow columns: "6p" and "12a" on the twelve-hour clock, "18"
+// and "00" on the 24-hour one.
 function hourLabel(hour: number) {
+  if (windowClock() === "24") return String(hour).padStart(2, "0");
   const clock = hour % 12 === 0 ? 12 : hour % 12;
   return `${clock}${hour < 12 ? "a" : "p"}`;
 }
@@ -68,7 +74,7 @@ export function blankSleepLogHTML() {
   <h1>Sleep log</h1>
   <p class="fields">Month<span></span> Time zone<span></span></p>
 </header>
-<p class="how">One row a day, from 6 PM to 6 PM the next day. Shade the time you were asleep, naps included, to the half hour. Put a ? where you are unsure, and leave a row empty for a day you did not record.</p>
+<p class="how">One row a day, from ${axisHour(firstHour)} to ${axisHour(firstHour)} the next day. Shade the time you were asleep, naps included, to the half hour. Put a ? where you are unsure, and leave a row empty for a day you did not record.</p>
 <table>
 <colgroup><col class="date">${hours.map(() => "<col>").join("")}<col class="notes"></colgroup>
 <thead><tr><th scope="col" class="date">Date</th>${head}<th scope="col" class="notes">Notes</th></tr></thead>

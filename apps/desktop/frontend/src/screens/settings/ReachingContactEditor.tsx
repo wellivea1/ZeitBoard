@@ -7,6 +7,7 @@ import {
   withDayOpen,
   type ReachingContact,
 } from "../../data/reachingHours";
+import { axisHour } from "../../utils/relativeTime";
 
 // One person on the reaching list: who they are, their zone, and their hours on
 // each day of the week. Each day carries a small 24-hour bar, so a week of
@@ -24,7 +25,7 @@ interface ReachingContactEditorProps {
   onRemove: () => void;
 }
 
-const AXIS_LABELS = ["Midnight", "6 AM", "Noon", "6 PM", "Midnight"];
+const AXIS_HOURS = [0, 6, 12, 18, 24];
 
 export function ReachingContactEditor({
   contact,
@@ -74,9 +75,9 @@ export function ReachingContactEditor({
         ))}
         <div className="reaching-week-axis" aria-hidden="true">
           <span className="reaching-week-scale">
-            {AXIS_LABELS.map((label, index) => (
-              <small key={`${label}-${index}`} style={{ left: `${index * 25}%` }}>
-                {label}
+            {AXIS_HOURS.map((hour) => (
+              <small key={hour} style={{ left: `${(hour / 24) * 100}%` }}>
+                {axisHour(hour)}
               </small>
             ))}
           </span>

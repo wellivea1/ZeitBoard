@@ -5,6 +5,7 @@ import {
   type MedicationClinicalReport,
   type MedicationClinicalReportInput,
 } from "../data/medicationReport";
+import { axisHour } from "../utils/relativeTime";
 
 const MedicationReportActogram = lazy(() =>
   import("./MedicationClinicalReportPreview").then((module) => ({
@@ -125,8 +126,8 @@ export function MedicationReportControls({
             disabled={busy}
             onChange={(event) => onChange({ dayStartHour: Number(event.target.value) as 12 | 18 })}
           >
-            <option value={18}>6 PM (recommended)</option>
-            <option value={12}>Noon</option>
+            <option value={18}>{axisHour(18)} (recommended)</option>
+            <option value={12}>{axisHour(12)}</option>
           </select>
         </label>
         <label>

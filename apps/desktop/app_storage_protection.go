@@ -63,6 +63,7 @@ func (a *App) GetStorageProtection() (StorageProtectionDTO, error) {
 		{"Write-ahead log", filepath.Join(dir, desktopDatabaseFile+"-wal")},
 		{"Display settings", filepath.Join(dir, appearanceFileName)},
 		{"Reaching hours", filepath.Join(dir, reachingFileName)},
+		{"Clock", filepath.Join(dir, regionalFileName)},
 	}
 
 	report := StorageProtectionDTO{

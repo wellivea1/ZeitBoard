@@ -762,7 +762,7 @@ func overviewDTOFromServer(response serverOverviewResponse, now time.Time) Overv
 		MedicationEvents:         []MedicationEventDTO{},
 		FixtureMode:              false,
 		Disclaimer:               nonEmpty(response.Disclaimer, disclaimer),
-		UpdatedLabel:             now.Local().Format("Synced Jan 2, 3:04 PM"),
+		UpdatedLabel:             displayClock().Format(now.Local(), "Synced Jan 2, 3:04 PM"),
 	}
 }
 
@@ -964,8 +964,8 @@ func backendProposalDTO(record backendProposalRecord) BackendProposalDTO {
 		Window:        "Window unavailable",
 		Confidence:    "Low",
 		ReasonLabels:  []string{},
-		CreatedLabel:  "Proposed " + record.CreatedAt.Local().Format("Jan 2, 3:04 PM"),
-		ExpiresLabel:  "expires " + record.ExpiresAt.Local().Format("Jan 2, 3:04 PM"),
+		CreatedLabel:  "Proposed " + displayClock().Format(record.CreatedAt.Local(), "Jan 2, 3:04 PM"),
+		ExpiresLabel:  "expires " + displayClock().Format(record.ExpiresAt.Local(), "Jan 2, 3:04 PM"),
 		DecisionToken: record.DecisionToken,
 	}
 	var payload backendProposalPayload
@@ -999,7 +999,7 @@ func civilWindow(start, end time.Time, zoneID string) string {
 			location = loaded
 		}
 	}
-	return start.In(location).Format("Mon Jan 2, 3:04 PM") + " to " + end.In(location).Format("3:04 PM MST")
+	return displayClock().Format(start.In(location), "Mon Jan 2, 3:04 PM") + " to " + displayClock().Format(end.In(location), "3:04 PM MST")
 }
 
 func titleConfidence(level string) string {

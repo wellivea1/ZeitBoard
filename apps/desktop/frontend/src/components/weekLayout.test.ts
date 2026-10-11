@@ -3,7 +3,8 @@ import type { CalendarBandSegment, CalendarData, CalendarEventSegment } from "..
 import type { MedicationsData } from "../data/medications";
 import type { ProposalRecord } from "../data/proposals";
 import type { SleepEntry } from "../data/sleepEntries";
-import { assignLanes, hourLabel, minuteClock, weekColumns, weekTitle } from "./weekLayout";
+import { setWindowClock } from "../utils/windowClock";
+import { assignLanes, minuteClock, weekColumns, weekTitle } from "./weekLayout";
 
 const zoneId = "America/New_York";
 // Thursday 24 September, 4:10 PM in New York.
@@ -284,7 +285,19 @@ describe("wording", () => {
     expect(tomorrow?.spokenDate).toMatch(/^Friday.*(25.*September|September.*25)$/);
   });
 
-  it("labels the gutter in words at noon", () => {
-    expect([3, 12, 15].map(hourLabel)).toEqual(["3 AM", "Noon", "3 PM"]);
+  // On the 24-hour clock the edges are written, not named (ADR-0057).
+  it("writes the day's edges on the 24-hour clock", () => {
+    setWindowClock("24");
+    try {
+      expect([0, 75, 720, 1350, 1440].map(minuteClock)).toEqual([
+        "00:00",
+        "01:15",
+        "12:00",
+        "22:30",
+        "24:00",
+      ]);
+    } finally {
+      setWindowClock("12");
+    }
   });
 });

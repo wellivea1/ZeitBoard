@@ -6,7 +6,29 @@
 // – 1:35 AM" instead: the day relative to today, the clock, and nothing
 // repeated.
 
+import { appLocale } from "./appLocale";
+import { windowClock, type Clock } from "./windowClock";
+
 const HOUR = 3_600_000;
+
+// Built once per clock: a formatter is not free, and these run for every label.
+const timeFormats = new Map<string, Intl.DateTimeFormat>();
+
+function timeFormat(options: { minute: boolean; timeZone?: string; clock?: Clock }) {
+  const clock = options.clock ?? windowClock();
+  const key = `${clock}/${options.minute}/${options.timeZone ?? ""}`;
+  let format = timeFormats.get(key);
+  if (!format) {
+    format = new Intl.DateTimeFormat(appLocale, {
+      ...(clock === "24"
+        ? { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }
+        : { hour: "numeric", ...(options.minute ? { minute: "2-digit" } : {}), hourCycle: "h12" }),
+      ...(options.timeZone ? { timeZone: options.timeZone } : {}),
+    });
+    timeFormats.set(key, format);
+  }
+  return format;
+}
 
 function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
@@ -26,23 +48,53 @@ export function relativeDay(date: Date, now: Date) {
   if (offset === 0) return date.getHours() >= 17 ? "Tonight" : "Today";
   if (offset === 1) return "Tomorrow";
   if (offset === -1) return "Yesterday";
-  if (offset > 1 && offset < 7) return date.toLocaleDateString(undefined, { weekday: "long" });
-  return date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  if (offset > 1 && offset < 7) return date.toLocaleDateString(appLocale, { weekday: "long" });
+  return date.toLocaleDateString(appLocale, { weekday: "short", month: "short", day: "numeric" });
 }
 
 function clockParts(date: Date) {
-  const parts = new Intl.DateTimeFormat(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  }).formatToParts(date);
+  const parts = timeFormat({ minute: true }).formatToParts(date);
   const part = (type: Intl.DateTimeFormatPartTypes) =>
     parts.find((candidate) => candidate.type === type)?.value ?? "";
-  // A 24-hour locale has no day period, and then ranges repeat nothing anyway.
+  // The 24-hour clock has no day period, and then ranges repeat nothing anyway.
   return { clock: `${part("hour")}:${part("minute")}`, dayPeriod: part("dayPeriod") };
 }
 
+/** "3:04 PM", or "15:04" on the 24-hour clock. */
 export function clockTime(date: Date) {
-  return date.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  return timeFormat({ minute: true }).format(date);
+}
+
+function civilInstant(hour: number, minute: number) {
+  return new Date(Date.UTC(2000, 0, 1, hour, minute));
+}
+
+/**
+ * A time of day from hours and minutes past midnight: "3:04 PM" or "15:04", on
+ * the window's clock unless another is named.
+ */
+export function timeOfDay(hour: number, minute = 0, clock?: Clock) {
+  return timeFormat({ minute: true, timeZone: "UTC", clock }).format(civilInstant(hour, minute));
+}
+
+/**
+ * An hour on an axis or a gutter. The twelve-hour clock writes "3 AM" and names
+ * the day's edges, "Midnight" and "Noon"; the 24-hour clock writes "03:00",
+ * "12:00", and "24:00" at the far edge.
+ */
+export function axisHour(hour: number) {
+  if (windowClock() === "24") return hour === 24 ? "24:00" : hourOfDay(hour);
+  if (hour === 12) return "Noon";
+  if (hour === 0 || hour === 24) return "Midnight";
+  return hourOfDay(hour);
+}
+
+/**
+ * A time of day for an axis or a gutter: "6 PM" on the hour and "6:20 PM" off
+ * it, or "18:00" and "18:20" on the 24-hour clock.
+ */
+export function hourOfDay(hour: number, minute = 0) {
+  return timeFormat({ minute: minute !== 0, timeZone: "UTC" }).format(civilInstant(hour, minute));
 }
 
 /** "7:15 – 10:10 AM", or "11:30 PM – 1:35 AM" when the halves of the day differ. */

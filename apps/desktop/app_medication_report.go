@@ -322,7 +322,7 @@ func (a *App) medicationClinicianReportAt(ctx context.Context, input MedicationC
 		Status:         status,
 		Message:        message,
 		GeneratedAt:    now.UTC().Format(time.RFC3339),
-		GeneratedLabel: now.Local().Format("Jan 2, 2006, 3:04 PM"),
+		GeneratedLabel: displayClock().Format(now.Local(), "Jan 2, 2006, 3:04 PM"),
 		Range: MedicationClinicalReportRangeDTO{
 			Mode:          reportRange.mode,
 			FromDate:      reportRange.fromDate.Format(time.DateOnly),
@@ -523,8 +523,8 @@ func addMedicationReportSleep(rows []MedicationClinicalActogramRowDTO, rowStarts
 					Kind:          kind,
 					StartPercent:  roundReportPercent(startHour / 24 * 100),
 					WidthPercent:  roundReportPercent((endHour - startHour) / 24 * 100),
-					StartLabel:    localStart.Format("Jan 2, 3:04 PM MST"),
-					WakeLabel:     localEnd.Format("Jan 2, 3:04 PM MST"),
+					StartLabel:    displayClock().Format(localStart, "Jan 2, 3:04 PM MST"),
+					WakeLabel:     displayClock().Format(localEnd, "Jan 2, 3:04 PM MST"),
 					DurationLabel: compactMedicationDuration(end.Sub(start)),
 					Source:        source,
 					Confidence:    confidenceTitle(medicationEvidenceConfidence(interval.StartEvidence).Level),
@@ -561,8 +561,8 @@ func addMedicationReportForecast(rows []MedicationClinicalActogramRowDTO, rowSta
 				Kind:          "forecast",
 				StartPercent:  roundReportPercent(startHour / 24 * 100),
 				WidthPercent:  roundReportPercent((endHour - startHour) / 24 * 100),
-				StartLabel:    start.In(reportRange.location).Format("Jan 2, 3:04 PM MST") + " earliest",
-				WakeLabel:     end.In(reportRange.location).Format("Jan 2, 3:04 PM MST") + " latest",
+				StartLabel:    displayClock().Format(start.In(reportRange.location), "Jan 2, 3:04 PM MST") + " earliest",
+				WakeLabel:     displayClock().Format(end.In(reportRange.location), "Jan 2, 3:04 PM MST") + " latest",
 				DurationLabel: compactMedicationDuration(end.Sub(start)) + " uncertain window",
 				Source:        "Current local forecast",
 				Confidence:    confidenceTitle(window.Confidence.Level),
@@ -595,7 +595,7 @@ func addMedicationReportAnnotations(rows []MedicationClinicalActogramRowDTO, rep
 			appendAnnotation(*medication.StartedAt, MedicationClinicalAnnotationDTO{
 				Kind:    "medication_start",
 				Label:   aliases[medication.MedicationID] + " start",
-				AtLabel: medication.StartedAt.In(reportRange.location).Format("Jan 2, 3:04 PM MST"),
+				AtLabel: displayClock().Format(medication.StartedAt.In(reportRange.location), "Jan 2, 3:04 PM MST"),
 				Detail:  "User-recorded start marker; temporal association only",
 			})
 		}
@@ -610,7 +610,7 @@ func addMedicationReportAnnotations(rows []MedicationClinicalActogramRowDTO, rep
 			appendAnnotation(item.Event.DoseAt, MedicationClinicalAnnotationDTO{
 				Kind:    kind,
 				Label:   aliases[item.Event.MedicationID],
-				AtLabel: item.Event.DoseAt.In(reportRange.location).Format("Jan 2, 3:04 PM MST"),
+				AtLabel: displayClock().Format(item.Event.DoseAt.In(reportRange.location), "Jan 2, 3:04 PM MST"),
 				Detail:  "User-recorded " + item.Event.Status + " event",
 			})
 		}
@@ -625,7 +625,7 @@ func addMedicationReportAnnotations(rows []MedicationClinicalActogramRowDTO, rep
 			appendAnnotation(marker.StartAt, MedicationClinicalAnnotationDTO{
 				Kind:    "context_" + marker.Kind,
 				Label:   rhythmMarkerKindLabel(marker.Kind),
-				AtLabel: marker.StartAt.In(reportRange.location).Format("Jan 2, 3:04 PM MST"),
+				AtLabel: displayClock().Format(marker.StartAt.In(reportRange.location), "Jan 2, 3:04 PM MST"),
 				Detail:  detail,
 			})
 			if annotationCount > before {
@@ -701,7 +701,7 @@ func medicationReportAdherence(events []storage.EffectiveMedicationEvent, medica
 		}
 		rows = append(rows, MedicationClinicalAdherenceEventDTO{
 			MedicationLabel: aliases[item.Event.MedicationID],
-			CivilTime:       item.Event.DoseAt.In(reportRange.location).Format("Jan 2, 2006, 3:04 PM MST"),
+			CivilTime:       displayClock().Format(item.Event.DoseAt.In(reportRange.location), "Jan 2, 2006, 3:04 PM MST"),
 			Status:          item.Event.Status,
 			ScheduleContext: scheduleContext,
 			WakeContext:     projected.WakeRelation,
@@ -781,7 +781,7 @@ func medicationReportAssociations(medications []storage.MedicationRecord, aliase
 		}
 		result = append(result, MedicationClinicalAssociationDTO{
 			MedicationLabel: aliases[medication.MedicationID],
-			StartedLabel:    medication.StartedAt.In(reportRange.location).Format("Jan 2, 2006, 3:04 PM MST"),
+			StartedLabel:    displayClock().Format(medication.StartedAt.In(reportRange.location), "Jan 2, 2006, 3:04 PM MST"),
 			Status:          association.Status,
 			Message:         message,
 			Before:          medicationReportAssociationSegment(association.Before, reportRange.location),
@@ -829,7 +829,7 @@ func medicationReportDrift(sessions []domain.SleepSession, reportRange medicatio
 	if reportRange.endAt.Before(asOf) {
 		asOf = reportRange.endAt
 	}
-	projection, err := (estimation.RobustEstimator{}).Project(context.Background(), selected, asOf)
+	projection, err := (estimation.RobustEstimator{Clock: displayClock()}).Project(context.Background(), selected, asOf)
 	if err != nil {
 		status := "unavailable"
 		message := "Sleep-onset drift is unavailable for the selected range."
@@ -986,8 +986,7 @@ func medicationReportRelativeCivilHour(rowDate time.Time, at time.Time, location
 }
 
 func formatReportClock(hour int) string {
-	value := time.Date(2000, 1, 1, hour, 0, 0, 0, time.UTC)
-	return value.Format("3 PM")
+	return displayClock().Hour(hour)
 }
 
 func roundReportPercent(value float64) float64 {

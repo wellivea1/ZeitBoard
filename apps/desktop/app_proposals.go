@@ -341,7 +341,7 @@ func (a *App) buildLocalProposals(now time.Time) (localProposalBuild, error) {
 			ExplanationCodes: append([]string(nil), proposal.ExplanationCodes...),
 			ReasonLabels:     reasonLabels(proposal.ExplanationCodes),
 			CreatedLabel:     "Proposed by Scheduler from local sleep entries and fixed calendar events",
-			ExpiresLabel:     "Refreshes at " + expiresAt.In(locationOrUTC(zoneID)).Format("3:04 PM MST"),
+			ExpiresLabel:     "Refreshes at " + displayClock().Format(expiresAt.In(locationOrUTC(zoneID)), "3:04 PM MST"),
 			Decision:         "pending",
 			CanUndo:          false,
 		})
@@ -408,7 +408,7 @@ func decidedProposalDTO(record storage.ProposalDecisionRecord) (ProposalDTO, err
 		Confidence:       confidenceTitle(domain.ConfidenceLevel(record.Confidence)),
 		ExplanationCodes: append([]string(nil), record.ExplanationCodes...),
 		ReasonLabels:     reasonLabels(record.ExplanationCodes),
-		CreatedLabel:     decisionTitle + " " + record.DecidedAt.In(locationOrUTC(record.ZoneID)).Format("Jan 2, 3:04 PM MST"),
+		CreatedLabel:     decisionTitle + " " + displayClock().Format(record.DecidedAt.In(locationOrUTC(record.ZoneID)), "Jan 2, 3:04 PM MST"),
 		ExpiresLabel:     "Decision is retained until you undo it",
 		Decision:         record.Decision,
 		CanUndo:          true,
