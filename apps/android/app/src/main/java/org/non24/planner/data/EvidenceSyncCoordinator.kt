@@ -33,6 +33,7 @@ class EvidenceSyncCoordinator(
         if (settings.settings.value.dataMode != DataMode.HEALTH_CONNECT) return
         health.refresh()
         queueSavedSleep()
+        reportCheck()
         if (sync.isConfigured()) scheduler.requestUpload()
         reconcileSchedule()
     }
@@ -52,6 +53,7 @@ class EvidenceSyncCoordinator(
         // Saved uploads remain authorized by enrollment even if further collection
         // is denied. No Health Connect read occurs without background permission.
         queueSavedSleep()
+        reportCheck()
         scheduler.requestUpload()
         return health.permissionState.value != HealthPermissionState.UNKNOWN &&
             health.backgroundReadState.value != BackgroundReadState.UNKNOWN &&
@@ -66,7 +68,14 @@ class EvidenceSyncCoordinator(
         }
         health.refresh()
         queueSavedSleep()
+        reportCheck()
         return sync.synchronize()
+    }
+
+    /** Tells the owner's computer what the newest check found (ADR-0054). */
+    private suspend fun reportCheck() {
+        if (settings.settings.value.dataMode != DataMode.HEALTH_CONNECT) return
+        health.lastCheck.value?.let { sync.reportSource(it) }
     }
 
     private suspend fun queueSavedSleep() {

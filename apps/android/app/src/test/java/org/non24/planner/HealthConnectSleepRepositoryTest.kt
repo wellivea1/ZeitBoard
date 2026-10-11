@@ -13,6 +13,7 @@ import org.non24.planner.data.HealthConnectPermissions
 import org.non24.planner.data.HealthConnectSleepRepository
 import org.non24.planner.data.InMemoryLocalUserDataStore
 import org.non24.planner.data.LocalUserDataRepository
+import org.non24.planner.data.ReadWindow
 import org.non24.planner.domain.AcquisitionMethod
 import org.non24.planner.domain.EvidenceStatus
 import org.non24.planner.domain.HealthConnectAvailability
@@ -126,7 +127,7 @@ class HealthConnectSleepRepositoryTest {
 
         override suspend fun grantedPermissions(): Set<String> = granted
 
-        override suspend fun readRecentSleep(): List<SleepEpisode> {
+        override suspend fun readSleep(window: ReadWindow): List<SleepEpisode> {
             readCount += 1
             readFailure?.let { throw it }
             if (returnEmptySnapshot) return emptyList()

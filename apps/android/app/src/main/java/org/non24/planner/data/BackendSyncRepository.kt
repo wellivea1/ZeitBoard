@@ -263,6 +263,20 @@ class BackendSyncRepository(
         return accepted
     }
 
+    /**
+     * Queues what a check of Health Connect found (ADR-0054), when it says
+     * something the last report did not or the last is six hours old. Returns
+     * whether a report was queued.
+     */
+    suspend fun reportSource(check: SourceCheck): Boolean = locked {
+        val config = configuration() ?: return@locked false
+        val record = SyncContract.sourceReport(check, statusState.value.heldCount)
+        if (!SourceReporting.due(outbox.lastQueued(SourceReporting.KIND), record)) return@locked false
+        outbox.enqueue(listOf(record))
+        publishIdle(config)
+        true
+    }
+
     private fun publishIdle(config: SyncConfig, held: Int = statusState.value.heldCount) {
         val pending = outbox.pendingCount()
         val lastUpload = outbox.lastSyncedAt()

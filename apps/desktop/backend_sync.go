@@ -615,6 +615,9 @@ func decodePulledRecord(record syncEnvelope) (storage.SyncPullRecord, error) {
 	case storage.SyncKindContextMarker:
 		var value storage.SyncPullMarker
 		return value, decode(&value.Marker)
+	case storage.SyncKindSourceReport:
+		value := storage.SyncPullSourceReport{DeviceID: record.DeviceID}
+		return value, decode(&value.Report)
 	case "tombstone":
 		var payload syncTombstonePayload
 		if err := decode(&payload); err != nil {

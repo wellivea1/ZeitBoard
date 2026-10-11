@@ -43,6 +43,9 @@ interface HealthConnectRepository : SleepRepository {
     val requiredPermissions: Set<String>
     val lastRefreshError: StateFlow<String?>
 
+    /** What the newest check of Health Connect found, for the source report (ADR-0054). */
+    val lastCheck: StateFlow<SourceCheck?>
+
     suspend fun refreshPermissionState()
 
     suspend fun onPermissionResult(grantedPermissions: Set<String>)

@@ -93,6 +93,25 @@ describe("the lead sentence", () => {
     );
   });
 
+  it("follows why with the likely cause, when the phone said one", () => {
+    const stale: OverviewData = {
+      ...awake,
+      state: "Current state uncertain",
+      freshness: {
+        ...awake.freshness,
+        trusted: false,
+        state: "withheld",
+        explanation: "The newest sleep record is 2 days old",
+      },
+    };
+    const cause = "The phone has not been allowed to read Health Connect since yesterday.";
+    expect(text(leadParts(stale, outlook, now, cause))).toMatch(
+      /^The newest sleep record is 2 days old\. The phone has not been allowed to read Health Connect since yesterday\. Sleep is likely/,
+    );
+    // A current estimate needs no cause.
+    expect(text(leadParts(awake, outlook, now, cause))).not.toContain("Health Connect");
+  });
+
   it("does not look ahead without an estimate", () => {
     expect(text(leadParts({ ...awake, status: "empty" }, outlook, now))).toBe(
       "There is not enough recorded sleep to look ahead yet.",

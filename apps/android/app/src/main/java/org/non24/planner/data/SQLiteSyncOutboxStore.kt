@@ -259,6 +259,20 @@ class SQLiteSyncOutboxStore(
         "SELECT 1 FROM sync_outbox WHERE record_id = ?", arrayOf(recordId),
     ).use { it.moveToFirst() }
 
+    override fun lastQueued(kind: String): OutboxRecord? = readable().rawQuery(
+        "SELECT $COLUMN_RECORD_ID, $COLUMN_CREATED_AT, $COLUMN_REVISION, $COLUMN_PAYLOAD FROM $OUTBOX_TABLE " +
+            "WHERE $COLUMN_KIND = ? ORDER BY $COLUMN_CREATED_AT DESC, $COLUMN_RECORD_ID DESC LIMIT 1",
+        arrayOf(kind),
+    ).use { cursor ->
+        if (!cursor.moveToFirst()) null else OutboxRecord(
+            recordId = cursor.getString(0),
+            kind = kind,
+            createdAt = Instant.ofEpochMilli(cursor.getLong(1)),
+            sourceRevision = Instant.ofEpochMilli(cursor.getLong(2)),
+            payload = cursor.getString(3),
+        )
+    }
+
     override fun hasPendingManualCorrection(observationId: String): Boolean = readable().rawQuery(
         "SELECT payload FROM sync_outbox WHERE observation_id = ? AND kind = 'correction' AND synced_at IS NULL", arrayOf(observationId),
     ).use { cursor ->
@@ -329,6 +343,8 @@ internal fun outboxObservationId(kind: String, payload: String): String =
         when (kind) {
             "correction" -> "target_observation_id"
             "medication_event" -> "medication_id"
+            // A report belongs to nothing but itself.
+            SourceReporting.KIND -> "report_id"
             else -> "observation_id"
         },
     )

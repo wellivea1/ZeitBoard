@@ -69,6 +69,12 @@ whenever a placement appears or goes, and a desktop worker carries the queue
 to the calendar with If-None-Match and If-Match preconditions. It shares the
 periodic-worker shape of the background sync loop.
 
+The desktop reads no sleep source itself. The companion reports what each Health
+Connect check found as a `source_report` record (ADR-0054), defined once in
+`core/sources` for the server's validation and the desktop's store. The desktop
+reads the reports into a status per source. Data Sources, the stale-estimate
+sentence on Home and Week, and the assistant snapshot all use that one status.
+
 ### Self-hosted backend and agent connector
 
 `apps/server` ships two binaries the operator runs: `zeitboardd` (device

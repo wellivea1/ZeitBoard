@@ -81,7 +81,16 @@ function beforeForecast(overview: OverviewData, say: (text: string) => void) {
   }
 }
 
-export function leadParts(overview: OverviewData, outlook: OutlookData, now = new Date()) {
+/**
+ * `sourceNote` is the likely cause of an estimate that is not current, from
+ * the phone's source reports; it follows the freshness explanation.
+ */
+export function leadParts(
+  overview: OverviewData,
+  outlook: OutlookData,
+  now = new Date(),
+  sourceNote?: string,
+) {
   const parts: LeadPart[] = [];
   const say = (text: string) => parts.push({ text });
   const mark = (text: string) => parts.push({ text, strong: true });
@@ -96,8 +105,10 @@ export function leadParts(overview: OverviewData, outlook: OutlookData, now = ne
   }
 
   const tone = stateTone(overview.state);
-  if (!overview.freshness.trusted) say(`${sentence(overview.freshness.explanation)} `);
-  else if (tone === "awake" && overview.timeSinceWake)
+  if (!overview.freshness.trusted) {
+    say(`${sentence(overview.freshness.explanation)} `);
+    if (sourceNote) say(`${sourceNote} `);
+  } else if (tone === "awake" && overview.timeSinceWake)
     say(`You have been awake for ${awakeFor(overview.timeSinceWake)}. `);
   else if (tone === "asleep") say("The forecast places you in a sleep now. ");
   else say(`${sentence(overview.state)} `);

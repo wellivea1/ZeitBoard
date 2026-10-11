@@ -1,8 +1,12 @@
 package org.non24.planner
 
+import java.time.Clock
+import java.time.Duration
 import java.time.Instant
+import java.time.ZoneId
 import java.time.ZoneOffset
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.serialization.json.jsonObject
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.*
 import org.junit.Test
@@ -31,7 +35,7 @@ class EvidenceSyncCoordinatorTest {
         override fun availability() = HealthConnectAvailability.AVAILABLE
         override fun backgroundReadAvailable() = supported
         override suspend fun grantedPermissions() = permissions
-        override suspend fun readRecentSleep(): List<SleepEpisode> {
+        override suspend fun readSleep(window: ReadWindow): List<SleepEpisode> {
             reads++
             if (failRead) error("Synthetic provider failure")
             return listOf(SleepEpisode(
@@ -43,12 +47,20 @@ class EvidenceSyncCoordinatorTest {
         }
     }
 
+    /** A clock the test moves by hand. */
+    private class StepClock(var now: Instant) : Clock() {
+        override fun getZone(): ZoneId = ZoneOffset.UTC
+        override fun withZone(zone: ZoneId?): Clock = this
+        override fun instant(): Instant = now
+    }
+
     private class Fixture {
         val settings = Settings()
         val adapter = Adapter()
         val scheduler = Scheduler()
+        val clock = StepClock(Instant.parse("2026-09-01T12:00:00Z"))
         val local = LocalUserDataRepository(InMemoryLocalUserDataStore())
-        val health = HealthConnectSleepRepository(adapter, local)
+        val health = HealthConnectSleepRepository(adapter, local, clock)
         val config = FakeConfigStore(SyncConfig("https://synthetic.test", "synthetic-token", "UTC", "synthetic-scope"))
         val outbox = FakeOutbox()
         val sync = BackendSyncRepository(outbox, config, FakeClient(), replica = FakeReplica())
@@ -75,16 +87,22 @@ class EvidenceSyncCoordinatorTest {
         }
     }
 
+    private fun Fixture.queued(kind: String) = outbox.pending(100).filter { it.kind == kind }
+
+    private fun Fixture.reports() = queued(SourceReporting.KIND).map {
+        kotlinx.serialization.json.Json.parseToJsonElement(it.payload).jsonObject
+    }
+
     @Test
     fun `permitted background refresh durably queues sleep and requests constrained upload`() = runTest {
         val f = Fixture()
         assertTrue(f.coordinator.refreshBackground())
         assertEquals(1, f.adapter.reads)
-        assertEquals(1, f.outbox.pendingCount())
+        assertEquals(1, f.queued("observation").size)
         assertTrue(f.scheduler.uploads > 0)
         // Restarting the repository reuses the same immutable queue, not a new request id.
         f.coordinator.refreshBackground()
-        assertEquals(1, f.outbox.pendingCount())
+        assertEquals(1, f.queued("observation").size)
     }
 
     @Test
@@ -94,8 +112,10 @@ class EvidenceSyncCoordinatorTest {
         f.adapter.permissions = emptySet()
         assertTrue(f.coordinator.refreshBackground())
         assertEquals(1, f.adapter.reads)
-        assertEquals(1, f.outbox.pendingCount())
+        assertEquals(1, f.queued("observation").size)
         assertEquals(HealthPermissionState.REQUIRED, f.health.permissionState.value)
+        // The computer is told the permission went (ADR-0054).
+        assertEquals("permission_missing", f.reports().last().string("outcome"))
     }
 
     @Test
@@ -105,8 +125,56 @@ class EvidenceSyncCoordinatorTest {
         f.settings.update { it.copy(backgroundSyncEnabled = false) }
         f.coordinator.refreshForeground()
         assertEquals(1, f.adapter.reads)
-        assertEquals(1, f.outbox.pendingCount())
+        assertEquals(1, f.queued("observation").size)
         assertFalse(f.scheduler.scheduled)
+        // It reads only while open, and says so.
+        assertEquals("false", f.reports().single().getValue("background_reads").toString())
+    }
+
+    @Test
+    fun `each check tells the computer what it found without repeating itself`() = runTest {
+        val f = Fixture()
+        f.coordinator.refreshBackground()
+        val first = f.reports().single()
+        assertEquals("read", first.string("outcome"))
+        assertEquals("2026-09-01T12:00:00Z", first.string("reported_at"))
+        val covered = first.getValue("covered").jsonObject
+        assertEquals("2026-08-02T12:00:00Z", covered.string("start_at"))
+        assertEquals("2026-09-01T12:00:00Z", covered.string("end_at"))
+        assertEquals("0", first.getValue("held").toString())
+
+        // An hour later the phone reads again and finds the same: nothing new to say.
+        f.clock.now = f.clock.now.plus(Duration.ofHours(1))
+        f.coordinator.refreshBackground()
+        assertEquals(1, f.reports().size)
+
+        // Six hours after the last report it says it again, so a quiet phone shows.
+        f.clock.now = f.clock.now.plus(Duration.ofHours(5))
+        f.coordinator.refreshBackground()
+        assertEquals(listOf("read", "read"), f.reports().map { it.string("outcome") })
+
+        // A failed read is said at once, and so is the next good one.
+        f.clock.now = f.clock.now.plus(Duration.ofMinutes(10))
+        f.adapter.failRead = true
+        f.coordinator.refreshBackground()
+        f.clock.now = f.clock.now.plus(Duration.ofHours(1))
+        f.adapter.failRead = false
+        f.coordinator.refreshBackground()
+        assertEquals(listOf("read", "read", "read_failed", "read"), f.reports().map { it.string("outcome") })
+        // Only reads state a window.
+        assertFalse(f.reports()[2].containsKey("covered"))
+    }
+
+    @Test
+    fun `nothing is reported without enrollment or in sample mode`() = runTest {
+        val unenrolled = Fixture()
+        unenrolled.config.clear()
+        unenrolled.coordinator.refreshForeground()
+        assertTrue(unenrolled.reports().isEmpty())
+        val sample = Fixture()
+        sample.settings.update { it.copy(dataMode = DataMode.FIXTURE) }
+        sample.coordinator.refreshForeground()
+        assertTrue(sample.reports().isEmpty())
     }
 
     @Test
@@ -117,7 +185,7 @@ class EvidenceSyncCoordinatorTest {
         f.adapter.failRead = true
         assertFalse(f.coordinator.refreshBackground())
         assertEquals(saved, f.health.sourceEpisodes.value)
-        assertEquals(1, f.outbox.pendingCount())
+        assertEquals(1, f.queued("observation").size)
     }
 
     @Test

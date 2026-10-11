@@ -189,6 +189,41 @@ object SyncContract {
         )
     }
 
+    /**
+     * What one check of Health Connect found, as a v1 source report
+     * (ADR-0054). It carries instants of the check and a count, never a sleep
+     * time. [held] counts the records in the read window held back above.
+     */
+    fun sourceReport(check: SourceCheck, held: Int): OutboxRecord {
+        require(held >= 0) { "A held count cannot be negative." }
+        val reportedAt = RFC3339.format(check.checkedAt)
+        val id = "srcrep-" + digest(
+            listOf("health_connect", check.outcome.wire, reportedAt, check.backgroundReads, held).joinToString("|"),
+        )
+        val payload = buildString {
+            append("{")
+            append("\"report_id\":").append(quote(id)).append(",")
+            append("\"source\":\"health_connect\",")
+            append("\"outcome\":").append(quote(check.outcome.wire)).append(",")
+            append("\"reported_at\":").append(quote(reportedAt)).append(",")
+            append("\"background_reads\":").append(check.backgroundReads)
+            check.covered?.let { window ->
+                append(",\"covered\":{")
+                append("\"start_at\":").append(quote(RFC3339.format(window.start))).append(",")
+                append("\"end_at\":").append(quote(RFC3339.format(window.end)))
+                append("},\"held\":").append(held)
+            }
+            append("}")
+        }
+        return OutboxRecord(
+            recordId = id,
+            kind = SourceReporting.KIND,
+            createdAt = check.checkedAt,
+            sourceRevision = check.checkedAt,
+            payload = payload,
+        )
+    }
+
     private fun sourceRecordId(episode: SleepEpisode): String =
         episode.provenance.sourceRecordId?.takeIf { it.isNotBlank() }
             ?: episode.logicalSourceId

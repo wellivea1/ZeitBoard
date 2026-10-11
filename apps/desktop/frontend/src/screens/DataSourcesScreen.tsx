@@ -12,6 +12,7 @@ import {
   type CalendarSource,
 } from "../data/calendar";
 import { loadSleepSources, sleepSourcesUnavailable } from "../data/sleepEntries";
+import { loadSourceStatuses } from "../data/sourceStatus";
 import { sleepDataChangedEvent } from "../data/sleepDataEvents";
 import { useLoaded } from "../state/useLoaded";
 
@@ -73,6 +74,10 @@ export function DataSourcesScreen() {
     events: [sleepDataChangedEvent],
     fallback: sleepSourcesUnavailable,
   });
+  const { data: sourceStatuses } = useLoaded(loadSourceStatuses, {
+    events: [sleepDataChangedEvent],
+    fallback: () => [],
+  });
   const [syncStatus, setSyncStatus] = useState<BackendSyncStatus | undefined>(undefined);
   const calendars = useCalendarSources();
 
@@ -96,6 +101,7 @@ export function DataSourcesScreen() {
       <section className="data-source-workspace" aria-label="Data source review">
         <DataSourceStatusPanel
           sleepSources={sleepSources}
+          sourceStatuses={sourceStatuses}
           syncStatus={syncStatus}
           calendarSources={calendars.ready ? calendars.sources : undefined}
         />

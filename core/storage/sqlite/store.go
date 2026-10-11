@@ -247,6 +247,20 @@ func (s *Store) initialize(ctx context.Context) error {
 			BEGIN
 				SELECT RAISE(ABORT, 'rhythm markers are immutable');
 			END`,
+		// What a phone found when it checked a source (ADR-0054), kept as sent.
+		`CREATE TABLE IF NOT EXISTS local_source_reports (
+			report_id TEXT PRIMARY KEY,
+			device_id TEXT NOT NULL,
+			source TEXT NOT NULL,
+			outcome TEXT NOT NULL CHECK(outcome IN ('read', 'permission_missing', 'unavailable', 'read_failed')),
+			reported_at TEXT NOT NULL,
+			payload_json BLOB NOT NULL
+		)`,
+		`CREATE TRIGGER IF NOT EXISTS trg_local_source_reports_immutable
+			BEFORE UPDATE ON local_source_reports
+			BEGIN
+				SELECT RAISE(ABORT, 'source reports are immutable');
+			END`,
 		`CREATE TABLE IF NOT EXISTS local_calendar_sources (
 			source_id TEXT PRIMARY KEY,
 			label TEXT NOT NULL,

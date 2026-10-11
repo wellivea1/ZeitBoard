@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import type { BackendSyncStatus } from "../data/backendSync";
 import type { CalendarSource } from "../data/calendar";
 import type { SleepSourceSummary, SleepSources } from "../data/sleepEntries";
+import { sourceStatusWording, type SourceStatus } from "../data/sourceStatus";
 import { Icon } from "./Icon";
 import { momentInSentence } from "../utils/relativeTime";
 
@@ -40,6 +41,39 @@ function sleepDetail(summary: SleepSourceSummary) {
   ].join(" · ");
 }
 
+const syncStates: Record<
+  BackendSyncStatus["status"],
+  { label: string; state: SourceRowProps["state"] }
+> = {
+  connected: { label: "Connected", state: "available" },
+  error: { label: "Error", state: "error" },
+  off: { label: "Off", state: "off" },
+};
+
+function SyncRow({ status }: { status: BackendSyncStatus }) {
+  const lastSync = status.lastSyncAt
+    ? `last synced ${momentInSentence(new Date(status.lastSyncAt), new Date())}`
+    : "not synced yet";
+  const shown = syncStates[status.status] ?? syncStates.off;
+  return (
+    <SourceRow
+      icon="sources"
+      name="Server sync"
+      detail={
+        status.enabled ? (
+          `Your own server · ${status.pushedCount} sent, ${status.pulledCount} received · ${lastSync}`
+        ) : (
+          <>
+            Everything stays on this device. <a href="#/settings/sync">Set up sync</a>
+          </>
+        )
+      }
+      status={shown.label}
+      state={shown.state}
+    />
+  );
+}
+
 // The nights more than one record describes are listed where the estimator's
 // view of the sources is: Rhythm › Sources.
 function OverlapNote({ count }: { count: number }) {
@@ -56,11 +90,14 @@ function OverlapNote({ count }: { count: number }) {
 
 export function DataSourceStatusPanel({
   sleepSources,
+  sourceStatuses = [],
   syncStatus,
   calendarSources,
 }: {
   /** Undefined while loading, like each row here: it waits rather than claiming none. */
   sleepSources?: SleepSources;
+  /** What a phone found when it last checked each source (ADR-0054). */
+  sourceStatuses?: SourceStatus[];
   syncStatus?: BackendSyncStatus;
   calendarSources?: CalendarSource[];
 }) {
@@ -95,39 +132,20 @@ export function DataSourceStatusPanel({
             />
           ))
         )}
-        {syncStatus && (
-          <SourceRow
-            icon="sources"
-            name="Server sync"
-            detail={
-              syncStatus.enabled ? (
-                `Your own server · ${syncStatus.pushedCount} sent, ${syncStatus.pulledCount} received · ${
-                  syncStatus.lastSyncAt
-                    ? `last synced ${momentInSentence(new Date(syncStatus.lastSyncAt), new Date())}`
-                    : "not synced yet"
-                }`
-              ) : (
-                <>
-                  Everything stays on this device. <a href="#/settings/sync">Set up sync</a>
-                </>
-              )
-            }
-            status={
-              syncStatus.status === "connected"
-                ? "Connected"
-                : syncStatus.status === "error"
-                  ? "Error"
-                  : "Off"
-            }
-            state={
-              syncStatus.status === "connected"
-                ? "available"
-                : syncStatus.status === "error"
-                  ? "error"
-                  : "off"
-            }
-          />
-        )}
+        {sourceStatuses.map((status) => {
+          const wording = sourceStatusWording(status);
+          return (
+            <SourceRow
+              key={status.source}
+              icon="sources"
+              name={wording.name}
+              detail={wording.detail}
+              status={wording.label}
+              state={wording.state}
+            />
+          );
+        })}
+        {syncStatus && <SyncRow status={syncStatus} />}
         {calendarSources && (
           <SourceRow
             icon="calendar"

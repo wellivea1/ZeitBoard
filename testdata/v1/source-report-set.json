@@ -1,0 +1,51 @@
+{
+  "schema_version": "v1",
+  "generated_at": "2026-03-15T00:00:00Z",
+  "reports": [
+    {
+      "report_id": "srcrep-0a1b2c3d4e5f60718293a4b5",
+      "source": "health_connect",
+      "outcome": "read",
+      "reported_at": "2026-03-13T09:00:00Z",
+      "background_reads": true,
+      "covered": {
+        "start_at": "2026-02-11T09:00:00Z",
+        "end_at": "2026-03-13T09:00:00Z"
+      },
+      "held": 0
+    },
+    {
+      "report_id": "srcrep-1b2c3d4e5f60718293a4b5c6",
+      "source": "health_connect",
+      "outcome": "permission_missing",
+      "reported_at": "2026-03-13T15:00:00Z",
+      "background_reads": false
+    },
+    {
+      "report_id": "srcrep-2c3d4e5f60718293a4b5c6d7",
+      "source": "health_connect",
+      "outcome": "read",
+      "reported_at": "2026-03-14T08:30:00Z",
+      "background_reads": true,
+      "covered": {
+        "start_at": "2026-02-12T08:30:00Z",
+        "end_at": "2026-03-14T08:30:00Z"
+      },
+      "held": 1
+    },
+    {
+      "report_id": "srcrep-3d4e5f60718293a4b5c6d7e8",
+      "source": "health_connect",
+      "outcome": "read_failed",
+      "reported_at": "2026-03-14T09:30:00Z",
+      "background_reads": true
+    },
+    {
+      "report_id": "srcrep-4e5f60718293a4b5c6d7e8f9",
+      "source": "health_connect",
+      "outcome": "unavailable",
+      "reported_at": "2026-03-14T10:30:00Z",
+      "background_reads": false
+    }
+  ]
+}

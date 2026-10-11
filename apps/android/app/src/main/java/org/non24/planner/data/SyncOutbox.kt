@@ -87,6 +87,9 @@ interface SyncOutboxStore {
     /** Adds records, ignoring any whose record id is already pending. */
     fun enqueue(records: List<OutboxRecord>)
     fun contains(recordId: String): Boolean
+
+    /** The newest record of [kind] queued under this enrollment, sent or not. */
+    fun lastQueued(kind: String): OutboxRecord?
     fun hasPendingManualCorrection(observationId: String): Boolean
 
     /**

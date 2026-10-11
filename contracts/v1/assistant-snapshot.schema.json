@@ -400,14 +400,34 @@
     "sync": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["enabled", "status", "pending_uploads", "pending_erasures", "waiting_records"],
+      "required": ["enabled", "status", "pending_uploads", "pending_erasures", "waiting_records", "sources"],
       "properties": {
         "enabled": { "type": "boolean" },
         "status": { "type": "string", "enum": ["off", "connected", "error"] },
         "last_sync_at": { "$ref": "#/$defs/instant" },
         "pending_uploads": { "$ref": "#/$defs/count" },
         "pending_erasures": { "$ref": "#/$defs/count" },
-        "waiting_records": { "$ref": "#/$defs/count" }
+        "waiting_records": { "$ref": "#/$defs/count" },
+        "sources": {
+          "description": "What a phone found when it last checked each source of sleep records (ADR-0054). The instants are of checks, never of sleep.",
+          "type": "array",
+          "maxItems": 8,
+          "items": { "$ref": "#/$defs/sourceStatus" }
+        }
+      }
+    },
+    "sourceStatus": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "outcome", "reported_at", "since", "background_reads", "held"],
+      "properties": {
+        "source": { "type": "string", "enum": ["health_connect"] },
+        "outcome": { "type": "string", "enum": ["read", "permission_missing", "unavailable", "read_failed"] },
+        "reported_at": { "$ref": "#/$defs/instant" },
+        "since": { "$ref": "#/$defs/instant" },
+        "read_through": { "$ref": "#/$defs/instant" },
+        "background_reads": { "type": "boolean" },
+        "held": { "$ref": "#/$defs/count" }
       }
     }
   }

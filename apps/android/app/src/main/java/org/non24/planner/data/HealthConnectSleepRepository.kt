@@ -8,7 +8,6 @@ import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import java.security.MessageDigest
 import java.time.Clock
-import java.time.Duration
 import java.time.Instant
 import java.time.ZoneOffset
 import java.util.concurrent.atomic.AtomicLong
@@ -38,13 +37,15 @@ interface HealthConnectClientAdapter {
 
     suspend fun grantedPermissions(): Set<String>
 
-    suspend fun readRecentSleep(): List<SleepEpisode>
+    /** Every sleep session Health Connect holds over [window]. */
+    suspend fun readSleep(window: ReadWindow): List<SleepEpisode>
 }
 
 internal class HealthConnectSleepRepository(
     private val client: HealthConnectClientAdapter,
     localUserDataRepository: LocalUserDataRepository =
         LocalUserDataRepository(InMemoryLocalUserDataStore()),
+    private val clock: Clock = Clock.systemUTC(),
 ) : CorrectableSleepRepository(localUserDataRepository), HealthConnectRepository {
     private val refreshMutex = Mutex()
     private val refreshRequestSequence = AtomicLong(0)
@@ -54,6 +55,18 @@ internal class HealthConnectSleepRepository(
     private val mutableLastRefreshError = MutableStateFlow<String?>(null)
     private val mutableBackgroundReadState = MutableStateFlow(BackgroundReadState.UNKNOWN)
     override val backgroundReadState: StateFlow<BackgroundReadState> = mutableBackgroundReadState.asStateFlow()
+    private val mutableLastCheck = MutableStateFlow<SourceCheck?>(null)
+    override val lastCheck: StateFlow<SourceCheck?> = mutableLastCheck.asStateFlow()
+
+    /** Records what a check found, for the source report (ADR-0054). */
+    private fun checked(outcome: SourceOutcome, covered: ReadWindow? = null, at: Instant = clock.instant()) {
+        mutableLastCheck.value = SourceCheck(
+            outcome = outcome,
+            checkedAt = at,
+            backgroundReads = mutableBackgroundReadState.value == BackgroundReadState.GRANTED,
+            covered = covered,
+        )
+    }
 
     override val sourceEpisodes: StateFlow<List<SleepEpisode>> = localUserDataRepository.healthEpisodes
     override val availability: StateFlow<HealthConnectAvailability> = mutableAvailability.asStateFlow()
@@ -70,6 +83,7 @@ internal class HealthConnectSleepRepository(
         if (mutableAvailability.value != HealthConnectAvailability.AVAILABLE) {
             mutablePermissionState.value = HealthPermissionState.UNAVAILABLE
             mutableBackgroundReadState.value = BackgroundReadState.UNAVAILABLE
+            checked(SourceOutcome.UNAVAILABLE)
             return
         }
         val granted = try {
@@ -85,6 +99,7 @@ internal class HealthConnectSleepRepository(
             mutableBackgroundReadState.value = BackgroundReadState.REQUIRED
             mutableLastRefreshError.value =
                 "Health Connect permission changed. The last saved sleep snapshot is still shown."
+            checked(SourceOutcome.PERMISSION_MISSING)
             return
         } catch (exception: CancellationException) {
             throw exception
@@ -93,12 +108,14 @@ internal class HealthConnectSleepRepository(
             mutableBackgroundReadState.value = BackgroundReadState.UNKNOWN
             mutableLastRefreshError.value =
                 "Health Connect could not be queried. The last saved sleep snapshot is still shown."
+            checked(SourceOutcome.READ_FAILED)
             return
         }
-        mutablePermissionState.value = if (granted.containsAll(requiredPermissions)) {
-            HealthPermissionState.GRANTED
+        if (granted.containsAll(requiredPermissions)) {
+            mutablePermissionState.value = HealthPermissionState.GRANTED
         } else {
-            HealthPermissionState.REQUIRED
+            mutablePermissionState.value = HealthPermissionState.REQUIRED
+            checked(SourceOutcome.PERMISSION_MISSING)
         }
     }
 
@@ -135,18 +152,23 @@ internal class HealthConnectSleepRepository(
         }
         try {
             localUserDataRepository.initialize()
-            val episodes = client.readRecentSleep().sortedByDescending { it.start }
+            val until = clock.instant()
+            val window = ReadWindow(until.minus(SourceReporting.LOOKBACK), until)
+            val episodes = client.readSleep(window).sortedByDescending { it.start }
             localUserDataRepository.replaceHealthConnectSleepSnapshot(episodes)
             mutableLastRefreshError.value = null
+            checked(SourceOutcome.READ, window, at = until)
         } catch (_: SecurityException) {
             mutablePermissionState.value = HealthPermissionState.REQUIRED
             mutableLastRefreshError.value =
                 "Health Connect permission changed. The last saved sleep snapshot is still shown."
+            checked(SourceOutcome.PERMISSION_MISSING)
         } catch (exception: CancellationException) {
             throw exception
         } catch (_: Exception) {
             mutableLastRefreshError.value =
                 "Health Connect refresh failed. The last saved sleep snapshot is still shown."
+            checked(SourceOutcome.READ_FAILED)
         }
     }
 
@@ -162,7 +184,6 @@ internal class HealthConnectSleepRepository(
 
 internal class AndroidHealthConnectClientAdapter(
     private val context: Context,
-    private val clock: Clock = Clock.systemUTC(),
 ) : HealthConnectClientAdapter {
     override fun backgroundReadAvailable(): Boolean = availableClient()?.features?.getFeatureStatus(
         HealthConnectFeatures.FEATURE_READ_HEALTH_DATA_IN_BACKGROUND,
@@ -179,11 +200,10 @@ internal class AndroidHealthConnectClientAdapter(
         return healthClient.permissionController.getGrantedPermissions()
     }
 
-    override suspend fun readRecentSleep(): List<SleepEpisode> {
+    override suspend fun readSleep(window: ReadWindow): List<SleepEpisode> {
         val healthClient = availableClient()
             ?: throw IllegalStateException("Health Connect became unavailable during refresh.")
-        val now = Instant.now(clock)
-        val timeRange = TimeRangeFilter.between(now.minus(Duration.ofDays(30)), now)
+        val timeRange = TimeRangeFilter.between(window.start, window.end)
         val records = HealthConnectSleepPager().readAll { pageToken ->
             val response = healthClient.readRecords(
                 ReadRecordsRequest(

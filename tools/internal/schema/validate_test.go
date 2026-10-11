@@ -132,6 +132,40 @@ func TestRhythmMarkerContractIsStrictAndUserReported(t *testing.T) {
 	}
 }
 
+// A source report says what a device found, and nothing else: a read states
+// its window and what it held back, and an outage states neither (ADR-0054).
+func TestSourceReportContractStatesAReadAndNothingElse(t *testing.T) {
+	set, root := testSet(t)
+	if err := set.ValidateFile("source-report-set.schema.json", filepath.Join(root, "testdata", "v1", "source-report-set.json")); err != nil {
+		t.Fatalf("source report fixture does not validate: %v", err)
+	}
+	wrap := func(report string) []byte {
+		return []byte(`{"schema_version": "v1", "generated_at": "2026-03-15T00:00:00Z", "reports": [` + report + `]}`)
+	}
+	for name, bad := range map[string][]byte{
+		"a read without its window": wrap(`{"report_id": "srcrep-bad-01", "source": "health_connect", "outcome": "read",
+			"reported_at": "2026-03-14T08:30:00Z", "background_reads": true, "held": 0}`),
+		"a read without its held count": wrap(`{"report_id": "srcrep-bad-02", "source": "health_connect", "outcome": "read",
+			"reported_at": "2026-03-14T08:30:00Z", "background_reads": true,
+			"covered": {"start_at": "2026-02-12T08:30:00Z", "end_at": "2026-03-14T08:30:00Z"}}`),
+		"an outage with a window": wrap(`{"report_id": "srcrep-bad-03", "source": "health_connect", "outcome": "permission_missing",
+			"reported_at": "2026-03-14T08:30:00Z", "background_reads": false,
+			"covered": {"start_at": "2026-02-12T08:30:00Z", "end_at": "2026-03-14T08:30:00Z"}}`),
+		"an outage with a held count": wrap(`{"report_id": "srcrep-bad-04", "source": "health_connect", "outcome": "read_failed",
+			"reported_at": "2026-03-14T08:30:00Z", "background_reads": true, "held": 2}`),
+		"an unknown source": wrap(`{"report_id": "srcrep-bad-05", "source": "fitbit_cloud", "outcome": "unavailable",
+			"reported_at": "2026-03-14T08:30:00Z", "background_reads": false}`),
+		"a sleep time": wrap(`{"report_id": "srcrep-bad-06", "source": "health_connect", "outcome": "unavailable",
+			"reported_at": "2026-03-14T08:30:00Z", "background_reads": false, "newest_sleep_end": "2026-03-14T07:00:00Z"}`),
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := set.ValidateBytes("source-report-set.schema.json", bad); err == nil {
+				t.Fatal("invalid source report was accepted")
+			}
+		})
+	}
+}
+
 func TestTrustedViewDefaultDeniesRhythmMarkersAndPrivateNotes(t *testing.T) {
 	set, _ := testSet(t)
 	overShared := []byte(`{

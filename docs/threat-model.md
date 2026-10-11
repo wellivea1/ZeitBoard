@@ -105,7 +105,10 @@ its cursor, invalidates affected cached forecasts, and persists Health Connect r
 across re-enrollment. Android has separately consented background sleep sync, durable bounded retry
 and enrollment generations; HTTP redirects cannot forward credentials, and uploads cannot promote
 provider revisions to human confirmation. The server rejects new corrections targeting erased
-observations and removes retained dependent revisions during erasure (ADR-0038). The **local v1
+observations and removes retained dependent revisions during erasure (ADR-0038). Source reports
+(ADR-0054) carry only check outcomes, check instants and a held count. The server validates them
+with the same `core/sources` code the desktop uses and reads none of them. A forged report could
+only misstate why records stopped. It cannot add, move or hide a sleep record. The **local v1
 sleep import boundary (ADR-0022)** is implemented with an 8 MiB / 20,000-row cap, strict JSON/CSV
 shape, per-row errors, source-id conflict detection, and atomic all-or-nothing commit. **Local
 medication evidence and user-authored schedules (ADR-0024/0025)** are implemented with private

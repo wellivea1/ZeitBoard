@@ -13,6 +13,7 @@ import (
 	"non24.app/core/markers"
 	"non24.app/core/medication"
 	"non24.app/core/sleepv1"
+	"non24.app/core/sources"
 )
 
 var identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{2,63}$`)
@@ -22,7 +23,7 @@ var identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{2,63}$`)
 func Pushable(kind Kind) bool {
 	switch kind {
 	case KindObservation, KindCorrection, KindTask, KindPlacement,
-		KindMedication, KindMedicationEvent, KindMedicationCorrection, KindContextMarker:
+		KindMedication, KindMedicationEvent, KindMedicationCorrection, KindContextMarker, KindSourceReport:
 		return true
 	default:
 		return false
@@ -119,6 +120,8 @@ func validatePayload(kind Kind, recordID string, payload json.RawMessage) error 
 		return validateMedicationCorrection(recordID, payload)
 	case KindContextMarker:
 		return validateContextMarker(recordID, payload)
+	case KindSourceReport:
+		return validateSourceReport(recordID, payload)
 	default:
 		return errors.New("unsupported record kind")
 	}
@@ -185,6 +188,20 @@ func validateContextMarker(recordID string, payload json.RawMessage) error {
 	}
 	if record.MarkerID != recordID {
 		return errors.New("marker_id must match recordId")
+	}
+	return nil
+}
+
+func validateSourceReport(recordID string, payload json.RawMessage) error {
+	var report sources.Report
+	if err := decodeStrict(payload, &report); err != nil {
+		return errors.New("invalid source report payload")
+	}
+	if err := report.Validate(); err != nil {
+		return fmt.Errorf("invalid source report: %w", err)
+	}
+	if report.ReportID != recordID {
+		return errors.New("report_id must match recordId")
 	}
 	return nil
 }

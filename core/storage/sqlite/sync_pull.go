@@ -83,6 +83,7 @@ const (
 	preparedSyncPullMedicationEvent
 	preparedSyncPullMedicationCorrection
 	preparedSyncPullMarker
+	preparedSyncPullSourceReport
 )
 
 type preparedSyncPullRecord struct {
@@ -92,6 +93,7 @@ type preparedSyncPullRecord struct {
 	task        preparedSyncedTask
 	medication  preparedMedicationSync
 	marker      preparedMarkerSync
+	report      preparedSourceReport
 	recordID    string
 	recordKind  string
 }
@@ -176,6 +178,8 @@ func (s *Store) applySyncPullPage(
 			seenID = record.medication.recordID
 		case preparedSyncPullMarker:
 			seenID = record.marker.record.MarkerID
+		case preparedSyncPullSourceReport:
+			seenID = record.report.report.ReportID
 		case preparedSyncPullPlacement, preparedSyncPullTombstone:
 			seenID = record.recordID
 		}
@@ -195,6 +199,8 @@ func (s *Store) applySyncPullPage(
 			applied, err = applySyncedMedicationTx(ctx, tx, record.medication, syncedAt)
 		case preparedSyncPullMarker:
 			applied, err = insertSyncedMarkerTx(ctx, tx, record.marker, syncedAt)
+		case preparedSyncPullSourceReport:
+			applied, err = insertSyncedSourceReportTx(ctx, tx, record.report)
 		default:
 			handled = false
 		}
@@ -318,6 +324,8 @@ func (s *Store) applySyncPullPage(
 			applied, err = eraseMedicationCorrectionTx(ctx, tx, record.recordID, erasedElsewhere)
 		case SyncKindContextMarker:
 			applied, err = eraseMarkerTx(ctx, tx, record.recordID, erasedElsewhere)
+		case SyncKindSourceReport:
+			applied, err = eraseSourceReportTx(ctx, tx, record.recordID, erasedElsewhere)
 		default:
 			applied, err = eraseSyncedSleepRecordTx(ctx, tx, record.recordID)
 		}
@@ -422,6 +430,9 @@ func prepareSyncPullRecord(record SyncPullRecord) (preparedSyncPullRecord, error
 	case SyncPullMarker:
 		prepared, err := prepareSyncedMarker(value.Marker)
 		return preparedSyncPullRecord{kind: preparedSyncPullMarker, marker: prepared}, err
+	case SyncPullSourceReport:
+		prepared, err := prepareSyncedSourceReport(value)
+		return preparedSyncPullRecord{kind: preparedSyncPullSourceReport, report: prepared}, err
 	case SyncPullPlacement:
 		if !contractIdentifier.MatchString(value.PlacementID) {
 			return preparedSyncPullRecord{}, errors.New("placement record id is not a valid identifier")
@@ -804,7 +815,7 @@ func validateSyncPullTombstone(recordID, recordKind string) error {
 			return fmt.Errorf("%s tombstone record_id must identify a revision", recordKind)
 		}
 		return nil
-	case "placement", SyncKindMedicationEvent, SyncKindMedicationCorrection, SyncKindContextMarker:
+	case "placement", SyncKindMedicationEvent, SyncKindMedicationCorrection, SyncKindContextMarker, SyncKindSourceReport:
 		return nil
 	default:
 		return fmt.Errorf("unsupported tombstone record kind %q", recordKind)

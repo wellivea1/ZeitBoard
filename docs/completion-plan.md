@@ -1181,6 +1181,38 @@ the night counted once, at times neither record gave. Rhythm › Sources now lis
 - **Agents do not see it.** The list carries raw record times, which the agent projections never
   return.
 
+### Sources say what they covered — 2026-10-11
+
+When the newest record aged, the desktop said "The newest sleep record is 3 days old" and nothing
+more. The cause and its remedy differ: the watch was not worn, the phone was off, a permission was
+taken away, or Health Connect needs an update. ADR-0054 makes each one explicit.
+
+- **The phone reports what each check found.** The outcomes are:
+  - read in full over the last 30 days, with how many records it held back for their time zone;
+  - permission missing;
+  - Health Connect unavailable;
+  - read failed.
+
+  It reports again when anything changes, and otherwise every six hours. A report holds no sleep
+  time.
+- **One definition.** `core/sources` validates a report for the server's push and the desktop's
+  store, and reads reports into a status. The status gives the newest outcome, since when that
+  outcome has held, and the end of the newest read window.
+- **Data Sources has a row for Health Connect on the phone.** It shows one of:
+  - "Read today at 9:07 AM. Its newest night ends …";
+  - "Permission off" since when, and where to allow it;
+  - "Unavailable";
+  - "Read failed";
+  - "Not reading", when no report has come for twelve hours.
+
+  It also says when the phone reads only while ZeitBoard is open on it.
+- **A stale estimate says the likely cause.** Home's lead sentence and Week's warning add one
+  sentence after the age. For example: "The phone read Health Connect today at 9:07 AM and found
+  no sleep in the last 30 days."
+- **An assistant sees the same.** The snapshot's sync section lists each source's outcome and
+  check times, and no time of sleep.
+- **Deleting all sleep data takes the reports with it,** here and on the server.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and
@@ -1230,7 +1262,7 @@ tests and a verification entry. Where it waits on something outside the code, th
 |---|---|---|
 | Undo a night's last edit in one click | Roadmap, phase 2 | Delivered 2026-10-08 |
 | A real list of nights where two sources disagree, in Rhythm › Sources | Roadmap, slice 5 | Delivered 2026-10-08 |
-| Missingness recorded per source | Roadmap, phase 2 | Open |
+| Missingness recorded per source | Roadmap, phase 2 | Delivered 2026-10-11 for Health Connect (ADR-0054). Manual nights have no coverage to state |
 | The clinical chart saved directly as PNG | Roadmap, phase 2; limitation 10 | Open |
 | A self-hosted server trusted through its own CA certificate rather than skipped verification | Roadmap, small debts | Open |
 | Reaching hours for more than one contact, and per-day hours | Roadmap, slice 16 | Open |

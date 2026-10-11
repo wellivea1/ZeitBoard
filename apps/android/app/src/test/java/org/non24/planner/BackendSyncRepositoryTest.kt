@@ -54,6 +54,8 @@ internal class FakeOutbox : SyncOutboxStore {
     }
 
     override fun contains(recordId: String) = rows.containsKey(recordId)
+    override fun lastQueued(kind: String): OutboxRecord? =
+        rows.values.map { it.first }.filter { it.kind == kind }.maxByOrNull { it.createdAt }
     override fun hasPendingManualCorrection(observationId: String) = rows.values.any { (record, accepted) ->
         val payload = Json.parseToJsonElement(record.payload).jsonObject
         accepted == null && record.kind == "correction" && payload["acquisition_method"]?.jsonPrimitive?.content != "health_connect" &&
