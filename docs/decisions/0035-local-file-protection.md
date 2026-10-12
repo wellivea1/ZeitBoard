@@ -100,3 +100,10 @@ rest. Adopting it would replace the driver, not the store's design. It waits on
 the owner for two reasons. It is a new dependency, still pre-v1. And the key needs
 a keeper: protected by Windows for this account, it would leave the database
 unreadable after an administrator resets the password.
+
+The driver has since grown whole-database `Serialize` and `Deserialize`
+(`modernc.org/sqlite` v1.52) and a read-only `io/fs` VFS, but still no writable
+VFS. Serialize would allow an in-memory working copy, encrypted whole on each
+write. That rewrites the entire database on every commit, and Takeout's activity
+minutes alone can make it large. It also loses whatever was not yet written if
+the process dies. Neither is a better route than the page cipher above.
