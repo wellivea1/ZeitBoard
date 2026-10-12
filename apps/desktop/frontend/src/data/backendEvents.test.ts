@@ -63,7 +63,8 @@ it("refreshes every synced view when a sync downloads or erases records", () => 
     calendarDataChangedEvent,
   ]);
   release();
-  expect(dispose).toHaveBeenCalledTimes(4);
+  // Every announcement subscribed to is let go of.
+  expect(dispose).toHaveBeenCalledTimes(5);
 });
 
 it("shows what an agent proposed without waiting for a refresh", () => {
@@ -81,6 +82,16 @@ it("shows how writing to the owner's calendar went", () => {
   try {
     announce("zeitboard:calendar-writes");
     expect(heard).toEqual([calendarWriteBackChangedEvent]);
+  } finally {
+    release();
+  }
+});
+
+it("redraws calendars when a subscribed one is read again", () => {
+  const { heard, announce, release } = bridge();
+  try {
+    announce("zeitboard:calendar-refreshed");
+    expect(heard).toEqual([calendarDataChangedEvent]);
   } finally {
     release();
   }

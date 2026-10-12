@@ -90,10 +90,18 @@ func (s *Store) ReplaceImportedCalendar(ctx context.Context, source calendarcore
 		return err
 	}
 	defer tx.Rollback()
+	if err := replaceImportedCalendarTx(ctx, tx, source, events, endpoint); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
 
+// replaceImportedCalendarTx puts a validated read-only calendar in place of
+// any copy kept before.
+func replaceImportedCalendarTx(ctx context.Context, tx *sql.Tx, source calendarcore.Source, events []calendarcore.Event, endpoint string) error {
 	var existingKind string
 	var existingReadOnly int
-	err = tx.QueryRowContext(ctx,
+	err := tx.QueryRowContext(ctx,
 		`SELECT kind, read_only FROM local_calendar_sources WHERE source_id = ?`, source.SourceID,
 	).Scan(&existingKind, &existingReadOnly)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -128,7 +136,7 @@ func (s *Store) ReplaceImportedCalendar(ctx context.Context, source calendarcore
 			return err
 		}
 	}
-	return tx.Commit()
+	return nil
 }
 
 func (s *Store) RemoveImportedCalendar(ctx context.Context, sourceID string) error {

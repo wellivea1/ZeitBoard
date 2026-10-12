@@ -98,4 +98,38 @@ describe("CalendarImportPanel", () => {
     expect(preview).toHaveBeenCalledWith(expect.objectContaining({ password: "preview-secret" }));
     expect(commit).toHaveBeenCalledWith(expect.objectContaining({ password: "commit-secret" }));
   });
+
+  // A calendar by its private address: what is kept, and why, is said beside
+  // the field; a preview comes before subscribing.
+  it("subscribes to a calendar by its private address after a preview", async () => {
+    const preview = vi.fn(async () => report);
+    const subscribe = vi.fn(async () => ({ ...report, imported: true }));
+    const onChanged = vi.fn();
+    (globalThis as { go?: unknown }).go = {
+      main: { App: { PreviewCalendarSubscription: preview, SubscribeCalendar: subscribe } },
+    };
+    render(<CalendarImportPanel available zoneId="America/New_York" onChanged={onChanged} />);
+
+    fireEvent.click(screen.getByRole("tab", { name: "Private address" }));
+    expect(screen.getByText(/Anyone holding the address can read the calendar/)).toBeVisible();
+    const subscribeButton = screen.getByRole("button", { name: "Subscribe" });
+    expect(subscribeButton).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText("Calendar address"), {
+      target: { value: " webcal://calendar.example.test/ical/synthetic/basic.ics " },
+    });
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Work" } });
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    await waitFor(() => expect(subscribeButton).toBeEnabled());
+    expect(preview).toHaveBeenCalledWith({
+      address: "webcal://calendar.example.test/ical/synthetic/basic.ics",
+      label: "Work",
+      zoneId: "America/New_York",
+    });
+
+    fireEvent.click(subscribeButton);
+    await waitFor(() => expect(onChanged).toHaveBeenCalledOnce());
+    expect(subscribe).toHaveBeenCalledOnce();
+    expect(screen.getByLabelText("Calendar address")).toHaveValue("");
+  });
 });

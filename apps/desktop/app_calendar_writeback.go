@@ -128,6 +128,16 @@ func (a *App) RefreshCalendarSource(input CalendarRefreshInput) (CalendarImportD
 	if err != nil {
 		return CalendarImportDTO{}, err
 	}
+	// A subscribed calendar refreshes from its address (ADR-0062).
+	subscription, found, err := subscribedCalendar(ctx, store, strings.TrimSpace(input.SourceID))
+	if err != nil {
+		return CalendarImportDTO{}, err
+	}
+	if found {
+		result, err := a.refreshCalendarSubscription(ctx, store, subscription)
+		a.announce(calendarRefreshedAnnouncement)
+		return result, err
+	}
 	target, on, err := store.CalendarWriteTarget(ctx)
 	if err != nil {
 		return CalendarImportDTO{}, err
@@ -142,7 +152,7 @@ func (a *App) RefreshCalendarSource(input CalendarRefreshInput) (CalendarImportD
 	if err != nil {
 		return CalendarImportDTO{}, err
 	}
-	return a.calendarImportResult(ctx, set, endpoint, true)
+	return a.calendarImportResult(ctx, set, keepImported(endpoint))
 }
 
 // DisableCalendarWriteBack stops writing and erases the sign-in. What was

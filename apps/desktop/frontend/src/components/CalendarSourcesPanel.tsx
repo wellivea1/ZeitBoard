@@ -3,7 +3,12 @@ import { useEffect, useState } from "react";
 import { Notice } from "./Notice";
 import { CalendarImportPanel, type CalDAVRefill } from "./CalendarImportPanel";
 import { CalendarWriteBackForm, CalendarWriteBackStatus } from "./CalendarWriteBack";
-import { refreshCalendarSource, removeCalendarSource, type CalendarSource } from "../data/calendar";
+import {
+  refreshCalendarSource,
+  removeCalendarSource,
+  type CalendarSource,
+  type CalendarSubscription,
+} from "../data/calendar";
 import {
   calendarWriteBackChangedEvent,
   loadCalendarWriteBack,
@@ -47,6 +52,23 @@ function useCalendarWriteBack(sources: CalendarSource[]) {
   return [writeBack, setWriteBack] as const;
 }
 
+// Where a subscribed calendar comes from, by host alone, and whether its last
+// reading worked (ADR-0062).
+function SubscriptionLine({ subscription }: { subscription: CalendarSubscription }) {
+  return (
+    <>
+      <small className="calendar-source-subscription">
+        From {subscription.host}, read {subscription.refreshedLabel} and every hour
+      </small>
+      {subscription.failure && (
+        <small className="calendar-source-failure">
+          {subscription.failure} The copy read {subscription.refreshedLabel} is kept.
+        </small>
+      )}
+    </>
+  );
+}
+
 export function CalendarSourcesPanel({
   sources,
   available,
@@ -86,13 +108,14 @@ export function CalendarSourcesPanel({
     );
   };
 
-  // The calendar written to keeps its sign-in and refreshes at once; any other
-  // opens the form at its address, and the owner signs in again.
+  // A subscribed calendar, and the calendar written to with its kept sign-in,
+  // refresh at once; any other opens the form at its address, and the owner
+  // signs in again.
   const refresh = (source: CalendarSource) => {
     if (busy) return;
     setError("");
     setRefreshed("");
-    if (writingTo !== source.sourceId) {
+    if (writingTo !== source.sourceId && !source.subscription) {
       setRefill({ endpoint: source.endpoint ?? "", label: source.label });
       setAdding(true);
       return;
@@ -152,14 +175,16 @@ export function CalendarSourcesPanel({
                 <div className="calendar-source-name">
                   <strong>{source.label}</strong>
                   <span>
-                    {kindLabels[source.kind]} · {source.coverageLabel}
+                    {source.subscription ? "Subscribed" : kindLabels[source.kind]} ·{" "}
+                    {source.coverageLabel}
                   </span>
                   {source.endpoint && (
                     <small className="calendar-source-endpoint">{source.endpoint}</small>
                   )}
+                  {source.subscription && <SubscriptionLine subscription={source.subscription} />}
                 </div>
                 <div className="calendar-source-actions">
-                  {source.kind === "caldav" && available && (
+                  {(source.kind === "caldav" || source.subscription) && available && (
                     <button
                       className="button ghost compact"
                       type="button"

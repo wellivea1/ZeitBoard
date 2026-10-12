@@ -20,6 +20,7 @@ import (
 	calendarcore "non24.app/core/calendar"
 	"non24.app/core/domain"
 	"non24.app/core/outlook"
+	storage "non24.app/core/storage/sqlite"
 )
 
 const (
@@ -113,6 +114,17 @@ type CalendarSourceDTO struct {
 	CoverageLabel string `json:"coverageLabel"`
 	CoverageStart string `json:"coverageStart"`
 	CoverageEnd   string `json:"coverageEnd"`
+
+	// Subscription is set for a calendar kept by its address (ADR-0062).
+	Subscription *CalendarSubscriptionDTO `json:"subscription,omitempty"`
+}
+
+// CalendarSubscriptionDTO says where a subscribed calendar comes from, by
+// host alone, and how its last refresh went.
+type CalendarSubscriptionDTO struct {
+	Host           string `json:"host"`
+	RefreshedLabel string `json:"refreshedLabel"`
+	Failure        string `json:"failure,omitempty"`
 }
 
 type CalendarDayDTO struct {
@@ -182,7 +194,7 @@ func (a *App) PreviewCalendarFile(input CalendarFileInput) (CalendarImportDTO, e
 	if err != nil {
 		return CalendarImportDTO{}, err
 	}
-	return a.calendarImportResult(context.Background(), set, "", false)
+	return a.calendarImportResult(context.Background(), set, nil)
 }
 
 func (a *App) ImportCalendarFile(input CalendarFileInput) (CalendarImportDTO, error) {
@@ -190,7 +202,7 @@ func (a *App) ImportCalendarFile(input CalendarFileInput) (CalendarImportDTO, er
 	if err != nil {
 		return CalendarImportDTO{}, err
 	}
-	return a.calendarImportResult(context.Background(), set, "", true)
+	return a.calendarImportResult(context.Background(), set, keepImported(""))
 }
 
 func (a *App) PreviewCalDAVCalendar(input CalDAVInput) (CalendarImportDTO, error) {
@@ -198,7 +210,7 @@ func (a *App) PreviewCalDAVCalendar(input CalDAVInput) (CalendarImportDTO, error
 	if err != nil {
 		return CalendarImportDTO{}, err
 	}
-	return a.calendarImportResult(context.Background(), set, "", false)
+	return a.calendarImportResult(context.Background(), set, nil)
 }
 
 func (a *App) ImportCalDAVCalendar(input CalDAVInput) (CalendarImportDTO, error) {
@@ -206,14 +218,32 @@ func (a *App) ImportCalDAVCalendar(input CalDAVInput) (CalendarImportDTO, error)
 	if err != nil {
 		return CalendarImportDTO{}, err
 	}
-	return a.calendarImportResult(context.Background(), set, endpoint, true)
+	return a.calendarImportResult(context.Background(), set, keepImported(endpoint))
 }
 
-// calendarImportResult previews or imports a calendar without ZeitBoard's own
-// accepted times: a calendar ZeitBoard writes to returns them, and each is
-// already on the board. Kept, the copy would be a busy commitment clashing
-// with the very placement it copies.
-func (a *App) calendarImportResult(ctx context.Context, set calendarcore.EventSet, endpoint string, commit bool) (CalendarImportDTO, error) {
+// calendarKeep keeps a fetched calendar in the store.
+type calendarKeep func(ctx context.Context, store *storage.Store, set calendarcore.EventSet) error
+
+// keepImported keeps an imported file or CalDAV calendar.
+func keepImported(endpoint string) calendarKeep {
+	return func(ctx context.Context, store *storage.Store, set calendarcore.EventSet) error {
+		return store.ReplaceImportedCalendar(ctx, set.Sources[0], set.Events, endpoint)
+	}
+}
+
+// keepSubscribed keeps a subscribed calendar with its address (ADR-0062).
+func keepSubscribed(address string) calendarKeep {
+	return func(ctx context.Context, store *storage.Store, set calendarcore.EventSet) error {
+		return store.ReplaceSubscribedCalendar(ctx, set.Sources[0], set.Events, address)
+	}
+}
+
+// calendarImportResult previews a calendar, or keeps it when keep is given,
+// without ZeitBoard's own accepted times: a calendar ZeitBoard writes to
+// returns them, and each is already on the board. Kept, the copy would be a
+// busy commitment clashing with the very placement it copies.
+func (a *App) calendarImportResult(ctx context.Context, set calendarcore.EventSet, keep calendarKeep) (CalendarImportDTO, error) {
+	commit := keep != nil
 	store, err := a.requireStore()
 	if err != nil && commit {
 		return CalendarImportDTO{}, err
@@ -235,7 +265,7 @@ func (a *App) calendarImportResult(ctx context.Context, set calendarcore.EventSe
 		set.Events = kept
 	}
 	if commit {
-		if err := store.ReplaceImportedCalendar(ctx, set.Sources[0], set.Events, endpoint); err != nil {
+		if err := keep(ctx, store, set); err != nil {
 			return CalendarImportDTO{}, err
 		}
 	}
@@ -319,6 +349,14 @@ func (a *App) getCalendar(ctx context.Context, input CalendarQueryInput) (Calend
 	if err != nil {
 		return CalendarDTO{}, err
 	}
+	subscriptions, err := store.CalendarSubscriptions(ctx)
+	if err != nil {
+		return CalendarDTO{}, err
+	}
+	subscribed := make(map[string]storage.CalendarSubscription, len(subscriptions))
+	for _, subscription := range subscriptions {
+		subscribed[subscription.SourceID] = subscription
+	}
 	estimate, err := a.localEstimate(ctx, now)
 	if err != nil {
 		return CalendarDTO{}, err
@@ -349,6 +387,9 @@ func (a *App) getCalendar(ctx context.Context, input CalendarQueryInput) (Calend
 			CoverageLabel: coverageLabel,
 			CoverageStart: source.CoverageStartAt.UTC().Format(time.RFC3339),
 			CoverageEnd:   source.CoverageEndAt.UTC().Format(time.RFC3339),
+		}
+		if subscription, found := subscribed[source.SourceID]; found {
+			dto.Subscription = calendarSubscriptionDTO(subscription, now, location)
 		}
 		sourceByID[source.SourceID] = dto
 		if source.ReadOnly && (start.UTC().Before(source.CoverageStartAt) || end.UTC().After(source.CoverageEndAt)) {

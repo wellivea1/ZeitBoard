@@ -176,8 +176,10 @@ itself is designed in [`portal-design.md`](portal-design.md).
    the scheduler, and a dense Calendar board that keeps private text local. Approval records bind
    transactionally to the exact task revision, sleep-data snapshot, and text-free busy-event
    snapshot. Approval creates only an app-owned local block; rejection writes no event; undo removes
-   only that block; app-owned placements export as RFC 5545 ICS. OAuth providers and remote
-   write-back remain future, separately permissioned work.
+   only that block; app-owned placements export as RFC 5545 ICS. Remote write-back shipped with
+   ADR-0053. _Calendars by private address delivered 2026-10-12 (ADR-0062):_ Google, Outlook and
+   iCloud calendars are subscribed by the iCal address each provider publishes, and are read again
+   every hour. OAuth providers remain future work and wait on registrations in the owner's name.
 
 **Disease-management track.** ~~M-A local medication logging~~, ~~M-B
 user-authored schedules + feasibility~~, ~~local rhythm context markers~~, and
