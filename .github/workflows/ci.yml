@@ -75,15 +75,18 @@ jobs:
           - name: core
             os: ubuntu-latest
             path: core
+            race: true
           - name: server
             os: ubuntu-latest
             path: apps/server
+            race: true
           - name: server-windows
             os: windows-latest
             path: apps/server
           - name: desktop-service
             os: windows-latest
             path: apps/desktop
+            race: true
     steps:
       - name: Check out repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -122,8 +125,11 @@ jobs:
           # first encrypted file makes a key in the account running the test,
           # and the runner's account is thrown away afterwards (ADR-0063).
           ZEITBOARD_TEST_EFS: ${{ matrix.name == 'desktop-service' && '1' || '' }}
+          # The race detector needs cgo. The server's Windows build is tested
+          # without it; its Linux job runs the same tests with it.
+          CGO_ENABLED: ${{ matrix.race && '1' || '' }}
         run: |
-          go test ./...
+          go test ${{ matrix.race && '-race' || '' }} ./...
           go vet ./...
 
   web:
