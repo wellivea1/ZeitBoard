@@ -1,34 +1,16 @@
+import { count, normalizeNightsFigure, type NightsFigure } from "./activityNights";
 import { findWailsMethod, type WailsRoot } from "./wailsBridge";
 
 // Activity from a Google export (ADR-0059). The desktop reads only when each
 // activity happened, keeps the minutes when asked, and compares the nights
 // their gaps suggest with the recorded ones. Suggestions reach nothing else.
 
-/** Part of a night cut at midnight: [day, start minute, end minute], day 0
- * being the first date drawn. */
-export type NightSegment = readonly [day: number, start: number, end: number];
-
-export interface ActivityAgreement {
-  /** Nights recorded while the activity was kept. */
-  recorded: number;
-  /** Of those, the nights a suggestion overlapped. */
-  matched: number;
-  /** How far apart their edges typically were, or empty when none matched. */
-  summary: string;
-}
-
 export interface AccountActivity {
   imported: boolean;
   minutes: number;
-  nights: number;
-  spanLabel: string;
   importedLabel: string;
-  zoneId: string;
-  firstDate: string;
-  days: number;
-  suggested: NightSegment[];
-  recorded: NightSegment[];
-  agreement?: ActivityAgreement;
+  /** The nights the kept activity suggests, once there is some. */
+  figure?: NightsFigure;
 }
 
 export interface ActivityExportPreview {
@@ -50,14 +32,7 @@ export function notifyAccountActivityChanged() {
 export const noAccountActivity: AccountActivity = {
   imported: false,
   minutes: 0,
-  nights: 0,
-  spanLabel: "",
   importedLabel: "",
-  zoneId: "",
-  firstDate: "",
-  days: 0,
-  suggested: [],
-  recorded: [],
 };
 
 type UnknownRecord = Record<string, unknown>;
@@ -66,60 +41,17 @@ function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === "object" && value !== null;
 }
 
-function count(value: unknown): number | undefined {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : undefined;
-}
-
-function segments(value: unknown, days: number): NightSegment[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const result: NightSegment[] = [];
-  for (const item of value) {
-    if (!Array.isArray(item) || item.length !== 3) return undefined;
-    const [day, start, end] = item.map(count);
-    if (day === undefined || start === undefined || end === undefined) return undefined;
-    if (day >= days || end <= start || end > 24 * 60) return undefined;
-    result.push([day, start, end]);
-  }
-  return result;
-}
-
-function agreement(value: unknown): ActivityAgreement | undefined {
-  if (!isRecord(value)) return undefined;
-  const recorded = count(value.recorded);
-  const matched = count(value.matched);
-  if (recorded === undefined || matched === undefined || matched > recorded) return undefined;
-  return {
-    recorded,
-    matched,
-    summary: typeof value.summary === "string" ? value.summary : "",
-  };
-}
-
 export function normalizeAccountActivity(value: unknown): AccountActivity | undefined {
   if (!isRecord(value) || typeof value.imported !== "boolean") return undefined;
   if (!value.imported) return noAccountActivity;
   const minutes = count(value.minutes);
-  const nights = count(value.nights);
-  const days = count(value.days);
-  if (minutes === undefined || nights === undefined || days === undefined || days === 0) {
-    return undefined;
-  }
-  const suggested = segments(value.suggested, days);
-  const recorded = segments(value.recorded, days);
-  if (!suggested || !recorded || typeof value.firstDate !== "string") return undefined;
-  const compared = agreement(value.agreement);
+  const figure = normalizeNightsFigure(value.figure);
+  if (minutes === undefined || !figure) return undefined;
   return {
     imported: true,
     minutes,
-    nights,
-    spanLabel: typeof value.spanLabel === "string" ? value.spanLabel : "",
     importedLabel: typeof value.importedLabel === "string" ? value.importedLabel : "",
-    zoneId: typeof value.zoneId === "string" ? value.zoneId : "",
-    firstDate: value.firstDate,
-    days,
-    suggested,
-    recorded,
-    ...(compared ? { agreement: compared } : {}),
+    figure,
   };
 }
 

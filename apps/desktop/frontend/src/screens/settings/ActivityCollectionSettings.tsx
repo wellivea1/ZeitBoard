@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   loadActivityCollection,
   setActivityCollection,
+  setPowerLogReading,
   deleteActivityData,
   saveActivityDataExport,
   type ActivityCollection,
@@ -17,6 +18,118 @@ function collectionLabel(status: ActivityCollection | null) {
 
 function canToggleCollection(status: ActivityCollection | null, zone: string) {
   return status !== null && (status.enabled || (status.supported && zone.length > 0));
+}
+
+// The records kept so far: exported to a private file, or deleted with the
+// word typed back, which also turns collection off.
+function ActivityRecordsCard({
+  status,
+  busy,
+  confirmation,
+  onConfirmation,
+  onExport,
+  onDelete,
+}: {
+  status: ActivityCollection | null;
+  busy: boolean;
+  confirmation: string;
+  onConfirmation: (value: string) => void;
+  onExport: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <section className="data-control-card" aria-label="Activity data controls">
+      <h3>Saved activity records</h3>
+      <p>
+        Turning collection off keeps previous records. Deleting also turns collection off. Exported
+        files contain exact timestamps; keep them private.
+      </p>
+      <button
+        type="button"
+        className="button secondary"
+        disabled={busy || !status || status.recordCount === 0}
+        onClick={onExport}
+      >
+        Export activity records
+      </button>
+      <label className="reaching-field">
+        <span>Type DELETE to delete activity records</span>
+        <input
+          value={confirmation}
+          disabled={busy || !status}
+          autoComplete="off"
+          onChange={(event) => onConfirmation(event.target.value)}
+        />
+      </label>
+      <button
+        type="button"
+        className="button secondary"
+        disabled={busy || !status || confirmation !== "DELETE"}
+        onClick={onDelete}
+      >
+        Delete activity records
+      </button>
+    </section>
+  );
+}
+
+// Windows' own log of sleep, wake, shutdown and start (ADR-0060). What it
+// reads is said before it is chosen, and it reads only while desktop activity
+// is on.
+function PowerLogCard({
+  status,
+  busy,
+  onToggle,
+}: {
+  status: ActivityCollection;
+  busy: boolean;
+  onToggle: (enabled: boolean) => void;
+}) {
+  const { powerLog } = status;
+  return (
+    <section className="data-control-card" aria-label="Sleep and wake from Windows">
+      <h3>Sleep and wake from Windows</h3>
+      <p>
+        Windows notes when this computer goes to sleep, wakes, shuts down and starts, and keeps
+        those notes for months. ZeitBoard can read those times and nothing else Windows logs,
+        including for the hours it was closed and the months before it was installed.
+      </p>
+      <dl className="sync-status-list">
+        <div>
+          <dt>Reading</dt>
+          <dd>{powerLog.enabled ? (status.enabled ? "On" : "Paused") : "Off"}</dd>
+        </div>
+        <div>
+          <dt>Read from Windows</dt>
+          <dd>
+            {powerLog.entries > 0
+              ? `${powerLog.entries} ${powerLog.entries === 1 ? "time" : "times"}, from ${powerLog.sinceLabel}`
+              : "None yet"}
+          </dd>
+        </div>
+      </dl>
+      <button
+        type="button"
+        className="button secondary"
+        disabled={busy || (!powerLog.enabled && !status.enabled)}
+        onClick={() => onToggle(!powerLog.enabled)}
+      >
+        {powerLog.enabled ? "Stop reading from Windows" : "Read sleep and wake from Windows"}
+      </button>
+      {!status.enabled && (
+        <p>
+          {powerLog.enabled
+            ? "Paused while desktop activity is off."
+            : "Turn on desktop activity first."}
+        </p>
+      )}
+      {powerLog.lastError && (
+        <p className="form-error" role="alert">
+          {powerLog.lastError}
+        </p>
+      )}
+    </section>
+  );
 }
 
 export function ActivityCollectionSettings() {
@@ -99,7 +212,8 @@ export function ActivityCollectionSettings() {
             Once on, it continues when you hide or close the window and resumes when ZeitBoard
             reopens; Quit from the tray stops it. It cannot collect while the computer is asleep or
             the app is closed, and gaps between polls are kept as possible suspend and resume
-            evidence.
+            evidence. With sleep and wake read from Windows, the times Windows noted while ZeitBoard
+            was closed are read when it runs again.
           </p>
         </details>
       </div>
@@ -155,38 +269,21 @@ export function ActivityCollectionSettings() {
             </button>
           )}
         </section>
-        <section className="data-control-card" aria-label="Activity data controls">
-          <h3>Saved activity records</h3>
-          <p>
-            Turning collection off keeps previous records. Deleting also turns collection off.
-            Exported files contain exact timestamps; keep them private.
-          </p>
-          <button
-            type="button"
-            className="button secondary"
-            disabled={busy || !status || status.recordCount === 0}
-            onClick={() => void run(saveActivityDataExport)}
-          >
-            Export activity records
-          </button>
-          <label className="reaching-field">
-            <span>Type DELETE to delete activity records</span>
-            <input
-              value={confirmation}
-              disabled={busy || !status}
-              autoComplete="off"
-              onChange={(event) => setConfirmation(event.target.value)}
-            />
-          </label>
-          <button
-            type="button"
-            className="button secondary"
-            disabled={busy || !status || confirmation !== "DELETE"}
-            onClick={() => void run(() => deleteActivityData(confirmation))}
-          >
-            Delete activity records
-          </button>
-        </section>
+        {status?.powerLog.supported && (
+          <PowerLogCard
+            status={status}
+            busy={busy}
+            onToggle={(enabled) => void run(() => setPowerLogReading(enabled))}
+          />
+        )}
+        <ActivityRecordsCard
+          status={status}
+          busy={busy}
+          confirmation={confirmation}
+          onConfirmation={setConfirmation}
+          onExport={() => void run(saveActivityDataExport)}
+          onDelete={() => void run(() => deleteActivityData(confirmation))}
+        />
       </div>
       {(error || status?.lastError) && (
         <p className="form-error" role="alert">

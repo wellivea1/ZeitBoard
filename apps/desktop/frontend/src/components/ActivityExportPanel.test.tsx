@@ -4,12 +4,9 @@ import { ActivityExportPanel } from "./ActivityExportPanel";
 import { ActivityNightsPanel } from "./ActivityNightsPanel";
 
 const none = { imported: false };
-const kept = {
-  imported: true,
-  minutes: 4210,
+const figure = {
   nights: 12,
   spanLabel: "Aug 31, 2026 to Sep 13, 2026",
-  importedLabel: "Sep 20, 2026",
   zoneId: "UTC",
   firstDate: "2026-08-31",
   days: 14,
@@ -22,6 +19,7 @@ const kept = {
       "On those nights, suggestions typically began 30 minutes before your recorded sleep and ended 20 minutes after your recorded wake.",
   },
 };
+const kept = { imported: true, minutes: 4210, importedLabel: "Sep 20, 2026", figure };
 const preview = {
   token: "activity_export_01",
   fileName: "takeout-20260920T000000Z-001.zip",
@@ -147,10 +145,58 @@ describe("ActivityNightsPanel", () => {
       await screen.findByRole("heading", { name: "Nights your Google activity suggests" }),
     ).toBeVisible();
     expect(
-      screen.getByText(/nights you recorded while this activity was kept had a suggestion/),
+      screen.getByText(/nights you recorded in the time the export covers had a suggestion/),
     ).toHaveTextContent(
-      "6 of 6 nights you recorded while this activity was kept had a suggestion beside them. On those nights, suggestions typically began 30 minutes before your recorded sleep and ended 20 minutes after your recorded wake.",
+      "6 of 6 nights you recorded in the time the export covers had a suggestion beside them. On those nights, suggestions typically began 30 minutes before your recorded sleep and ended 20 minutes after your recorded wake.",
     );
     expect(screen.getByText(/no link or assistant sees them/)).toBeVisible();
+  });
+
+  // With nights from both a Google export and this computer, a switch picks
+  // whose are drawn, and each keeps its own words and link.
+  it("switches between Google activity and this computer", async () => {
+    install({
+      GetAccountActivity: async () => kept,
+      GetComputerNights: async () => ({
+        collected: true,
+        figure: { ...figure, nights: 9, agreement: undefined },
+      }),
+    });
+    render(<ActivityNightsPanel />);
+    const google = await screen.findByRole("button", { name: "Google activity" });
+    expect(screen.getByRole("heading", { name: "Nights your activity suggests" })).toBeVisible();
+    expect(google).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("link", { name: "Imported activity" })).toHaveAttribute(
+      "href",
+      "#/data-sources",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "This computer" }));
+    expect(screen.getByRole("link", { name: "Desktop activity" })).toHaveAttribute(
+      "href",
+      "#/settings/computer",
+    );
+    expect(
+      screen.getByText(/You recorded no nights in the time this computer's record covers/),
+    ).toBeVisible();
+    expect(screen.getByRole("img").getAttribute("aria-label")).toMatch(
+      /suggested by this computer/,
+    );
+  });
+
+  it("says when this computer has not suggested a night yet", async () => {
+    install({
+      GetAccountActivity: async () => none,
+      GetComputerNights: async () => ({
+        collected: true,
+        figure: { ...figure, nights: 0, suggested: [], agreement: undefined },
+      }),
+    });
+    render(<ActivityNightsPanel />);
+    expect(
+      await screen.findByRole("heading", { name: "Nights this computer suggests" }),
+    ).toBeVisible();
+    expect(screen.queryByRole("group", { name: "Suggested by" })).toBeNull();
+    expect(screen.getByText(/so this computer suggests no nights/)).toBeVisible();
   });
 });

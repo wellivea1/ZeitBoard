@@ -1,4 +1,4 @@
-import type { AccountActivity, NightSegment } from "../data/accountActivity";
+import type { NightSegment, NightsFigure } from "../data/activityNights";
 import { appLocale } from "../utils/appLocale";
 import { formatCivilDate } from "./timeProbeLogic";
 
@@ -78,21 +78,21 @@ export function rowLabels(firstDate: string, days: number, height: number): RowL
 export const RECENT_DAYS = 84;
 
 /** The last `rows` days of the figure, renumbered from the first one shown. */
-export function lastDays(activity: AccountActivity, rows: number): AccountActivity {
-  if (activity.days <= rows) return activity;
-  const offset = activity.days - rows;
+export function lastDays(figure: NightsFigure, rows: number): NightsFigure {
+  if (figure.days <= rows) return figure;
+  const offset = figure.days - rows;
   const shift = (segments: readonly NightSegment[]) =>
     segments
       .filter(([day]) => day >= offset)
       .map(([day, start, end]): NightSegment => [day - offset, start, end]);
-  const first = new Date(`${activity.firstDate}T00:00:00Z`);
+  const first = new Date(`${figure.firstDate}T00:00:00Z`);
   first.setUTCDate(first.getUTCDate() + offset);
   return {
-    ...activity,
+    ...figure,
     days: rows,
     firstDate: first.toISOString().slice(0, 10),
-    suggested: shift(activity.suggested),
-    recorded: shift(activity.recorded),
+    suggested: shift(figure.suggested),
+    recorded: shift(figure.recorded),
   };
 }
 

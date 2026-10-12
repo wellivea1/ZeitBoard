@@ -136,6 +136,58 @@ func TestShutdownDoesNotOpenAQuietInterval(t *testing.T) {
 	}
 }
 
+// A shutdown Windows logged is the computer off until it starts, which is a
+// quiet stretch; ZeitBoard quitting is not (ADR-0060).
+func TestALoggedShutdownIsQuietUntilTheComputerStarts(t *testing.T) {
+	intervals := FromActivity([]activity.Transition{
+		{At: night, State: activity.StateShutdown},
+		{At: night.Add(time.Minute), State: activity.StateShutdown, FromPowerLog: true},
+		{At: night.Add(8 * time.Hour), State: activity.StateStartup, FromPowerLog: true},
+		{At: night.Add(8*time.Hour + 2*time.Minute), State: activity.StateStartup},
+	})
+	if len(intervals) != 1 || !intervals[0].StartAt.Equal(night.Add(time.Minute)) ||
+		!intervals[0].EndAt.Equal(night.Add(8*time.Hour)) {
+		t.Fatalf("intervals = %+v, want the eight hours the computer was off", intervals)
+	}
+}
+
+// Where the collector inferred a sleep from a missed poll and Windows logged
+// the same sleep, there is one quiet stretch, not two.
+func TestAnInferredAndALoggedSleepAreOneStretch(t *testing.T) {
+	intervals := FromActivity([]activity.Transition{
+		{At: night, State: activity.StateIdle},
+		{At: night.Add(30 * time.Minute), State: activity.StateSuspended},
+		{At: night.Add(31 * time.Minute), State: activity.StateSuspended, FromPowerLog: true},
+		{At: night.Add(7 * time.Hour), State: activity.StateResumed, FromPowerLog: true},
+		{At: night.Add(7*time.Hour + time.Minute), State: activity.StateResumed},
+		{At: night.Add(7*time.Hour + time.Minute), State: activity.StateActive},
+	})
+	if len(intervals) != 1 || !intervals[0].StartAt.Equal(night) || !intervals[0].EndAt.Equal(night.Add(7*time.Hour)) {
+		t.Fatalf("intervals = %+v, want one stretch from idle to the logged wake", intervals)
+	}
+}
+
+// A computer that wakes itself for a few minutes in the night has not ended
+// the night; one that someone used has.
+func TestABriefWakeWithoutUseDoesNotEndTheNight(t *testing.T) {
+	sleepUntil := func(extra ...activity.Transition) []activity.Transition {
+		return append([]activity.Transition{
+			{At: night, State: activity.StateSuspended, FromPowerLog: true},
+			{At: night.Add(4 * time.Hour), State: activity.StateResumed, FromPowerLog: true},
+			{At: night.Add(4*time.Hour + 10*time.Minute), State: activity.StateSuspended, FromPowerLog: true},
+			{At: night.Add(8 * time.Hour), State: activity.StateResumed, FromPowerLog: true},
+		}, extra...)
+	}
+	intervals := FromActivity(sleepUntil())
+	if len(intervals) != 1 || intervals[0].EndAt.Sub(intervals[0].StartAt) != 8*time.Hour {
+		t.Fatalf("a timer wake split the night: %+v", intervals)
+	}
+	intervals = FromActivity(sleepUntil(activity.Transition{At: night.Add(4*time.Hour + 2*time.Minute), State: activity.StateActive}))
+	if len(intervals) != 2 {
+		t.Fatalf("a wake someone used did not end the stretch: %+v", intervals)
+	}
+}
+
 func TestFromActivityPairsIdleWithTheReturnToUse(t *testing.T) {
 	intervals := FromActivity([]activity.Transition{
 		{At: night, State: activity.StateActive},

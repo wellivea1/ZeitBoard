@@ -130,19 +130,20 @@ func TestAGoogleExportSuggestsNightsBesideRecordedOnes(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertNoCanary(t, kept)
-	if !kept.Imported || kept.Nights != 12 || kept.Minutes != preview.Minutes || kept.Days < 12 {
+	figure := kept.Figure
+	if !kept.Imported || figure == nil || figure.Nights != 12 || kept.Minutes != preview.Minutes || figure.Days < 12 {
 		t.Fatalf("kept %+v", kept)
 	}
 	// Night 12 comes after the activity ends, so only 6 to 11 can be compared.
-	agreement := kept.Agreement
+	agreement := figure.Agreement
 	if agreement == nil || agreement.Recorded != 6 || agreement.Matched != 6 {
 		t.Fatalf("agreement %+v", agreement)
 	}
 	if want := "On those nights, suggestions typically began 30 minutes before your recorded sleep and ended 20 minutes after your recorded wake."; agreement.Summary != want {
 		t.Errorf("summary %q", agreement.Summary)
 	}
-	if len(kept.Suggested) < 12 || len(kept.Recorded) < 6 {
-		t.Errorf("figure has %d suggested and %d recorded segments", len(kept.Suggested), len(kept.Recorded))
+	if len(figure.Suggested) < 12 || len(figure.Recorded) < 6 {
+		t.Errorf("figure has %d suggested and %d recorded segments", len(figure.Suggested), len(figure.Recorded))
 	}
 
 	// The same preview cannot be kept twice.
@@ -171,7 +172,7 @@ func TestRemovingImportedActivityTakesTheWordAndLeavesNothing(t *testing.T) {
 		t.Fatal("removed without the word")
 	}
 	removed, err := app.RemoveAccountActivity(AccountActivityRemoveInput{Confirmation: "REMOVE"})
-	if err != nil || removed.Imported || removed.Nights != 0 || len(removed.Suggested) != 0 {
+	if err != nil || removed.Imported || removed.Figure != nil {
 		t.Fatalf("after removal %+v, %v", removed, err)
 	}
 	minutes, err := app.store.AccountActivityMinutes(context.Background())

@@ -292,10 +292,13 @@ M-E's separately reviewed local agent projection.
     login/start-to-tray, one instance per profile and tray-failure recovery. Background
     projection refresh and native lifecycle qualification remain in C1.
 
-    Still open: the collector runs inside the desktop process, so it collects only while ZeitBoard
-    is running (it survives closing the window, which hides to the tray, but not quitting). Desktop
-    CPU, memory and startup baselines were not captured before it landed, so its cost is still
-    described rather than measured.
+    The collector runs inside the desktop process, so it collects only while ZeitBoard is
+    running (it survives closing the window, which hides to the tray, but not quitting). ADR-0060
+    (2026-10-12) fills the gaps from Windows' own power log, by a separate choice: when the computer
+    slept, woke, shut down and started, read as far back as Windows keeps it. The nights these
+    records suggest are drawn beside the recorded ones in Rhythm › Sources. Still open: desktop CPU,
+    memory and startup baselines were not captured before the collector landed, so its cost is
+    still described rather than measured.
 
 12. ~~**Claim-accuracy defects.**~~ ✅ Delivered. _(b) and (c)_ landed with the freshness policy and
     the honest-confidence pass: Home leads estimate quality with evidence age, the categorical badge

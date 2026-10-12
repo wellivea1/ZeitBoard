@@ -66,7 +66,7 @@ function KeptActivity({
     <div className="activity-export-kept">
       <p>
         <span className="count">{amount(activity.minutes)}</span> minutes with activity, from{" "}
-        {activity.spanLabel}. Last imported {activity.importedLabel}.
+        {activity.figure?.spanLabel}. Last imported {activity.importedLabel}.
       </p>
       <p className="activity-export-actions">
         <a href="#/rhythm/sources">See the nights they suggest</a>

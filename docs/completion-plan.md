@@ -1361,6 +1361,28 @@ earlier in when they used their phone. ZeitBoard now reads that from a Google Ta
 - **Not done.** Taking a suggested night into the record needs a correction prompt. Other services'
   exports, and exports made as web pages, are not read.
 
+### This computer between runs — 2026-10-12
+
+The activity collector runs inside ZeitBoard, so it saw nothing after Quit, before ZeitBoard
+started, or while the computer slept. Nothing showed what its records implied, either (ADR-0060).
+
+- **Windows' own record, by choice.** With desktop activity on, Settings › This computer offers a
+  second choice: read when the computer went to sleep, woke, shut down and started. It is off by
+  default and says what it reads before it is chosen.
+- **Six entries, by time alone.** ZeitBoard asks the System log for six entries by provider and
+  number: Kernel-Power 42 and 506, 107 and 507, and Kernel-General 13 and 12. Of each it decodes
+  the time and the record number. It reads as far back as Windows keeps them, then at each start
+  and every half hour while it runs.
+- **Kept with the activity records.** The entries become observed suspend, resume, shutdown and
+  start transitions from the existing closed set, kept once each. They are counted, exported and
+  erased with the collector's records. Erasing also turns the reading off.
+- **What the computer suggests.** Quiet stretches become suggested nights by ADR-0031's rules. A
+  logged shutdown counts as quiet until the computer starts, but ZeitBoard quitting does not. A
+  wake of fifteen minutes or less with no sign of use does not end a night. Rhythm › Sources now
+  offers this computer beside a Google export, with the same figure and agreement.
+- **Not done.** Lock and unlock history from Windows' logs, whose event data is undocumented, and
+  other operating systems.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and
@@ -1418,7 +1440,7 @@ tests and a verification entry. Where it waits on something outside the code, th
 | Localization readiness | Roadmap, phase 2; limitation 11 | Delivered 2026-10-11 for times (ADR-0057). Translated text waits for a message catalog |
 | Google Takeout and My Activity import, with inference kept in shadow mode | Roadmap, slice 7; limitation 12 | Delivered 2026-10-12 (ADR-0059). Suggestions stay beside the recorded nights until they pass the backtest gate |
 | Missed-dose sharing, off by default per link | Medication plan, M-F | Delivered 2026-10-11 (ADR-0058). Only doses logged as skipped are shown |
-| Activity collected while the app is closed | Roadmap, slice 11 | Open |
+| Activity collected while the app is closed | Roadmap, slice 11 | Delivered 2026-10-12 (ADR-0060) from Windows' own power log, by a separate choice. The collector itself still stops when ZeitBoard quits |
 | OAuth calendar providers | Roadmap, slice 6 and phase 3 | Waits on provider app registrations in the owner's name |
 | Packaged cloud skills for assistants | Roadmap, phase 4 | Open. It needs its own privacy and threat review |
 | Encrypting the local database | Roadmap, phase 2; limitation 1 | Blocked on a CGo-free driver with an encryption hook |
