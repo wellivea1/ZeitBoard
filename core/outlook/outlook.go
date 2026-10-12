@@ -432,15 +432,25 @@ func buildSegments(in Input, now, end time.Time, zoneID string) []Segment {
 		wake = append(wake, span{start: now, stop: stop})
 	}
 
+	// The timeline is read to the minute, so its boundaries are put on the
+	// minute. A forecast boundary seconds after now otherwise leaves a stretch
+	// that reads "7:19 PM to 7:19 PM, lasting 0 minutes". The horizon's own
+	// ends stay where they are.
 	cuts := []time.Time{now, end}
-	for _, interval := range sleep {
-		cuts = append(cuts, interval.start, interval.stop)
+	onTheMinute := func(value time.Time) time.Time {
+		rounded := value.Round(time.Minute)
+		switch {
+		case rounded.Before(now):
+			return now
+		case rounded.After(end):
+			return end
+		}
+		return rounded
 	}
-	for _, interval := range wake {
-		cuts = append(cuts, interval.start, interval.stop)
-	}
-	for _, interval := range recorded {
-		cuts = append(cuts, interval.start, interval.stop)
+	for _, intervals := range [][]span{sleep, wake, recorded} {
+		for _, interval := range intervals {
+			cuts = append(cuts, onTheMinute(interval.start), onTheMinute(interval.stop))
+		}
 	}
 	cuts = sortedUnique(cuts, now, end)
 
