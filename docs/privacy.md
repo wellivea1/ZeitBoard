@@ -36,8 +36,13 @@ The desktop runs on the user's manually entered sleep data and shows an honest
 empty state until entries exist; synthetic data appears only in clearly labeled
 sample mode. Local sleep-file import reads only the JSON or CSV the user
 explicitly selects; it does not scan arbitrary folders or upload the file.
-Calendar import likewise reads only an owner-selected ICS file or an explicitly
-entered CalDAV collection. Importing is read-only, bounded, and device-side. The
+Calendar import likewise reads only an owner-selected ICS file, an explicitly
+entered CalDAV collection, or a calendar's private address that the owner pastes
+(ADR-0062). Importing is read-only, bounded, and device-side. A private address is
+a secret: anyone holding it can read that calendar. ZeitBoard keeps it in the
+owner-protected local database, shows only its host, sends it only to its own
+provider over HTTPS, never syncs, exports or logs it, and erases it with the
+calendar. It is read every hour while ZeitBoard runs. The
 import password is used for one request and cleared; it is never persisted.
 Stored collection endpoints are sanitized to exclude credentials and query
 secrets. Writing accepted times to a CalDAV calendar is off unless the owner

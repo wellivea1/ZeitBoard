@@ -84,8 +84,12 @@ type App struct {
 	backendOutage      backendOutage
 	background         periodicWorker
 	calendarWriter     periodicWorker
-	sleepImportMu      sync.Mutex
-	sleepImportPending map[string]pendingSleepImportFile
+	// calendarSubscriber refreshes subscribed calendars every hour, through
+	// calendarSubscriptionClient when one is set (ADR-0062).
+	calendarSubscriber         periodicWorker
+	calendarSubscriptionClient calendarHTTPDoer
+	sleepImportMu              sync.Mutex
+	sleepImportPending         map[string]pendingSleepImportFile
 	// accountActivityMu guards the export being previewed and the nights
 	// worked out from the kept activity (ADR-0059).
 	accountActivityMu      sync.Mutex
@@ -386,6 +390,7 @@ func (a *App) startup(ctx context.Context) {
 	a.startPowerLogReader(ctx)
 	a.startDesktopBackground(ctx, desktopBackgroundInterval)
 	a.startCalendarWriter(ctx)
+	a.startCalendarSubscriptions(ctx)
 	a.startLocalAgent(ctx)
 	a.startDesktopTray(ctx)
 }
@@ -397,6 +402,7 @@ func (a *App) shutdown(ctx context.Context) {
 	a.stopDesktopBackground()
 	a.powerLogReader.stop()
 	a.calendarWriter.stop()
+	a.calendarSubscriber.stop()
 	a.stopMedicationReminderService()
 	a.stopLocalAgent(ctx)
 	a.stopLocalAnalysis()

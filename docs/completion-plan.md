@@ -1409,6 +1409,25 @@ that review, and ships the packages.
 - **Not done.** ChatGPT, and Claude on the web and phones, take remote MCP servers only. Offering
   one means exposing the owner's server with OAuth, a boundary that needs its own review.
 
+### Calendars by their private address — 2026-10-12
+
+Imported calendars were snapshots: plans could be made over a commitment added later until someone
+imported again. ADR-0062 subscribes instead.
+
+- **By the address the provider publishes.** Data Sources › Add a calendar › Private address takes
+  a calendar's secret iCal address (`https://` or `webcal://`) from Google, Outlook or iCloud. It
+  previews like a file, and "Subscribe" keeps it. No sign-in or OAuth registration is needed.
+- **Read again every hour.** While ZeitBoard runs, every subscribed calendar is fetched and replaced
+  whole, and "Refresh" on its row does the same at once. A failure keeps the last copy, and the row
+  says why and from when the copy is. Open views re-read through a new announcement.
+- **The address is a secret.** It is kept in its own table, `local_calendar_subscriptions`, which
+  cascades with the calendar. It is shown by host only, and appears in no message, status, sync or
+  export. Redirects must stay on HTTPS.
+- **The same bounds as a file.** It uses the same parser and recurrence bounds, a 16 MiB response
+  cap and a 20 second timeout.
+- **Not done.** OAuth, for write access and calendars that publish no address, still waits on
+  registrations.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and
@@ -1434,7 +1453,7 @@ or deferred with its reason.
 | # | Limitation | Disposition |
 |---|---|---|
 | 1 | The local database is not encrypted at rest. Owner-only file permissions protect it, and Settings says so (ADR-0035). | Accepted. Whole-database encryption waits for a CGo-free driver with an encryption hook. |
-| 2 | A calendar file is refreshed by importing the updated file again, under the same name. | Accepted. CalDAV calendars refresh from their row. |
+| 2 | ~~A calendar file is refreshed by importing the updated file again, under the same name.~~ | Resolved 2026-10-12: a calendar subscribed by its private address is read again every hour (ADR-0062). A file still refreshes by importing it again. |
 | 3 | Accepted times go to one CalDAV calendar at a time, and the calendar's host can read their task names (ADR-0053; disclosed in the offer). | Accepted by design. |
 | 4 | Estimates use recorded sleep only. Multi-source inference stays in shadow mode after a negative promotion decision (ADR-0031). | Deferred analysis work. It ships only after a candidate passes the measured gate. |
 | 5 | The server's projection folds all relevant sleep history on each request (review #2). | Accepted at the current scale. Revisit with production profiles. |
@@ -1467,6 +1486,6 @@ tests and a verification entry. Where it waits on something outside the code, th
 | Google Takeout and My Activity import, with inference kept in shadow mode | Roadmap, slice 7; limitation 12 | Delivered 2026-10-12 (ADR-0059). Suggestions stay beside the recorded nights until they pass the backtest gate |
 | Missed-dose sharing, off by default per link | Medication plan, M-F | Delivered 2026-10-11 (ADR-0058). Only doses logged as skipped are shown |
 | Activity collected while the app is closed | Roadmap, slice 11 | Delivered 2026-10-12 (ADR-0060) from Windows' own power log, by a separate choice. The collector itself still stops when ZeitBoard quits |
-| OAuth calendar providers | Roadmap, slice 6 and phase 3 | Waits on provider app registrations in the owner's name |
+| OAuth calendar providers | Roadmap, slice 6 and phase 3 | Read access delivered 2026-10-12 without OAuth: Google, Outlook and iCloud calendars subscribe by their private address (ADR-0062). OAuth itself, for write access, waits on provider app registrations in the owner's name |
 | Packaged cloud skills for assistants | Roadmap, phase 4 | Delivered 2026-10-12 for Claude (ADR-0061), with its privacy and threat review. ChatGPT and Claude on the web take remote servers only, which ZeitBoard does not expose |
 | Encrypting the local database | Roadmap, phase 2; limitation 1 | Blocked on a CGo-free driver with an encryption hook |

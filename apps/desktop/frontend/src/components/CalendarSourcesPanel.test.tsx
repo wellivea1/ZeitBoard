@@ -258,4 +258,58 @@ describe("CalendarSourcesPanel", () => {
     expect(screen.getByDisplayValue("Home")).toBeInTheDocument();
     expect(refresh).toHaveBeenCalledOnce();
   });
+
+  // A subscribed calendar names its host, never its address, says how its
+  // last reading went, and refreshes at once from its row.
+  it("refreshes a subscribed calendar from its address at once", async () => {
+    const refresh = vi.fn(async () => ({
+      sourceId: "calendar_source_subscription_work",
+      label: "Work",
+      kind: "ics",
+      readOnly: true,
+      imported: true,
+      eventCount: 3,
+      busyCount: 3,
+      allDayCount: 0,
+      coverageStartAt: "2026-01-01T00:00:00Z",
+      coverageEndAt: "2027-01-01T00:00:00Z",
+      coverageLabel: "Jan 1, 2026 to Jan 1, 2027",
+      previewTruncated: false,
+      events: [],
+      message: "Imported 3 calendar events.",
+    }));
+    (globalThis as { go?: unknown }).go = {
+      main: {
+        App: { RefreshCalendarSource: refresh, GetCalendarWriteBack: async () => ({ on: false }) },
+      },
+    };
+    const subscribed: CalendarSource = {
+      sourceId: "calendar_source_subscription_work",
+      label: "Work",
+      kind: "ics",
+      readOnly: true,
+      visibleEvents: 3,
+      coverageLabel: "Jan 1 to Dec 31",
+      coverageStart: "2026-01-01T00:00:00Z",
+      coverageEnd: "2027-01-01T00:00:00Z",
+      subscription: {
+        host: "calendar.example.test",
+        refreshedLabel: "10:42 AM",
+        failure: "calendar.example.test answered HTTP 503.",
+      },
+    };
+    render(<CalendarSourcesPanel sources={[subscribed]} available onChanged={vi.fn()} />);
+
+    expect(screen.getByText(/^Subscribed/)).toBeVisible();
+    expect(
+      screen.getByText("From calendar.example.test, read 10:42 AM and every hour"),
+    ).toBeVisible();
+    expect(
+      screen.getByText("calendar.example.test answered HTTP 503. The copy read 10:42 AM is kept."),
+    ).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh Work" }));
+    await waitFor(() => expect(refresh).toHaveBeenCalledOnce());
+    expect(screen.queryByLabelText("Collection URL")).toBeNull();
+  });
 });

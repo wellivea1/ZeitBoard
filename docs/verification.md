@@ -2941,3 +2941,41 @@ ADR-0061. Go tests in `core/agentskill` and the desktop; component tests in the 
   - Each save says what to do with the file.
   - A closed dialog says nothing, and a failure says why.
   - Outside the desktop app, the buttons are disabled with the reason.
+
+## Calendars by their private address — 2026-10-12
+
+ADR-0062. Go tests in `core/storage/sqlite` and the desktop; component tests in the window.
+
+- The store:
+  - A subscribed calendar keeps its address beside its copy, and the source's endpoint stays empty
+    as a file's does.
+  - A refresh replaces the copy, and clears the failure.
+  - A failure keeps the copy and records when and why.
+  - Removing the calendar erases the address.
+  - Plain HTTP, credentials, fragments, relative addresses and CalDAV sources are refused, and
+    nothing is recorded for a calendar nobody subscribed to.
+  - The upgrade test still finds an earlier database upgraded to the current schema.
+- The desktop, against a local server holding a synthetic calendar at an address with a canary
+  secret:
+  - A preview keeps nothing, and subscribing keeps the calendar under its name.
+  - The source names its host, with when it was read.
+  - The hourly pass picks up an added event.
+  - A 503 keeps the three events and says "answered HTTP 503" on the row.
+  - Removing it erases the address, and the next pass fetches nothing.
+  - The canary appears in no calendar the window reads, and in no error.
+  - `webcal://` is read as HTTPS. Plain HTTP and credentials are refused.
+  - A redirect may change host on HTTPS, but not drop to HTTP.
+- The window:
+  - The Private address tab says what is kept and why before anything is fetched, and needs a
+    preview before Subscribe.
+  - A subscribed row shows "Subscribed", its host and when it was read, and a failure as a caution
+    with the copy kept.
+  - Its Refresh fetches at once rather than opening the form.
+- In the running desktop, against a loopback server holding a synthetic calendar:
+  - The Private address tab previewed two events.
+  - Subscribing added "Synthetic work · Subscribed", read from 127.0.0.1 at 5:20 AM and every
+    hour.
+  - The address's private path appeared nowhere the window reads.
+  - With the server stopped, Refresh said "127.0.0.1 could not be reached. The copy read 5:20 AM is
+    kept."
+  - Removing it with REMOVE took it off the list.

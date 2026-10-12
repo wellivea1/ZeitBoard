@@ -371,6 +371,9 @@ func (s *Store) initialize(ctx context.Context) error {
 	if err := s.initializeAccountActivity(ctx); err != nil {
 		return err
 	}
+	if err := s.initializeCalendarSubscriptions(ctx); err != nil {
+		return err
+	}
 	// Validate the current shape without rewriting development-era records.
 	// Packaged-release upgrade guarantees begin with the first release.
 	for _, query := range []string{
@@ -571,7 +574,7 @@ func (s *Store) DeleteAll(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	for _, table := range []string{"local_calendar_write_target", "local_calendar_writes", "local_placement_sync_records", "local_sync_connection", "local_sync_seen", "local_sync_deferred_corrections", "local_sleep_analysis", "local_recompute_runs", "source_collection_preferences", "source_observations", "manual_corrections", "phase_estimates", "medication_events", "share_profiles", "local_sleep_corrections", "local_sleep_observations", "local_medication_sync_records", "local_evidence_sync_records", "local_sync_deferred_medication", "local_medication_reminder_claims", "local_medication_event_corrections", "local_medication_events", "local_medications", "local_rhythm_markers", "local_proposal_decisions", "local_calendar_events", "local_calendar_sources", "local_account_activity_minutes", "local_account_activity_imports"} {
+	for _, table := range []string{"local_calendar_write_target", "local_calendar_writes", "local_placement_sync_records", "local_sync_connection", "local_sync_seen", "local_sync_deferred_corrections", "local_sleep_analysis", "local_recompute_runs", "source_collection_preferences", "source_observations", "manual_corrections", "phase_estimates", "medication_events", "share_profiles", "local_sleep_corrections", "local_sleep_observations", "local_medication_sync_records", "local_evidence_sync_records", "local_sync_deferred_medication", "local_medication_reminder_claims", "local_medication_event_corrections", "local_medication_events", "local_medications", "local_rhythm_markers", "local_proposal_decisions", "local_calendar_subscriptions", "local_calendar_events", "local_calendar_sources", "local_account_activity_minutes", "local_account_activity_imports"} {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table); err != nil {
 			_ = tx.Rollback()
 			return err

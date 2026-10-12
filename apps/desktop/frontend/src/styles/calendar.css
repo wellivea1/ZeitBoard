@@ -318,3 +318,16 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Where a subscribed calendar comes from, and, when it could not be read
+ * again, why, marked as a caution note is (ADR-0062). */
+.calendar-source-subscription,
+.calendar-source-failure {
+  display: block;
+  font-size: var(--type-micro);
+  line-height: 1.45;
+}
+
+.calendar-source-failure {
+  color: var(--state-uncertain);
+}

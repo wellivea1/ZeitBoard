@@ -6,6 +6,14 @@ export const calendarDataChangedEvent = "zeitboard:calendar-data-changed";
 export type CalendarSourceKind = "ics" | "caldav" | "zeitboard";
 export type CalendarOwnership = "imported" | "app_owned";
 
+/** A calendar kept by its private address (ADR-0062), named by host alone. */
+export interface CalendarSubscription {
+  host: string;
+  refreshedLabel: string;
+  /** Why the last refresh failed; the copy from refreshedLabel is kept. */
+  failure?: string;
+}
+
 export interface CalendarSource {
   sourceId: string;
   label: string;
@@ -16,6 +24,7 @@ export interface CalendarSource {
   coverageLabel: string;
   coverageStart: string;
   coverageEnd: string;
+  subscription?: CalendarSubscription;
 }
 
 export interface CalendarEventSegment {
@@ -106,6 +115,13 @@ export interface CalDAVInput {
   label: string;
   username: string;
   password: string;
+  zoneId: string;
+}
+
+/** A calendar's private address, as its provider publishes it (ADR-0062). */
+export interface CalendarSubscriptionInput {
+  address: string;
+  label: string;
   zoneId: string;
 }
 
@@ -256,6 +272,7 @@ function normalizeSource(value: unknown): CalendarSource | undefined {
   ) {
     return undefined;
   }
+  const subscription = normalizeSubscription(value.subscription);
   return {
     sourceId,
     label,
@@ -266,7 +283,17 @@ function normalizeSource(value: unknown): CalendarSource | undefined {
     coverageStart,
     coverageEnd,
     ...(endpoint ? { endpoint } : {}),
+    ...(subscription && kind === "ics" ? { subscription } : {}),
   };
+}
+
+function normalizeSubscription(value: unknown): CalendarSubscription | undefined {
+  if (!isRecord(value)) return undefined;
+  const host = text(value.host);
+  const refreshedLabel = text(value.refreshedLabel);
+  if (!host || !refreshedLabel) return undefined;
+  const failure = text(value.failure);
+  return { host, refreshedLabel, ...(failure ? { failure } : {}) };
 }
 
 function normalizeEvent(value: unknown): CalendarEventSegment | undefined {
@@ -640,7 +667,7 @@ export async function loadCalendar(
 
 async function importCall(
   methodName: string,
-  input: CalendarFileInput | CalDAVInput | { sourceId: string },
+  input: CalendarFileInput | CalDAVInput | CalendarSubscriptionInput | { sourceId: string },
   root: WailsRoot,
 ): Promise<CalendarImportReport> {
   const method = findWailsMethod(root, [methodName]);
@@ -678,7 +705,24 @@ export function importCalDAVCalendar(
   return importCall("ImportCalDAVCalendar", input, root);
 }
 
-/** Imports again the calendar accepted times are written to, with its kept sign-in. */
+export function previewCalendarSubscription(
+  input: CalendarSubscriptionInput,
+  root: WailsRoot = globalThis as unknown as WailsRoot,
+) {
+  return importCall("PreviewCalendarSubscription", input, root);
+}
+
+export function subscribeCalendar(
+  input: CalendarSubscriptionInput,
+  root: WailsRoot = globalThis as unknown as WailsRoot,
+) {
+  return importCall("SubscribeCalendar", input, root);
+}
+
+/**
+ * Fetches a subscribed calendar from its address, or imports again the
+ * calendar accepted times are written to, with its kept sign-in.
+ */
 export function refreshCalendarSource(
   sourceId: string,
   root: WailsRoot = globalThis as unknown as WailsRoot,

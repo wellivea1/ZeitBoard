@@ -4,6 +4,8 @@ import {
   importCalendarFile,
   previewCalDAVCalendar,
   previewCalendarFile,
+  previewCalendarSubscription,
+  subscribeCalendar,
   type CalendarImportReport,
 } from "../data/calendar";
 
@@ -193,6 +195,109 @@ function CalDAVForm({
   );
 }
 
+// A calendar by the private address its provider publishes (ADR-0062). The
+// address is a secret: it is kept on this computer, shown by host alone, and
+// fetched every hour.
+function SubscriptionForm({
+  available,
+  busy,
+  zoneId,
+  report,
+  onBusy,
+  onReport,
+  onError,
+  onChanged,
+}: {
+  available: boolean;
+  busy: boolean;
+  zoneId: string;
+  report: CalendarImportReport | null;
+  onBusy: (busy: boolean) => void;
+  onReport: (report: CalendarImportReport | null) => void;
+  onError: (message: string) => void;
+  onChanged: () => void;
+}) {
+  const [address, setAddress] = useState("");
+  const [label, setLabel] = useState("");
+  const canRequest = available && Boolean(address.trim()) && !busy;
+
+  const run = (commit: boolean) => {
+    if (!canRequest) return;
+    onBusy(true);
+    onError("");
+    const operation = commit ? subscribeCalendar : previewCalendarSubscription;
+    void operation({ address: address.trim(), label: label.trim(), zoneId }).then(
+      (next) => {
+        onBusy(false);
+        onReport(next);
+        if (commit) {
+          setAddress("");
+          onChanged();
+        }
+      },
+      (reason: unknown) => {
+        onBusy(false);
+        onError(reason instanceof Error ? reason.message : "The calendar could not be read.");
+      },
+    );
+  };
+
+  return (
+    <div className="calendar-import-form" role="tabpanel">
+      <label>
+        <span>Calendar address</span>
+        <input
+          type="url"
+          value={address}
+          placeholder="https://calendar.google.com/calendar/ical/…/basic.ics"
+          autoComplete="off"
+          spellCheck={false}
+          disabled={!available || busy}
+          onChange={(event) => {
+            setAddress(event.currentTarget.value);
+            onReport(null);
+          }}
+        />
+      </label>
+      <label>
+        <span>Name</span>
+        <input
+          value={label}
+          placeholder="Work calendar"
+          disabled={!available || busy}
+          onChange={(event) => setLabel(event.currentTarget.value)}
+        />
+      </label>
+      <small>
+        In Google Calendar, a calendar&apos;s settings give its secret address in iCal format. In
+        Outlook, publish the calendar and copy its ICS link. Anyone holding the address can read the
+        calendar, so ZeitBoard keeps it on this computer, shows only its host, and reads it again
+        every hour.
+      </small>
+      <div className="calendar-import-actions">
+        <button
+          className="button secondary compact"
+          type="button"
+          disabled={!canRequest}
+          onClick={() => run(false)}
+        >
+          {busy ? "Reading…" : "Preview"}
+        </button>
+        <button
+          className="button primary compact"
+          type="button"
+          disabled={!canRequest || !report || report.imported || report.kind !== "ics"}
+          onClick={() => run(true)}
+        >
+          Subscribe
+        </button>
+      </div>
+    </div>
+  );
+}
+
+type ImportMode = "file" | "caldav" | "address";
+
 export interface CalDAVRefill {
   endpoint: string;
   label: string;
@@ -210,7 +315,7 @@ export function CalendarImportPanel({
   /** A calendar to import again: its address and name, ready for a sign-in. */
   refill?: CalDAVRefill;
 }) {
-  const [mode, setMode] = useState<"file" | "caldav">(refill ? "caldav" : "file");
+  const [mode, setMode] = useState<ImportMode>(refill ? "caldav" : "file");
   const [file, setFile] = useState<CalendarFileSelection | null>(null);
   const [caldav, setCalDAV] = useState<CalDAVFields>({
     endpoint: refill?.endpoint ?? "",
@@ -230,7 +335,7 @@ export function CalendarImportPanel({
   const [error, setError] = useState("");
   const fileReadVersion = useRef(0);
 
-  const selectMode = (next: "file" | "caldav") => {
+  const selectMode = (next: ImportMode) => {
     setMode(next);
     setReport(null);
     setError("");
@@ -346,13 +451,21 @@ export function CalendarImportPanel({
         >
           CalDAV account
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === "address"}
+          onClick={() => selectMode("address")}
+        >
+          Private address
+        </button>
       </div>
 
       {!available && (
         <p className="inline-notice">Adding a calendar needs the ZeitBoard desktop app.</p>
       )}
 
-      {mode === "file" ? (
+      {mode === "file" && (
         <CalendarFileForm
           available={available}
           busy={busy}
@@ -361,7 +474,8 @@ export function CalendarImportPanel({
           onChoose={chooseFile}
           onRun={runFile}
         />
-      ) : (
+      )}
+      {mode === "caldav" && (
         <CalDAVForm
           available={available}
           busy={busy}
@@ -369,6 +483,18 @@ export function CalendarImportPanel({
           report={report}
           onChange={changeCalDAV}
           onRun={runCalDAV}
+        />
+      )}
+      {mode === "address" && (
+        <SubscriptionForm
+          available={available}
+          busy={busy}
+          zoneId={zoneId}
+          report={report}
+          onBusy={setBusy}
+          onReport={setReport}
+          onError={setError}
+          onChanged={onChanged}
         />
       )}
 
