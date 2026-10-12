@@ -313,6 +313,7 @@ func (a *App) signInCalendarAccount(client calendaraccounts.Client) (CalendarAcc
 		ClientSecret: client.ClientSecret,
 		RefreshToken: token.Refresh,
 		ConnectedAt:  a.currentTime().UTC(),
+		Scopes:       token.Scope,
 	}
 	if err := store.SaveCalendarAccount(ctx, account); err != nil {
 		return CalendarAccountCalendarsDTO{}, err

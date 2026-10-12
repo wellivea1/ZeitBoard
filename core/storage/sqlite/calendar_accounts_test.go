@@ -18,6 +18,7 @@ func testCalendarAccount() CalendarAccount {
 		AccountID: "calendar_account_01", Provider: "google", Label: "owner@example.test",
 		ClientID: "synthetic-client.apps.example.test", ClientSecret: "synthetic-desktop-secret",
 		RefreshToken: syntheticRefreshToken, ConnectedAt: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC),
+		Scopes: "https://www.googleapis.com/auth/calendar.readonly",
 	}
 }
 
@@ -95,7 +96,8 @@ func TestACalendarAccountKeepsItsCalendarsUntilItIsRemoved(t *testing.T) {
 		t.Fatal(err)
 	}
 	if accounts, err := store.CalendarAccounts(ctx); err != nil || len(accounts) != 1 || accounts[0].RefreshToken != rotated ||
-		accounts[0].ClientSecret != account.ClientSecret || !accounts[0].ConnectedAt.Equal(account.ConnectedAt) {
+		accounts[0].ClientSecret != account.ClientSecret || !accounts[0].ConnectedAt.Equal(account.ConnectedAt) ||
+		accounts[0].Scopes != account.Scopes {
 		t.Fatalf("accounts %+v, %v", accounts, err)
 	}
 

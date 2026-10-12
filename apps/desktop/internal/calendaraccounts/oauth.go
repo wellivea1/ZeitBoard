@@ -149,11 +149,13 @@ func randomToken(bytes int) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buffer), nil
 }
 
-// Token is what the provider grants.
+// Token is what the provider grants. Scope is what the owner consented to,
+// as the provider states it; a provider that does not say leaves it empty.
 type Token struct {
 	Access    string
 	Refresh   string
 	ExpiresAt time.Time
+	Scope     string
 }
 
 // Exchange trades the code the browser brought back for tokens.
@@ -218,6 +220,7 @@ func (c Client) token(ctx context.Context, form url.Values) (Token, error) {
 		AccessToken  string `json:"access_token"`
 		RefreshToken string `json:"refresh_token"`
 		ExpiresIn    int    `json:"expires_in"`
+		Scope        string `json:"scope"`
 		Error        string `json:"error"`
 		Description  string `json:"error_description"`
 	}
@@ -239,6 +242,7 @@ func (c Client) token(ctx context.Context, form url.Values) (Token, error) {
 		Access:    answer.AccessToken,
 		Refresh:   answer.RefreshToken,
 		ExpiresAt: time.Now().Add(time.Duration(expires) * time.Second),
+		Scope:     strings.TrimSpace(answer.Scope),
 	}, nil
 }
 

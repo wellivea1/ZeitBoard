@@ -85,7 +85,9 @@ func (f *fakeProvider) serve(w http.ResponseWriter, r *http.Request) {
 				write(map[string]string{"error": "invalid_grant"})
 				return
 			}
-			write(map[string]any{"access_token": "access-1", "refresh_token": "refresh-1", "expires_in": 3599})
+			write(map[string]any{
+				"access_token": "access-1", "refresh_token": "refresh-1", "expires_in": 3599, "scope": scope(f.provider),
+			})
 		case "refresh_token":
 			if form.Get("refresh_token") != "refresh-1" {
 				w.WriteHeader(http.StatusBadRequest)
@@ -167,7 +169,8 @@ func TestGoogleSignsInAndReadsEveryPage(t *testing.T) {
 	}
 
 	token, err := client.Exchange(context.Background(), auth, "synthetic-code")
-	if err != nil || token.Access != "access-1" || token.Refresh != "refresh-1" || time.Until(token.ExpiresAt) < time.Hour-time.Minute {
+	if err != nil || token.Access != "access-1" || token.Refresh != "refresh-1" || time.Until(token.ExpiresAt) < time.Hour-time.Minute ||
+		token.Scope != "https://www.googleapis.com/auth/calendar.readonly" {
 		t.Fatalf("token %+v, %v", token, err)
 	}
 	refreshed, err := client.Refresh(context.Background(), "refresh-1")

@@ -31,6 +31,10 @@ type CalendarAccount struct {
 	RefreshToken string
 	ConnectedAt  time.Time
 
+	// Scopes is what the owner consented to at sign-in, as the provider
+	// stated it.
+	Scopes string
+
 	// Problem says the provider ended the sign-in, so that only signing in
 	// again restores it; it is empty otherwise.
 	Problem string
@@ -58,6 +62,7 @@ func (s *Store) initializeCalendarAccounts(ctx context.Context) error {
 			client_secret TEXT NOT NULL DEFAULT '',
 			refresh_token TEXT NOT NULL,
 			connected_at TEXT NOT NULL,
+			scopes TEXT NOT NULL DEFAULT '',
 			problem TEXT NOT NULL DEFAULT ''
 		)`,
 		`CREATE TABLE IF NOT EXISTS local_calendar_account_calendars (
@@ -91,6 +96,8 @@ func validateCalendarAccount(account CalendarAccount) error {
 		return errors.New("a calendar account needs the client id it signed in with")
 	case strings.TrimSpace(account.RefreshToken) == "" || len(account.RefreshToken) > 8192:
 		return errors.New("a calendar account needs lasting access")
+	case len(account.Scopes) > 2048:
+		return errors.New("a calendar account's scopes are too long")
 	case account.ConnectedAt.IsZero():
 		return errors.New("a calendar account needs when it was connected")
 	}
@@ -104,13 +111,13 @@ func (s *Store) SaveCalendarAccount(ctx context.Context, account CalendarAccount
 		return err
 	}
 	_, err := s.db.ExecContext(ctx, `INSERT INTO local_calendar_accounts(
-			account_id, provider, label, client_id, client_secret, refresh_token, connected_at)
-		VALUES(?, ?, ?, ?, ?, ?, ?)
+			account_id, provider, label, client_id, client_secret, refresh_token, connected_at, scopes)
+		VALUES(?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(account_id) DO UPDATE SET label = excluded.label, client_id = excluded.client_id,
 			client_secret = excluded.client_secret, refresh_token = excluded.refresh_token,
-			connected_at = excluded.connected_at, problem = ''`,
+			connected_at = excluded.connected_at, scopes = excluded.scopes, problem = ''`,
 		account.AccountID, account.Provider, account.Label, account.ClientID, account.ClientSecret,
-		account.RefreshToken, formatSQLiteTime(account.ConnectedAt))
+		account.RefreshToken, formatSQLiteTime(account.ConnectedAt), strings.TrimSpace(account.Scopes))
 	return err
 }
 
@@ -147,7 +154,7 @@ func (s *Store) RecordCalendarAccountProblem(ctx context.Context, accountID, pro
 // carry them.
 func (s *Store) CalendarAccounts(ctx context.Context) ([]CalendarAccount, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT account_id, provider, label, client_id, client_secret, refresh_token,
-			connected_at, problem
+			connected_at, scopes, problem
 		FROM local_calendar_accounts ORDER BY provider, label, account_id`)
 	if err != nil {
 		return nil, err
@@ -158,7 +165,7 @@ func (s *Store) CalendarAccounts(ctx context.Context) ([]CalendarAccount, error)
 		var account CalendarAccount
 		var connected string
 		if err := rows.Scan(&account.AccountID, &account.Provider, &account.Label, &account.ClientID,
-			&account.ClientSecret, &account.RefreshToken, &connected, &account.Problem); err != nil {
+			&account.ClientSecret, &account.RefreshToken, &connected, &account.Scopes, &account.Problem); err != nil {
 			return nil, err
 		}
 		if account.ConnectedAt, err = parseCalendarTime(connected); err != nil {
