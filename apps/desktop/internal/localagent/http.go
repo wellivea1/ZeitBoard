@@ -182,7 +182,7 @@ func (h *Handler) initialize(w http.ResponseWriter, r *http.Request, req rpcRequ
 		"serverInfo": map[string]any{
 			"name":    "zeitboard-desktop-local",
 			"title":   "ZeitBoard Desktop Local Agent",
-			"version": "0.1.0",
+			"version": Version,
 		},
 		"instructions": "Read allowlisted desktop projections, refuse medical decisions, and create proposals only. No tool can approve or apply a health or schedule change. Appearance changes are direct, local, and reversible.",
 	}))

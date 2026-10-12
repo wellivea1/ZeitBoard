@@ -6,7 +6,7 @@
 > self-hostable** (the project operates no service and collects no telemetry); the user's data syncs
 > to _their own_ instance, and the assistant LLM is **bring-your-own-key**. The Milestone 1 sync
 > path, Milestone 2 BYOK assistant backend, Milestone 3 server-side read projections, and the
-> Milestone 4 local MCP connector are implemented; cloud skill packaging remains future work. Not
+> Milestone 4 local MCP connector are implemented, and so is packaging for Claude (ADR-0061). Not
 > legal advice.
 
 ## Commitments
@@ -408,6 +408,15 @@ Access to the endpoint requires a bearer token held in a descriptor file that is
 restricted to the current user (an explicit owner-only DACL on Windows, mode 0600
 elsewhere). Any process already running as the user can read that file; the endpoint is a
 user-level boundary, not a sandbox.
+
+**Packaged for Claude (ADR-0061).** Settings › This computer writes two files where the owner
+chooses. One is a Claude Desktop extension holding the installed local connector. The other is a
+skill that tells Claude how to use it. Neither holds a record, a password or a token. With them
+added, what the connector returns, the projections above, goes to the model Claude uses. That model
+runs in Anthropic's cloud, under the owner's Anthropic account and its terms. Settings says so
+beside the two files before either is saved. The skill is guidance only: the budgets, the refusal
+and the proposals that wait for the owner are enforced by ZeitBoard, not by the skill. ChatGPT,
+and Claude on the web and phones, take remote servers only, and ZeitBoard offers none.
 
 ## Development data
 

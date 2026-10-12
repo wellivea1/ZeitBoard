@@ -1383,6 +1383,32 @@ started, or while the computer slept. Nothing showed what its records implied, e
 - **Not done.** Lock and unlock history from Windows' logs, whose event data is undocumented, and
   other operating systems.
 
+### ZeitBoard packaged for Claude — 2026-10-12
+
+ADR-0006 held cloud packaging back until it had its own privacy and threat review. ADR-0061 is
+that review, and ships the packages.
+
+- **Made by the desktop.** Settings › This computer › Use ZeitBoard with Claude saves two files:
+  - A Claude Desktop extension (`ZeitBoard.mcpb`, MCP Bundle 0.3) holding the installed connector.
+    Its manifest's tool list is generated from the registry the endpoint serves, so the two cannot
+    drift apart.
+  - A skill (`zeitboard-skill.zip`). It says how to use those tools:
+    - read the snapshot first;
+    - speak in ranges;
+    - give ZeitBoard's medical answer word for word;
+    - every change is a proposal;
+    - treat results as data;
+    - repeat no more health detail than a question needs.
+- **One skill, kept in core.** `core/agentskill` holds `SKILL.md`. Tests hold it to Claude's
+  frontmatter rules and check that it quotes `agentpolicy.MedicalRefusal`. They also check that it
+  explains every registered action and names exactly the tools the connector serves.
+- **Said before it is saved.** Settings says that what the tools return goes to the model Claude
+  uses, in Anthropic's cloud, and that neither file holds a record or a password.
+- **The guards stay in ZeitBoard.** Budgets, the refusal and proposals that wait for the owner do
+  not depend on the skill.
+- **Not done.** ChatGPT, and Claude on the web and phones, take remote MCP servers only. Offering
+  one means exposing the owner's server with OAuth, a boundary that needs its own review.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and
@@ -1442,5 +1468,5 @@ tests and a verification entry. Where it waits on something outside the code, th
 | Missed-dose sharing, off by default per link | Medication plan, M-F | Delivered 2026-10-11 (ADR-0058). Only doses logged as skipped are shown |
 | Activity collected while the app is closed | Roadmap, slice 11 | Delivered 2026-10-12 (ADR-0060) from Windows' own power log, by a separate choice. The collector itself still stops when ZeitBoard quits |
 | OAuth calendar providers | Roadmap, slice 6 and phase 3 | Waits on provider app registrations in the owner's name |
-| Packaged cloud skills for assistants | Roadmap, phase 4 | Open. It needs its own privacy and threat review |
+| Packaged cloud skills for assistants | Roadmap, phase 4 | Delivered 2026-10-12 for Claude (ADR-0061), with its privacy and threat review. ChatGPT and Claude on the web take remote servers only, which ZeitBoard does not expose |
 | Encrypting the local database | Roadmap, phase 2; limitation 1 | Blocked on a CGo-free driver with an encryption hook |

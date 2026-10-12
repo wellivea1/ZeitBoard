@@ -84,5 +84,5 @@ opt-in tier.
 
 Accepted. The local MCP connector is implemented in
 [ADR-0012](0012-mcp-agent-connector.md): it exposes M3 read projections and M2
-propose-only actions through a stateless local adapter. Cloud skill packaging remains a
-future opt-in layer and requires its own privacy/threat review before shipment.
+propose-only actions through a stateless local adapter. Packaging for Claude, with its own
+privacy and threat review, is [ADR-0061](0061-zeitboard-packaged-for-claude.md).

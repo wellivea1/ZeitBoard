@@ -754,3 +754,10 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* The two files that add ZeitBoard to Claude (ADR-0061), side by side. */
+.claude-package-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
