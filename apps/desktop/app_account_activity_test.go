@@ -37,7 +37,7 @@ func writeSyntheticTakeout(t *testing.T) string {
 		entries = append(entries, entry{Header: "Search", Title: "Searched for canary-terms", Time: at.Format(time.RFC3339)})
 	}
 	for wake := 0; wake <= 12; wake++ {
-		from := syntheticSleepStart(wake-1).Add(8*time.Hour + 20*time.Minute)
+		from := syntheticSleepStart(wake - 1).Add(8*time.Hour + 20*time.Minute)
 		until := syntheticSleepStart(wake).Add(-30 * time.Minute)
 		for at := from; at.Before(until); at = at.Add(15 * time.Minute) {
 			add(at)
