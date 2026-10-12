@@ -91,3 +91,10 @@ What remains open is whole-database encryption. It needs either upstream VFS
 support in the pure-Go driver, or a decision to accept CGO for the desktop build
 with everything that implies for the build matrix. Neither is a small change, and
 neither should be made to satisfy a sentence in a document.
+
+_Update, 2026-10-12:_ a third way exists. `ncruces/go-sqlite3` is a CGo-free SQLite
+that runs as WebAssembly, and its `adiantum` and `xts` VFSs encrypt every page at
+rest. Adopting it would replace the driver, not the store's design. It waits on
+the owner for two reasons. It is a new dependency, still pre-v1. And the key needs
+a keeper: protected by Windows for this account, it would leave the database
+unreadable after an administrator resets the password.

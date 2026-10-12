@@ -1452,7 +1452,7 @@ or deferred with its reason.
 
 | # | Limitation | Disposition |
 |---|---|---|
-| 1 | The local database is not encrypted at rest. Owner-only file permissions protect it, and Settings says so (ADR-0035). | Accepted. Whole-database encryption waits for a CGo-free driver with an encryption hook. |
+| 1 | The local database is not encrypted at rest. Owner-only file permissions protect it, and Settings says so (ADR-0035). | Accepted. A CGo-free driver with an encryption hook now exists; adopting it waits on the owner (see the planned functions). |
 | 2 | ~~A calendar file is refreshed by importing the updated file again, under the same name.~~ | Resolved 2026-10-12: a calendar subscribed by its private address is read again every hour (ADR-0062). A file still refreshes by importing it again. |
 | 3 | Accepted times go to one CalDAV calendar at a time, and the calendar's host can read their task names (ADR-0053; disclosed in the offer). | Accepted by design. |
 | 4 | Estimates use recorded sleep only. Multi-source inference stays in shadow mode after a negative promotion decision (ADR-0031). | Deferred analysis work. It ships only after a candidate passes the measured gate. |
@@ -1473,6 +1473,13 @@ The goal now covers every planned function, not only the release milestones. Thi
 each function the roadmap and the plans above still name. A function stays open until it ships with
 tests and a verification entry. Where it waits on something outside the code, the table says what.
 
+**Standing, 2026-10-12.** Every function in the table is delivered except two parts that wait on
+the owner rather than on code:
+- OAuth for calendar providers needs app registrations in the owner's name. Read access already
+  works by private address.
+- Encrypting the local database needs a decision to adopt a new SQLite driver, which is a download
+  and a dependency, and a decision on who holds the key.
+
 | Function | Named in | Status |
 |---|---|---|
 | Undo a night's last edit in one click | Roadmap, phase 2 | Delivered 2026-10-08 |
@@ -1488,4 +1495,4 @@ tests and a verification entry. Where it waits on something outside the code, th
 | Activity collected while the app is closed | Roadmap, slice 11 | Delivered 2026-10-12 (ADR-0060) from Windows' own power log, by a separate choice. The collector itself still stops when ZeitBoard quits |
 | OAuth calendar providers | Roadmap, slice 6 and phase 3 | Read access delivered 2026-10-12 without OAuth: Google, Outlook and iCloud calendars subscribe by their private address (ADR-0062). OAuth itself, for write access, waits on provider app registrations in the owner's name |
 | Packaged cloud skills for assistants | Roadmap, phase 4 | Delivered 2026-10-12 for Claude (ADR-0061), with its privacy and threat review. ChatGPT and Claude on the web take remote servers only, which ZeitBoard does not expose |
-| Encrypting the local database | Roadmap, phase 2; limitation 1 | Blocked on a CGo-free driver with an encryption hook |
+| Encrypting the local database | Roadmap, phase 2; limitation 1 | Waits on the owner. `ncruces/go-sqlite3` is CGo-free (SQLite as WebAssembly) and offers encrypting VFSs, `adiantum` and `xts`, that encrypt every page. It is pre-v1. Adopting it means downloading a new driver and moving the desktop store to it. It also means deciding where the key lives: protected by Windows for this account, a database that a password reset by an administrator would make unreadable |
