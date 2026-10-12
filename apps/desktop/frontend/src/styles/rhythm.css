@@ -245,3 +245,179 @@
     margin-bottom: var(--space-2);
   }
 }
+
+/* Nights a Google export suggests, in Rhythm › Sources (ADR-0059). Every day
+ * the export covers is a row of a double plot. The suggestions are soft bands
+ * and the recorded nights a solid bar through their middle, so the two read
+ * apart by shape as well as colour, and agreement shows as a bar inside a band. */
+.activity-nights-panel {
+  margin-top: var(--space-6);
+  padding-top: var(--space-5);
+}
+
+.activity-nights-figure {
+  --activity-dates: 76px;
+  margin: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.activity-nights-axis {
+  position: relative;
+  height: 18px;
+  margin-inline-start: calc(var(--activity-dates) + var(--space-3));
+  color: var(--muted);
+  font-size: var(--type-micro);
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+}
+
+.activity-nights-axis span {
+  position: absolute;
+  top: 0;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.activity-nights-axis span:nth-child(1) {
+  left: 0;
+  transform: none;
+}
+
+.activity-nights-axis span:nth-child(2) {
+  left: 25%;
+}
+
+.activity-nights-axis span:nth-child(3) {
+  left: 50%;
+}
+
+.activity-nights-axis span:nth-child(4) {
+  left: 75%;
+}
+
+.activity-nights-axis span:nth-child(5) {
+  left: 100%;
+  transform: translateX(-100%);
+}
+
+.activity-nights-body {
+  display: grid;
+  grid-template-columns: var(--activity-dates) minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+.activity-nights-dates {
+  position: relative;
+}
+
+.activity-nights-dates time {
+  position: absolute;
+  right: 0;
+  color: var(--muted);
+  font-size: var(--type-micro);
+  font-variant-numeric: tabular-nums;
+  font-weight: 750;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.activity-nights-plot {
+  --probe-line: var(--actogram-grid);
+  position: relative;
+  min-width: 0;
+  background-image:
+    linear-gradient(
+      to right,
+      transparent calc(50% - 1px),
+      var(--actogram-grid) calc(50% - 1px),
+      var(--actogram-grid) 50%,
+      transparent 50%
+    ),
+    linear-gradient(to right, var(--divider) 1px, transparent 1px);
+  background-size:
+    100% 100%,
+    12.5% 100%;
+  border-block: 1px solid var(--divider);
+}
+
+.activity-nights-plot svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.activity-nights-suggested {
+  fill: var(--actogram-suggested);
+}
+
+.activity-nights-recorded {
+  fill: var(--actogram-observed);
+}
+
+.activity-nights-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  margin-inline-start: calc(var(--activity-dates) + var(--space-3));
+  color: var(--muted);
+  font-size: var(--type-micro);
+}
+
+.activity-nights-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.activity-nights-key {
+  width: 20px;
+  height: 10px;
+  display: inline-block;
+}
+
+.activity-nights-key.is-suggested {
+  background: var(--actogram-suggested);
+}
+
+.activity-nights-key.is-recorded {
+  height: 4px;
+  background: var(--actogram-observed);
+}
+
+.activity-nights-legend p {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--subtle);
+}
+
+.activity-nights-agreement {
+  max-width: 70ch;
+  margin: var(--space-5) 0 0;
+  color: var(--ink);
+  font-family: var(--font-serif);
+  font-size: 17px;
+  line-height: 1.5;
+}
+
+.activity-nights-agreement .count {
+  font-size: 22px;
+}
+
+@media (max-width: 700px) {
+  .activity-nights-figure {
+    --activity-dates: 56px;
+  }
+}
+
+/* Recent weeks or the whole export, set like the Week board's range. */
+.activity-nights-span {
+  display: flex;
+  justify-content: flex-end;
+  gap: 18px;
+}
+
+.activity-nights-span .filter {
+  min-height: 32px;
+}

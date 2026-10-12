@@ -34,6 +34,10 @@ import (
 const (
 	disclaimer    = "Estimates describe observed sleep-wake timing and uncertainty. This application does not provide medical advice."
 	deleteConfirm = "DELETE"
+
+	// removeConfirm is typed back to remove what was brought in from
+	// elsewhere and can be brought in again: a calendar, an export's activity.
+	removeConfirm = "REMOVE"
 )
 
 var saveSleepDataDialog = runtime.SaveFileDialog
@@ -46,57 +50,62 @@ type App struct {
 	analysisDone      <-chan struct{}
 	analysisEstimator estimation.Estimator
 	// analysisUpdated observes each analysis-updated announcement (tests).
-	analysisUpdated     func()
-	serviceMu           sync.Mutex
-	window              desktopWindow
-	startupMu           sync.Mutex
-	startupControl      autostart.Controller
-	closing             atomic.Bool
-	collector           *ingest.Manager
-	activityMu          sync.Mutex
-	activitySource      ingest.Collector
-	activityStarted     bool
-	activityClosed      bool
-	activityError       string
-	tray                tray.Controller
-	store               *storage.Store
-	storeErr            error
-	configDir           string
-	calendarHTTPClient  calendarHTTPDoer
-	backendHTTPMu       sync.Mutex
-	backendHTTPClients  map[backendTrust]*http.Client
-	backendSyncMu       sync.Mutex
-	backendConfigMu     sync.RWMutex
-	backendRunMu        sync.Mutex
-	backendRunCancel    context.CancelFunc
-	backendOutage       backendOutage
-	background          periodicWorker
-	calendarWriter      periodicWorker
-	sleepImportMu       sync.Mutex
-	sleepImportPending  map[string]pendingSleepImportFile
-	nowFn               func() time.Time
-	reminderMu          sync.RWMutex
-	reminderCancel      context.CancelFunc
-	reminderDone        chan struct{}
-	reminderRunning     bool
-	reminderLastError   string
-	localAgentMu        sync.RWMutex
-	localAgent          *localagent.Endpoint
-	localAgentErr       string
-	appearanceMu        sync.RWMutex
-	appearance          LocalAppearanceStateDTO
-	appearanceRevision  uint64
-	appearancePersisted bool
-	appearanceErr       string
-	reachingMu          sync.RWMutex
-	reaching            ReachingHoursDTO
-	reachingRevision    uint64
-	reachingErr         string
-	regionalMu          sync.RWMutex
-	regional            RegionalSettingsDTO
-	regionalRevision    uint64
-	regionalErr         string
-	systemClock         civilfmt.Clock
+	analysisUpdated    func()
+	serviceMu          sync.Mutex
+	window             desktopWindow
+	startupMu          sync.Mutex
+	startupControl     autostart.Controller
+	closing            atomic.Bool
+	collector          *ingest.Manager
+	activityMu         sync.Mutex
+	activitySource     ingest.Collector
+	activityStarted    bool
+	activityClosed     bool
+	activityError      string
+	tray               tray.Controller
+	store              *storage.Store
+	storeErr           error
+	configDir          string
+	calendarHTTPClient calendarHTTPDoer
+	backendHTTPMu      sync.Mutex
+	backendHTTPClients map[backendTrust]*http.Client
+	backendSyncMu      sync.Mutex
+	backendConfigMu    sync.RWMutex
+	backendRunMu       sync.Mutex
+	backendRunCancel   context.CancelFunc
+	backendOutage      backendOutage
+	background         periodicWorker
+	calendarWriter     periodicWorker
+	sleepImportMu      sync.Mutex
+	sleepImportPending map[string]pendingSleepImportFile
+	// accountActivityMu guards the export being previewed and the nights
+	// worked out from the kept activity (ADR-0059).
+	accountActivityMu      sync.Mutex
+	accountActivityPending *pendingAccountActivity
+	accountActivityNights  accountActivityNights
+	nowFn                  func() time.Time
+	reminderMu             sync.RWMutex
+	reminderCancel         context.CancelFunc
+	reminderDone           chan struct{}
+	reminderRunning        bool
+	reminderLastError      string
+	localAgentMu           sync.RWMutex
+	localAgent             *localagent.Endpoint
+	localAgentErr          string
+	appearanceMu           sync.RWMutex
+	appearance             LocalAppearanceStateDTO
+	appearanceRevision     uint64
+	appearancePersisted    bool
+	appearanceErr          string
+	reachingMu             sync.RWMutex
+	reaching               ReachingHoursDTO
+	reachingRevision       uint64
+	reachingErr            string
+	regionalMu             sync.RWMutex
+	regional               RegionalSettingsDTO
+	regionalRevision       uint64
+	regionalErr            string
+	systemClock            civilfmt.Clock
 }
 
 type RefusalDTO struct {

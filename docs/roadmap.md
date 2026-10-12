@@ -192,9 +192,11 @@ clinical-day chart, selected-range drift, dose/start markers, explicit-record
 adherence, and confirmed redaction-first printable HTML. **Next:** M-D sync and
 M-E's separately reviewed local agent projection.
 
-7. **Takeout / "My Activity" import + activity→sleep inference.** File import (no Google API exists
-   for My Activity) feeding the deferred probabilistic inference; emits low-confidence `inferred`
-   episodes only, validated by the backtest before it can influence the estimate.
+7. ~~**Takeout / "My Activity" import + activity→sleep inference.**~~ ✅ Delivered 2026-10-12
+   (ADR-0059): the person chooses a Takeout export, ZeitBoard keeps only the minute of each
+   activity, and gaps become suggested nights drawn beside the recorded ones in Rhythm › Sources,
+   with how well they agree. They stay in the shadow: no estimate, plan or projection reads them
+   until a candidate passes the backtest.
 8. ~~**Assistant desktop UI (Phase 4 front end).**~~ ✅ Delivered: the §4 assistant rail
    (status-strip toggle, Chat/Queue tabs, action cards wired to the same one-use-token queue
    decisions, Enter/Shift+Enter composer, typing indicator, disclaimer) over the M2 propose-only
@@ -457,7 +459,7 @@ periodic real screen-reader/TalkBack walkthroughs.
 Largely delivered (see "Where things stand"). Remaining in scope:
 
 - Import adapters beyond sleep observation-set JSON/CSV (the local sleep path is hardened by
-  ADR-0022; Takeout/activity import remains slice 7).
+  ADR-0022; the Takeout/My Activity import was delivered in slice 7, ADR-0059).
 - ~~Source-specific missingness.~~ Delivered 2026-10-11 for Health Connect (ADR-0054): after each
   check, the companion reports whether it read, may not read, found Health Connect unavailable, or
   failed. The desktop words the cause beside a stale estimate and on Data Sources. Manual

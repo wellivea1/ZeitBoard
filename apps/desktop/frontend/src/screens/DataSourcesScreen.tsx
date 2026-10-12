@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { PageHeader } from "../components/AppShell";
+import { ActivityExportPanel } from "../components/ActivityExportPanel";
 import { CalendarSourcesPanel } from "../components/CalendarSourcesPanel";
 import { DataSourceStatusPanel } from "../components/DataSourceStatusPanel";
 import { SleepImportPanel } from "../components/SleepImportPanel";
@@ -112,6 +113,7 @@ export function DataSourcesScreen() {
           onChanged={notifyCalendarDataChanged}
         />
         <SleepImportPanel />
+        <ActivityExportPanel />
         <p className="data-source-log-pointer">
           Individual nights, their corrections, and deleting them are in{" "}
           <a href="#/log/sleep">Log</a>.

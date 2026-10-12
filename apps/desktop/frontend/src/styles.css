@@ -79,6 +79,7 @@
   --actogram-observed-text: #f7f4ed;
   --actogram-inferred-text: #2b3d5e;
   --actogram-inferred: repeating-linear-gradient(90deg, #9aa6bb 0 5px, #e3e5ea 5px 8px);
+  --actogram-suggested: #9aa6bb;
   --actogram-forecast-text: #3b4a66;
   --actogram-forecast: repeating-linear-gradient(90deg, #c7cedb 0 7px, #ebedf1 7px 12px);
   --actogram-forecast-border: #9aa6bb;
@@ -219,6 +220,7 @@
   --actogram-observed-text: #10131a;
   --actogram-inferred-text: #cfd8ea;
   --actogram-inferred: repeating-linear-gradient(90deg, #4c5a78 0 5px, #232733 5px 8px);
+  --actogram-suggested: #4c5a78;
   --actogram-forecast-text: #b9c5dd;
   --actogram-forecast: repeating-linear-gradient(90deg, #3a4660 0 7px, #20242e 7px 12px);
   --actogram-forecast-border: #5a6b8e;
@@ -287,6 +289,7 @@
   --actogram-observed-text: #05070a;
   --actogram-inferred-text: #cfd8ea;
   --actogram-inferred: repeating-linear-gradient(90deg, #3c4760 0 5px, #10131a 5px 8px);
+  --actogram-suggested: #3c4760;
   --actogram-forecast-text: #b9c5dd;
   --actogram-forecast: repeating-linear-gradient(90deg, #2e384d 0 7px, #10131a 7px 12px);
   --actogram-forecast-border: #4c5a78;
@@ -360,6 +363,7 @@
   --actogram-observed-text: #000000;
   --actogram-inferred-text: #ffc21a;
   --actogram-inferred: repeating-linear-gradient(90deg, #7a5500 0 5px, #241a00 5px 8px);
+  --actogram-suggested: #7a5500;
   --actogram-forecast-text: #ffc21a;
   --actogram-forecast: repeating-linear-gradient(90deg, #4d3800 0 7px, #1c1503 7px 12px);
   --actogram-forecast-border: #8a6300;
@@ -430,6 +434,7 @@
   --actogram-observed-text: #000000;
   --actogram-inferred-text: #ffffff;
   --actogram-inferred: repeating-linear-gradient(90deg, #7a7a7a 0 5px, #262626 5px 8px);
+  --actogram-suggested: #7a7a7a;
   --actogram-forecast-text: #ffffff;
   --actogram-forecast: repeating-linear-gradient(90deg, #4d4d4d 0 7px, #1a1a1a 7px 12px);
   --actogram-forecast-border: #9a9a9a;

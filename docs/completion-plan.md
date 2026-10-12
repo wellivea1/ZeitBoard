@@ -1334,6 +1334,33 @@ on a share link, off unless the owner ticks it (ADR-0058).
   measures the sleep evidence. The server may now read dose records (never medication
   definitions), and only when some link has the grant.
 
+### Years of rhythm from a Google export — 2026-10-12
+
+Recorded nights begin when someone starts recording, but a drifting rhythm usually shows years
+earlier in when they used their phone. ZeitBoard now reads that from a Google Takeout export
+(ADR-0059).
+
+- **The person brings the export.** Data Sources takes a Takeout .zip, or a My Activity .json from
+  one, through the system's file dialog. ZeitBoard never signs in to Google. An export made as web
+  pages is refused with how to make it as JSON.
+- **Time alone.** `core/takeout` reads My Activity as a stream and keeps the minute of each entry.
+  The decoder sees only that a header is present and the time. Titles, links, products and places
+  are passed over as the file is read, and an entry larger than a megabyte is not held whole.
+  Folders are recognised by shape, since Takeout translates their names.
+- **Shown before it is kept.** The preview counts the entries read, the minutes with activity, the
+  span and the nights suggested. "Keep these times" stores only the minutes, with counts of what
+  each import read. One action in Data Sources removes them all and compacts the database.
+- **In the shadow.** Gaps of three to fourteen hours become suggested nights under ADR-0031's rules,
+  with their own source kind. Rhythm › Sources draws them as a double-plotted actogram beside the
+  recorded nights. It opens on the last twelve weeks, and the whole export is one press away. Below
+  the figure it says how many recorded nights had a suggestion beside them, and how far apart the
+  edges typically were. A night nobody recorded counts neither way.
+- **Nothing else reads them.** The minutes are in no sync payload, share link, snapshot, agent
+  projection, estimate or plan, and a test asserts that keeping them leaves the planning
+  fingerprint unchanged.
+- **Not done.** Taking a suggested night into the record needs a correction prompt. Other services'
+  exports, and exports made as web pages, are not read.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and
@@ -1369,7 +1396,7 @@ or deferred with its reason.
 | 9 | There are no ordered migrations yet. Every schema change so far was additive or an explicit drop (review #25). | Accepted. The upgrade tests fail on the first change that is neither, which then needs its migration. |
 | 10 | ~~The clinical chart prints, or saves as PDF, but produces no PNG directly.~~ | Resolved 2026-10-11: "Save chart as PNG". |
 | 11 | English only. ~~Onboarding is the first-run setup.~~ | English only is accepted for the private release. Times have followed the reader's 12- or 24-hour clock since 2026-10-11 (ADR-0057). Onboarding resolved 2026-10-11: after the first forecast, Home lists what else there is to set up. |
-| 12 | Google Takeout and My Activity import are not implemented. | Deferred, with slice 7's multi-source work. |
+| 12 | ~~Google Takeout and My Activity import are not implemented.~~ | Resolved 2026-10-12: a Takeout export's times become suggested nights beside the recorded ones, in the shadow (ADR-0059). |
 | 13 | ~~A correction is undone by adding another, not with one click.~~ | Resolved 2026-10-08: Undo on the night's row takes back its latest edit. |
 | 14 | Notices reach a phone through the OS push transport, which the owner's own server does not replace (C6, disclosed). | Accepted and disclosed. |
 
@@ -1389,7 +1416,7 @@ tests and a verification entry. Where it waits on something outside the code, th
 | Reaching hours for more than one contact, and per-day hours | Roadmap, slice 16 | Delivered 2026-10-11 (ADR-0056) |
 | Onboarding beyond the first-run setup | Roadmap, phase 2; limitation 11 | Delivered 2026-10-11 |
 | Localization readiness | Roadmap, phase 2; limitation 11 | Delivered 2026-10-11 for times (ADR-0057). Translated text waits for a message catalog |
-| Google Takeout and My Activity import, with inference kept in shadow mode | Roadmap, slice 7; limitation 12 | Open. Inference reaches the estimate only after it passes the backtest gate |
+| Google Takeout and My Activity import, with inference kept in shadow mode | Roadmap, slice 7; limitation 12 | Delivered 2026-10-12 (ADR-0059). Suggestions stay beside the recorded nights until they pass the backtest gate |
 | Missed-dose sharing, off by default per link | Medication plan, M-F | Delivered 2026-10-11 (ADR-0058). Only doses logged as skipped are shown |
 | Activity collected while the app is closed | Roadmap, slice 11 | Open |
 | OAuth calendar providers | Roadmap, slice 6 and phase 3 | Waits on provider app registrations in the owner's name |
