@@ -1,9 +1,12 @@
 package calendaraccounts
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -33,7 +36,9 @@ func (c Client) Calendars(ctx context.Context, access string) ([]Calendar, error
 }
 
 // Events reads one calendar's events between from and to, each occurrence
-// of a repeating event on its own.
+// of a repeating event on its own. An accepted time ZeitBoard wrote there
+// (ADR-0065) comes back under ZeitBoard's own UID, so that reading it is
+// not mistaken for the owner's commitment.
 func (c Client) Events(ctx context.Context, access, calendarID string, from, to time.Time) ([]calendarcore.AccountEvent, error) {
 	if strings.TrimSpace(calendarID) == "" {
 		return nil, errors.New("no calendar was named")
@@ -44,24 +49,53 @@ func (c Client) Events(ctx context.Context, access, calendarID string, from, to 
 	return c.googleEvents(ctx, access, calendarID, from, to)
 }
 
-func (c Client) get(ctx context.Context, address, access string, headers map[string]string, value any) error {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, address, nil)
+// call sends one request to the provider's API, with a JSON body when one is
+// given, and gives back the status for the caller to judge.
+func (c Client) call(ctx context.Context, method, address, access string, headers map[string]string, body, value any) (int, error) {
+	var reader io.Reader
+	if body != nil {
+		encoded, err := json.Marshal(body)
+		if err != nil {
+			return 0, err
+		}
+		reader = bytes.NewReader(encoded)
+	}
+	request, err := http.NewRequestWithContext(ctx, method, address, reader)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	request.Header.Set("Authorization", "Bearer "+access)
 	request.Header.Set("Accept", "application/json")
+	if body != nil {
+		request.Header.Set("Content-Type", "application/json")
+	}
 	for name, header := range headers {
 		request.Header.Set(name, header)
 	}
-	status, err := c.send(request, value)
+	if value == nil {
+		value = &struct{}{}
+	}
+	return c.send(request, value)
+}
+
+func (c Client) get(ctx context.Context, address, access string, headers map[string]string, value any) error {
+	status, err := c.call(ctx, http.MethodGet, address, access, headers, nil, value)
 	if err != nil {
 		return err
 	}
 	if status != http.StatusOK {
-		return fmt.Errorf("%s answered HTTP %d", request.URL.Hostname(), status)
+		return answered(address, status)
 	}
 	return nil
+}
+
+// answered is an answer a request did not expect, naming the host alone.
+func answered(address string, status int) error {
+	host := address
+	if parsed, err := url.Parse(address); err == nil {
+		host = parsed.Hostname()
+	}
+	return fmt.Errorf("%s answered HTTP %d", host, status)
 }
 
 func (c Client) googleCalendars(ctx context.Context, access string) ([]Calendar, error) {
@@ -139,13 +173,16 @@ func (c Client) googleEvents(ctx context.Context, access, calendarID string, fro
 		var answer struct {
 			TimeZone string `json:"timeZone"`
 			Items    []struct {
-				ID           string     `json:"id"`
-				Status       string     `json:"status"`
-				Summary      string     `json:"summary"`
-				Location     string     `json:"location"`
-				Transparency string     `json:"transparency"`
-				Start        googleTime `json:"start"`
-				End          googleTime `json:"end"`
+				ID                 string     `json:"id"`
+				Status             string     `json:"status"`
+				Summary            string     `json:"summary"`
+				Location           string     `json:"location"`
+				Transparency       string     `json:"transparency"`
+				Start              googleTime `json:"start"`
+				End                googleTime `json:"end"`
+				ExtendedProperties struct {
+					Private map[string]string `json:"private"`
+				} `json:"extendedProperties"`
 			} `json:"items"`
 			NextPageToken string `json:"nextPageToken"`
 		}
@@ -174,8 +211,12 @@ func (c Client) googleEvents(ctx context.Context, access, calendarID string, fro
 			if zone == "" {
 				zone = calendarZone
 			}
+			id := item.ID
+			if own := item.ExtendedProperties.Private[ownMark]; own != "" {
+				id = calendarcore.OwnUID(own)
+			}
 			events = append(events, calendarcore.AccountEvent{
-				ID: item.ID, Title: item.Summary, Location: item.Location,
+				ID: id, Title: item.Summary, Location: item.Location,
 				StartAt: start, EndAt: end, ZoneID: validZone(zone), AllDay: allDay,
 				Busy: item.Transparency != "transparent",
 			})
@@ -224,7 +265,7 @@ func (c Client) microsoftEvents(ctx context.Context, access, calendarID string, 
 		"startDateTime": {from.UTC().Format(time.RFC3339)},
 		"endDateTime":   {to.UTC().Format(time.RFC3339)},
 		"$top":          {"500"},
-		"$select":       {"id,subject,location,start,end,isAllDay,showAs,isCancelled,originalStartTimeZone"},
+		"$select":       {"id,subject,location,start,end,isAllDay,showAs,isCancelled,transactionId"},
 	}
 	address := c.Endpoints.API + "/me/calendars/" + url.PathEscape(calendarID) + "/calendarView?" + query.Encode()
 	// Times come back in UTC, so nothing depends on Windows zone names.
@@ -244,9 +285,10 @@ func (c Client) microsoftEvents(ctx context.Context, access, calendarID string, 
 				End struct {
 					DateTime string `json:"dateTime"`
 				} `json:"end"`
-				IsAllDay    bool   `json:"isAllDay"`
-				ShowAs      string `json:"showAs"`
-				IsCancelled bool   `json:"isCancelled"`
+				IsAllDay      bool   `json:"isAllDay"`
+				ShowAs        string `json:"showAs"`
+				IsCancelled   bool   `json:"isCancelled"`
+				TransactionID string `json:"transactionId"`
 			} `json:"value"`
 			NextLink string `json:"@odata.nextLink"`
 		}
@@ -265,8 +307,12 @@ func (c Client) microsoftEvents(ctx context.Context, access, calendarID string, 
 			if err != nil || end.Before(start) {
 				return nil, errors.New("an event's end could not be read")
 			}
+			id := item.ID
+			if _, own := calendarcore.OwnEventID(item.TransactionID); own {
+				id = item.TransactionID
+			}
 			events = append(events, calendarcore.AccountEvent{
-				ID: item.ID, Title: item.Subject, Location: item.Location.DisplayName,
+				ID: id, Title: item.Subject, Location: item.Location.DisplayName,
 				StartAt: start, EndAt: end, ZoneID: "UTC", AllDay: item.IsAllDay,
 				Busy: item.ShowAs != "free" && item.ShowAs != "workingElsewhere",
 			})

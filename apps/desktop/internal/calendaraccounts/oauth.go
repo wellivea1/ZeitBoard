@@ -1,9 +1,10 @@
 // Package calendaraccounts reads calendars from a Google or Microsoft account
-// through the owner's own app registration (ADR-0064). The owner registers an
-// app with the provider and gives ZeitBoard its client id; ZeitBoard ships no
-// credentials of its own. Sign-in is OAuth 2.0 with PKCE and a one-time
-// loopback redirect, as RFC 8252 describes for installed apps, and every scope
-// asked for is read-only.
+// through the owner's own app registration (ADR-0064), and writes accepted
+// times to one the owner owns once they allow it (ADR-0065). The owner
+// registers an app with the provider and gives ZeitBoard its client id;
+// ZeitBoard ships no credentials of its own. Sign-in is OAuth 2.0 with PKCE and
+// a one-time loopback redirect, as RFC 8252 describes for installed apps. It
+// asks only to read, unless the owner has turned writing on.
 package calendaraccounts
 
 import (
@@ -62,13 +63,36 @@ func DefaultEndpoints(provider Provider) Endpoints {
 	}
 }
 
-// scope is everything asked for: reading calendars, and for Microsoft a
-// refresh token, which Google gives for access_type=offline instead.
-func scope(provider Provider) string {
-	if provider == Microsoft {
+// scope is everything asked for: reading calendars, and adding events when
+// writing is on; and for Microsoft a refresh token, which Google gives for
+// access_type=offline instead. Google's write scope reaches only calendars
+// the owner owns.
+func scope(provider Provider, write bool) string {
+	switch {
+	case provider == Microsoft && write:
+		return "offline_access Calendars.ReadWrite"
+	case provider == Microsoft:
 		return "offline_access Calendars.Read"
+	case write:
+		return "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events.owned"
+	default:
+		return "https://www.googleapis.com/auth/calendar.readonly"
 	}
-	return "https://www.googleapis.com/auth/calendar.readonly"
+}
+
+// Writes reports whether a granted scope, as a provider states it, lets
+// ZeitBoard add events. Google lets the owner grant part of what is asked.
+func Writes(provider Provider, granted string) bool {
+	for _, each := range strings.Fields(granted) {
+		name := strings.ToLower(each[strings.LastIndex(each, "/")+1:])
+		switch {
+		case provider == Microsoft && name == "calendars.readwrite":
+			return true
+		case provider == Google && (name == "calendar.events.owned" || name == "calendar.events" || name == "calendar"):
+			return true
+		}
+	}
+	return false
 }
 
 // Doer sends a request; *http.Client is one.
@@ -88,6 +112,9 @@ type Client struct {
 
 	Endpoints Endpoints
 	HTTP      Doer
+
+	// Write asks to add events too; set once the owner turns writing on.
+	Write bool
 }
 
 // Authorization is one sign-in begun: the address to open in the browser,
@@ -116,16 +143,18 @@ func (c Client) Begin(redirect string) (Authorization, error) {
 		"client_id":             {c.ClientID},
 		"redirect_uri":          {redirect},
 		"response_type":         {"code"},
-		"scope":                 {scope(c.Provider)},
+		"scope":                 {scope(c.Provider, c.Write)},
 		"state":                 {state},
 		"code_challenge":        {Challenge(verifier)},
 		"code_challenge_method": {"S256"},
 	}
 	if c.Provider == Google {
 		// A refresh token comes only with offline access, and only on a
-		// consent the owner has just given.
+		// consent the owner has just given. Signing in again keeps what was
+		// granted before, so reading anew never takes writing away.
 		query.Set("access_type", "offline")
 		query.Set("prompt", "consent")
+		query.Set("include_granted_scopes", "true")
 	}
 	return Authorization{
 		URL:      c.Endpoints.Authorize + "?" + query.Encode(),
@@ -208,7 +237,7 @@ func (c Client) token(ctx context.Context, form url.Values) (Token, error) {
 		form.Set("client_secret", c.ClientSecret)
 	}
 	if c.Provider == Microsoft {
-		form.Set("scope", scope(c.Provider))
+		form.Set("scope", scope(c.Provider, c.Write))
 	}
 	request, err := http.NewRequestWithContext(ctx, http.MethodPost, c.Endpoints.Token, strings.NewReader(form.Encode()))
 	if err != nil {
@@ -238,11 +267,16 @@ func (c Client) token(ctx context.Context, form url.Values) (Token, error) {
 	if expires <= 0 {
 		expires = 3600
 	}
+	granted := strings.TrimSpace(answer.Scope)
+	if granted == "" {
+		// Left out, the scope is the one asked for (RFC 6749 §5.1).
+		granted = scope(c.Provider, c.Write)
+	}
 	return Token{
 		Access:    answer.AccessToken,
 		Refresh:   answer.RefreshToken,
 		ExpiresAt: time.Now().Add(time.Duration(expires) * time.Second),
-		Scope:     strings.TrimSpace(answer.Scope),
+		Scope:     granted,
 	}, nil
 }
 
@@ -284,7 +318,7 @@ func (c Client) send(request *http.Request, value any) (int, error) {
 	if len(data) > maxResponseBytes {
 		return response.StatusCode, fmt.Errorf("%s's answer is larger than 16 MiB", request.URL.Hostname())
 	}
-	if len(data) > 0 && json.Unmarshal(data, value) != nil && response.StatusCode == http.StatusOK {
+	if len(data) > 0 && json.Unmarshal(data, value) != nil && response.StatusCode/100 == 2 {
 		return response.StatusCode, fmt.Errorf("%s's answer could not be read", request.URL.Hostname())
 	}
 	return response.StatusCode, nil

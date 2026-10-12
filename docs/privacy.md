@@ -58,7 +58,13 @@ secrets. Writing accepted times to a CalDAV calendar is off unless the owner
 turns it on for one imported calendar (ADR-0053). Its sign-in is then kept in
 the owner-protected local database, unencrypted, like the backend credential.
 It is sent only to that calendar's own origin, never synced or exported, and
-erased when writing stops or the calendar is removed.
+erased when writing stops or the calendar is removed. Writing to a calendar
+from a Google or Microsoft account (ADR-0065) is off in the same way. Turning
+it on asks the account, in the owner's browser, to allow adding events, on
+calendars the owner owns for Google. That permission then rides on the
+account's kept sign-in until the account is removed. Either way the calendar's
+provider receives each accepted time's task name, time and any location or
+notes, and ZeitBoard writes and removes only its own events.
 Medication data is created only from labels, optional form/strength and
 clinician-rule text, optional owner-recorded start markers, schedules, and
 taken/skipped events the owner explicitly enters. The app does not query a drug

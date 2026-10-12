@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -65,8 +66,10 @@ type CalendarAccountDTO struct {
 	Provider       string `json:"provider"`
 	Label          string `json:"label"`
 	ConnectedLabel string `json:"connectedLabel"`
-	// Calendars counts the calendars brought in from the account.
-	Calendars int `json:"calendars"`
+	// Calendars counts the calendars brought in from the account, and
+	// Writing is set when accepted times are written to one of them.
+	Calendars int  `json:"calendars"`
+	Writing   bool `json:"writing,omitempty"`
 	// Problem says the provider ended the sign-in; signing in again with
 	// the kept registration restores it.
 	Problem string `json:"problem,omitempty"`
@@ -120,18 +123,18 @@ func (a *App) ConnectCalendarAccount(input CalendarAccountInput) (CalendarAccoun
 			return CalendarAccountCalendarsDTO{}, errors.New("Paste the client secret Google gave with the client ID.")
 		}
 	}
-	return a.signInCalendarAccount(a.calendarAccountClient(provider, clientID, secret))
+	return a.signInCalendarAccount(a.calendarAccountClient(provider, clientID, secret), nil)
 }
 
 // ReconnectCalendarAccount signs in again with the registration an account
-// was kept with, as after the provider ended its sign-in.
+// was kept with, as after the provider ended its sign-in, asking again for
+// what it allowed before.
 func (a *App) ReconnectCalendarAccount(input CalendarAccountRef) (CalendarAccountCalendarsDTO, error) {
 	_, account, err := a.calendarAccount(a.applicationContext(), input.AccountID)
 	if err != nil {
 		return CalendarAccountCalendarsDTO{}, err
 	}
-	return a.signInCalendarAccount(a.calendarAccountClient(
-		calendaraccounts.Provider(account.Provider), account.ClientID, account.ClientSecret))
+	return a.signInCalendarAccount(a.accountClient(account), &account)
 }
 
 // CancelCalendarSignIn stops waiting for the browser.
@@ -162,9 +165,13 @@ func (a *App) GetCalendarAccounts() ([]CalendarAccountDTO, error) {
 	for _, calendar := range calendars {
 		kept[calendar.AccountID]++
 	}
+	writing, err := accountWrittenTo(ctx, store)
+	if err != nil {
+		return nil, err
+	}
 	result := make([]CalendarAccountDTO, 0, len(accounts))
 	for _, account := range accounts {
-		result = append(result, calendarAccountDTO(account, kept[account.AccountID]))
+		result = append(result, calendarAccountDTO(account, kept[account.AccountID], writing == account.AccountID))
 	}
 	return result, nil
 }
@@ -240,7 +247,7 @@ func (a *App) RemoveCalendarAccount(input RemoveCalendarAccountInput) (RemovedCa
 	defer cancel()
 	removed := account.Label + " and its calendars are removed from ZeitBoard."
 	switch {
-	case a.calendarAccountClient(provider, account.ClientID, account.ClientSecret).Revoke(revokeCtx, account.RefreshToken):
+	case a.accountClient(account).Revoke(revokeCtx, account.RefreshToken):
 		return RemovedCalendarAccountDTO{Message: removed + " Google has withdrawn ZeitBoard's access too."}, nil
 	case provider == calendaraccounts.Google:
 		return RemovedCalendarAccountDTO{Message: removed + " Google did not confirm withdrawing ZeitBoard's access; " +
@@ -263,10 +270,19 @@ func (a *App) calendarAccountClient(provider calendaraccounts.Provider, clientID
 	}
 }
 
+// accountClient talks to an account's provider with the registration it was
+// kept with, asking for writing where the account allowed it.
+func (a *App) accountClient(account storage.CalendarAccount) calendaraccounts.Client {
+	provider := calendaraccounts.Provider(account.Provider)
+	client := a.calendarAccountClient(provider, account.ClientID, account.ClientSecret)
+	client.Write = calendaraccounts.Writes(provider, account.Scopes)
+	return client
+}
+
 // signInCalendarAccount opens the provider's sign-in in the browser, waits
 // for it to come back to a one-time loopback address, and keeps the account
-// it signed in to.
-func (a *App) signInCalendarAccount(client calendaraccounts.Client) (CalendarAccountCalendarsDTO, error) {
+// it signed in to: any account, or only the one wanted.
+func (a *App) signInCalendarAccount(client calendaraccounts.Client, want *storage.CalendarAccount) (CalendarAccountCalendarsDTO, error) {
 	store, err := a.requireStore()
 	if err != nil {
 		return CalendarAccountCalendarsDTO{}, err
@@ -315,11 +331,43 @@ func (a *App) signInCalendarAccount(client calendaraccounts.Client) (CalendarAcc
 		ConnectedAt:  a.currentTime().UTC(),
 		Scopes:       token.Scope,
 	}
+	if want != nil && account.AccountID != want.AccountID {
+		return CalendarAccountCalendarsDTO{}, fmt.Errorf("The browser signed in to %s. Sign in to %s instead.", label, want.Label)
+	}
+	if account.Scopes, err = a.grantedScopes(ctx, store, account); err != nil {
+		return CalendarAccountCalendarsDTO{}, err
+	}
 	if err := store.SaveCalendarAccount(ctx, account); err != nil {
 		return CalendarAccountCalendarsDTO{}, err
 	}
 	a.holdAccessToken(account.AccountID, token)
 	return accountCalendarsDTO(ctx, store, account, calendars)
+}
+
+// grantedScopes is what an account allows once signed in again. Google's
+// answer already holds what was granted before (include_granted_scopes);
+// Microsoft keeps consent per app, so what an earlier sign-in allowed still
+// holds, and is added to what this one states.
+func (a *App) grantedScopes(ctx context.Context, store *storage.Store, account storage.CalendarAccount) (string, error) {
+	if account.Provider != string(calendaraccounts.Microsoft) {
+		return account.Scopes, nil
+	}
+	accounts, err := store.CalendarAccounts(ctx)
+	if err != nil {
+		return "", err
+	}
+	granted := strings.Fields(account.Scopes)
+	for _, kept := range accounts {
+		if kept.AccountID != account.AccountID {
+			continue
+		}
+		for _, earlier := range strings.Fields(kept.Scopes) {
+			if !slices.ContainsFunc(granted, func(scope string) bool { return strings.EqualFold(scope, earlier) }) {
+				granted = append(granted, earlier)
+			}
+		}
+	}
+	return strings.Join(granted, " "), nil
 }
 
 // beginCalendarSignIn holds the one sign-in that may wait for the browser at
@@ -345,7 +393,7 @@ func (a *App) beginCalendarSignIn() (context.Context, func(), error) {
 // provider rotated. A sign-in the provider has ended is recorded on the
 // account, for the window to offer signing in again.
 func (a *App) accountAccess(ctx context.Context, store *storage.Store, account storage.CalendarAccount) (calendaraccounts.Client, string, error) {
-	client := a.calendarAccountClient(calendaraccounts.Provider(account.Provider), account.ClientID, account.ClientSecret)
+	client := a.accountClient(account)
 	// One refresh at a time, so a provider that rotates refresh tokens is
 	// never sent one it has already replaced.
 	a.calendarRefreshMu.Lock()
@@ -566,15 +614,26 @@ func calendarAccountSources(ctx context.Context, store *storage.Store, now time.
 	return sources, nil
 }
 
-func calendarAccountDTO(account storage.CalendarAccount, calendars int) CalendarAccountDTO {
+func calendarAccountDTO(account storage.CalendarAccount, calendars int, writing bool) CalendarAccountDTO {
 	return CalendarAccountDTO{
 		AccountID:      account.AccountID,
 		Provider:       account.Provider,
 		Label:          account.Label,
 		ConnectedLabel: "Signed in " + account.ConnectedAt.In(displayLocation()).Format("Jan 2, 2006"),
 		Calendars:      calendars,
+		Writing:        writing,
 		Problem:        account.Problem,
 	}
+}
+
+// accountWrittenTo names the account whose calendar accepted times are
+// written to, if any is.
+func accountWrittenTo(ctx context.Context, store *storage.Store) (string, error) {
+	target, on, err := store.CalendarWriteTarget(ctx)
+	if err != nil || !on {
+		return "", err
+	}
+	return target.AccountID, nil
 }
 
 // accountCalendarsDTO lists an account's calendars, its main one first.
@@ -605,7 +664,14 @@ func accountCalendarsDTO(ctx context.Context, store *storage.Store, account stor
 		}
 		return strings.ToLower(choices[i].Name) < strings.ToLower(choices[j].Name)
 	})
-	return CalendarAccountCalendarsDTO{Account: calendarAccountDTO(account, len(sources)), Calendars: choices}, nil
+	writing, err := accountWrittenTo(ctx, store)
+	if err != nil {
+		return CalendarAccountCalendarsDTO{}, err
+	}
+	return CalendarAccountCalendarsDTO{
+		Account:   calendarAccountDTO(account, len(sources), writing == account.AccountID),
+		Calendars: choices,
+	}, nil
 }
 
 // accountLabel names an account by its owner's address, which its main
@@ -627,14 +693,17 @@ func accountLabel(provider calendaraccounts.Provider, calendars []calendaraccoun
 }
 
 // asSentence reads an error from the provider package, written in Go's lower
-// case, as a sentence for the window.
+// case, as a sentence for the window. One that begins with a host name, as
+// "oauth2.googleapis.com could not be reached", keeps it as it is spelled.
 func asSentence(err error) error {
-	message := err.Error()
+	message := strings.TrimSpace(err.Error())
 	first, size := utf8.DecodeRuneInString(message)
 	if size == 0 {
 		return err
 	}
-	message = string(unicode.ToUpper(first)) + message[size:]
+	if word, _, _ := strings.Cut(message, " "); !strings.Contains(word, ".") {
+		message = string(unicode.ToUpper(first)) + message[size:]
+	}
 	if !strings.HasSuffix(message, ".") {
 		message += "."
 	}

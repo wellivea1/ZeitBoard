@@ -523,6 +523,12 @@ export function CalendarAccountForm({
             Its sign-in is erased, and the calendars brought in from it are deleted from ZeitBoard.
             The calendars themselves are not changed.
           </p>
+          {removing.writing && (
+            <p>
+              ZeitBoard also stops writing accepted times to its calendar. What it wrote stays
+              there.
+            </p>
+          )}
         </ConfirmDelete>
       )}
       {status && (

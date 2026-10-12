@@ -71,3 +71,6 @@ remove an event of its own that the owner has since changed, for instance by mov
   threat model). ZeitBoard asks for an app password where the provider offers one.
 - One calendar at a time. Writing to another one means stopping first, which keeps "where do my
   accepted times go?" a one-word answer.
+- Update, 2026-10-12: [ADR-0065](0065-accepted-times-written-to-google-and-microsoft-calendars.md)
+  writes to a calendar brought in from a Google or Microsoft account as well, with the same
+  guarantees.

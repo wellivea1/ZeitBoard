@@ -23,6 +23,8 @@ export interface CalendarAccount {
   connectedLabel: string;
   /** How many of its calendars ZeitBoard keeps. */
   calendars: number;
+  /** Accepted times are written to one of its calendars (ADR-0065). */
+  writing: boolean;
   /** Set when the provider ended the sign-in; signing in again restores it. */
   problem?: string;
 }
@@ -80,6 +82,7 @@ export function normalizeCalendarAccount(value: unknown): CalendarAccount | unde
     label,
     connectedLabel: text(value.connectedLabel) ?? "",
     calendars,
+    writing: value.writing === true,
     ...(problem ? { problem } : {}),
   };
 }

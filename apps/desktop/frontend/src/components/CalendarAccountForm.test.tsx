@@ -161,6 +161,7 @@ describe("CalendarAccountForm", () => {
     const ended = {
       ...account,
       calendars: 2,
+      writing: true,
       problem: "The sign-in to owner@example.test has ended. Sign in to it again.",
     };
     let accounts: unknown[] = [ended];
@@ -187,6 +188,9 @@ describe("CalendarAccountForm", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Remove owner@example.test" }));
     const confirm = screen.getByRole("button", { name: "Remove account" });
     expect(confirm).toBeDisabled();
+    expect(
+      screen.getByText(/ZeitBoard also stops writing accepted times to its calendar/),
+    ).toBeVisible();
     fireEvent.change(screen.getByLabelText(/Type REMOVE/), { target: { value: "REMOVE" } });
     fireEvent.click(confirm);
     expect(

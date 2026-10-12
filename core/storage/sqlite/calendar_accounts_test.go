@@ -172,3 +172,43 @@ func TestAnAccountCalendarNeedsASignedInAccount(t *testing.T) {
 		}
 	}
 }
+
+// A calendar brought in from an account can take accepted times, written with
+// the account's own sign-in: the target keeps no sign-in of its own, names
+// the account and calendar, and goes with the account.
+func TestAnAccountCalendarTakesAcceptedTimesUntilTheAccountGoes(t *testing.T) {
+	store, ctx := openCalendarTestStore(t)
+	now := time.Date(2026, 9, 27, 18, 0, 0, 0, time.UTC)
+	account := testCalendarAccount()
+	if err := store.SaveCalendarAccount(ctx, account); err != nil {
+		t.Fatal(err)
+	}
+	work := accountSource("calendar_source_account_work", "Work")
+	if err := store.ReplaceAccountCalendar(ctx, account.AccountID, "work@example.test", work, nil); err != nil {
+		t.Fatal(err)
+	}
+	acceptTime(t, store, "calendar_event_ahead", now.Add(24*time.Hour))
+	if err := store.SetCalendarWriteTarget(ctx, CalendarWriteTarget{
+		SourceID: work.SourceID, Username: "ignored", Password: "ignored-canary",
+	}, now); err != nil {
+		t.Fatal(err)
+	}
+	target, on, err := store.CalendarWriteTarget(ctx)
+	if err != nil || !on || target.AccountID != account.AccountID || target.CalendarID != "work@example.test" ||
+		target.Label != "Work" || target.CollectionURL != "" || target.Username != "" || target.Password != "" {
+		t.Fatalf("target %+v, %v, %v", target, on, err)
+	}
+	if states := writeStates(t, store); states["calendar_event_ahead"] != CalendarWriteCreate {
+		t.Fatalf("queued %v", states)
+	}
+
+	if err := store.RemoveCalendarAccount(ctx, account.AccountID); err != nil {
+		t.Fatal(err)
+	}
+	if _, on, err := store.CalendarWriteTarget(ctx); err != nil || on {
+		t.Fatalf("writing outlived the account: %v, %v", on, err)
+	}
+	if states := writeStates(t, store); len(states) != 0 {
+		t.Fatalf("writes outlived the account: %v", states)
+	}
+}

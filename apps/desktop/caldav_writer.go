@@ -118,8 +118,8 @@ func (w calDAVWriter) create(ctx context.Context, event calendarcore.Event, stam
 }
 
 // remove takes an undone time out of the calendar, if the owner has not
-// changed it there since ZeitBoard wrote it.
-func (w calDAVWriter) remove(ctx context.Context, href, etag string) calendarWriteResult {
+// changed it there since ZeitBoard wrote it. Its href names it already.
+func (w calDAVWriter) remove(ctx context.Context, _, href, etag string) calendarWriteResult {
 	if !w.owns(href) {
 		return calendarWriteResult{outcome: calendarWriteConflict, detail: "This event is not where ZeitBoard writes, so it was left alone."}
 	}

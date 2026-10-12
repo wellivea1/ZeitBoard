@@ -317,6 +317,78 @@ describe("CalendarSourcesPanel fetched calendars", () => {
     expect(screen.queryByLabelText("Collection URL")).toBeNull();
   });
 
+  // A calendar from an account takes accepted times with the account's own
+  // sign-in: nothing is typed, the browser asks once, and stopping leaves the
+  // account signed in for reading (ADR-0065).
+  it("writes accepted times to a calendar from an account once the account allows it", async () => {
+    const owner: CalendarSource = {
+      sourceId: "calendar_source_account_owner",
+      label: "Owner",
+      kind: "ics",
+      readOnly: true,
+      visibleEvents: 0,
+      coverageLabel: "Oct 12, 2025 to Oct 12, 2028",
+      coverageStart: "2025-10-12T00:00:00Z",
+      coverageEnd: "2028-10-12T00:00:00Z",
+      account: { provider: "google", accountLabel: "owner@example.test", refreshedLabel: "09:42" },
+    };
+    const writingThere: CalendarWriteBack = {
+      on: true,
+      sourceId: owner.sourceId,
+      label: "Owner",
+      provider: "google",
+      summary: "The next time you accept is added to Owner.",
+      problems: [],
+    };
+    const pending: { refuse?: (reason: string) => void } = {};
+    const enable = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            pending.refuse = reject;
+          }),
+      )
+      .mockResolvedValueOnce(writingThere);
+    const cancel = vi.fn(async () => pending.refuse?.("signing in was cancelled"));
+    (globalThis as { go?: unknown }).go = {
+      main: {
+        App: {
+          GetCalendarWriteBack: async () => ({
+            on: false,
+            summary: "Accepted times stay in ZeitBoard.",
+            problems: [],
+          }),
+          EnableAccountWriteBack: enable,
+          CancelCalendarSignIn: cancel,
+        },
+      },
+    };
+    render(<CalendarSourcesPanel sources={[owner]} available onChanged={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Write accepted times to Owner" }));
+    const offer = screen.getByRole("region", { name: "Write accepted times to Owner" });
+    expect(offer).toHaveTextContent(
+      "Google asks in your browser whether ZeitBoard may add events to calendars you own.",
+    );
+    expect(screen.queryByLabelText("App password")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Allow writing" }));
+    expect(
+      await screen.findByText("If your browser asks, allow ZeitBoard to add events."),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Signing in was cancelled.");
+    expect(cancel).toHaveBeenCalledOnce();
+
+    fireEvent.click(screen.getByRole("button", { name: "Allow writing" }));
+    const status = await screen.findByRole("region", { name: "Accepted times are written here" });
+    expect(status).toHaveTextContent("The next time you accept is added to Owner.");
+    expect(enable).toHaveBeenLastCalledWith({ sourceId: owner.sourceId });
+    fireEvent.click(screen.getByRole("button", { name: "Stop writing" }));
+    expect(screen.getByText(/The Google account stays signed in for reading/)).toBeVisible();
+  });
+
   // A calendar from an account names the account, says how its last reading
   // went, and refreshes at once with the account's sign-in (ADR-0064).
   it("refreshes a calendar from an account at once and names the account", async () => {

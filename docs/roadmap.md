@@ -181,6 +181,7 @@ itself is designed in [`portal-design.md`](portal-design.md).
    iCloud calendars are subscribed by the iCal address each provider publishes, and are read again
    every hour. _Google and Microsoft accounts delivered 2026-10-12 (ADR-0064):_ the owner signs in
    through an app of their own registration, chooses calendars, and each is read every hour.
+   Accepted times can be written to one of them (ADR-0065).
 
 **Disease-management track.** ~~M-A local medication logging~~, ~~M-B
 user-authored schedules + feasibility~~, ~~local rhythm context markers~~, and
@@ -505,8 +506,9 @@ one-use signed approval tokens, cross-device decisions, audit trail, real local
 tasks, immutable task revision sync with erasure-grade deletion, read-only
 calendar import, local approved-placement materialization, persistent local
 decision history/undo, and app-owned ICS export.
-**Not yet delivered:** external-provider calendar write-back, batch review,
-unified local/backend presentation, and richer proposal expiry handling.
+Since delivered: external calendar write-back, to CalDAV (ADR-0053) and to Google
+and Microsoft calendars (ADR-0065); batch review (ADR-0052); and one queue across
+local, backend and visitor work with origins and expiry (ADR-0046, C2).
 
 **3a. Read-only calendar import - delivered locally (ADR-0023).** ICS and
 CalDAV adapters run device-side; imported events are immutable inputs whose
@@ -518,11 +520,13 @@ decisions now persist with visible history and per-item undo. Remaining work is
 one combined presentation across local and backend origins, batch review, and
 surfaced expiry.
 
-**3c. External calendar write-back - last, and separately gated.** ADR-0023
+**3c. External calendar write-back - delivered, off by default.** ADR-0023
 delivers the ownership-safe local precursor: approval materializes a ZeitBoard
 block and an owner can export those blocks as ICS. Writing into an external
-provider remains off. It requires least-privilege scope, explicit per-calendar
-consent, conflict semantics, and a dedicated security review before enablement.
+calendar shipped with ADR-0053 for CalDAV and ADR-0065 for Google and Microsoft.
+It is turned on for one calendar at a time, with least-privilege scope,
+per-calendar consent, preconditions that leave the owner's own and changed
+events alone, and a threat-model review.
 
 Exit criteria: no code path applies a calendar change without a recorded
 approval; import is revocable and least-privilege; write-back is off by

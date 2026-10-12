@@ -3068,3 +3068,46 @@ reaches Google or Microsoft.
   - The waiting form greys everything else.
   - The running desktop's own window could not be driven: the browser pane blocks Wails'
     `ipc.js`, and the shared desktop takes no input.
+
+## Accepted times written to Google and Microsoft calendars — 2026-10-12
+
+ADR-0065. Go tests in `internal/calendaraccounts`, `core/storage/sqlite` and the desktop;
+component and data tests in the window. Every provider is a local stand-in.
+
+- The provider package, against synthetic Google and Microsoft calendars:
+  - Google takes events only on a calendar the owner owns. An accepted time is written under
+    its derived ID with its zone and transparency.
+  - A retried create finds the first rather than posting again.
+  - An event already at that ID without this time's mark is a conflict.
+  - Read back, the event carries ZeitBoard's UID.
+  - A changed event is not removed. A removal under another time's name is refused, and an
+    event already gone counts as removed.
+  - Microsoft takes events only on a calendar the owner can edit. An accepted time carries
+    ZeitBoard's UID as transaction ID, in UTC, with immutable IDs.
+  - A retried create finds the first by transaction ID. A changed change key leaves the event,
+    and another time's event is refused.
+  - Writing asks Google for `calendar.events.owned`. A granted scope is read as writing only
+    when it allows adding events.
+- The store: an account calendar takes the write target with no sign-in of its own, names its
+  account and calendar, and goes, with its queued writes, when the account is removed. Anything
+  else is refused.
+- The desktop, with a synthetic provider and a scripted browser:
+  - Google: turning writing on asks for `calendar.events.owned` and nothing broader. The status
+    names Google and no username. Three accepted times are written with their marks.
+  - Refreshing recognises all three as ZeitBoard's own. Undo removes one.
+  - A changed event waits as a conflict until "Remove it anyway".
+  - Removing the account stops writing and leaves what was written.
+  - Microsoft: after the hour passes, the refresh must ask for writing again. An accepted time
+    that landed with its answer lost is not written twice. An ended sign-in leaves the removal
+    waiting with "has ended" and a retry time.
+  - An unticked permission, a sign-in to another account (not kept), a shared calendar and a
+    missing calendar each turn nothing on, saying why.
+  - The race detector passes.
+- The window:
+  - An account calendar offers "Write accepted times here" with no sign-in to type. The offer
+    says Google asks, in the browser, only to add events to calendars the owner owns.
+  - "Allow writing" waits and can cancel. Allowed, it shows the status.
+  - Stopping says the account stays signed in for reading.
+  - Removing an account that is written to says writing stops.
+- Seen in the browser pane, with the real components on a stand-in bridge: the offer, the waiting
+  line, the status with a conflict and its two choices, and the stop wording.

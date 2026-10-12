@@ -1,6 +1,9 @@
 import { useId, useState } from "react";
+import type { CalendarAccountProvider } from "../data/calendar";
+import { cancelCalendarSignIn, providerNames } from "../data/calendarAccounts";
 import {
   disableCalendarWriteBack,
+  enableAccountWriteBack,
   enableCalendarWriteBack,
   resolveCalendarWriteConflict,
   retryCalendarWrites,
@@ -10,15 +13,131 @@ import {
 } from "../data/calendarWriteBack";
 import { clockTime, dayInSentence, relativeDay } from "../utils/relativeTime";
 
-// Writing accepted times to a CalDAV calendar (ADR-0053), set up on the
-// calendar's own row in Data Sources › Calendars: first the offer with what it
-// does and the sign-in it needs, then how it is going.
+// Writing accepted times to a calendar (ADR-0053), set up on the calendar's
+// own row in Data Sources › Calendars: first the offer with what it does and
+// the sign-in it needs, then how it is going. A calendar from a Google or
+// Microsoft account needs no sign-in typed here: the account is asked, in the
+// browser, to allow adding events (ADR-0065).
 
 function failure(reason: unknown, fallback: string) {
   return reason instanceof Error && reason.message ? reason.message : fallback;
 }
 
+// The offer for a calendar from an account: what writing does, then the
+// browser asks the owner, once, to allow it.
+function AccountWriteBackForm({
+  sourceId,
+  label,
+  provider,
+  onStarted,
+  onCancel,
+}: {
+  sourceId: string;
+  label: string;
+  provider: CalendarAccountProvider;
+  onStarted: (status: CalendarWriteBack) => void;
+  onCancel: () => void;
+}) {
+  const id = useId();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const name = providerNames[provider];
+
+  const start = () => {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    void enableAccountWriteBack(sourceId).then(
+      (status) => {
+        setBusy(false);
+        onStarted(status);
+      },
+      (reason: unknown) => {
+        setBusy(false);
+        setError(failure(reason, "Writing could not be turned on."));
+      },
+    );
+  };
+
+  return (
+    <section className="calendar-write" aria-labelledby={`${id}-title`}>
+      <strong id={`${id}-title`}>Write accepted times to {label}</strong>
+      <p>
+        Each time you accept is added to {label} as ZeitBoard’s own event, named after its task, and
+        removed if you undo it. Your own events are never changed. If you change one of ZeitBoard’s
+        events there, it asks you before removing it.
+      </p>
+      <small>
+        The first time, {name} asks in your browser whether ZeitBoard may add events to{" "}
+        {provider === "google" ? "calendars you own" : "your calendars"}. Nothing else is asked for,
+        and the account’s sign-in stays on this computer.
+      </small>
+      {busy ? (
+        <div className="calendar-account-waiting" role="status">
+          <span>If your browser asks, allow ZeitBoard to add events.</span>
+          <button
+            className="button ghost compact"
+            type="button"
+            onClick={() => void cancelCalendarSignIn()}
+          >
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <div className="calendar-import-actions">
+          <button className="button primary compact" type="button" onClick={start}>
+            Allow writing
+          </button>
+          <button className="button ghost compact" type="button" onClick={onCancel}>
+            Cancel
+          </button>
+        </div>
+      )}
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
+    </section>
+  );
+}
+
 export function CalendarWriteBackForm({
+  sourceId,
+  label,
+  provider,
+  onStarted,
+  onCancel,
+}: {
+  sourceId: string;
+  label: string;
+  /** Set for a calendar brought in from an account. */
+  provider?: CalendarAccountProvider;
+  onStarted: (status: CalendarWriteBack) => void;
+  onCancel: () => void;
+}) {
+  if (provider) {
+    return (
+      <AccountWriteBackForm
+        sourceId={sourceId}
+        label={label}
+        provider={provider}
+        onStarted={onStarted}
+        onCancel={onCancel}
+      />
+    );
+  }
+  return (
+    <CalDAVWriteBackForm
+      sourceId={sourceId}
+      label={label}
+      onStarted={onStarted}
+      onCancel={onCancel}
+    />
+  );
+}
+
+function CalDAVWriteBackForm({
   sourceId,
   label,
   onStarted,
@@ -234,7 +353,10 @@ export function CalendarWriteBackStatus({
         <div className="calendar-write-stop" role="group" aria-labelledby={`${id}-stop`}>
           <p id={`${id}-stop`}>
             Stop writing to {status.label}? What ZeitBoard wrote stays there, and undoing an
-            accepted time will no longer remove it. The sign-in is erased.
+            accepted time will no longer remove it.{" "}
+            {status.provider
+              ? `The ${providerNames[status.provider]} account stays signed in for reading; removing it withdraws ZeitBoard’s access.`
+              : "The sign-in is erased."}
           </p>
           <div className="calendar-import-actions">
             <button

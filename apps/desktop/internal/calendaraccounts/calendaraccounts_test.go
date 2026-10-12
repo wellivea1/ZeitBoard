@@ -29,6 +29,7 @@ type fakeProvider struct {
 	verifier string
 	secret   string
 	foreign  bool
+	write    bool
 }
 
 func newFakeProvider(t *testing.T, provider Provider) *fakeProvider {
@@ -74,7 +75,7 @@ func (f *fakeProvider) serve(w http.ResponseWriter, r *http.Request) {
 			write(map[string]string{"error": "invalid_client"})
 			return
 		}
-		if f.provider == Microsoft && form.Get("scope") != "offline_access Calendars.Read" {
+		if f.provider == Microsoft && form.Get("scope") != scope(Microsoft, f.write) {
 			write(map[string]string{"error": "invalid_scope"})
 			return
 		}
@@ -86,7 +87,7 @@ func (f *fakeProvider) serve(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			write(map[string]any{
-				"access_token": "access-1", "refresh_token": "refresh-1", "expires_in": 3599, "scope": scope(f.provider),
+				"access_token": "access-1", "refresh_token": "refresh-1", "expires_in": 3599, "scope": scope(f.provider, f.write),
 			})
 		case "refresh_token":
 			if form.Get("refresh_token") != "refresh-1" {

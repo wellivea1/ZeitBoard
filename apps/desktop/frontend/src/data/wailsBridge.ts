@@ -15,12 +15,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 /**
  * A Go error is a lowercase clause without a full stop, by Go convention.
- * Shown to the owner, it reads as a sentence.
+ * Shown to the owner, it reads as a sentence. One that begins with a host
+ * name, as "calendar.example.test could not be reached", keeps it as spelled.
  */
 export function asSentence(message: string): string {
   const trimmed = message.trim();
   if (!trimmed) return trimmed;
-  const capitalized = trimmed.charAt(0).toLocaleUpperCase() + trimmed.slice(1);
+  const startsWithHost = (trimmed.split(/\s/, 1)[0] ?? "").includes(".");
+  const capitalized = startsWithHost
+    ? trimmed
+    : trimmed.charAt(0).toLocaleUpperCase() + trimmed.slice(1);
   return /[.!?…]$/.test(capitalized) ? capitalized : `${capitalized}.`;
 }
 

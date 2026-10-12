@@ -37,15 +37,40 @@ type syntheticAccount struct {
 	ended     bool
 	gained    bool
 	revoked   []string
+
+	// owner is whose account the browser signs in to. requested is the
+	// scope the sign-in page asked for, and grant, when set, what the owner
+	// allowed instead. scopes is what each access token was issued for.
+	owner     string
+	requested string
+	grant     string
+	scopes    map[string]string
+
+	// empty leaves out the owner's own events, as in a calendar kept for
+	// ZeitBoard. stored holds the events ZeitBoard wrote, by ID, versioned.
+	empty   bool
+	stored  map[string]map[string]any
+	version int
+	posts   int
 }
 
 func accountApp(t *testing.T, provider calendaraccounts.Provider) (*App, *syntheticAccount) {
 	t.Helper()
-	fake := &syntheticAccount{t: t, provider: provider}
-	fake.server = httptest.NewServer(http.HandlerFunc(fake.serve))
-	t.Cleanup(fake.server.Close)
 	app := newTestApp(t)
 	app.nowFn = func() time.Time { return time.Date(2026, 10, 12, 9, 0, 0, 0, time.UTC) }
+	return app, serveAccount(t, app, provider)
+}
+
+// serveAccount points an app at a synthetic provider, with a browser that
+// signs in to it.
+func serveAccount(t *testing.T, app *App, provider calendaraccounts.Provider) *syntheticAccount {
+	t.Helper()
+	fake := &syntheticAccount{
+		t: t, provider: provider, owner: syntheticAccountOwner,
+		scopes: map[string]string{}, stored: map[string]map[string]any{},
+	}
+	fake.server = httptest.NewServer(http.HandlerFunc(fake.serve))
+	t.Cleanup(fake.server.Close)
 	app.calendarAccountHTTP = fake.server.Client()
 	app.calendarAccountEndpoints = func(provider calendaraccounts.Provider) calendaraccounts.Endpoints {
 		endpoints := calendaraccounts.Endpoints{
@@ -59,7 +84,7 @@ func accountApp(t *testing.T, provider calendaraccounts.Provider) (*App, *synthe
 	opened := openSignInPage
 	openSignInPage = fake.browser("")
 	t.Cleanup(func() { openSignInPage = opened })
-	return app, fake
+	return fake
 }
 
 // browser signs in as the owner would: it reads the sign-in page's address
@@ -78,6 +103,7 @@ func (s *syntheticAccount) browser(refusal string) func(context.Context, string)
 		}
 		s.mu.Lock()
 		s.challenge = query.Get("code_challenge")
+		s.requested = query.Get("scope")
 		s.mu.Unlock()
 		back := url.Values{"state": {query.Get("state")}, "code": {"synthetic-code"}}
 		if refusal != "" {
@@ -136,8 +162,15 @@ func (s *syntheticAccount) token(form url.Values, write func(int, any)) {
 			return
 		}
 		s.ended, s.refresh = false, "refresh-canary-1"
+		granted := s.requested
+		if s.grant != "" {
+			granted = s.grant
+		}
+		s.scopes[access] = granted
 		// Short-lived, so the next request refreshes.
-		write(http.StatusOK, map[string]any{"access_token": access, "refresh_token": s.refresh, "expires_in": 30})
+		write(http.StatusOK, map[string]any{
+			"access_token": access, "refresh_token": s.refresh, "expires_in": 30, "scope": granted,
+		})
 	case "refresh_token":
 		if s.ended || form.Get("refresh_token") != s.refresh {
 			write(http.StatusBadRequest, map[string]string{"error": "invalid_grant"})
@@ -145,21 +178,31 @@ func (s *syntheticAccount) token(form url.Values, write func(int, any)) {
 		}
 		s.refreshes++
 		answer := map[string]any{"access_token": access, "expires_in": 3600}
+		// Google's refresh carries everything granted; Microsoft's gives what
+		// the refresh asks for.
+		s.scopes[access] = s.requested
+		if s.grant != "" {
+			s.scopes[access] = s.grant
+		}
 		if s.provider == calendaraccounts.Microsoft {
 			s.refresh = fmt.Sprintf("refresh-canary-%d", s.refreshes+1)
 			answer["refresh_token"] = s.refresh
+			s.scopes[access] = form.Get("scope")
 		}
 		write(http.StatusOK, answer)
 	}
 }
 
 func (s *syntheticAccount) api(r *http.Request, write func(int, any)) {
+	if s.serveWrites(r, write) {
+		return
+	}
 	at := func(value string) map[string]string { return map[string]string{"dateTime": value} }
 	switch {
 	case r.URL.Path == "/api/users/me/calendarList":
 		write(http.StatusOK, map[string]any{"items": []map[string]any{
 			{"id": "team@group.example.test", "summary": "Team"},
-			{"id": syntheticAccountOwner, "summary": "Owner", "primary": true},
+			{"id": s.owner, "summary": "Owner", "primary": true},
 		}})
 	case strings.HasPrefix(r.URL.Path, "/api/calendars/"):
 		items := []map[string]any{{"id": "g1", "summary": "Dentist",
@@ -168,15 +211,22 @@ func (s *syntheticAccount) api(r *http.Request, write func(int, any)) {
 			items = append(items, map[string]any{"id": "g2", "summary": "Added later",
 				"start": at("2026-10-15T12:00:00Z"), "end": at("2026-10-15T13:00:00Z")})
 		}
-		write(http.StatusOK, map[string]any{"timeZone": "America/New_York", "items": items})
+		if s.empty {
+			items = nil
+		}
+		write(http.StatusOK, map[string]any{"timeZone": "America/New_York", "items": append(items, s.storedEvents()...)})
 	case r.URL.Path == "/api/me/calendars":
 		write(http.StatusOK, map[string]any{"value": []map[string]any{
 			{"id": "m-shared", "name": "Shared", "owner": map[string]string{"address": "colleague@example.test"}},
-			{"id": "m-default", "name": "Calendar", "isDefaultCalendar": true, "owner": map[string]string{"address": syntheticAccountOwner}},
+			{"id": "m-default", "name": "Calendar", "isDefaultCalendar": true, "owner": map[string]string{"address": s.owner}},
 		}})
 	case strings.HasSuffix(r.URL.Path, "/calendarView"):
-		write(http.StatusOK, map[string]any{"value": []map[string]any{{"id": "m1", "subject": "Standup", "showAs": "busy",
-			"start": at("2026-10-14T13:00:00.0000000"), "end": at("2026-10-14T13:15:00.0000000")}}})
+		items := []map[string]any{{"id": "m1", "subject": "Standup", "showAs": "busy",
+			"start": at("2026-10-14T13:00:00.0000000"), "end": at("2026-10-14T13:15:00.0000000")}}
+		if s.empty {
+			items = nil
+		}
+		write(http.StatusOK, map[string]any{"value": append(items, s.storedEvents()...)})
 	default:
 		write(http.StatusNotFound, map[string]string{"error": "not_found"})
 	}

@@ -1472,6 +1472,29 @@ ZeitBoard's name.
   browser, in the desktop tests; nothing reaches a real provider.
 - **Not done yet.** Writing accepted times to these calendars, which the next decision takes up.
 
+### Accepted times written to Google and Microsoft calendars — 2026-10-12
+
+ADR-0064 read these calendars; ADR-0065 writes the owner's accepted times to one, with
+ADR-0053's guarantees for CalDAV.
+
+- **The same offer.** "Write accepted times here" sits on an account calendar's row. "Allow
+  writing" signs the account in again to ask, once, for adding events: Google's
+  `calendar.events.owned`, Microsoft's `Calendars.ReadWrite`. A permission left unticked, another
+  account, or a calendar the owner does not own turns nothing on and says why.
+- **ZeitBoard's own events, recognised.** Google events go under an ID derived from ZeitBoard's
+  with a private mark, and Microsoft's carry ZeitBoard's UID as transaction ID. Reading the
+  calendar back recognises them, so a refresh does not count them as busy time.
+- **Preconditions.**
+  - A retried create finds the first instead of writing twice.
+  - A taken ID is kept only when it carries this time's mark.
+  - A removal sends If-Match (Google) or compares the change key (Microsoft), so an event the
+    owner changed waits for them.
+- **ADR-0053's writer and queue.** Retries, conflicts, the status and stopping are unchanged. An
+  account that cannot be signed in to leaves every due write waiting with the reason.
+- **Tested against stand-ins.** Synthetic Google and Microsoft calendars honour each promise in the
+  provider package. The desktop runs accepting, refreshing, undoing, a change by the owner, a lost
+  answer, a refresh that must ask for writing again, an ended sign-in, refusals and removal.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and
@@ -1498,7 +1521,7 @@ or deferred with its reason.
 |---|---|---|
 | 1 | ~~The local database is not encrypted at rest.~~ | Resolved 2026-10-12 on Windows editions with file encryption: by choice, Windows encrypts the data folder and every file in it (ADR-0063). Owner-only permissions remain everywhere. Encryption inside the database itself waits on adopting a driver (ADR-0035's update). |
 | 2 | ~~A calendar file is refreshed by importing the updated file again, under the same name.~~ | Resolved 2026-10-12: a calendar subscribed by its private address is read again every hour (ADR-0062). A file still refreshes by importing it again. |
-| 3 | Accepted times go to one CalDAV calendar at a time, and the calendar's host can read their task names (ADR-0053; disclosed in the offer). | Accepted by design. |
+| 3 | Accepted times go to one calendar at a time, by CalDAV or from a Google or Microsoft account, and the calendar's host can read their task names (ADR-0053, ADR-0065; disclosed in the offer). | Accepted by design. |
 | 4 | Estimates use recorded sleep only. Multi-source inference stays in shadow mode after a negative promotion decision (ADR-0031). | Deferred analysis work. It ships only after a candidate passes the measured gate. |
 | 5 | The server's projection folds all relevant sleep history on each request (review #2). | Accepted at the current scale. Revisit with production profiles. |
 | 6 | Older desktop methods pass `context.Background()` rather than the app's context (review #15). | Accepted. Converted as each area changes; no one sees the difference. |
@@ -1517,9 +1540,8 @@ The goal now covers every planned function, not only the release milestones. Thi
 each function the roadmap and the plans above still name. A function stays open until it ships with
 tests and a verification entry. Where it waits on something outside the code, the table says what.
 
-**Standing, 2026-10-12.** The table's functions are delivered but for writing accepted times to
-Google and Microsoft calendars, which follows ADR-0064's reading. One possible extension waits on
-the owner rather than on code:
+**Standing, 2026-10-12.** Every function in the table is delivered. One possible extension waits
+on the owner rather than on code:
 - Encryption inside the database needs a new SQLite driver, which is a download and a dependency,
   and a decision on who holds the key. Windows' file encryption covers the files in the meantime
   (ADR-0063).
@@ -1537,6 +1559,6 @@ the owner rather than on code:
 | Google Takeout and My Activity import, with inference kept in shadow mode | Roadmap, slice 7; limitation 12 | Delivered 2026-10-12 (ADR-0059). Suggestions stay beside the recorded nights until they pass the backtest gate |
 | Missed-dose sharing, off by default per link | Medication plan, M-F | Delivered 2026-10-11 (ADR-0058). Only doses logged as skipped are shown |
 | Activity collected while the app is closed | Roadmap, slice 11 | Delivered 2026-10-12 (ADR-0060) from Windows' own power log, by a separate choice. The collector itself still stops when ZeitBoard quits |
-| OAuth calendar providers | Roadmap, slice 6 and phase 3 | Reading delivered 2026-10-12: Google and Microsoft accounts sign in through an app the owner registers, with no registration in ZeitBoard's name (ADR-0064); calendars that publish an address can also subscribe by it (ADR-0062). Writing accepted times to them is in progress |
+| OAuth calendar providers | Roadmap, slice 6 and phase 3 | Delivered 2026-10-12: Google and Microsoft accounts sign in through an app the owner registers, with no registration in ZeitBoard's name, and are read every hour (ADR-0064). Accepted times can be written to one of their calendars, with CalDAV write-back's guarantees (ADR-0065). Calendars that publish an address can also subscribe by it (ADR-0062) |
 | Packaged cloud skills for assistants | Roadmap, phase 4 | Delivered 2026-10-12 for Claude (ADR-0061), with its privacy and threat review. ChatGPT and Claude on the web take remote servers only, which ZeitBoard does not expose |
 | Encrypting the local database | Roadmap, phase 2; limitation 1 | Delivered 2026-10-12 with Windows' file encryption, by choice (ADR-0063). Encryption inside the database, with a key ZeitBoard holds, would need `ncruces/go-sqlite3`'s encrypting VFS: a new pre-v1 dependency to download, and a key-custody decision for the owner |

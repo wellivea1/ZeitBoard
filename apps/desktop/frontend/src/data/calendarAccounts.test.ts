@@ -64,7 +64,8 @@ function desktop(methods: Record<string, unknown>) {
 
 describe("calendar accounts adapter", () => {
   it("reads an account and its calendars, and refuses what is malformed", () => {
-    expect(normalizeCalendarAccount(account)).toEqual(account);
+    expect(normalizeCalendarAccount(account)).toEqual({ ...account, writing: false });
+    expect(normalizeCalendarAccount({ ...account, writing: true })?.writing).toBe(true);
     expect(
       normalizeCalendarAccount({ ...account, problem: "The sign-in has ended." }),
     ).toMatchObject({
@@ -106,7 +107,7 @@ describe("calendar accounts adapter", () => {
     };
     await expect(connectCalendarAccount(input, root)).resolves.toMatchObject({ account });
     expect(connect).toHaveBeenCalledWith(input);
-    await expect(loadCalendarAccounts(root)).resolves.toEqual([account]);
+    await expect(loadCalendarAccounts(root)).resolves.toEqual([{ ...account, writing: false }]);
     const chosen = {
       accountId: account.accountId,
       calendarId: "owner@example.test",
