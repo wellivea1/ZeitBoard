@@ -2744,3 +2744,15 @@ ADR-0057. Verified on Windows 11, whose regional format here writes "h:mm tt", t
   layout put each settings row in a second grid column. On windows wider than 800 px, that
   squeezed the appearance presets into a 190 px strip. They now fill the section, three to a row.
 
+## No stretch shorter than a minute — 2026-10-11
+
+Seen in the running desktop: Home's figure listed "Likely awake, Sun 7:19 PM to 7:19 PM, lasting 0
+minutes". The window asks for the outlook at a whole minute, but the forecast's boundaries carry
+seconds, so a boundary twenty seconds after now left a twenty-second stretch.
+
+The outlook now puts its boundaries on the minute before it classifies the stretches between them,
+and clamps them to the horizon so the timeline still starts at now and ends at the horizon. A test
+moves the first predicted sleep to twenty seconds after now. It failed with a 20-second first
+segment, and now passes with no stretch under a minute and no gap. The other outlook tests, and
+the desktop and server suites, pass unchanged.
+
