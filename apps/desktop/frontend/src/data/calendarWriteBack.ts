@@ -1,9 +1,12 @@
-// Writing accepted times to the owner's CalDAV calendar (ADR-0053). Off until
-// the owner turns it on for one imported CalDAV calendar with a sign-in that
-// may add events. Then each accepted time is added there as ZeitBoard's own
-// event and removed again on undo; what the owner changed there waits for them.
-// Without the desktop service there is nothing to turn on.
+// Writing accepted times to the owner's calendar (ADR-0053). Off until the
+// owner turns it on for one calendar: an imported CalDAV calendar with a
+// sign-in that may add events, or one brought in from a Google or Microsoft
+// account that allows it (ADR-0065). Then each accepted time is added there
+// as ZeitBoard's own event and removed again on undo; what the owner changed
+// there waits for them. Without the desktop service there is nothing to turn
+// on.
 
+import { accountProvider, type CalendarAccountProvider } from "./calendar";
 import { findWailsMethod, type WailsRoot } from "./wailsBridge";
 
 export const calendarWriteBackChangedEvent = "zeitboard:calendar-write-back-changed";
@@ -27,6 +30,8 @@ export interface CalendarWriteBack {
   sourceId?: string;
   label?: string;
   username?: string;
+  /** The account the calendar written to belongs to; none for CalDAV. */
+  provider?: CalendarAccountProvider;
   summary: string;
   problems: CalendarWriteProblem[];
 }
@@ -78,12 +83,14 @@ export function normalizeCalendarWriteBack(value: unknown): CalendarWriteBack | 
   const on = value.on;
   const sourceId = text(value.sourceId);
   const label = text(value.label);
+  const provider = accountProvider(value.provider);
   if (on && (!sourceId || !label)) return undefined;
   return {
     on,
     ...(sourceId ? { sourceId } : {}),
     ...(label ? { label } : {}),
     ...(text(value.username) ? { username: text(value.username) } : {}),
+    ...(provider ? { provider } : {}),
     summary: text(value.summary) as string,
     problems: problems as CalendarWriteProblem[],
   };
@@ -114,6 +121,17 @@ export function enableCalendarWriteBack(
   root: WailsRoot = globalThis as unknown as WailsRoot,
 ) {
   return writeBackCall("EnableCalendarWriteBack", input, root);
+}
+
+/**
+ * Starts writing to a calendar brought in from an account. The first time,
+ * the account is signed in again in the browser to allow adding events.
+ */
+export function enableAccountWriteBack(
+  sourceId: string,
+  root: WailsRoot = globalThis as unknown as WailsRoot,
+) {
+  return writeBackCall("EnableAccountWriteBack", { sourceId }, root);
 }
 
 export function disableCalendarWriteBack(root: WailsRoot = globalThis as unknown as WailsRoot) {

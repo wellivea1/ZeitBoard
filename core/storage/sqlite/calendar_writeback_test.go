@@ -78,7 +78,7 @@ func TestWritingIsOffUntilTurnedOnForACalDAVCalendar(t *testing.T) {
 	if err := store.ReplaceImportedCalendar(ctx, ics, nil, ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.SetCalendarWriteTarget(ctx, CalendarWriteTarget{SourceID: ics.SourceID}, now); !errors.Is(err, ErrCalendarWriteTargetNotCalDAV) {
+	if err := store.SetCalendarWriteTarget(ctx, CalendarWriteTarget{SourceID: ics.SourceID}, now); !errors.Is(err, ErrCalendarNotWritable) {
 		t.Fatalf("an ICS file as the target: %v", err)
 	}
 	if err := store.SetCalendarWriteTarget(ctx, CalendarWriteTarget{SourceID: "calendar_source_missing"}, now); !errors.Is(err, ErrCalendarSourceNotFound) {

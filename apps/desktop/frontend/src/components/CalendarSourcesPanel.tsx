@@ -20,7 +20,8 @@ import {
 // The calendars ZeitBoard reads, and adding another. This used to sit in a
 // narrow column beside the calendar board; it is set up once and rarely
 // touched, so it lives in Data Sources with the other inputs. A CalDAV
-// calendar can also take the times the owner accepts (ADR-0053).
+// calendar (ADR-0053), or one from a Google or Microsoft account (ADR-0065),
+// can also take the times the owner accepts.
 
 const kindLabels: Record<CalendarSource["kind"], string> = {
   ics: "Calendar file",
@@ -178,8 +179,8 @@ export function CalendarSourcesPanel({
       </div>
       <Notice id="calendars.ownership">
         Suggested times stay clear of busy events. The times you accept are kept in ZeitBoard, and
-        can also be written to a CalDAV calendar of yours as ZeitBoard’s own events. Your own events
-        are never changed.
+        can also be written to one of your calendars, by CalDAV or from a Google or Microsoft
+        account, as ZeitBoard’s own events. Your own events are never changed.
       </Notice>
       {sources.length === 0 ? (
         <p className="calendar-source-empty">No calendars yet. Adding one is optional.</p>
@@ -188,7 +189,10 @@ export function CalendarSourcesPanel({
           {sources.map((source) => {
             const writingHere = writingTo === source.sourceId;
             const canOffer =
-              available && writeBack !== undefined && !writeBack.on && source.kind === "caldav";
+              available &&
+              writeBack !== undefined &&
+              !writeBack.on &&
+              (source.kind === "caldav" || source.account !== undefined);
             return (
               <li
                 className="calendar-source-row"
@@ -248,6 +252,7 @@ export function CalendarSourcesPanel({
                   <CalendarWriteBackForm
                     sourceId={source.sourceId}
                     label={source.label}
+                    provider={source.account?.provider}
                     onStarted={(status) => {
                       setOffering(null);
                       setWriteBack(status);
@@ -276,8 +281,8 @@ export function CalendarSourcesPanel({
           <p>Its events are deleted from ZeitBoard. The calendar itself is not changed.</p>
           {writingTo === sourceBeingRemoved.sourceId && (
             <p>
-              ZeitBoard also stops writing accepted times to it. What it wrote stays there, and the
-              sign-in is erased.
+              ZeitBoard also stops writing accepted times to it. What it wrote stays there
+              {sourceBeingRemoved.account ? "." : ", and the sign-in is erased."}
             </p>
           )}
         </ConfirmDelete>

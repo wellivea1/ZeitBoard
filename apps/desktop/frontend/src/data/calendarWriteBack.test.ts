@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { loadCalendarWriteBack, normalizeCalendarWriteBack } from "./calendarWriteBack";
+import { describe, expect, it, vi } from "vitest";
+import {
+  enableAccountWriteBack,
+  loadCalendarWriteBack,
+  normalizeCalendarWriteBack,
+} from "./calendarWriteBack";
 
 describe("calendar write-back status", () => {
   const changed = {
@@ -48,5 +52,22 @@ describe("calendar write-back status", () => {
 
   it("is absent outside the desktop app", async () => {
     await expect(loadCalendarWriteBack({})).resolves.toBeUndefined();
+  });
+
+  // A calendar from an account (ADR-0065) is written with the account's own
+  // sign-in: no username comes back, only whose account it is.
+  it("names the account a calendar written to belongs to", async () => {
+    const account = { ...on, username: undefined, provider: "microsoft" };
+    expect(normalizeCalendarWriteBack(account)).toMatchObject({ provider: "microsoft" });
+    expect(
+      normalizeCalendarWriteBack({ ...account, provider: "fastmail" })?.provider,
+    ).toBeUndefined();
+    const enable = vi.fn(async () => account);
+    const root = { go: { main: { App: { EnableAccountWriteBack: enable } } } };
+    await expect(enableAccountWriteBack("calendar_source_account", root)).resolves.toMatchObject({
+      on: true,
+      provider: "microsoft",
+    });
+    expect(enable).toHaveBeenCalledWith({ sourceId: "calendar_source_account" });
   });
 });

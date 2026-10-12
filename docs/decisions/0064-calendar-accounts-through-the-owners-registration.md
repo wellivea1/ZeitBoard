@@ -78,3 +78,6 @@ PKCE, returning to a one-time loopback address.
   until it is revoked.
 - Writing accepted times to these calendars is a separate, later decision; CalDAV write-back
   (ADR-0053) is unchanged.
+- Update, 2026-10-12: [ADR-0065](0065-accepted-times-written-to-google-and-microsoft-calendars.md)
+  writes accepted times to a calendar from an account. The account is asked to allow it only
+  when the owner turns writing on.

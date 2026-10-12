@@ -11,13 +11,14 @@ import (
 	calendarcore "non24.app/core/calendar"
 )
 
-// Writing accepted times to the owner's CalDAV calendar (ADR-0053). Off until
-// the owner turns it on for one imported CalDAV calendar and gives ZeitBoard a
-// sign-in for it. Then every accepted time that has not ended is written there
-// as ZeitBoard's own event, and undoing one removes it, unless the owner has
-// changed it in their calendar since. ZeitBoard writes and removes only the
-// events it created, named by their placement; it never changes an imported
-// event.
+// Writing accepted times to the owner's calendar (ADR-0053). Off until the
+// owner turns it on for one calendar: an imported CalDAV calendar with a
+// sign-in for it, or one brought in from a Google or Microsoft account that
+// allowed adding events (ADR-0065). Then every accepted time that has not
+// ended is written there as ZeitBoard's own event, and undoing one removes it,
+// unless the owner has changed it in their calendar since. ZeitBoard writes
+// and removes only the events it created, named by their placement; it never
+// changes an imported event.
 //
 // Triggers queue the writes, so every path that adds or removes an accepted
 // time (accepting, undoing, deleting the task, erasing data) queues the right
@@ -32,14 +33,15 @@ const (
 )
 
 var (
-	ErrCalendarWriteTargetNotCalDAV = errors.New("accepted times can be written only to an imported CalDAV calendar")
-	ErrCalendarWriteNotFound        = errors.New("no such written time")
+	ErrCalendarNotWritable   = errors.New("accepted times can be written only to a CalDAV calendar or one brought in from an account")
+	ErrCalendarWriteNotFound = errors.New("no such written time")
 )
 
-// CalendarWriteTarget is the calendar accepted times are written to, and the
-// sign-in to write with. The sign-in is a credential: it stays in this
-// owner-protected database, is never exported or synced, and is erased when
-// writing stops.
+// CalendarWriteTarget is the calendar accepted times are written to, and how
+// to write there: a CalDAV collection with the sign-in to write with, or an
+// account's calendar, written with the account's own sign-in. A CalDAV
+// sign-in is a credential: it stays in this owner-protected database, is
+// never exported or synced, and is erased when writing stops.
 type CalendarWriteTarget struct {
 	SourceID      string
 	Label         string
@@ -47,6 +49,11 @@ type CalendarWriteTarget struct {
 	Username      string
 	Password      string
 	EnabledAt     time.Time
+
+	// AccountID and CalendarID name the account calendar written to; both
+	// are empty for a CalDAV calendar.
+	AccountID  string
+	CalendarID string
 }
 
 // CalendarWrite is one accepted time's place in the owner's calendar.
@@ -116,9 +123,11 @@ func (s *Store) CalendarWriteTarget(ctx context.Context) (CalendarWriteTarget, b
 	var target CalendarWriteTarget
 	var enabledAt string
 	err := s.db.QueryRowContext(ctx, `SELECT target.source_id, source.label, target.collection_url, target.username,
-		target.password, target.enabled_at
-		FROM local_calendar_write_target AS target JOIN local_calendar_sources AS source ON source.source_id = target.source_id`,
-	).Scan(&target.SourceID, &target.Label, &target.CollectionURL, &target.Username, &target.Password, &enabledAt)
+		target.password, target.enabled_at, COALESCE(link.account_id, ''), COALESCE(link.calendar_id, '')
+		FROM local_calendar_write_target AS target JOIN local_calendar_sources AS source ON source.source_id = target.source_id
+		LEFT JOIN local_calendar_account_calendars AS link ON link.source_id = target.source_id`,
+	).Scan(&target.SourceID, &target.Label, &target.CollectionURL, &target.Username, &target.Password, &enabledAt,
+		&target.AccountID, &target.CalendarID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return CalendarWriteTarget{}, false, nil
 	}
@@ -131,9 +140,11 @@ func (s *Store) CalendarWriteTarget(ctx context.Context) (CalendarWriteTarget, b
 	return target, true, nil
 }
 
-// SetCalendarWriteTarget turns writing on for an imported CalDAV calendar at
-// now, replacing any other target, and queues every accepted time that has
-// not ended.
+// SetCalendarWriteTarget turns writing on at now, replacing any other target,
+// and queues every accepted time that has not ended. The calendar is an
+// imported CalDAV calendar, written with the sign-in given, or one brought
+// in from an account, written with the account's own; the caller has checked
+// that the account allows it.
 func (s *Store) SetCalendarWriteTarget(ctx context.Context, target CalendarWriteTarget, now time.Time) error {
 	if err := s.FilePermissionError(); err != nil {
 		return errors.New("a calendar sign-in requires owner-only local storage")
@@ -145,14 +156,20 @@ func (s *Store) SetCalendarWriteTarget(ctx context.Context, target CalendarWrite
 	}
 	defer tx.Rollback()
 	var kind, endpoint string
-	err = tx.QueryRowContext(ctx, `SELECT kind, endpoint FROM local_calendar_sources WHERE source_id = ?`, target.SourceID).Scan(&kind, &endpoint)
+	var fromAccount bool
+	err = tx.QueryRowContext(ctx, `SELECT kind, endpoint,
+			EXISTS(SELECT 1 FROM local_calendar_account_calendars WHERE source_id = source.source_id)
+		FROM local_calendar_sources AS source WHERE source_id = ?`, target.SourceID).Scan(&kind, &endpoint, &fromAccount)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return ErrCalendarSourceNotFound
 	case err != nil:
 		return err
+	case fromAccount:
+		// Written with the account's own sign-in; nothing more is kept.
+		endpoint, target.Username, target.Password = "", "", ""
 	case kind != string(calendarcore.SourceCalDAV) || endpoint == "":
-		return ErrCalendarWriteTargetNotCalDAV
+		return ErrCalendarNotWritable
 	}
 	// Replacing the target forgets what was written to the old one.
 	if _, err := tx.ExecContext(ctx, `DELETE FROM local_calendar_write_target`); err != nil {

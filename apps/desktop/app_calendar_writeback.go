@@ -31,10 +31,13 @@ func calendarWriteRetryDelay(failures int) time.Duration {
 }
 
 type CalendarWriteBackDTO struct {
-	On       bool                      `json:"on"`
-	SourceID string                    `json:"sourceId,omitempty"`
-	Label    string                    `json:"label,omitempty"`
-	Username string                    `json:"username,omitempty"`
+	On       bool   `json:"on"`
+	SourceID string `json:"sourceId,omitempty"`
+	Label    string `json:"label,omitempty"`
+	Username string `json:"username,omitempty"`
+	// Provider names the account a calendar written to belongs to
+	// (ADR-0065); it is empty for a CalDAV calendar.
+	Provider string                    `json:"provider,omitempty"`
 	Summary  string                    `json:"summary"`
 	Problems []CalendarWriteProblemDTO `json:"problems"`
 }
@@ -97,7 +100,7 @@ func (a *App) EnableCalendarWriteBack(input CalendarWriteBackInput) (CalendarWri
 		}
 	}
 	if endpoint == "" {
-		return CalendarWriteBackDTO{}, storage.ErrCalendarWriteTargetNotCalDAV
+		return CalendarWriteBackDTO{}, storage.ErrCalendarNotWritable
 	}
 	writer, err := newCalDAVWriter(a.calendarHTTPClient, endpoint, username, input.Password)
 	if err != nil {
@@ -223,8 +226,13 @@ func (a *App) writeCalendarPass(ctx context.Context) {
 	if err != nil || !on {
 		return
 	}
-	writer, err := newCalDAVWriter(a.calendarHTTPClient, target.CollectionURL, target.Username, target.Password)
+	writer, err := a.eventWriterFor(ctx, store, target)
 	if err != nil {
+		// An account that cannot be signed in to now leaves every due write
+		// waiting, saying why.
+		if target.AccountID != "" && a.deferDueWrites(ctx, store, err.Error()) {
+			a.announce(calendarWritesChangedEvent)
+		}
 		return
 	}
 	changed := false
@@ -249,7 +257,7 @@ func (a *App) writeCalendarPass(ctx context.Context) {
 
 // carryCalendarWrite makes one write and records how it went. It reports
 // whether anything was recorded.
-func (a *App) carryCalendarWrite(ctx context.Context, store *storage.Store, writer calDAVWriter, write storage.CalendarWrite) bool {
+func (a *App) carryCalendarWrite(ctx context.Context, store *storage.Store, writer eventWriter, write storage.CalendarWrite) bool {
 	now := a.currentTime().UTC()
 	var event calendarcore.Event
 	var result calendarWriteResult
@@ -263,7 +271,7 @@ func (a *App) carryCalendarWrite(ctx context.Context, store *storage.Store, writ
 		event = accepted
 		result = writer.create(ctx, event, now.Truncate(time.Second))
 	case storage.CalendarWriteDelete:
-		result = writer.remove(ctx, write.Href, write.ETag)
+		result = writer.remove(ctx, write.EventID, write.Href, write.ETag)
 	default:
 		return false
 	}
@@ -298,6 +306,11 @@ func (a *App) calendarWriteBack(ctx context.Context, store *storage.Store) (Cale
 		return dto, nil
 	}
 	dto.On, dto.SourceID, dto.Label, dto.Username = true, target.SourceID, target.Label, target.Username
+	if target.AccountID != "" {
+		if _, account, err := a.calendarAccount(ctx, target.AccountID); err == nil {
+			dto.Provider = account.Provider
+		}
+	}
 	writes, err := store.CalendarWrites(ctx)
 	if err != nil {
 		return CalendarWriteBackDTO{}, err
