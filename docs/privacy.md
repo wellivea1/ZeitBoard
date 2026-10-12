@@ -290,8 +290,12 @@ repeatedly can watch the user's rhythm drift. That is inherent to the feature,
 is disclosed when a link is created, and is a reason to share deliberately.
 
 The portal keeps its own database. It holds hashed link tokens, hashed passcodes, the materialized
-windows, sessions, rate-limit counters, and a coarse access log. It holds no health data, and public
-request handlers have no route to the private database at all. The user's own name for a link —
+windows, sessions, rate-limit counters, and a coarse access log. Public request handlers have no
+route to the private database at all. It holds no health data, with one exception the owner must
+choose per link: a link with the skipped-doses grant (ADR-0058) carries the times of doses logged
+as skipped in the last three days. It never carries which medication, a note, or any dose that was
+taken or not logged. Whoever has such a link learns that the owner takes a medication on a schedule,
+and the Sharing screen says so before the grant can be ticked. The user's own name for a link —
 "Mum", a clinician — is stored encrypted in the _private_ database and never reaches the portal.
 
 Abuse limits need to tell visitors apart, so the portal stores a keyed hash of

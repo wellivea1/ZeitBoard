@@ -242,6 +242,16 @@ type availabilityDTO struct {
 	GeneratedAt string      `json:"generatedAt"`
 	HorizonEnd  string      `json:"horizonEnd"`
 	Status      string      `json:"status"`
+
+	// SkippedDoses is present only on a link with the skipped-doses grant
+	// (ADR-0058), as a list even when it is empty, so a reader can tell
+	// "none logged" from "not shared".
+	SkippedDoses *[]skippedDoseDTO `json:"skippedDoses,omitempty"`
+}
+
+type skippedDoseDTO struct {
+	At     string `json:"at"`
+	ZoneID string `json:"zoneId"`
 }
 
 type windowDTO struct {
@@ -279,6 +289,18 @@ func toAvailabilityDTO(snapshot Snapshot, now time.Time) availabilityDTO {
 	}
 	if dto.Status == "" {
 		dto.Status = StatusInsufficientData
+	}
+	// Skipped doses do not depend on the forecast, so they are set before the
+	// rules that withhold it, and dropped past their window as the page does.
+	if snapshot.DosesShared {
+		doses := []skippedDoseDTO{}
+		for _, dose := range snapshot.SkippedDoses {
+			if dose.At.After(now) || now.Sub(dose.At) >= SkippedDoseWindow {
+				continue
+			}
+			doses = append(doses, skippedDoseDTO{At: formatTime(dose.At), ZoneID: dose.ZoneID})
+		}
+		dto.SkippedDoses = &doses
 	}
 	// Apply the same age rules the rendered page applies, so a JSON consumer
 	// cannot present an out-of-date "awake now" the HTML would have withheld.

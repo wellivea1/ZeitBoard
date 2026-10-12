@@ -3,7 +3,7 @@
 > [ADR-0039](decisions/0039-pre-release-contracts-and-streamlining.md) supersedes the prototype-compatibility notes below: only the current v2 medication contracts are maintained. There are no packaged releases or deployed v1 consumers.
 
 > Implementation plan. M-A through M-C are delivered under ADR-0024 through
-> ADR-0027; M-D..M-F remain gated.
+> ADR-0027, M-D and M-E under ADR-0048 and ADR-0051, and M-F under ADR-0058.
 > Extends `ui-ux-design.md` §9.6 and the
 > roadmap's medication debt line into a full feature plan. Engineering notes
 > only; not medical advice. The app records and displays — it never recommends
@@ -194,7 +194,7 @@ are append-only evidence.**
 | **M-C Adherence + clinician export - delivered (ADR-0027)** | explicit-record adherence-vs-rhythm table, dose/start markers, robust observational association with the ADR-0026 confounder list, redacted preview, and standalone printable HTML/PDF path | M-A; marker records (delivered) |
 | **M-D Sync** | definitions as revision records, events as append-only records, tombstone deletion | M-A (mirrors ADR-0020) |
 | **M-E Agent surface** | redacted assistant/MCP context + `propose_log_dose` (delivered, ADR-0051: proposed doses wait on the owner's computer until accepted); refusal-boundary tests | M-A, slice-8 rail |
-| **M-F Missed-dose sharing** | Medfriend-equivalent as an off-by-default sharing permission | sharing transport (deferred) |
+| **M-F Missed-dose sharing — delivered (ADR-0058)** | Medfriend-equivalent as an off-by-default sharing permission: a link may show the times of doses logged as skipped in the last three days, never the medication; seen on the page, not pushed | sharing transport (the portal) |
 
 Ordering rationale: M-A retired the last full "Sample preview" screen; M-B
 completed the explicit schedule/collision part of §9.6; M-C adds the local

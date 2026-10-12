@@ -102,3 +102,22 @@ func TestSuppressionChangesTheFingerprint(t *testing.T) {
 		t.Error("suppressing a session did not change the fingerprint")
 	}
 }
+
+// A record a publication reads, such as a dose a link may show (ADR-0058),
+// changes the fingerprint even when no night has moved, and in any order.
+func TestRecordsAreInTheFingerprint(t *testing.T) {
+	sleep := []domain.SleepSession{session("s1", base, base.Add(8*time.Hour), base)}
+	none := (recompute.Inputs{Sleep: sleep}).Fingerprint()
+	one := (recompute.Inputs{Sleep: sleep, Records: []string{"dose-a"}}).Fingerprint()
+	forward := (recompute.Inputs{Sleep: sleep, Records: []string{"dose-a", "dose-b"}}).Fingerprint()
+	backward := (recompute.Inputs{Sleep: sleep, Records: []string{"dose-b", "dose-a"}}).Fingerprint()
+	if none == one || one == forward {
+		t.Error("a new record did not change the fingerprint")
+	}
+	if forward != backward {
+		t.Error("the order records arrive in changed the fingerprint")
+	}
+	if (recompute.Inputs{Consumers: []string{"x"}}).Fingerprint() == (recompute.Inputs{Records: []string{"x"}}).Fingerprint() {
+		t.Error("a consumer and a record with the same text collided")
+	}
+}

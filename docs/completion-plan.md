@@ -88,7 +88,8 @@ scope:
 
 The ordinary trusted-availability projection remains medication-free. M-F, if enabled by an owner,
 must be a separately designed minimal signal permission, not an expansion of the default
-availability DTO. Any new private-data boundary needs its versioned contract, ADR, redaction tests
+availability DTO. (Delivered 2026-10-11 as exactly that, ADR-0058: a per-link grant, off by default,
+whose snapshot field is absent from every other link.) Any new private-data boundary needs its versioned contract, ADR, redaction tests
 and corresponding UI consent.
 
 ## What counts as finished
@@ -692,8 +693,8 @@ hides it on the lock screen and retires it when the request is answered.
 There is no vendor push service in the path, so there is no intermediary to
 disclose; the delivery limits (15-minute minimum, battery deferral,
 force-stop) are documented in `self-hosting.md`. The optional M-F missed-dose
-signal is dispositioned as not implemented: it needs its own grant and
-projection and is outside this feed. Remaining for C6's acceptance: the
+signal is outside this feed: since 2026-10-11 (ADR-0058) it is a link grant
+whose times are seen on the page, not pushed. Remaining for C6's acceptance: the
 recorded device run (a portal request raising a notice on an enrolled phone
 with the desktop closed), recorded on 2026-09-27 below.
 
@@ -1313,6 +1314,26 @@ few hand-built ones in the window (ADR-0057).
 - **Not done.** Translated text, other languages' day and month names, and plural rules need a
   message catalog. The visitor's availability page on the server still writes the twelve-hour clock.
 
+### A share link can show the doses logged as skipped — 2026-10-11
+
+Medisafe's "Medfriend" tells a chosen person about a missed dose. ZeitBoard's equivalent is a grant
+on a share link, off unless the owner ticks it (ADR-0058).
+
+- **What the link holder sees.** The page lists the times of doses logged as skipped in the last
+  three days, or says there were none. A medication name, form, note, schedule, identifier or count
+  of taken doses never appears.
+- **Only what was logged as skipped, as it now stands.** The server reads doses through the same
+  fold as the desktop, now in `core/medication`. A skip corrected to taken, or excluded, is not
+  shown, and a dose with no record never is.
+- **Said before it is chosen.** The Sharing screen says what the grant reveals beside the box: that
+  the owner takes a medication on a schedule.
+- **Seen, not sent.** The page refreshes as doses arrive, and drops each one 72 hours after it.
+  Nothing is pushed to the link holder.
+- **The boundary moved by one field, for chosen links only.** Doses feed the recompute inputs, so a
+  new skip is published, but not the content stamp. The page's "updated" age therefore still
+  measures the sleep evidence. The server may now read dose records (never medication
+  definitions), and only when some link has the grant.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and
@@ -1369,7 +1390,7 @@ tests and a verification entry. Where it waits on something outside the code, th
 | Onboarding beyond the first-run setup | Roadmap, phase 2; limitation 11 | Delivered 2026-10-11 |
 | Localization readiness | Roadmap, phase 2; limitation 11 | Delivered 2026-10-11 for times (ADR-0057). Translated text waits for a message catalog |
 | Google Takeout and My Activity import, with inference kept in shadow mode | Roadmap, slice 7; limitation 12 | Open. Inference reaches the estimate only after it passes the backtest gate |
-| Missed-dose sharing, off by default per link | Medication plan, M-F | Open. It needs an ADR, and it must never show a dose that was not logged as missed |
+| Missed-dose sharing, off by default per link | Medication plan, M-F | Delivered 2026-10-11 (ADR-0058). Only doses logged as skipped are shown |
 | Activity collected while the app is closed | Roadmap, slice 11 | Open |
 | OAuth calendar providers | Roadmap, slice 6 and phase 3 | Waits on provider app registrations in the owner's name |
 | Packaged cloud skills for assistants | Roadmap, phase 4 | Open. It needs its own privacy and threat review |

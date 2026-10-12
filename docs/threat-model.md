@@ -54,7 +54,8 @@ availability.
     output filtering (ADR-0029). Off by default; not exposed.
 14. Private read model → **allowlisted portal snapshot**: the one inbound path to the portal
     database, owned by `portalbridge`, narrowing an estimate to windows, a generation time, a
-    horizon, and a status. Confidence labels are withheld because ADR-0022 measured them inverted.
+    horizon, and a status, and, only for a link with that grant, the times of doses logged as
+    skipped in the last three days (ADR-0058). Confidence labels are withheld because ADR-0022 measured them inverted.
     Since ADR-0033 the stored windows are unfiltered and unclipped, with both rules applied at
     render, so the snapshot holds a few already-elapsed windows for the same profile that was
     already granted them. The generation time now means when the content last changed, so a
@@ -201,7 +202,10 @@ The availability portal adds residuals of its own, all of them accepted rather t
 solved. A recipient can screenshot or simply remember a window, which revocation cannot
 reach; the create-link response states this. Sharing a live projection is inherently
 observable — someone watching the link over time sees the user's rhythm shift, which is a
-consequence of the feature and not a defect. The timing floor on link resolution bounds
+consequence of the feature and not a defect. A link with the skipped-doses grant tells its
+holder that the owner takes a medication on a schedule, and when doses were logged as skipped;
+that is the grant's purpose, it is off unless chosen, and the screen says so before it can be
+chosen. The timing floor on link resolution bounds
 enumeration signal without eliminating it. Source identifiers are pseudonymous, not
 anonymous. The portal database is encrypted with a key derived one-way from the daemon
 data key, so reading it never yields the private key, but the two cannot be rotated
@@ -235,10 +239,11 @@ visibly queued.
 - Projection: test output against a forbidden-field list across all permission
   combinations; revoked and expired profiles return no view.
 - Availability portal: plant canary values in private device labels, observation IDs,
-  source record IDs, task titles, correction IDs, and the share label, then assert none
+  source record IDs, task titles, correction IDs, the share label, a medication's name and ID,
+  and a dose's note and ID, then assert none
   appears in any public response body, any response header, or the portal database file
   bytes including its write-ahead log; assert the availability JSON carries exactly the
-  five allowlisted keys; assert unknown, expired, and revoked links produce byte-identical
+  five allowlisted keys, and a sixth, `skippedDoses`, only on a link with that grant; assert unknown, expired, and revoked links produce byte-identical
   responses; assert an already-authenticated session dies the moment its link is revoked;
   assert a session for one link grants nothing on another; assert mutations require
   same-origin attestation and that a request with neither `Sec-Fetch-Site` nor a matching

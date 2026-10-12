@@ -40,6 +40,10 @@ func (p Portal) Prepare(ctx context.Context, now time.Time) (recompute.Prepared,
 	inputs := recompute.Inputs{
 		Sleep:     prep.Sessions,
 		Consumers: consumerKeys(prep.Profiles),
+		// Skipped doses are inputs, so a new one is published, and not content,
+		// so publishing it does not restamp the page's forecast as fresh
+		// (ADR-0058): the stamp says how old the sleep evidence is.
+		Records: prep.DoseRecords,
 	}
 
 	return recompute.Prepared{
@@ -61,12 +65,14 @@ func (p Portal) Prepare(ctx context.Context, now time.Time) (recompute.Prepared,
 // fingerprint: creating a link for one person must not restamp everybody else's
 // page as freshly updated.
 //
-// Only the opaque profile id and the grant flags appear. The owner's private
+// Only the opaque profile id and the grant flags that change what is published
+// appear. The owner's private
 // label for a link lives in the private database and has no business here.
 func consumerKeys(profiles []portal.Profile) []string {
 	keys := make([]string, 0, len(profiles))
 	for _, profile := range profiles {
-		keys = append(keys, profile.ID+"\x1f"+strconv.FormatBool(profile.Grants.WakingWindows))
+		keys = append(keys, profile.ID+"\x1f"+strconv.FormatBool(profile.Grants.WakingWindows)+
+			"\x1f"+strconv.FormatBool(profile.Grants.SkippedDoses))
 	}
 	return keys
 }

@@ -301,6 +301,11 @@ type Inputs struct {
 	// opaque strings. They belong in the fingerprint because a new consumer
 	// needs a row written even when the rhythm has not moved at all.
 	Consumers []string
+
+	// Records are any other records a publication reads, already rendered to
+	// stable strings: the doses a share link may show (ADR-0058), for one. A
+	// new one must reach the page even when nothing else moved.
+	Records []string
 }
 
 // Fingerprint digests the inputs.
@@ -310,12 +315,15 @@ type Inputs struct {
 // included. A fingerprint that moved with the clock would report a change on
 // every run and make the whole mechanism decorative.
 func (in Inputs) Fingerprint() Fingerprint {
-	entries := make([]string, 0, len(in.Sleep)+len(in.Consumers))
+	entries := make([]string, 0, len(in.Sleep)+len(in.Consumers)+len(in.Records))
 	for _, session := range in.Sleep {
 		entries = append(entries, sleepEntry(session))
 	}
 	for _, consumer := range in.Consumers {
 		entries = append(entries, "consumer\x1f"+consumer)
+	}
+	for _, record := range in.Records {
+		entries = append(entries, "record\x1f"+record)
 	}
 	return digest(entries)
 }

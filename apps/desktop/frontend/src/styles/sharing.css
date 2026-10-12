@@ -366,6 +366,27 @@
   font-size: var(--type-body);
 }
 
+/* A grant whose consequence a choice depends on carries it beside the box. */
+.sharing-grants .sharing-grant-described {
+  align-items: flex-start;
+}
+
+.sharing-grant-described input {
+  margin-top: 4px;
+}
+
+.sharing-grant-described > span {
+  display: grid;
+  gap: 2px;
+}
+
+.sharing-grant-described small {
+  max-width: 62ch;
+  color: var(--muted);
+  font-size: var(--type-label);
+  line-height: 1.4;
+}
+
 .sharing-create > .button {
   justify-self: start;
 }

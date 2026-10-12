@@ -3,6 +3,7 @@ package portal
 import (
 	"fmt"
 	"math"
+	"sort"
 	"time"
 )
 
@@ -21,6 +22,11 @@ const Qualifier = "This is an estimate from recent patterns. It is often off by 
 
 // NoticeNotMedical keeps the public surface's purpose unambiguous.
 const NoticeNotMedical = "This page shows scheduling availability only. It is not medical information and does not describe any health condition."
+
+// NoticeWithDoses replaces it on a link that also shows doses logged as
+// skipped (ADR-0058). That page cannot claim to hold no medical information,
+// so it says what else it shows, and still claims nothing about a condition.
+const NoticeWithDoses = "This page shows scheduling availability and, by its owner's choice, when they logged a dose as skipped. It is not medical advice and does not describe any health condition."
 
 // AvailabilityView is the rendered form of a Snapshot. Every string here is
 // derived from the allowlisted snapshot; none of it reaches back into private
@@ -45,6 +51,24 @@ type AvailabilityView struct {
 	// Figure draws the same windows as a picture: a row per day from local
 	// midnight. It adds nothing the window list does not already say.
 	Figure []FigureDay
+
+	// Doses are the doses logged as skipped, on a link that shows them
+	// (ADR-0058). They do not depend on the forecast, so they are shown
+	// whatever it says.
+	Doses DosesView
+}
+
+// DosesView is what a link with the skipped-doses grant shows.
+type DosesView struct {
+	Shared bool
+	Items  []DoseView
+}
+
+// DoseView is one dose logged as skipped, written in the zone it was logged
+// in: "Yesterday" and "9:05 PM".
+type DoseView struct {
+	DayLabel  string
+	TimeLabel string
 }
 
 // FigureWidth is the figure's own coordinate width. Positions are computed
@@ -104,6 +128,10 @@ func BuildView(snapshot Snapshot, now time.Time) AvailabilityView {
 		view.ZoneIDInput = snapshot.Windows[0].ZoneID
 	}
 	now = now.UTC()
+	view.Doses = buildDoses(snapshot, now)
+	if view.Doses.Shared {
+		view.Notice = NoticeWithDoses
+	}
 
 	if snapshot.GeneratedAt.IsZero() {
 		view.Unavailable = true
@@ -183,9 +211,48 @@ func BuildView(snapshot Snapshot, now time.Time) AvailabilityView {
 	return view
 }
 
+// buildDoses lists the doses logged as skipped in the window a link shows,
+// newest first. A dose older than that is dropped here, at render, so the page
+// is right however long ago the snapshot was written.
+func buildDoses(snapshot Snapshot, now time.Time) DosesView {
+	view := DosesView{Shared: snapshot.DosesShared}
+	if !snapshot.DosesShared {
+		return view
+	}
+	shown := make([]SkippedDose, 0, len(snapshot.SkippedDoses))
+	for _, dose := range snapshot.SkippedDoses {
+		if dose.At.After(now) || now.Sub(dose.At) >= SkippedDoseWindow {
+			continue
+		}
+		shown = append(shown, dose)
+	}
+	sort.SliceStable(shown, func(i, j int) bool { return shown[i].At.After(shown[j].At) })
+	for _, dose := range shown {
+		location := windowLocation(dose.ZoneID)
+		view.Items = append(view.Items, DoseView{
+			DayLabel:  describePastDay(dose.At, now, location),
+			TimeLabel: formatClock(dose.At.In(location)),
+		})
+	}
+	return view
+}
+
+// describePastDay names a day already begun: "Today", "Yesterday", or the date.
+func describePastDay(value, now time.Time, location *time.Location) string {
+	switch daysBetween(value.In(location), now.In(location)) {
+	case 0:
+		return "Today"
+	case 1:
+		return "Yesterday"
+	default:
+		return value.In(location).Format("Mon, Jan 2")
+	}
+}
+
 // nextChange is the next instant the page's claim changes with no new
-// estimate: a window opening or closing, or the estimate turning stale or
-// unavailable. An open page refreshes itself then.
+// estimate: a window opening or closing, the estimate turning stale or
+// unavailable, or a skipped dose leaving the page. An open page refreshes
+// itself then.
 func nextChange(snapshot Snapshot, now time.Time) time.Time {
 	var next time.Time
 	consider := func(at time.Time) {
@@ -200,6 +267,11 @@ func nextChange(snapshot Snapshot, now time.Time) time.Time {
 	if !snapshot.GeneratedAt.IsZero() {
 		consider(snapshot.GeneratedAt.Add(StaleAfter))
 		consider(snapshot.GeneratedAt.Add(UnavailableAfter))
+	}
+	if snapshot.DosesShared {
+		for _, dose := range snapshot.SkippedDoses {
+			consider(dose.At.Add(SkippedDoseWindow))
+		}
 	}
 	return next
 }

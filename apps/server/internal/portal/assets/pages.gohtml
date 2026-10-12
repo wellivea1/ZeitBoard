@@ -79,6 +79,22 @@
   <p class="zone">Times shown in {{.ZoneLabel}}.</p>
 </section>
 {{end}}
+
+{{if .Doses.Shared}}
+<section class="windows doses" aria-labelledby="doses-title">
+  <h2 class="section-title" id="doses-title">Doses logged as skipped</h2>
+  {{if .Doses.Items}}
+  <ul>
+    {{range .Doses.Items}}
+    <li><span class="day-name">{{.DayLabel}}</span><span class="range">{{.TimeLabel}}</span></li>
+    {{end}}
+  </ul>
+  {{else}}
+  <p>None in the last three days.</p>
+  {{end}}
+  <p class="zone">Only doses logged as skipped in the last three days are shown. A dose that was not logged is not shown.</p>
+</section>
+{{end}}
 {{end}}
 
 {{if .CanRequest}}
