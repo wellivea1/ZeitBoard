@@ -181,7 +181,7 @@ func writeApp(t *testing.T, provider calendaraccounts.Provider) (*App, *syntheti
 func TestAcceptedTimesAreWrittenToAGoogleCalendarOfTheOwners(t *testing.T) {
 	app, fake, account, sourceID, ids := writeApp(t, calendaraccounts.Google)
 	ctx := context.Background()
-	status, err := app.EnableAccountWriteBack(CalendarRefreshInput{SourceID: sourceID})
+	status, err := app.EnableAccountWriteBack(AccountWriteBackInput{SourceID: sourceID})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -258,7 +258,7 @@ func TestAcceptedTimesAreWrittenToAGoogleCalendarOfTheOwners(t *testing.T) {
 func TestAMicrosoftCalendarIsWrittenOnceAndWaitsOnAnEndedSignIn(t *testing.T) {
 	app, fake, account, sourceID, ids := writeApp(t, calendaraccounts.Microsoft)
 	ctx := context.Background()
-	if _, err := app.EnableAccountWriteBack(CalendarRefreshInput{SourceID: sourceID}); err != nil {
+	if _, err := app.EnableAccountWriteBack(AccountWriteBackInput{SourceID: sourceID}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := app.DecideLocalProposals(LocalProposalsDecisionInput{ProposalIDs: ids, Decision: storage.ProposalApproved}); err != nil {
@@ -305,7 +305,7 @@ func TestAMicrosoftCalendarIsWrittenOnceAndWaitsOnAnEndedSignIn(t *testing.T) {
 func TestWritingNeedsPermissionTheSameAccountAndACalendarOfTheOwners(t *testing.T) {
 	app, fake, account, sourceID, _ := writeApp(t, calendaraccounts.Google)
 	enable := func(sourceID string) error {
-		_, err := app.EnableAccountWriteBack(CalendarRefreshInput{SourceID: sourceID})
+		_, err := app.EnableAccountWriteBack(AccountWriteBackInput{SourceID: sourceID})
 		return err
 	}
 

@@ -19,10 +19,14 @@ import (
 // the owner changed. Reading never asked to add events, so turning writing on
 // signs the account in again to allow it, in the browser.
 
+type AccountWriteBackInput struct {
+	SourceID string `json:"sourceId"`
+}
+
 // EnableAccountWriteBack starts writing accepted times to a calendar brought
 // in from an account, once the account allows adding events and the calendar
 // is one ZeitBoard may add to.
-func (a *App) EnableAccountWriteBack(input CalendarRefreshInput) (CalendarWriteBackDTO, error) {
+func (a *App) EnableAccountWriteBack(input AccountWriteBackInput) (CalendarWriteBackDTO, error) {
 	ctx := a.applicationContext()
 	store, err := a.requireStore()
 	if err != nil {
@@ -133,18 +137,16 @@ func (w accountEventWriter) remove(ctx context.Context, eventID, href, etag stri
 	return calendarWriteResult{outcome: calendarWriteDone}
 }
 
-// deferDueWrites leaves every due write waiting, saying why, when the
-// account cannot be reached for any of them. It reports whether any was.
-func (a *App) deferDueWrites(ctx context.Context, store *storage.Store, reason string) bool {
+// deferCalendarWrites leaves writes waiting, saying why, when the account
+// cannot be signed in to for any of them. It reports whether any was.
+func (a *App) deferCalendarWrites(ctx context.Context, store *storage.Store, due []storage.CalendarWrite, reason string) bool {
 	now := a.currentTime().UTC()
-	due, err := store.DueCalendarWrites(ctx, now, calendarWriteBatch)
-	if err != nil {
-		return false
-	}
+	deferred := false
 	for _, write := range due {
-		_ = store.DeferCalendarWrite(ctx, write.EventID, reason, now.Add(calendarWriteRetryDelay(write.Attempts+1)), now)
+		retryAt := now.Add(calendarWriteRetryDelay(write.Attempts + 1))
+		deferred = store.DeferCalendarWrite(ctx, write.EventID, reason, retryAt, now) == nil || deferred
 	}
-	return len(due) > 0
+	return deferred
 }
 
 func providerName(provider calendaraccounts.Provider) string {

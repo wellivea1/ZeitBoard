@@ -89,5 +89,8 @@ describe("Wails bridge lookup", () => {
       "Message is too long (2000 characters max).",
     );
     expect(asSentence("  ")).toBe("");
+    expect(asSentence("oauth2.googleapis.com could not be reached")).toBe(
+      "oauth2.googleapis.com could not be reached.",
+    );
   });
 });

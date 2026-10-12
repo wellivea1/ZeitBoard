@@ -226,21 +226,22 @@ func (a *App) writeCalendarPass(ctx context.Context) {
 	if err != nil || !on {
 		return
 	}
+	due, err := store.DueCalendarWrites(ctx, a.currentTime(), calendarWriteBatch)
+	if err != nil || len(due) == 0 {
+		// Nothing to write: an account is not even signed in to.
+		return
+	}
 	writer, err := a.eventWriterFor(ctx, store, target)
 	if err != nil {
 		// An account that cannot be signed in to now leaves every due write
 		// waiting, saying why.
-		if target.AccountID != "" && a.deferDueWrites(ctx, store, err.Error()) {
+		if target.AccountID != "" && a.deferCalendarWrites(ctx, store, due, err.Error()) {
 			a.announce(calendarWritesChangedEvent)
 		}
 		return
 	}
 	changed := false
-	for round := 0; round < calendarWriteRounds; round++ {
-		due, err := store.DueCalendarWrites(ctx, a.currentTime(), calendarWriteBatch)
-		if err != nil || len(due) == 0 {
-			break
-		}
+	for round := 0; round < calendarWriteRounds && len(due) > 0; round++ {
 		for _, write := range due {
 			if ctx.Err() != nil {
 				break
@@ -248,6 +249,9 @@ func (a *App) writeCalendarPass(ctx context.Context) {
 			if a.carryCalendarWrite(ctx, store, writer, write) {
 				changed = true
 			}
+		}
+		if due, err = store.DueCalendarWrites(ctx, a.currentTime(), calendarWriteBatch); err != nil {
+			break
 		}
 	}
 	if changed {

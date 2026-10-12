@@ -693,14 +693,17 @@ func accountLabel(provider calendaraccounts.Provider, calendars []calendaraccoun
 }
 
 // asSentence reads an error from the provider package, written in Go's lower
-// case, as a sentence for the window.
+// case, as a sentence for the window. One that begins with a host name, as
+// "oauth2.googleapis.com could not be reached", keeps it as it is spelled.
 func asSentence(err error) error {
-	message := err.Error()
+	message := strings.TrimSpace(err.Error())
 	first, size := utf8.DecodeRuneInString(message)
 	if size == 0 {
 		return err
 	}
-	message = string(unicode.ToUpper(first)) + message[size:]
+	if word, _, _ := strings.Cut(message, " "); !strings.Contains(word, ".") {
+		message = string(unicode.ToUpper(first)) + message[size:]
+	}
 	if !strings.HasSuffix(message, ".") {
 		message += "."
 	}
