@@ -24,11 +24,11 @@ interface ScreenTabsProps<Id extends string> {
   onSelect: (id: Id) => void;
 }
 
-export function tabId(name: string, id: string) {
+function tabId(name: string, id: string) {
   return `${name}-tab-${id}`;
 }
 
-export function panelId(name: string, id: string) {
+function panelId(name: string, id: string) {
   return `${name}-panel-${id}`;
 }
 

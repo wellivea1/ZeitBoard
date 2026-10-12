@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { readRouteFromHash } from "./AppShell";
+import { readRouteFromHash } from "../navigation";
 import { ScreenTabs } from "./ScreenTabs";
 
 describe("readRouteFromHash", () => {

@@ -70,26 +70,33 @@ if (/metric-card/.test(home) || hasStaticClass(home, "panel")) {
 // point — eight equal-weight entries was too much undifferentiated navigation
 // for someone operating under fatigue, and nothing stops it creeping back
 // except a check.
+// The destinations and routes live in navigation.ts; the shell draws them.
+const navigationPath = join(frontend, "navigation.ts");
+const navigation = readFileSync(navigationPath, "utf8");
 const shellPath = join(frontend, "components", "AppShell.tsx");
 const shell = readFileSync(shellPath, "utf8");
-const primaryBlock = shell.match(/const primaryNavigation: NavItem\[\] = \[(.*?)\];/s)?.[1] ?? "";
+const primaryBlock =
+  navigation.match(/const primaryNavigation: NavItem\[\] = \[(.*?)\];/s)?.[1] ?? "";
 const primaryCount = [...primaryBlock.matchAll(/\{\s*id:/g)].length;
 if (primaryCount !== 5) {
-  fail(shellPath, `Primary navigation must hold exactly five destinations; found ${primaryCount}.`);
+  fail(
+    navigationPath,
+    `Primary navigation must hold exactly five destinations; found ${primaryCount}.`,
+  );
 }
-if (!shell.includes("utilityNavigation") || !shell.includes('className="utility-nav"')) {
+if (!navigation.includes("utilityNavigation") || !shell.includes('className="utility-nav"')) {
   fail(shellPath, "The utility group must stay separate from the primary destinations.");
 }
 
 // Legacy hashes stay routable. They are written down in the verification
 // record and in whatever the user bookmarked; a dead link is a worse answer
 // than a redirect.
-const legacyStart = shell.indexOf("const legacyRoutes");
+const legacyStart = navigation.indexOf("const legacyRoutes");
 const legacyBlock =
-  legacyStart < 0 ? "" : shell.slice(legacyStart, shell.indexOf("};", legacyStart));
+  legacyStart < 0 ? "" : navigation.slice(legacyStart, navigation.indexOf("};", legacyStart));
 for (const legacy of ["overview", "calendar", "tasks", "approvals", "medications", "timeline"]) {
   if (!legacyBlock.includes(`${legacy}: { screen:`)) {
-    fail(shellPath, `The legacy #/${legacy} route must keep redirecting.`);
+    fail(navigationPath, `The legacy #/${legacy} route must keep redirecting.`);
   }
 }
 
