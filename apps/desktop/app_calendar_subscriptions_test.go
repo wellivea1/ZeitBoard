@@ -97,7 +97,7 @@ func TestASubscribedCalendarRefreshesItself(t *testing.T) {
 
 	// The calendar gains an event; the hourly pass replaces the copy.
 	served.moved.Store(true)
-	app.refreshCalendarSubscriptions(app.applicationContext())
+	app.refreshFetchedCalendars(app.applicationContext())
 	calendar, _ = app.GetCalendar(query)
 	if events := countCalendarEvents(calendar); events != 3 {
 		t.Fatalf("after a refresh %d events", events)
@@ -123,7 +123,7 @@ func TestASubscribedCalendarRefreshesItself(t *testing.T) {
 		t.Fatalf("the address outlived its calendar: %+v, %v", subscriptions, err)
 	}
 	fetches := served.fetches.Load()
-	app.refreshCalendarSubscriptions(app.applicationContext())
+	app.refreshFetchedCalendars(app.applicationContext())
 	if served.fetches.Load() != fetches {
 		t.Fatal("a removed calendar was fetched again")
 	}

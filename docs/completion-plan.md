@@ -1449,6 +1449,29 @@ new, so ADR-0063 offers it.
   round trip runs on CI's throwaway Windows account, because encrypting for real makes a key in the
   account running it.
 
+### Google and Microsoft calendars through the owner's registration — 2026-10-12
+
+A calendar without a published address could not come in at all. ADR-0064 reads Google and
+Microsoft calendars through OAuth, with an app the owner registers rather than one in
+ZeitBoard's name.
+
+- **The owner's own registration.** Data Sources › Add a calendar › Google or Microsoft asks for
+  the client ID, and for Google the client secret, with the steps to register beside the form.
+  ZeitBoard ships no client of its own.
+- **Signed in in the browser.** PKCE and a state check, with the answer on a loopback port opened
+  for it alone. The window shows that it waits for the browser, and can cancel. After five
+  minutes it stops.
+- **Chosen, previewed, kept.** The account lists its calendars, its main one first. Each is
+  previewed and brought in as a read-only calendar, then read again every hour with the
+  subscribed ones. Its row names the account.
+- **The sign-in is a credential.** The refresh token is kept in the owner-protected database and
+  never shown, synced, exported or logged; a rotated one replaces it. When the provider ends the
+  sign-in, the account says so and "Sign in again" uses the kept registration. Removing the account
+  erases it with its calendars, and Google is asked to revoke the grant.
+- **Tested against stand-ins.** A synthetic provider plays Google and Microsoft, with a scripted
+  browser, in the desktop tests; nothing reaches a real provider.
+- **Not done yet.** Writing accepted times to these calendars, which the next decision takes up.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and
@@ -1494,10 +1517,9 @@ The goal now covers every planned function, not only the release milestones. Thi
 each function the roadmap and the plans above still name. A function stays open until it ships with
 tests and a verification entry. Where it waits on something outside the code, the table says what.
 
-**Standing, 2026-10-12.** The table's functions are delivered. Two possible extensions wait on the
-owner rather than on code:
-- OAuth for calendar providers needs app registrations in the owner's name. Read access already
-  works by private address.
+**Standing, 2026-10-12.** The table's functions are delivered but for writing accepted times to
+Google and Microsoft calendars, which follows ADR-0064's reading. One possible extension waits on
+the owner rather than on code:
 - Encryption inside the database needs a new SQLite driver, which is a download and a dependency,
   and a decision on who holds the key. Windows' file encryption covers the files in the meantime
   (ADR-0063).
@@ -1515,6 +1537,6 @@ owner rather than on code:
 | Google Takeout and My Activity import, with inference kept in shadow mode | Roadmap, slice 7; limitation 12 | Delivered 2026-10-12 (ADR-0059). Suggestions stay beside the recorded nights until they pass the backtest gate |
 | Missed-dose sharing, off by default per link | Medication plan, M-F | Delivered 2026-10-11 (ADR-0058). Only doses logged as skipped are shown |
 | Activity collected while the app is closed | Roadmap, slice 11 | Delivered 2026-10-12 (ADR-0060) from Windows' own power log, by a separate choice. The collector itself still stops when ZeitBoard quits |
-| OAuth calendar providers | Roadmap, slice 6 and phase 3 | Read access delivered 2026-10-12 without OAuth: Google, Outlook and iCloud calendars subscribe by their private address (ADR-0062). OAuth itself, for write access, waits on provider app registrations in the owner's name |
+| OAuth calendar providers | Roadmap, slice 6 and phase 3 | Reading delivered 2026-10-12: Google and Microsoft accounts sign in through an app the owner registers, with no registration in ZeitBoard's name (ADR-0064); calendars that publish an address can also subscribe by it (ADR-0062). Writing accepted times to them is in progress |
 | Packaged cloud skills for assistants | Roadmap, phase 4 | Delivered 2026-10-12 for Claude (ADR-0061), with its privacy and threat review. ChatGPT and Claude on the web take remote servers only, which ZeitBoard does not expose |
 | Encrypting the local database | Roadmap, phase 2; limitation 1 | Delivered 2026-10-12 with Windows' file encryption, by choice (ADR-0063). Encryption inside the database, with a key ZeitBoard holds, would need `ncruces/go-sqlite3`'s encrypting VFS: a new pre-v1 dependency to download, and a key-custody decision for the owner |

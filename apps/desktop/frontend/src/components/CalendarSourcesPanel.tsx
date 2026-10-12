@@ -6,9 +6,11 @@ import { CalendarWriteBackForm, CalendarWriteBackStatus } from "./CalendarWriteB
 import {
   refreshCalendarSource,
   removeCalendarSource,
+  type CalendarAccountSource,
   type CalendarSource,
   type CalendarSubscription,
 } from "../data/calendar";
+import { providerNames } from "../data/calendarAccounts";
 import {
   calendarWriteBackChangedEvent,
   loadCalendarWriteBack,
@@ -69,6 +71,28 @@ function SubscriptionLine({ subscription }: { subscription: CalendarSubscription
   );
 }
 
+// Which account a calendar was brought in from, and whether its last reading
+// worked (ADR-0064).
+function AccountLine({ account }: { account: CalendarAccountSource }) {
+  return (
+    <>
+      <small className="calendar-source-subscription">
+        From {account.accountLabel}, read {account.refreshedLabel} and every hour
+      </small>
+      {account.failure && (
+        <small className="calendar-source-failure">
+          {account.failure} The copy read {account.refreshedLabel} is kept.
+        </small>
+      )}
+    </>
+  );
+}
+
+function sourceKind(source: CalendarSource) {
+  if (source.account) return `${providerNames[source.account.provider]} account`;
+  return source.subscription ? "Subscribed" : kindLabels[source.kind];
+}
+
 export function CalendarSourcesPanel({
   sources,
   available,
@@ -108,14 +132,14 @@ export function CalendarSourcesPanel({
     );
   };
 
-  // A subscribed calendar, and the calendar written to with its kept sign-in,
-  // refresh at once; any other opens the form at its address, and the owner
-  // signs in again.
+  // A subscribed calendar, one from an account, and the calendar written to
+  // with its kept sign-in refresh at once; any other opens the form at its
+  // address, and the owner signs in again.
   const refresh = (source: CalendarSource) => {
     if (busy) return;
     setError("");
     setRefreshed("");
-    if (writingTo !== source.sourceId && !source.subscription) {
+    if (writingTo !== source.sourceId && !source.subscription && !source.account) {
       setRefill({ endpoint: source.endpoint ?? "", label: source.label });
       setAdding(true);
       return;
@@ -175,26 +199,27 @@ export function CalendarSourcesPanel({
                 <div className="calendar-source-name">
                   <strong>{source.label}</strong>
                   <span>
-                    {source.subscription ? "Subscribed" : kindLabels[source.kind]} ·{" "}
-                    {source.coverageLabel}
+                    {sourceKind(source)} · {source.coverageLabel}
                   </span>
                   {source.endpoint && (
                     <small className="calendar-source-endpoint">{source.endpoint}</small>
                   )}
                   {source.subscription && <SubscriptionLine subscription={source.subscription} />}
+                  {source.account && <AccountLine account={source.account} />}
                 </div>
                 <div className="calendar-source-actions">
-                  {(source.kind === "caldav" || source.subscription) && available && (
-                    <button
-                      className="button ghost compact"
-                      type="button"
-                      disabled={busy}
-                      aria-label={`Refresh ${source.label}`}
-                      onClick={() => refresh(source)}
-                    >
-                      Refresh
-                    </button>
-                  )}
+                  {(source.kind === "caldav" || source.subscription || source.account) &&
+                    available && (
+                      <button
+                        className="button ghost compact"
+                        type="button"
+                        disabled={busy}
+                        aria-label={`Refresh ${source.label}`}
+                        onClick={() => refresh(source)}
+                      >
+                        Refresh
+                      </button>
+                    )}
                   {canOffer && offering !== source.sourceId && (
                     <button
                       className="button ghost compact"

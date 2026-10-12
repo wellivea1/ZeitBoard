@@ -179,7 +179,8 @@ itself is designed in [`portal-design.md`](portal-design.md).
    only that block; app-owned placements export as RFC 5545 ICS. Remote write-back shipped with
    ADR-0053. _Calendars by private address delivered 2026-10-12 (ADR-0062):_ Google, Outlook and
    iCloud calendars are subscribed by the iCal address each provider publishes, and are read again
-   every hour. OAuth providers remain future work and wait on registrations in the owner's name.
+   every hour. _Google and Microsoft accounts delivered 2026-10-12 (ADR-0064):_ the owner signs in
+   through an app of their own registration, chooses calendars, and each is read every hour.
 
 **Disease-management track.** ~~M-A local medication logging~~, ~~M-B
 user-authored schedules + feasibility~~, ~~local rhythm context markers~~, and

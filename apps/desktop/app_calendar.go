@@ -115,8 +115,11 @@ type CalendarSourceDTO struct {
 	CoverageStart string `json:"coverageStart"`
 	CoverageEnd   string `json:"coverageEnd"`
 
-	// Subscription is set for a calendar kept by its address (ADR-0062).
-	Subscription *CalendarSubscriptionDTO `json:"subscription,omitempty"`
+	// Subscription is set for a calendar kept by its address (ADR-0062), and
+	// Account for one brought in from a Google or Microsoft account
+	// (ADR-0064).
+	Subscription *CalendarSubscriptionDTO  `json:"subscription,omitempty"`
+	Account      *CalendarAccountSourceDTO `json:"account,omitempty"`
 }
 
 // CalendarSubscriptionDTO says where a subscribed calendar comes from, by
@@ -357,6 +360,10 @@ func (a *App) getCalendar(ctx context.Context, input CalendarQueryInput) (Calend
 	for _, subscription := range subscriptions {
 		subscribed[subscription.SourceID] = subscription
 	}
+	fromAccounts, err := calendarAccountSources(ctx, store, now, location)
+	if err != nil {
+		return CalendarDTO{}, err
+	}
 	estimate, err := a.localEstimate(ctx, now)
 	if err != nil {
 		return CalendarDTO{}, err
@@ -391,6 +398,7 @@ func (a *App) getCalendar(ctx context.Context, input CalendarQueryInput) (Calend
 		if subscription, found := subscribed[source.SourceID]; found {
 			dto.Subscription = calendarSubscriptionDTO(subscription, now, location)
 		}
+		dto.Account = fromAccounts[source.SourceID]
 		sourceByID[source.SourceID] = dto
 		if source.ReadOnly && (start.UTC().Before(source.CoverageStartAt) || end.UTC().After(source.CoverageEndAt)) {
 			warnings = append(warnings, source.Label+" does not cover this entire date range; refresh the source to extend it.")

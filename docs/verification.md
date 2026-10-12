@@ -3006,3 +3006,65 @@ ADR-0063. Go tests in the desktop and `platform/efs`; component and data tests i
   - It names each encrypted file and says when all are encrypted.
   - Where Windows cannot encrypt, it points to device encryption or BitLocker instead.
   - Encryption fields default to none, and an impossible count reads as none.
+
+## Google and Microsoft calendars through the owner's registration — 2026-10-12
+
+ADR-0064. Go tests in `core/calendar`, `core/storage/sqlite`, `internal/calendaraccounts` and the
+desktop; data and component tests in the window. Every provider is a local stand-in; nothing
+reaches Google or Microsoft.
+
+- The provider package:
+  - PKCE's challenge matches RFC 7636's own example.
+  - Against a stand-in Google, sign-in asks for offline access and read-only scope, the code
+    trades for tokens with the client secret, a refresh keeps the refresh token Google did not
+    rotate, and calendars and events are read across pages.
+  - All-day events are dated in the calendar's zone, also on a page that leaves the zone out.
+    Cancelled events are left out, and free time does not block.
+  - Against a stand-in Microsoft, times come in UTC, a rotated refresh token is returned, and a
+    next page on another host is refused.
+  - A refused code says why without its body; a refused refresh reads as an ended sign-in.
+  - Revoking reports what the provider answered, and nothing is revoked without an address.
+  - The loopback receiver gives Google `127.0.0.1` and Microsoft `localhost` at the same port. It
+    answers a wrong state and keeps waiting, takes the right one, and ends on a refusal or a cancel.
+- The store:
+  - An account keeps its calendars. A failed refresh keeps the copy, and a rotated token replaces
+    the old one.
+  - An ended sign-in is recorded, and signing in again clears it.
+  - Removing one calendar leaves the account. Removing the account takes its calendars, and the
+    token is gone from the database file and its write-ahead log.
+  - A calendar for no account, a CalDAV source, a missing provider ID and malformed accounts are
+    refused.
+- The core: an account's events are kept like a file's, with stable IDs, "Busy" for untitled
+  events, repeats and events outside the span left out, the event's own zone kept, and a long
+  calendar name shortened.
+- The desktop, against a synthetic provider and a scripted browser:
+  - Google: signing in lists the main calendar first. A preview keeps nothing, bringing it in
+    shows it under its name with the account, and the hourly pass picks up an added event.
+  - Microsoft: the account is named by its default calendar's owner, not a shared calendar's.
+    The rotated refresh token is the one kept.
+  - When the grant is withdrawn, the hourly pass keeps the event and says the sign-in ended. The
+    account offers signing in again, which restores it with the kept registration.
+  - Removal needs REMOVE, erases the account and its calendars, and revokes Google's grant with
+    the current token. Microsoft's confirmation says where to withdraw it.
+  - A second sign-in is refused while one waits, a cancelled one says so, and a refusal in the
+    browser gives the provider's reason. A bad provider, a missing client ID or a missing Google
+    secret is refused.
+  - No credential appears in anything returned to the window. The race detector passes.
+- The window:
+  - Signing in needs a client ID, and for Google the secret. The secret is cleared once signed
+    in, and signing in to another account then waits behind a button.
+  - Each calendar is previewed before "Bring in", then reads "Brought in · read every hour".
+  - Microsoft needs no secret, and its steps give the `http://localhost` redirect.
+  - While the browser is open the form waits and can cancel. A cancelled sign-in keeps what was
+    typed.
+  - An ended sign-in shows its reason with "Sign in again", and removing an account asks for
+    REMOVE and says what became of its access.
+  - A calendar from an account names the account, says how its last reading went, and refreshes
+    at once from its row.
+- Seen in the browser pane, with the real components and synthetic accounts on a stand-in bridge:
+  - Accounts read "Google account · Signed in Oct 9, 2026 · 1 calendar brought in".
+  - An ended sign-in's reason wraps in full beside "Sign in again".
+  - The calendars open under their account, with the preview right below them.
+  - The waiting form greys everything else.
+  - The running desktop's own window could not be driven: the browser pane blocks Wails'
+    `ipc.js`, and the shared desktop takes no input.

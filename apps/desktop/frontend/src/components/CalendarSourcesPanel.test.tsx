@@ -258,7 +258,11 @@ describe("CalendarSourcesPanel", () => {
     expect(screen.getByDisplayValue("Home")).toBeInTheDocument();
     expect(refresh).toHaveBeenCalledOnce();
   });
+});
 
+// Calendars ZeitBoard can read again by itself refresh at once from their
+// rows, and say where they come from.
+describe("CalendarSourcesPanel fetched calendars", () => {
   // A subscribed calendar names its host, never its address, says how its
   // last reading went, and refreshes at once from its row.
   it("refreshes a subscribed calendar from its address at once", async () => {
@@ -310,6 +314,59 @@ describe("CalendarSourcesPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Refresh Work" }));
     await waitFor(() => expect(refresh).toHaveBeenCalledOnce());
+    expect(screen.queryByLabelText("Collection URL")).toBeNull();
+  });
+
+  // A calendar from an account names the account, says how its last reading
+  // went, and refreshes at once with the account's sign-in (ADR-0064).
+  it("refreshes a calendar from an account at once and names the account", async () => {
+    const refresh = vi.fn(async () => ({
+      sourceId: "calendar_source_account_work",
+      label: "Team",
+      kind: "ics",
+      readOnly: true,
+      imported: true,
+      eventCount: 2,
+      busyCount: 2,
+      allDayCount: 0,
+      coverageStartAt: "2026-01-01T00:00:00Z",
+      coverageEndAt: "2027-01-01T00:00:00Z",
+      coverageLabel: "Jan 1, 2026 to Jan 1, 2027",
+      previewTruncated: false,
+      events: [],
+      message: "Imported 2 calendar events.",
+    }));
+    (globalThis as { go?: unknown }).go = {
+      main: {
+        App: { RefreshCalendarSource: refresh, GetCalendarWriteBack: async () => ({ on: false }) },
+      },
+    };
+    const fromAccount: CalendarSource = {
+      sourceId: "calendar_source_account_work",
+      label: "Team",
+      kind: "ics",
+      readOnly: true,
+      visibleEvents: 2,
+      coverageLabel: "Jan 1 to Dec 31",
+      coverageStart: "2026-01-01T00:00:00Z",
+      coverageEnd: "2027-01-01T00:00:00Z",
+      account: {
+        provider: "microsoft",
+        accountLabel: "owner@example.test",
+        refreshedLabel: "10:42 AM",
+        failure: "graph.microsoft.com answered HTTP 503.",
+      },
+    };
+    render(<CalendarSourcesPanel sources={[fromAccount]} available onChanged={vi.fn()} />);
+
+    expect(screen.getByText(/^Microsoft account/)).toBeVisible();
+    expect(screen.getByText("From owner@example.test, read 10:42 AM and every hour")).toBeVisible();
+    expect(
+      screen.getByText("graph.microsoft.com answered HTTP 503. The copy read 10:42 AM is kept."),
+    ).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "Refresh Team" }));
+    await waitFor(() => expect(refresh).toHaveBeenCalledWith({ sourceId: fromAccount.sourceId }));
     expect(screen.queryByLabelText("Collection URL")).toBeNull();
   });
 });
