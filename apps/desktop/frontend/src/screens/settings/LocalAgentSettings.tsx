@@ -1,4 +1,5 @@
 import type { LocalAgentStatus } from "../../data/localAgent";
+import { ClaudePackagesCard } from "./ClaudePackagesCard";
 
 interface LocalAgentSettingsProps {
   status: LocalAgentStatus | null;
@@ -97,6 +98,8 @@ export function LocalAgentSettings({ status, error }: LocalAgentSettingsProps) {
             </li>
           </ul>
         </section>
+
+        <ClaudePackagesCard />
       </div>
 
       {error && (

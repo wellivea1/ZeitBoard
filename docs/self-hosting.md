@@ -383,5 +383,21 @@ certificate):
 
 Either way, what the agent can see is the same redacted, speakable projection surface the UI
 uses. Which *model* hears it is the client's configuration and the user's provider
-relationship — the same BYOK posture as the in-app assistant. Cloud skill packaging
-remains future work behind its own privacy review.
+relationship — the same BYOK posture as the in-app assistant.
+
+### Packaged for Claude
+
+Settings › This computer › Use ZeitBoard with Claude writes two files (ADR-0061):
+
+- **The Claude Desktop extension** (`ZeitBoard.mcpb`) holds the installed `zeitboard-local-mcp.exe`
+  and a manifest listing its tools. Open it to add ZeitBoard to Claude Desktop instead of editing
+  the configuration by hand. Make it from ZeitBoard rather than accepting one from elsewhere: MCP
+  bundles may be unsigned.
+- **The skill** (`zeitboard-skill.zip`) tells Claude how to use the tools: read the snapshot first,
+  speak in ranges, give ZeitBoard's medical answer, and propose rather than change. Add it to your
+  skills in Claude's settings, or unpack it into Claude Code's skills folder
+  (`%USERPROFILE%\.claude\skills`).
+
+With them, what ZeitBoard's tools return goes to the model Claude uses, in Anthropic's cloud. A
+client running a local model keeps it on the computer. ChatGPT, and Claude on the web and phones,
+take remote MCP servers over HTTPS only; ZeitBoard does not expose one.

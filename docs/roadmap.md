@@ -204,7 +204,7 @@ M-E's separately reviewed local agent projection.
    re-attached locally for display — and tests assert the redaction, the medical-refusal
    passthrough, and that the flow touches no endpoint that could apply a change. Provider disclosure
    comes from the backend (`Connected: <provider>` / `Offline`). The Claude-Desktop-over-MCP voice
-   path is documented in the self-hosting runbook. Cloud skill packaging and any reviewer-gated
+   path is documented in the self-hosting runbook. Claude packaging shipped 2026-10-12 (ADR-0061); any reviewer-gated
    auto-apply stay future and separately gated. _Desktop-local agent endpoint delivered (ADR-0028):_
    the app serves its own loopback MCP (token + `Origin` rejection + an owner-only, inheritance-
    disabled descriptor ACL), exposing allowlisted read projections, `set_appearance` as the ADR-0021
@@ -544,7 +544,9 @@ wired to the same one-use-token backend decisions.
   proposal history remain Phase 3 queue work.
 - Voice: ZeitBoard ships no speech stack; the supported path is an MCP-capable client with voice
   (documented in the self-hosting runbook).
-- Cloud skill packaging (Claude/ChatGPT) — additive, opt-in, needs its own privacy/threat review.
+- ~~Cloud skill packaging (Claude/ChatGPT).~~ Delivered 2026-10-12 for Claude (ADR-0061): the
+  desktop writes a Claude Desktop extension and a skill, with the privacy and threat review. ChatGPT,
+  and Claude on the web and phones, take remote servers only, which ZeitBoard does not expose.
   Reviewer-gated auto-apply remains future and is never the default gate.
 
 Exit criteria: the assistant cannot mutate the schedule except by creating

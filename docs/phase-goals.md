@@ -61,7 +61,7 @@ itself, so a voice client can read state and switch appearance with the
 backend off. Medication timing facts and context markers are answerable
 through `ask_zeitboard_facts`, and the medical refusal now lives in shared
 `core/agentpolicy` so chat, backend MCP, and the local endpoint cannot drift
-apart. Cloud skill packaging remains separately gated.
+apart. Packaging for Claude shipped with its own review (ADR-0061).
 
 **Gap 5 — largely closed 2026-07-31.** ADR-0029 delivers P5-a: the split
 store, the projection firewall, the security middleware, and a read-only

@@ -2913,3 +2913,31 @@ and synthetic records.
   - Settings › This computer showed the new card beside the consent card: "Reading: Off", "322
     times, from May 23, 2026", and "Turn on desktop activity first."
   - Nothing from this computer's real log was put into the profile.
+
+## ZeitBoard packaged for Claude — 2026-10-12
+
+ADR-0061. Go tests in `core/agentskill` and the desktop; component tests in the window.
+
+- The skill:
+  - Its frontmatter keeps to what Claude accepts. The name is lowercase, at most 64 characters,
+    and avoids the reserved words. The description has no tags and stays under 1,024 characters.
+  - The body stays well under the length a skill's instructions should take.
+  - It quotes `agentpolicy.MedicalRefusal` word for word.
+  - It explains every registered action and names no approval or apply tool.
+- The packages:
+  - The extension holds the installed connector byte for byte, the app's icon, and a manifest.
+    - The manifest has every field MCP Bundle 0.3 requires.
+    - Its version is the connector's, which is the product's.
+    - It is a binary server whose entry point is in the bundle, with a command beside it.
+    - It asks for no settings.
+    - Its tools are exactly the endpoint's, each described, with none that approves or applies.
+  - Without the connector installed beside ZeitBoard, no extension is written, and the message
+    says to reinstall.
+  - The skill is one folder holding `SKILL.md` exactly as ZeitBoard keeps it.
+  - A closed dialog saves nothing.
+  - The skill names exactly the tools the connector serves.
+- The window:
+  - The card says where the data goes before either file is saved.
+  - Each save says what to do with the file.
+  - A closed dialog says nothing, and a failure says why.
+  - Outside the desktop app, the buttons are disabled with the reason.

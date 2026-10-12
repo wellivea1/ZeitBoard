@@ -40,6 +40,10 @@ func safeToolError(err error) string {
 	return "ZeitBoard could not complete that tool call. No change was made."
 }
 
+// Version is the connector's version, as it reports itself and as the Claude
+// Desktop extension carries it. It follows the product's version.
+const Version = "0.1.0"
+
 type ToolDefinition struct {
 	Name        string         `json:"name"`
 	Title       string         `json:"title,omitempty"`
