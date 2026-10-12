@@ -20,6 +20,33 @@ function payload(overrides: Record<string, unknown> = {}) {
 }
 
 describe("normalizeStorageProtection", () => {
+  // Encryption reads as absent unless the desktop says otherwise: a missing
+  // flag must never paint a file as encrypted.
+  it("reads Windows' encryption, defaulting to none", () => {
+    const plain = normalizeStorageProtection(payload());
+    expect(plain?.encryption).toEqual({
+      supported: false,
+      chosen: false,
+      encryptedFiles: 0,
+      files: 0,
+      pending: false,
+    });
+    expect(plain?.files[0]?.encrypted).toBe(false);
+
+    const encrypted = normalizeStorageProtection(
+      payload({
+        files: [{ name: "Sleep database", ownerOnly: true, inherited: false, encrypted: true }],
+        encryption: { supported: true, chosen: true, encryptedFiles: 4, files: 4, pending: false },
+      }),
+    );
+    expect(encrypted?.files[0]?.encrypted).toBe(true);
+    expect(encrypted?.encryption.encryptedFiles).toBe(4);
+    const impossible = normalizeStorageProtection(
+      payload({ encryption: { supported: true, encryptedFiles: 9, files: 4 } }),
+    );
+    expect(impossible?.encryption.encryptedFiles).toBe(0);
+  });
+
   it("accepts a complete report", () => {
     const parsed = normalizeStorageProtection(payload());
     expect(parsed?.state).toBe("ok");

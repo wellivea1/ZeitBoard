@@ -161,12 +161,22 @@ can read the disk from another operating system, and it does not stop a program
 running as you. Settings → Local data reports which files were checked and says
 this in the same words.
 
+**Windows can encrypt them, by your choice (ADR-0063).** Where Windows offers file
+encryption (Pro, Enterprise and Education), Settings → Your data can have it
+encrypt ZeitBoard's folder and every file in it, with a key Windows keeps in your
+account. Other accounts, administrators and other operating systems then see only
+noise; programs running as you still read the files. It takes effect when ZeitBoard
+next starts, because Windows encrypts only files nothing has open. Each file's state
+is read back from Windows. Settings says first that, without a backup of the key
+Windows offers to make, a password reset by an administrator or a lost account
+leaves the files unreadable. Exports saved elsewhere are not encrypted.
+
 This section previously said at-rest encryption was required locally as well as on the instance.
 That was never true of the local store, and the sentence was worse than a gap, because a reader
-would have concluded their sleep history was encrypted when it was not. Whole-database encryption
-for the local store is not part of the chosen release architecture, and
-[`ADR-0035`](decisions/0035-local-file-protection.md) records why it does not exist yet and what it
-would take.
+would have concluded their sleep history was encrypted when it was not. Encryption inside the
+database itself, with a key ZeitBoard holds, does not exist yet.
+[`ADR-0035`](decisions/0035-local-file-protection.md) records why and what it would take. Windows'
+file encryption (ADR-0063) covers the files by choice in the meantime.
 
 Android exposes opt-in self-hosted sleep sync and separately opt-in background refresh. READ_SLEEP
 permits foreground collection; READ_HEALTH_DATA_IN_BACKGROUND is separately requested where

@@ -117,6 +117,11 @@ jobs:
       - name: Test and vet
         if: steps.detect.outputs.present == 'true'
         working-directory: ${{ matrix.path }}
+        env:
+          # Windows file encryption is tried for real only on the runner: the
+          # first encrypted file makes a key in the account running the test,
+          # and the runner's account is thrown away afterwards (ADR-0063).
+          ZEITBOARD_TEST_EFS: ${{ matrix.name == 'desktop-service' && '1' || '' }}
         run: |
           go test ./...
           go vet ./...

@@ -1428,6 +1428,27 @@ imported again. ADR-0062 subscribes instead.
 - **Not done.** OAuth, for write access and calendars that publish no address, still waits on
   registrations.
 
+### The local files encrypted by Windows — 2026-10-12
+
+Encryption inside the database waits on a new driver. Windows' own file encryption needs nothing
+new, so ADR-0063 offers it.
+
+- **A choice in Settings › Your data, off by default.** Where Windows can encrypt files, "Encrypt
+  with Windows" sits under the file list. Before the choice, Settings says what it protects and
+  what it does not, and that without a backup of Windows' key the files could be lost. Elsewhere,
+  Settings points to device encryption or BitLocker.
+- **Applied at start.** Windows encrypts only files nothing has open, so the choice is carried out
+  before the store opens. Folders go before their files, and come after them when decrypting.
+  The folder is marked as soon as the choice is made. A file that could not be done is reported,
+  and the next start tries again.
+- **Only ZeitBoard's own choice.** Without a saved choice nothing is touched, so a folder the owner
+  encrypted in Explorer stays as it is.
+- **Read back.** Each file's state comes from Windows. The readout says the files are encrypted only
+  when every one is, and names each encrypted file.
+- **Tested without touching this account.** A stand-in plays Windows in the desktop tests. The real
+  round trip runs on CI's throwaway Windows account, because encrypting for real makes a key in the
+  account running it.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and
@@ -1452,7 +1473,7 @@ or deferred with its reason.
 
 | # | Limitation | Disposition |
 |---|---|---|
-| 1 | The local database is not encrypted at rest. Owner-only file permissions protect it, and Settings says so (ADR-0035). | Accepted. A CGo-free driver with an encryption hook now exists; adopting it waits on the owner (see the planned functions). |
+| 1 | ~~The local database is not encrypted at rest.~~ | Resolved 2026-10-12 on Windows editions with file encryption: by choice, Windows encrypts the data folder and every file in it (ADR-0063). Owner-only permissions remain everywhere. Encryption inside the database itself waits on adopting a driver (ADR-0035's update). |
 | 2 | ~~A calendar file is refreshed by importing the updated file again, under the same name.~~ | Resolved 2026-10-12: a calendar subscribed by its private address is read again every hour (ADR-0062). A file still refreshes by importing it again. |
 | 3 | Accepted times go to one CalDAV calendar at a time, and the calendar's host can read their task names (ADR-0053; disclosed in the offer). | Accepted by design. |
 | 4 | Estimates use recorded sleep only. Multi-source inference stays in shadow mode after a negative promotion decision (ADR-0031). | Deferred analysis work. It ships only after a candidate passes the measured gate. |
@@ -1473,12 +1494,13 @@ The goal now covers every planned function, not only the release milestones. Thi
 each function the roadmap and the plans above still name. A function stays open until it ships with
 tests and a verification entry. Where it waits on something outside the code, the table says what.
 
-**Standing, 2026-10-12.** Every function in the table is delivered except two parts that wait on
-the owner rather than on code:
+**Standing, 2026-10-12.** The table's functions are delivered. Two possible extensions wait on the
+owner rather than on code:
 - OAuth for calendar providers needs app registrations in the owner's name. Read access already
   works by private address.
-- Encrypting the local database needs a decision to adopt a new SQLite driver, which is a download
-  and a dependency, and a decision on who holds the key.
+- Encryption inside the database needs a new SQLite driver, which is a download and a dependency,
+  and a decision on who holds the key. Windows' file encryption covers the files in the meantime
+  (ADR-0063).
 
 | Function | Named in | Status |
 |---|---|---|
@@ -1495,4 +1517,4 @@ the owner rather than on code:
 | Activity collected while the app is closed | Roadmap, slice 11 | Delivered 2026-10-12 (ADR-0060) from Windows' own power log, by a separate choice. The collector itself still stops when ZeitBoard quits |
 | OAuth calendar providers | Roadmap, slice 6 and phase 3 | Read access delivered 2026-10-12 without OAuth: Google, Outlook and iCloud calendars subscribe by their private address (ADR-0062). OAuth itself, for write access, waits on provider app registrations in the owner's name |
 | Packaged cloud skills for assistants | Roadmap, phase 4 | Delivered 2026-10-12 for Claude (ADR-0061), with its privacy and threat review. ChatGPT and Claude on the web take remote servers only, which ZeitBoard does not expose |
-| Encrypting the local database | Roadmap, phase 2; limitation 1 | Waits on the owner. `ncruces/go-sqlite3` is CGo-free (SQLite as WebAssembly) and offers encrypting VFSs, `adiantum` and `xts`, that encrypt every page. It is pre-v1. Adopting it means downloading a new driver and moving the desktop store to it. It also means deciding where the key lives: protected by Windows for this account, a database that a password reset by an administrator would make unreadable |
+| Encrypting the local database | Roadmap, phase 2; limitation 1 | Delivered 2026-10-12 with Windows' file encryption, by choice (ADR-0063). Encryption inside the database, with a key ZeitBoard holds, would need `ncruces/go-sqlite3`'s encrypting VFS: a new pre-v1 dependency to download, and a key-custody decision for the owner |
