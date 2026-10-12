@@ -42,7 +42,16 @@ entered CalDAV collection, or a calendar's private address that the owner pastes
 a secret: anyone holding it can read that calendar. ZeitBoard keeps it in the
 owner-protected local database, shows only its host, sends it only to its own
 provider over HTTPS, never syncs, exports or logs it, and erases it with the
-calendar. It is read every hour while ZeitBoard runs. The
+calendar. It is read every hour while ZeitBoard runs. A Google or Microsoft
+account is read only after the owner signs in to it in their own browser,
+through an app the owner registers with the provider (ADR-0064): ZeitBoard ships
+no credentials of its own and no service sits between the owner and the
+provider. It asks only to read calendars. The refresh token, and the client ID
+and secret it was issued to, are kept in the owner-protected local database,
+sent only to that provider, never shown, synced, exported or logged, and erased
+with the account, which Google is then asked to revoke. Access tokens are held
+in memory only. Calendars brought in from an account are read every hour while
+ZeitBoard runs. The
 import password is used for one request and cleared; it is never persisted.
 Stored collection endpoints are sanitized to exclude credentials and query
 secrets. Writing accepted times to a CalDAV calendar is off unless the owner

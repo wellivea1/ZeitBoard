@@ -27,6 +27,7 @@ import (
 	"non24.app/core/scheduling"
 	"non24.app/core/sleepv1"
 	storage "non24.app/core/storage/sqlite"
+	"non24.app/desktop/internal/calendaraccounts"
 	"non24.app/desktop/internal/localagent"
 	"non24.app/desktop/platform/autostart"
 	"non24.app/desktop/platform/tray"
@@ -93,8 +94,18 @@ type App struct {
 	// calendarSubscriptionClient when one is set (ADR-0062).
 	calendarSubscriber         periodicWorker
 	calendarSubscriptionClient calendarHTTPDoer
-	sleepImportMu              sync.Mutex
-	sleepImportPending         map[string]pendingSleepImportFile
+	// calendarAccountsMu guards the one sign-in waiting for the browser and
+	// the access tokens held for their hour, and calendarRefreshMu has
+	// refreshes take turns (ADR-0064). calendarAccountEndpoints and
+	// calendarAccountHTTP stand in for the providers in tests.
+	calendarAccountsMu       sync.Mutex
+	calendarRefreshMu        sync.Mutex
+	calendarSignInCancel     context.CancelFunc
+	calendarAccessTokens     map[string]calendaraccounts.Token
+	calendarAccountEndpoints func(calendaraccounts.Provider) calendaraccounts.Endpoints
+	calendarAccountHTTP      calendaraccounts.Doer
+	sleepImportMu            sync.Mutex
+	sleepImportPending       map[string]pendingSleepImportFile
 	// accountActivityMu guards the export being previewed and the nights
 	// worked out from the kept activity (ADR-0059).
 	accountActivityMu      sync.Mutex

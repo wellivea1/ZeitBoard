@@ -119,9 +119,11 @@ type CalendarRefreshInput struct {
 	SourceID string `json:"sourceId"`
 }
 
-// RefreshCalendarSource imports again the calendar accepted times are written
-// to, with the sign-in kept for writing. Any other calendar is refreshed by
-// adding it again, since its sign-in is never kept.
+// RefreshCalendarSource reads a calendar again where ZeitBoard keeps the
+// means to: a subscribed calendar from its address, one from an account with
+// the account's sign-in, and the calendar accepted times are written to with
+// the sign-in kept for writing. Any other calendar is refreshed by adding it
+// again, since its sign-in is never kept.
 func (a *App) RefreshCalendarSource(input CalendarRefreshInput) (CalendarImportDTO, error) {
 	ctx := a.applicationContext()
 	store, err := a.requireStore()
@@ -135,6 +137,16 @@ func (a *App) RefreshCalendarSource(input CalendarRefreshInput) (CalendarImportD
 	}
 	if found {
 		result, err := a.refreshCalendarSubscription(ctx, store, subscription)
+		a.announce(calendarRefreshedAnnouncement)
+		return result, err
+	}
+	// A calendar from an account refreshes from it (ADR-0064).
+	account, calendar, fromAccount, err := accountCalendar(ctx, store, strings.TrimSpace(input.SourceID))
+	if err != nil {
+		return CalendarImportDTO{}, err
+	}
+	if fromAccount {
+		result, err := a.refreshAccountCalendar(ctx, store, account, calendar)
 		a.announce(calendarRefreshedAnnouncement)
 		return result, err
 	}

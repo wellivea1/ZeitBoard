@@ -44,3 +44,6 @@ through OAuth still waits on such registrations.
 - Calendars added from a file, or by CalDAV without write-back, still refresh by adding them again.
 - Not done: OAuth, which would allow write access and calendars that publish no address, still
   waits on provider registrations in the owner's name.
+- Update, 2026-10-12: [ADR-0064](0064-calendar-accounts-through-the-owners-registration.md) reads
+  Google and Microsoft calendars through OAuth with an app the owner registers, so no registration
+  in ZeitBoard's name is needed.

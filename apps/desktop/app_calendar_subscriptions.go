@@ -95,26 +95,37 @@ func (a *App) SubscribeCalendar(input CalendarSubscriptionInput) (CalendarImport
 }
 
 func (a *App) startCalendarSubscriptions(parent context.Context) {
-	a.calendarSubscriber.start(parent, calendarSubscriptionInterval, a.refreshCalendarSubscriptions)
+	a.calendarSubscriber.start(parent, calendarSubscriptionInterval, a.refreshFetchedCalendars)
 }
 
-// refreshCalendarSubscriptions fetches every subscribed calendar once.
-func (a *App) refreshCalendarSubscriptions(ctx context.Context) {
+// refreshFetchedCalendars reads every subscribed calendar and every calendar
+// brought in from an account once, and tells the window when there were any.
+func (a *App) refreshFetchedCalendars(ctx context.Context) {
 	store, err := a.requireStore()
 	if err != nil {
 		return
 	}
+	subscribed := a.refreshCalendarSubscriptions(ctx, store)
+	fromAccounts := a.refreshAccountCalendars(ctx, store)
+	if subscribed || fromAccounts {
+		a.announce(calendarRefreshedAnnouncement)
+	}
+}
+
+// refreshCalendarSubscriptions fetches every subscribed calendar once and
+// reports whether there was any to fetch.
+func (a *App) refreshCalendarSubscriptions(ctx context.Context, store *storage.Store) bool {
 	subscriptions, err := store.CalendarSubscriptions(ctx)
 	if err != nil || len(subscriptions) == 0 {
-		return
+		return false
 	}
 	for _, subscription := range subscriptions {
 		if ctx.Err() != nil {
-			return
+			break
 		}
 		_, _ = a.refreshCalendarSubscription(ctx, store, subscription)
 	}
-	a.announce(calendarRefreshedAnnouncement)
+	return true
 }
 
 // refreshCalendarSubscription replaces a subscribed calendar's copy, or
@@ -215,14 +226,20 @@ func subscriptionHost(address string) string {
 }
 
 func calendarSubscriptionDTO(subscription storage.CalendarSubscription, now time.Time, location *time.Location) *CalendarSubscriptionDTO {
-	refreshed := subscription.RefreshedAt.In(location)
+	return &CalendarSubscriptionDTO{
+		Host:           subscriptionHost(subscription.Address),
+		RefreshedLabel: calendarRefreshedLabel(subscription.RefreshedAt, now, location),
+		Failure:        subscription.Failure,
+	}
+}
+
+// calendarRefreshedLabel says when a fetched calendar was read: the time
+// alone today, with its day before.
+func calendarRefreshedLabel(at, now time.Time, location *time.Location) string {
+	refreshed := at.In(location)
 	label := displayClock().Time(refreshed)
 	if today := now.In(location); refreshed.YearDay() != today.YearDay() || refreshed.Year() != today.Year() {
 		label = refreshed.Format("Jan 2") + ", " + label
 	}
-	return &CalendarSubscriptionDTO{
-		Host:           subscriptionHost(subscription.Address),
-		RefreshedLabel: label,
-		Failure:        subscription.Failure,
-	}
+	return label
 }

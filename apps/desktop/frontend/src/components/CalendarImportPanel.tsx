@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
+import { CalendarAccountForm } from "./CalendarAccountForm";
 import {
   importCalDAVCalendar,
   importCalendarFile,
@@ -296,7 +297,7 @@ function SubscriptionForm({
   );
 }
 
-type ImportMode = "file" | "caldav" | "address";
+type ImportMode = "file" | "caldav" | "address" | "account";
 
 export interface CalDAVRefill {
   endpoint: string;
@@ -459,6 +460,14 @@ export function CalendarImportPanel({
         >
           Private address
         </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={mode === "account"}
+          onClick={() => selectMode("account")}
+        >
+          Google or Microsoft
+        </button>
       </div>
 
       {!available && (
@@ -491,6 +500,17 @@ export function CalendarImportPanel({
           busy={busy}
           zoneId={zoneId}
           report={report}
+          onBusy={setBusy}
+          onReport={setReport}
+          onError={setError}
+          onChanged={onChanged}
+        />
+      )}
+      {mode === "account" && (
+        <CalendarAccountForm
+          available={available}
+          busy={busy}
+          zoneId={zoneId}
           onBusy={setBusy}
           onReport={setReport}
           onError={setError}

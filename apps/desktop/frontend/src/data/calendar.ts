@@ -14,6 +14,17 @@ export interface CalendarSubscription {
   failure?: string;
 }
 
+export type CalendarAccountProvider = "google" | "microsoft";
+
+/** A calendar brought in from a Google or Microsoft account (ADR-0064). */
+export interface CalendarAccountSource {
+  provider: CalendarAccountProvider;
+  accountLabel: string;
+  refreshedLabel: string;
+  /** Why the last refresh failed; the copy from refreshedLabel is kept. */
+  failure?: string;
+}
+
 export interface CalendarSource {
   sourceId: string;
   label: string;
@@ -25,6 +36,7 @@ export interface CalendarSource {
   coverageStart: string;
   coverageEnd: string;
   subscription?: CalendarSubscription;
+  account?: CalendarAccountSource;
 }
 
 export interface CalendarEventSegment {
@@ -273,6 +285,7 @@ function normalizeSource(value: unknown): CalendarSource | undefined {
     return undefined;
   }
   const subscription = normalizeSubscription(value.subscription);
+  const account = normalizeAccountSource(value.account);
   return {
     sourceId,
     label,
@@ -284,6 +297,7 @@ function normalizeSource(value: unknown): CalendarSource | undefined {
     coverageEnd,
     ...(endpoint ? { endpoint } : {}),
     ...(subscription && kind === "ics" ? { subscription } : {}),
+    ...(account && kind === "ics" ? { account } : {}),
   };
 }
 
@@ -294,6 +308,20 @@ function normalizeSubscription(value: unknown): CalendarSubscription | undefined
   if (!host || !refreshedLabel) return undefined;
   const failure = text(value.failure);
   return { host, refreshedLabel, ...(failure ? { failure } : {}) };
+}
+
+export function accountProvider(value: unknown): CalendarAccountProvider | undefined {
+  return value === "google" || value === "microsoft" ? value : undefined;
+}
+
+function normalizeAccountSource(value: unknown): CalendarAccountSource | undefined {
+  if (!isRecord(value)) return undefined;
+  const provider = accountProvider(value.provider);
+  const accountLabel = text(value.accountLabel);
+  const refreshedLabel = text(value.refreshedLabel);
+  if (!provider || !accountLabel || !refreshedLabel) return undefined;
+  const failure = text(value.failure);
+  return { provider, accountLabel, refreshedLabel, ...(failure ? { failure } : {}) };
 }
 
 function normalizeEvent(value: unknown): CalendarEventSegment | undefined {

@@ -331,3 +331,149 @@
 .calendar-source-failure {
   color: var(--state-uncertain);
 }
+
+/* A reason is read whole, however narrow the row. */
+.calendar-source-name .calendar-source-failure {
+  white-space: normal;
+}
+
+/* Google and Microsoft accounts (ADR-0064): the accounts signed in as a
+ * ruled list, each opening onto its calendars inside its own rules, then
+ * signing in to another under a hairline. */
+.calendar-account-list {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  list-style: none;
+}
+
+.calendar-account-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--divider);
+}
+
+.calendar-account-calendars,
+.calendar-account-calendars-empty {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.calendar-account-calendars {
+  padding: 0 0 0 var(--space-4);
+  display: grid;
+  list-style: none;
+  border-left: 1px solid var(--divider);
+}
+
+.calendar-account-calendars > li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-2) 0;
+}
+
+.calendar-account-calendars > li + li {
+  border-top: 1px solid var(--divider);
+}
+
+.calendar-account-calendars .calendar-source-name strong {
+  font-size: 17px;
+}
+
+.calendar-account-kept,
+.calendar-account-calendars-empty {
+  color: var(--muted);
+  font-size: var(--type-label);
+}
+
+.calendar-account-signin {
+  display: grid;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+}
+
+.calendar-account-list + .calendar-account-signin,
+.confirm-delete + .calendar-account-signin,
+.form-status + .calendar-account-signin {
+  margin-top: var(--space-2);
+}
+
+.calendar-account-signin > strong {
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.calendar-account-signin > small {
+  color: var(--muted);
+  font-size: var(--type-label);
+  line-height: 1.4;
+}
+
+/* Google or Microsoft: the two names in small capitals, the chosen one
+ * underlined, as the tabs above are. */
+.calendar-account-providers {
+  display: flex;
+  gap: 20px;
+}
+
+.calendar-account-providers button {
+  min-height: 32px;
+  padding: 0;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.calendar-account-providers button[aria-checked="true"] {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 6px;
+}
+
+.calendar-account-steps summary {
+  cursor: pointer;
+  color: var(--ink);
+  font-size: var(--type-label);
+  font-weight: 700;
+}
+
+.calendar-account-steps ol {
+  margin: var(--space-2) 0;
+  padding-left: 1.4em;
+  display: grid;
+  gap: var(--space-1);
+  max-width: 62ch;
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.calendar-account-steps p {
+  margin: 0;
+  max-width: 62ch;
+  color: var(--muted);
+  font-size: var(--type-label);
+  line-height: 1.4;
+}
+
+.calendar-account-waiting {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  font-family: var(--font-serif);
+  font-size: 15px;
+}
