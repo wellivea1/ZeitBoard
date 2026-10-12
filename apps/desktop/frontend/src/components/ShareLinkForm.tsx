@@ -3,7 +3,9 @@ import type { CreatedShareLink, CreateShareLinkInput, ShareLinksData } from "../
 
 // The disclosure is shown *above* the button, not after the link exists: an
 // owner must not be able to create one without having seen what it reveals and
-// what revocation cannot undo (portal-design exposure gate, item 7).
+// what revocation cannot undo (portal-design exposure gate, item 7). What the
+// skipped-doses grant reveals is said beside it, before it can be ticked
+// (ADR-0058): it is health information, and a choice depends on it.
 
 const emptyForm = {
   label: "",
@@ -12,6 +14,7 @@ const emptyForm = {
   wakingWindows: true,
   allowRequests: false,
   allowMessages: false,
+  skippedDoses: false,
 };
 
 export function ShareLinkForm({
@@ -83,6 +86,7 @@ export function ShareLinkForm({
         wakingWindows: form.wakingWindows,
         allowRequests: form.allowRequests,
         allowMessages: form.allowMessages,
+        skippedDoses: form.skippedDoses,
       },
     });
   };
@@ -174,6 +178,21 @@ export function ShareLinkForm({
             onChange={(event) => setForm({ ...form, allowMessages: event.target.checked })}
           />
           <span>Write to you about a time they asked for (plain text, until you answer)</span>
+        </label>
+        <label className="sharing-grant-described">
+          <input
+            type="checkbox"
+            checked={form.skippedDoses}
+            onChange={(event) => setForm({ ...form, skippedDoses: event.target.checked })}
+          />
+          <span>
+            See the doses you log as skipped
+            <small>
+              They learn that you take a medication on a schedule, and when you logged a dose as
+              skipped in the last three days: the times only, never which medication. A dose you did
+              not log is not shown.
+            </small>
+          </span>
         </label>
       </fieldset>
 

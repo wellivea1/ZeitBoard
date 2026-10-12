@@ -33,6 +33,10 @@ type ShareGrantsDTO struct {
 	WakingWindows bool `json:"wakingWindows"`
 	AllowRequests bool `json:"allowRequests"`
 	AllowMessages bool `json:"allowMessages"`
+
+	// SkippedDoses shows when a dose was logged as skipped, by time alone
+	// (ADR-0058).
+	SkippedDoses bool `json:"skippedDoses"`
 }
 
 // ShareAccessDTO is the per-link access audit the instance keeps. It counts
@@ -112,6 +116,7 @@ type backendShareProfileRecord struct {
 		WakingWindows bool `json:"wakingWindows"`
 		AllowRequests bool `json:"allowRequests"`
 		AllowMessages bool `json:"allowMessages"`
+		SkippedDoses  bool `json:"skippedDoses"`
 	} `json:"grants"`
 	Access []struct {
 		Event      string    `json:"event"`
@@ -201,6 +206,7 @@ func shareLinkDTO(record backendShareProfileRecord) ShareLinkDTO {
 			WakingWindows: record.Grants.WakingWindows,
 			AllowRequests: record.Grants.AllowRequests,
 			AllowMessages: record.Grants.AllowMessages,
+			SkippedDoses:  record.Grants.SkippedDoses,
 		},
 		Access: make([]ShareAccessDTO, 0, len(record.Access)),
 	}
@@ -246,9 +252,12 @@ func shareExpiryLabel(state string, expiresAt time.Time) string {
 // shareGrantSummary states what the link shows in the owner's words rather than
 // as a row of flag names.
 func shareGrantSummary(grants ShareGrantsDTO) string {
-	parts := make([]string, 0, 3)
+	parts := make([]string, 0, 4)
 	if grants.WakingWindows {
 		parts = append(parts, "when you are likely awake")
+	}
+	if grants.SkippedDoses {
+		parts = append(parts, "when you log a dose as skipped")
 	}
 	if grants.AllowRequests {
 		parts = append(parts, "can ask for a time")
@@ -318,6 +327,7 @@ func (a *App) CreateBackendShareLink(input CreateShareLinkInput) (CreatedShareLi
 			"wakingWindows": input.Grants.WakingWindows,
 			"allowRequests": input.Grants.AllowRequests,
 			"allowMessages": input.Grants.AllowMessages,
+			"skippedDoses":  input.Grants.SkippedDoses,
 		},
 	}
 	if err := client.postJSON(ctx, "/v1/portal/profiles", payload, &created); err != nil {
@@ -346,7 +356,8 @@ func validateShareLinkInput(input CreateShareLinkInput) error {
 	if input.ExpiresInDays <= 0 || input.ExpiresInDays > MaxShareLinkDays {
 		return errors.New("Choose an expiry between 1 and 90 days. Links do not last forever.")
 	}
-	if !input.Grants.WakingWindows && !input.Grants.AllowRequests && !input.Grants.AllowMessages {
+	if !input.Grants.WakingWindows && !input.Grants.AllowRequests && !input.Grants.AllowMessages &&
+		!input.Grants.SkippedDoses {
 		return errors.New("A link that shows nothing is not worth sending. Choose at least one thing to share.")
 	}
 	return nil

@@ -145,6 +145,24 @@ func TestShareLinkStatesReadAsPlainFacts(t *testing.T) {
 	if none := shareLinkDTO(record); none.GrantSummary != "Shows nothing yet" {
 		t.Errorf("empty grants summarised as %q", none.GrantSummary)
 	}
+
+	// Skipped doses are named in the summary like any other grant (ADR-0058).
+	record.Grants.SkippedDoses = true
+	if doses := shareLinkDTO(record); !doses.Grants.SkippedDoses ||
+		doses.GrantSummary != "Shows when you log a dose as skipped" {
+		t.Errorf("a skipped-doses link reads %+v", doses)
+	}
+}
+
+// A link that shows only skipped doses shows something, and is accepted.
+func TestALinkMayShowOnlySkippedDoses(t *testing.T) {
+	input := CreateShareLinkInput{
+		Label: "My sister", Passcode: "long-enough", ExpiresInDays: 14,
+		Grants: ShareGrantsDTO{SkippedDoses: true},
+	}
+	if err := validateShareLinkInput(input); err != nil {
+		t.Errorf("a skipped-doses link was refused: %v", err)
+	}
 }
 
 // TestUnnamedLinkStillReads keeps a missing private label from rendering as a

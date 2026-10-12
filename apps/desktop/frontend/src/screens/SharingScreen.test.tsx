@@ -196,6 +196,35 @@ describe("SharingScreen", () => {
 
   // Messages belong to a request: the grant says so, and it cannot be given
   // to a link that takes no requests.
+  // What the grant reveals is said before it can be ticked (ADR-0058), and the
+  // choice reaches the server.
+  it("says what showing skipped doses reveals, and sends the choice", async () => {
+    const create = vi.fn(async () => ({
+      status: "ok",
+      linkUrl: "https://share.example.test/p/opaque-token",
+      links: connected(),
+    }));
+    mount({ GetBackendShareLinks: async () => connected(), CreateBackendShareLink: create });
+    render(<SharingScreen />);
+
+    const doses = await screen.findByRole("checkbox", { name: /doses you log as skipped/ });
+    expect(doses).not.toBeChecked();
+    expect(
+      screen.getByText(/that you take a medication on a schedule.*never which medication/),
+    ).toBeVisible();
+
+    fireEvent.change(screen.getByLabelText(/Name/), { target: { value: "My sister" } });
+    fireEvent.change(screen.getByLabelText(/Passcode/), { target: { value: "long-enough" } });
+    fireEvent.click(doses);
+    fireEvent.click(screen.getByRole("button", { name: "Create link" }));
+    await screen.findByText(/can show it again/i);
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        grants: expect.objectContaining({ wakingWindows: true, skippedDoses: true }),
+      }),
+    );
+  });
+
   it("offers messages only with requests", async () => {
     mount({ GetBackendShareLinks: async () => connected() });
     render(<SharingScreen />);

@@ -11,11 +11,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"non24.app/core/domain"
 	"non24.app/core/estimation"
 	"non24.app/core/freshness"
+	"non24.app/core/medication"
 	"non24.app/server/internal/portal"
 )
 
@@ -23,6 +25,13 @@ import (
 // materialization needs.
 type SleepSource interface {
 	EffectiveSleepSessions(ctx context.Context) ([]domain.SleepSession, error)
+}
+
+// DoseSource is the private read model of doses, narrowed to the one call a
+// link that shows skipped doses needs (ADR-0058). It is read only when some
+// link has that grant.
+type DoseSource interface {
+	EffectiveDoses(ctx context.Context) ([]medication.EffectiveEvent, error)
 }
 
 // SnapshotSink is the portal store, narrowed to publication. Nothing here can
@@ -39,6 +48,7 @@ type ProfileSource interface {
 
 type Materializer struct {
 	Sleep     SleepSource
+	Doses     DoseSource
 	Profiles  ProfileSource
 	Sink      SnapshotSink
 	Estimator estimation.RobustEstimator
@@ -71,9 +81,15 @@ type Preparation struct {
 	Profiles []portal.Profile
 	Sessions []domain.SleepSession
 
-	// ExpiresAt is the earliest instant the freshness verdict could change with
-	// no new evidence at all. Zero means nothing further expires by itself.
+	// ExpiresAt is the earliest instant the published answer could change with
+	// no new evidence at all: the freshness verdict, or a skipped dose leaving
+	// the page. Zero means nothing further expires by itself.
 	ExpiresAt time.Time
+
+	// DoseRecords render every dose logged as skipped, not only the ones a
+	// page shows now, so the input fingerprint does not move with the clock
+	// and a new skip is published even when the forecast has not changed.
+	DoseRecords []string
 }
 
 // Prepare computes the projection as of `now` without publishing it.
@@ -95,6 +111,16 @@ func (m Materializer) Prepare(ctx context.Context, now time.Time) (Preparation, 
 			return Preparation{}, fmt.Errorf("list portal profiles: %w", err)
 		}
 		prep.Profiles = profiles
+	}
+
+	// Skipped doses do not depend on the forecast, so they are read before
+	// anything that can withhold it.
+	if m.Doses != nil && showsDoses(prep.Profiles) {
+		doses, err := m.Doses.EffectiveDoses(ctx)
+		if err != nil {
+			return Preparation{}, fmt.Errorf("read doses: %w", err)
+		}
+		prep.Snapshot.SkippedDoses, prep.DoseRecords, prep.ExpiresAt = skippedDoses(doses, now)
 	}
 
 	sessions, err := m.Sleep.EffectiveSleepSessions(ctx)
@@ -124,7 +150,7 @@ func (m Materializer) Prepare(ctx context.Context, now time.Time) (Preparation, 
 	// just now".
 	policy := freshness.Default()
 	inputs := freshnessInputs(estimate, sessions, now)
-	prep.ExpiresAt = policy.NextChange(inputs)
+	prep.ExpiresAt = earliest(prep.ExpiresAt, policy.NextChange(inputs))
 	if !policy.Assess(inputs).MayClaimCurrentState() {
 		prep.Snapshot.Status = portal.StatusInsufficientData
 		return prep, nil
@@ -139,6 +165,65 @@ func (m Materializer) Prepare(ctx context.Context, now time.Time) (Preparation, 
 	prep.Snapshot.Windows = windows
 	prep.Snapshot.HorizonEnd = windows[len(windows)-1].EndAt
 	return prep, nil
+}
+
+// showsDoses reports whether any link has the skipped-doses grant. Without one
+// the doses are not read at all.
+func showsDoses(profiles []portal.Profile) bool {
+	for _, profile := range profiles {
+		if profile.Grants.SkippedDoses {
+			return true
+		}
+	}
+	return false
+}
+
+// skippedDoses narrows doses to what a link may show: the time and zone of each
+// one logged as skipped and not excluded, from the last 72 hours (ADR-0058).
+// The medication, its name, the note and every identifier stay here. It also
+// renders every such dose for the input fingerprint, and says when the next
+// one will leave the page.
+func skippedDoses(doses []medication.EffectiveEvent, now time.Time) ([]portal.SkippedDose, []string, time.Time) {
+	var (
+		shown   []portal.SkippedDose
+		records []string
+		expires time.Time
+	)
+	for _, dose := range doses {
+		if dose.Excluded || dose.Event.Status != medication.EventSkipped {
+			continue
+		}
+		at := dose.Event.DoseAt.UTC()
+		zoneID := dose.Event.ZoneID
+		if zoneID == "" {
+			zoneID = "UTC"
+		}
+		records = append(records, "skipped\x1f"+dose.Event.EventID+"\x1f"+strconv.FormatInt(at.UnixNano(), 10)+"\x1f"+zoneID)
+		leaves := at.Add(portal.SkippedDoseWindow)
+		if !leaves.After(now) {
+			continue
+		}
+		// A dose logged ahead of its time is kept; the page shows it once its
+		// time has come.
+		shown = append(shown, portal.SkippedDose{At: at, ZoneID: zoneID})
+		expires = earliest(expires, leaves)
+		if at.After(now) {
+			expires = earliest(expires, at)
+		}
+	}
+	return shown, records, expires
+}
+
+// earliest is the earlier of two instants, where zero means none.
+func earliest(a, b time.Time) time.Time {
+	switch {
+	case a.IsZero():
+		return b
+	case b.IsZero() || a.Before(b):
+		return a
+	default:
+		return b
+	}
 }
 
 // Snapshot computes the allowlisted projection without publishing it, at the
@@ -257,6 +342,12 @@ func withCurrentWakingWindow(windows []portal.Window, estimate domain.PhaseEstim
 func (m Materializer) Publish(ctx context.Context, prep Preparation) error {
 	for _, profile := range prep.Profiles {
 		published := prep.Snapshot
+		// Doses go only to a link that shows them; every other link's snapshot
+		// is exactly what it was before there were doses to show.
+		published.DosesShared = profile.Grants.SkippedDoses
+		if !published.DosesShared {
+			published.SkippedDoses = nil
+		}
 		if !profile.Grants.WakingWindows {
 			// A link without the windows grant still gets a row so the page
 			// can render an honest "not shared" state rather than 404.

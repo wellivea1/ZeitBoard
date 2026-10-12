@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"non24.app/core/medication"
 	"non24.app/server/internal/auth"
 	"non24.app/server/internal/portal"
 	"non24.app/server/internal/portalbridge"
@@ -57,6 +58,12 @@ var canaries = map[string]string{
 	"task title":       "canary-task-title-d04e",
 	"share label":      "canary-share-label-e15f",
 	"correction id":    "canary-correction-f260",
+	// A skipped dose may cross to a link that shows them, by time alone
+	// (ADR-0058); nothing else about it, or about the medication, may.
+	"medication id":    "canary-medication-a371",
+	"medication label": "canary-medication-label-b482",
+	"dose id":          "canary-dose-c593",
+	"dose note":        "canary-dose-note-d6a4",
 }
 
 type leakFixture struct {
@@ -129,6 +136,8 @@ func newLeakFixture(t *testing.T) *leakFixture {
 			now.Add(-2*time.Hour).UTC().Format(time.RFC3339))),
 	})
 
+	records = append(records, medicationRecords(now)...)
+
 	request := syncmodel.PushRequest{SchemaVersion: syncmodel.SchemaVersion, Records: records}
 	if err := syncmodel.ValidatePushRequest(&request); err != nil {
 		t.Fatalf("validate push: %v", err)
@@ -149,7 +158,7 @@ func newLeakFixture(t *testing.T) *leakFixture {
 		ProfileID: profileID,
 		Token:     token,
 		Passcode:  testPasscode,
-		Grants:    portal.Grants{WakingWindows: true},
+		Grants:    portal.Grants{WakingWindows: true, SkippedDoses: true},
 		CreatedAt: now,
 		ExpiresAt: now.Add(30 * 24 * time.Hour),
 	}); err != nil {
@@ -161,6 +170,7 @@ func newLeakFixture(t *testing.T) *leakFixture {
 
 	materializer := portalbridge.Materializer{
 		Sleep:    readmodel.SleepReader{Store: private},
+		Doses:    readmodel.MedicationReader{Store: private},
 		Profiles: portalStore,
 		Sink:     portalStore,
 		Now:      func() time.Time { return now },
@@ -191,6 +201,49 @@ func newLeakFixture(t *testing.T) *leakFixture {
 		dbPath:  filepath.Join(dir, "zeitboard-portal.db"),
 		token:   token,
 		now:     now,
+	}
+}
+
+// skippedDoseAt is the one dose the fixture logs as skipped and leaves so.
+func skippedDoseAt(now time.Time) time.Time {
+	return now.Add(-5 * time.Hour).Truncate(time.Minute)
+}
+
+// medicationRecords are a medication with a name and four doses: one logged
+// as skipped, with a note; one taken; one skipped and then corrected to
+// taken; and one skipped four days ago, past what a link shows.
+func medicationRecords(now time.Time) []syncmodel.PushRecord {
+	medicationID := canaries["medication id"]
+	stamp := func(at time.Time) string { return at.UTC().Format(time.RFC3339) }
+	dose := func(id string, at time.Time, status, note string) syncmodel.PushRecord {
+		notePart := ""
+		if note != "" {
+			notePart = fmt.Sprintf(`,"note":%q`, note)
+		}
+		return syncmodel.PushRecord{
+			RecordID: id, Kind: syncmodel.KindMedicationEvent, CreatedAt: now.Add(-time.Hour),
+			Payload: json.RawMessage(fmt.Sprintf(
+				`{"event_id":%q,"medication_id":%q,"dose_at":%q,"zone_id":"America/New_York","status":%q,"scheduled":true%s,"provenance":{"acquisition_method":"manual","evidence_status":"user_reported","recorded_at":%q}}`,
+				id, medicationID, stamp(at), status, notePart, stamp(at))),
+		}
+	}
+	return []syncmodel.PushRecord{
+		{
+			RecordID: syncmodel.MedicationRevisionID(medicationID, 1), Kind: syncmodel.KindMedication, CreatedAt: now.Add(-48 * time.Hour),
+			Payload: json.RawMessage(fmt.Sprintf(
+				`{"medication_id":%q,"label":%q,"active":true,"created_at":%q,"revision":1,"updated_at":%q}`,
+				medicationID, canaries["medication label"], stamp(now.Add(-48*time.Hour)), stamp(now.Add(-48*time.Hour)))),
+		},
+		dose(canaries["dose id"], skippedDoseAt(now), "skipped", canaries["dose note"]),
+		dose("dose-taken-01", now.Add(-29*time.Hour), "taken", ""),
+		dose("dose-corrected-01", now.Add(-53*time.Hour), "skipped", ""),
+		{
+			RecordID: "fix-corrected-01", Kind: syncmodel.KindMedicationCorrection, CreatedAt: now.Add(-time.Hour),
+			Payload: json.RawMessage(fmt.Sprintf(
+				`{"correction_id":"fix-corrected-01","target_event_id":"dose-corrected-01","created_at":%q,"reason":"user_edit","changes":{"status":"taken"}}`,
+				stamp(now.Add(-52*time.Hour)))),
+		},
+		dose("dose-old-01", now.Add(-96*time.Hour), "skipped", ""),
 	}
 }
 
@@ -473,4 +526,72 @@ func (f *leakFixture) authenticate(t *testing.T) string {
 	}
 	t.Fatal("no session cookie issued")
 	return ""
+}
+
+// A link with the grant receives the one dose that now stands as skipped and
+// is less than 72 hours old, by its time and zone alone (ADR-0058).
+func TestALinkSharesSkippedDosesByTimeAlone(t *testing.T) {
+	fixture := newLeakFixture(t)
+	snapshot, err := fixture.portal.ReadSnapshot(context.Background(), fixture.profileID(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []portal.SkippedDose{{At: skippedDoseAt(fixture.now).UTC(), ZoneID: "America/New_York"}}
+	if !snapshot.DosesShared || len(snapshot.SkippedDoses) != 1 || snapshot.SkippedDoses[0] != want[0] {
+		t.Fatalf("doses shared %v: %+v, want %+v", snapshot.DosesShared, snapshot.SkippedDoses, want)
+	}
+}
+
+// A link without the grant gets no doses, even beside one that has it, and
+// with no link that has it the doses are not read at all.
+func TestOnlyALinkWithTheGrantGetsDoses(t *testing.T) {
+	fixture := newLeakFixture(t)
+	ctx := context.Background()
+	profileID, _ := portal.NewProfileID()
+	token, _ := portal.NewLinkToken()
+	if err := fixture.portal.CreateProfile(ctx, portal.CreateProfileInput{
+		ProfileID: profileID, Token: token, Passcode: testPasscode,
+		Grants:    portal.Grants{WakingWindows: true},
+		CreatedAt: fixture.now, ExpiresAt: fixture.now.Add(24 * time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	materializer := portalbridge.Materializer{
+		Sleep:    readmodel.SleepReader{Store: fixture.private},
+		Doses:    readmodel.MedicationReader{Store: fixture.private},
+		Profiles: fixture.portal,
+		Sink:     fixture.portal,
+		Now:      func() time.Time { return fixture.now },
+	}
+	materializeAll(ctx, t, materializer, fixture.now)
+	snapshot, err := fixture.portal.ReadSnapshot(ctx, profileID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.DosesShared || len(snapshot.SkippedDoses) != 0 {
+		t.Errorf("a link without the grant received doses: %+v", snapshot.SkippedDoses)
+	}
+
+	unread := portalbridge.Materializer{
+		Sleep:    readmodel.SleepReader{Store: fixture.private},
+		Doses:    failingDoses{t: t},
+		Profiles: onlyProfiles{profiles: []portal.Profile{{ID: profileID, Grants: portal.Grants{WakingWindows: true}}}},
+		Sink:     fixture.portal,
+	}
+	if _, err := unread.Prepare(ctx, fixture.now); err != nil {
+		t.Fatal(err)
+	}
+}
+
+type failingDoses struct{ t *testing.T }
+
+func (f failingDoses) EffectiveDoses(context.Context) ([]medication.EffectiveEvent, error) {
+	f.t.Error("doses were read with no link that shows them")
+	return nil, nil
+}
+
+type onlyProfiles struct{ profiles []portal.Profile }
+
+func (o onlyProfiles) ListActiveProfiles(context.Context, time.Time) ([]portal.Profile, error) {
+	return o.profiles, nil
 }

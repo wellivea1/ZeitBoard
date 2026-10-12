@@ -2756,3 +2756,53 @@ moves the first predicted sleep to twenty seconds after now. It failed with a 20
 segment, and now passes with no stretch under a minute and no gap. The other outlook tests, and
 the desktop and server suites, pass unchanged.
 
+## A share link can show the doses logged as skipped — 2026-10-11
+
+ADR-0058, medication plan slice M-F.
+
+- `core/medication`:
+  - The correction fold moved here from the desktop's store, which now calls it.
+  - Corrections apply in the order they were made, whatever order they arrive in, and the record
+    itself is untouched.
+  - A correction that would leave a dose invalid is refused.
+  - The store's medication tests pass unchanged.
+- The server reads doses through that fold. A skip corrected to taken reads as taken, and an
+  exclusion stays with its dose. Server code may now read dose records but still not medication
+  definitions.
+- The recompute inputs take other records. A new dose changes the fingerprint, in any order, and
+  cannot collide with a link key of the same text.
+- The portal store:
+  - The grant is stored and read back.
+  - The column is added by one migration path, so an upgraded database matches a new one (the
+    upgrade test).
+  - A snapshot written before doses existed still reads.
+  - A snapshot cannot carry doses to a link that does not share them.
+- The visitor page and its JSON:
+  - A link with the grant lists the doses logged as skipped in the last 72 hours, newest first, as
+    "Today" and "Yesterday" in the zone they were logged in. A future dose and one older than 72
+    hours are left out.
+  - Each dose in the JSON carries only `at` and `zoneId`.
+  - With none, the page says "None in the last three days" and the JSON holds an empty list.
+  - Doses show while the forecast is refused.
+  - An open page refreshes when a dose leaves it.
+  - The notice says the page shows doses logged as skipped and is not medical advice.
+  - A link without the grant has no section, no key and the original notice.
+- The materializer, against a store seeded with canaries:
+  - A medication's name and ID and a dose's note and ID never appear in any public response, its
+    headers or the portal database file.
+  - Of four doses (skipped, taken, skipped then corrected to taken, and skipped four days ago),
+    only the first reaches the link, by time and zone.
+  - A link without the grant gets nothing beside one that has it.
+  - With no such link, the doses are not read at all.
+- The desktop:
+  - The Sharing form says what the grant reveals before it can be ticked, and sends the choice.
+  - The link's summary names it.
+  - A link that shows only skipped doses is accepted.
+- In a browser against a local portal harness with synthetic data:
+  - A link with both grants showed the waking windows and then "Doses logged as skipped" with
+    Today and Yesterday at 7:52 PM, set as the same ruled list as the windows, with the note that
+    an unlogged dose is not shown.
+  - The footer's "It is not medical information" was then untrue for such a page. It now reads that
+    the page shows, by its owner's choice, when they logged a dose as skipped, and is not medical
+    advice.
+

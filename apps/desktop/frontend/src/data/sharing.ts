@@ -11,6 +11,8 @@ export interface ShareGrants {
   wakingWindows: boolean;
   allowRequests: boolean;
   allowMessages: boolean;
+  /** When a dose was logged as skipped, by time alone (ADR-0058). */
+  skippedDoses: boolean;
 }
 
 export interface ShareAccessEntry {
@@ -94,6 +96,7 @@ function normalizeGrants(value: unknown): ShareGrants {
     wakingWindows: record.wakingWindows === true,
     allowRequests: record.allowRequests === true,
     allowMessages: record.allowMessages === true,
+    skippedDoses: record.skippedDoses === true,
   };
 }
 

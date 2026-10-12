@@ -59,6 +59,7 @@ describe("normalizeShareLinks", () => {
       wakingWindows: false,
       allowRequests: false,
       allowMessages: false,
+      skippedDoses: false,
     });
   });
 });

@@ -78,6 +78,7 @@ func serve(configPath string, stop <-chan struct{}, ready chan<- struct{}) error
 
 		materializer := portalbridge.Materializer{
 			Sleep:    readmodel.SleepReader{Store: st},
+			Doses:    readmodel.MedicationReader{Store: st},
 			Profiles: portalStore,
 			Sink:     portalStore,
 		}

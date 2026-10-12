@@ -11,6 +11,7 @@
 package portal
 
 import (
+	"bytes"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
@@ -84,6 +85,10 @@ type Grants struct {
 	WakingWindows bool `json:"wakingWindows"`
 	AllowRequests bool `json:"allowRequests"`
 	AllowMessages bool `json:"allowMessages"`
+
+	// SkippedDoses shows when the owner logged a dose as skipped, by time
+	// alone (ADR-0058). Off unless the owner turns it on for the link.
+	SkippedDoses bool `json:"skippedDoses"`
 }
 
 // Profile is the portal-side projection of a share profile. It has no label,
@@ -102,6 +107,22 @@ type Window struct {
 	ZoneID  string    `json:"zoneId"`
 }
 
+// SkippedDose is when the owner logged a dose as skipped: a time and the zone
+// it was logged in, and nothing about the medication (ADR-0058).
+type SkippedDose struct {
+	At     time.Time `json:"at"`
+	ZoneID string    `json:"zoneId"`
+}
+
+// SkippedDoseWindow is how far back a link shows doses logged as skipped:
+// long enough for someone who looks once a day to see each one, short enough
+// that the page is not a record of the owner's adherence.
+const SkippedDoseWindow = 72 * time.Hour
+
+// maxSkippedDoses bounds what one snapshot can carry. Even a dose every hour
+// for three days fits.
+const maxSkippedDoses = 96
+
 // Snapshot is the entire set of facts the public surface may describe. Adding
 // a field here widens the public boundary and requires the design review in
 // docs/portal-design.md section 5.
@@ -111,6 +132,21 @@ type Snapshot struct {
 	GeneratedAt time.Time
 	HorizonEnd  time.Time
 	Status      string
+
+	// DosesShared is true for a link with the SkippedDoses grant, so the page
+	// can tell "none logged as skipped" from "not shared". SkippedDoses is
+	// empty on every other link.
+	DosesShared  bool
+	SkippedDoses []SkippedDose
+}
+
+// snapshotPayload is what is sealed in a snapshot row. A row written before
+// skipped doses existed holds a bare array of windows, which ReadSnapshot
+// still reads.
+type snapshotPayload struct {
+	Windows      []Window      `json:"windows"`
+	DosesShared  bool          `json:"dosesShared,omitempty"`
+	SkippedDoses []SkippedDose `json:"skippedDoses,omitempty"`
 }
 
 type Store struct {
@@ -295,7 +331,37 @@ func (s *Store) migrate(ctx context.Context) error {
 			return fmt.Errorf("portal migrate: %w", err)
 		}
 	}
+	// Columns added after a table was first made are added here, for a new
+	// database as for an old one, so both end with the same table. A link
+	// from before ADR-0058 had no skipped-doses grant, which the default says.
+	if err := s.ensureColumn(ctx, "portal_profiles", "grant_skipped_doses", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return fmt.Errorf("portal migrate: %w", err)
+	}
 	return s.ensureAuditKey(ctx)
+}
+
+// ensureColumn adds a column to a table that predates it. SQLite has no ADD
+// COLUMN IF NOT EXISTS, so the table is asked first.
+func (s *Store) ensureColumn(ctx context.Context, table, column, definition string) error {
+	rows, err := s.db.QueryContext(ctx, `SELECT name FROM pragma_table_info(?)`, table)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return err
+		}
+		if name == column {
+			return rows.Err()
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, `ALTER TABLE `+table+` ADD COLUMN `+column+` `+definition)
+	return err
 }
 
 // CreateProfileInput carries a new link. The caller supplies the raw token and
@@ -333,12 +399,13 @@ func (s *Store) CreateProfile(ctx context.Context, input CreateProfileInput) err
 	tokenHash := hashToken(input.Token)
 
 	_, err := s.db.ExecContext(ctx, `INSERT INTO portal_profiles
-		(profile_id, token_hash, grant_windows, grant_requests, grant_messages,
+		(profile_id, token_hash, grant_windows, grant_requests, grant_messages, grant_skipped_doses,
 		 created_at, expires_at, revoked_at,
 		 passcode_hash, passcode_salt, passcode_time, passcode_memory, passcode_threads)
-		VALUES (?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?)`,
 		input.ProfileID, tokenHash[:],
 		boolToInt(input.Grants.WakingWindows), boolToInt(input.Grants.AllowRequests), boolToInt(input.Grants.AllowMessages),
+		boolToInt(input.Grants.SkippedDoses),
 		formatTime(input.CreatedAt), formatTime(input.ExpiresAt),
 		hash, salt, int64(argonTime), int64(argonMemory), int64(argonThreads))
 	if err != nil {
@@ -354,8 +421,7 @@ func (s *Store) ResolveLink(ctx context.Context, token string, now time.Time) (P
 		return Profile{}, ErrLinkNotUsable
 	}
 	tokenHash := hashToken(token)
-	row := s.db.QueryRowContext(ctx, `SELECT profile_id, grant_windows, grant_requests, grant_messages,
-		created_at, expires_at, revoked_at
+	row := s.db.QueryRowContext(ctx, `SELECT `+profileColumns+`
 		FROM portal_profiles WHERE token_hash = ?`, tokenHash[:])
 	profile, expired, revoked, err := scanProfile(row, now)
 	switch {
@@ -372,8 +438,7 @@ func (s *Store) ResolveLink(ctx context.Context, token string, now time.Time) (P
 // LookupProfile is the owner-side read. Unlike ResolveLink it distinguishes
 // missing from revoked, because the owner is entitled to that difference.
 func (s *Store) LookupProfile(ctx context.Context, profileID string, now time.Time) (Profile, bool, bool, error) {
-	row := s.db.QueryRowContext(ctx, `SELECT profile_id, grant_windows, grant_requests, grant_messages,
-		created_at, expires_at, revoked_at
+	row := s.db.QueryRowContext(ctx, `SELECT `+profileColumns+`
 		FROM portal_profiles WHERE profile_id = ?`, profileID)
 	profile, expired, revoked, err := scanProfile(row, now)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -385,13 +450,25 @@ func (s *Store) LookupProfile(ctx context.Context, profileID string, now time.Ti
 	return profile, expired, revoked, nil
 }
 
-func scanProfile(row *sql.Row, now time.Time) (Profile, bool, bool, error) {
+// profileColumns are the columns every profile read selects, in the order
+// scanProfile reads them.
+const profileColumns = `profile_id, grant_windows, grant_requests, grant_messages, grant_skipped_doses,
+		created_at, expires_at, revoked_at`
+
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
+// scanProfile reads one row of profileColumns, and says whether the link has
+// expired at now or been revoked.
+func scanProfile(row rowScanner, now time.Time) (Profile, bool, bool, error) {
 	var (
-		profile                             Profile
-		windows, requests, messages         int
-		createdAtRaw, expiresAtRaw, revoked string
+		profile                                   Profile
+		windows, requests, messages, skippedDoses int
+		createdAtRaw, expiresAtRaw, revoked       string
 	)
-	if err := row.Scan(&profile.ID, &windows, &requests, &messages, &createdAtRaw, &expiresAtRaw, &revoked); err != nil {
+	if err := row.Scan(&profile.ID, &windows, &requests, &messages, &skippedDoses,
+		&createdAtRaw, &expiresAtRaw, &revoked); err != nil {
 		return Profile{}, false, false, err
 	}
 	createdAt, err := parseTime(createdAtRaw)
@@ -408,6 +485,7 @@ func scanProfile(row *sql.Row, now time.Time) (Profile, bool, bool, error) {
 		WakingWindows: windows == 1,
 		AllowRequests: requests == 1,
 		AllowMessages: messages == 1,
+		SkippedDoses:  skippedDoses == 1,
 	}
 	return profile, !expiresAt.After(now), revoked != "", nil
 }
@@ -453,8 +531,8 @@ func (s *Store) listProfiles(ctx context.Context, now time.Time, activeOnly bool
 }
 
 func (s *Store) listProfileStates(ctx context.Context, now time.Time) ([]ProfileState, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT profile_id, grant_windows, grant_requests, grant_messages,
-		created_at, expires_at, revoked_at FROM portal_profiles ORDER BY created_at, profile_id`)
+	rows, err := s.db.QueryContext(ctx, `SELECT `+profileColumns+`
+		FROM portal_profiles ORDER BY created_at, profile_id`)
 	if err != nil {
 		return nil, err
 	}
@@ -462,34 +540,11 @@ func (s *Store) listProfileStates(ctx context.Context, now time.Time) ([]Profile
 
 	var states []ProfileState
 	for rows.Next() {
-		var (
-			profile                             Profile
-			windows, requests, messages         int
-			createdAtRaw, expiresAtRaw, revoked string
-		)
-		if err := rows.Scan(&profile.ID, &windows, &requests, &messages, &createdAtRaw, &expiresAtRaw, &revoked); err != nil {
-			return nil, err
-		}
-		createdAt, err := parseTime(createdAtRaw)
+		profile, expired, revoked, err := scanProfile(rows, now)
 		if err != nil {
 			return nil, err
 		}
-		expiresAt, err := parseTime(expiresAtRaw)
-		if err != nil {
-			return nil, err
-		}
-		profile.CreatedAt = createdAt
-		profile.ExpiresAt = expiresAt
-		profile.Grants = Grants{
-			WakingWindows: windows == 1,
-			AllowRequests: requests == 1,
-			AllowMessages: messages == 1,
-		}
-		states = append(states, ProfileState{
-			Profile: profile,
-			Expired: !expiresAt.After(now),
-			Revoked: revoked != "",
-		})
+		states = append(states, ProfileState{Profile: profile, Expired: expired, Revoked: revoked})
 	}
 	return states, rows.Err()
 }
@@ -577,7 +632,9 @@ func (s *Store) PublishSnapshot(ctx context.Context, profileID string, snapshot 
 	if err := validateSnapshot(snapshot); err != nil {
 		return err
 	}
-	payload, err := json.Marshal(snapshot.Windows)
+	payload, err := json.Marshal(snapshotPayload{
+		Windows: snapshot.Windows, DosesShared: snapshot.DosesShared, SkippedDoses: snapshot.SkippedDoses,
+	})
 	if err != nil {
 		return err
 	}
@@ -638,14 +695,28 @@ func (s *Store) ReadSnapshot(ctx context.Context, profileID string) (Snapshot, e
 	if err != nil {
 		return Snapshot{}, fmt.Errorf("decrypt portal snapshot: %w", err)
 	}
-	var windows []Window
-	if err := json.Unmarshal(plaintext, &windows); err != nil {
+	payload, err := decodeSnapshotPayload(plaintext)
+	if err != nil {
 		return Snapshot{}, err
 	}
 	snapshot.GeneratedAt = generatedAt
 	snapshot.HorizonEnd = horizonEnd
-	snapshot.Windows = windows
+	snapshot.Windows = payload.Windows
+	snapshot.DosesShared = payload.DosesShared
+	snapshot.SkippedDoses = payload.SkippedDoses
 	return snapshot, nil
+}
+
+// decodeSnapshotPayload reads a sealed snapshot, including one written as a
+// bare array of windows before skipped doses existed.
+func decodeSnapshotPayload(plaintext []byte) (snapshotPayload, error) {
+	var payload snapshotPayload
+	if trimmed := bytes.TrimSpace(plaintext); len(trimmed) > 0 && trimmed[0] == '[' {
+		err := json.Unmarshal(trimmed, &payload.Windows)
+		return payload, err
+	}
+	err := json.Unmarshal(plaintext, &payload)
+	return payload, err
 }
 
 func validateSnapshot(snapshot Snapshot) error {
@@ -666,6 +737,17 @@ func validateSnapshot(snapshot Snapshot) error {
 		}
 		if window.ZoneID == "" {
 			return errors.New("portal snapshot windows require a zone id")
+		}
+	}
+	if len(snapshot.SkippedDoses) > 0 && !snapshot.DosesShared {
+		return errors.New("portal snapshot carries doses for a link that does not share them")
+	}
+	if len(snapshot.SkippedDoses) > maxSkippedDoses {
+		return fmt.Errorf("portal snapshot carries more than %d skipped doses", maxSkippedDoses)
+	}
+	for _, dose := range snapshot.SkippedDoses {
+		if dose.At.IsZero() || dose.ZoneID == "" {
+			return errors.New("portal snapshot skipped doses require a time and a zone id")
 		}
 	}
 	return nil

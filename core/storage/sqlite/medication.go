@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"sort"
 	"time"
 
@@ -50,11 +49,9 @@ type MedicationReminderClaim struct {
 	ClaimedAt    time.Time
 }
 
-type EffectiveMedicationEvent struct {
-	Event       MedicationEventRecord
-	Excluded    bool
-	Corrections []MedicationEventCorrectionRecord
-}
+// EffectiveMedicationEvent is a dose with its corrections applied, read the
+// same way the server reads it (ADR-0058).
+type EffectiveMedicationEvent = medicationcore.EffectiveEvent
 
 type MedicationSet struct {
 	SchemaVersion string             `json:"schema_version"`
@@ -368,46 +365,7 @@ func (s *Store) EffectiveMedicationEvents(ctx context.Context) ([]EffectiveMedic
 	if err != nil {
 		return nil, err
 	}
-	byEvent := make(map[string][]MedicationEventCorrectionRecord)
-	for _, correction := range corrections {
-		byEvent[correction.TargetEventID] = append(byEvent[correction.TargetEventID], correction)
-	}
-	result := make([]EffectiveMedicationEvent, 0, len(events))
-	for _, event := range events {
-		item := EffectiveMedicationEvent{Event: event, Corrections: byEvent[event.EventID]}
-		for _, correction := range item.Corrections {
-			changes := correction.Changes
-			if changes.DoseAt != nil {
-				item.Event.DoseAt = changes.DoseAt.UTC()
-			}
-			if changes.ZoneID != nil {
-				item.Event.ZoneID = *changes.ZoneID
-			}
-			if changes.Status != nil {
-				item.Event.Status = *changes.Status
-			}
-			if changes.Scheduled != nil {
-				item.Event.Scheduled = *changes.Scheduled
-			}
-			if changes.Note != nil {
-				item.Event.Note = *changes.Note
-			}
-			if changes.Excluded != nil {
-				item.Excluded = *changes.Excluded
-			}
-		}
-		if err := validateMedicationEvent(item.Event); err != nil {
-			return nil, fmt.Errorf("effective medication event %s: %w", event.EventID, err)
-		}
-		result = append(result, item)
-	}
-	sort.Slice(result, func(i, j int) bool {
-		if result[i].Event.DoseAt.Equal(result[j].Event.DoseAt) {
-			return result[i].Event.EventID < result[j].Event.EventID
-		}
-		return result[i].Event.DoseAt.Before(result[j].Event.DoseAt)
-	})
-	return result, nil
+	return medicationcore.Effective(events, corrections)
 }
 
 func (s *Store) LatestMedicationEventCorrectionID(ctx context.Context, eventID string) (string, error) {

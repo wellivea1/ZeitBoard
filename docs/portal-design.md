@@ -168,7 +168,8 @@ authentication.
 Private owner configuration stores:
 
 - profile ID and private display label;
-- grants: `waking_windows`, `allow_requests`, and `allow_messages`;
+- grants: `waking_windows`, `allow_requests`, `allow_messages`, and `skipped_doses`
+  ([ADR-0058](decisions/0058-a-link-can-show-skipped-doses.md), off unless chosen);
 - required expiry, at most 90 days;
 - required passcode policy; and
 - created, updated, revoked, and audit metadata.
@@ -215,7 +216,16 @@ The owner-side materializer writes this only:
 
 `status` is `available`, `refused`, or `insufficient_data`. No internal estimate
 parameters, observation IDs, confidence buckets, medication facts, markers, or
-free text cross the materialization boundary. Materialization runs after an
+free text cross the materialization boundary.
+
+The one exception is chosen per link (ADR-0058, 2026-10-11). A link with the
+`skipped_doses` grant also carries `skippedDoses`, the time and zone of each
+dose logged as skipped in the last 72 hours, and the page says "None in the last
+three days" when there are none. No medication name, form, schedule, note,
+reason, identifier or count of taken doses crosses, and a dose that was never
+logged is never shown. Every other link's snapshot is unchanged. Doses are
+inputs to the recompute fingerprint but not content, so a new skip is published
+without restamping `generatedAt`, which keeps measuring the sleep evidence. Materialization runs after an
 accepted sync push that changes sleep inputs, an estimate-affecting edit or hard
 erasure, and estimator version changes. It publishes by transaction and then
 notifies open streams.
