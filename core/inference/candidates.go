@@ -104,48 +104,102 @@ const (
 	RefusalNoQuietInterval = "no_quiet_interval"
 )
 
+// briefWake is how long a computer may wake on its own, for an update or a
+// timer, without ending a night. Windows logs such a wake, but nobody used the
+// computer during it (ADR-0060).
+const briefWake = 15 * time.Minute
+
 // FromActivity turns a run of activity transitions into quiet intervals: spans
 // during which the machine was not being used. It makes no claim about sleep.
 func FromActivity(transitions []activity.Transition) []Interval {
 	sorted := append([]activity.Transition(nil), transitions...)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i].At.Before(sorted[j].At) })
+	sort.SliceStable(sorted, func(i, j int) bool { return sorted[i].At.Before(sorted[j].At) })
 
-	var intervals []Interval
+	var spans []quietSpan
+	var uses []time.Time
 	var quietFrom time.Time
 	quiet := false
-
-	for _, transition := range sorted {
-		switch transition.State {
-		case activity.StateIdle, activity.StateLocked, activity.StateSuspended:
-			if !quiet {
-				quiet = true
-				quietFrom = transition.At.UTC()
-			}
-		case activity.StateActive, activity.StateUnlocked, activity.StateResumed, activity.StateStartup:
-			if quiet {
-				intervals = append(intervals, Interval{
-					Source:  SourceDesktopActivity,
-					StartAt: quietFrom,
-					EndAt:   transition.At.UTC(),
-				})
-				quiet = false
-			}
-		case activity.StateShutdown:
-			// A shutdown ends the observable record rather than opening a
-			// quiet interval: the machine being off says nothing about the
-			// person, and treating it as evidence would turn every holiday
-			// into a fortnight of sleep.
-			if quiet {
-				intervals = append(intervals, Interval{
-					Source:  SourceDesktopActivity,
-					StartAt: quietFrom,
-					EndAt:   transition.At.UTC(),
-				})
-				quiet = false
-			}
+	open := func(at time.Time) {
+		if !quiet {
+			quiet = true
+			quietFrom = at
 		}
 	}
+	end := func(at time.Time, logged bool) {
+		if quiet {
+			spans = append(spans, quietSpan{start: quietFrom, end: at, endedByLog: logged})
+			quiet = false
+		}
+	}
+
+	for _, transition := range sorted {
+		at := transition.At.UTC()
+		switch transition.State {
+		case activity.StateIdle, activity.StateLocked, activity.StateSuspended:
+			open(at)
+		case activity.StateActive, activity.StateUnlocked, activity.StateStartup:
+			if !transition.FromPowerLog {
+				uses = append(uses, at)
+			}
+			end(at, transition.FromPowerLog)
+		case activity.StateResumed:
+			end(at, transition.FromPowerLog)
+		case activity.StateShutdown:
+			if transition.FromPowerLog {
+				// Windows logging its own shutdown is the computer turning
+				// off, and nobody uses a computer that is off (ADR-0060).
+				// It opens a quiet interval as a sleep does; a holiday's
+				// fortnight off is still too long for Build to call a night.
+				open(at)
+				continue
+			}
+			// The collector's own shutdown is only ZeitBoard stopping. It
+			// ends the observable record rather than opening a quiet
+			// interval: the person may well go on using the computer.
+			end(at, false)
+		}
+	}
+
+	spans = joinBriefWakes(spans, uses)
+	intervals := make([]Interval, len(spans))
+	for i, span := range spans {
+		intervals[i] = Interval{Source: SourceDesktopActivity, StartAt: span.start, EndAt: span.end}
+	}
 	return intervals
+}
+
+type quietSpan struct {
+	start, end time.Time
+
+	// endedByLog is true when the span ended on a wake or start Windows
+	// logged, which says the computer was on, not that anyone used it.
+	endedByLog bool
+}
+
+// joinBriefWakes rejoins quiet spans that only a logged wake of briefWake or
+// less came between, with no sign of use from the collector in it.
+func joinBriefWakes(spans []quietSpan, uses []time.Time) []quietSpan {
+	usedBetween := func(from, to time.Time) bool {
+		for _, use := range uses {
+			if !use.Before(from) && !use.After(to) {
+				return true
+			}
+		}
+		return false
+	}
+	var joined []quietSpan
+	for _, span := range spans {
+		if n := len(joined); n > 0 {
+			last := &joined[n-1]
+			if last.endedByLog && span.start.Sub(last.end) <= briefWake && !usedBetween(last.end, span.start) {
+				last.end = span.end
+				last.endedByLog = span.endedByLog
+				continue
+			}
+		}
+		joined = append(joined, span)
+	}
+	return joined
 }
 
 // FromMoments turns moments of activity, each a minute in which the person did

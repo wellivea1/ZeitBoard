@@ -49,6 +49,12 @@ type Transition struct {
 	// hour idle stretch between an idle and an active transition is the
 	// signal, not the instants themselves.
 	PriorDuration time.Duration
+
+	// FromPowerLog marks a transition Windows wrote to its own log rather
+	// than one the collector saw (ADR-0060). It matters for a shutdown: from
+	// the log it is the computer turning off, from the collector it is only
+	// ZeitBoard stopping.
+	FromPowerLog bool
 }
 
 // Sample is one observation of machine state, as a platform source reports it.
@@ -228,6 +234,13 @@ type payload struct {
 const CollectorVersion = "activity-v3"
 
 func (t Transition) encode(osName string) (json.RawMessage, error) {
+	return t.encodeAs(osName, CollectorVersion)
+}
+
+// encodeAs writes a transition under the rules that produced it. Only the
+// collector infers a sleep, from a missed poll; one read from the power log
+// was observed.
+func (t Transition) encodeAs(osName, version string) (json.RawMessage, error) {
 	if !t.State.valid() {
 		return nil, fmt.Errorf("unsupported activity state %q", string(t.State))
 	}
@@ -235,9 +248,9 @@ func (t Transition) encode(osName string) (json.RawMessage, error) {
 		State:            string(t.State),
 		PriorSeconds:     int64(t.PriorDuration / time.Second),
 		OS:               osName,
-		CollectorVersion: CollectorVersion,
+		CollectorVersion: version,
 	}
-	if t.State == StateSuspended || t.State == StateResumed {
+	if version == CollectorVersion && (t.State == StateSuspended || t.State == StateResumed) {
 		value.Confidence = &domain.InferenceConfidence{Level: domain.ConfidenceUnknown, Reasons: []string{"poll_gap_not_observed_power_event"}}
 	}
 	return json.Marshal(value)

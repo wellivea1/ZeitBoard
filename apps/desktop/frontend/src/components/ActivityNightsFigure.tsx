@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, type PointerEvent } from "react";
-import type { AccountActivity } from "../data/accountActivity";
+import type { NightsFigure } from "../data/activityNights";
 import { axisHour } from "../utils/relativeTime";
 import {
   DAY,
@@ -13,26 +13,34 @@ import {
 import { TimeProbe } from "./TimeProbe";
 import { civilProbeLabel, useTimeProbe } from "./timeProbeLogic";
 
-// Nights a Google export suggests, drawn against the recorded ones (ADR-0059).
-// It is a double plot: each row is a day and the day after it, so a night that
-// crosses midnight is one shape, and a drifting rhythm runs down the page as a
-// slanting band. It opens on the last weeks, where rows are tall enough to set
-// a suggestion against a recorded night; the whole export, years of rows drawn
-// as two paths in a box the height of a page, is one press away.
+// Nights a source suggests, drawn against the recorded ones: a Google export's
+// (ADR-0059) or this computer's (ADR-0060). It is a double plot: each row is a
+// day and the day after it, so a night that crosses midnight is one shape, and
+// a drifting rhythm runs down the page as a slanting band. It opens on the last
+// weeks, where rows are tall enough to set a suggestion against a recorded
+// night; everything, years of rows drawn as two paths in a box the height of a
+// page, is one press away.
 
-function figureSummary(activity: AccountActivity, recent: boolean) {
-  const recorded = activity.agreement?.recorded ?? 0;
+function figureSummary(figure: NightsFigure, source: string, recent: boolean) {
+  const recorded = figure.agreement?.recorded ?? 0;
   const beside = recorded > 0 ? `, beside ${recorded} recorded` : "";
-  const nights = `${activity.nights} suggested ${activity.nights === 1 ? "night" : "nights"}`;
+  const nights = `${figure.nights} suggested ${figure.nights === 1 ? "night" : "nights"}`;
   return recent
-    ? `The last ${RECENT_DAYS / 7} weeks of nights suggested by your Google activity. In all it covers ${activity.spanLabel}, with ${nights}${beside}.`
-    : `Nights suggested by your Google activity, ${activity.spanLabel}: ${nights}${beside}.`;
+    ? `The last ${RECENT_DAYS / 7} weeks of nights suggested by ${source}. In all it covers ${figure.spanLabel}, with ${nights}${beside}.`
+    : `Nights suggested by ${source}, ${figure.spanLabel}: ${nights}${beside}.`;
 }
 
-export function ActivityNightsFigure({ activity }: { activity: AccountActivity }) {
+export function ActivityNightsFigure({
+  figure,
+  source,
+}: {
+  figure: NightsFigure;
+  /** Who suggests the nights, in words: "your Google activity". */
+  source: string;
+}) {
   const [everything, setEverything] = useState(false);
-  const long = activity.days > RECENT_DAYS;
-  const shown = long && !everything ? lastDays(activity, RECENT_DAYS) : activity;
+  const long = figure.days > RECENT_DAYS;
+  const shown = long && !everything ? lastDays(figure, RECENT_DAYS) : figure;
   const { days, firstDate, zoneId } = shown;
   const height = figureHeight(days);
   const row = useRef(0);
@@ -68,7 +76,7 @@ export function ActivityNightsFigure({ activity }: { activity: AccountActivity }
               onClick={() => setEverything(all)}
               key={String(all)}
             >
-              {all ? `All ${spanWords(activity.days)}` : `Last ${RECENT_DAYS / 7} weeks`}
+              {all ? `All ${spanWords(figure.days)}` : `Last ${RECENT_DAYS / 7} weeks`}
             </button>
           ))}
         </div>
@@ -90,7 +98,7 @@ export function ActivityNightsFigure({ activity }: { activity: AccountActivity }
           className="activity-nights-plot has-time-probe"
           style={{ height }}
           role="img"
-          aria-label={figureSummary(activity, shown !== activity)}
+          aria-label={figureSummary(figure, source, shown !== figure)}
           onPointerMove={onPointerMove}
           onPointerLeave={probe.onPointerLeave}
         >
@@ -103,8 +111,8 @@ export function ActivityNightsFigure({ activity }: { activity: AccountActivity }
       </div>
       <figcaption className="activity-nights-legend">
         <span>
-          <i className="activity-nights-key is-suggested" aria-hidden="true" /> Suggested by your
-          activity
+          <i className="activity-nights-key is-suggested" aria-hidden="true" /> Suggested by{" "}
+          {source}
         </span>
         <span>
           <i className="activity-nights-key is-recorded" aria-hidden="true" /> Recorded

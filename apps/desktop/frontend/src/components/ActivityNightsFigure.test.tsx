@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { noAccountActivity, type AccountActivity } from "../data/accountActivity";
+import type { NightsFigure } from "../data/activityNights";
 import { ActivityNightsFigure } from "./ActivityNightsFigure";
 import { figureHeight, lastDays, nightPath, rowLabels, spanWords } from "./activityNightsLayout";
 
@@ -44,11 +44,9 @@ describe("ActivityNightsFigure", () => {
   });
 
   it("names what it shows", () => {
-    const activity: AccountActivity = {
-      ...noAccountActivity,
-      imported: true,
+    const figure: NightsFigure = {
       nights: 12,
-      minutes: 4210,
+      zoneId: "UTC",
       spanLabel: "Aug 31, 2026 to Sep 13, 2026",
       firstDate: "2026-08-31",
       days: 14,
@@ -56,13 +54,13 @@ describe("ActivityNightsFigure", () => {
       recorded: [[7, 300, 780]],
       agreement: { recorded: 6, matched: 6, summary: "" },
     };
-    render(<ActivityNightsFigure activity={activity} />);
+    render(<ActivityNightsFigure figure={figure} source="your Google activity" />);
     expect(
       screen.getByRole("img", {
         name: "Nights suggested by your Google activity, Aug 31, 2026 to Sep 13, 2026: 12 suggested nights, beside 6 recorded.",
       }),
     ).toBeInTheDocument();
-    expect(screen.getByText("Suggested by your activity")).toBeInTheDocument();
+    expect(screen.getByText(/Suggested by your Google activity/)).toBeInTheDocument();
     // Two weeks need no choice of span.
     expect(screen.queryByRole("group", { name: "Days drawn" })).toBeNull();
   });
@@ -70,10 +68,9 @@ describe("ActivityNightsFigure", () => {
   // Over a long export the rows would be too thin to compare, so the figure
   // opens on the last weeks and can show everything.
   it("opens a long export on its last weeks", () => {
-    const activity: AccountActivity = {
-      ...noAccountActivity,
-      imported: true,
+    const figure: NightsFigure = {
       nights: 600,
+      zoneId: "UTC",
       spanLabel: "Feb 10, 2025 to Oct 10, 2026",
       firstDate: "2025-02-10",
       days: 608,
@@ -83,7 +80,7 @@ describe("ActivityNightsFigure", () => {
       ],
       recorded: [[607, 60, 540]],
     };
-    render(<ActivityNightsFigure activity={activity} />);
+    render(<ActivityNightsFigure figure={figure} source="your Google activity" />);
     const recent = screen.getByRole("button", { name: "Last 12 weeks" });
     expect(recent).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("img").getAttribute("aria-label")).toMatch(/^The last 12 weeks/);
@@ -96,8 +93,9 @@ describe("ActivityNightsFigure", () => {
   it("renumbers the last weeks from their first day", () => {
     const shown = lastDays(
       {
-        ...noAccountActivity,
-        imported: true,
+        nights: 3,
+        spanLabel: "",
+        zoneId: "UTC",
         firstDate: "2026-01-01",
         days: 100,
         suggested: [

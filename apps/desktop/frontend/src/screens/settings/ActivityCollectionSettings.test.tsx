@@ -69,3 +69,36 @@ it("shows a failed collector as stopped and requires an explicit retry", async (
   await screen.findByText("Running");
   expect(set).toHaveBeenCalledWith({ enabled: true, zoneId: "UTC" });
 });
+
+// Reading Windows' log is a choice of its own: it says what it reads before it
+// is made, and waits for desktop activity to be on.
+it("offers to read sleep and wake from Windows once activity is on", async () => {
+  const powerLog = { supported: true, enabled: false, entries: 0, sinceLabel: "", lastError: "" };
+  const read = vi.fn(async () => ({
+    ...initial,
+    enabled: true,
+    running: true,
+    recordCount: 14,
+    powerLog: { ...powerLog, enabled: true, entries: 10, sinceLabel: "Oct 1, 2026" },
+  }));
+  install({
+    GetActivityCollection: async () => ({ ...initial, powerLog }),
+    SetPowerLogReading: read,
+  });
+  const { unmount } = render(<ActivityCollectionSettings />);
+  const card = await screen.findByRole("region", { name: "Sleep and wake from Windows" });
+  expect(card).toHaveTextContent("ZeitBoard can read those times and nothing else Windows logs");
+  expect(screen.getByRole("button", { name: "Read sleep and wake from Windows" })).toBeDisabled();
+  expect(card).toHaveTextContent("Turn on desktop activity first.");
+  unmount();
+
+  install({
+    GetActivityCollection: async () => ({ ...initial, enabled: true, running: true, powerLog }),
+    SetPowerLogReading: read,
+  });
+  render(<ActivityCollectionSettings />);
+  fireEvent.click(await screen.findByRole("button", { name: "Read sleep and wake from Windows" }));
+  await screen.findByText("10 times, from Oct 1, 2026");
+  expect(read).toHaveBeenCalledWith({ enabled: true });
+  expect(screen.getByRole("button", { name: "Stop reading from Windows" })).toBeEnabled();
+});

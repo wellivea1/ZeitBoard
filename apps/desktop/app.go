@@ -22,6 +22,7 @@ import (
 	"non24.app/core/estimation"
 	"non24.app/core/freshness"
 	"non24.app/core/ingest"
+	"non24.app/core/platform/activity"
 	"non24.app/core/recompute"
 	"non24.app/core/scheduling"
 	"non24.app/core/sleepv1"
@@ -50,18 +51,25 @@ type App struct {
 	analysisDone      <-chan struct{}
 	analysisEstimator estimation.Estimator
 	// analysisUpdated observes each analysis-updated announcement (tests).
-	analysisUpdated    func()
-	serviceMu          sync.Mutex
-	window             desktopWindow
-	startupMu          sync.Mutex
-	startupControl     autostart.Controller
-	closing            atomic.Bool
-	collector          *ingest.Manager
-	activityMu         sync.Mutex
-	activitySource     ingest.Collector
-	activityStarted    bool
-	activityClosed     bool
-	activityError      string
+	analysisUpdated func()
+	serviceMu       sync.Mutex
+	window          desktopWindow
+	startupMu       sync.Mutex
+	startupControl  autostart.Controller
+	closing         atomic.Bool
+	collector       *ingest.Manager
+	activityMu      sync.Mutex
+	activitySource  ingest.Collector
+	activityStarted bool
+	activityClosed  bool
+	activityError   string
+	// powerLogSource reads Windows' power log; nil selects the build's
+	// reader (ADR-0060). powerLogError is guarded by activityMu.
+	powerLogSource     activity.PowerLog
+	powerLogReader     periodicWorker
+	powerLogError      string
+	computerNightsMu   sync.Mutex
+	computerNights     cachedNights
 	tray               tray.Controller
 	store              *storage.Store
 	storeErr           error
@@ -82,7 +90,7 @@ type App struct {
 	// worked out from the kept activity (ADR-0059).
 	accountActivityMu      sync.Mutex
 	accountActivityPending *pendingAccountActivity
-	accountActivityNights  accountActivityNights
+	accountActivityNights  cachedNights
 	nowFn                  func() time.Time
 	reminderMu             sync.RWMutex
 	reminderCancel         context.CancelFunc
@@ -375,6 +383,7 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.startLocalAnalysis()
 	a.startActivityService(ctx)
+	a.startPowerLogReader(ctx)
 	a.startDesktopBackground(ctx, desktopBackgroundInterval)
 	a.startCalendarWriter(ctx)
 	a.startLocalAgent(ctx)
@@ -386,6 +395,7 @@ func (a *App) shutdown(ctx context.Context) {
 	a.serviceMu.Lock()
 	defer a.serviceMu.Unlock()
 	a.stopDesktopBackground()
+	a.powerLogReader.stop()
 	a.calendarWriter.stop()
 	a.stopMedicationReminderService()
 	a.stopLocalAgent(ctx)

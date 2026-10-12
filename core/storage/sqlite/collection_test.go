@@ -45,3 +45,55 @@ func TestCollectionBatchRollsBackAndExportIsSourceScoped(t *testing.T) {
 		t.Fatal("erased another source")
 	}
 }
+
+// A record the operating system hands over twice is kept once, and reading a
+// source back gives its observations in time order with the newest log time.
+func TestARecordReadTwiceIsKeptOnce(t *testing.T) {
+	store, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	ctx := context.Background()
+	at := time.Date(2026, 10, 11, 6, 12, 0, 0, time.UTC)
+	logged := func(id string, when time.Time) domain.SourceObservation {
+		return domain.SourceObservation{ID: domain.ObservationID("power-log-" + id), SourceID: "desktop-activity",
+			ExternalID: "windows-power-log:" + id, Kind: "activity", ObservedAt: domain.MustZonedInstant(when, "UTC"),
+			RecordedAt: at, Evidence: domain.Evidence{Algorithm: "windows-power-log-v1"},
+			Payload: json.RawMessage(`{"state":"suspended"}`)}
+	}
+	first := []domain.SourceObservation{logged("1", at.Add(time.Hour)), logged("2", at)}
+	if added, err := store.AppendNew(ctx, first); err != nil || added != 2 {
+		t.Fatalf("first read added %d, %v", added, err)
+	}
+	if added, err := store.AppendNew(ctx, append(first, logged("3", at.Add(2*time.Hour)))); err != nil || added != 1 {
+		t.Fatalf("second read added %d, %v", added, err)
+	}
+	collected := domain.SourceObservation{ID: "activity-synthetic-1", SourceID: "desktop-activity", Kind: "activity",
+		ObservedAt: domain.MustZonedInstant(at.Add(3*time.Hour), "UTC"), RecordedAt: at,
+		Evidence: domain.Evidence{Algorithm: "activity-v3"}, Payload: json.RawMessage(`{"state":"idle"}`)}
+	if err := store.Append(ctx, []domain.SourceObservation{collected}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.AppendNew(ctx, []domain.SourceObservation{collected}); err == nil {
+		t.Fatal("an observation without an external ID was kept as if it had one")
+	}
+
+	observations, err := store.SourceObservations(ctx, "desktop-activity")
+	if err != nil || len(observations) != 4 {
+		t.Fatalf("read %d observations, %v", len(observations), err)
+	}
+	if observations[0].ID != "power-log-2" || observations[3].ID != "activity-synthetic-1" {
+		t.Errorf("order %s … %s", observations[0].ID, observations[3].ID)
+	}
+	fromLog, err := store.SourceObservationSpan(ctx, "desktop-activity", "windows-power-log-v1")
+	if err != nil || fromLog.Count != 3 || !fromLog.Oldest.Equal(at) || !fromLog.Latest.Equal(at.Add(2*time.Hour)) {
+		t.Errorf("logged span %+v, %v", fromLog, err)
+	}
+	if all, err := store.SourceObservationSpan(ctx, "desktop-activity", ""); err != nil || all.Count != 4 || !all.Latest.Equal(at.Add(3*time.Hour)) {
+		t.Errorf("whole span %+v, %v", all, err)
+	}
+	if none, err := store.SourceObservationSpan(ctx, "desktop-activity", "nothing-v1"); err != nil || none.Count != 0 || !none.Latest.IsZero() {
+		t.Errorf("an algorithm with nothing kept gave %+v, %v", none, err)
+	}
+}

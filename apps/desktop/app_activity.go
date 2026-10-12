@@ -19,12 +19,13 @@ type ActivityCollectionInput struct {
 }
 
 type ActivityCollectionDTO struct {
-	Enabled     bool   `json:"enabled"`
-	Running     bool   `json:"running"`
-	Supported   bool   `json:"supported"`
-	ZoneID      string `json:"zoneId"`
-	RecordCount int    `json:"recordCount"`
-	LastError   string `json:"lastError"`
+	Enabled     bool        `json:"enabled"`
+	Running     bool        `json:"running"`
+	Supported   bool        `json:"supported"`
+	ZoneID      string      `json:"zoneId"`
+	RecordCount int         `json:"recordCount"`
+	LastError   string      `json:"lastError"`
+	PowerLog    PowerLogDTO `json:"powerLog"`
 }
 
 type ActivityExportDTO struct {
@@ -147,7 +148,8 @@ func (a *App) activityStatusLocked() (ActivityCollectionDTO, error) {
 	}
 	return ActivityCollectionDTO{Enabled: pref.Enabled, Running: health.Running,
 		Supported: capabilities.ActiveIdle || capabilities.SessionState, ZoneID: pref.ZoneID,
-		RecordCount: count, LastError: lastError}, nil
+		RecordCount: count, LastError: lastError,
+		PowerLog: a.powerLogStatusLocked(a.applicationContext(), store)}, nil
 }
 
 func (a *App) SetActivityCollection(input ActivityCollectionInput) (ActivityCollectionDTO, error) {
@@ -178,6 +180,11 @@ func (a *App) SetActivityCollection(input ActivityCollectionInput) (ActivityColl
 	}
 	a.activityError = ""
 	a.reconcileActivityLocked(a.applicationContext())
+	if input.Enabled {
+		// What Windows logged while collection was off is read now, if the
+		// owner chose to read it.
+		a.powerLogReader.nudge()
+	}
 	return a.activityStatusLocked()
 }
 
@@ -202,6 +209,11 @@ func (a *App) DeleteActivityData(confirmation string) (ActivityCollectionDTO, er
 	if err := store.SetCollectionPreference(a.applicationContext(), activity.SourceID, pref); err != nil {
 		return ActivityCollectionDTO{}, errors.New("Collection could not be disabled; activity records were not erased.")
 	}
+	// Erasing starts over: the log is not read again until it is chosen again.
+	if err := store.SetCollectionPreference(a.applicationContext(), activity.PowerLogSourceID, pref); err != nil {
+		return ActivityCollectionDTO{}, errors.New("Reading Windows' power log could not be turned off; activity records were not erased.")
+	}
+	a.powerLogError = ""
 	if a.collector != nil {
 		_ = a.collector.Stop(a.applicationContext())
 		a.collector = nil

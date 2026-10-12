@@ -1,5 +1,16 @@
 import { findWailsMethod, type WailsRoot } from "./wailsBridge";
 
+/** Reading Windows' own log of sleep, wake, shutdown and start (ADR-0060). */
+export interface PowerLogReading {
+  supported: boolean;
+  enabled: boolean;
+  /** Entries kept from the log. */
+  entries: number;
+  /** The date of the oldest, once there is one. */
+  sinceLabel: string;
+  lastError: string;
+}
+
 export interface ActivityCollection {
   enabled: boolean;
   running: boolean;
@@ -7,6 +18,30 @@ export interface ActivityCollection {
   zoneId: string;
   recordCount: number;
   lastError: string;
+  powerLog: PowerLogReading;
+}
+
+const noPowerLog: PowerLogReading = {
+  supported: false,
+  enabled: false,
+  entries: 0,
+  sinceLabel: "",
+  lastError: "",
+};
+
+function powerLog(value: unknown): PowerLogReading {
+  if (typeof value !== "object" || value === null) return noPowerLog;
+  const v = value as Record<string, unknown>;
+  return {
+    supported: v.supported === true,
+    enabled: v.enabled === true,
+    entries:
+      typeof v.entries === "number" && Number.isSafeInteger(v.entries) && v.entries >= 0
+        ? v.entries
+        : 0,
+    sinceLabel: typeof v.sinceLabel === "string" ? v.sinceLabel : "",
+    lastError: typeof v.lastError === "string" ? v.lastError : "",
+  };
 }
 
 async function invoke(name: string, input?: unknown, root: WailsRoot = globalThis as WailsRoot) {
@@ -30,7 +65,7 @@ function collection(value: unknown): ActivityCollection {
     typeof v.lastError !== "string"
   )
     throw new Error("Activity status is invalid. Refresh to try again.");
-  return v as unknown as ActivityCollection;
+  return { ...(v as unknown as ActivityCollection), powerLog: powerLog(v.powerLog) };
 }
 
 export async function loadActivityCollection() {
@@ -39,6 +74,10 @@ export async function loadActivityCollection() {
 
 export async function setActivityCollection(enabled: boolean, zoneId: string) {
   return collection(await invoke("SetActivityCollection", { enabled, zoneId }));
+}
+
+export async function setPowerLogReading(enabled: boolean) {
+  return collection(await invoke("SetPowerLogReading", { enabled }));
 }
 
 export async function deleteActivityData(confirmation: string) {

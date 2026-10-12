@@ -2865,3 +2865,51 @@ synthetic export.
   - Both read in the light and the dark theme.
   - Removing with REMOVE emptied it.
   - The export was put into the profile through the store, not through the native dialog.
+
+## This computer between runs — 2026-10-12
+
+ADR-0060. Go tests in `core/platform/activity`, `core/inference`, `core/storage/sqlite` and the
+desktop; component and data tests in the window; then the running desktop with a disposable profile
+and synthetic records.
+
+- The reader:
+  - The query names the six entries by provider and number after a given time.
+  - A rendered entry gives up its time and record number. The computer's name, the account and
+    the event data in the test entry are canaries and do not come back.
+  - Any other provider, number or a damaged time is not read.
+  - On Windows, the real System log answers the query in order with only those states, and a limit
+    of one gives one. The test prints nothing it reads.
+  - The same entry read twice is the same observation, kept with observed status and no unknown
+    confidence.
+- The inference:
+  - A logged shutdown is quiet until the computer starts, but ZeitBoard quitting is not.
+  - An inferred and a logged sleep of the same night are one stretch.
+  - A wake of a few minutes with no sign of use leaves the night whole. One someone used ends it.
+- The store: a record read twice is kept once, activity reads back in time order, and the span of
+  what was read is counted per algorithm.
+- The desktop, with a synthetic log:
+  - The choice is refused while desktop activity is off.
+  - Without the choice, the log is not read.
+  - With it, the first read goes back as far as the log does, and the next asks from an hour
+    before the newest entry kept and keeps only what is new.
+  - With desktop activity off, the choice stays but nothing is read.
+  - A failed read says so and keeps the choice.
+  - Erasing activity erases what was read and turns the reading off.
+  - Ten logged nights suggested ten. Three recorded nights inside them all matched, with "began 30
+    minutes before your recorded sleep and ended 20 minutes after your recorded wake".
+- The window:
+  - Settings › This computer says what the choice reads before it is made, and waits for desktop
+    activity to be on.
+  - After reading, it shows how many times were read and from when.
+  - Rhythm › Sources switches between Google activity and this computer, each with its own words
+    and link. It says when this computer has not suggested a night yet.
+- In the running desktop, with desktop activity off and synthetic records:
+  - The profile held synthetic recorded nights, 322 synthetic power entries over 138 nights, a
+    shutdown every ninth night and a timer wake every sixth, and the synthetic Google export
+    again.
+  - Rhythm › Sources read "Nights your activity suggests" with both sources.
+  - "This computer" drew 138 nights over 142 days, the recorded nights inside them, and "57 of 57".
+  - The timer wakes split no night.
+  - Settings › This computer showed the new card beside the consent card: "Reading: Off", "322
+    times, from May 23, 2026", and "Turn on desktop activity first."
+  - Nothing from this computer's real log was put into the profile.

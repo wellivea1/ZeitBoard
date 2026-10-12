@@ -83,6 +83,15 @@ session — an ordinary hour of work produces no records at all. Suspend and res
 from wall-clock gaps rather than observed, and the collector does not claim a power-event capability
 it does not have.
 
+With desktop activity on, a second choice reads Windows' own log of when the computer went to sleep,
+woke, shut down and started (ADR-0060). It is off by default. ZeitBoard asks the System log for six
+entries by provider and number, and of each keeps the time and the log's record number. Nothing else
+in the log is asked for, and nothing else in an entry is read. It reads as far back as Windows keeps
+them, which includes times ZeitBoard was closed or not yet installed. The times are kept, exported
+and erased with the other activity records, and erasing them turns the reading off. Like those
+records, they stay on this computer and change no forecast or plan. The nights they suggest appear
+only in Rhythm › Sources, beside the recorded ones.
+
 The desktop now persists its explicit default-off activity grant and time zone
 in SQLite. Settings shows whether the collector is running, stopped or failing,
 and how many records are retained. Activity records remain local; they are not
