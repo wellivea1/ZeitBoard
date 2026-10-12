@@ -120,7 +120,7 @@ func (a *App) GetLocalAgentStatus() LocalAgentStatusDTO {
 	status := LocalAgentStatusDTO{
 		SchemaVersion:             "v1",
 		Mode:                      "desktop_local",
-		BackendProposalsAvailable: desktopLocalCapability{app: a}.TaskProposalsAvailable(context.Background()),
+		BackendProposalsAvailable: desktopLocalCapability{app: a}.TaskProposalsAvailable(a.applicationContext()),
 		AppearanceStatus:          "ready",
 	}
 	if _, err := a.requireStore(); err == nil {

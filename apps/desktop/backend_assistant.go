@@ -164,7 +164,7 @@ func (a *App) GetAssistantStatus() (AssistantStatusDTO, error) {
 	}
 	client := a.newPassiveBackendClient(cfg, token)
 	var response assistantStatusResponse
-	if err := client.getJSON(context.Background(), "/v1/status", &response); err != nil {
+	if err := client.getJSON(a.applicationContext(), "/v1/status", &response); err != nil {
 		return AssistantStatusDTO{Enabled: false, Message: sanitizeBackendError(err)}, nil
 	}
 	return AssistantStatusDTO{
@@ -193,7 +193,7 @@ func (a *App) SendAssistantMessage(input AssistantMessageInput) (AssistantReplyD
 		return AssistantReplyDTO{Available: false, Result: "unavailable", Answer: sanitizeBackendError(err), Proposals: []BackendProposalDTO{}}, nil
 	}
 
-	ctx := context.Background()
+	ctx := a.applicationContext()
 	scope := assistantFactScope{}
 	// A prompt that will be refused does not need health facts to cross even
 	// the owner-controlled backend boundary.
@@ -445,7 +445,7 @@ type AppearanceClockDTO struct {
 
 func (a *App) GetAppearanceClock() (AppearanceClockDTO, error) {
 	now := a.currentTime().UTC()
-	state, err := a.localEstimate(context.Background(), now)
+	state, err := a.localEstimate(a.applicationContext(), now)
 	if err != nil {
 		return AppearanceClockDTO{}, err
 	}

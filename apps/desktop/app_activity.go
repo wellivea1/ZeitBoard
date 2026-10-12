@@ -47,7 +47,7 @@ func (a *App) activityHealthLocked() ingest.ServiceHealth {
 	if a.collector == nil {
 		return ingest.ServiceHealth{CollectorIDs: []string{}}
 	}
-	result := a.collector.Health(context.Background())
+	result := a.collector.Health(a.applicationContext())
 	if result.LastError != "" {
 		result.LastError = "Activity collection stopped because its records could not be saved. Retry collection or check local storage."
 	}

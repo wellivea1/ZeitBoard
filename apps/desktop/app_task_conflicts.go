@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	storage "non24.app/core/storage/sqlite"
 )
 
@@ -43,14 +42,14 @@ func (a *App) attachTaskConflictReview(dto *ProposalsDTO) error {
 	if err != nil {
 		return err
 	}
-	conflicts, err := store.ListTaskSyncConflicts(context.Background())
+	conflicts, err := store.ListTaskSyncConflicts(a.applicationContext())
 	if err != nil {
 		return err
 	}
 	for _, conflict := range conflicts {
 		dto.TaskConflicts = append(dto.TaskConflicts, taskConflictDTO(conflict))
 	}
-	history, err := store.ListTaskSyncResolutions(context.Background())
+	history, err := store.ListTaskSyncResolutions(a.applicationContext())
 	if err != nil {
 		return err
 	}

@@ -86,7 +86,7 @@ func (a *App) AddRhythmMarker(input RhythmMarkerInput) (RhythmMarkersDTO, error)
 			RecordedAt:        now,
 		},
 	}
-	if err := store.CreateRhythmMarker(context.Background(), record); err != nil {
+	if err := store.CreateRhythmMarker(a.applicationContext(), record); err != nil {
 		return RhythmMarkersDTO{}, err
 	}
 	return a.rhythmMarkersAt(now)
@@ -100,7 +100,7 @@ func (a *App) DeleteRhythmMarker(input RhythmMarkerDeleteInput) (RhythmMarkersDT
 	if err != nil {
 		return RhythmMarkersDTO{}, err
 	}
-	if err := store.DeleteRhythmMarker(context.Background(), strings.TrimSpace(input.MarkerID)); err != nil {
+	if err := store.DeleteRhythmMarker(a.applicationContext(), strings.TrimSpace(input.MarkerID)); err != nil {
 		return RhythmMarkersDTO{}, err
 	}
 	return a.GetRhythmMarkers()
@@ -112,7 +112,7 @@ func (a *App) ExportRhythmMarkers() (RhythmMarkerExportDTO, error) {
 		return RhythmMarkerExportDTO{}, err
 	}
 	now := a.currentTime().UTC().Truncate(time.Second)
-	exported, err := store.ExportRhythmMarkers(context.Background(), now)
+	exported, err := store.ExportRhythmMarkers(a.applicationContext(), now)
 	if err != nil {
 		return RhythmMarkerExportDTO{}, err
 	}

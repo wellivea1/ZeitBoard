@@ -119,7 +119,7 @@ func (a *App) decideLocalProposals(proposalIDs []string, decisionKind string) (L
 	if err != nil {
 		return LocalProposalsDecisionDTO{}, err
 	}
-	records, err := store.DecideProposals(context.Background(), items)
+	records, err := store.DecideProposals(a.applicationContext(), items)
 	if err != nil {
 		return LocalProposalsDecisionDTO{}, err
 	}
@@ -193,7 +193,7 @@ func (a *App) UndoLocalProposalDecision(input LocalProposalUndoInput) (LocalProp
 		return LocalProposalDecisionDTO{}, err
 	}
 	record, err := store.UndoProposalDecision(
-		context.Background(), newLocalID("decision"), input.ProposalID, a.currentTime().UTC().Truncate(time.Second),
+		a.applicationContext(), newLocalID("decision"), input.ProposalID, a.currentTime().UTC().Truncate(time.Second),
 	)
 	if err != nil {
 		return LocalProposalDecisionDTO{}, err
@@ -208,7 +208,7 @@ func (a *App) UndoLocalProposalDecision(input LocalProposalUndoInput) (LocalProp
 }
 
 func (a *App) buildLocalProposals(now time.Time) (localProposalBuild, error) {
-	ctx := context.Background()
+	ctx := a.applicationContext()
 	store, err := a.requireStore()
 	if err != nil {
 		return localProposalBuild{}, err

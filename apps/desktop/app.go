@@ -466,7 +466,7 @@ func (a *App) AddSleepEntry(input SleepEntryInput) (SleepEntryDTO, error) {
 			SourceRecordID:    "desktop-manual",
 		},
 	}
-	if err := store.AppendSleepObservation(context.Background(), record); err != nil {
+	if err := store.AppendSleepObservation(a.applicationContext(), record); err != nil {
 		return SleepEntryDTO{}, err
 	}
 	return a.sleepEntryByID(record.ObservationID)
@@ -606,7 +606,7 @@ func (a *App) CorrectSleepEntry(input SleepCorrectionInput) (SleepEntryDTO, erro
 	if err != nil {
 		return SleepEntryDTO{}, err
 	}
-	review, err := store.SleepReview(context.Background(), input.ObservationID)
+	review, err := store.SleepReview(a.applicationContext(), input.ObservationID)
 	if err != nil {
 		return SleepEntryDTO{}, err
 	}
@@ -631,7 +631,7 @@ func (a *App) CorrectSleepEntry(input SleepCorrectionInput) (SleepEntryDTO, erro
 			Excluded:            &input.Excluded,
 		},
 	}
-	if err := store.AppendSleepCorrection(context.Background(), record); err != nil {
+	if err := store.AppendSleepCorrection(a.applicationContext(), record); err != nil {
 		return SleepEntryDTO{}, err
 	}
 	return a.sleepEntryByID(input.ObservationID)
@@ -643,7 +643,7 @@ func (a *App) SuppressSleepEntry(input SleepSuppressInput) (SleepEntryDTO, error
 	if err != nil {
 		return SleepEntryDTO{}, err
 	}
-	review, err := store.SleepReview(context.Background(), input.ObservationID)
+	review, err := store.SleepReview(a.applicationContext(), input.ObservationID)
 	if err != nil {
 		return SleepEntryDTO{}, err
 	}
@@ -668,7 +668,7 @@ func (a *App) SuppressSleepEntry(input SleepSuppressInput) (SleepEntryDTO, error
 			Excluded:            &excluded,
 		},
 	}
-	if err := store.AppendSleepCorrection(context.Background(), record); err != nil {
+	if err := store.AppendSleepCorrection(a.applicationContext(), record); err != nil {
 		return SleepEntryDTO{}, err
 	}
 	return a.sleepEntryByID(input.ObservationID)
@@ -937,7 +937,7 @@ func (a *App) AddTask(input TaskInput) (TasksDTO, error) {
 	if err != nil {
 		return TasksDTO{}, err
 	}
-	if err := store.AddTask(context.Background(), record); err != nil {
+	if err := store.AddTask(a.applicationContext(), record); err != nil {
 		return TasksDTO{}, err
 	}
 	return a.ListTasks()
@@ -948,15 +948,15 @@ func (a *App) ListTasks() (TasksDTO, error) {
 	if err != nil {
 		return TasksDTO{Status: "unavailable", Message: "Task planning needs the desktop app service.", Tasks: []TaskDTO{}}, nil
 	}
-	records, err := store.ListTasks(context.Background())
+	records, err := store.ListTasks(a.applicationContext())
 	if err != nil {
 		return TasksDTO{}, err
 	}
-	conflicts, err := store.TaskSyncConflictIDs(context.Background())
+	conflicts, err := store.TaskSyncConflictIDs(a.applicationContext())
 	if err != nil {
 		return TasksDTO{}, err
 	}
-	decisions, err := store.ActiveProposalDecisions(context.Background())
+	decisions, err := store.ActiveProposalDecisions(a.applicationContext())
 	if err != nil {
 		return TasksDTO{}, err
 	}
@@ -995,7 +995,7 @@ func (a *App) UpdateTask(input TaskInput) (TasksDTO, error) {
 	if err != nil {
 		return TasksDTO{}, err
 	}
-	existing, err := store.GetTask(context.Background(), input.TaskID)
+	existing, err := store.GetTask(a.applicationContext(), input.TaskID)
 	if err != nil {
 		return TasksDTO{}, err
 	}
@@ -1008,7 +1008,7 @@ func (a *App) UpdateTask(input TaskInput) (TasksDTO, error) {
 	}
 	record.Revision = input.Revision + 1
 	record.UpdatedAt = time.Now().UTC()
-	if err := store.UpdateTask(context.Background(), record, input.Revision); err != nil {
+	if err := store.UpdateTask(a.applicationContext(), record, input.Revision); err != nil {
 		return TasksDTO{}, err
 	}
 	return a.ListTasks()
@@ -1023,7 +1023,7 @@ func (a *App) SetTaskDone(input TaskActionInput) (TasksDTO, error) {
 	if input.Done {
 		status = storage.TaskStatusDone
 	}
-	if err := store.SetTaskStatus(context.Background(), input.TaskID, status, input.Revision); err != nil {
+	if err := store.SetTaskStatus(a.applicationContext(), input.TaskID, status, input.Revision); err != nil {
 		return TasksDTO{}, err
 	}
 	return a.ListTasks()
@@ -1034,7 +1034,7 @@ func (a *App) DeleteTask(input TaskActionInput) (TasksDTO, error) {
 	if err != nil {
 		return TasksDTO{}, err
 	}
-	if err := store.DeleteTask(context.Background(), input.TaskID, input.Revision); err != nil {
+	if err := store.DeleteTask(a.applicationContext(), input.TaskID, input.Revision); err != nil {
 		return TasksDTO{}, err
 	}
 	return a.ListTasks()

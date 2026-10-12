@@ -1501,7 +1501,7 @@ or deferred with its reason.
 | 3 | Accepted times go to one CalDAV calendar at a time, and the calendar's host can read their task names (ADR-0053; disclosed in the offer). | Accepted by design. |
 | 4 | Estimates use recorded sleep only. Multi-source inference stays in shadow mode after a negative promotion decision (ADR-0031). | Deferred analysis work. It ships only after a candidate passes the measured gate. |
 | 5 | The server's projection folds all relevant sleep history on each request (review #2). | Accepted at the current scale. Revisit with production profiles. |
-| 6 | Older desktop methods pass `context.Background()` rather than the app's context (review #15). | Accepted. Converted as each area changes; no one sees the difference. |
+| 6 | ~~Older desktop methods pass `context.Background()` rather than the app's context (review #15).~~ | Resolved 2026-10-12: every bound method uses the app's context, so quitting cancels what is in flight. `context.Background()` remains only where one is needed: as the fallback before startup, for shutdown deadlines, in a pure computation and in the command-line tools. |
 | 7 | The desktop `App` facade is not yet split into services (review #22). | Accepted. Extraction happens at feature boundaries, as the sleep log's reads did. |
 | 8 | The calendar, medication and report validators are handwritten, outside generated schema ownership (review #24). | Accepted. They are strict and tested. |
 | 9 | There are no ordered migrations yet. Every schema change so far was additive or an explicit drop (review #25). | Accepted. The upgrade tests fail on the first change that is neither, which then needs its migration. |
