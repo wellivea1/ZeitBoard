@@ -153,9 +153,10 @@ func TestActivityNoStoreCannotGrantConsent(t *testing.T) {
 func TestDesktopDataDirectoryCanIsolateQualificationProfile(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "qualification")
 	t.Setenv("ZEITBOARD_DATA_DIR", dir)
-	store, err := openDesktopStore()
-	if err != nil {
-		t.Fatal(err)
+	// Without a saved choice to encrypt, opening touches no encryption.
+	store, encryptionProblem, err := openDesktopStore()
+	if err != nil || encryptionProblem != "" {
+		t.Fatal(err, encryptionProblem)
 	}
 	defer store.Close()
 	if _, err := os.Stat(filepath.Join(dir, desktopDatabaseFile)); err != nil {

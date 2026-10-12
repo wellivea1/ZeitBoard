@@ -65,25 +65,30 @@ type App struct {
 	activityError   string
 	// powerLogSource reads Windows' power log; nil selects the build's
 	// reader (ADR-0060). powerLogError is guarded by activityMu.
-	powerLogSource     activity.PowerLog
-	powerLogReader     periodicWorker
-	powerLogError      string
-	computerNightsMu   sync.Mutex
-	computerNights     cachedNights
-	tray               tray.Controller
-	store              *storage.Store
-	storeErr           error
-	configDir          string
-	calendarHTTPClient calendarHTTPDoer
-	backendHTTPMu      sync.Mutex
-	backendHTTPClients map[backendTrust]*http.Client
-	backendSyncMu      sync.Mutex
-	backendConfigMu    sync.RWMutex
-	backendRunMu       sync.Mutex
-	backendRunCancel   context.CancelFunc
-	backendOutage      backendOutage
-	background         periodicWorker
-	calendarWriter     periodicWorker
+	powerLogSource activity.PowerLog
+	powerLogReader periodicWorker
+	powerLogError  string
+	// storageCryptSource stands in for Windows file encryption in tests, and
+	// storageEncryptionProblem is what applying the choice at start could
+	// not do (ADR-0063).
+	storageCryptSource       fileCrypt
+	storageEncryptionProblem string
+	computerNightsMu         sync.Mutex
+	computerNights           cachedNights
+	tray                     tray.Controller
+	store                    *storage.Store
+	storeErr                 error
+	configDir                string
+	calendarHTTPClient       calendarHTTPDoer
+	backendHTTPMu            sync.Mutex
+	backendHTTPClients       map[backendTrust]*http.Client
+	backendSyncMu            sync.Mutex
+	backendConfigMu          sync.RWMutex
+	backendRunMu             sync.Mutex
+	backendRunCancel         context.CancelFunc
+	backendOutage            backendOutage
+	background               periodicWorker
+	calendarWriter           periodicWorker
 	// calendarSubscriber refreshes subscribed calendars every hour, through
 	// calendarSubscriptionClient when one is set (ADR-0062).
 	calendarSubscriber         periodicWorker
@@ -315,8 +320,9 @@ type localEstimateState struct {
 }
 
 func NewApp() *App {
-	store, err := openDesktopStore()
+	store, encryptionProblem, err := openDesktopStore()
 	app := newAppWithStore(store, err)
+	app.storageEncryptionProblem = encryptionProblem
 	if dir, dirErr := desktopDataDir(); dirErr == nil {
 		app.configDir = dir
 		if appearanceErr := app.loadAppearanceFromDisk(); appearanceErr != nil {
@@ -365,17 +371,26 @@ func (a *App) applicationContext() context.Context {
 	return context.Background()
 }
 
-func openDesktopStore() (*storage.Store, error) {
+// openDesktopStore opens the local store, first bringing the data folder in
+// line with the owner's choice to encrypt it (ADR-0063): Windows encrypts only
+// a file nothing has open. What it could not do is returned to be shown, and
+// the store opens either way.
+func openDesktopStore() (*storage.Store, string, error) {
 	dir, err := desktopDataDir()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	// The directory restriction is inherited by everything created inside it,
 	// including the write-ahead log SQLite makes on the first write.
 	if err := ensurePrivateDir(dir); err != nil {
-		return nil, err
+		return nil, "", err
 	}
-	return storage.Open(filepath.Join(dir, desktopDatabaseFile))
+	problem := ""
+	if err := applyStorageEncryption(dir, windowsFileCrypt{}); err != nil {
+		problem = err.Error()
+	}
+	store, err := storage.Open(filepath.Join(dir, desktopDatabaseFile))
+	return store, problem, err
 }
 
 func (a *App) startup(ctx context.Context) {

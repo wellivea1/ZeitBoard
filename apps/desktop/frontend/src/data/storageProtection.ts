@@ -12,7 +12,20 @@ export interface StorageProtectionFile {
   name: string;
   ownerOnly: boolean;
   inherited: boolean;
+  /** Windows encrypts it (ADR-0063), as read back from Windows. */
+  encrypted: boolean;
   note?: string;
+}
+
+/** The choice to have Windows encrypt ZeitBoard's folder, and how far it went. */
+export interface StorageEncryption {
+  supported: boolean;
+  chosen: boolean;
+  encryptedFiles: number;
+  files: number;
+  /** The files do not match the choice yet; the next start puts it right. */
+  pending: boolean;
+  problem?: string;
 }
 
 export interface StorageProtection {
@@ -20,13 +33,23 @@ export interface StorageProtection {
   headline: string;
   detail: string;
   files: StorageProtectionFile[];
+  encryption: StorageEncryption;
 }
+
+const noEncryption: StorageEncryption = {
+  supported: false,
+  chosen: false,
+  encryptedFiles: 0,
+  files: 0,
+  pending: false,
+};
 
 export const storageProtectionUnavailable: StorageProtection = {
   state: "unknown",
   headline: "Open the ZeitBoard desktop app to check local file permissions.",
   detail: "This browser preview has no local files to inspect.",
   files: [],
+  encryption: noEncryption,
 };
 
 type UnknownRecord = Record<string, unknown>;
@@ -52,10 +75,30 @@ function files(value: unknown): StorageProtectionFile[] {
       // Absent reads as not protected. An unknown permission is not a good one.
       ownerOnly: entry.ownerOnly === true,
       inherited: entry.inherited === true,
+      encrypted: entry.encrypted === true,
       ...(note ? { note } : {}),
     });
   }
   return parsed;
+}
+
+function count(value: unknown): number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+}
+
+function encryption(value: unknown): StorageEncryption {
+  if (!isRecord(value)) return noEncryption;
+  const problem = str(value.problem);
+  const files = count(value.files);
+  return {
+    supported: value.supported === true,
+    chosen: value.chosen === true,
+    // More encrypted than there are files cannot be, so it reads as none.
+    encryptedFiles: count(value.encryptedFiles) <= files ? count(value.encryptedFiles) : 0,
+    files,
+    pending: value.pending === true,
+    ...(problem ? { problem } : {}),
+  };
 }
 
 export function normalizeStorageProtection(value: unknown): StorageProtection | undefined {
@@ -67,7 +110,13 @@ export function normalizeStorageProtection(value: unknown): StorageProtection | 
   const headline = str(value.headline);
   const detail = str(value.detail);
   if (!state || !headline || !detail) return undefined;
-  return { state, headline, detail, files: files(value.files) };
+  return {
+    state,
+    headline,
+    detail,
+    files: files(value.files),
+    encryption: encryption(value.encryption),
+  };
 }
 
 export async function loadStorageProtection(
@@ -82,4 +131,16 @@ export async function loadStorageProtection(
     // fall through
   }
   return storageProtectionUnavailable;
+}
+
+/** Saves the choice to have Windows encrypt ZeitBoard's files (ADR-0063). */
+export async function setStorageEncryption(
+  encrypt: boolean,
+  root: WailsRoot = globalThis as unknown as WailsRoot,
+): Promise<StorageProtection> {
+  const method = findWailsMethod(root, ["SetStorageEncryption"]);
+  if (!method) throw new Error("Encrypting files needs the ZeitBoard desktop app.");
+  const report = normalizeStorageProtection(await method({ encrypt }));
+  if (!report) throw new Error("ZeitBoard's files could not be checked.");
+  return report;
 }

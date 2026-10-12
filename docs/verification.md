@@ -2979,3 +2979,30 @@ ADR-0062. Go tests in `core/storage/sqlite` and the desktop; component tests in 
   - With the server stopped, Refresh said "127.0.0.1 could not be reached. The copy read 5:20 AM is
     kept."
   - Removing it with REMOVE took it off the list.
+
+## The local files encrypted by Windows — 2026-10-12
+
+ADR-0063. Go tests in the desktop and `platform/efs`; component and data tests in the window.
+
+- The decision logic, with a stand-in for Windows:
+  - Without a saved choice nothing is touched, even a file already encrypted.
+  - Chosen, the folder is encrypted before its four files, and a second start does nothing.
+  - Turned off, the files are decrypted before the folder.
+  - A file in use is reported as "1 of ZeitBoard's 5 files could not be encrypted", and stays
+    pending.
+  - Where Windows cannot encrypt, the choice is refused, and a choice saved elsewhere says why it
+    was not carried out.
+  - From Settings, the folder is marked at once and the readout says the rest is pending. It says
+    "encrypted by Windows" only after every file is, and then marks the database.
+  - Opening the store with no saved choice reports nothing.
+- On Windows:
+  - Asking whether a file can be encrypted runs here and changes nothing.
+  - The round trip runs in CI (`ZEITBOARD_TEST_EFS`, desktop job only), never here, because it makes
+    a key in the account running it. A folder and a file are encrypted, a file made later in the
+    folder is encrypted, this account still reads the contents, and both are decrypted again.
+- The window:
+  - The panel says what could lose the files before "Encrypt with Windows".
+  - After choosing, it says when it happens.
+  - It names each encrypted file and says when all are encrypted.
+  - Where Windows cannot encrypt, it points to device encryption or BitLocker instead.
+  - Encryption fields default to none, and an impossible count reads as none.

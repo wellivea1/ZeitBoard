@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 
 	"non24.app/core/platform/privatefile"
+	"non24.app/desktop/platform/efs"
 )
 
 // desktopDatabaseFile is the local store. It is named here because the
@@ -32,12 +33,17 @@ type StorageProtectionDTO struct {
 	// Files lists what was inspected, so "the database is protected" can be
 	// checked rather than believed.
 	Files []StorageProtectionFileDTO `json:"files"`
+
+	// Encryption is the choice to have Windows encrypt the folder, and how
+	// far it has gone (ADR-0063).
+	Encryption StorageEncryptionDTO `json:"encryption"`
 }
 
 type StorageProtectionFileDTO struct {
 	Name      string `json:"name"`
 	OwnerOnly bool   `json:"ownerOnly"`
 	Inherited bool   `json:"inherited"`
+	Encrypted bool   `json:"encrypted"`
 	Note      string `json:"note,omitempty"`
 }
 
@@ -45,7 +51,13 @@ const storageProtectionDetail = "These files are restricted to your account, not
 	"Anyone who can read this disk from another operating system, and any program " +
 	"running as you, can still read them."
 
-// GetStorageProtection reports whether the local files really are private.
+// storageEncryptedDetail replaces it once Windows encrypts every file.
+const storageEncryptedDetail = "These files are restricted to your account and encrypted by Windows. " +
+	"Other accounts, administrators and other operating systems see only noise. " +
+	"Programs running as you can still read them."
+
+// GetStorageProtection reports whether the local files really are private, and
+// whether Windows encrypts them.
 func (a *App) GetStorageProtection() (StorageProtectionDTO, error) {
 	dir, err := desktopDataDir()
 	if err != nil {
@@ -85,6 +97,9 @@ func (a *App) GetStorageProtection() (StorageProtectionDTO, error) {
 			OwnerOnly: access.OwnerOnly,
 			Inherited: access.Inherited,
 		}
+		if status, err := a.storageCrypt().Check(candidate.path); err == nil && status == efs.Encrypted {
+			entry.Encrypted = true
+		}
 		if !access.OwnerOnly {
 			entry.Note = "another account on this computer can read it"
 			report.State = "at_risk"
@@ -97,10 +112,14 @@ func (a *App) GetStorageProtection() (StorageProtectionDTO, error) {
 		report.Files = append(report.Files, entry)
 	}
 
+	report.Encryption = storageEncryptionStatus(dir, a.storageCrypt(), a.storageEncryptionProblem)
 	if checked == 0 {
 		report.State = "unknown"
 		report.Headline = "There is nothing stored on this computer yet."
 		return report, nil
+	}
+	if report.Encryption.Files > 0 && report.Encryption.EncryptedFiles == report.Encryption.Files {
+		report.Detail = storageEncryptedDetail
 	}
 	if report.State == "at_risk" {
 		report.Headline = "Some local files are readable by other accounts on this computer."
