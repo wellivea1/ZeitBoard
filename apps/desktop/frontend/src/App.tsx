@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, type ReactNode } from "react";
-import { AppShell, useScreenNavigation } from "./components/AppShell";
+import { AppShell } from "./components/AppShell";
+import { useScreenNavigation } from "./navigation";
 import { ApprovalsProvider } from "./state/approvals";
 import { VisitorRequestsProvider } from "./state/visitorRequests";
 import { ApprovalQueueProvider } from "./state/approvalQueue";
