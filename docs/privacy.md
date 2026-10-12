@@ -93,6 +93,17 @@ contain exact transition timestamps. Poll-gap suspend/resume records are marked
 inferred, with unknown confidence, because a paused process or clock adjustment
 can also explain the gap. See [ADR-0042](decisions/0042-desktop-consent-and-background-sync.md).
 
+Google activity is read only from an export the owner chooses: a Takeout .zip
+or a My Activity .json file (ADR-0059). ZeitBoard never signs in to Google. As
+the file is read, each entry gives up only the minute it happened. What was
+searched, watched or visited, the product, links and places are passed over and
+never stored, logged or shown. Beside the minutes, ZeitBoard keeps how many
+entries each import read and when. The minutes stay in the local database. They
+are in no sync payload, share link, snapshot or agent projection, and one action
+in Data Sources erases them and compacts the database. Gaps in them appear only
+in Rhythm › Sources, as suggested nights beside the recorded ones; they do not
+change forecasts or planning.
+
 Enrolled desktop sync runs from the app context at startup and about every minute,
 including while the window is hidden. It uses the existing sleep/task payloads.
 Disable cancels in-flight synchronization; quit stops the background worker.

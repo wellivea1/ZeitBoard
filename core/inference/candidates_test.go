@@ -164,3 +164,45 @@ func TestSuspendCountsAsQuiet(t *testing.T) {
 		t.Fatalf("intervals = %+v, want one seven-hour quiet span", intervals)
 	}
 }
+
+// Moments of account activity leave quiet stretches between them; only one
+// long enough to hold a principal sleep becomes a quiet interval, and Build
+// treats it as it treats an unused computer (ADR-0059).
+func TestAGapInAccountActivitySuggestsANight(t *testing.T) {
+	base := time.Date(2026, 3, 1, 22, 0, 0, 0, time.UTC)
+	moments := []time.Time{
+		base.Add(30 * time.Minute), // after a short gap, nothing
+		base,
+		base.Add(8 * time.Hour), // the night: 30 minutes past 22:00 to 06:00
+		base.Add(8*time.Hour + 2*time.Hour),
+		base.Add(30*time.Hour + 20*time.Hour), // a 20-hour gap is absence, not a night
+	}
+	quiet := FromMoments(SourceAccountActivity, moments)
+	if len(quiet) != 2 {
+		t.Fatalf("quiet intervals %+v, want the night and the long gap", quiet)
+	}
+	if !quiet[0].StartAt.Equal(base.Add(30*time.Minute)) || !quiet[0].EndAt.Equal(base.Add(8*time.Hour)) {
+		t.Errorf("the night reads %s to %s", quiet[0].StartAt, quiet[0].EndAt)
+	}
+
+	recorded := Interval{
+		Source: SourceUserConfirmed, Asleep: true,
+		StartAt: base.Add(time.Hour), EndAt: base.Add(7 * time.Hour),
+	}
+	candidates, refusal := Build(append(quiet, recorded), base.Add(48*time.Hour))
+	if refusal != nil {
+		t.Fatal(refusal)
+	}
+	// The recorded night is the stronger claim and the gap corroborates it;
+	// the twenty-hour gap is too long to be a night.
+	if len(candidates) != 1 || len(candidates[0].Supporting) != 2 ||
+		candidates[0].Supporting[1] != SourceAccountActivity {
+		t.Fatalf("candidates %+v", candidates)
+	}
+
+	alone, refusal := Build(quiet[:1], base.Add(48*time.Hour))
+	if refusal != nil || len(alone) != 1 || alone[0].Supporting[0] != SourceAccountActivity ||
+		!strings.Contains(alone[0].Describe(), "a gap in your account's activity") {
+		t.Fatalf("a gap alone reads %+v, %v", alone, refusal)
+	}
+}

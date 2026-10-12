@@ -42,6 +42,10 @@ export const noticeCatalog = {
     title: "How importing works",
     where: "Data Sources",
   },
+  "import.activity": {
+    title: "Exporting from Google Takeout",
+    where: "Data Sources",
+  },
   "sharing.how": {
     title: "How a share link works",
     where: "Sharing",

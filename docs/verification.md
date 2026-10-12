@@ -2806,3 +2806,62 @@ ADR-0058, medication plan slice M-F.
     the page shows, by its owner's choice, when they logged a dose as skipped, and is not medical
     advice.
 
+## Years of rhythm from a Google export — 2026-10-12
+
+ADR-0059. Go tests in `core/takeout`, `core/inference`, `core/storage/sqlite` and the desktop;
+component and data tests in the window; then the running desktop with a disposable profile and a
+synthetic export.
+
+- The reader:
+  - A Takeout .zip gives up each minute with activity, across products and folder names in any
+    language, once per minute. Browser history beside it is skipped.
+  - One My Activity file is read on its own.
+  - Every title, link, place and channel in the test files is a canary, and none comes back.
+  - An entry without a time, dated before 2000, or dated more than a day after reading counts as
+    unusable.
+  - An export made as web pages is refused with how to export JSON, as a .zip or as one page.
+  - A file that is not My Activity is refused, and a list cut short is an error.
+  - An entry past 1 MiB is not held whole, and the list reads as damaged.
+  - A fuzz test feeds arbitrary bytes to the reader. About two million inputs gave no panic and
+    only ordered, unique minutes.
+- Suggested nights: a gap of three hours or more between moments of activity is a quiet interval
+  with its own source kind, and becomes a candidate under ADR-0031's rules.
+- The store:
+  - A second export overlapping the first adds only the minutes not kept, and each import records
+    what it read.
+  - Many minutes go in across statements in one transaction.
+  - Unsorted, repeated, future or unattributed minutes are refused, and keep nothing.
+  - Removal leaves no minute, no import and no free page.
+  - The upgrade test still finds an earlier database upgraded to the current schema.
+- The desktop, with a synthetic export whose searches stop half an hour before each night and
+  resume twenty minutes after it:
+  - The preview keeps nothing, and the search text never reaches it.
+  - Keeping finds 12 nights. The 6 recorded nights inside the export's span are matched, and "began
+    30 minutes before your recorded sleep and ended 20 minutes after your recorded wake".
+  - A spent preview cannot be kept again.
+  - Keeping leaves the planning fingerprint unchanged.
+  - Removal needs REMOVE and leaves nothing.
+  - An HTML export says how to export JSON, and a closed dialog is no choice.
+  - Nights are cut at midnight where the reader is, through the November clock change.
+- The window:
+  - Data Sources says what is read before a file is chosen.
+  - The preview's counts and sentence come before "Keep these times".
+  - The kept activity links to its nights, and removal goes through the REMOVE confirmation.
+  - Outside the desktop app, the button is disabled and says why.
+  - Rhythm › Sources shows nothing until activity is imported. Then it shows the figure, the
+    agreement and the note that suggestions go nowhere else.
+  - The figure's double plot, its date labels over weeks, months and years, and its span switch
+    are tested as arithmetic.
+- In the running desktop, with a disposable profile and a synthetic export of 40,169 entries over
+  20 months:
+  - The profile already held the synthetic recorded nights from earlier checks.
+  - The Data Sources panel matched the sleep import above it.
+  - After keeping, it read "38,799 minutes with activity, from Feb 10, 2025 to Oct 10, 2026".
+  - Rhythm › Sources opened on the last twelve weeks as an actogram. The suggested nights slanted
+    later each day, and from August 23 the recorded nights sat inside them.
+  - "All 20 months" drew every day at 960px, and the drift read as slanting bands.
+  - The agreement read "56 of 56 nights you recorded while this activity was kept had a suggestion
+    beside them", with medians of 38 minutes before and 28 after.
+  - Both read in the light and the dark theme.
+  - Removing with REMOVE emptied it.
+  - The export was put into the profile through the store, not through the native dialog.

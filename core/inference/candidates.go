@@ -47,7 +47,18 @@ const (
 	SourceDesktopActivity SourceKind = "desktop_activity"
 	SourceWearableSleep   SourceKind = "wearable_sleep"
 	SourceUserConfirmed   SourceKind = "user_confirmed"
+
+	// SourceAccountActivity is activity on an online account, read from an
+	// export the person brought (ADR-0059): searches, videos and the like,
+	// known only by when they happened.
+	SourceAccountActivity SourceKind = "account_activity"
 )
+
+// quietSource reports whether a source says nothing about sleep directly, only
+// when the person was not doing something, so its intervals are quiet ones.
+func quietSource(source SourceKind) bool {
+	return source == SourceDesktopActivity || source == SourceAccountActivity
+}
 
 // Interval is a half-open span of evidence from one source.
 type Interval struct {
@@ -137,6 +148,23 @@ func FromActivity(transitions []activity.Transition) []Interval {
 	return intervals
 }
 
+// FromMoments turns moments of activity, each a minute in which the person did
+// something, into quiet intervals: the stretches between consecutive moments
+// long enough to hold a principal sleep. Like FromActivity it makes no claim
+// about sleep; Build decides which quiet intervals are plausible.
+func FromMoments(source SourceKind, moments []time.Time) []Interval {
+	sorted := append([]time.Time(nil), moments...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].Before(sorted[j]) })
+	var intervals []Interval
+	for i := 1; i < len(sorted); i++ {
+		if sorted[i].Sub(sorted[i-1]) < MinimumDuration {
+			continue
+		}
+		intervals = append(intervals, Interval{Source: source, StartAt: sorted[i-1].UTC(), EndAt: sorted[i].UTC()})
+	}
+	return intervals
+}
+
 // Build produces candidates from the supplied evidence.
 //
 // A quiet desktop interval of plausible length becomes a candidate. A wearable
@@ -158,7 +186,7 @@ func Build(intervals []Interval, now time.Time) ([]Candidate, *Refusal) {
 			asserted = append(asserted, interval)
 			continue
 		}
-		if interval.Source == SourceDesktopActivity {
+		if quietSource(interval.Source) {
 			quiet = append(quiet, interval)
 		}
 	}
@@ -201,12 +229,12 @@ func Build(intervals []Interval, now time.Time) ([]Candidate, *Refusal) {
 			StartAt: span.StartAt.UTC(),
 			EndAt:   span.EndAt.UTC(),
 			// Inactivity brackets sleep rather than marking it: someone stops
-			// using the machine before falling asleep and uses it again some
-			// time after waking. The uncertainty says so rather than implying
-			// the boundaries are the sleep itself.
+			// using the machine, or their phone, before falling asleep and
+			// uses it again some time after waking. The uncertainty says so
+			// rather than implying the boundaries are the sleep itself.
 			StartUncertainty: 45 * time.Minute,
 			EndUncertainty:   30 * time.Minute,
-			Supporting:       []SourceKind{SourceDesktopActivity},
+			Supporting:       []SourceKind{span.Source},
 			AlgorithmVersion: AlgorithmVersion,
 		}
 		for _, sleep := range asserted {
@@ -292,6 +320,8 @@ func joinSources(sources []SourceKind) string {
 		switch source {
 		case SourceDesktopActivity:
 			names = append(names, "this computer being unused")
+		case SourceAccountActivity:
+			names = append(names, "a gap in your account's activity")
 		case SourceWearableSleep:
 			names = append(names, "your wearable")
 		case SourceUserConfirmed:

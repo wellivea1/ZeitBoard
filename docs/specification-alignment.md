@@ -98,8 +98,8 @@ acceptance clause or of its real-device qualification.
 
 - Production use of multi-source sleep/wake inference and calibrated boundary-error metrics.
   ADR-0031 delivered shadow inference and a negative promotion decision; inferred episodes must
-  remain shadow-only until a new candidate passes the measured gate. Takeout/My Activity remains an
-  extension.
+  remain shadow-only until a new candidate passes the measured gate. The Takeout/My Activity
+  import (ADR-0059) adds a source whose suggestions stay in that shadow.
 - Source reliability learning, conflict scoring, and inferred forced-schedule qualification.
   Explicit missingness records exist for Health Connect (ADR-0054). They distinguish an unavailable
   source, a missing permission, a failed read, no record in a read window, and silence. The

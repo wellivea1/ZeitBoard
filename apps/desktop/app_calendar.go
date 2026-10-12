@@ -23,9 +23,8 @@ import (
 )
 
 const (
-	calendarRemoveConfirmation = "REMOVE"
-	maxCalDAVResponseBytes     = 16 << 20
-	maxCalendarPreviewEvents   = 50
+	maxCalDAVResponseBytes   = 16 << 20
+	maxCalendarPreviewEvents = 50
 )
 
 type calendarHTTPDoer interface {
@@ -249,7 +248,7 @@ func (a *App) calendarImportResult(ctx context.Context, set calendarcore.EventSe
 }
 
 func (a *App) RemoveCalendarSource(input RemoveCalendarSourceInput) error {
-	if strings.TrimSpace(input.Confirmation) != calendarRemoveConfirmation {
+	if strings.TrimSpace(input.Confirmation) != removeConfirm {
 		return errors.New("type REMOVE to confirm calendar source erasure")
 	}
 	store, err := a.requireStore()

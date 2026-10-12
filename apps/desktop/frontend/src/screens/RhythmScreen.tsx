@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { ActivityNightsPanel } from "../components/ActivityNightsPanel";
 import { Notice } from "../components/Notice";
 import { SleepOverlapList } from "../components/SleepOverlapList";
 import { Icon } from "../components/Icon";
@@ -123,6 +124,8 @@ function SourcesPanel() {
         )}
         <SleepOverlapList overlaps={data.overlaps} count={data.overlapCount} />
       </section>
+
+      <ActivityNightsPanel />
     </>
   );
 }
