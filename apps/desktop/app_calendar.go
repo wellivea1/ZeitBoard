@@ -197,7 +197,7 @@ func (a *App) PreviewCalendarFile(input CalendarFileInput) (CalendarImportDTO, e
 	if err != nil {
 		return CalendarImportDTO{}, err
 	}
-	return a.calendarImportResult(context.Background(), set, nil)
+	return a.calendarImportResult(a.applicationContext(), set, nil)
 }
 
 func (a *App) ImportCalendarFile(input CalendarFileInput) (CalendarImportDTO, error) {
@@ -205,23 +205,25 @@ func (a *App) ImportCalendarFile(input CalendarFileInput) (CalendarImportDTO, er
 	if err != nil {
 		return CalendarImportDTO{}, err
 	}
-	return a.calendarImportResult(context.Background(), set, keepImported(""))
+	return a.calendarImportResult(a.applicationContext(), set, keepImported(""))
 }
 
 func (a *App) PreviewCalDAVCalendar(input CalDAVInput) (CalendarImportDTO, error) {
-	set, _, err := a.fetchCalDAVCalendar(context.Background(), input, a.currentTime().UTC())
+	ctx := a.applicationContext()
+	set, _, err := a.fetchCalDAVCalendar(ctx, input, a.currentTime().UTC())
 	if err != nil {
 		return CalendarImportDTO{}, err
 	}
-	return a.calendarImportResult(context.Background(), set, nil)
+	return a.calendarImportResult(ctx, set, nil)
 }
 
 func (a *App) ImportCalDAVCalendar(input CalDAVInput) (CalendarImportDTO, error) {
-	set, endpoint, err := a.fetchCalDAVCalendar(context.Background(), input, a.currentTime().UTC())
+	ctx := a.applicationContext()
+	set, endpoint, err := a.fetchCalDAVCalendar(ctx, input, a.currentTime().UTC())
 	if err != nil {
 		return CalendarImportDTO{}, err
 	}
-	return a.calendarImportResult(context.Background(), set, keepImported(endpoint))
+	return a.calendarImportResult(ctx, set, keepImported(endpoint))
 }
 
 // calendarKeep keeps a fetched calendar in the store.
@@ -288,7 +290,7 @@ func (a *App) RemoveCalendarSource(input RemoveCalendarSourceInput) error {
 	if err != nil {
 		return err
 	}
-	return store.RemoveImportedCalendar(context.Background(), strings.TrimSpace(input.SourceID))
+	return store.RemoveImportedCalendar(a.applicationContext(), strings.TrimSpace(input.SourceID))
 }
 
 func (a *App) ExportOwnedCalendar() (CalendarExportDTO, error) {
@@ -296,7 +298,7 @@ func (a *App) ExportOwnedCalendar() (CalendarExportDTO, error) {
 	if err != nil {
 		return CalendarExportDTO{}, err
 	}
-	events, err := store.OwnedCalendarEvents(context.Background())
+	events, err := store.OwnedCalendarEvents(a.applicationContext())
 	if err != nil {
 		return CalendarExportDTO{}, err
 	}

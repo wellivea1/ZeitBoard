@@ -171,7 +171,7 @@ func (a *App) GetAgentProposals() (AgentProposalsDTO, error) {
 	if err != nil {
 		return AgentProposalsDTO{}, err
 	}
-	return a.agentProposals(context.Background(), store, a.currentTime())
+	return a.agentProposals(a.applicationContext(), store, a.currentTime())
 }
 
 // DecideAgentProposal approves a proposal, which makes the owner's own record
@@ -181,7 +181,7 @@ func (a *App) DecideAgentProposal(input AgentProposalDecisionInput) (AgentPropos
 	if err != nil {
 		return AgentProposalsDTO{}, err
 	}
-	ctx := context.Background()
+	ctx := a.applicationContext()
 	now := a.currentTime().UTC().Truncate(time.Second)
 	proposalID := strings.TrimSpace(input.ProposalID)
 	switch input.Decision {

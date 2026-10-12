@@ -215,7 +215,7 @@ func (a *App) AddMedication(input MedicationInput) (MedicationsDTO, error) {
 		Revision:      1,
 		UpdatedAt:     now,
 	}
-	if err := store.CreateMedication(context.Background(), record); err != nil {
+	if err := store.CreateMedication(a.applicationContext(), record); err != nil {
 		return MedicationsDTO{}, err
 	}
 	return a.medicationsAt(now)
@@ -226,7 +226,7 @@ func (a *App) UpdateMedication(input MedicationUpdateInput) (MedicationsDTO, err
 	if err != nil {
 		return MedicationsDTO{}, err
 	}
-	ctx := context.Background()
+	ctx := a.applicationContext()
 	current, err := store.MedicationByID(ctx, strings.TrimSpace(input.MedicationID))
 	if err != nil {
 		return MedicationsDTO{}, err
@@ -261,7 +261,7 @@ func (a *App) UpdateMedicationSchedule(input MedicationScheduleInput) (Medicatio
 	if err != nil {
 		return MedicationsDTO{}, err
 	}
-	ctx := context.Background()
+	ctx := a.applicationContext()
 	current, err := store.MedicationByID(ctx, strings.TrimSpace(input.MedicationID))
 	if err != nil {
 		return MedicationsDTO{}, err
@@ -345,7 +345,7 @@ func (a *App) LogMedicationEvent(input MedicationEventInput) (MedicationsDTO, er
 			RecordedAt:        now,
 		},
 	}
-	if err := store.AppendMedicationEvent(context.Background(), record); err != nil {
+	if err := store.AppendMedicationEvent(a.applicationContext(), record); err != nil {
 		return MedicationsDTO{}, err
 	}
 	return a.medicationsAt(now)
@@ -356,7 +356,7 @@ func (a *App) CorrectMedicationEvent(input MedicationEventCorrectionInput) (Medi
 	if err != nil {
 		return MedicationsDTO{}, err
 	}
-	ctx := context.Background()
+	ctx := a.applicationContext()
 	now := a.currentTime().UTC().Truncate(time.Second)
 	doseAt, zoneID, status, note, err := medicationEventValues(input.DoseLocal, input.ZoneID, input.Status, input.Note, now)
 	if err != nil {
@@ -430,7 +430,7 @@ func (a *App) DeleteMedication(input MedicationDeleteInput) (MedicationsDTO, err
 	if err != nil {
 		return MedicationsDTO{}, err
 	}
-	if err := store.DeleteMedication(context.Background(), strings.TrimSpace(input.MedicationID)); err != nil {
+	if err := store.DeleteMedication(a.applicationContext(), strings.TrimSpace(input.MedicationID)); err != nil {
 		return MedicationsDTO{}, err
 	}
 	return a.GetMedications()
@@ -444,7 +444,7 @@ func (a *App) DeleteMedicationEvent(input MedicationEventDeleteInput) (Medicatio
 	if err != nil {
 		return MedicationsDTO{}, err
 	}
-	if err := store.DeleteMedicationEvent(context.Background(), strings.TrimSpace(input.EventID)); err != nil {
+	if err := store.DeleteMedicationEvent(a.applicationContext(), strings.TrimSpace(input.EventID)); err != nil {
 		return MedicationsDTO{}, err
 	}
 	return a.GetMedications()
@@ -456,7 +456,7 @@ func (a *App) ExportMedicationData() (MedicationExportDTO, error) {
 		return MedicationExportDTO{}, err
 	}
 	now := a.currentTime().UTC().Truncate(time.Second)
-	exported, err := store.ExportMedicationData(context.Background(), now)
+	exported, err := store.ExportMedicationData(a.applicationContext(), now)
 	if err != nil {
 		return MedicationExportDTO{}, err
 	}
