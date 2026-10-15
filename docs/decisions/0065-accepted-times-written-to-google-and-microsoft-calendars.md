@@ -34,23 +34,33 @@ events that the owner has since changed. Each provider offers what those rules n
    - Microsoft's is `Calendars.ReadWrite`, which has no narrower form.
    - A permission left unticked, or a sign-in to a different account, turns nothing on and says
      why.
-   - Signing in again later keeps what was allowed: Google with `include_granted_scopes`, and
-     Microsoft because consent is kept per app.
+   - What a sign-in states is what is kept. Signing in again asks for what is in use: adding
+     events only while accepted times are written to the account. Google's
+     `include_granted_scopes` keeps an earlier grant on its side.
+   - A sign-in from the form that would take adding events from the account written to is
+     refused, and its kept sign-in stays.
 3. **Only a calendar ZeitBoard may add to.** In Google, a calendar the owner owns. In Microsoft,
    one the owner can edit. A calendar shared with them is refused, by name.
 4. **ZeitBoard's own events only, recognisable as such.**
-   - In Google, an accepted time is written under an ID derived from ZeitBoard's own (base32hex,
-     as Google requires) and carries a private mark naming it.
-   - In Microsoft, it carries ZeitBoard's UID as its transaction ID.
+   - Each acceptance of a time is written as an event of its own, named by the time and the moment
+     it was accepted. Retrying a write keeps that name; accepting the time again after undoing it
+     makes a new one.
+   - In Google, the event's ID is derived from that name (base32hex, as Google requires), and it
+     carries a private mark naming the time.
+   - In Microsoft, it carries ZeitBoard's UID for the time, with the moment, as its transaction ID.
+   - Events are written without reminders, as CalDAV writes are.
    - A removal checks the event carries this time's mark or UID, else leaves it.
    - Reading the calendar back maps both to ZeitBoard's UID, so an import or refresh recognises
      them, as ADR-0053 does for CalDAV.
 5. **Preconditions instead of trust.**
-   - A Google create that finds its ID taken keeps the event only if it carries this time's
-     mark; anything else is a conflict for the owner.
-   - A Microsoft create first looks for an event with its transaction ID over the time it takes,
-     and keeps one it finds. Graph drops a repeated transaction ID too.
-   - A Google removal sends `If-Match` with the version ZeitBoard was given.
+   - A Google create that finds its ID taken keeps the event only if it carries this time's mark;
+     anything else is a conflict for the owner. Google keeps a removed event under its ID, so one
+     ZeitBoard's own that was removed is put back, as a CalDAV create puts back an event removed
+     there.
+   - Graph drops a create that repeats a transaction ID. A Microsoft retry also looks first, over
+     every page of the time's events, for what an earlier attempt wrote.
+   - A Google removal sends `If-Match` with the version ZeitBoard was given. "Remove it anyway"
+     sends none, so it first checks the event still carries this time's mark.
    - A Microsoft removal compares the change key first.
    - A changed event waits for the owner, as in ADR-0053. IDs are asked for as immutable, so an
      event the owner moves between calendars is still found.
@@ -74,3 +84,10 @@ events that the owner has since changed. Each provider offers what those rules n
 - The account sees the accepted times' task names, as any calendar host does (ADR-0053's
   limitation 3).
 - One calendar at a time still, whether CalDAV or an account's.
+- Residual: an acceptance's moment is kept to the second. If a time is undone and accepted again
+  within the same second, Microsoft sees the same transaction ID, and Graph could take the second
+  write for the removed first. Google's is put back instead.
+- Update, 2026-10-15: a code review of this change brought in the per-acceptance names, putting a
+  removed Google event back, writing without reminders, looking first only on a retry and over
+  every page, and what a sign-in again asks for (completion plan, "Writing to accounts after
+  review").

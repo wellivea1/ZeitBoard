@@ -104,3 +104,18 @@ func TestAStoppedSignInSaysSo(t *testing.T) {
 		}
 	}
 }
+
+// A host name keeps its spelling at the start of a sentence; anything else
+// starts with a capital, even a first word with a dot in it.
+func TestAProviderErrorReadsAsASentence(t *testing.T) {
+	for raw, want := range map[string]string{
+		"oauth2.googleapis.com could not be reached": "oauth2.googleapis.com could not be reached.",
+		"127.0.0.1 answered HTTP 503":                "127.0.0.1 answered HTTP 503.",
+		"the provider refused: invalid_client":       "The provider refused: invalid_client.",
+		"e.g. this, said first":                      "E.g. this, said first.",
+	} {
+		if got := asSentence(errors.New(raw)).Error(); got != want {
+			t.Errorf("%q read as %q", raw, got)
+		}
+	}
+}

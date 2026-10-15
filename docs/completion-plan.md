@@ -1519,6 +1519,38 @@ signing in again refuses a sign-in to another account. The other eight are fixed
   - After a failure, the accounts are read again, so an ended sign-in offers "Sign in again".
   - Signing in again waits on that account's row, not in a blank form for a new account.
 
+### Writing to accounts after review — 2026-10-15
+
+A code review of ADR-0065's change (PR #83) at high effort raised ten findings. One was already
+fixed in the first review's round: a failed write drops an access token the provider refused.
+The others are fixed, each with a test:
+
+- **A time accepted again is written again.** An accepted time's event ID comes from its
+  proposal. After an undo, accepting it again reused the ID of the removed event, which Google
+  keeps as cancelled. The new acceptance was taken for written while the calendar showed nothing.
+  Each acceptance is now written under a name of its own, by the time and the moment it was
+  accepted, and ZeitBoard's own removed Google event is put back if met. On Microsoft the
+  acceptance's moment also keeps a new transaction from being taken for the removed one's.
+- **Microsoft's owner edits are told from reminders.** Graph turned reminders on by default, and
+  dismissing one changed the change key, so undoing looked like a conflict. Events are now
+  written without reminders on both providers, as CalDAV writes are.
+- **Looking before writing.** A Microsoft create looked for an earlier attempt every time, on the
+  first page only. It now looks only on a retry, over every page, and Graph's own transaction ID
+  covers a first attempt.
+- **What a sign-in again asks for.** Microsoft scopes were merged across sign-ins, even from
+  another registration, and could claim writing never granted. What a sign-in states is now what
+  is kept. Signing in again asks to add events only while the account is written to. A sign-in
+  that would take that away from the account written to is refused.
+- **Smaller fixes.**
+  - Quitting while a pass refreshes the account's access leaves the due writes untouched, not
+    failed.
+  - An account that already allows writing turns it on without a browser prompt or a Cancel
+    that does nothing.
+  - A host name keeps its spelling at the start of an error only when it is one: "e.g." is not.
+- **Left as a residual.** An acceptance's moment is kept to the second. A time undone and
+  accepted again within one second has the same Microsoft transaction ID, and Graph could take
+  it for the removed event. ADR-0065 records this.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and

@@ -320,6 +320,67 @@ describe("CalendarSourcesPanel fetched calendars", () => {
   // A calendar from an account takes accepted times with the account's own
   // sign-in: nothing is typed, the browser asks once, and stopping leaves the
   // account signed in for reading (ADR-0065).
+  // An account that already lets ZeitBoard add events asks nothing in the
+  // browser, so there is no sign-in to cancel while writing is turned on.
+  it("turns writing on without the browser when the account already allows it", async () => {
+    let finish: (status: unknown) => void = () => undefined;
+    (globalThis as { go?: unknown }).go = {
+      main: {
+        App: {
+          GetCalendarWriteBack: async () => ({
+            on: false,
+            summary: "Accepted times stay in ZeitBoard.",
+            problems: [],
+          }),
+          EnableAccountWriteBack: vi.fn(
+            () =>
+              new Promise((resolve) => {
+                finish = resolve;
+              }),
+          ),
+        },
+      },
+    };
+    const owner: CalendarSource = {
+      sourceId: "calendar_source_account_owner",
+      label: "Owner",
+      kind: "ics",
+      readOnly: true,
+      visibleEvents: 0,
+      coverageLabel: "Oct 12, 2025 to Oct 12, 2028",
+      coverageStart: "2025-10-12T00:00:00Z",
+      coverageEnd: "2028-10-12T00:00:00Z",
+      account: {
+        provider: "microsoft",
+        accountLabel: "owner@example.test",
+        refreshedLabel: "09:42",
+        writes: true,
+      },
+    };
+    render(<CalendarSourcesPanel sources={[owner]} available onChanged={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Write accepted times to Owner" }));
+    expect(
+      screen.getByText("Microsoft already lets ZeitBoard add events to your calendars."),
+    ).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Allow writing" }));
+    expect(
+      await screen.findByText("Checking that ZeitBoard can add events to Owner…"),
+    ).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    finish({
+      on: true,
+      sourceId: owner.sourceId,
+      label: "Owner",
+      provider: "microsoft",
+      summary: "The next time you accept is added to Owner.",
+      problems: [],
+    });
+    expect(
+      await screen.findByRole("region", { name: "Accepted times are written here" }),
+    ).toBeVisible();
+  });
+
   it("writes accepted times to a calendar from an account once the account allows it", async () => {
     const owner: CalendarSource = {
       sourceId: "calendar_source_account_owner",
