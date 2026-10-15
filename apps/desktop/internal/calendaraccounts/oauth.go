@@ -18,6 +18,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 )
@@ -80,15 +81,28 @@ func scope(provider Provider, write bool) string {
 	}
 }
 
-// Writes reports whether a granted scope, as a provider states it, lets
-// ZeitBoard add events. Google lets the owner grant part of what is asked.
+// Reads and Writes report whether a granted scope, as a provider states it,
+// lets ZeitBoard read calendars, or add events. Google lets the owner grant
+// part of what is asked.
+func Reads(provider Provider, granted string) bool {
+	if provider == Microsoft {
+		return grants(granted, "calendars.read", "calendars.readwrite")
+	}
+	return grants(granted, "calendar.readonly", "calendar")
+}
+
 func Writes(provider Provider, granted string) bool {
+	if provider == Microsoft {
+		return grants(granted, "calendars.readwrite")
+	}
+	return grants(granted, "calendar.events.owned", "calendar.events", "calendar")
+}
+
+// grants reports whether a granted scope holds one of names, compared by
+// the part after its last slash, in any case.
+func grants(granted string, names ...string) bool {
 	for _, each := range strings.Fields(granted) {
-		name := strings.ToLower(each[strings.LastIndex(each, "/")+1:])
-		switch {
-		case provider == Microsoft && name == "calendars.readwrite":
-			return true
-		case provider == Google && (name == "calendar.events.owned" || name == "calendar.events" || name == "calendar"):
+		if slices.Contains(names, strings.ToLower(each[strings.LastIndex(each, "/")+1:])) {
 			return true
 		}
 	}
@@ -308,6 +322,11 @@ func (c Client) send(request *http.Request, value any) (int, error) {
 	}
 	response, err := client.Do(request)
 	if err != nil {
+		// A sign-in cancelled or out of time says so, not that the
+		// provider could not be reached.
+		if stopped := request.Context().Err(); stopped != nil {
+			return 0, stopped
+		}
 		return 0, fmt.Errorf("%s could not be reached", request.URL.Hostname())
 	}
 	defer response.Body.Close()

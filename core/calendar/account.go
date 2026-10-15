@@ -9,7 +9,10 @@ import (
 
 // AccountEvent is one event as a calendar account's API states it (ADR-0064),
 // before it is kept. Recurring events arrive already expanded, one per
-// occurrence, each with its own provider id.
+// occurrence, each with its own provider id. An all-day event is a span of
+// dates rather than of instants: its StartAt and EndAt carry its first day
+// and the day after its last at midnight UTC, and it is kept in the zone the
+// calendar is kept in, as a file's all-day dates are.
 type AccountEvent struct {
 	ID       string
 	Title    string
@@ -30,6 +33,10 @@ func AccountEventSet(options ParseOptions, events []AccountEvent) (EventSet, err
 	if err := options.validate(); err != nil {
 		return EventSet{}, err
 	}
+	location, calendarZone, err := loadLocation(options.DefaultZoneID)
+	if err != nil {
+		return EventSet{}, err
+	}
 	kept := make([]Event, 0, len(events))
 	seen := make(map[string]bool, len(events))
 	for index, item := range events {
@@ -40,27 +47,33 @@ func AccountEventSet(options ParseOptions, events []AccountEvent) (EventSet, err
 			continue
 		}
 		seen[item.ID] = true
-		if !intervalIntersects(item.StartAt, item.EndAt, options.CoverageStart, options.CoverageEnd) {
+		start, end, zone := item.StartAt, item.EndAt, item.ZoneID
+		if item.AllDay {
+			if start, end, err = civilDays(location, item.StartAt, item.EndAt); err != nil {
+				return EventSet{}, fmt.Errorf("account event %d: %w", index, err)
+			}
+			zone = calendarZone
+		}
+		if zone == "" {
+			zone = options.DefaultZoneID
+		}
+		if !intervalIntersects(start, end, options.CoverageStart, options.CoverageEnd) {
 			continue
 		}
 		title := strings.TrimSpace(item.Title)
 		if title == "" {
 			title = "Busy"
 		}
-		zone := item.ZoneID
-		if zone == "" {
-			zone = options.DefaultZoneID
-		}
 		event := Event{
 			EventID:        deterministicEventID(options.SourceID, item.ID, item.StartAt),
 			SourceID:       options.SourceID,
 			SourceRecordID: truncateRunes(item.ID, maxSourceRecordIDRunes),
 			Title:          truncateRunes(title, maxTitleRunes),
-			StartAt:        item.StartAt.UTC(),
-			EndAt:          item.EndAt.UTC(),
+			StartAt:        start.UTC(),
+			EndAt:          end.UTC(),
 			ZoneID:         zone,
 			AllDay:         item.AllDay,
-			Busy:           item.Busy && item.StartAt.Before(item.EndAt),
+			Busy:           item.Busy && start.Before(end),
 			Ownership:      OwnershipImported,
 			CreatedAt:      options.ImportedAt.UTC(),
 			Location:       truncateRunes(strings.TrimSpace(item.Location), maxLocationRunes),
@@ -93,6 +106,24 @@ func AccountEventSet(options ParseOptions, events []AccountEvent) (EventSet, err
 		}},
 		Events: kept,
 	}, nil
+}
+
+// civilDays places an all-day span, whose dates come at midnight UTC, at
+// midnight in the calendar's zone.
+func civilDays(location *time.Location, start, end time.Time) (time.Time, time.Time, error) {
+	place := func(at time.Time) (time.Time, error) {
+		year, month, day := at.UTC().Date()
+		return resolveCivil(location, year, month, day, 0, 0, 0)
+	}
+	placedStart, err := place(start)
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	placedEnd, err := place(end)
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	return placedStart, placedEnd, nil
 }
 
 // truncateRunes shortens text that would otherwise fail a bound, rather than

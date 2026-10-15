@@ -62,6 +62,25 @@ func TestAccountEventsAreKeptLikeAFilesEvents(t *testing.T) {
 	}
 }
 
+// An all-day event is a day in the calendar's own zone, as a file's all-day
+// dates are, however the provider stated it.
+func TestAnAllDayAccountEventIsADayInTheCalendarsZone(t *testing.T) {
+	day := time.Date(2026, 10, 14, 0, 0, 0, 0, time.UTC)
+	set, err := AccountEventSet(accountOptions(), []AccountEvent{
+		{ID: "holiday", Title: "Holiday", StartAt: day, EndAt: day.AddDate(0, 0, 1), AllDay: true, Busy: true, ZoneID: "UTC"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	event := set.Events[0]
+	newYork, _ := time.LoadLocation("America/New_York")
+	if !event.AllDay || event.ZoneID != "America/New_York" ||
+		!event.StartAt.Equal(time.Date(2026, 10, 14, 0, 0, 0, 0, newYork)) ||
+		!event.EndAt.Equal(time.Date(2026, 10, 15, 0, 0, 0, 0, newYork)) {
+		t.Fatalf("all-day event %+v", event)
+	}
+}
+
 func TestAnAccountEventWithoutAnIDIsRefused(t *testing.T) {
 	at := time.Date(2026, 10, 14, 15, 0, 0, 0, time.UTC)
 	if _, err := AccountEventSet(accountOptions(), []AccountEvent{{Title: "No id", StartAt: at, EndAt: at.Add(time.Hour)}}); err == nil {

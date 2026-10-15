@@ -107,7 +107,8 @@ func (a *App) refreshFetchedCalendars(ctx context.Context) {
 	}
 	subscribed := a.refreshCalendarSubscriptions(ctx, store)
 	fromAccounts := a.refreshAccountCalendars(ctx, store)
-	if subscribed || fromAccounts {
+	// A pass cut short by quitting announces nothing it did not finish.
+	if (subscribed || fromAccounts) && ctx.Err() == nil {
 		a.announce(calendarRefreshedAnnouncement)
 	}
 }

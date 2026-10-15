@@ -36,14 +36,16 @@ PKCE, returning to a one-time loopback address.
    - The port closes after one answer, a cancel, or five minutes. One sign-in waits at a time.
 3. **Read-only scopes.** Google: `calendar.readonly`. Microsoft: `Calendars.Read` and
    `offline_access`. A sign-in that grants no refresh token is refused, because it could not
-   be read again.
+   be read again. So is one whose consent left reading unticked, which Google allows; it keeps
+   nothing and says why.
 4. **The refresh token is a credential.**
    - It is kept in the owner-protected local database, as the CalDAV write-back sign-in is, with
      the client ID and secret it was issued to.
    - It is never shown, synced, exported or logged. No error carries a token or a response body.
-   - Access tokens live in memory for their hour.
-   - A token a provider rotates replaces the old one. Refreshes take turns, so a rotated token is
-     never spent twice.
+   - Access tokens live in memory for their hour. One is dropped early only when the provider
+     refuses it; a calendar deleted at the provider fails on its own row.
+   - A token a provider rotates replaces the old one. Refreshes take turns, and each refresh reads
+     the sign-in as it is kept now, so a replaced token is never sent.
    - Removing the account erases it and every calendar brought in from it, compacting the
      database. Google is then asked to revoke the grant. Microsoft has no revocation address, so
      the confirmation says where to withdraw it.
@@ -55,7 +57,13 @@ PKCE, returning to a one-time loopback address.
    - Long names are shortened rather than refused.
    - The same event caps apply, with a 16 MiB answer cap, 50 pages, and paging that may not leave
      the provider's host.
-   - Microsoft's times are asked for in UTC, so nothing depends on Windows zone names.
+   - Microsoft's times are asked for in UTC, so nothing depends on Windows zone names. They show
+     in the zone the calendar is kept in.
+   - An all-day event is a day, kept in the calendar's zone as a file's all-day dates are. Google
+     states its dates. Graph states midnight in UTC, or midnight where the event was made, converted;
+     either is read as its date.
+   - An event that carries ZeitBoard's own UID, such as an accepted time imported from its export,
+     is recognised as ZeitBoard's and not counted as busy time.
 6. **Read again every hour.** Calendars from accounts refresh with the subscribed ones, each
    account's access refreshed once per pass. "Refresh" on a row reads at once. A failure keeps the
    last copy and says why on the row.
@@ -81,3 +89,6 @@ PKCE, returning to a one-time loopback address.
 - Update, 2026-10-12: [ADR-0065](0065-accepted-times-written-to-google-and-microsoft-calendars.md)
   writes accepted times to a calendar from an account. The account is asked to allow it only
   when the owner turns writing on.
+- Update, 2026-10-15: a code review of this change found the all-day, token, consent and
+  cancellation cases now written into decisions 3 to 5. They are fixed, with a test each (completion
+  plan, "Calendar accounts after review").

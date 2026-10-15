@@ -89,13 +89,29 @@ func (c Client) get(ctx context.Context, address, access string, headers map[str
 	return nil
 }
 
-// answered is an answer a request did not expect, naming the host alone.
+// StatusError is an answer a request did not expect. It names the host
+// alone, never the address.
+type StatusError struct {
+	Host   string
+	Status int
+}
+
+func (e StatusError) Error() string { return fmt.Sprintf("%s answered HTTP %d", e.Host, e.Status) }
+
+// Unauthorized reports whether a provider refused the access token itself,
+// which a refresh may mend; any other failure leaves the token good.
+func Unauthorized(err error) bool {
+	var answer StatusError
+	return errors.As(err, &answer) && answer.Status == http.StatusUnauthorized
+}
+
+// answered is an answer a request did not expect.
 func answered(address string, status int) error {
 	host := address
 	if parsed, err := url.Parse(address); err == nil {
 		host = parsed.Hostname()
 	}
-	return fmt.Errorf("%s answered HTTP %d", host, status)
+	return StatusError{Host: host, Status: status}
 }
 
 func (c Client) googleCalendars(ctx context.Context, access string) ([]Calendar, error) {
@@ -139,27 +155,23 @@ type googleTime struct {
 	TimeZone string `json:"timeZone"`
 }
 
-func (t googleTime) instant(fallback *time.Location) (time.Time, bool, error) {
+// instant reads a boundary: an instant for a timed event, and for an all-day
+// one its date at midnight UTC, as an AccountEvent carries dates.
+func (t googleTime) instant() (time.Time, bool, error) {
 	if t.DateTime != "" {
 		at, err := time.Parse(time.RFC3339, t.DateTime)
 		return at, false, err
 	}
-	location := fallback
-	if t.TimeZone != "" {
-		if zone, err := time.LoadLocation(t.TimeZone); err == nil {
-			location = zone
-		}
-	}
-	day, err := time.ParseInLocation("2006-01-02", t.Date, location)
+	day, err := time.Parse("2006-01-02", t.Date)
 	return day, true, err
 }
 
 func (c Client) googleEvents(ctx context.Context, access, calendarID string, from, to time.Time) ([]calendarcore.AccountEvent, error) {
 	var events []calendarcore.AccountEvent
 	page := ""
-	// The calendar's own zone dates its all-day events; a later page may
-	// leave it out.
-	calendarZone, fallback := "", time.UTC
+	// The calendar's own zone names a timed event that names none; a later
+	// page may leave it out.
+	calendarZone := ""
 	for range maxPages {
 		query := url.Values{
 			"timeMin":      {from.UTC().Format(time.RFC3339)},
@@ -180,6 +192,7 @@ func (c Client) googleEvents(ctx context.Context, access, calendarID string, fro
 				Transparency       string     `json:"transparency"`
 				Start              googleTime `json:"start"`
 				End                googleTime `json:"end"`
+				ICalUID            string     `json:"iCalUID"`
 				ExtendedProperties struct {
 					Private map[string]string `json:"private"`
 				} `json:"extendedProperties"`
@@ -190,20 +203,18 @@ func (c Client) googleEvents(ctx context.Context, access, calendarID string, fro
 		if err := c.get(ctx, address, access, nil, &answer); err != nil {
 			return nil, err
 		}
-		if answer.TimeZone != "" {
-			if zone, err := time.LoadLocation(answer.TimeZone); err == nil {
-				calendarZone, fallback = answer.TimeZone, zone
-			}
+		if zone := validZone(answer.TimeZone); zone != "" {
+			calendarZone = zone
 		}
 		for _, item := range answer.Items {
 			if item.Status == "cancelled" {
 				continue
 			}
-			start, allDay, err := item.Start.instant(fallback)
+			start, allDay, err := item.Start.instant()
 			if err != nil {
 				return nil, fmt.Errorf("an event's start could not be read")
 			}
-			end, _, err := item.End.instant(fallback)
+			end, _, err := item.End.instant()
 			if err != nil || end.Before(start) {
 				return nil, fmt.Errorf("an event's end could not be read")
 			}
@@ -211,12 +222,8 @@ func (c Client) googleEvents(ctx context.Context, access, calendarID string, fro
 			if zone == "" {
 				zone = calendarZone
 			}
-			id := item.ID
-			if own := item.ExtendedProperties.Private[ownMark]; own != "" {
-				id = calendarcore.OwnUID(own)
-			}
 			events = append(events, calendarcore.AccountEvent{
-				ID: id, Title: item.Summary, Location: item.Location,
+				ID: ownID(item.ID, item.ExtendedProperties.Private[ownMark], item.ICalUID), Title: item.Summary, Location: item.Location,
 				StartAt: start, EndAt: end, ZoneID: validZone(zone), AllDay: allDay,
 				Busy: item.Transparency != "transparent",
 			})
@@ -265,7 +272,7 @@ func (c Client) microsoftEvents(ctx context.Context, access, calendarID string, 
 		"startDateTime": {from.UTC().Format(time.RFC3339)},
 		"endDateTime":   {to.UTC().Format(time.RFC3339)},
 		"$top":          {"500"},
-		"$select":       {"id,subject,location,start,end,isAllDay,showAs,isCancelled,transactionId"},
+		"$select":       {"id,subject,location,start,end,isAllDay,showAs,isCancelled,transactionId,iCalUId"},
 	}
 	address := c.Endpoints.API + "/me/calendars/" + url.PathEscape(calendarID) + "/calendarView?" + query.Encode()
 	// Times come back in UTC, so nothing depends on Windows zone names.
@@ -289,6 +296,7 @@ func (c Client) microsoftEvents(ctx context.Context, access, calendarID string, 
 				ShowAs        string `json:"showAs"`
 				IsCancelled   bool   `json:"isCancelled"`
 				TransactionID string `json:"transactionId"`
+				ICalUID       string `json:"iCalUId"`
 			} `json:"value"`
 			NextLink string `json:"@odata.nextLink"`
 		}
@@ -307,13 +315,13 @@ func (c Client) microsoftEvents(ctx context.Context, access, calendarID string, 
 			if err != nil || end.Before(start) {
 				return nil, errors.New("an event's end could not be read")
 			}
-			id := item.ID
-			if _, own := calendarcore.OwnEventID(item.TransactionID); own {
-				id = item.TransactionID
+			if item.IsAllDay {
+				start, end = nearestMidnight(start), nearestMidnight(end)
 			}
+			// Times came in UTC; with no zone named, the calendar's own shows them.
 			events = append(events, calendarcore.AccountEvent{
-				ID: id, Title: item.Subject, Location: item.Location.DisplayName,
-				StartAt: start, EndAt: end, ZoneID: "UTC", AllDay: item.IsAllDay,
+				ID: ownID(item.ID, "", item.TransactionID, item.ICalUID), Title: item.Subject, Location: item.Location.DisplayName,
+				StartAt: start, EndAt: end, AllDay: item.IsAllDay,
 				Busy: item.ShowAs != "free" && item.ShowAs != "workingElsewhere",
 			})
 		}
@@ -332,6 +340,30 @@ func (c Client) microsoftEvents(ctx context.Context, access, calendarID string, 
 // is UTC, written to seven decimal places.
 func graphTime(value string) (time.Time, error) {
 	return time.ParseInLocation("2006-01-02T15:04:05.9999999", value, time.UTC)
+}
+
+// nearestMidnight reads an all-day boundary Graph gives in UTC as its date.
+// Graph states an all-day event at midnight in the zone asked for, or at
+// midnight where it was made, converted; either is within twelve hours of
+// the midnight UTC that starts the day meant.
+func nearestMidnight(at time.Time) time.Time {
+	return at.UTC().Add(12 * time.Hour).Truncate(24 * time.Hour)
+}
+
+// ownID names an event ZeitBoard wrote (ADR-0065), or one carrying the UID
+// ZeitBoard gives its own times, by that UID, so that reading it back is not
+// mistaken for the owner's commitment. Any other event keeps the provider's
+// ID.
+func ownID(id, mark string, uids ...string) string {
+	if mark != "" {
+		return calendarcore.OwnUID(mark)
+	}
+	for _, uid := range uids {
+		if _, own := calendarcore.OwnEventID(uid); own {
+			return uid
+		}
+	}
+	return id
 }
 
 func validZone(zone string) string {

@@ -47,8 +47,10 @@ type syntheticAccount struct {
 	scopes    map[string]string
 
 	// empty leaves out the owner's own events, as in a calendar kept for
-	// ZeitBoard. stored holds the events ZeitBoard wrote, by ID, versioned.
+	// ZeitBoard, and gone names a calendar deleted at the provider. stored
+	// holds the events ZeitBoard wrote, by ID, versioned.
 	empty   bool
+	gone    string
 	stored  map[string]map[string]any
 	version int
 	posts   int
@@ -194,6 +196,10 @@ func (s *syntheticAccount) token(form url.Values, write func(int, any)) {
 }
 
 func (s *syntheticAccount) api(r *http.Request, write func(int, any)) {
+	if s.gone != "" && strings.Contains(r.URL.Path, "/"+s.gone+"/") {
+		write(http.StatusNotFound, map[string]string{"error": "notFound"})
+		return
+	}
 	if s.serveWrites(r, write) {
 		return
 	}

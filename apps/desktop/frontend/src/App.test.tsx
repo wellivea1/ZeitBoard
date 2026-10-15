@@ -22,23 +22,29 @@ function onePage(log: { status: string; empty: boolean; message: string; entries
 }
 
 describe("desktop navigation", () => {
-  it("opens a new destination at its top with focus inside it, but not a tab", async () => {
-    window.location.hash = "#/plan/tasks";
-    const scroll = vi.spyOn(window, "scrollTo");
-    render(<App />);
-    await screen.findByRole("heading", { level: 1, name: "Plan" });
-    expect(scroll).not.toHaveBeenCalled();
+  // Each destination's screen loads on demand, which under a full parallel
+  // run can take longer than the default second.
+  it(
+    "opens a new destination at its top with focus inside it, but not a tab",
+    { timeout: 15_000 },
+    async () => {
+      window.location.hash = "#/plan/tasks";
+      const scroll = vi.spyOn(window, "scrollTo");
+      render(<App />);
+      await screen.findByRole("heading", { level: 1, name: "Plan" }, { timeout: 5_000 });
+      expect(scroll).not.toHaveBeenCalled();
 
-    fireEvent.click(await screen.findByRole("tab", { name: "Week" }));
-    await screen.findByRole("tab", { name: "Week", selected: true });
-    expect(scroll).not.toHaveBeenCalled();
+      fireEvent.click(await screen.findByRole("tab", { name: "Week" }, { timeout: 5_000 }));
+      await screen.findByRole("tab", { name: "Week", selected: true });
+      expect(scroll).not.toHaveBeenCalled();
 
-    window.location.hash = "#/rhythm";
-    await screen.findByRole("heading", { level: 1, name: "Rhythm" });
-    expect(scroll).toHaveBeenCalledWith(0, 0);
-    expect(screen.getByRole("main")).toHaveFocus();
-    scroll.mockRestore();
-  });
+      window.location.hash = "#/rhythm";
+      await screen.findByRole("heading", { level: 1, name: "Rhythm" }, { timeout: 5_000 });
+      expect(scroll).toHaveBeenCalledWith(0, 0);
+      expect(screen.getByRole("main")).toHaveFocus();
+      scroll.mockRestore();
+    },
+  );
 
   it("skips to the active view without changing its route", async () => {
     window.location.hash = "#/plan/tasks";

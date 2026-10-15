@@ -3111,3 +3111,33 @@ component and data tests in the window. Every provider is a local stand-in.
   - Removing an account that is written to says writing stops.
 - Seen in the browser pane, with the real components on a stand-in bridge: the offer, the waiting
   line, the status with a conflict and its two choices, and the stop wording.
+
+## Calendar accounts after review — 2026-10-15
+
+The fixes to the code review of ADR-0064's change. Go tests in `core/calendar`,
+`internal/calendaraccounts` and the desktop; a component test in the window.
+
+- Core: an all-day event given as dates at midnight UTC is kept from midnight to midnight in
+  America/New_York, the calendar's zone, whatever zone the provider named.
+- The provider package:
+  - Google's all-day dates come as dates. Microsoft's events name no zone.
+  - Graph's all-day midnight, stated in UTC, in New York or in Berlin, is read as the same date.
+  - ZeitBoard's mark, or its UID as iCalUID, iCalUId or transaction ID, names an event by that UID.
+    Google's own UIDs do not.
+  - A 401 is told from a 404, and an answer names its host alone.
+  - A request on a cancelled context reports the cancellation.
+  - What a grant lets ZeitBoard read is read for both providers.
+- The desktop:
+  - With one of two Microsoft calendars deleted at the provider, an hourly pass refreshes once. The
+    other calendar is read, the deleted one's row says "answered HTTP 404", and the account stays
+    signed in.
+  - After a rotation, a copy of the account read before it refreshes without being refused.
+  - A Google sign-in that leaves reading unticked keeps nothing and says why.
+  - An owner address too long to keep names the account "Google account". The main calendar's
+    owner names a Microsoft account.
+  - Cancelled, out of time, unreachable and refused sign-ins are each worded as such.
+- The window:
+  - A failure that finds the sign-in ended reads the accounts again, and the row offers "Sign in
+    again".
+  - Signing in again waits on that row, with the form for a new account closed and disabled.
+    Cancelling says so and reads the accounts again.

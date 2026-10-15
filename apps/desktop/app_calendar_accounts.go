@@ -190,7 +190,7 @@ func (a *App) ListAccountCalendars(input CalendarAccountRef) (CalendarAccountCal
 	}
 	calendars, err := client.Calendars(ctx, access)
 	if err != nil {
-		a.forgetAccessToken(account.AccountID)
+		a.forgetRefusedAccess(account.AccountID, err)
 		return CalendarAccountCalendarsDTO{}, asSentence(err)
 	}
 	return accountCalendarsDTO(ctx, store, account, calendars)
@@ -303,22 +303,22 @@ func (a *App) signInCalendarAccount(client calendaraccounts.Client, want *storag
 	}
 	openSignInPage(a.applicationContext(), auth.URL)
 	code, err := receiver.Wait(ctx, auth.State)
-	switch {
-	case errors.Is(err, context.DeadlineExceeded):
-		return CalendarAccountCalendarsDTO{}, errors.New("Signing in waited five minutes for the browser and stopped. Try again when you are ready.")
-	case errors.Is(err, context.Canceled):
-		return CalendarAccountCalendarsDTO{}, errors.New("Signing in was cancelled.")
-	case err != nil:
-		return CalendarAccountCalendarsDTO{}, asSentence(err)
+	if err != nil {
+		return CalendarAccountCalendarsDTO{}, signInStopped(err)
 	}
 	a.showDesktopWindow()
 	token, err := client.Exchange(ctx, auth, code)
 	if err != nil {
-		return CalendarAccountCalendarsDTO{}, asSentence(err)
+		return CalendarAccountCalendarsDTO{}, signInStopped(err)
+	}
+	// Google lets the owner untick what is asked; without reading there is
+	// nothing to keep.
+	if !calendaraccounts.Reads(client.Provider, token.Scope) {
+		return CalendarAccountCalendarsDTO{}, fmt.Errorf("%s did not allow ZeitBoard to read your calendars, so the account was not added.", providerName(client.Provider))
 	}
 	calendars, err := client.Calendars(ctx, token.Access)
 	if err != nil {
-		return CalendarAccountCalendarsDTO{}, asSentence(err)
+		return CalendarAccountCalendarsDTO{}, signInStopped(err)
 	}
 	label := accountLabel(client.Provider, calendars)
 	account := storage.CalendarAccount{
@@ -342,6 +342,19 @@ func (a *App) signInCalendarAccount(client calendaraccounts.Client, want *storag
 	}
 	a.holdAccessToken(account.AccountID, token)
 	return accountCalendarsDTO(ctx, store, account, calendars)
+}
+
+// signInStopped words why a sign-in stopped: cancelled, out of time, or the
+// provider's own reason.
+func signInStopped(err error) error {
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return errors.New("Signing in waited five minutes for the browser and stopped. Try again when you are ready.")
+	case errors.Is(err, context.Canceled):
+		return errors.New("Signing in was cancelled.")
+	default:
+		return asSentence(err)
+	}
 }
 
 // grantedScopes is what an account allows once signed in again. Google's
@@ -393,7 +406,6 @@ func (a *App) beginCalendarSignIn() (context.Context, func(), error) {
 // provider rotated. A sign-in the provider has ended is recorded on the
 // account, for the window to offer signing in again.
 func (a *App) accountAccess(ctx context.Context, store *storage.Store, account storage.CalendarAccount) (calendaraccounts.Client, string, error) {
-	client := a.accountClient(account)
 	// One refresh at a time, so a provider that rotates refresh tokens is
 	// never sent one it has already replaced.
 	a.calendarRefreshMu.Lock()
@@ -402,8 +414,15 @@ func (a *App) accountAccess(ctx context.Context, store *storage.Store, account s
 	held, found := a.calendarAccessTokens[account.AccountID]
 	a.calendarAccountsMu.Unlock()
 	if found && time.Until(held.ExpiresAt) > time.Minute {
-		return client, held.Access, nil
+		return a.accountClient(account), held.Access, nil
 	}
+	// The sign-in as it is kept now: a refresh since the caller read the
+	// account may have rotated its token.
+	_, account, err := a.calendarAccount(ctx, account.AccountID)
+	if err != nil {
+		return calendaraccounts.Client{}, "", err
+	}
+	client := a.accountClient(account)
 	token, err := client.Refresh(ctx, account.RefreshToken)
 	if errors.Is(err, calendaraccounts.ErrSignInEnded) {
 		ended := fmt.Sprintf("The sign-in to %s has ended. Sign in to it again to keep reading its calendars.", account.Label)
@@ -436,12 +455,21 @@ func (a *App) holdAccessToken(accountID string, token calendaraccounts.Token) {
 	a.calendarAccessTokens[accountID] = token
 }
 
-// forgetAccessToken drops a held access token, as after a request it did not
-// get through, so the next one refreshes.
+// forgetAccessToken drops a held access token, so the next request
+// refreshes.
 func (a *App) forgetAccessToken(accountID string) {
 	a.calendarAccountsMu.Lock()
 	defer a.calendarAccountsMu.Unlock()
 	delete(a.calendarAccessTokens, accountID)
+}
+
+// forgetRefusedAccess drops an access token the provider refused. Any other
+// failure, such as a calendar deleted at the provider, leaves it good for
+// the account's other calendars.
+func (a *App) forgetRefusedAccess(accountID string, err error) {
+	if calendaraccounts.Unauthorized(err) {
+		a.forgetAccessToken(accountID)
+	}
 }
 
 // calendarAccount finds a signed-in account.
@@ -476,7 +504,7 @@ func (a *App) fetchAccountCalendar(ctx context.Context, store *storage.Store, ac
 	coverageStart, coverageEnd := calendarcore.CoverageAround(importedAt)
 	events, err := client.Events(ctx, access, calendarID, coverageStart, coverageEnd)
 	if err != nil {
-		a.forgetAccessToken(account.AccountID)
+		a.forgetRefusedAccess(account.AccountID, err)
 		return calendarcore.EventSet{}, asSentence(err)
 	}
 	label := strings.TrimSpace(input.Label)
@@ -683,7 +711,7 @@ func accountLabel(provider calendaraccounts.Provider, calendars []calendaraccoun
 			owner = address
 		}
 	}
-	if owner == "" || utf8.RuneCountInString(owner) > 320 {
+	if owner == "" || len(owner) > 320 {
 		if provider == calendaraccounts.Microsoft {
 			return "Microsoft account"
 		}
