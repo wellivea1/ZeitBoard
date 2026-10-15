@@ -477,3 +477,9 @@
   font-family: var(--font-serif);
   font-size: 15px;
 }
+
+/* Signing in to an account again waits on its own row. */
+.calendar-account-row > .calendar-account-waiting {
+  grid-column: 1 / -1;
+  margin-top: 0;
+}

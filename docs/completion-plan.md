@@ -1495,6 +1495,30 @@ ADR-0053's guarantees for CalDAV.
   provider package. The desktop runs accepting, refreshing, undoing, a change by the owner, a lost
   answer, a refresh that must ask for writing again, an ended sign-in, refusals and removal.
 
+### Calendar accounts after review — 2026-10-15
+
+A code review of ADR-0064's change (PR #82) at high effort raised ten findings. Two were already
+fixed by ADR-0065's change: an error starting with a host name no longer capitalises it, and
+signing in again refuses a sign-in to another account. The other eight are fixed, each with a test:
+
+- **All-day events are days.** Microsoft's were kept as instants at midnight UTC, so for an owner
+  west of UTC a busy day blocked the evening before. Google's took the calendar's zone, not the
+  one the calendar is kept in. Both are now dates in the zone the calendar is kept in, as a file's
+  are. Microsoft's timed events show in that zone rather than in UTC.
+- **A rotated token is never sent again.** A calendar deleted at the provider used to drop the
+  account's access token, and the next calendar then refreshed with a copy of the account read
+  before the provider rotated its token. Now only a refused token is dropped, and a refresh reads
+  the sign-in as it is kept.
+- **Consent and cancellation are said plainly.** A sign-in whose consent left reading unticked is
+  refused and keeps nothing. A sign-in cancelled or out of time during the token exchange says so,
+  not that the provider could not be reached.
+- **Smaller fixes.**
+  - An account name is bounded the way it is kept: in bytes, not characters.
+  - An accepted time imported into Google from ZeitBoard's export is recognised by its UID.
+  - A refresh pass cut short by quitting announces nothing.
+  - After a failure, the accounts are read again, so an ended sign-in offers "Sign in again".
+  - Signing in again waits on that account's row, not in a blank form for a new account.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and

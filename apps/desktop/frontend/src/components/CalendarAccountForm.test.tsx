@@ -60,6 +60,49 @@ afterEach(() => {
 });
 
 describe("CalendarAccountForm", () => {
+  // Signing in to an account again waits on its row, not in a blank form for
+  // a new account; a failure there, or anywhere, reloads the accounts, so an
+  // ended sign-in shows as one.
+  it("waits on the row being signed in again, and reloads the accounts after a failure", async () => {
+    const ended = {
+      ...account,
+      problem: "The sign-in to owner@example.test has ended. Sign in to it again.",
+    };
+    let accounts: unknown[] = [{ ...account, calendars: 1 }];
+    const load = vi.fn(async () => accounts);
+    let refuse: (reason: string) => void = () => undefined;
+    desktop({
+      GetCalendarAccounts: load,
+      ListAccountCalendars: vi.fn(async () => {
+        accounts = [ended];
+        throw ended.problem;
+      }),
+      ReconnectCalendarAccount: vi.fn(
+        () =>
+          new Promise((_, reject) => {
+            refuse = reject;
+          }),
+      ),
+      CancelCalendarSignIn: vi.fn(async () => refuse("signing in was cancelled")),
+    });
+    openAccountTab();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Calendars in owner@example.test" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(ended.problem);
+    fireEvent.click(await screen.findByRole("button", { name: "Sign in again" }));
+
+    const waiting = await screen.findByText(
+      "Finish signing in to owner@example.test in your browser. ZeitBoard waits five minutes.",
+    );
+    expect(waiting.closest("li")).toHaveTextContent("owner@example.test");
+    expect(screen.queryByLabelText("Client ID")).toBeNull();
+    expect(screen.getByRole("button", { name: "Sign in to another account" })).toBeDisabled();
+    const loads = load.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Signing in was cancelled.");
+    await waitFor(() => expect(load.mock.calls.length).toBeGreaterThan(loads));
+  });
+
   // Signing in takes the owner's own registration; the account's calendars
   // follow, each previewed before it is brought in.
   it("signs in to a Google account and brings a calendar in after a preview", async () => {

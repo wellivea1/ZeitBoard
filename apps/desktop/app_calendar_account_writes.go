@@ -48,7 +48,7 @@ func (a *App) EnableAccountWriteBack(input AccountWriteBackInput) (CalendarWrite
 	}
 	writable, err := client.CanWrite(ctx, access, calendar.CalendarID)
 	if err != nil {
-		a.forgetAccessToken(account.AccountID)
+		a.forgetRefusedAccess(account.AccountID, err)
 		return CalendarWriteBackDTO{}, asSentence(err)
 	}
 	if !writable {
@@ -104,15 +104,20 @@ func (a *App) eventWriterFor(ctx context.Context, store *storage.Store, target s
 	if err != nil {
 		return nil, err
 	}
-	return accountEventWriter{client: client, access: access, calendarID: target.CalendarID}, nil
+	return accountEventWriter{
+		client: client, access: access, calendarID: target.CalendarID,
+		refused: func(err error) { a.forgetRefusedAccess(account.AccountID, err) },
+	}, nil
 }
 
 // accountEventWriter writes to one calendar of an account. The provider
-// package keeps ADR-0053's promises; this says how each write came out.
+// package keeps ADR-0053's promises; this says how each write came out, and
+// drops an access token the provider refused so the next pass refreshes it.
 type accountEventWriter struct {
 	client     calendaraccounts.Client
 	access     string
 	calendarID string
+	refused    func(error)
 }
 
 func (w accountEventWriter) create(ctx context.Context, event calendarcore.Event, _ time.Time) calendarWriteResult {
@@ -121,6 +126,7 @@ func (w accountEventWriter) create(ctx context.Context, event calendarcore.Event
 	case errors.Is(err, calendaraccounts.ErrTaken):
 		return calendarWriteResult{outcome: calendarWriteConflict, detail: err.Error()}
 	case err != nil:
+		w.refused(err)
 		return calendarWriteResult{outcome: calendarWriteFailed, detail: asSentence(err).Error()}
 	}
 	return calendarWriteResult{outcome: calendarWriteDone, href: written.ID, etag: written.Version}
@@ -132,6 +138,7 @@ func (w accountEventWriter) remove(ctx context.Context, eventID, href, etag stri
 	case errors.Is(err, calendaraccounts.ErrChanged), errors.Is(err, calendaraccounts.ErrNotOurs):
 		return calendarWriteResult{outcome: calendarWriteConflict, detail: err.Error()}
 	case err != nil:
+		w.refused(err)
 		return calendarWriteResult{outcome: calendarWriteFailed, detail: asSentence(err).Error()}
 	}
 	return calendarWriteResult{outcome: calendarWriteDone}

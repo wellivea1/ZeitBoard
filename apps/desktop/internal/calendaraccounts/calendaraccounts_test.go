@@ -191,7 +191,9 @@ func TestGoogleSignsInAndReadsEveryPage(t *testing.T) {
 	if !events[0].StartAt.Equal(time.Date(2026, 10, 14, 19, 0, 0, 0, time.UTC)) || !events[0].Busy || events[0].ZoneID != "America/New_York" {
 		t.Errorf("timed event %+v", events[0])
 	}
-	if !events[1].AllDay || events[1].StartAt.Format(time.RFC3339) != "2026-10-16T00:00:00-04:00" {
+	// An all-day event comes as its dates; the calendar it is kept in places them.
+	if !events[1].AllDay || events[1].StartAt.Format(time.RFC3339) != "2026-10-16T00:00:00Z" ||
+		events[1].EndAt.Format(time.RFC3339) != "2026-10-17T00:00:00Z" {
 		t.Errorf("all-day event %+v", events[1])
 	}
 	if events[2].Busy {
@@ -222,7 +224,9 @@ func TestMicrosoftSignsInAndReadsEveryPageOnItsOwnHost(t *testing.T) {
 	}
 	from := time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)
 	events, err := client.Events(context.Background(), "access-1", "m-default", from, from.AddDate(0, 1, 0))
-	if err != nil || len(events) != 2 || events[0].ZoneID != "UTC" || events[1].Busy {
+	// Times come in UTC, and no zone is named for them: the calendar's own
+	// zone shows them, as for any event that names none.
+	if err != nil || len(events) != 2 || events[0].ZoneID != "" || events[1].Busy {
 		t.Fatalf("events %+v, %v", events, err)
 	}
 	if !events[0].StartAt.Equal(time.Date(2026, 10, 14, 13, 0, 0, 0, time.UTC)) {
@@ -333,6 +337,69 @@ func TestARefusalInTheBrowserEndsTheWait(t *testing.T) {
 	defer second.Close()
 	if _, err := second.Wait(stopped, "s"); !errors.Is(err, context.Canceled) {
 		t.Fatalf("a stopped wait read as %v", err)
+	}
+}
+
+// Graph states an all-day day at midnight in the zone asked for, or at
+// midnight where the event was made, converted to it. Either way it is read
+// as its date.
+func TestAMicrosoftAllDayEventIsReadAsItsDate(t *testing.T) {
+	for stated, want := range map[string]string{
+		"2026-10-12T00:00:00.0000000": "2026-10-12", // midnight in UTC, as asked
+		"2026-10-12T04:00:00.0000000": "2026-10-12", // midnight in New York
+		"2026-10-11T22:00:00.0000000": "2026-10-12", // midnight in Berlin
+	} {
+		at, err := graphTime(stated)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := nearestMidnight(at); got.Format(time.RFC3339) != want+"T00:00:00Z" {
+			t.Errorf("%s read as %s", stated, got)
+		}
+	}
+}
+
+// An event carrying ZeitBoard's mark or UID is named by that UID, whichever
+// way it came to be there: written by ZeitBoard, or imported from its export.
+func TestZeitBoardsOwnEventsAreNamedByTheirUID(t *testing.T) {
+	for _, tc := range []struct {
+		id, mark string
+		uids     []string
+		want     string
+	}{
+		{"g1", "calendar_event_01", nil, "calendar_event_01@zeitboard.local"},
+		{"g2", "", []string{"calendar_event_02@zeitboard.local"}, "calendar_event_02@zeitboard.local"},
+		{"m3", "", []string{"", "calendar_event_03@zeitboard.local"}, "calendar_event_03@zeitboard.local"},
+		{"g4", "", []string{"040000008200E00074C5B7101A82E008@google.com"}, "g4"},
+	} {
+		if got := ownID(tc.id, tc.mark, tc.uids...); got != tc.want {
+			t.Errorf("ownID(%s) = %s, want %s", tc.id, got, tc.want)
+		}
+	}
+}
+
+// A refused access token is told from any other failure, a sign-in that is
+// stopped says so, and what was granted is read for reading and writing.
+func TestFailuresAndGrantsAreToldApart(t *testing.T) {
+	if !Unauthorized(answered("https://graph.microsoft.com/v1.0/me", http.StatusUnauthorized)) ||
+		Unauthorized(answered("https://graph.microsoft.com/v1.0/me", http.StatusNotFound)) {
+		t.Fatal("a refused token was not told from a missing calendar")
+	}
+	if got := answered("https://graph.microsoft.com/v1.0/me/calendars/secret", 503).Error(); got != "graph.microsoft.com answered HTTP 503" {
+		t.Fatalf("an answer read as %q", got)
+	}
+
+	fake := newFakeProvider(t, Google)
+	stopped, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := fake.client().Calendars(stopped, "access-1"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("a stopped request read as %v", err)
+	}
+
+	if !Reads(Google, "https://www.googleapis.com/auth/calendar.readonly") ||
+		Reads(Google, "https://www.googleapis.com/auth/calendar.events.owned") ||
+		!Reads(Microsoft, "https://graph.microsoft.com/Calendars.ReadWrite") || Reads(Microsoft, "offline_access") {
+		t.Fatal("what a grant lets ZeitBoard read was misread")
 	}
 }
 

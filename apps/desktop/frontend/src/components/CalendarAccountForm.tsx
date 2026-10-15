@@ -55,18 +55,23 @@ function AccountRow({
   account,
   open,
   disabled,
+  waiting,
   children,
   onChoose,
   onReconnect,
   onRemove,
+  onCancel,
 }: {
   account: CalendarAccount;
   open: boolean;
   disabled: boolean;
+  /** The account is being signed in to again, in the browser. */
+  waiting: boolean;
   children?: ReactNode;
   onChoose: () => void;
   onReconnect: () => void;
   onRemove: () => void;
+  onCancel: () => void;
 }) {
   return (
     <li className="calendar-account-row" data-provider={account.provider}>
@@ -110,6 +115,16 @@ function AccountRow({
           Remove
         </button>
       </div>
+      {waiting && (
+        <div className="calendar-account-waiting" role="status">
+          <span>
+            Finish signing in to {account.label} in your browser. ZeitBoard waits five minutes.
+          </span>
+          <button className="button ghost compact" type="button" onClick={onCancel}>
+            Cancel
+          </button>
+        </div>
+      )}
       {children}
     </li>
   );
@@ -339,6 +354,9 @@ function failure(reason: unknown, fallback: string) {
   return reason instanceof Error ? reason.message : fallback;
 }
 
+// What waits for the browser when a new account is being signed in to.
+const newSignIn = "";
+
 export function CalendarAccountForm({
   available,
   busy,
@@ -359,10 +377,13 @@ export function CalendarAccountForm({
   const [accounts, reload] = useCalendarAccounts();
   const [choosing, setChoosing] = useState<CalendarAccountCalendars | undefined>();
   const [previewed, setPreviewed] = useState<string | undefined>();
-  const [waiting, setWaiting] = useState(false);
+  // Which sign-in waits for the browser: a new account's, or the one being
+  // signed in to again, by its id.
+  const [waitingFor, setWaitingFor] = useState<string | undefined>();
   const [removing, setRemoving] = useState<CalendarAccount | undefined>();
   const [status, setStatus] = useState("");
-  const locked = !available || busy || waiting;
+  const locked = !available || busy || waitingFor !== undefined;
+  const cancel = () => void cancelCalendarSignIn();
 
   const begin = () => {
     onError("");
@@ -376,19 +397,20 @@ export function CalendarAccountForm({
     reload();
   };
 
-  const signIn = (operation: Promise<CalendarAccountCalendars>) => {
+  const signIn = (operation: Promise<CalendarAccountCalendars>, accountId = newSignIn) => {
     begin();
     onReport(null);
-    setWaiting(true);
+    setWaitingFor(accountId);
     return operation.then(
       (result) => {
-        setWaiting(false);
+        setWaitingFor(undefined);
         signedIn(result);
         return true;
       },
       (reason: unknown) => {
-        setWaiting(false);
+        setWaitingFor(undefined);
         onError(failure(reason, "Signing in did not finish."));
+        reload();
         return false;
       },
     );
@@ -406,6 +428,8 @@ export function CalendarAccountForm({
       (reason: unknown) => {
         onBusy(false);
         onError(failure(reason, fallback));
+        // A failure may have found the sign-in ended; the row then says so.
+        reload();
       },
     );
   };
@@ -488,12 +512,16 @@ export function CalendarAccountForm({
                 account={account}
                 open={open}
                 disabled={locked}
+                waiting={waitingFor === account.accountId}
                 onChoose={() => choose(account)}
-                onReconnect={() => void signIn(reconnectCalendarAccount(account.accountId))}
+                onReconnect={() =>
+                  void signIn(reconnectCalendarAccount(account.accountId), account.accountId)
+                }
                 onRemove={() => {
                   begin();
                   setRemoving(account);
                 }}
+                onCancel={cancel}
               >
                 {open && choosing && (
                   <AccountCalendarList
@@ -538,11 +566,11 @@ export function CalendarAccountForm({
       )}
       <SignInForm
         available={available}
-        busy={busy}
-        waiting={waiting}
+        busy={busy || (waitingFor !== undefined && waitingFor !== newSignIn)}
+        waiting={waitingFor === newSignIn}
         first={accounts.length === 0}
         onSignIn={(details) => signIn(connectCalendarAccount(details))}
-        onCancel={() => void cancelCalendarSignIn()}
+        onCancel={cancel}
       />
     </div>
   );
