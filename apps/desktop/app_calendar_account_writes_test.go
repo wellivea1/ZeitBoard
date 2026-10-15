@@ -48,6 +48,7 @@ func (s *syntheticAccount) serveGoogleWrites(r *http.Request, path string, write
 			return true
 		}
 		s.posts++
+		event["status"] = "confirmed"
 		s.stamp(event)
 		s.stored[id] = event
 		write(http.StatusOK, event)
@@ -56,13 +57,25 @@ func (s *syntheticAccount) serveGoogleWrites(r *http.Request, path string, write
 		event, found := s.stored[id]
 		switch {
 		case !found:
-			write(http.StatusGone, map[string]string{"error": "deleted"})
+			write(http.StatusNotFound, map[string]string{"error": "notFound"})
 		case r.Method == http.MethodGet:
 			write(http.StatusOK, event)
+		case r.Method == http.MethodPut && r.Header.Get("If-Match") != event["etag"]:
+			write(http.StatusPreconditionFailed, map[string]string{"error": "conditionNotMet"})
+		case r.Method == http.MethodPut:
+			var update map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&update)
+			s.stamp(update)
+			s.stored[id] = update
+			write(http.StatusOK, update)
+		case event["status"] == "cancelled":
+			write(http.StatusGone, map[string]string{"error": "deleted"})
 		case r.Header.Get("If-Match") != "" && r.Header.Get("If-Match") != event["etag"]:
 			write(http.StatusPreconditionFailed, map[string]string{"error": "conditionNotMet"})
 		default:
-			delete(s.stored, id)
+			// Google keeps a removed event, and its ID, as cancelled.
+			event["status"] = "cancelled"
+			s.stamp(event)
 			write(http.StatusNoContent, nil)
 		}
 	default:
@@ -78,6 +91,13 @@ func (s *syntheticAccount) serveGraphWrites(r *http.Request, path string, write 
 	case path == "/me/calendars/m-default/events" && r.Method == http.MethodPost:
 		var event map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&event)
+		for _, existing := range s.stored {
+			if existing["transactionId"] == event["transactionId"] {
+				// Graph drops a create that repeats a transaction ID.
+				write(http.StatusCreated, existing)
+				return true
+			}
+		}
 		s.posts++
 		id := fmt.Sprintf("graph-%d", s.posts)
 		event["id"] = id
@@ -109,10 +129,14 @@ func (s *syntheticAccount) stamp(event map[string]any) {
 	event["changeKey"] = fmt.Sprintf("ck-%d", s.version)
 }
 
+// storedEvents are the written events a calendar's listing shows; Google's
+// listing leaves out removed ones.
 func (s *syntheticAccount) storedEvents() []map[string]any {
 	events := make([]map[string]any, 0, len(s.stored))
 	for _, event := range s.stored {
-		events = append(events, event)
+		if event["status"] != "cancelled" {
+			events = append(events, event)
+		}
 	}
 	return events
 }
@@ -138,7 +162,9 @@ func (s *syntheticAccount) written() map[string]bool {
 	defer s.mu.Unlock()
 	held := map[string]bool{}
 	for _, event := range s.stored {
-		held[ownedBy(event)] = true
+		if event["status"] != "cancelled" {
+			held[ownedBy(event)] = true
+		}
 	}
 	return held
 }
@@ -268,7 +294,7 @@ func TestAMicrosoftCalendarIsWrittenOnceAndWaitsOnAnEndedSignIn(t *testing.T) {
 	first := events[ids[0]]
 	fake.with(func(s *syntheticAccount) {
 		landed := map[string]any{
-			"id": "landed", "subject": first.Title, "transactionId": calendarcore.OwnUID(first.EventID),
+			"id": "landed", "subject": first.Title, "transactionId": calendaraccounts.TransactionID(first),
 			"start": map[string]string{"dateTime": first.StartAt.UTC().Format("2006-01-02T15:04:05"), "timeZone": "UTC"},
 			"end":   map[string]string{"dateTime": first.EndAt.UTC().Format("2006-01-02T15:04:05"), "timeZone": "UTC"},
 		}
@@ -338,4 +364,106 @@ func TestWritingNeedsPermissionTheSameAccountAndACalendarOfTheOwners(t *testing.
 	if err := enable("calendar_source_missing"); err == nil {
 		t.Fatal("writing was turned on for no calendar")
 	}
+}
+
+// Undoing an accepted time and accepting it again writes it afresh. Google
+// keeps the removed event's ID, so the second acceptance goes under its own.
+func TestATimeAcceptedAgainAfterAnUndoIsWrittenAgain(t *testing.T) {
+	app, fake, _, sourceID, ids := writeApp(t, calendaraccounts.Google)
+	ctx := context.Background()
+	if _, err := app.EnableAccountWriteBack(AccountWriteBackInput{SourceID: sourceID}); err != nil {
+		t.Fatal(err)
+	}
+	accept := func() {
+		t.Helper()
+		if _, err := app.DecideLocalProposals(LocalProposalsDecisionInput{ProposalIDs: ids[:1], Decision: storage.ProposalApproved}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	accept()
+	app.writeCalendarPass(ctx)
+	eventID := ownEvents(t, app)[ids[0]].EventID
+	if _, err := app.UndoLocalProposalDecision(LocalProposalUndoInput{ProposalID: ids[0]}); err != nil {
+		t.Fatal(err)
+	}
+	app.writeCalendarPass(ctx)
+	if fake.written()[eventID] {
+		t.Fatal("the undone time stayed in the calendar")
+	}
+
+	// The app's clock stands still here, so the second acceptance has the
+	// first one's moment, and its ID: the removed event is put back.
+	accept()
+	app.writeCalendarPass(ctx)
+	status := writeStatus(t, app)
+	if !fake.written()[eventID] || status.Summary != "1 accepted time is in Owner." || len(status.Problems) != 0 {
+		t.Fatalf("accepted again: %+v, held %v", status, fake.written())
+	}
+}
+
+// Quitting during a pass, while the account's access is being refreshed,
+// leaves the due writes as they were: nothing failed.
+func TestQuittingMidPassIsNoFailure(t *testing.T) {
+	app, _, account, sourceID, ids := writeApp(t, calendaraccounts.Google)
+	if _, err := app.EnableAccountWriteBack(AccountWriteBackInput{SourceID: sourceID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.DecideLocalProposals(LocalProposalsDecisionInput{ProposalIDs: ids, Decision: storage.ProposalApproved}); err != nil {
+		t.Fatal(err)
+	}
+	app.forgetAccessToken(account.AccountID)
+	quitting, quit := context.WithCancel(context.Background())
+	quit()
+	app.writeCalendarPass(quitting)
+	writes, _ := app.store.CalendarWrites(context.Background())
+	for _, write := range writes {
+		if write.Attempts != 0 || write.Detail != "" {
+			t.Fatalf("quitting was recorded as a failure: %+v", write)
+		}
+	}
+}
+
+// Signing in again asks for what is in use, and a sign-in that would take
+// adding events from the account written to is refused rather than kept.
+func TestSigningInAgainKeepsWhatWritingNeeds(t *testing.T) {
+	app, fake, account, sourceID, _ := writeApp(t, calendaraccounts.Google)
+	status, err := app.EnableAccountWriteBack(AccountWriteBackInput{SourceID: sourceID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	calendar, _ := app.GetCalendar(accountWeekOf(t, app))
+	if calendar.Sources[0].Account == nil || !calendar.Sources[0].Account.Writes {
+		t.Fatalf("the account does not say it lets ZeitBoard add events: %+v", calendar.Sources[0].Account)
+	}
+
+	// From the form, without adding events, while its calendar is written to.
+	fake.with(func(s *syntheticAccount) { s.grant = "https://www.googleapis.com/auth/calendar.readonly" })
+	if _, err := app.ConnectCalendarAccount(CalendarAccountInput{
+		Provider: "google", ClientID: syntheticAccountClient, ClientSecret: syntheticAccountSecret,
+	}); err == nil || !strings.Contains(err.Error(), "must allow adding events") {
+		t.Fatalf("a sign-in taking writing away read as %v", err)
+	}
+	if accounts, _ := app.store.CalendarAccounts(context.Background()); !calendaraccounts.Writes(calendaraccounts.Google, accounts[0].Scopes) {
+		t.Fatalf("the kept sign-in lost writing: %q", accounts[0].Scopes)
+	}
+
+	// Writing stopped, signing in again asks only to read.
+	fake.with(func(s *syntheticAccount) { s.grant = "" })
+	if _, err := app.DisableCalendarWriteBack(); err != nil || !status.On {
+		t.Fatalf("stopping: %v", err)
+	}
+	if _, err := app.ReconnectCalendarAccount(CalendarAccountRef{AccountID: account.AccountID}); err != nil {
+		t.Fatal(err)
+	}
+	fake.with(func(s *syntheticAccount) {
+		if strings.Contains(s.requested, "calendar.events.owned") {
+			t.Errorf("signing in again asked to add events with writing off: %q", s.requested)
+		}
+	})
+}
+
+// accountWeekOf is the week around the app's own today.
+func accountWeekOf(t *testing.T, app *App) CalendarQueryInput {
+	t.Helper()
+	return CalendarQueryInput{StartCivilDate: app.currentTime().Format("2006-01-02"), Days: 7, ZoneID: defaultZoneID}
 }

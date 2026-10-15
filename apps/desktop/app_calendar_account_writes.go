@@ -86,7 +86,9 @@ func (a *App) allowWriting(ctx context.Context, account storage.CalendarAccount)
 // eventWriter carries writes to the calendar written to: a CalDAV collection
 // (ADR-0053) or an account's calendar (ADR-0065).
 type eventWriter interface {
-	create(ctx context.Context, event calendarcore.Event, stamp time.Time) calendarWriteResult
+	// create writes an accepted time; retry says an earlier attempt may have
+	// written it with its answer lost.
+	create(ctx context.Context, event calendarcore.Event, stamp time.Time, retry bool) calendarWriteResult
 	remove(ctx context.Context, eventID, href, etag string) calendarWriteResult
 }
 
@@ -120,8 +122,8 @@ type accountEventWriter struct {
 	refused    func(error)
 }
 
-func (w accountEventWriter) create(ctx context.Context, event calendarcore.Event, _ time.Time) calendarWriteResult {
-	written, err := w.client.CreateEvent(ctx, w.access, w.calendarID, event)
+func (w accountEventWriter) create(ctx context.Context, event calendarcore.Event, _ time.Time, retry bool) calendarWriteResult {
+	written, err := w.client.CreateEvent(ctx, w.access, w.calendarID, event, retry)
 	switch {
 	case errors.Is(err, calendaraccounts.ErrTaken):
 		return calendarWriteResult{outcome: calendarWriteConflict, detail: err.Error()}

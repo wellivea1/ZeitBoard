@@ -71,8 +71,9 @@ func (w calDAVWriter) objectURL(eventID string) string {
 	return w.collection.JoinPath(calendarcore.OwnUID(eventID) + ".ics").String()
 }
 
-// create writes an accepted time as a new event.
-func (w calDAVWriter) create(ctx context.Context, event calendarcore.Event, stamp time.Time) calendarWriteResult {
+// create writes an accepted time as a new event. A retry needs nothing of
+// its own: If-None-Match finds an earlier attempt.
+func (w calDAVWriter) create(ctx context.Context, event calendarcore.Event, stamp time.Time, _ bool) calendarWriteResult {
 	body, err := calendarcore.CalendarObject(event, stamp)
 	if err != nil {
 		return calendarWriteResult{outcome: calendarWriteConflict, detail: "ZeitBoard could not turn this time into a calendar event."}

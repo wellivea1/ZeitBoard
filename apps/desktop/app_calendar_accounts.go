@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -100,6 +100,9 @@ type CalendarAccountSourceDTO struct {
 	AccountLabel   string `json:"accountLabel"`
 	RefreshedLabel string `json:"refreshedLabel"`
 	Failure        string `json:"failure,omitempty"`
+	// Writes says the account already lets ZeitBoard add events, so turning
+	// writing on asks nothing in the browser (ADR-0065).
+	Writes bool `json:"writes,omitempty"`
 }
 
 // ConnectCalendarAccount signs in to an account through the owner's app
@@ -127,14 +130,22 @@ func (a *App) ConnectCalendarAccount(input CalendarAccountInput) (CalendarAccoun
 }
 
 // ReconnectCalendarAccount signs in again with the registration an account
-// was kept with, as after the provider ended its sign-in, asking again for
-// what it allowed before.
+// was kept with, as after the provider ended its sign-in. It asks for what is
+// in use: reading, and adding events while accepted times are written to the
+// account.
 func (a *App) ReconnectCalendarAccount(input CalendarAccountRef) (CalendarAccountCalendarsDTO, error) {
-	_, account, err := a.calendarAccount(a.applicationContext(), input.AccountID)
+	ctx := a.applicationContext()
+	store, account, err := a.calendarAccount(ctx, input.AccountID)
 	if err != nil {
 		return CalendarAccountCalendarsDTO{}, err
 	}
-	return a.signInCalendarAccount(a.accountClient(account), &account)
+	writing, err := accountWrittenTo(ctx, store)
+	if err != nil {
+		return CalendarAccountCalendarsDTO{}, err
+	}
+	client := a.accountClient(account)
+	client.Write = writing == account.AccountID
+	return a.signInCalendarAccount(client, &account)
 }
 
 // CancelCalendarSignIn stops waiting for the browser.
@@ -334,8 +345,14 @@ func (a *App) signInCalendarAccount(client calendaraccounts.Client, want *storag
 	if want != nil && account.AccountID != want.AccountID {
 		return CalendarAccountCalendarsDTO{}, fmt.Errorf("The browser signed in to %s. Sign in to %s instead.", label, want.Label)
 	}
-	if account.Scopes, err = a.grantedScopes(ctx, store, account); err != nil {
+	// What a sign-in states is what is kept. One that does not allow adding
+	// events must not replace the sign-in of an account written to.
+	writing, err := accountWrittenTo(ctx, store)
+	if err != nil {
 		return CalendarAccountCalendarsDTO{}, err
+	}
+	if writing == account.AccountID && !calendaraccounts.Writes(client.Provider, account.Scopes) {
+		return CalendarAccountCalendarsDTO{}, fmt.Errorf("Accepted times are written to a calendar of %s, so signing in to it again must allow adding events. Use “Sign in again” on the account, or stop writing first.", label)
 	}
 	if err := store.SaveCalendarAccount(ctx, account); err != nil {
 		return CalendarAccountCalendarsDTO{}, err
@@ -355,32 +372,6 @@ func signInStopped(err error) error {
 	default:
 		return asSentence(err)
 	}
-}
-
-// grantedScopes is what an account allows once signed in again. Google's
-// answer already holds what was granted before (include_granted_scopes);
-// Microsoft keeps consent per app, so what an earlier sign-in allowed still
-// holds, and is added to what this one states.
-func (a *App) grantedScopes(ctx context.Context, store *storage.Store, account storage.CalendarAccount) (string, error) {
-	if account.Provider != string(calendaraccounts.Microsoft) {
-		return account.Scopes, nil
-	}
-	accounts, err := store.CalendarAccounts(ctx)
-	if err != nil {
-		return "", err
-	}
-	granted := strings.Fields(account.Scopes)
-	for _, kept := range accounts {
-		if kept.AccountID != account.AccountID {
-			continue
-		}
-		for _, earlier := range strings.Fields(kept.Scopes) {
-			if !slices.ContainsFunc(granted, func(scope string) bool { return strings.EqualFold(scope, earlier) }) {
-				granted = append(granted, earlier)
-			}
-		}
-	}
-	return strings.Join(granted, " "), nil
 }
 
 // beginCalendarSignIn holds the one sign-in that may wait for the browser at
@@ -637,6 +628,7 @@ func calendarAccountSources(ctx context.Context, store *storage.Store, now time.
 			AccountLabel:   account.Label,
 			RefreshedLabel: calendarRefreshedLabel(calendar.RefreshedAt, now, location),
 			Failure:        calendar.Failure,
+			Writes:         calendaraccounts.Writes(calendaraccounts.Provider(account.Provider), account.Scopes),
 		}
 	}
 	return sources, nil
@@ -729,7 +721,7 @@ func asSentence(err error) error {
 	if size == 0 {
 		return err
 	}
-	if word, _, _ := strings.Cut(message, " "); !strings.Contains(word, ".") {
+	if word, _, _ := strings.Cut(message, " "); !hostName.MatchString(word) {
 		message = string(unicode.ToUpper(first)) + message[size:]
 	}
 	if !strings.HasSuffix(message, ".") {
@@ -737,3 +729,6 @@ func asSentence(err error) error {
 	}
 	return errors.New(message)
 }
+
+// hostName is a host as an error names it: lowercase labels joined by dots.
+var hostName = regexp.MustCompile(`^[a-z0-9-]+(\.[a-z0-9-]+)+$`)

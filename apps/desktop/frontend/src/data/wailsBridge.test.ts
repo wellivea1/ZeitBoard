@@ -92,5 +92,6 @@ describe("Wails bridge lookup", () => {
     expect(asSentence("oauth2.googleapis.com could not be reached")).toBe(
       "oauth2.googleapis.com could not be reached.",
     );
+    expect(asSentence("e.g. this, said first")).toBe("E.g. this, said first.");
   });
 });

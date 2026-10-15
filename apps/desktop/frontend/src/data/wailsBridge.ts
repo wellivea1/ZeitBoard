@@ -18,10 +18,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  * Shown to the owner, it reads as a sentence. One that begins with a host
  * name, as "calendar.example.test could not be reached", keeps it as spelled.
  */
+// A host as an error names it: lowercase labels joined by dots.
+const hostName = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/;
+
 export function asSentence(message: string): string {
   const trimmed = message.trim();
   if (!trimmed) return trimmed;
-  const startsWithHost = (trimmed.split(/\s/, 1)[0] ?? "").includes(".");
+  const startsWithHost = hostName.test(trimmed.split(/\s/, 1)[0] ?? "");
   const capitalized = startsWithHost
     ? trimmed
     : trimmed.charAt(0).toLocaleUpperCase() + trimmed.slice(1);

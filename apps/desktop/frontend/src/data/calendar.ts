@@ -23,6 +23,8 @@ export interface CalendarAccountSource {
   refreshedLabel: string;
   /** Why the last refresh failed; the copy from refreshedLabel is kept. */
   failure?: string;
+  /** The account already lets ZeitBoard add events (ADR-0065). */
+  writes?: boolean;
 }
 
 export interface CalendarSource {
@@ -321,7 +323,13 @@ function normalizeAccountSource(value: unknown): CalendarAccountSource | undefin
   const refreshedLabel = text(value.refreshedLabel);
   if (!provider || !accountLabel || !refreshedLabel) return undefined;
   const failure = text(value.failure);
-  return { provider, accountLabel, refreshedLabel, ...(failure ? { failure } : {}) };
+  return {
+    provider,
+    accountLabel,
+    refreshedLabel,
+    ...(failure ? { failure } : {}),
+    ...(value.writes === true ? { writes: true } : {}),
+  };
 }
 
 function normalizeEvent(value: unknown): CalendarEventSegment | undefined {

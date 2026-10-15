@@ -235,7 +235,8 @@ func (a *App) writeCalendarPass(ctx context.Context) {
 	if err != nil {
 		// An account that cannot be signed in to now leaves every due write
 		// waiting, saying why.
-		if target.AccountID != "" && a.deferCalendarWrites(ctx, store, due, err.Error()) {
+		// Quitting is no failure to retry.
+		if target.AccountID != "" && ctx.Err() == nil && a.deferCalendarWrites(ctx, store, due, err.Error()) {
 			a.announce(calendarWritesChangedEvent)
 		}
 		return
@@ -273,7 +274,7 @@ func (a *App) carryCalendarWrite(ctx context.Context, store *storage.Store, writ
 			return false
 		}
 		event = accepted
-		result = writer.create(ctx, event, now.Truncate(time.Second))
+		result = writer.create(ctx, event, now.Truncate(time.Second), write.Attempts > 0)
 	case storage.CalendarWriteDelete:
 		result = writer.remove(ctx, write.EventID, write.Href, write.ETag)
 	default:

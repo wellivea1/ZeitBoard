@@ -3141,3 +3141,34 @@ The fixes to the code review of ADR-0064's change. Go tests in `core/calendar`,
     again".
   - Signing in again waits on that row, with the form for a new account closed and disabled.
     Cancelling says so and reads the accounts again.
+
+## Writing to accounts after review — 2026-10-15
+
+The fixes to the code review of ADR-0065's change. Go tests in `internal/calendaraccounts` and the
+desktop (also under `-race`); component and data tests in the window. The stand-ins now behave as
+the providers do: Google keeps a removed event as cancelled under its ID and answers 410 for it,
+and Graph drops a create that repeats a transaction ID.
+
+- The provider package:
+  - A Google create's body asks for no reminders.
+  - A time accepted a minute later is written under a new ID and shown. Accepted again under the
+    removed event's own ID, the event is put back with a new version, not taken for written.
+  - "Remove it anyway" refuses an event under another time's mark and removes this time's own.
+  - A first Microsoft create reads no calendar view, and its body carries the transaction ID with
+    the acceptance and no reminder. A retry reads the view and finds the first, with one post.
+  - A time accepted again after an undo is a new post.
+  - With the view paged one event at a time, a retry finds its earlier attempt on a later page.
+- The desktop:
+  - Undone and accepted again with the app's clock standing still, an accepted time is in the
+    Google calendar again, with no problems.
+  - A pass cancelled while the account's access is refreshed leaves every due write at no attempts
+    and no detail.
+  - With writing on, the source says the account lets ZeitBoard add events.
+  - A read-only sign-in from the form, to the account written to, is refused, and the kept sign-in
+    still writes.
+  - With writing stopped, signing in again does not ask to add events.
+  - "e.g." starts a sentence with a capital; host names and IP addresses keep their spelling.
+  - The Microsoft write test pre-writes its landed event with the acceptance's transaction ID, and
+    no second event is written.
+- The window: an account that already allows writing says so, turns writing on with "Checking
+  that ZeitBoard can add events to Owner…" and no Cancel, then shows the status.
