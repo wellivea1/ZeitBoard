@@ -264,17 +264,22 @@ func (a *App) writeCalendarPass(ctx context.Context) {
 // whether anything was recorded.
 func (a *App) carryCalendarWrite(ctx context.Context, store *storage.Store, writer eventWriter, write storage.CalendarWrite) bool {
 	now := a.currentTime().UTC()
-	var event calendarcore.Event
+	var accepted storage.AcceptedTime
 	var result calendarWriteResult
 	switch write.State {
 	case storage.CalendarWriteCreate:
-		accepted, found, err := store.CalendarWriteEvent(ctx, write.EventID)
-		if err != nil || !found {
+		var found bool
+		var err error
+		if accepted, found, err = store.CalendarWriteEvent(ctx, write.EventID); err != nil || !found {
 			// Undone since it was listed: the undo dropped this write.
 			return false
 		}
-		event = accepted.Event
-		result = writer.create(ctx, accepted, now.Truncate(time.Second))
+		// Recorded before it is sent, so a create cut off by quitting still
+		// counts as one the calendar may hold.
+		if err := store.MarkCalendarWriteSent(ctx, write.EventID); err != nil {
+			return false
+		}
+		result = writer.create(ctx, accepted, write.Sent, now.Truncate(time.Second))
 	case storage.CalendarWriteDelete:
 		result = writer.remove(ctx, write.EventID, write.Href, write.ETag)
 	default:
@@ -287,7 +292,7 @@ func (a *App) carryCalendarWrite(ctx context.Context, store *storage.Store, writ
 	var err error
 	switch {
 	case result.outcome == calendarWriteDone && write.State == storage.CalendarWriteCreate:
-		err = store.MarkCalendarWritten(ctx, event, result.href, result.etag, now)
+		err = store.MarkCalendarWritten(ctx, accepted, result.href, result.etag, now)
 	case result.outcome == calendarWriteDone:
 		err = store.MarkCalendarWriteRemoved(ctx, write.EventID)
 	case result.outcome == calendarWriteConflict:

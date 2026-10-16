@@ -39,6 +39,7 @@ events that the owner has since changed. Each provider offers what those rules n
      `include_granted_scopes` keeps an earlier grant on its side.
    - A sign-in from the form that would take adding events from the account written to is
      refused, and its kept sign-in stays.
+   - Turning writing on can be cancelled at any point, whether or not the browser was asked.
 3. **Only a calendar ZeitBoard may add to.** In Google, a calendar the owner owns. In Microsoft,
    one the owner can edit. A calendar shared with them is refused, by name.
 4. **ZeitBoard's own events only, recognisable as such.**
@@ -56,12 +57,16 @@ events that the owner has since changed. Each provider offers what those rules n
 5. **Preconditions instead of trust.**
    - A Google create that finds its ID taken keeps the event only if it carries this time's mark;
      anything else is a conflict for the owner. Google keeps a removed event under its ID.
-     ZeitBoard's own event removed before writing to the calendar was turned on is put back, as
-     turning writing on writes every accepted time. One the owner removed since stays removed, as
-     it would had the write's answer come back.
+     ZeitBoard records each create before sending it. Its own event removed while writing was off
+     is put back when writing is turned on again, as turning writing on writes every accepted
+     time. One the owner removed after a create was sent stays removed, as it would had that
+     create's answer come back.
    - A Microsoft create first looks, over every page of the time's events, for what an earlier
      attempt wrote, its answer lost or the app quitting first. Graph also drops a create that
-     repeats a transaction ID.
+     repeats a transaction ID, which alone guards a time holding more events than ZeitBoard
+     reads.
+   - A time with no approval on record cannot be named, so it waits for the owner as a
+     conflict.
    - A Google removal first checks the event still carries this time's mark, then sends
      `If-Match` with the version ZeitBoard was given. "Remove it anyway" sends none.
    - A Microsoft removal compares the change key first.
@@ -69,9 +74,12 @@ events that the owner has since changed. Each provider offers what those rules n
      event the owner moves between calendars is still found.
 6. **The writer and its queue are ADR-0053's.** The same triggers queue writes, and the same
    retries, conflicts, "Try again now", status and problem list apply. When the account cannot
-   be signed in to, every due write waits and says why, such as an ended sign-in. A time accepted
-   again while its earlier acceptance is still being removed is written once that removal
-   settles.
+   be signed in to, every due write waits and says why, such as an ended sign-in.
+   - A time accepted again while its earlier acceptance is still being removed is written once
+     that removal is done. If the owner keeps the changed event instead, that event stands for the
+     time, at the version ZeitBoard wrote, so removing it later still asks first.
+   - A create that lands after its acceptance was undone is removed, and a time accepted again
+     meanwhile is written after.
 7. **Stopping and removing.**
    - Stopping writing forgets what was written, as ADR-0053 does. The account stays signed in
      for reading. Removing the account withdraws its access: Google revokes the grant, and
@@ -101,3 +109,7 @@ events that the owner has since changed. Each provider offers what those rules n
   removed before writing began, made every Microsoft create look first, and checked the mark
   before every Google removal. No release carried the earlier names, so nothing written under
   them needs carrying over (completion plan, "Writing to accounts after a second review").
+- Update, 2026-10-16: a third review moved the choice to put a Google event back from clocks to
+  whether a create was sent, kept an event the owner chose to keep, removed a create that landed
+  for an undone acceptance, and let turning writing on be cancelled at any point (completion
+  plan, "Writing to accounts after a third review").

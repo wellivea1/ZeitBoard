@@ -405,8 +405,6 @@ export function CalendarAccountForm({
       (result) => {
         setWaitingFor(undefined);
         signedIn(result);
-        // What the account allows may have changed, which its calendars show.
-        onChanged();
         return true;
       },
       (reason: unknown) => {

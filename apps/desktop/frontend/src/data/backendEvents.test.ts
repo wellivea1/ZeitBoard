@@ -2,7 +2,6 @@ import { afterEach, expect, it, vi } from "vitest";
 import { subscribeBackendEvents } from "./backendEvents";
 import { calendarDataChangedEvent } from "./calendar";
 import { agentProposalsChangedEvent } from "./agentProposals";
-import { calendarSignInOpenedEvent } from "./calendarAccounts";
 import { calendarWriteBackChangedEvent } from "./calendarWriteBack";
 import { medicationDataChangedEvent } from "./medications";
 import { rhythmMarkersChangedEvent } from "./rhythmMarkers";
@@ -26,7 +25,6 @@ function bridge() {
     calendarDataChangedEvent,
     agentProposalsChangedEvent,
     calendarWriteBackChangedEvent,
-    calendarSignInOpenedEvent,
   ];
   const listeners = views.map((view) => {
     const listener = (event: Event) => heard.push(event.type);
@@ -66,7 +64,7 @@ it("refreshes every synced view when a sync downloads or erases records", () => 
   ]);
   release();
   // Every announcement subscribed to is let go of.
-  expect(dispose).toHaveBeenCalledTimes(6);
+  expect(dispose).toHaveBeenCalledTimes(5);
 });
 
 it("shows what an agent proposed without waiting for a refresh", () => {
@@ -94,16 +92,6 @@ it("redraws calendars when a subscribed one is read again", () => {
   try {
     announce("zeitboard:calendar-refreshed");
     expect(heard).toEqual([calendarDataChangedEvent]);
-  } finally {
-    release();
-  }
-});
-
-it("lets a sign-in opened in the browser be cancelled", () => {
-  const { heard, announce, release } = bridge();
-  try {
-    announce("zeitboard:calendar-sign-in");
-    expect(heard).toEqual([calendarSignInOpenedEvent]);
   } finally {
     release();
   }

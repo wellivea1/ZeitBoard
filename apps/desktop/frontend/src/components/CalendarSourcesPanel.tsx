@@ -253,7 +253,6 @@ export function CalendarSourcesPanel({
                     sourceId={source.sourceId}
                     label={source.label}
                     provider={source.account?.provider}
-                    writes={source.account?.writes}
                     onStarted={(status) => {
                       setOffering(null);
                       setWriteBack(status);

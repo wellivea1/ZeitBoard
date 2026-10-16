@@ -32,10 +32,6 @@ const (
 
 	// calendarRevokeTimeout bounds asking a provider to withdraw a grant.
 	calendarRevokeTimeout = 10 * time.Second
-
-	// calendarSignInAnnouncement tells the window a sign-in now waits for
-	// the browser, so whatever started it can offer to cancel it.
-	calendarSignInAnnouncement = "zeitboard:calendar-sign-in"
 )
 
 // openSignInPage opens a provider's sign-in page in the owner's browser;
@@ -104,9 +100,6 @@ type CalendarAccountSourceDTO struct {
 	AccountLabel   string `json:"accountLabel"`
 	RefreshedLabel string `json:"refreshedLabel"`
 	Failure        string `json:"failure,omitempty"`
-	// Writes says the account already lets ZeitBoard add events, so turning
-	// writing on asks nothing in the browser (ADR-0065).
-	Writes bool `json:"writes,omitempty"`
 }
 
 // ConnectCalendarAccount signs in to an account through the owner's app
@@ -130,7 +123,12 @@ func (a *App) ConnectCalendarAccount(input CalendarAccountInput) (CalendarAccoun
 			return CalendarAccountCalendarsDTO{}, errors.New("Paste the client secret Google gave with the client ID.")
 		}
 	}
-	return a.signInCalendarAccount(a.calendarAccountClient(provider, clientID, secret), nil)
+	ctx, done, err := a.beginCalendarSignIn()
+	if err != nil {
+		return CalendarAccountCalendarsDTO{}, err
+	}
+	defer done()
+	return a.signInCalendarAccount(ctx, a.calendarAccountClient(provider, clientID, secret), nil)
 }
 
 // ReconnectCalendarAccount signs in again with the registration an account
@@ -149,10 +147,16 @@ func (a *App) ReconnectCalendarAccount(input CalendarAccountRef) (CalendarAccoun
 	}
 	client := a.accountClient(account)
 	client.Write = writing == account.AccountID
-	return a.signInCalendarAccount(client, &account)
+	held, done, err := a.beginCalendarSignIn()
+	if err != nil {
+		return CalendarAccountCalendarsDTO{}, err
+	}
+	defer done()
+	return a.signInCalendarAccount(held, client, &account)
 }
 
-// CancelCalendarSignIn stops waiting for the browser.
+// CancelCalendarSignIn stops the sign-in under way, or turning writing on,
+// whether or not it is waiting for the browser.
 func (a *App) CancelCalendarSignIn() {
 	a.calendarAccountsMu.Lock()
 	defer a.calendarAccountsMu.Unlock()
@@ -296,17 +300,13 @@ func (a *App) accountClient(account storage.CalendarAccount) calendaraccounts.Cl
 
 // signInCalendarAccount opens the provider's sign-in in the browser, waits
 // for it to come back to a one-time loopback address, and keeps the account
-// it signed in to: any account, or only the one wanted.
-func (a *App) signInCalendarAccount(client calendaraccounts.Client, want *storage.CalendarAccount) (CalendarAccountCalendarsDTO, error) {
+// it signed in to: any account, or only the one wanted. ctx is the one
+// beginCalendarSignIn holds.
+func (a *App) signInCalendarAccount(ctx context.Context, client calendaraccounts.Client, want *storage.CalendarAccount) (CalendarAccountCalendarsDTO, error) {
 	store, err := a.requireStore()
 	if err != nil {
 		return CalendarAccountCalendarsDTO{}, err
 	}
-	ctx, done, err := a.beginCalendarSignIn()
-	if err != nil {
-		return CalendarAccountCalendarsDTO{}, err
-	}
-	defer done()
 	receiver, err := calendaraccounts.Listen()
 	if err != nil {
 		return CalendarAccountCalendarsDTO{}, asSentence(err)
@@ -317,7 +317,6 @@ func (a *App) signInCalendarAccount(client calendaraccounts.Client, want *storag
 		return CalendarAccountCalendarsDTO{}, asSentence(err)
 	}
 	openSignInPage(a.applicationContext(), auth.URL)
-	a.announce(calendarSignInAnnouncement)
 	code, err := receiver.Wait(ctx, auth.State)
 	if err != nil {
 		return CalendarAccountCalendarsDTO{}, signInStopped(err)
@@ -390,13 +389,13 @@ func signInStopped(err error) error {
 	}
 }
 
-// beginCalendarSignIn holds the one sign-in that may wait for the browser at
-// a time, until it comes back, five minutes pass, or it is cancelled.
+// beginCalendarSignIn holds the one sign-in, or turning writing on, that may
+// run at a time, until it is done, five minutes pass, or it is cancelled.
 func (a *App) beginCalendarSignIn() (context.Context, func(), error) {
 	a.calendarAccountsMu.Lock()
 	defer a.calendarAccountsMu.Unlock()
 	if a.calendarSignInCancel != nil {
-		return nil, nil, errors.New("ZeitBoard is already waiting for a sign-in in your browser.")
+		return nil, nil, errors.New("ZeitBoard is already signing in to a calendar account. Finish or cancel that first.")
 	}
 	ctx, cancel := context.WithTimeout(a.applicationContext(), calendarSignInTimeout)
 	a.calendarSignInCancel = cancel
@@ -644,7 +643,6 @@ func calendarAccountSources(ctx context.Context, store *storage.Store, now time.
 			AccountLabel:   account.Label,
 			RefreshedLabel: calendarRefreshedLabel(calendar.RefreshedAt, now, location),
 			Failure:        calendar.Failure,
-			Writes:         calendaraccounts.Writes(calendaraccounts.Provider(account.Provider), account.Scopes),
 		}
 	}
 	return sources, nil

@@ -74,17 +74,18 @@ func TransactionID(eventID, approval string) string {
 
 // CreateEvent writes one acceptance of a time into a calendar: the accepted
 // event, named by the approval that accepted it. An earlier attempt whose
-// answer was lost is found and kept rather than written twice. writingSince
-// is when writing to the calendar was turned on: ZeitBoard's own event the
-// owner removed there since then stays removed.
-func (c Client) CreateEvent(ctx context.Context, access, calendarID string, event calendarcore.Event, approval string, writingSince time.Time) (Written, error) {
+// answer was lost is found and kept rather than written twice. sent says a
+// create for this acceptance was sent since writing to the calendar was
+// turned on, so ZeitBoard's own event found removed was removed by the owner,
+// and stays removed.
+func (c Client) CreateEvent(ctx context.Context, access, calendarID string, event calendarcore.Event, approval string, sent bool) (Written, error) {
 	if event.Ownership != calendarcore.OwnershipAppOwned || strings.TrimSpace(approval) == "" || strings.TrimSpace(calendarID) == "" {
 		return Written{}, errors.New("only an accepted time is written, to a named calendar")
 	}
 	if c.Provider == Microsoft {
 		return c.microsoftCreate(ctx, access, calendarID, event, approval)
 	}
-	return c.googleCreate(ctx, access, calendarID, event, approval, writingSince)
+	return c.googleCreate(ctx, access, calendarID, event, approval, sent)
 }
 
 // DeleteEvent removes an undone accepted time, unless the owner has changed
@@ -137,17 +138,16 @@ func googleBoundary(event calendarcore.Event, at time.Time) map[string]string {
 }
 
 // googleMarked is a Google event as far as telling ZeitBoard's from another,
-// and a removed one from one shown, and when it was last changed.
+// and a removed one from one shown.
 type googleMarked struct {
-	ETag               string    `json:"etag"`
-	Status             string    `json:"status"`
-	Updated            time.Time `json:"updated"`
+	ETag               string `json:"etag"`
+	Status             string `json:"status"`
 	ExtendedProperties struct {
 		Private map[string]string `json:"private"`
 	} `json:"extendedProperties"`
 }
 
-func (c Client) googleCreate(ctx context.Context, access, calendarID string, event calendarcore.Event, approval string, writingSince time.Time) (Written, error) {
+func (c Client) googleCreate(ctx context.Context, access, calendarID string, event calendarcore.Event, approval string, sent bool) (Written, error) {
 	id := googleEventID(event.EventID, approval)
 	transparency := "opaque"
 	if !event.Busy {
@@ -190,14 +190,15 @@ func (c Client) googleCreate(ctx context.Context, access, calendarID string, eve
 	switch {
 	case existing.ExtendedProperties.Private[ownMark] != event.EventID:
 		return Written{}, ErrTaken
-	case existing.Status != "cancelled", existing.Updated.After(writingSince):
-		// Shown, or removed by the owner while ZeitBoard was writing here:
-		// that removal stands, as it would had the answer come back.
+	case existing.Status != "cancelled", sent:
+		// Shown, or written by an earlier attempt and removed by the owner
+		// since: that removal stands, as it would had the answer come back.
 		return Written{ID: id, Version: existing.ETag}, nil
 	}
-	// Removed before writing here was turned on. Turning it on writes every
-	// accepted time, so it is put back: Google keeps a removed event under its
-	// ID, where a CalDAV calendar would take it afresh.
+	// Written while ZeitBoard last wrote here, and removed since. Turning
+	// writing on again writes every accepted time, so it is put back: Google
+	// keeps a removed event under its ID, where a CalDAV calendar would take
+	// it afresh.
 	body["status"] = "confirmed"
 	var restored struct {
 		ETag string `json:"etag"`
@@ -340,7 +341,9 @@ func (c Client) microsoftFind(ctx context.Context, access, calendarID string, ev
 		}
 		address = answer.NextLink
 	}
-	return Written{}, false, errors.New("the time holds more events than ZeitBoard reads at once")
+	// More events than ZeitBoard reads at once: the create goes ahead, with
+	// Graph's own check of the transaction ID to keep it from writing twice.
+	return Written{}, false, nil
 }
 
 func (c Client) microsoftDelete(ctx context.Context, access, eventID string, written Written) error {

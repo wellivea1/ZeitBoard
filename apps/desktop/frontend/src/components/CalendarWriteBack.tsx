@@ -1,10 +1,6 @@
-import { useEffect, useId, useState } from "react";
+import { useId, useState } from "react";
 import type { CalendarAccountProvider } from "../data/calendar";
-import {
-  calendarSignInOpenedEvent,
-  cancelCalendarSignIn,
-  providerNames,
-} from "../data/calendarAccounts";
+import { cancelCalendarSignIn, providerNames } from "../data/calendarAccounts";
 import {
   disableCalendarWriteBack,
   enableAccountWriteBack,
@@ -28,43 +24,25 @@ function failure(reason: unknown, fallback: string) {
 }
 
 // The offer for a calendar from an account: what writing does, then the
-// browser asks the owner, once, to allow it.
+// browser asks the owner, once, to allow it. Turning writing on can be
+// cancelled at any point, whether or not the browser was asked.
 function AccountWriteBackForm({
   sourceId,
   label,
   provider,
-  writes,
   onStarted,
   onCancel,
 }: {
   sourceId: string;
   label: string;
   provider: CalendarAccountProvider;
-  /** The account already lets ZeitBoard add events: the browser asks nothing. */
-  writes: boolean;
   onStarted: (status: CalendarWriteBack) => void;
   onCancel: () => void;
 }) {
   const id = useId();
   const [busy, setBusy] = useState(false);
-  // Whether turning writing on opened a sign-in in the browser, as the
-  // desktop says: only then is there one to cancel.
-  const [signingIn, setSigningIn] = useState(false);
   const [error, setError] = useState("");
   const name = providerNames[provider];
-  const calendars = provider === "google" ? "calendars you own" : "your calendars";
-
-  useEffect(() => {
-    if (!busy) return undefined;
-    const opened = () => setSigningIn(true);
-    window.addEventListener(calendarSignInOpenedEvent, opened);
-    return () => window.removeEventListener(calendarSignInOpenedEvent, opened);
-  }, [busy]);
-
-  const settle = () => {
-    setBusy(false);
-    setSigningIn(false);
-  };
 
   const start = () => {
     if (busy) return;
@@ -72,11 +50,11 @@ function AccountWriteBackForm({
     setError("");
     void enableAccountWriteBack(sourceId).then(
       (status) => {
-        settle();
+        setBusy(false);
         onStarted(status);
       },
       (reason: unknown) => {
-        settle();
+        setBusy(false);
         setError(failure(reason, "Writing could not be turned on."));
       },
     );
@@ -91,16 +69,11 @@ function AccountWriteBackForm({
         events there, it asks you before removing it.
       </p>
       <small>
-        {writes
-          ? `${name} already lets ZeitBoard add events to ${calendars}.`
-          : `The first time, ${name} asks in your browser whether ZeitBoard may add events to ${calendars}. Nothing else is asked for, and the account’s sign-in stays on this computer.`}
+        The first time, {name} asks in your browser whether ZeitBoard may add events to{" "}
+        {provider === "google" ? "calendars you own" : "your calendars"}. Nothing else is asked for,
+        and the account’s sign-in stays on this computer.
       </small>
-      {busy && !signingIn && (
-        <p className="calendar-account-waiting" role="status">
-          Checking that ZeitBoard can add events to {label}…
-        </p>
-      )}
-      {busy && signingIn && (
+      {busy && (
         <div className="calendar-account-waiting" role="status">
           <span>If your browser asks, allow ZeitBoard to add events.</span>
           <button
@@ -135,7 +108,6 @@ export function CalendarWriteBackForm({
   sourceId,
   label,
   provider,
-  writes = false,
   onStarted,
   onCancel,
 }: {
@@ -143,8 +115,6 @@ export function CalendarWriteBackForm({
   label: string;
   /** Set for a calendar brought in from an account. */
   provider?: CalendarAccountProvider;
-  /** The account already lets ZeitBoard add events. */
-  writes?: boolean;
   onStarted: (status: CalendarWriteBack) => void;
   onCancel: () => void;
 }) {
@@ -154,7 +124,6 @@ export function CalendarWriteBackForm({
         sourceId={sourceId}
         label={label}
         provider={provider}
-        writes={writes}
         onStarted={onStarted}
         onCancel={onCancel}
       />

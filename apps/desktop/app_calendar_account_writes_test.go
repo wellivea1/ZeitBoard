@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	calendarcore "non24.app/core/calendar"
 	storage "non24.app/core/storage/sqlite"
@@ -33,6 +34,9 @@ func (s *syntheticAccount) serveWrites(r *http.Request, write func(int, any)) bo
 func (s *syntheticAccount) serveGoogleWrites(r *http.Request, path string, write func(int, any)) bool {
 	events := "/calendars/" + s.owner + "/events"
 	switch {
+	case strings.HasPrefix(path, "/users/me/calendarList/") && s.checking != nil:
+		s.checking()
+		<-r.Context().Done()
 	case strings.HasPrefix(path, "/users/me/calendarList/"):
 		role := "reader"
 		if strings.TrimPrefix(path, "/users/me/calendarList/") == s.owner {
@@ -51,6 +55,10 @@ func (s *syntheticAccount) serveGoogleWrites(r *http.Request, path string, write
 		event["status"] = "confirmed"
 		s.stamp(event)
 		s.stored[id] = event
+		if s.losing {
+			write(http.StatusServiceUnavailable, map[string]string{"error": "backendError"})
+			return true
+		}
 		write(http.StatusOK, event)
 	case strings.HasPrefix(path, events+"/"):
 		id := strings.TrimPrefix(path, events+"/")
@@ -463,10 +471,6 @@ func TestSigningInAgainKeepsWhatWritingNeeds(t *testing.T) {
 	if _, err := app.EnableAccountWriteBack(AccountWriteBackInput{SourceID: sourceID}); err != nil {
 		t.Fatal(err)
 	}
-	calendar, _ := app.GetCalendar(accountWeekOf(t, app))
-	if calendar.Sources[0].Account == nil || !calendar.Sources[0].Account.Writes {
-		t.Fatalf("the account does not say it lets ZeitBoard add events: %+v", calendar.Sources[0].Account)
-	}
 	stillWrites := func() {
 		t.Helper()
 		if accounts, _ := app.store.CalendarAccounts(context.Background()); !calendaraccounts.Writes(calendaraccounts.Google, accounts[0].Scopes) {
@@ -504,6 +508,122 @@ func TestSigningInAgainKeepsWhatWritingNeeds(t *testing.T) {
 			t.Errorf("signing in again asked to add events with writing off: %q", s.requested)
 		}
 	})
+}
+
+// Turning writing on can be cancelled while ZeitBoard checks the calendar,
+// with no browser asked, and holds off any other sign-in meanwhile.
+func TestTurningWritingOnCanBeCancelledAtAnyPoint(t *testing.T) {
+	app, fake, account, sourceID, _ := writeApp(t, calendaraccounts.Google)
+	if _, err := app.EnableAccountWriteBack(AccountWriteBackInput{SourceID: sourceID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := app.DisableCalendarWriteBack(); err != nil {
+		t.Fatal(err)
+	}
+	var meanwhile error
+	fake.with(func(s *syntheticAccount) {
+		s.checking = func() {
+			_, meanwhile = app.ReconnectCalendarAccount(CalendarAccountRef{AccountID: account.AccountID})
+			app.CancelCalendarSignIn()
+		}
+	})
+	_, err := app.EnableAccountWriteBack(AccountWriteBackInput{SourceID: sourceID})
+	if err == nil || err.Error() != "Turning writing on was cancelled." {
+		t.Fatalf("cancelled while checking: %v", err)
+	}
+	fake.with(func(s *syntheticAccount) {
+		if meanwhile == nil || meanwhile.Error() != "ZeitBoard is already signing in to a calendar account. Finish or cancel that first." {
+			t.Errorf("a sign-in meanwhile read as %v", meanwhile)
+		}
+		s.checking = nil
+	})
+	if status := writeStatus(t, app); status.On {
+		t.Fatalf("writing was turned on: %+v", status)
+	}
+	if _, err := app.EnableAccountWriteBack(AccountWriteBackInput{SourceID: sourceID}); err != nil {
+		t.Fatalf("turning writing on once the cancel was done: %v", err)
+	}
+}
+
+// Google keeps a removed event under its ID. ZeitBoard's own that the owner
+// removed after a create whose answer was lost stays removed; removed while
+// writing was off, it comes back when writing is turned on again.
+func TestGooglePutsBackOnlyWhatWasRemovedWhileWritingWasOff(t *testing.T) {
+	app, fake, _, sourceID, ids := writeApp(t, calendaraccounts.Google)
+	ctx := context.Background()
+	enable := func() {
+		t.Helper()
+		if _, err := app.EnableAccountWriteBack(AccountWriteBackInput{SourceID: sourceID}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// remove removes the events of the times named, as the owner would in
+	// their own calendar app.
+	remove := func(eventIDs ...string) {
+		t.Helper()
+		fake.with(func(s *syntheticAccount) {
+			for _, event := range s.stored {
+				for _, eventID := range eventIDs {
+					if ownedBy(event) == eventID {
+						event["status"] = "cancelled"
+						s.stamp(event)
+					}
+				}
+			}
+		})
+	}
+	held := func(want int, summary string) {
+		t.Helper()
+		status := writeStatus(t, app)
+		if len(fake.written()) != want || status.Summary != summary || len(status.Problems) != 0 {
+			t.Fatalf("%+v, held %v", status, fake.written())
+		}
+	}
+	enable()
+	if _, err := app.DecideLocalProposals(LocalProposalsDecisionInput{ProposalIDs: ids, Decision: storage.ProposalApproved}); err != nil {
+		t.Fatal(err)
+	}
+	// Every create lands with its answer lost; the owner removes one.
+	fake.with(func(s *syntheticAccount) { s.losing = true })
+	app.writeCalendarPass(ctx)
+	fake.with(func(s *syntheticAccount) { s.losing = false })
+	events := ownEvents(t, app)
+	remove(events[ids[1]].EventID)
+	if _, err := app.RetryCalendarWrites(); err != nil {
+		t.Fatal(err)
+	}
+	app.writeCalendarPass(ctx)
+	held(2, "3 accepted times are in Owner.")
+	if fake.written()[events[ids[1]].EventID] {
+		t.Fatal("the owner's removal was undone")
+	}
+
+	// Writing stopped, the owner clears the calendar; turned on again, every
+	// accepted time is written there again.
+	if _, err := app.DisableCalendarWriteBack(); err != nil {
+		t.Fatal(err)
+	}
+	remove(events[ids[0]].EventID, events[ids[2]].EventID)
+	enable()
+	app.writeCalendarPass(ctx)
+	held(3, "3 accepted times are in Owner.")
+	fake.with(func(s *syntheticAccount) {
+		if s.posts != 3 {
+			t.Errorf("%d events written: one was written twice rather than put back", s.posts)
+		}
+	})
+}
+
+// A time no approval records cannot be named, so it waits for the owner
+// rather than failing again and again.
+func TestATimeWithNoApprovalWaitsForTheOwner(t *testing.T) {
+	accepted := storage.AcceptedTime{Event: calendarcore.Event{
+		EventID: "calendar_event_unrecorded", Ownership: calendarcore.OwnershipAppOwned,
+	}}
+	result := accountEventWriter{}.create(context.Background(), accepted, false, time.Time{})
+	if result.outcome != calendarWriteConflict || result.detail != "ZeitBoard has no record of accepting this time, so it was not written." {
+		t.Fatalf("a time with no approval: %+v", result)
+	}
 }
 
 // accountWeekOf is the week around the app's own today.

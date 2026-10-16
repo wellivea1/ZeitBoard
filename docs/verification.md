@@ -3176,13 +3176,13 @@ and Graph drops a create that repeats a transaction ID.
 ## Writing to accounts after a second review — 2026-10-15
 
 The fixes to the second review of ADR-0065's change. Go tests in the store,
-`internal/calendaraccounts` and the desktop; component and data tests in the window. The Google
-stand-in now stamps when each event last changed, as Google's `updated` does, and the Graph
-stand-in can stop dropping a repeated transaction ID.
+`internal/calendaraccounts` and the desktop; component and data tests in the window. The Graph
+stand-in can stop dropping a repeated transaction ID. The third review below replaced this
+round's tests of putting a Google event back, and of Cancel in the window.
 
 - The store:
   - A time accepted again while its earlier acceptance is being removed is queued to be written
-    once the removal is done, or once the owner keeps the changed event.
+    once the removal is done.
   - Undone again before the removal settles, nothing more is queued. A time the owner left out of
     the calendar is not queued again.
   - Run with the trigger switched off, the desktop's test of the same thing fails: the time
@@ -3193,9 +3193,6 @@ stand-in can stop dropping a repeated transaction ID.
     approval finds it, with one post.
   - A removal sent to another time's event, at that event's own version, leaves it.
   - Accepted again under a new approval, a Google time is a new event the owner sees.
-  - A ZeitBoard event removed before writing began is put back with a new version. Removed by the
-    owner after writing began, a retry keeps it removed, takes it as written, and undoing it later
-    is no failure.
   - A first Microsoft create reads the calendar view once. With Graph no longer dropping repeats,
     a second create finds the first and posts nothing.
   - With the view paged one event at a time, a create finds its earlier attempt on a later page.
@@ -3209,10 +3206,36 @@ stand-in can stop dropping a repeated transaction ID.
     and “Sign in again” is told to allow adding events when Google asks. The kept sign-in still
     writes both times.
   - Stopping writing returns a status that is off.
-- The window:
-  - Turning writing on shows "Checking that ZeitBoard can add events to Owner…" with no Cancel,
-    even for an account thought to allow writing, until the desktop says it opened a sign-in.
-    Then it shows "If your browser asks, allow ZeitBoard to add events." with Cancel, and a later
-    attempt starts from checking again.
-  - Signing in, or again, tells the sources panel to reload.
-  - The announcement bridge passes the desktop's sign-in announcement to the window.
+
+## Writing to accounts after a third review — 2026-10-16
+
+The fixes to the third review of ADR-0065's change. Go tests in the store,
+`internal/calendaraccounts` and the desktop; component tests in the window. The Google stand-in
+can store a create and answer as though it failed, as a lost answer would. It can also hold the
+check that a calendar takes events until the app gives up on it.
+
+- The store:
+  - Keeping a changed event for a time accepted again leaves the time written, at the event's
+    address and the version ZeitBoard wrote.
+  - A create that lands for an acceptance no longer in force turns the write waiting for the new
+    acceptance into the removal of what landed, at its address and version. Once that is removed,
+    the new acceptance is queued afresh.
+  - A write says whether a create was sent for it, from when that is recorded until the write
+    goes, and the record goes with the write.
+- The provider package:
+  - ZeitBoard's own Google event, removed when no create was sent for it, is put back with a new
+    version. Removed by the owner after a create was sent, a retry keeps it removed, takes it as
+    written, and undoing it later is no failure.
+  - In a time holding more events than ZeitBoard reads, a Microsoft create goes ahead after the
+    pages it reads, and Graph's check of the transaction ID keeps it from writing twice.
+- The desktop:
+  - Turning writing on, cancelled while ZeitBoard checks the calendar with no browser asked, says
+    "Turning writing on was cancelled." and leaves writing off. A sign-in meanwhile is refused as
+    one already under way. Afterwards, writing turns on.
+  - With every create's answer lost and the owner removing one event, a retry keeps that removal
+    and counts all three times as written. Writing stopped, the owner clearing the calendar, and
+    writing turned on again, all three are put back with no second post. With the desktop made to
+    say no create was ever sent, this test fails.
+  - A time no approval records waits for the owner as a conflict.
+- The window: turning writing on for an account's calendar offers Cancel at once, and cancelling
+  shows "Turning writing on was cancelled."

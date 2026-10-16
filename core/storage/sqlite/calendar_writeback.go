@@ -67,6 +67,9 @@ type CalendarWrite struct {
 	Attempts      int
 	NextAttemptAt time.Time // zero: due now
 	Detail        string    // why the last attempt failed, or what the conflict is
+	// Sent says a create for it was sent before, so the calendar may already
+	// hold it, its answer lost or the app quitting first.
+	Sent bool
 }
 
 func (s *Store) initializeCalendarWriteBack(ctx context.Context) error {
@@ -105,11 +108,15 @@ func (s *Store) initializeCalendarWriteBack(ctx context.Context) error {
 		UPDATE local_calendar_writes SET state = 'delete', attempts = 0, next_attempt_at = '', detail = '',
 			updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 		WHERE event_id = OLD.event_id AND state = 'written'; END`,
+		// The creates sent for a write, which the write's going takes with it.
+		`CREATE TABLE IF NOT EXISTS local_calendar_write_sends(
+			event_id TEXT PRIMARY KEY REFERENCES local_calendar_writes(event_id) ON DELETE CASCADE
+		)`,
 		// A time accepted again while its earlier acceptance was still being
-		// removed found that removal in its place. Once the removal is settled,
-		// removed or kept by the owner, the new acceptance is written.
+		// removed found that removal in its place. Once it is removed, the new
+		// acceptance is written.
 		`CREATE TRIGGER IF NOT EXISTS local_calendar_write_after_removal AFTER DELETE ON local_calendar_writes
-		WHEN OLD.href <> '' AND OLD.state IN ('delete', 'conflict') AND EXISTS(SELECT 1 FROM local_calendar_write_target) BEGIN
+		WHEN OLD.state = 'delete' AND EXISTS(SELECT 1 FROM local_calendar_write_target) BEGIN
 		INSERT OR IGNORE INTO local_calendar_writes(event_id, state, title, start_at, updated_at)
 		SELECT event_id, 'create', title, start_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now') FROM local_calendar_events
 		WHERE event_id = OLD.event_id AND ownership = 'app_owned'; END`,
@@ -223,6 +230,12 @@ func (s *Store) CalendarWrites(ctx context.Context) ([]CalendarWrite, error) {
 	return scanCalendarWrites(rows)
 }
 
+// approvalOfEvent is the approval in force for an accepted time, named
+// event: the latest approval of its time, or empty where none is recorded.
+const approvalOfEvent = `COALESCE((SELECT approval.decision_id FROM local_proposal_decisions AS approval
+	WHERE approval.proposal_id = event.proposal_id AND approval.event_id = event.event_id
+	AND approval.decision = 'approved' ORDER BY approval.rowid DESC LIMIT 1), '')`
+
 // AcceptedTime is an accepted time as a create writes it: the event, and the
 // approval that accepted it. Each acceptance is written as an event of its
 // own, named by its approval, so a time accepted again after an undo is never
@@ -237,10 +250,7 @@ func (s *Store) CalendarWriteEvent(ctx context.Context, eventID string) (Accepte
 	var accepted AcceptedTime
 	event, err := scanCalendarEvent(s.db.QueryRowContext(ctx, `SELECT
 		event_id, source_id, source_record_id, title, start_at, end_at, zone_id,
-		all_day, busy, ownership, created_at, location, notes, task_id, task_revision, proposal_id,
-		COALESCE((SELECT approval.decision_id FROM local_proposal_decisions AS approval
-			WHERE approval.proposal_id = event.proposal_id AND approval.event_id = event.event_id
-			AND approval.decision = 'approved' ORDER BY approval.rowid DESC LIMIT 1), '')
+		all_day, busy, ownership, created_at, location, notes, task_id, task_revision, proposal_id, `+approvalOfEvent+`
 		FROM local_calendar_events AS event WHERE event_id = ? AND ownership = 'app_owned'`, eventID), &accepted.Approval)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
@@ -252,24 +262,49 @@ func (s *Store) CalendarWriteEvent(ctx context.Context, eventID string) (Accepte
 	return accepted, true, nil
 }
 
-// MarkCalendarWritten records that an accepted time is in the calendar. If it
-// was undone while being written, it is queued for removal instead.
-func (s *Store) MarkCalendarWritten(ctx context.Context, event calendarcore.Event, href, etag string, now time.Time) error {
-	stamp := formatSQLiteTime(now.UTC())
-	result, err := s.db.ExecContext(ctx, `UPDATE local_calendar_writes SET state = 'written', href = ?, etag = ?,
-		attempts = 0, next_attempt_at = '', detail = '', updated_at = ? WHERE event_id = ? AND state = 'create'`,
-		href, etag, stamp, event.EventID)
+// MarkCalendarWritten records that an acceptance is in the calendar. If it
+// was undone while being written, what was written is queued for removal
+// instead, and a time accepted again meanwhile is written once that is done.
+func (s *Store) MarkCalendarWritten(ctx context.Context, accepted AcceptedTime, href, etag string, now time.Time) error {
+	event, stamp := accepted.Event, formatSQLiteTime(now.UTC())
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
-	if changed, _ := result.RowsAffected(); changed == 1 {
-		return nil
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `UPDATE local_calendar_writes SET state = 'written', href = ?, etag = ?,
+		attempts = 0, next_attempt_at = '', detail = '', updated_at = ? WHERE event_id = ? AND state = 'create'
+		AND EXISTS(SELECT 1 FROM local_calendar_events AS event WHERE event.event_id = local_calendar_writes.event_id
+			AND event.ownership = 'app_owned' AND `+approvalOfEvent+` = ?)`,
+		href, etag, stamp, event.EventID, accepted.Approval)
+	if err != nil {
+		return err
 	}
-	// Undone while it was being written: the undo found nothing to remove, so
-	// remove what was just written.
-	_, err = s.db.ExecContext(ctx, `INSERT OR IGNORE INTO local_calendar_writes(event_id, state, href, etag, title, start_at, updated_at)
-		SELECT ?, 'delete', ?, ?, ?, ?, ? WHERE EXISTS(SELECT 1 FROM local_calendar_write_target)`,
-		event.EventID, href, etag, event.Title, formatSQLiteTime(event.StartAt.UTC()), stamp)
+	if changed, _ := result.RowsAffected(); changed == 0 {
+		// Undone while it was being written, and perhaps accepted again: the
+		// write waiting for the new acceptance removes this one first.
+		result, err = tx.ExecContext(ctx, `UPDATE local_calendar_writes SET state = 'delete', href = ?, etag = ?,
+			attempts = 0, next_attempt_at = '', detail = '', updated_at = ? WHERE event_id = ? AND state = 'create'`,
+			href, etag, stamp, event.EventID)
+		if err != nil {
+			return err
+		}
+		if changed, _ := result.RowsAffected(); changed == 0 {
+			if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO local_calendar_writes(event_id, state, href, etag, title, start_at, updated_at)
+				SELECT ?, 'delete', ?, ?, ?, ?, ? WHERE EXISTS(SELECT 1 FROM local_calendar_write_target)`,
+				event.EventID, href, etag, event.Title, formatSQLiteTime(event.StartAt.UTC()), stamp); err != nil {
+				return err
+			}
+		}
+	}
+	return tx.Commit()
+}
+
+// MarkCalendarWriteSent records that a create is about to be sent, so a
+// later attempt knows the calendar may already hold it.
+func (s *Store) MarkCalendarWriteSent(ctx context.Context, eventID string) error {
+	_, err := s.db.ExecContext(ctx, `INSERT OR IGNORE INTO local_calendar_write_sends(event_id)
+		SELECT event_id FROM local_calendar_writes WHERE event_id = ? AND state = 'create'`, eventID)
 	return err
 }
 
@@ -324,7 +359,8 @@ func (s *Store) OwnCalendarEventIDs(ctx context.Context) (map[string]bool, error
 }
 
 // ResolveCalendarWriteConflict settles a conflict as the owner decided: remove
-// the event from their calendar after all, or leave it there and forget it.
+// the event from their calendar after all, or leave it there and forget it,
+// unless the time has been accepted again, which it then stands for.
 func (s *Store) ResolveCalendarWriteConflict(ctx context.Context, eventID string, remove bool, now time.Time) error {
 	var result sql.Result
 	var err error
@@ -333,8 +369,10 @@ func (s *Store) ResolveCalendarWriteConflict(ctx context.Context, eventID string
 		result, err = s.db.ExecContext(ctx, `UPDATE local_calendar_writes SET state = 'delete', etag = '', attempts = 0,
 			next_attempt_at = '', detail = '', updated_at = ? WHERE event_id = ? AND state = 'conflict' AND href <> ''`,
 			formatSQLiteTime(now.UTC()), eventID)
-	} else {
-		result, err = s.db.ExecContext(ctx, `DELETE FROM local_calendar_writes WHERE event_id = ? AND state = 'conflict'`, eventID)
+	} else if result, err = s.keepCalendarWrite(ctx, eventID, now); err == nil {
+		if changed, _ := result.RowsAffected(); changed == 0 {
+			result, err = s.db.ExecContext(ctx, `DELETE FROM local_calendar_writes WHERE event_id = ? AND state = 'conflict'`, eventID)
+		}
 	}
 	if err != nil {
 		return err
@@ -345,7 +383,19 @@ func (s *Store) ResolveCalendarWriteConflict(ctx context.Context, eventID string
 	return nil
 }
 
-const calendarWriteSelect = `SELECT event_id, state, href, etag, title, start_at, attempts, next_attempt_at, detail
+// keepCalendarWrite leaves a changed event in the calendar for a time that
+// has been accepted again since it was undone: that event stands for the
+// time, as written at the version ZeitBoard wrote, so removing it later
+// still asks the owner first. It changes nothing for any other conflict.
+func (s *Store) keepCalendarWrite(ctx context.Context, eventID string, now time.Time) (sql.Result, error) {
+	return s.db.ExecContext(ctx, `UPDATE local_calendar_writes SET state = 'written', attempts = 0, next_attempt_at = '',
+		detail = '', updated_at = ? WHERE event_id = ? AND state = 'conflict' AND href <> ''
+		AND EXISTS(SELECT 1 FROM local_calendar_events WHERE event_id = ? AND ownership = 'app_owned')`,
+		formatSQLiteTime(now.UTC()), eventID, eventID)
+}
+
+const calendarWriteSelect = `SELECT event_id, state, href, etag, title, start_at, attempts, next_attempt_at, detail,
+	EXISTS(SELECT 1 FROM local_calendar_write_sends AS sent WHERE sent.event_id = local_calendar_writes.event_id)
 	FROM local_calendar_writes`
 
 func scanCalendarWrites(rows *sql.Rows) ([]CalendarWrite, error) {
@@ -355,7 +405,7 @@ func scanCalendarWrites(rows *sql.Rows) ([]CalendarWrite, error) {
 		var write CalendarWrite
 		var startAt, nextAttemptAt string
 		if err := rows.Scan(&write.EventID, &write.State, &write.Href, &write.ETag, &write.Title, &startAt,
-			&write.Attempts, &nextAttemptAt, &write.Detail); err != nil {
+			&write.Attempts, &nextAttemptAt, &write.Detail, &write.Sent); err != nil {
 			return nil, err
 		}
 		for _, field := range []struct {

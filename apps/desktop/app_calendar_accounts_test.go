@@ -57,7 +57,12 @@ type syntheticAccount struct {
 
 	// quitting, when set, is called as a refresh comes in, which then waits
 	// for the app to give up on it, as when the app quits mid-refresh.
+	// checking is the same for the check that a calendar takes events.
+	// losing stores a Google create and answers as if it failed, as an
+	// answer lost on the way back would.
 	quitting func()
+	checking func()
+	losing   bool
 }
 
 func accountApp(t *testing.T, provider calendaraccounts.Provider) (*App, *syntheticAccount) {
@@ -431,7 +436,7 @@ func TestOneSignInWaitsAtATimeAndCanBeCancelled(t *testing.T) {
 		waiting <- err
 	}()
 	<-opened
-	if _, err := app.ConnectCalendarAccount(input); err == nil || !strings.Contains(err.Error(), "already waiting") {
+	if _, err := app.ConnectCalendarAccount(input); err == nil || !strings.Contains(err.Error(), "already signing in") {
 		t.Fatalf("a second sign-in read as %v", err)
 	}
 	app.CancelCalendarSignIn()

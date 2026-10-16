@@ -1562,7 +1562,8 @@ with a test. Checking them turned up a ninth fault, older than both reviews, whi
   and put the owner's removal back. Each acceptance is now named by the approval that accepted
   it, which no other acceptance shares. ZeitBoard's own Google event is put back only if it was
   removed before writing to the calendar began. One removed since was the owner's doing and stays
-  removed, as it would had the answer come back. The second-precision residual is gone.
+  removed, as it would had the answer come back. The second-precision residual is gone. The third
+  review below replaced the clocks this compared with whether a create was sent.
 - **Every Microsoft create looks first.** Looking only on a retry missed an attempt cut off by
   quitting or a crash, which counts no failed attempt, and it searched again after every failed
   sign-in. Each create now looks, over every page, before posting. One read per write is cheap
@@ -1573,11 +1574,13 @@ with a test. Checking them turned up a ninth fault, older than both reviews, whi
 - **Accepted again during a removal.** Found while checking the above, in ADR-0053's queue for
   CalDAV and accounts alike: a time accepted again while its earlier acceptance was still being
   removed found that removal in its place, and was never written. A trigger now queues it once
-  the removal settles, removed or kept by the owner. A time the owner left out stays out.
+  the removal settles. A time the owner left out stays out. The third review changed what keeping
+  the changed event does.
 - **Cancel only for a sign-in that opened.** Whether the browser would open came from a flag the
   sources list read earlier, which a sign-in made since could leave stale. Then a real sign-in ran
   with no Cancel. The desktop now announces a sign-in as it opens the browser, and only then does
   the window offer to cancel. A sign-in also reloads the calendar list, so the flag stays fresh.
+  The third review replaced all of this with a Cancel that works at any point.
 - **Advice that fits the path.** Refused a sign-in that would take adding events from the account
   written to, “Sign in again” was told to use “Sign in again”. It now asks the owner to allow
   adding events when the provider asks. The form, which asks only to read, still points to “Sign
@@ -1587,6 +1590,42 @@ with a test. Checking them turned up a ninth fault, older than both reviews, whi
   the status from before it stopped; it reads what stopping returned.
 - **No change: names from before.** The first finding was that writes queued before an upgrade
   would get new names. No release or tag carried writing to an account, so no such write exists.
+
+### Writing to accounts after a third review — 2026-10-16
+
+A fresh high-effort review of the second round (PR #90, before it merged) raised nine findings.
+Seven are fixed, each with a test; two are left as they are, with reasons:
+
+- **Keeping a changed event is respected.** After the owner kept a changed event in a CalDAV
+  calendar, the trigger queued the time accepted again. Its create then took the kept event over
+  at its current version, so a later undo would have deleted it. The trigger now runs only after
+  a removal is done. Keeping a changed event for a time accepted again leaves that event standing
+  for the time, at the version ZeitBoard wrote, so removing it later asks the owner first.
+- **A create landing for an undone acceptance.** A create still on its way when its acceptance
+  was undone, and the time accepted again, was recorded as the new acceptance's write. A write is
+  now recorded only for the acceptance in force. Otherwise what landed is removed first, and the
+  new acceptance is written after, through the same trigger.
+- **No clocks in putting an event back.** Putting a removed Google event back compared Google's
+  time of removal with the computer's time of turning writing on, which a wrong clock could flip.
+  ZeitBoard now records each create before sending it, in a table the write's going takes with
+  it. An event removed after a create was sent was removed by the owner, and stays removed. One no
+  create was sent for since writing was turned on is put back.
+- **Cancel at any point.** The window offered Cancel once the desktop announced that the browser
+  had opened, and could miss that announcement or act on another sign-in's. Turning writing on is
+  now held from start to finish, as a sign-in is. Cancel always stops it, whether or not the
+  browser was asked, and no other sign-in starts meanwhile. The announcement is gone, and so is
+  the flag saying an account already allows writing. So is the reload after every sign-in that
+  kept that flag fresh.
+- **A busy calendar.** A Microsoft create that found more events in its time than ZeitBoard reads
+  failed every time. It now goes ahead, with Graph's own check of the transaction ID against
+  writing twice. The one read before each create stays, as the second review chose.
+- **A time with no approval.** One no approval records cannot be named, and was retried forever.
+  It now waits for the owner as a conflict.
+- **No change: a read before each Google removal.** The review suggested deleting first and
+  reading only after a refusal. The read is what checks ZeitBoard's mark, which keeps a removal
+  from taking another time's event. Removals come one per undo, so the request costs little.
+- **No change: names from before.** As in the second review: no release carried writing to an
+  account.
 
 ## Where the completion goal stands — 2026-09-27
 

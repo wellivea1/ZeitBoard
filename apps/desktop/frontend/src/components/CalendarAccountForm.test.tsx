@@ -138,8 +138,6 @@ describe("CalendarAccountForm", () => {
       clientId: "synthetic-client.apps.example.test",
       clientSecret: "synthetic-desktop-secret",
     });
-    // A sign-in may change what the account allows, which its calendars show.
-    expect(onChanged).toHaveBeenCalledOnce();
     // With an account signed in, signing in to another waits behind a button.
     expect(screen.queryByLabelText("Client secret")).toBeNull();
     expect(screen.getByText("Main calendar")).toBeVisible();
@@ -153,7 +151,7 @@ describe("CalendarAccountForm", () => {
       zoneId: "America/New_York",
     });
     fireEvent.click(screen.getByRole("button", { name: "Bring in Owner" }));
-    await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(onChanged).toHaveBeenCalledOnce());
     expect(add).toHaveBeenCalledOnce();
     expect(screen.getByText("Brought in · read every hour")).toBeVisible();
     expect(screen.getByRole("button", { name: "Preview Team" })).toBeEnabled();
@@ -229,7 +227,6 @@ describe("CalendarAccountForm", () => {
     expect(screen.getByRole("button", { name: "Sign in to another account" })).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Sign in again" }));
     await waitFor(() => expect(reconnect).toHaveBeenCalledWith({ accountId: account.accountId }));
-    await waitFor(() => expect(onChanged).toHaveBeenCalledOnce());
 
     fireEvent.click(await screen.findByRole("button", { name: "Remove owner@example.test" }));
     const confirm = screen.getByRole("button", { name: "Remove account" });
@@ -243,7 +240,7 @@ describe("CalendarAccountForm", () => {
       await screen.findByText("owner@example.test and its calendars are removed from ZeitBoard."),
     ).toBeVisible();
     expect(remove).toHaveBeenCalledWith({ accountId: account.accountId, confirmation: "REMOVE" });
-    expect(onChanged).toHaveBeenCalledTimes(2);
+    expect(onChanged).toHaveBeenCalledOnce();
     await waitFor(() => expect(screen.queryByText(ended.problem)).toBeNull());
   });
 });

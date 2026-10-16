@@ -76,4 +76,6 @@ remove an event of its own that the owner has since changed, for instance by mov
   guarantees.
 - Update, 2026-10-15: a time accepted again while its earlier acceptance was still being removed
   found that removal in its place, and was never written. A trigger now queues it once the removal
-  settles, removed or kept by the owner.
+  is done. If the owner keeps the changed event instead, that event stands for the time, at the
+  version ZeitBoard wrote. A create that lands after its acceptance was undone is removed first,
+  and a time accepted again meanwhile is written after.
