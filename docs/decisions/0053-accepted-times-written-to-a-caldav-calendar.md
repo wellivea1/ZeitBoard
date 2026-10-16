@@ -74,3 +74,11 @@ remove an event of its own that the owner has since changed, for instance by mov
 - Update, 2026-10-12: [ADR-0065](0065-accepted-times-written-to-google-and-microsoft-calendars.md)
   writes to a calendar brought in from a Google or Microsoft account as well, with the same
   guarantees.
+- Update, 2026-10-15: a time accepted again while its earlier acceptance was still being removed
+  found that removal in its place, and was never written. A trigger now queues it once the removal
+  is done. If the owner keeps the changed event instead, that event stands for the time, at the
+  version ZeitBoard wrote. A create that lands after its acceptance was undone is removed first,
+  and a time accepted again meanwhile is written after.
+- Update, 2026-10-16: a pass ends where writing stops or moves to another calendar, and records
+  what it carried only for the time of writing it began in. Undoing a time settles a create of it
+  that met a conflict, so the time accepted again is written afresh.

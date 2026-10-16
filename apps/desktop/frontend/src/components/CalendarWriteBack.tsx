@@ -24,20 +24,18 @@ function failure(reason: unknown, fallback: string) {
 }
 
 // The offer for a calendar from an account: what writing does, then the
-// browser asks the owner, once, to allow it.
+// browser asks the owner, once, to allow it. Turning writing on can be
+// cancelled at any point, whether or not the browser was asked.
 function AccountWriteBackForm({
   sourceId,
   label,
   provider,
-  writes,
   onStarted,
   onCancel,
 }: {
   sourceId: string;
   label: string;
   provider: CalendarAccountProvider;
-  /** The account already lets ZeitBoard add events: the browser asks nothing. */
-  writes: boolean;
   onStarted: (status: CalendarWriteBack) => void;
   onCancel: () => void;
 }) {
@@ -45,7 +43,6 @@ function AccountWriteBackForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const name = providerNames[provider];
-  const calendars = provider === "google" ? "calendars you own" : "your calendars";
 
   const start = () => {
     if (busy) return;
@@ -72,18 +69,13 @@ function AccountWriteBackForm({
         events there, it asks you before removing it.
       </p>
       <small>
-        {writes
-          ? `${name} already lets ZeitBoard add events to ${calendars}.`
-          : `The first time, ${name} asks in your browser whether ZeitBoard may add events to ${calendars}. Nothing else is asked for, and the account’s sign-in stays on this computer.`}
+        The first time, {name} asks in your browser whether ZeitBoard may add events to{" "}
+        {provider === "google" ? "calendars you own" : "your calendars"}. Nothing else is asked for,
+        and the account’s sign-in stays on this computer.
       </small>
-      {busy && writes && (
-        <p className="calendar-account-waiting" role="status">
-          Checking that ZeitBoard can add events to {label}…
-        </p>
-      )}
-      {busy && !writes && (
+      {busy && (
         <div className="calendar-account-waiting" role="status">
-          <span>If your browser asks, allow ZeitBoard to add events.</span>
+          <span>Turning writing on. If your browser asks, allow ZeitBoard to add events.</span>
           <button
             className="button ghost compact"
             type="button"
@@ -116,7 +108,6 @@ export function CalendarWriteBackForm({
   sourceId,
   label,
   provider,
-  writes = false,
   onStarted,
   onCancel,
 }: {
@@ -124,8 +115,6 @@ export function CalendarWriteBackForm({
   label: string;
   /** Set for a calendar brought in from an account. */
   provider?: CalendarAccountProvider;
-  /** The account already lets ZeitBoard add events. */
-  writes?: boolean;
   onStarted: (status: CalendarWriteBack) => void;
   onCancel: () => void;
 }) {
@@ -135,7 +124,6 @@ export function CalendarWriteBackForm({
         sourceId={sourceId}
         label={label}
         provider={provider}
-        writes={writes}
         onStarted={onStarted}
         onCancel={onCancel}
       />

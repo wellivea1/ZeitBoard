@@ -585,15 +585,17 @@ func insertCalendarEvent(ctx context.Context, tx *sql.Tx, event calendarcore.Eve
 	return err
 }
 
-func scanCalendarEvent(scanner rowScanner) (calendarcore.Event, error) {
+// scanCalendarEvent reads an event row, then any columns selected after it
+// into extra.
+func scanCalendarEvent(scanner rowScanner, extra ...any) (calendarcore.Event, error) {
 	var event calendarcore.Event
 	var startAt, endAt, createdAt, ownership string
 	var allDay, busy int
-	if err := scanner.Scan(
+	if err := scanner.Scan(append([]any{
 		&event.EventID, &event.SourceID, &event.SourceRecordID, &event.Title,
 		&startAt, &endAt, &event.ZoneID, &allDay, &busy, &ownership, &createdAt,
 		&event.Location, &event.Notes, &event.TaskID, &event.TaskRevision, &event.ProposalID,
-	); err != nil {
+	}, extra...)...); err != nil {
 		return calendarcore.Event{}, err
 	}
 	var err error

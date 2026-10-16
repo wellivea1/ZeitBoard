@@ -20,8 +20,9 @@ import (
 // private mark, in Microsoft with its UID as the transaction ID. A create
 // cannot overwrite another event, and a removal leaves an event the owner has
 // changed since. Each acceptance of a time is written as an event of its own,
-// so accepting a time again after undoing it is never mistaken for the event
-// removed before. Events are written without reminders, as CalDAV writes are.
+// named by the approval that accepted it, so accepting a time again after
+// undoing it is never mistaken for the event removed before. Events are
+// written without reminders, as CalDAV writes are.
 
 var (
 	// ErrTaken is a create that found a different event where ZeitBoard
@@ -44,7 +45,12 @@ type Written struct {
 }
 
 // ownMark is the private property that marks a Google event as ZeitBoard's.
-const ownMark = "zeitboardEvent"
+// writingMark names the time of writing to the calendar that wrote it, or
+// last put it back.
+const (
+	ownMark     = "zeitboardEvent"
+	writingMark = "zeitboardWriting"
+)
 
 // immutableIDs keeps a Microsoft event's ID when the owner moves it between
 // calendars, so a kept ID still finds it.
@@ -53,41 +59,38 @@ const immutableIDs = `IdType="ImmutableId"`
 // googleID is the shape of an ID googleEventID makes.
 var googleID = regexp.MustCompile(`^[0-9a-v]{32}$`)
 
-// acceptance names one acceptance of a time: the moment it was accepted.
-// Retrying its write keeps it; accepting the time again after undoing it
-// does not.
-func acceptance(event calendarcore.Event) string {
-	return event.CreatedAt.UTC().Format("20060102T150405.000000000Z")
-}
-
 // googleEventID is the ID one acceptance is written under in Google Calendar:
-// base32hex, as Google requires of an ID a client chooses. A retried create
-// finds the first under it, while a time accepted again gets an ID of its own,
-// since Google keeps the ID of an event it has removed.
-func googleEventID(event calendarcore.Event) string {
-	sum := sha256.Sum256([]byte(event.EventID + "\n" + acceptance(event)))
+// base32hex, as Google requires of an ID a client chooses, derived from the
+// time and the approval that accepted it. A retried create finds the first
+// under it, while a time accepted again gets an ID of its own, since Google
+// keeps the ID of an event it has removed.
+func googleEventID(eventID, approval string) string {
+	sum := sha256.Sum256([]byte(eventID + "\n" + approval))
 	return strings.ToLower(base32.HexEncoding.WithPadding(base32.NoPadding).EncodeToString(sum[:20]))
 }
 
 // TransactionID is the Microsoft transaction ID one acceptance is written
-// with: ZeitBoard's UID for the time, then the acceptance, so a retried create
-// is the same transaction and a time accepted again is a new one. Read back,
-// it names the event by ZeitBoard's UID.
-func TransactionID(event calendarcore.Event) string {
-	return calendarcore.OwnUID(event.EventID) + "/" + acceptance(event)
+// with: ZeitBoard's UID for the time, then the approval that accepted it, so a
+// retried create is the same transaction and a time accepted again is a new
+// one. Read back, it names the event by ZeitBoard's UID.
+func TransactionID(eventID, approval string) string {
+	return calendarcore.OwnUID(eventID) + "/" + approval
 }
 
-// CreateEvent writes an accepted time into a calendar. retry says an earlier
-// attempt may have written it with its answer lost; that event is then found
-// and kept rather than written twice.
-func (c Client) CreateEvent(ctx context.Context, access, calendarID string, event calendarcore.Event, retry bool) (Written, error) {
-	if event.Ownership != calendarcore.OwnershipAppOwned || strings.TrimSpace(calendarID) == "" {
+// CreateEvent writes one acceptance of a time into a calendar: the accepted
+// event, named by the approval that accepted it. An earlier attempt whose
+// answer was lost is found and kept rather than written twice. writing names
+// this time of writing to the calendar, from turning it on to stopping:
+// ZeitBoard's own event that was written in it and removed since was removed
+// by the owner, and stays removed.
+func (c Client) CreateEvent(ctx context.Context, access, calendarID string, event calendarcore.Event, approval, writing string) (Written, error) {
+	if event.Ownership != calendarcore.OwnershipAppOwned || strings.TrimSpace(approval) == "" || strings.TrimSpace(calendarID) == "" {
 		return Written{}, errors.New("only an accepted time is written, to a named calendar")
 	}
 	if c.Provider == Microsoft {
-		return c.microsoftCreate(ctx, access, calendarID, event, retry)
+		return c.microsoftCreate(ctx, access, calendarID, event, approval)
 	}
-	return c.googleCreate(ctx, access, calendarID, event)
+	return c.googleCreate(ctx, access, calendarID, event, approval, writing)
 }
 
 // DeleteEvent removes an undone accepted time, unless the owner has changed
@@ -149,8 +152,8 @@ type googleMarked struct {
 	} `json:"extendedProperties"`
 }
 
-func (c Client) googleCreate(ctx context.Context, access, calendarID string, event calendarcore.Event) (Written, error) {
-	id := googleEventID(event)
+func (c Client) googleCreate(ctx context.Context, access, calendarID string, event calendarcore.Event, approval, writing string) (Written, error) {
+	id := googleEventID(event.EventID, approval)
 	transparency := "opaque"
 	if !event.Busy {
 		transparency = "transparent"
@@ -162,7 +165,7 @@ func (c Client) googleCreate(ctx context.Context, access, calendarID string, eve
 		"end":                googleBoundary(event, event.EndAt),
 		"transparency":       transparency,
 		"reminders":          map[string]bool{"useDefault": false},
-		"extendedProperties": map[string]any{"private": map[string]string{ownMark: event.EventID}},
+		"extendedProperties": map[string]any{"private": map[string]string{ownMark: event.EventID, writingMark: writing}},
 	}
 	if event.Location != "" {
 		body["location"] = event.Location
@@ -189,15 +192,19 @@ func (c Client) googleCreate(ctx context.Context, access, calendarID string, eve
 	if err := c.get(ctx, address, access, nil, &existing); err != nil {
 		return Written{}, err
 	}
-	if existing.ExtendedProperties.Private[ownMark] != event.EventID {
+	switch {
+	case existing.ExtendedProperties.Private[ownMark] != event.EventID:
 		return Written{}, ErrTaken
-	}
-	if existing.Status != "cancelled" {
+	case existing.Status != "cancelled", existing.ExtendedProperties.Private[writingMark] == writing:
+		// Shown, or written in this time of writing, its answer lost, and
+		// removed by the owner since: that removal stands, as it would had
+		// the answer come back.
 		return Written{ID: id, Version: existing.ETag}, nil
 	}
-	// Removed since, by an undo or in the calendar, and accepted again: Google
-	// keeps a removed event under its ID, so it is put back, as a CalDAV
-	// create puts back an event removed there.
+	// Written while ZeitBoard last wrote here, and removed since. Turning
+	// writing on again writes every accepted time, so it is put back: Google
+	// keeps a removed event under its ID, where a CalDAV calendar would take
+	// it afresh.
 	body["status"] = "confirmed"
 	var restored struct {
 		ETag string `json:"etag"`
@@ -213,32 +220,30 @@ func (c Client) googleCreate(ctx context.Context, access, calendarID string, eve
 	}
 }
 
+// googleDelete removes only an event that carries this time's mark, and only
+// at the version ZeitBoard wrote, unless the owner chose to remove it anyway.
 func (c Client) googleDelete(ctx context.Context, access, calendarID, eventID string, written Written) error {
 	if !googleID.MatchString(written.ID) {
 		return ErrNotOurs
 	}
 	address := c.googleEventsAddress(calendarID) + "/" + written.ID
+	var existing googleMarked
+	status, err := c.call(ctx, http.MethodGet, address, access, nil, nil, &existing)
+	switch {
+	case err != nil:
+		return err
+	case status == http.StatusNotFound || status == http.StatusGone || (status == http.StatusOK && existing.Status == "cancelled"):
+		return nil
+	case status != http.StatusOK:
+		return answered(address, status)
+	case existing.ExtendedProperties.Private[ownMark] != eventID:
+		return ErrNotOurs
+	}
 	headers := map[string]string{}
 	if written.Version != "" {
-		// Only the version ZeitBoard wrote is removed.
 		headers["If-Match"] = written.Version
-	} else {
-		// Removed anyway, whatever its version, as the owner chose: still only
-		// an event that carries this time's mark.
-		var existing googleMarked
-		status, err := c.call(ctx, http.MethodGet, address, access, nil, nil, &existing)
-		switch {
-		case err != nil:
-			return err
-		case status == http.StatusNotFound || status == http.StatusGone:
-			return nil
-		case status != http.StatusOK:
-			return answered(address, status)
-		case existing.ExtendedProperties.Private[ownMark] != eventID:
-			return ErrNotOurs
-		}
 	}
-	status, err := c.call(ctx, http.MethodDelete, address, access, headers, nil, nil)
+	status, err = c.call(ctx, http.MethodDelete, address, access, headers, nil, nil)
 	switch {
 	case err != nil:
 		return err
@@ -264,15 +269,13 @@ func graphBoundary(event calendarcore.Event, at time.Time) map[string]string {
 	return map[string]string{"dateTime": at.UTC().Format("2006-01-02T15:04:05"), "timeZone": "UTC"}
 }
 
-func (c Client) microsoftCreate(ctx context.Context, access, calendarID string, event calendarcore.Event, retry bool) (Written, error) {
-	transaction := TransactionID(event)
-	// A retry looks first for what an earlier attempt may have written with
-	// its answer lost. Graph also drops a second create with the same
-	// transaction ID.
-	if retry {
-		if found, ok, err := c.microsoftFind(ctx, access, calendarID, event, transaction); err != nil || ok {
-			return found, err
-		}
+func (c Client) microsoftCreate(ctx context.Context, access, calendarID string, event calendarcore.Event, approval string) (Written, error) {
+	transaction := TransactionID(event.EventID, approval)
+	// What an earlier attempt wrote, its answer lost or the app quitting
+	// before it came, is looked for first. Graph also drops a second create
+	// with the same transaction ID.
+	if found, ok, err := c.microsoftFind(ctx, access, calendarID, event, transaction); err != nil || ok {
+		return found, err
 	}
 	showAs := "busy"
 	if !event.Busy {
@@ -344,7 +347,9 @@ func (c Client) microsoftFind(ctx context.Context, access, calendarID string, ev
 		}
 		address = answer.NextLink
 	}
-	return Written{}, false, errors.New("the time holds more events than ZeitBoard reads at once")
+	// More events than ZeitBoard reads at once: the create goes ahead, with
+	// Graph's own check of the transaction ID to keep it from writing twice.
+	return Written{}, false, nil
 }
 
 func (c Client) microsoftDelete(ctx context.Context, access, eventID string, written Written) error {
