@@ -83,6 +83,10 @@ events that the owner has since changed. Each provider offers what those rules n
    - A create that lands after its acceptance was undone is removed, and a time accepted again
      meanwhile is written after. Whatever becomes of a create, written, refused or failed, is
      recorded only for the acceptance it carried.
+   - A pass ends where writing stops or moves to another calendar, and what it carried by then
+     is recorded only for the time of writing it began in.
+   - Undoing a time settles a create of it that met a conflict, so the time accepted again is
+     written afresh.
 7. **Stopping and removing.**
    - Stopping writing forgets what was written, as ADR-0053 does. The account stays signed in
      for reading. Removing the account withdraws its access: Google revokes the grant, and
@@ -120,4 +124,6 @@ events that the owner has since changed. Each provider offers what those rules n
   after a third review"). A fourth review settled the choice on the time of writing each event
   carries, and kept a rotated refresh token through a cancel (completion plan, "Writing to
   accounts after a fourth review"). A fifth recorded every outcome of a create only for the
-  acceptance it carried (completion plan, "Writing to accounts after a fifth review").
+  acceptance it carried (completion plan, "Writing to accounts after a fifth review"). A sixth
+  kept a pass to its own time of writing, and let an undo settle a create's conflict (completion
+  plan, "Writing to accounts after a sixth review").

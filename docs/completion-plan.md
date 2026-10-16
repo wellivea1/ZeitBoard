@@ -1676,6 +1676,25 @@ on:
   before, which still holds: Microsoft does not revoke a refresh token for being used, and Google's
   do not rotate.
 
+### Writing to accounts after a sixth review — 2026-10-16
+
+A fresh high-effort review of the fifth round raised ten candidate findings, unverified. Seven
+repeat ones the earlier rounds settled, or ask for what the design chose on purpose: a kept event
+standing for its time, and a time accepted again written even if it has ended meanwhile, as any
+waiting create is. Each provider request is bounded by its own twenty seconds, so a request that
+hangs cannot hold a sign-in for long. Three were acted on:
+
+- **A pass keeps to its time of writing.** A pass still carrying writes when writing stopped and
+  was turned on again, or for another calendar, recorded what it carried on the writes queued for
+  the new time of writing, and carried them on with the old calendar's writer. A pass now checks
+  before each write that writing is on as it began. It lists only writes of its own time of
+  writing, and records every outcome only for that time, in the same statement.
+- **Undoing settles a create's conflict.** A create that met a conflict outlived its time's undo,
+  and a time accepted again found it in its place, never to be written once the owner left it out.
+  A trigger now settles such a conflict when its time is undone.
+- **The approval read for creates alone.** Listing writes read the approval in force for every
+  write, though only a create's is ever used.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and

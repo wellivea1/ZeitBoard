@@ -3245,6 +3245,11 @@ acceptance undone meanwhile leave the write waiting for the new acceptance as it
 attempt and no detail. The window's test reads "Turning writing on. If your browser asks, allow
 ZeitBoard to add events." with Cancel.
 
+The sixth review's fixes, in the store: what a pass carried for a time of writing since replaced,
+by turning writing on again, is neither written, refused nor delayed. That pass finds no more to
+carry, and it reads writing as no longer on, while the new time of writing reads as on. A create
+that met a conflict goes with its time's undo, and the time accepted again is queued afresh.
+
 The fourth review's fixes are covered by the same tests: the time of writing by the tests of
 putting an event back above, and keeping a changed event by the store's test of it, now in one
 transaction. A cancel that lands just after a refresh, and a wait for the browser that runs out,

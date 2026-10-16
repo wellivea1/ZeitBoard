@@ -174,12 +174,12 @@ func (w accountEventWriter) remove(ctx context.Context, eventID, href, etag stri
 
 // deferCalendarWrites leaves writes waiting, saying why, when the account
 // cannot be signed in to for any of them. It reports whether any was.
-func (a *App) deferCalendarWrites(ctx context.Context, store *storage.Store, due []storage.CalendarWrite, reason string) bool {
+func (a *App) deferCalendarWrites(ctx context.Context, store *storage.Store, target storage.CalendarWriteTarget, due []storage.CalendarWrite, reason string) bool {
 	now := a.currentTime().UTC()
 	deferred := false
 	for _, write := range due {
 		retryAt := now.Add(calendarWriteRetryDelay(write.Attempts + 1))
-		deferred = store.DeferCalendarWrite(ctx, write, reason, retryAt, now) == nil || deferred
+		deferred = store.DeferCalendarWrite(ctx, target, write, reason, retryAt, now) == nil || deferred
 	}
 	return deferred
 }

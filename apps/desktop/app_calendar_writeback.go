@@ -216,7 +216,9 @@ func (a *App) ResolveCalendarWriteConflict(input CalendarWriteConflictInput) (Ca
 	return a.calendarWriteBack(a.applicationContext(), store)
 }
 
-// writeCalendarPass carries every due write to the calendar.
+// writeCalendarPass carries every due write to the calendar. It ends where
+// writing stops or moves to another calendar, and what it carried by then
+// is recorded only for the time of writing it began in.
 func (a *App) writeCalendarPass(ctx context.Context) {
 	store, err := a.requireStore()
 	if err != nil {
@@ -226,7 +228,7 @@ func (a *App) writeCalendarPass(ctx context.Context) {
 	if err != nil || !on {
 		return
 	}
-	due, err := store.DueCalendarWrites(ctx, a.currentTime(), calendarWriteBatch)
+	due, err := store.DueCalendarWrites(ctx, target, a.currentTime(), calendarWriteBatch)
 	if err != nil || len(due) == 0 {
 		// Nothing to write: an account is not even signed in to.
 		return
@@ -236,7 +238,7 @@ func (a *App) writeCalendarPass(ctx context.Context) {
 		// An account that cannot be signed in to now leaves every due write
 		// waiting, saying why.
 		// Quitting is no failure to retry.
-		if target.AccountID != "" && ctx.Err() == nil && a.deferCalendarWrites(ctx, store, due, err.Error()) {
+		if target.AccountID != "" && ctx.Err() == nil && a.deferCalendarWrites(ctx, store, target, due, err.Error()) {
 			a.announce(calendarWritesChangedEvent)
 		}
 		return
@@ -244,14 +246,14 @@ func (a *App) writeCalendarPass(ctx context.Context) {
 	changed := false
 	for round := 0; round < calendarWriteRounds && len(due) > 0; round++ {
 		for _, write := range due {
-			if ctx.Err() != nil {
+			if still, err := store.WritingStill(ctx, target); err != nil || !still {
 				break
 			}
-			if a.carryCalendarWrite(ctx, store, writer, write) {
+			if a.carryCalendarWrite(ctx, store, target, writer, write) {
 				changed = true
 			}
 		}
-		if due, err = store.DueCalendarWrites(ctx, a.currentTime(), calendarWriteBatch); err != nil {
+		if due, err = store.DueCalendarWrites(ctx, target, a.currentTime(), calendarWriteBatch); err != nil {
 			break
 		}
 	}
@@ -262,7 +264,7 @@ func (a *App) writeCalendarPass(ctx context.Context) {
 
 // carryCalendarWrite makes one write and records how it went. It reports
 // whether anything was recorded.
-func (a *App) carryCalendarWrite(ctx context.Context, store *storage.Store, writer eventWriter, write storage.CalendarWrite) bool {
+func (a *App) carryCalendarWrite(ctx context.Context, store *storage.Store, target storage.CalendarWriteTarget, writer eventWriter, write storage.CalendarWrite) bool {
 	now := a.currentTime().UTC()
 	var accepted storage.AcceptedTime
 	var result calendarWriteResult
@@ -289,13 +291,13 @@ func (a *App) carryCalendarWrite(ctx context.Context, store *storage.Store, writ
 	var err error
 	switch {
 	case result.outcome == calendarWriteDone && write.State == storage.CalendarWriteCreate:
-		err = store.MarkCalendarWritten(ctx, accepted, result.href, result.etag, now)
+		err = store.MarkCalendarWritten(ctx, target, accepted, result.href, result.etag, now)
 	case result.outcome == calendarWriteDone:
-		err = store.MarkCalendarWriteRemoved(ctx, write.EventID)
+		err = store.MarkCalendarWriteRemoved(ctx, target, write.EventID)
 	case result.outcome == calendarWriteConflict:
-		err = store.MarkCalendarWriteConflict(ctx, write, result.detail, now)
+		err = store.MarkCalendarWriteConflict(ctx, target, write, result.detail, now)
 	default:
-		err = store.DeferCalendarWrite(ctx, write, result.detail, now.Add(calendarWriteRetryDelay(write.Attempts+1)), now)
+		err = store.DeferCalendarWrite(ctx, target, write, result.detail, now.Add(calendarWriteRetryDelay(write.Attempts+1)), now)
 	}
 	return err == nil
 }
