@@ -75,7 +75,7 @@ function AccountWriteBackForm({
       </small>
       {busy && (
         <div className="calendar-account-waiting" role="status">
-          <span>If your browser asks, allow ZeitBoard to add events.</span>
+          <span>Turning writing on. If your browser asks, allow ZeitBoard to add events.</span>
           <button
             className="button ghost compact"
             type="button"

@@ -1655,6 +1655,27 @@ left as they are, with reasons:
   deleted event where ZeitBoard does not look, which ADR-0065 records as a residual.
 - **No change: the read before each Google removal.** As in the third review.
 
+### Writing to accounts after a fifth review — 2026-10-16
+
+A fresh high-effort review of the fourth round raised ten candidate findings, unverified. Six
+repeat ones the earlier rounds settled, and are left with the reasons given there. Four were acted
+on:
+
+- **Every outcome on the write carried.** Only a successful create checked that its acceptance
+  was still the one in force. A refused or failed create for an acceptance undone meanwhile, the
+  time accepted again, marked the new acceptance's write as a conflict or delayed it. Each write
+  is now listed with the approval in force. Whatever becomes of it, written, conflict or failure,
+  is recorded only while that approval still is, in one statement.
+- **Writing on is never reported as cancelled.** A cancel arriving after writing was turned on
+  could still be reported, had reading the status then failed. Only the steps before writing is
+  on can now be cancelled.
+- **Words for the wait.** While writing is turned on, the window now says so first. It no longer
+  opens with what to do if the browser asks, which it may not.
+- **What a cut-off refresh leaves.** The comment on keeping a refresh's answer said a rotated
+  token was the only one still honoured. A refresh cut off before its answer leaves the token kept
+  before, which still holds: Microsoft does not revoke a refresh token for being used, and Google's
+  do not rotate.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and

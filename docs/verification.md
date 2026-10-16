@@ -3240,6 +3240,11 @@ check that a calendar takes events until the app gives up on it.
 - The window: turning writing on for an account's calendar offers Cancel at once, and cancelling
   shows "Turning writing on was cancelled."
 
+The fifth review's fixes: in the store, a conflict and a failure recorded for the create of an
+acceptance undone meanwhile leave the write waiting for the new acceptance as it was, with no
+attempt and no detail. The window's test reads "Turning writing on. If your browser asks, allow
+ZeitBoard to add events." with Cancel.
+
 The fourth review's fixes are covered by the same tests: the time of writing by the tests of
 putting an event back above, and keeping a changed event by the store's test of it, now in one
 transaction. A cancel that lands just after a refresh, and a wait for the browser that runs out,

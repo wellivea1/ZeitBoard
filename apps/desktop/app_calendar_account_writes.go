@@ -38,42 +38,41 @@ func (a *App) EnableAccountWriteBack(input AccountWriteBackInput) (CalendarWrite
 		return CalendarWriteBackDTO{}, err
 	}
 	defer done()
-	status, err := a.enableAccountWriteBack(ctx, store, strings.TrimSpace(input.SourceID))
-	if err != nil && ctx.Err() != nil {
-		return CalendarWriteBackDTO{}, errors.New("Turning writing on was cancelled.")
+	if err := a.turnAccountWritingOn(ctx, store, strings.TrimSpace(input.SourceID)); err != nil {
+		if ctx.Err() != nil {
+			return CalendarWriteBackDTO{}, errors.New("Turning writing on was cancelled.")
+		}
+		return CalendarWriteBackDTO{}, err
 	}
-	return status, err
+	// Writing is on now, whatever a cancel arriving after this would say.
+	a.calendarWriter.nudge()
+	return a.calendarWriteBack(a.applicationContext(), store)
 }
 
-func (a *App) enableAccountWriteBack(ctx context.Context, store *storage.Store, sourceID string) (CalendarWriteBackDTO, error) {
+func (a *App) turnAccountWritingOn(ctx context.Context, store *storage.Store, sourceID string) error {
 	account, calendar, found, err := accountCalendar(ctx, store, sourceID)
 	if err != nil {
-		return CalendarWriteBackDTO{}, err
+		return err
 	}
 	if !found {
-		return CalendarWriteBackDTO{}, storage.ErrCalendarNotWritable
+		return storage.ErrCalendarNotWritable
 	}
 	if account, err = a.allowWriting(ctx, account); err != nil {
-		return CalendarWriteBackDTO{}, err
+		return err
 	}
 	client, access, err := a.accountAccess(ctx, store, account)
 	if err != nil {
-		return CalendarWriteBackDTO{}, err
+		return err
 	}
 	writable, err := client.CanWrite(ctx, access, calendar.CalendarID)
 	if err != nil {
 		a.forgetRefusedAccess(account.AccountID, err)
-		return CalendarWriteBackDTO{}, asSentence(err)
+		return asSentence(err)
 	}
 	if !writable {
-		return CalendarWriteBackDTO{}, fmt.Errorf("ZeitBoard can add events only to a calendar of your own, and %s is not.", calendar.Label)
+		return fmt.Errorf("ZeitBoard can add events only to a calendar of your own, and %s is not.", calendar.Label)
 	}
-	if err := store.SetCalendarWriteTarget(ctx, storage.CalendarWriteTarget{SourceID: calendar.SourceID}, a.currentTime()); err != nil {
-		return CalendarWriteBackDTO{}, err
-	}
-	a.calendarWriter.nudge()
-	// Writing is on now: a cancel arriving after this changes nothing.
-	return a.calendarWriteBack(a.applicationContext(), store)
+	return store.SetCalendarWriteTarget(ctx, storage.CalendarWriteTarget{SourceID: calendar.SourceID}, a.currentTime())
 }
 
 // allowWriting gives back the account as it stands once it allows adding
@@ -180,7 +179,7 @@ func (a *App) deferCalendarWrites(ctx context.Context, store *storage.Store, due
 	deferred := false
 	for _, write := range due {
 		retryAt := now.Add(calendarWriteRetryDelay(write.Attempts + 1))
-		deferred = store.DeferCalendarWrite(ctx, write.EventID, reason, retryAt, now) == nil || deferred
+		deferred = store.DeferCalendarWrite(ctx, write, reason, retryAt, now) == nil || deferred
 	}
 	return deferred
 }

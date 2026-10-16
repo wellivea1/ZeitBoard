@@ -81,7 +81,8 @@ events that the owner has since changed. Each provider offers what those rules n
      that removal is done. If the owner keeps the changed event instead, that event stands for the
      time, at the version ZeitBoard wrote, so removing it later still asks first.
    - A create that lands after its acceptance was undone is removed, and a time accepted again
-     meanwhile is written after.
+     meanwhile is written after. Whatever becomes of a create, written, refused or failed, is
+     recorded only for the acceptance it carried.
 7. **Stopping and removing.**
    - Stopping writing forgets what was written, as ADR-0053 does. The account stays signed in
      for reading. Removing the account withdraws its access: Google revokes the grant, and
@@ -118,4 +119,5 @@ events that the owner has since changed. Each provider offers what those rules n
   and let turning writing on be cancelled at any point (completion plan, "Writing to accounts
   after a third review"). A fourth review settled the choice on the time of writing each event
   carries, and kept a rotated refresh token through a cancel (completion plan, "Writing to
-  accounts after a fourth review").
+  accounts after a fourth review"). A fifth recorded every outcome of a create only for the
+  acceptance it carried (completion plan, "Writing to accounts after a fifth review").

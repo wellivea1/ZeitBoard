@@ -434,8 +434,11 @@ func (a *App) accountAccess(ctx context.Context, store *storage.Store, account s
 	}
 	client := a.accountClient(account)
 	token, err := client.Refresh(ctx, account.RefreshToken)
-	// What the provider answered is kept even if the caller gives up now: a
-	// rotated refresh token is the only one the provider still honours.
+	// What the provider answered is kept even if the caller gives up now, so
+	// a rotated refresh token is never lost to a cancel. A refresh cut off
+	// before its answer leaves the token kept before, which still holds:
+	// Microsoft does not revoke a refresh token for being used, and Google's
+	// do not rotate.
 	keep := context.WithoutCancel(ctx)
 	if errors.Is(err, calendaraccounts.ErrSignInEnded) {
 		ended := fmt.Sprintf("The sign-in to %s has ended. Sign in to it again to keep reading its calendars.", account.Label)

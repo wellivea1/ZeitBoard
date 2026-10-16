@@ -274,6 +274,8 @@ func (a *App) carryCalendarWrite(ctx context.Context, store *storage.Store, writ
 			// Undone since it was listed: the undo dropped this write.
 			return false
 		}
+		// What becomes of it is recorded for the acceptance carried.
+		write.Approval = accepted.Approval
 		result = writer.create(ctx, accepted, now.Truncate(time.Second))
 	case storage.CalendarWriteDelete:
 		result = writer.remove(ctx, write.EventID, write.Href, write.ETag)
@@ -291,9 +293,9 @@ func (a *App) carryCalendarWrite(ctx context.Context, store *storage.Store, writ
 	case result.outcome == calendarWriteDone:
 		err = store.MarkCalendarWriteRemoved(ctx, write.EventID)
 	case result.outcome == calendarWriteConflict:
-		err = store.MarkCalendarWriteConflict(ctx, write.EventID, result.detail, now)
+		err = store.MarkCalendarWriteConflict(ctx, write, result.detail, now)
 	default:
-		err = store.DeferCalendarWrite(ctx, write.EventID, result.detail, now.Add(calendarWriteRetryDelay(write.Attempts+1)), now)
+		err = store.DeferCalendarWrite(ctx, write, result.detail, now.Add(calendarWriteRetryDelay(write.Attempts+1)), now)
 	}
 	return err == nil
 }

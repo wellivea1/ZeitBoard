@@ -377,7 +377,9 @@ describe("CalendarSourcesPanel fetched calendars", () => {
     // browser was asked.
     fireEvent.click(screen.getByRole("button", { name: "Allow writing" }));
     expect(
-      await screen.findByText("If your browser asks, allow ZeitBoard to add events."),
+      await screen.findByText(
+        "Turning writing on. If your browser asks, allow ZeitBoard to add events.",
+      ),
     ).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Turning writing on was cancelled.");

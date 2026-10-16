@@ -67,6 +67,11 @@ type CalendarWrite struct {
 	Attempts      int
 	NextAttemptAt time.Time // zero: due now
 	Detail        string    // why the last attempt failed, or what the conflict is
+
+	// Approval is, for a create, the approval in force for its time when it
+	// was listed. What becomes of a create is recorded only while that
+	// approval still is: a time undone and accepted again is another write.
+	Approval string
 }
 
 func (s *Store) initializeCalendarWriteBack(ctx context.Context) error {
@@ -229,6 +234,11 @@ const approvalOfEvent = `COALESCE((SELECT approval.decision_id FROM local_propos
 	WHERE approval.proposal_id = event.proposal_id AND approval.event_id = event.event_id
 	AND approval.decision = 'approved' ORDER BY approval.rowid DESC LIMIT 1), '')`
 
+// approvalInForce is the approval in force for a write's time, or NULL
+// once the time is undone.
+const approvalInForce = `(SELECT ` + approvalOfEvent + ` FROM local_calendar_events AS event
+	WHERE event.event_id = local_calendar_writes.event_id AND event.ownership = 'app_owned')`
+
 // AcceptedTime is an accepted time as a create writes it: the event, and the
 // approval that accepted it. Each acceptance is written as an event of its
 // own, named by its approval, so a time accepted again after an undo is never
@@ -267,8 +277,7 @@ func (s *Store) MarkCalendarWritten(ctx context.Context, accepted AcceptedTime, 
 	defer tx.Rollback()
 	result, err := tx.ExecContext(ctx, `UPDATE local_calendar_writes SET state = 'written', href = ?, etag = ?,
 		attempts = 0, next_attempt_at = '', detail = '', updated_at = ? WHERE event_id = ? AND state = 'create'
-		AND EXISTS(SELECT 1 FROM local_calendar_events AS event WHERE event.event_id = local_calendar_writes.event_id
-			AND event.ownership = 'app_owned' AND `+approvalOfEvent+` = ?)`,
+		AND `+approvalInForce+` = ?`,
 		href, etag, stamp, event.EventID, accepted.Approval)
 	if err != nil {
 		return err
@@ -300,19 +309,25 @@ func (s *Store) MarkCalendarWriteRemoved(ctx context.Context, eventID string) er
 }
 
 // MarkCalendarWriteConflict leaves a write for the owner to settle.
-func (s *Store) MarkCalendarWriteConflict(ctx context.Context, eventID, detail string, now time.Time) error {
+func (s *Store) MarkCalendarWriteConflict(ctx context.Context, write CalendarWrite, detail string, now time.Time) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE local_calendar_writes SET state = 'conflict', detail = ?, updated_at = ?
-		WHERE event_id = ?`, detail, formatSQLiteTime(now.UTC()), eventID)
+		WHERE `+theWriteCarried, detail, formatSQLiteTime(now.UTC()), write.EventID, write.State, write.Approval)
 	return err
 }
 
 // DeferCalendarWrite records a failed attempt and when to try again.
-func (s *Store) DeferCalendarWrite(ctx context.Context, eventID, detail string, retryAt, now time.Time) error {
+func (s *Store) DeferCalendarWrite(ctx context.Context, write CalendarWrite, detail string, retryAt, now time.Time) error {
 	_, err := s.db.ExecContext(ctx, `UPDATE local_calendar_writes SET attempts = attempts + 1, next_attempt_at = ?,
-		detail = ?, updated_at = ? WHERE event_id = ? AND state IN ('create', 'delete')`,
-		formatSQLiteTime(retryAt.UTC()), detail, formatSQLiteTime(now.UTC()), eventID)
+		detail = ?, updated_at = ? WHERE `+theWriteCarried,
+		formatSQLiteTime(retryAt.UTC()), detail, formatSQLiteTime(now.UTC()), write.EventID, write.State, write.Approval)
 	return err
 }
+
+// theWriteCarried picks a write as it was carried, by its time, state and,
+// for a create, the approval in force: an outcome never lands on a write
+// that has taken its place since.
+const theWriteCarried = `event_id = ? AND state = ? AND state IN ('create', 'delete')
+	AND (state = 'delete' OR ` + approvalInForce + ` = ?)`
 
 // RetryCalendarWrites makes every waiting write due now.
 func (s *Store) RetryCalendarWrites(ctx context.Context) error {
@@ -385,8 +400,8 @@ func keepCalendarWrite(ctx context.Context, tx *sql.Tx, eventID string, now time
 		formatSQLiteTime(now.UTC()), eventID, eventID)
 }
 
-const calendarWriteSelect = `SELECT event_id, state, href, etag, title, start_at, attempts, next_attempt_at, detail
-	FROM local_calendar_writes`
+const calendarWriteSelect = `SELECT event_id, state, href, etag, title, start_at, attempts, next_attempt_at, detail,
+	COALESCE(` + approvalInForce + `, '') FROM local_calendar_writes`
 
 func scanCalendarWrites(rows *sql.Rows) ([]CalendarWrite, error) {
 	defer rows.Close()
@@ -395,7 +410,7 @@ func scanCalendarWrites(rows *sql.Rows) ([]CalendarWrite, error) {
 		var write CalendarWrite
 		var startAt, nextAttemptAt string
 		if err := rows.Scan(&write.EventID, &write.State, &write.Href, &write.ETag, &write.Title, &startAt,
-			&write.Attempts, &nextAttemptAt, &write.Detail); err != nil {
+			&write.Attempts, &nextAttemptAt, &write.Detail, &write.Approval); err != nil {
 			return nil, err
 		}
 		for _, field := range []struct {
