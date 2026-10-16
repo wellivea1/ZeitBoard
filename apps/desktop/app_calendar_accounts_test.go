@@ -54,6 +54,10 @@ type syntheticAccount struct {
 	stored  map[string]map[string]any
 	version int
 	posts   int
+
+	// quitting, when set, is called as a refresh comes in, which then waits
+	// for the app to give up on it, as when the app quits mid-refresh.
+	quitting func()
 }
 
 func accountApp(t *testing.T, provider calendaraccounts.Provider) (*App, *syntheticAccount) {
@@ -134,6 +138,9 @@ func (s *syntheticAccount) serve(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(value)
 	}
 	switch {
+	case r.URL.Path == "/token" && r.ParseForm() == nil && s.quitting != nil && r.PostForm.Get("grant_type") == "refresh_token":
+		s.quitting()
+		<-r.Context().Done()
 	case r.URL.Path == "/token" && r.ParseForm() == nil:
 		s.token(r.PostForm, write)
 	case r.URL.Path == "/revoke" && r.ParseForm() == nil:

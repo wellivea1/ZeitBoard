@@ -3172,3 +3172,47 @@ and Graph drops a create that repeats a transaction ID.
     no second event is written.
 - The window: an account that already allows writing says so, turns writing on with "Checking
   that ZeitBoard can add events to Owner…" and no Cancel, then shows the status.
+
+## Writing to accounts after a second review — 2026-10-15
+
+The fixes to the second review of ADR-0065's change. Go tests in the store,
+`internal/calendaraccounts` and the desktop; component and data tests in the window. The Google
+stand-in now stamps when each event last changed, as Google's `updated` does, and the Graph
+stand-in can stop dropping a repeated transaction ID.
+
+- The store:
+  - A time accepted again while its earlier acceptance is being removed is queued to be written
+    once the removal is done, or once the owner keeps the changed event.
+  - Undone again before the removal settles, nothing more is queued. A time the owner left out of
+    the calendar is not queued again.
+  - Run with the trigger switched off, the desktop's test of the same thing fails: the time
+    accepted again is never written.
+- The provider package:
+  - A time with no approval is not written.
+  - A Google event is written under an ID from its time and approval, and a retry with the same
+    approval finds it, with one post.
+  - A removal sent to another time's event, at that event's own version, leaves it.
+  - Accepted again under a new approval, a Google time is a new event the owner sees.
+  - A ZeitBoard event removed before writing began is put back with a new version. Removed by the
+    owner after writing began, a retry keeps it removed, takes it as written, and undoing it later
+    is no failure.
+  - A first Microsoft create reads the calendar view once. With Graph no longer dropping repeats,
+    a second create finds the first and posts nothing.
+  - With the view paged one event at a time, a create finds its earlier attempt on a later page.
+- The desktop:
+  - An accepted time undone and accepted again is written under a new name. Undone and accepted
+    again before the writer runs, one pass removes the old event and writes the new one, three
+    events written in all and one shown.
+  - A pass that quits while the account's access is refreshed reaches the refresh, writes nothing,
+    and leaves every due write waiting with no attempts and no detail.
+  - Refused a sign-in that would take adding events away, the form is told to use “Sign in again”,
+    and “Sign in again” is told to allow adding events when Google asks. The kept sign-in still
+    writes both times.
+  - Stopping writing returns a status that is off.
+- The window:
+  - Turning writing on shows "Checking that ZeitBoard can add events to Owner…" with no Cancel,
+    even for an account thought to allow writing, until the desktop says it opened a sign-in.
+    Then it shows "If your browser asks, allow ZeitBoard to add events." with Cancel, and a later
+    attempt starts from checking again.
+  - Signing in, or again, tells the sources panel to reload.
+  - The announcement bridge passes the desktop's sign-in announcement to the window.

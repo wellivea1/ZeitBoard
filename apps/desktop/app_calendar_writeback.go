@@ -273,8 +273,8 @@ func (a *App) carryCalendarWrite(ctx context.Context, store *storage.Store, writ
 			// Undone since it was listed: the undo dropped this write.
 			return false
 		}
-		event = accepted
-		result = writer.create(ctx, event, now.Truncate(time.Second), write.Attempts > 0)
+		event = accepted.Event
+		result = writer.create(ctx, accepted, now.Truncate(time.Second))
 	case storage.CalendarWriteDelete:
 		result = writer.remove(ctx, write.EventID, write.Href, write.ETag)
 	default:

@@ -1,5 +1,6 @@
 import { calendarDataChangedEvent } from "./calendar";
 import { agentProposalsChangedEvent } from "./agentProposals";
+import { calendarSignInOpenedEvent } from "./calendarAccounts";
 import { calendarWriteBackChangedEvent } from "./calendarWriteBack";
 import { medicationDataChangedEvent } from "./medications";
 import { rhythmMarkersChangedEvent } from "./rhythmMarkers";
@@ -7,7 +8,8 @@ import { sleepDataChangedEvent } from "./sleepDataEvents";
 
 // The backend announces changes it made on its own: a finished analysis, a
 // sync that downloaded or erased records, something an agent proposed,
-// accepted times written to a calendar, or a subscribed calendar refreshed. One bridge in the app root turns each
+// accepted times written to a calendar, a subscribed calendar refreshed, or a
+// sign-in opened in the browser. One bridge in the app root turns each
 // announcement into the window events the affected views already listen to.
 // Announcements carry no health payload; each view re-reads its own projection.
 const announcements: Record<string, readonly string[]> = {
@@ -15,6 +17,7 @@ const announcements: Record<string, readonly string[]> = {
   "zeitboard:agent-proposed": [agentProposalsChangedEvent],
   "zeitboard:calendar-writes": [calendarWriteBackChangedEvent],
   "zeitboard:calendar-refreshed": [calendarDataChangedEvent],
+  "zeitboard:calendar-sign-in": [calendarSignInOpenedEvent],
   "zeitboard:sync-applied": [
     sleepDataChangedEvent,
     medicationDataChangedEvent,

@@ -1,6 +1,10 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { CalendarAccountProvider } from "../data/calendar";
-import { cancelCalendarSignIn, providerNames } from "../data/calendarAccounts";
+import {
+  calendarSignInOpenedEvent,
+  cancelCalendarSignIn,
+  providerNames,
+} from "../data/calendarAccounts";
 import {
   disableCalendarWriteBack,
   enableAccountWriteBack,
@@ -43,9 +47,24 @@ function AccountWriteBackForm({
 }) {
   const id = useId();
   const [busy, setBusy] = useState(false);
+  // Whether turning writing on opened a sign-in in the browser, as the
+  // desktop says: only then is there one to cancel.
+  const [signingIn, setSigningIn] = useState(false);
   const [error, setError] = useState("");
   const name = providerNames[provider];
   const calendars = provider === "google" ? "calendars you own" : "your calendars";
+
+  useEffect(() => {
+    if (!busy) return undefined;
+    const opened = () => setSigningIn(true);
+    window.addEventListener(calendarSignInOpenedEvent, opened);
+    return () => window.removeEventListener(calendarSignInOpenedEvent, opened);
+  }, [busy]);
+
+  const settle = () => {
+    setBusy(false);
+    setSigningIn(false);
+  };
 
   const start = () => {
     if (busy) return;
@@ -53,11 +72,11 @@ function AccountWriteBackForm({
     setError("");
     void enableAccountWriteBack(sourceId).then(
       (status) => {
-        setBusy(false);
+        settle();
         onStarted(status);
       },
       (reason: unknown) => {
-        setBusy(false);
+        settle();
         setError(failure(reason, "Writing could not be turned on."));
       },
     );
@@ -76,12 +95,12 @@ function AccountWriteBackForm({
           ? `${name} already lets ZeitBoard add events to ${calendars}.`
           : `The first time, ${name} asks in your browser whether ZeitBoard may add events to ${calendars}. Nothing else is asked for, and the account’s sign-in stays on this computer.`}
       </small>
-      {busy && writes && (
+      {busy && !signingIn && (
         <p className="calendar-account-waiting" role="status">
           Checking that ZeitBoard can add events to {label}…
         </p>
       )}
-      {busy && !writes && (
+      {busy && signingIn && (
         <div className="calendar-account-waiting" role="status">
           <span>If your browser asks, allow ZeitBoard to add events.</span>
           <button

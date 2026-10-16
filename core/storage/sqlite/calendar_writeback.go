@@ -105,6 +105,14 @@ func (s *Store) initializeCalendarWriteBack(ctx context.Context) error {
 		UPDATE local_calendar_writes SET state = 'delete', attempts = 0, next_attempt_at = '', detail = '',
 			updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
 		WHERE event_id = OLD.event_id AND state = 'written'; END`,
+		// A time accepted again while its earlier acceptance was still being
+		// removed found that removal in its place. Once the removal is settled,
+		// removed or kept by the owner, the new acceptance is written.
+		`CREATE TRIGGER IF NOT EXISTS local_calendar_write_after_removal AFTER DELETE ON local_calendar_writes
+		WHEN OLD.href <> '' AND OLD.state IN ('delete', 'conflict') AND EXISTS(SELECT 1 FROM local_calendar_write_target) BEGIN
+		INSERT OR IGNORE INTO local_calendar_writes(event_id, state, title, start_at, updated_at)
+		SELECT event_id, 'create', title, start_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now') FROM local_calendar_events
+		WHERE event_id = OLD.event_id AND ownership = 'app_owned'; END`,
 		// Without a calendar to write to, ZeitBoard forgets what it wrote; the
 		// owner's calendar keeps it.
 		`CREATE TRIGGER IF NOT EXISTS local_calendar_write_on_stop AFTER DELETE ON local_calendar_write_target BEGIN
@@ -215,19 +223,33 @@ func (s *Store) CalendarWrites(ctx context.Context) ([]CalendarWrite, error) {
 	return scanCalendarWrites(rows)
 }
 
+// AcceptedTime is an accepted time as a create writes it: the event, and the
+// approval that accepted it. Each acceptance is written as an event of its
+// own, named by its approval, so a time accepted again after an undo is never
+// taken for the event removed.
+type AcceptedTime struct {
+	Event    calendarcore.Event
+	Approval string
+}
+
 // CalendarWriteEvent is the accepted time a create writes.
-func (s *Store) CalendarWriteEvent(ctx context.Context, eventID string) (calendarcore.Event, bool, error) {
+func (s *Store) CalendarWriteEvent(ctx context.Context, eventID string) (AcceptedTime, bool, error) {
+	var accepted AcceptedTime
 	event, err := scanCalendarEvent(s.db.QueryRowContext(ctx, `SELECT
 		event_id, source_id, source_record_id, title, start_at, end_at, zone_id,
-		all_day, busy, ownership, created_at, location, notes, task_id, task_revision, proposal_id
-		FROM local_calendar_events WHERE event_id = ? AND ownership = 'app_owned'`, eventID))
+		all_day, busy, ownership, created_at, location, notes, task_id, task_revision, proposal_id,
+		COALESCE((SELECT approval.decision_id FROM local_proposal_decisions AS approval
+			WHERE approval.proposal_id = event.proposal_id AND approval.event_id = event.event_id
+			AND approval.decision = 'approved' ORDER BY approval.rowid DESC LIMIT 1), '')
+		FROM local_calendar_events AS event WHERE event_id = ? AND ownership = 'app_owned'`, eventID), &accepted.Approval)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
-		return calendarcore.Event{}, false, nil
+		return AcceptedTime{}, false, nil
 	case err != nil:
-		return calendarcore.Event{}, false, err
+		return AcceptedTime{}, false, err
 	}
-	return event, true, nil
+	accepted.Event = event
+	return accepted, true, nil
 }
 
 // MarkCalendarWritten records that an accepted time is in the calendar. If it

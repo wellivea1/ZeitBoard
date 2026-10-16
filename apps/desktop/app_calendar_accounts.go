@@ -32,6 +32,10 @@ const (
 
 	// calendarRevokeTimeout bounds asking a provider to withdraw a grant.
 	calendarRevokeTimeout = 10 * time.Second
+
+	// calendarSignInAnnouncement tells the window a sign-in now waits for
+	// the browser, so whatever started it can offer to cancel it.
+	calendarSignInAnnouncement = "zeitboard:calendar-sign-in"
 )
 
 // openSignInPage opens a provider's sign-in page in the owner's browser;
@@ -313,6 +317,7 @@ func (a *App) signInCalendarAccount(client calendaraccounts.Client, want *storag
 		return CalendarAccountCalendarsDTO{}, asSentence(err)
 	}
 	openSignInPage(a.applicationContext(), auth.URL)
+	a.announce(calendarSignInAnnouncement)
 	code, err := receiver.Wait(ctx, auth.State)
 	if err != nil {
 		return CalendarAccountCalendarsDTO{}, signInStopped(err)
@@ -352,13 +357,24 @@ func (a *App) signInCalendarAccount(client calendaraccounts.Client, want *storag
 		return CalendarAccountCalendarsDTO{}, err
 	}
 	if writing == account.AccountID && !calendaraccounts.Writes(client.Provider, account.Scopes) {
-		return CalendarAccountCalendarsDTO{}, fmt.Errorf("Accepted times are written to a calendar of %s, so signing in to it again must allow adding events. Use “Sign in again” on the account, or stop writing first.", label)
+		return CalendarAccountCalendarsDTO{}, writingKept(client, label)
 	}
 	if err := store.SaveCalendarAccount(ctx, account); err != nil {
 		return CalendarAccountCalendarsDTO{}, err
 	}
 	a.holdAccessToken(account.AccountID, token)
 	return accountCalendarsDTO(ctx, store, account, calendars)
+}
+
+// writingKept refuses a sign-in that would take adding events from the
+// account written to, saying what to do instead: a sign-in that asked for it
+// was refused it in the browser, while the form asks only to read and
+// “Sign in again” asks for both.
+func writingKept(client calendaraccounts.Client, label string) error {
+	if client.Write {
+		return fmt.Errorf("Accepted times are written to a calendar of %s, so signing in to it again must allow adding events. Allow that when %s asks, or stop writing first.", label, providerName(client.Provider))
+	}
+	return fmt.Errorf("Accepted times are written to a calendar of %s, so signing in to it must allow adding events. Use “Sign in again” on the account, which asks for that, or stop writing first.", label)
 }
 
 // signInStopped words why a sign-in stopped: cancelled, out of time, or the

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	calendarcore "non24.app/core/calendar"
+	storage "non24.app/core/storage/sqlite"
 )
 
 // calDAVWriter writes ZeitBoard's own events into one calendar collection
@@ -72,8 +73,11 @@ func (w calDAVWriter) objectURL(eventID string) string {
 }
 
 // create writes an accepted time as a new event. A retry needs nothing of
-// its own: If-None-Match finds an earlier attempt.
-func (w calDAVWriter) create(ctx context.Context, event calendarcore.Event, stamp time.Time, _ bool) calendarWriteResult {
+// its own: If-None-Match finds an earlier attempt. A CalDAV calendar keeps
+// nothing of an event removed from it, so the event is named by the time
+// alone.
+func (w calDAVWriter) create(ctx context.Context, accepted storage.AcceptedTime, stamp time.Time) calendarWriteResult {
+	event := accepted.Event
 	body, err := calendarcore.CalendarObject(event, stamp)
 	if err != nil {
 		return calendarWriteResult{outcome: calendarWriteConflict, detail: "ZeitBoard could not turn this time into a calendar event."}

@@ -16,6 +16,9 @@ export const providerNames: Record<CalendarAccountProvider, string> = {
   microsoft: "Microsoft",
 };
 
+/** The desktop opened a sign-in in the browser, which can now be cancelled. */
+export const calendarSignInOpenedEvent = "zeitboard:calendar-sign-in-opened";
+
 export interface CalendarAccount {
   accountId: string;
   provider: CalendarAccountProvider;

@@ -292,9 +292,13 @@ func TestAMicrosoftCalendarIsWrittenOnceAndWaitsOnAnEndedSignIn(t *testing.T) {
 	}
 	events := ownEvents(t, app)
 	first := events[ids[0]]
+	accepted, _, err := app.store.CalendarWriteEvent(ctx, first.EventID)
+	if err != nil || accepted.Approval == "" {
+		t.Fatalf("the accepted time's approval: %+v, %v", accepted, err)
+	}
 	fake.with(func(s *syntheticAccount) {
 		landed := map[string]any{
-			"id": "landed", "subject": first.Title, "transactionId": calendaraccounts.TransactionID(first),
+			"id": "landed", "subject": first.Title, "transactionId": calendaraccounts.TransactionID(first.EventID, accepted.Approval),
 			"start": map[string]string{"dateTime": first.StartAt.UTC().Format("2006-01-02T15:04:05"), "timeZone": "UTC"},
 			"end":   map[string]string{"dateTime": first.EndAt.UTC().Format("2006-01-02T15:04:05"), "timeZone": "UTC"},
 		}
@@ -366,8 +370,9 @@ func TestWritingNeedsPermissionTheSameAccountAndACalendarOfTheOwners(t *testing.
 	}
 }
 
-// Undoing an accepted time and accepting it again writes it afresh. Google
-// keeps the removed event's ID, so the second acceptance goes under its own.
+// Undoing an accepted time and accepting it again writes it afresh, under
+// the new approval: Google keeps the removed event's ID. Accepted again before
+// the removal reached the calendar, it is written once the removal has.
 func TestATimeAcceptedAgainAfterAnUndoIsWrittenAgain(t *testing.T) {
 	app, fake, _, sourceID, ids := writeApp(t, calendaraccounts.Google)
 	ctx := context.Background()
@@ -380,31 +385,49 @@ func TestATimeAcceptedAgainAfterAnUndoIsWrittenAgain(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	undo := func() {
+		t.Helper()
+		if _, err := app.UndoLocalProposalDecision(LocalProposalUndoInput{ProposalID: ids[0]}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	held := func(posts int) {
+		t.Helper()
+		status := writeStatus(t, app)
+		fake.with(func(s *syntheticAccount) {
+			if s.posts != posts {
+				t.Errorf("%d events written, not %d: an acceptance was taken for another", s.posts, posts)
+			}
+		})
+		if len(fake.written()) != 1 || status.Summary != "1 accepted time is in Owner." || len(status.Problems) != 0 {
+			t.Fatalf("accepted again: %+v, held %v", status, fake.written())
+		}
+	}
 	accept()
 	app.writeCalendarPass(ctx)
 	eventID := ownEvents(t, app)[ids[0]].EventID
-	if _, err := app.UndoLocalProposalDecision(LocalProposalUndoInput{ProposalID: ids[0]}); err != nil {
-		t.Fatal(err)
-	}
+	undo()
 	app.writeCalendarPass(ctx)
 	if fake.written()[eventID] {
 		t.Fatal("the undone time stayed in the calendar")
 	}
 
-	// The app's clock stands still here, so the second acceptance has the
-	// first one's moment, and its ID: the removed event is put back.
 	accept()
 	app.writeCalendarPass(ctx)
-	status := writeStatus(t, app)
-	if !fake.written()[eventID] || status.Summary != "1 accepted time is in Owner." || len(status.Problems) != 0 {
-		t.Fatalf("accepted again: %+v, held %v", status, fake.written())
-	}
+	held(2)
+
+	// Undone and accepted again before the writer ran: the removal goes
+	// first, then the new acceptance is written.
+	undo()
+	accept()
+	app.writeCalendarPass(ctx)
+	held(3)
 }
 
 // Quitting during a pass, while the account's access is being refreshed,
 // leaves the due writes as they were: nothing failed.
 func TestQuittingMidPassIsNoFailure(t *testing.T) {
-	app, _, account, sourceID, ids := writeApp(t, calendaraccounts.Google)
+	app, fake, account, sourceID, ids := writeApp(t, calendaraccounts.Google)
 	if _, err := app.EnableAccountWriteBack(AccountWriteBackInput{SourceID: sourceID}); err != nil {
 		t.Fatal(err)
 	}
@@ -413,44 +436,65 @@ func TestQuittingMidPassIsNoFailure(t *testing.T) {
 	}
 	app.forgetAccessToken(account.AccountID)
 	quitting, quit := context.WithCancel(context.Background())
-	quit()
+	defer quit()
+	refreshing := false
+	fake.with(func(s *syntheticAccount) {
+		s.quitting = func() { refreshing = true; quit() }
+	})
 	app.writeCalendarPass(quitting)
+	fake.with(func(s *syntheticAccount) {
+		if !refreshing || s.posts != 0 {
+			t.Errorf("the pass did not quit mid-refresh: refreshing %v, %d written", refreshing, s.posts)
+		}
+	})
 	writes, _ := app.store.CalendarWrites(context.Background())
 	for _, write := range writes {
-		if write.Attempts != 0 || write.Detail != "" {
+		if write.State != storage.CalendarWriteCreate || write.Attempts != 0 || write.Detail != "" {
 			t.Fatalf("quitting was recorded as a failure: %+v", write)
 		}
 	}
 }
 
 // Signing in again asks for what is in use, and a sign-in that would take
-// adding events from the account written to is refused rather than kept.
+// adding events from the account written to is refused rather than kept,
+// saying what to do instead.
 func TestSigningInAgainKeepsWhatWritingNeeds(t *testing.T) {
 	app, fake, account, sourceID, _ := writeApp(t, calendaraccounts.Google)
-	status, err := app.EnableAccountWriteBack(AccountWriteBackInput{SourceID: sourceID})
-	if err != nil {
+	if _, err := app.EnableAccountWriteBack(AccountWriteBackInput{SourceID: sourceID}); err != nil {
 		t.Fatal(err)
 	}
 	calendar, _ := app.GetCalendar(accountWeekOf(t, app))
 	if calendar.Sources[0].Account == nil || !calendar.Sources[0].Account.Writes {
 		t.Fatalf("the account does not say it lets ZeitBoard add events: %+v", calendar.Sources[0].Account)
 	}
+	stillWrites := func() {
+		t.Helper()
+		if accounts, _ := app.store.CalendarAccounts(context.Background()); !calendaraccounts.Writes(calendaraccounts.Google, accounts[0].Scopes) {
+			t.Fatalf("the kept sign-in lost writing: %q", accounts[0].Scopes)
+		}
+	}
 
-	// From the form, without adding events, while its calendar is written to.
+	// From the form, which asks only to read, while its calendar is written to.
 	fake.with(func(s *syntheticAccount) { s.grant = "https://www.googleapis.com/auth/calendar.readonly" })
 	if _, err := app.ConnectCalendarAccount(CalendarAccountInput{
 		Provider: "google", ClientID: syntheticAccountClient, ClientSecret: syntheticAccountSecret,
-	}); err == nil || !strings.Contains(err.Error(), "must allow adding events") {
-		t.Fatalf("a sign-in taking writing away read as %v", err)
+	}); err == nil || err.Error() != "Accepted times are written to a calendar of owner@example.test, "+
+		"so signing in to it must allow adding events. Use “Sign in again” on the account, which asks for that, or stop writing first." {
+		t.Fatalf("a sign-in from the form taking writing away read as %v", err)
 	}
-	if accounts, _ := app.store.CalendarAccounts(context.Background()); !calendaraccounts.Writes(calendaraccounts.Google, accounts[0].Scopes) {
-		t.Fatalf("the kept sign-in lost writing: %q", accounts[0].Scopes)
+	stillWrites()
+	// Signing in again asks to add events; the owner leaves that unticked.
+	if _, err := app.ReconnectCalendarAccount(CalendarAccountRef{AccountID: account.AccountID}); err == nil ||
+		err.Error() != "Accepted times are written to a calendar of owner@example.test, "+
+			"so signing in to it again must allow adding events. Allow that when Google asks, or stop writing first." {
+		t.Fatalf("signing in again without adding events read as %v", err)
 	}
+	stillWrites()
 
 	// Writing stopped, signing in again asks only to read.
 	fake.with(func(s *syntheticAccount) { s.grant = "" })
-	if _, err := app.DisableCalendarWriteBack(); err != nil || !status.On {
-		t.Fatalf("stopping: %v", err)
+	if stopped, err := app.DisableCalendarWriteBack(); err != nil || stopped.On {
+		t.Fatalf("stopping: %+v, %v", stopped, err)
 	}
 	if _, err := app.ReconnectCalendarAccount(CalendarAccountRef{AccountID: account.AccountID}); err != nil {
 		t.Fatal(err)

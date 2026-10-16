@@ -1549,7 +1549,44 @@ The others are fixed, each with a test:
   - A host name keeps its spelling at the start of an error only when it is one: "e.g." is not.
 - **Left as a residual.** An acceptance's moment is kept to the second. A time undone and
   accepted again within one second has the same Microsoft transaction ID, and Graph could take
-  it for the removed event. ADR-0065 records this.
+  it for the removed event. ADR-0065 records this. The second review below removed it.
+
+### Writing to accounts after a second review — 2026-10-15
+
+A fresh high-effort review of those fixes (PR #89) raised nine findings. Eight are fixed, each
+with a test. Checking them turned up a ninth fault, older than both reviews, which is fixed too:
+
+- **Each acceptance named by its approval.** The moment of acceptance, kept to the second, could
+  be shared by two acceptances, so a removed Google event had to be put back when met. A retry
+  could not tell that from an event the owner had removed after an attempt whose answer was lost,
+  and put the owner's removal back. Each acceptance is now named by the approval that accepted
+  it, which no other acceptance shares. ZeitBoard's own Google event is put back only if it was
+  removed before writing to the calendar began. One removed since was the owner's doing and stays
+  removed, as it would had the answer come back. The second-precision residual is gone.
+- **Every Microsoft create looks first.** Looking only on a retry missed an attempt cut off by
+  quitting or a crash, which counts no failed attempt, and it searched again after every failed
+  sign-in. Each create now looks, over every page, before posting. One read per write is cheap
+  for times ZeitBoard writes a few of a day, and the retry flag is gone from every writer.
+- **Every Google removal checks the mark.** An event's ID no longer names its time alone, so a
+  removal now reads the event first and leaves one without this time's mark. A version it holds
+  still goes as `If-Match`.
+- **Accepted again during a removal.** Found while checking the above, in ADR-0053's queue for
+  CalDAV and accounts alike: a time accepted again while its earlier acceptance was still being
+  removed found that removal in its place, and was never written. A trigger now queues it once
+  the removal settles, removed or kept by the owner. A time the owner left out stays out.
+- **Cancel only for a sign-in that opened.** Whether the browser would open came from a flag the
+  sources list read earlier, which a sign-in made since could leave stale. Then a real sign-in ran
+  with no Cancel. The desktop now announces a sign-in as it opens the browser, and only then does
+  the window offer to cancel. A sign-in also reloads the calendar list, so the flag stays fresh.
+- **Advice that fits the path.** Refused a sign-in that would take adding events from the account
+  written to, “Sign in again” was told to use “Sign in again”. It now asks the owner to allow
+  adding events when the provider asks. The form, which asks only to read, still points to “Sign
+  in again”.
+- **Tests that test.** The quitting test cancelled before the pass began, so it never reached the
+  refresh. It now quits during the refresh, and checks the pass got there. The stopping check read
+  the status from before it stopped; it reads what stopping returned.
+- **No change: names from before.** The first finding was that writes queued before an upgrade
+  would get new names. No release or tag carried writing to an account, so no such write exists.
 
 ## Where the completion goal stands — 2026-09-27
 

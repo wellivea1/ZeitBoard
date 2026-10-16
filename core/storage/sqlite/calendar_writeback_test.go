@@ -126,11 +126,11 @@ func TestAcceptingAndUndoingQueueTheirWrites(t *testing.T) {
 		t.Fatalf("due = %+v, %v", due, err)
 	}
 	kept, found, err := store.CalendarWriteEvent(ctx, "calendar_event_kept")
-	if err != nil || !found || kept.Ownership != calendarcore.OwnershipAppOwned {
+	if err != nil || !found || kept.Event.Ownership != calendarcore.OwnershipAppOwned {
 		t.Fatalf("event to write = %+v, %v, %v", kept, found, err)
 	}
 	href := testCollection + "calendar_event_kept@zeitboard.local.ics"
-	if err := store.MarkCalendarWritten(ctx, kept, href, `"etag-1"`, now); err != nil {
+	if err := store.MarkCalendarWritten(ctx, kept.Event, href, `"etag-1"`, now); err != nil {
 		t.Fatal(err)
 	}
 	if due, _ := store.DueCalendarWrites(ctx, now, 10); len(due) != 0 {
@@ -152,7 +152,7 @@ func TestAcceptingAndUndoingQueueTheirWrites(t *testing.T) {
 	acceptTime(t, store, "calendar_event_race", now.Add(3*time.Hour))
 	race, _, _ := store.CalendarWriteEvent(ctx, "calendar_event_race")
 	undoTime(t, store, "calendar_event_race")
-	if err := store.MarkCalendarWritten(ctx, race, testCollection+"race.ics", `"etag-race"`, now); err != nil {
+	if err := store.MarkCalendarWritten(ctx, race.Event, testCollection+"race.ics", `"etag-race"`, now); err != nil {
 		t.Fatal(err)
 	}
 	due, err = store.DueCalendarWrites(ctx, now, 10)
@@ -169,6 +169,60 @@ func TestAcceptingAndUndoingQueueTheirWrites(t *testing.T) {
 	}
 }
 
+// A time accepted again while its earlier acceptance is still being removed
+// is written once that removal is settled, however it is settled.
+func TestATimeAcceptedAgainMidRemovalIsWrittenAfter(t *testing.T) {
+	store, ctx, now := writeBackStore(t)
+	if err := store.SetCalendarWriteTarget(ctx, CalendarWriteTarget{SourceID: "calendar_source_import_01"}, now); err != nil {
+		t.Fatal(err)
+	}
+	removing := func(id string) {
+		t.Helper()
+		acceptTime(t, store, id, now.Add(time.Hour))
+		accepted, _, _ := store.CalendarWriteEvent(ctx, id)
+		if err := store.MarkCalendarWritten(ctx, accepted.Event, testCollection+id+".ics", `"etag"`, now); err != nil {
+			t.Fatal(err)
+		}
+		undoTime(t, store, id)
+		acceptTime(t, store, id, now.Add(time.Hour))
+	}
+
+	removing("calendar_event_removed")
+	if err := store.MarkCalendarWriteRemoved(ctx, "calendar_event_removed"); err != nil {
+		t.Fatal(err)
+	}
+	removing("calendar_event_kept_changed")
+	if err := store.MarkCalendarWriteConflict(ctx, "calendar_event_kept_changed", "changed in the calendar", now); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ResolveCalendarWriteConflict(ctx, "calendar_event_kept_changed", false, now); err != nil {
+		t.Fatal(err)
+	}
+	// Undone again before the removal settled: nothing more to write.
+	removing("calendar_event_undone_again")
+	undoTime(t, store, "calendar_event_undone_again")
+	if err := store.MarkCalendarWriteRemoved(ctx, "calendar_event_undone_again"); err != nil {
+		t.Fatal(err)
+	}
+	states := writeStates(t, store)
+	if len(states) != 2 || states["calendar_event_removed"] != CalendarWriteCreate ||
+		states["calendar_event_kept_changed"] != CalendarWriteCreate {
+		t.Fatalf("after the removals settled: %v", states)
+	}
+
+	// A time left out of the calendar at the owner's word stays out.
+	acceptTime(t, store, "calendar_event_left_out", now.Add(2*time.Hour))
+	if err := store.MarkCalendarWriteConflict(ctx, "calendar_event_left_out", "a different event is there", now); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ResolveCalendarWriteConflict(ctx, "calendar_event_left_out", false, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, queued := writeStates(t, store)["calendar_event_left_out"]; queued {
+		t.Fatal("a time the owner left out was queued again")
+	}
+}
+
 func TestAConflictWaitsForTheOwner(t *testing.T) {
 	store, ctx, now := writeBackStore(t)
 	if err := store.SetCalendarWriteTarget(ctx, CalendarWriteTarget{SourceID: "calendar_source_import_01"}, now); err != nil {
@@ -176,8 +230,8 @@ func TestAConflictWaitsForTheOwner(t *testing.T) {
 	}
 	for _, id := range []string{"calendar_event_remove", "calendar_event_keep"} {
 		acceptTime(t, store, id, now.Add(time.Hour))
-		event, _, _ := store.CalendarWriteEvent(ctx, id)
-		if err := store.MarkCalendarWritten(ctx, event, testCollection+id+".ics", `"etag"`, now); err != nil {
+		accepted, _, _ := store.CalendarWriteEvent(ctx, id)
+		if err := store.MarkCalendarWritten(ctx, accepted.Event, testCollection+id+".ics", `"etag"`, now); err != nil {
 			t.Fatal(err)
 		}
 		undoTime(t, store, id)

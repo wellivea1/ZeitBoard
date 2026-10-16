@@ -74,3 +74,6 @@ remove an event of its own that the owner has since changed, for instance by mov
 - Update, 2026-10-12: [ADR-0065](0065-accepted-times-written-to-google-and-microsoft-calendars.md)
   writes to a calendar brought in from a Google or Microsoft account as well, with the same
   guarantees.
+- Update, 2026-10-15: a time accepted again while its earlier acceptance was still being removed
+  found that removal in its place, and was never written. A trigger now queues it once the removal
+  settles, removed or kept by the owner.

@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { CalendarSource } from "../data/calendar";
+import { calendarSignInOpenedEvent } from "../data/calendarAccounts";
 import { calendarWriteBackChangedEvent, type CalendarWriteBack } from "../data/calendarWriteBack";
 import { clockTime, dayInSentence, relativeDay } from "../utils/relativeTime";
 import { CalendarSourcesPanel } from "./CalendarSourcesPanel";
@@ -321,8 +322,9 @@ describe("CalendarSourcesPanel fetched calendars", () => {
   // sign-in: nothing is typed, the browser asks once, and stopping leaves the
   // account signed in for reading (ADR-0065).
   // An account that already lets ZeitBoard add events asks nothing in the
-  // browser, so there is no sign-in to cancel while writing is turned on.
-  it("turns writing on without the browser when the account already allows it", async () => {
+  // browser, so there is no sign-in to cancel while writing is turned on,
+  // until the desktop says it opened one after all.
+  it("offers to cancel only a sign-in the desktop opened", async () => {
     let finish: (status: unknown) => void = () => undefined;
     (globalThis as { go?: unknown }).go = {
       main: {
@@ -368,6 +370,13 @@ describe("CalendarSourcesPanel fetched calendars", () => {
       await screen.findByText("Checking that ZeitBoard can add events to Owner…"),
     ).toBeVisible();
     expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+    // Signed in again since without adding events, the account asks after
+    // all: the desktop says so, and the sign-in can be cancelled.
+    fireEvent(window, new Event(calendarSignInOpenedEvent));
+    expect(
+      await screen.findByText("If your browser asks, allow ZeitBoard to add events."),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeVisible();
     finish({
       on: true,
       sourceId: owner.sourceId,
@@ -436,11 +445,18 @@ describe("CalendarSourcesPanel fetched calendars", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Allow writing" }));
     expect(
+      await screen.findByText("Checking that ZeitBoard can add events to Owner…"),
+    ).toBeVisible();
+    fireEvent(window, new Event(calendarSignInOpenedEvent));
+    expect(
       await screen.findByText("If your browser asks, allow ZeitBoard to add events."),
     ).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Signing in was cancelled.");
     expect(cancel).toHaveBeenCalledOnce();
+    // The next attempt starts from checking again.
+    fireEvent(window, new Event(calendarSignInOpenedEvent));
+    expect(screen.queryByText("If your browser asks, allow ZeitBoard to add events.")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Allow writing" }));
     const status = await screen.findByRole("region", { name: "Accepted times are written here" });

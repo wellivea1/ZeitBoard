@@ -42,31 +42,36 @@ events that the owner has since changed. Each provider offers what those rules n
 3. **Only a calendar ZeitBoard may add to.** In Google, a calendar the owner owns. In Microsoft,
    one the owner can edit. A calendar shared with them is refused, by name.
 4. **ZeitBoard's own events only, recognisable as such.**
-   - Each acceptance of a time is written as an event of its own, named by the time and the moment
-     it was accepted. Retrying a write keeps that name; accepting the time again after undoing it
-     makes a new one.
+   - Each acceptance of a time is written as an event of its own, named by the time and the
+     approval that accepted it. Retrying a write keeps that name, as does writing to the same
+     calendar again after stopping; accepting the time again after undoing it makes a new one.
    - In Google, the event's ID is derived from that name (base32hex, as Google requires), and it
      carries a private mark naming the time.
-   - In Microsoft, it carries ZeitBoard's UID for the time, with the moment, as its transaction ID.
+   - In Microsoft, it carries ZeitBoard's UID for the time, with the approval, as its transaction
+     ID.
    - Events are written without reminders, as CalDAV writes are.
    - A removal checks the event carries this time's mark or UID, else leaves it.
    - Reading the calendar back maps both to ZeitBoard's UID, so an import or refresh recognises
      them, as ADR-0053 does for CalDAV.
 5. **Preconditions instead of trust.**
    - A Google create that finds its ID taken keeps the event only if it carries this time's mark;
-     anything else is a conflict for the owner. Google keeps a removed event under its ID, so one
-     ZeitBoard's own that was removed is put back, as a CalDAV create puts back an event removed
-     there.
-   - Graph drops a create that repeats a transaction ID. A Microsoft retry also looks first, over
-     every page of the time's events, for what an earlier attempt wrote.
-   - A Google removal sends `If-Match` with the version ZeitBoard was given. "Remove it anyway"
-     sends none, so it first checks the event still carries this time's mark.
+     anything else is a conflict for the owner. Google keeps a removed event under its ID.
+     ZeitBoard's own event removed before writing to the calendar was turned on is put back, as
+     turning writing on writes every accepted time. One the owner removed since stays removed, as
+     it would had the write's answer come back.
+   - A Microsoft create first looks, over every page of the time's events, for what an earlier
+     attempt wrote, its answer lost or the app quitting first. Graph also drops a create that
+     repeats a transaction ID.
+   - A Google removal first checks the event still carries this time's mark, then sends
+     `If-Match` with the version ZeitBoard was given. "Remove it anyway" sends none.
    - A Microsoft removal compares the change key first.
    - A changed event waits for the owner, as in ADR-0053. IDs are asked for as immutable, so an
      event the owner moves between calendars is still found.
 6. **The writer and its queue are ADR-0053's.** The same triggers queue writes, and the same
    retries, conflicts, "Try again now", status and problem list apply. When the account cannot
-   be signed in to, every due write waits and says why, such as an ended sign-in.
+   be signed in to, every due write waits and says why, such as an ended sign-in. A time accepted
+   again while its earlier acceptance is still being removed is written once that removal
+   settles.
 7. **Stopping and removing.**
    - Stopping writing forgets what was written, as ADR-0053 does. The account stays signed in
      for reading. Removing the account withdraws its access: Google revokes the grant, and
@@ -84,10 +89,15 @@ events that the owner has since changed. Each provider offers what those rules n
 - The account sees the accepted times' task names, as any calendar host does (ADR-0053's
   limitation 3).
 - One calendar at a time still, whether CalDAV or an account's.
-- Residual: an acceptance's moment is kept to the second. If a time is undone and accepted again
-  within the same second, Microsoft sees the same transaction ID, and Graph could take the second
-  write for the removed first. Google's is put back instead.
+- Residual: Graph documents its de-duplication by transaction ID for retries. Writing to the same
+  Microsoft calendar again after stopping, ZeitBoard assumes a create is not answered with an
+  event the owner deleted meanwhile. That needs checking against a real account.
 - Update, 2026-10-15: a code review of this change brought in the per-acceptance names, putting a
   removed Google event back, writing without reminders, looking first only on a retry and over
   every page, and what a sign-in again asks for (completion plan, "Writing to accounts after
   review").
+- Update, 2026-10-15: a second review named each acceptance by its approval instead of its
+  moment, which two acceptances could share. It also limited putting a Google event back to one
+  removed before writing began, made every Microsoft create look first, and checked the mark
+  before every Google removal. No release carried the earlier names, so nothing written under
+  them needs carrying over (completion plan, "Writing to accounts after a second review").

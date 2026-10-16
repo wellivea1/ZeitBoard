@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	calendarcore "non24.app/core/calendar"
 	storage "non24.app/core/storage/sqlite"
 	"non24.app/desktop/internal/calendaraccounts"
 )
@@ -86,9 +85,7 @@ func (a *App) allowWriting(ctx context.Context, account storage.CalendarAccount)
 // eventWriter carries writes to the calendar written to: a CalDAV collection
 // (ADR-0053) or an account's calendar (ADR-0065).
 type eventWriter interface {
-	// create writes an accepted time; retry says an earlier attempt may have
-	// written it with its answer lost.
-	create(ctx context.Context, event calendarcore.Event, stamp time.Time, retry bool) calendarWriteResult
+	create(ctx context.Context, accepted storage.AcceptedTime, stamp time.Time) calendarWriteResult
 	remove(ctx context.Context, eventID, href, etag string) calendarWriteResult
 }
 
@@ -107,7 +104,7 @@ func (a *App) eventWriterFor(ctx context.Context, store *storage.Store, target s
 		return nil, err
 	}
 	return accountEventWriter{
-		client: client, access: access, calendarID: target.CalendarID,
+		client: client, access: access, calendarID: target.CalendarID, since: target.EnabledAt,
 		refused: func(err error) { a.forgetRefusedAccess(account.AccountID, err) },
 	}, nil
 }
@@ -119,11 +116,12 @@ type accountEventWriter struct {
 	client     calendaraccounts.Client
 	access     string
 	calendarID string
+	since      time.Time // when writing to the calendar was turned on
 	refused    func(error)
 }
 
-func (w accountEventWriter) create(ctx context.Context, event calendarcore.Event, _ time.Time, retry bool) calendarWriteResult {
-	written, err := w.client.CreateEvent(ctx, w.access, w.calendarID, event, retry)
+func (w accountEventWriter) create(ctx context.Context, accepted storage.AcceptedTime, _ time.Time) calendarWriteResult {
+	written, err := w.client.CreateEvent(ctx, w.access, w.calendarID, accepted.Event, accepted.Approval, w.since)
 	switch {
 	case errors.Is(err, calendaraccounts.ErrTaken):
 		return calendarWriteResult{outcome: calendarWriteConflict, detail: err.Error()}
