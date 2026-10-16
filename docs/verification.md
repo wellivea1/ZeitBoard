@@ -3278,15 +3278,16 @@ stand-ins can store a create and answer as though it failed, as the Google one a
 
 - The store:
   - A time undone before its create was confirmed leaves a removal with no address. It records
-    what to look for, and is gone once done, taking that record with it.
+    what to look for, with the time the event was written for, and is gone once done, taking that
+    record with it.
   - A create that lands for an acceptance undone meanwhile gives that removal its address and
-    version, and leaves nothing to look for. A conflict or failure for it changes nothing.
-  - What is found waits for the owner as a conflict, at the address and version found, with
-    nothing left to look for. Removing it anyway queues its removal there, whatever its version.
+    version. A conflict or failure for it changes nothing.
+  - What is found waits for the owner as a conflict, at the address and version found. Removing it
+    anyway queues its removal there, whatever its version.
 - The provider package, for Google and Microsoft: with nothing written, the lookup finds nothing.
   With the create landed, it finds the event, at its address and version, and changes nothing.
   Under the name, another's Google event is not found. In a Microsoft time with more events than
-  ZeitBoard reads, the lookup says it cannot tell.
+  ZeitBoard reads, the lookup reads every page it may, then gives up.
 - The desktop, for CalDAV, Google and Microsoft: an accepted time whose create landed with its
   answer lost, undone before a retry, waits for the owner as a removal. The problem says
   ZeitBoard may have added it and cannot tell whether it changed. Removed anyway, it leaves the

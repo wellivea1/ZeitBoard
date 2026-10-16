@@ -482,13 +482,14 @@ func TestAnUnconfirmedCreateIsLookedFor(t *testing.T) {
 				t.Fatalf("with its create landed: %+v, %v, %v; %d shown", found, ok, err, fake.shown())
 			}
 			if provider == Microsoft {
-				// More events in the time than ZeitBoard reads: it cannot say.
+				// More events in the time than ZeitBoard reads: it cannot be
+				// searched, and the lookup gives up rather than wait for good.
 				for n := range maxPages {
 					fake.events[fmt.Sprintf("a-%03d", n)] = map[string]any{"id": "filler", "transactionId": "someone-elses"}
 				}
-				fake.paged = true
-				if _, ok, err := find("decision_first"); !errors.Is(err, errTooManyEvents) || ok {
-					t.Fatalf("past the pages read: %v, %v", ok, err)
+				fake.paged, fake.views = true, 0
+				if _, ok, err := find("decision_first"); err != nil || ok || fake.views != maxPages {
+					t.Fatalf("past the pages read: %v, %v after %d pages", ok, err, fake.views)
 				}
 				return
 			}

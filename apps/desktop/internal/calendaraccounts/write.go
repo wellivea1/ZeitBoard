@@ -106,13 +106,16 @@ func (c Client) DeleteEvent(ctx context.Context, access, calendarID, eventID str
 // before the create was confirmed, its answer lost or the app quitting first:
 // by the name the acceptance was written under, between start and end in
 // Microsoft. It finds only ZeitBoard's own event for the time, shown, and
-// says where it is and at what version.
+// says where it is and at what version. A Microsoft time holding more events
+// than ZeitBoard reads cannot be searched, and the lookup gives up rather
+// than wait on it for good.
 func (c Client) FindUnconfirmed(ctx context.Context, access, calendarID, eventID, approval string, start, end time.Time) (Written, bool, error) {
 	if c.Provider == Microsoft {
-		if !start.Before(end) {
-			return Written{}, false, nil // no time to look in
+		found, ok, err := c.microsoftFind(ctx, access, calendarID, start, end, TransactionID(eventID, approval))
+		if errors.Is(err, errTooManyEvents) {
+			return Written{}, false, nil
 		}
-		return c.microsoftFind(ctx, access, calendarID, start, end, TransactionID(eventID, approval))
+		return found, ok, err
 	}
 	id := googleEventID(eventID, approval)
 	address := c.googleEventsAddress(calendarID) + "/" + id

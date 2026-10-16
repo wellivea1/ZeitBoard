@@ -134,7 +134,7 @@ func TestAcceptingAndUndoingQueueTheirWrites(t *testing.T) {
 	}
 	unconfirmed, found, err := store.CalendarWriteUnconfirmed(ctx, "calendar_event_quick_undo")
 	if err != nil || !found || unconfirmed.EventID != "calendar_event_quick_undo" || unconfirmed.Approval != "" ||
-		!unconfirmed.StartAt.IsZero() {
+		!unconfirmed.StartAt.Equal(now.Add(time.Hour)) || !unconfirmed.EndAt.Equal(now.Add(90*time.Minute)) {
 		t.Fatalf("what it looks for: %+v, %v, %v", unconfirmed, found, err)
 	}
 	if err := store.MarkCalendarWriteRemoved(ctx, targetOf(t, store), "calendar_event_quick_undo"); err != nil {
@@ -305,9 +305,6 @@ func TestAWriteLandingForAnUndoneAcceptanceIsRemovedFirst(t *testing.T) {
 		write.ETag != `"etag-landed"` {
 		t.Fatalf("what landed for the undone acceptance: %+v", write)
 	}
-	if _, unconfirmed, _ := store.CalendarWriteUnconfirmed(ctx, id); unconfirmed {
-		t.Fatal("a removal that knows its address still looks for it")
-	}
 	if err := store.MarkCalendarWriteRemoved(ctx, targetOf(t, store), id); err != nil {
 		t.Fatal(err)
 	}
@@ -335,9 +332,6 @@ func TestWhatAnUnconfirmedCreateWroteWaitsForTheOwner(t *testing.T) {
 	if len(writes) != 1 || writes[0].State != CalendarWriteConflict || writes[0].Href != testCollection+"found.ics" ||
 		writes[0].ETag != `"etag-found"` || writes[0].Detail != "it may have been added before the undo" {
 		t.Fatalf("what was found: %+v", writes)
-	}
-	if _, unconfirmed, _ := store.CalendarWriteUnconfirmed(ctx, id); unconfirmed {
-		t.Fatal("what was found is still looked for")
 	}
 	if err := store.ResolveCalendarWriteConflict(ctx, id, true, now); err != nil {
 		t.Fatal(err)

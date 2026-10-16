@@ -1703,8 +1703,8 @@ confirmed it, ZeitBoard forgot the write, and the event stayed in the calendar f
 came back on every reading as busy time ZeitBoard did not recognise.
 
 - Undoing a time whose create is not yet confirmed now turns its write into a removal of
-  whatever that create wrote. A trigger records the approval it was written under, before the
-  time goes.
+  whatever that create wrote. A trigger records the approval it was written under, and the time
+  it was written for, before the time goes.
 - The removal looks where ZeitBoard writes the time: the CalDAV object named by it, the Google
   event under the acceptance's ID, or the Microsoft event with its transaction ID, over the time
   the approval records. Finding nothing, or another's event, it is done.
@@ -1715,9 +1715,15 @@ came back on every reading as busy time ZeitBoard did not recognise.
   removes exactly what landed, with nothing to ask.
 - A time accepted again meanwhile is written once the removal is done, as with any removal.
 - A review of the first version found it removed what it found unasked, which could take an
-  owner's change with it. It also took a Microsoft lookup cut short by a busy time for finding
-  nothing. Both are fixed: what is found waits for the owner, and a lookup cut short is a failure
-  to retry.
+  owner's change with it. What is found now waits for the owner.
+- A second review found that a Microsoft lookup cut short by a time holding more events than
+  ZeitBoard reads, retried, would wait for good. A time accepted again would wait behind it. The
+  lookup now gives up there, as a create there goes ahead. What to look for keeps the event's own
+  time, not one read back from the approval. One rule names the approval in force, for the
+  trigger and the queue alike. A removal that knows its address uses it.
+- An undo while the calendar cannot be reached leaves its lookup waiting with the other writes,
+  and a time accepted again waits behind it. Nothing could be written then anyway, and once the
+  calendar answers, the lookup settles and the time is written.
 
 ## Where the completion goal stands — 2026-09-27
 

@@ -280,15 +280,19 @@ func (a *App) carryCalendarWrite(ctx context.Context, store *storage.Store, targ
 		write.Approval = accepted.Approval
 		result = writer.create(ctx, accepted, now.Truncate(time.Second))
 	case storage.CalendarWriteDelete:
+		if write.Href != "" {
+			result = writer.remove(ctx, write.EventID, write.Href, write.ETag)
+			break
+		}
+		// Undone before its create was confirmed: look for what it wrote.
 		created, unconfirmed, err := store.CalendarWriteUnconfirmed(ctx, write.EventID)
 		switch {
 		case err != nil:
 			return false
 		case unconfirmed:
-			// Undone before its create was confirmed: look for what it wrote.
 			result = writer.findUnconfirmed(ctx, created)
 		default:
-			result = writer.remove(ctx, write.EventID, write.Href, write.ETag)
+			result = calendarWriteResult{outcome: calendarWriteDone} // nothing known to look for
 		}
 	default:
 		return false
