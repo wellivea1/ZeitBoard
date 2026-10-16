@@ -1724,6 +1724,18 @@ came back on every reading as busy time ZeitBoard did not recognise.
 - An undo while the calendar cannot be reached leaves its lookup waiting with the other writes,
   and a time accepted again waits behind it. Nothing could be written then anyway, and once the
   calendar answers, the lookup settles and the time is written.
+- A third review raised small points, now fixed:
+  - A lookup that learns its address from a create landing late starts that removal afresh,
+    with no backoff or reason left over.
+  - A record of what to look for that cannot be read waits, saying so, instead of being tried
+    again at once.
+  - The rule for the approval in force is one constant again.
+- The third review also asked for things left as they are, each with its reason:
+  - A Microsoft time holding more events than ZeitBoard reads gives up the lookup. That is a
+    calendar with thousands of events within one accepted block.
+  - An event from an earlier time of writing that a lookup finds goes to the owner. Asking is
+    safe, and the time was undone.
+  - Three readings of a Google event remain, and each judges what it reads for its own purpose.
 
 ## Where the completion goal stands — 2026-09-27
 

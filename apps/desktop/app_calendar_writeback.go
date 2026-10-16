@@ -287,8 +287,10 @@ func (a *App) carryCalendarWrite(ctx context.Context, store *storage.Store, targ
 		// Undone before its create was confirmed: look for what it wrote.
 		created, unconfirmed, err := store.CalendarWriteUnconfirmed(ctx, write.EventID)
 		switch {
-		case err != nil:
+		case err != nil && ctx.Err() != nil:
 			return false
+		case err != nil:
+			result = calendarWriteResult{outcome: calendarWriteFailed, detail: "ZeitBoard could not read what to look for."}
 		case unconfirmed:
 			result = writer.findUnconfirmed(ctx, created)
 		default:
