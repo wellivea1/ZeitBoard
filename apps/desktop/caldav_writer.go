@@ -27,12 +27,18 @@ type calDAVWriter struct {
 	password   string
 }
 
-// What one write came to. A conflict waits for the owner; a failure is retried.
+// What one write came to. A conflict waits for the owner; a failure is
+// retried. Found is the event the create of a time undone before it was
+// confirmed wrote, which waits for the owner too.
 const (
 	calendarWriteDone     = "done"
 	calendarWriteConflict = "conflict"
 	calendarWriteFailed   = "failed"
+	calendarWriteFound    = "found"
 )
+
+// unconfirmedFound is why such an event waits for the owner.
+const unconfirmedFound = "ZeitBoard may have added this before you undid it, and cannot tell whether it was changed since."
 
 type calendarWriteResult struct {
 	outcome string
@@ -146,10 +152,10 @@ func (w calDAVWriter) remove(ctx context.Context, _, href, etag string) calendar
 	}
 }
 
-// removeUnconfirmed removes what the create of a time undone before it was
+// findUnconfirmed looks for what the create of a time undone before it was
 // confirmed may have written: the object named by the time, if it carries
-// ZeitBoard's UID for it. Nothing there, or another's object, is left.
-func (w calDAVWriter) removeUnconfirmed(ctx context.Context, created storage.UnconfirmedCreate) calendarWriteResult {
+// ZeitBoard's UID for it. Nothing there, or another's object, it is done.
+func (w calDAVWriter) findUnconfirmed(ctx context.Context, created storage.UnconfirmedCreate) calendarWriteResult {
 	href := w.objectURL(created.EventID)
 	uid, etag, status, err := w.fetch(ctx, href)
 	switch {
@@ -162,9 +168,7 @@ func (w calDAVWriter) removeUnconfirmed(ctx context.Context, created storage.Unc
 	case uid != calendarcore.OwnUID(created.EventID):
 		return calendarWriteResult{outcome: calendarWriteDone}
 	}
-	// Removed as it was just read, so a change made meanwhile is not lost
-	// unseen: the next attempt reads it again.
-	return w.remove(ctx, created.EventID, href, etag)
+	return calendarWriteResult{outcome: calendarWriteFound, href: href, etag: etag, detail: unconfirmedFound}
 }
 
 // probe checks that the sign-in opens the calendar and may add events to it,

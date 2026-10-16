@@ -3271,7 +3271,7 @@ synthetic values only, now check:
 
 Statement coverage of the package is 88.9%; what remains is the system's random source failing.
 
-## An undone time's unconfirmed create is removed — 2026-10-16
+## An undone time's unconfirmed create is looked for — 2026-10-16
 
 Go tests in the store, `internal/calendaraccounts` and the desktop. The CalDAV and Microsoft
 stand-ins can store a create and answer as though it failed, as the Google one already could.
@@ -3280,10 +3280,14 @@ stand-ins can store a create and answer as though it failed, as the Google one a
   - A time undone before its create was confirmed leaves a removal with no address. It records
     what to look for, and is gone once done, taking that record with it.
   - A create that lands for an acceptance undone meanwhile gives that removal its address and
-    version. A conflict or failure for it changes nothing.
-- The provider package, for Google and Microsoft: with nothing written, the lookup finds nothing
-  and changes nothing. With the create landed, its event is removed. Under the name, another's
-  Google event is left.
+    version, and leaves nothing to look for. A conflict or failure for it changes nothing.
+  - What is found waits for the owner as a conflict, at the address and version found, with
+    nothing left to look for. Removing it anyway queues its removal there, whatever its version.
+- The provider package, for Google and Microsoft: with nothing written, the lookup finds nothing.
+  With the create landed, it finds the event, at its address and version, and changes nothing.
+  Under the name, another's Google event is not found. In a Microsoft time with more events than
+  ZeitBoard reads, the lookup says it cannot tell.
 - The desktop, for CalDAV, Google and Microsoft: an accepted time whose create landed with its
-  answer lost, undone before a retry, is removed from the calendar by the next pass, with no
-  problems left. With the trigger switched off, these tests fail.
+  answer lost, undone before a retry, waits for the owner as a removal. The problem says
+  ZeitBoard may have added it and cannot tell whether it changed. Removed anyway, it leaves the
+  calendar, with no problems left. With the trigger switched off, these tests fail.

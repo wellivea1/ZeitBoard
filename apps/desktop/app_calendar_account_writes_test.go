@@ -630,9 +630,9 @@ func TestGooglePutsBackOnlyWhatWasRemovedWhileWritingWasOff(t *testing.T) {
 }
 
 // An accepted time whose create landed with its answer lost, undone before
-// the create was confirmed, is found by the name it was written under and
-// removed by the next pass.
-func TestAnAccountCreateUnconfirmedAtAnUndoIsRemoved(t *testing.T) {
+// the create was confirmed, is found by the name it was written under. It
+// waits for the owner, who can remove it.
+func TestAnAccountCreateUnconfirmedAtAnUndoWaitsForTheOwner(t *testing.T) {
 	for _, provider := range []calendaraccounts.Provider{calendaraccounts.Google, calendaraccounts.Microsoft} {
 		t.Run(string(provider), func(t *testing.T) {
 			app, fake, _, sourceID, ids := writeApp(t, provider)
@@ -655,8 +655,17 @@ func TestAnAccountCreateUnconfirmedAtAnUndoIsRemoved(t *testing.T) {
 			}
 			app.writeCalendarPass(ctx)
 			status := writeStatus(t, app)
+			if !fake.written()[eventID] || len(status.Problems) != 1 || !status.Problems[0].Conflict ||
+				!status.Problems[0].Removing || status.Problems[0].Detail != unconfirmedFound {
+				t.Fatalf("what the unconfirmed create wrote did not wait for the owner: %+v", status)
+			}
+			if _, err := app.ResolveCalendarWriteConflict(CalendarWriteConflictInput{EventID: eventID, Decision: "remove"}); err != nil {
+				t.Fatal(err)
+			}
+			app.writeCalendarPass(ctx)
+			status = writeStatus(t, app)
 			if fake.written()[eventID] || status.Summary != "The next time you accept is added to Owner." || len(status.Problems) != 0 {
-				t.Fatalf("what the unconfirmed create wrote: %+v, held %v", status, fake.written())
+				t.Fatalf("removing it anyway: %+v, held %v", status, fake.written())
 			}
 		})
 	}

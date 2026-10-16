@@ -305,11 +305,46 @@ func TestAWriteLandingForAnUndoneAcceptanceIsRemovedFirst(t *testing.T) {
 		write.ETag != `"etag-landed"` {
 		t.Fatalf("what landed for the undone acceptance: %+v", write)
 	}
+	if _, unconfirmed, _ := store.CalendarWriteUnconfirmed(ctx, id); unconfirmed {
+		t.Fatal("a removal that knows its address still looks for it")
+	}
 	if err := store.MarkCalendarWriteRemoved(ctx, targetOf(t, store), id); err != nil {
 		t.Fatal(err)
 	}
 	if write := due(); write.State != CalendarWriteCreate || write.Href != "" {
 		t.Fatalf("the new acceptance after the removal: %+v", write)
+	}
+}
+
+// What the create of a time undone before it was confirmed is found to have
+// written waits for the owner, at the address and version found: removing it
+// anyway removes it there, whatever its version.
+func TestWhatAnUnconfirmedCreateWroteWaitsForTheOwner(t *testing.T) {
+	store, ctx, now := writeBackStore(t)
+	if err := store.SetCalendarWriteTarget(ctx, CalendarWriteTarget{SourceID: "calendar_source_import_01"}, now); err != nil {
+		t.Fatal(err)
+	}
+	const id = "calendar_event_found"
+	acceptTime(t, store, id, now.Add(time.Hour))
+	undoTime(t, store, id)
+	if err := store.MarkCalendarWriteFound(ctx, targetOf(t, store), id, testCollection+"found.ics", `"etag-found"`,
+		"it may have been added before the undo", now); err != nil {
+		t.Fatal(err)
+	}
+	writes, _ := store.CalendarWrites(ctx)
+	if len(writes) != 1 || writes[0].State != CalendarWriteConflict || writes[0].Href != testCollection+"found.ics" ||
+		writes[0].ETag != `"etag-found"` || writes[0].Detail != "it may have been added before the undo" {
+		t.Fatalf("what was found: %+v", writes)
+	}
+	if _, unconfirmed, _ := store.CalendarWriteUnconfirmed(ctx, id); unconfirmed {
+		t.Fatal("what was found is still looked for")
+	}
+	if err := store.ResolveCalendarWriteConflict(ctx, id, true, now); err != nil {
+		t.Fatal(err)
+	}
+	due, err := store.DueCalendarWrites(ctx, targetOf(t, store), now, 10)
+	if err != nil || len(due) != 1 || due[0].State != CalendarWriteDelete || due[0].Href != testCollection+"found.ics" || due[0].ETag != "" {
+		t.Fatalf("removing it anyway: %+v, %v", due, err)
 	}
 }
 

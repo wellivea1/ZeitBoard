@@ -460,33 +460,42 @@ func TestAMicrosoftCreateLooksOnEveryPage(t *testing.T) {
 }
 
 // The create of a time undone before it was confirmed is looked for by the
-// name it was written under and removed if it is ZeitBoard's. Nothing there,
-// or another's event under that name, leaves the calendar as it is.
-func TestAnUnconfirmedCreateIsLookedForAndRemoved(t *testing.T) {
+// name it was written under. ZeitBoard's own event there is found, with
+// where it is and at what version; nothing there, or another's event, is not.
+func TestAnUnconfirmedCreateIsLookedFor(t *testing.T) {
 	for _, provider := range []Provider{Google, Microsoft} {
 		t.Run(string(provider), func(t *testing.T) {
 			fake := newFakeCalendars(t, provider)
 			client, ctx := fake.client(), context.Background()
 			accepted := acceptedTime("calendar_event_owned_01")
-			removeUnconfirmed := func(approval string) error {
-				return client.RemoveUnconfirmed(ctx, "access", "mine", accepted.EventID, approval, accepted.StartAt, accepted.EndAt)
+			find := func(approval string) (Written, bool, error) {
+				return client.FindUnconfirmed(ctx, "access", "mine", accepted.EventID, approval, accepted.StartAt, accepted.EndAt)
 			}
-			if err := removeUnconfirmed("decision_first"); err != nil || len(fake.events) != 0 {
-				t.Fatalf("with nothing written: %v; %d held", err, len(fake.events))
+			if _, ok, err := find("decision_first"); err != nil || ok {
+				t.Fatalf("with nothing written: %v, %v", ok, err)
 			}
-			if _, err := client.CreateEvent(ctx, "access", "mine", accepted, "decision_first", "writing_now"); err != nil {
+			written, err := client.CreateEvent(ctx, "access", "mine", accepted, "decision_first", "writing_now")
+			if err != nil {
 				t.Fatal(err)
 			}
-			if err := removeUnconfirmed("decision_first"); err != nil || fake.shown() != 0 {
-				t.Fatalf("with its create landed: %v; %d shown", err, fake.shown())
+			if found, ok, err := find("decision_first"); err != nil || !ok || found != written || fake.shown() != 1 {
+				t.Fatalf("with its create landed: %+v, %v, %v; %d shown", found, ok, err, fake.shown())
 			}
 			if provider == Microsoft {
+				// More events in the time than ZeitBoard reads: it cannot say.
+				for n := range maxPages {
+					fake.events[fmt.Sprintf("a-%03d", n)] = map[string]any{"id": "filler", "transactionId": "someone-elses"}
+				}
+				fake.paged = true
+				if _, ok, err := find("decision_first"); !errors.Is(err, errTooManyEvents) || ok {
+					t.Fatalf("past the pages read: %v, %v", ok, err)
+				}
 				return
 			}
 			taken := googleEventID(accepted.EventID, "decision_other")
 			fake.events[taken] = map[string]any{"id": taken, "etag": `"0"`}
-			if err := removeUnconfirmed("decision_other"); err != nil || fake.shown() != 1 {
-				t.Fatalf("with another's event under the name: %v; %d shown", err, fake.shown())
+			if _, ok, err := find("decision_other"); err != nil || ok {
+				t.Fatalf("with another's event under the name: %v, %v", ok, err)
 			}
 		})
 	}

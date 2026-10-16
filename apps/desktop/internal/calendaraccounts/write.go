@@ -102,28 +102,38 @@ func (c Client) DeleteEvent(ctx context.Context, access, calendarID, eventID str
 	return c.googleDelete(ctx, access, calendarID, eventID, written)
 }
 
-// RemoveUnconfirmed removes what a create may have written for a time undone
-// before the create was confirmed, its answer lost or the app quitting first.
-// It is looked for by the name the acceptance was written under, between
-// start and end in Microsoft, and removed if it is ZeitBoard's; finding
-// nothing, or another's event, leaves the calendar as it is.
-func (c Client) RemoveUnconfirmed(ctx context.Context, access, calendarID, eventID, approval string, start, end time.Time) error {
+// FindUnconfirmed looks for what a create may have written for a time undone
+// before the create was confirmed, its answer lost or the app quitting first:
+// by the name the acceptance was written under, between start and end in
+// Microsoft. It finds only ZeitBoard's own event for the time, shown, and
+// says where it is and at what version.
+func (c Client) FindUnconfirmed(ctx context.Context, access, calendarID, eventID, approval string, start, end time.Time) (Written, bool, error) {
 	if c.Provider == Microsoft {
 		if !start.Before(end) {
-			return nil // no time to look in
+			return Written{}, false, nil // no time to look in
 		}
-		found, ok, err := c.microsoftFind(ctx, access, calendarID, start, end, TransactionID(eventID, approval))
-		if err != nil || !ok {
-			return err
-		}
-		return c.microsoftDelete(ctx, access, eventID, found)
+		return c.microsoftFind(ctx, access, calendarID, start, end, TransactionID(eventID, approval))
 	}
-	err := c.googleDelete(ctx, access, calendarID, eventID, Written{ID: googleEventID(eventID, approval)})
-	if errors.Is(err, ErrNotOurs) {
-		return nil
+	id := googleEventID(eventID, approval)
+	address := c.googleEventsAddress(calendarID) + "/" + id
+	var existing googleMarked
+	status, err := c.call(ctx, http.MethodGet, address, access, nil, nil, &existing)
+	switch {
+	case err != nil:
+		return Written{}, false, err
+	case status == http.StatusNotFound || status == http.StatusGone:
+		return Written{}, false, nil
+	case status != http.StatusOK:
+		return Written{}, false, answered(address, status)
+	case existing.Status == "cancelled", existing.ExtendedProperties.Private[ownMark] != eventID:
+		return Written{}, false, nil
 	}
-	return err
+	return Written{ID: id, Version: existing.ETag}, true, nil
 }
+
+// errTooManyEvents is a time holding more events than ZeitBoard reads at
+// once, so it cannot tell whether one of them is the event looked for.
+var errTooManyEvents = errors.New("the time holds more events than ZeitBoard reads at once")
 
 // CanWrite reports whether ZeitBoard may add events to a calendar: in Google
 // one the owner owns, which is all its write scope reaches; in Microsoft one
@@ -297,7 +307,10 @@ func (c Client) microsoftCreate(ctx context.Context, access, calendarID string, 
 	// What an earlier attempt wrote, its answer lost or the app quitting
 	// before it came, is looked for first. Graph also drops a second create
 	// with the same transaction ID.
-	if found, ok, err := c.microsoftFind(ctx, access, calendarID, event.StartAt, event.EndAt, transaction); err != nil || ok {
+	// More events than ZeitBoard reads at once, the create goes ahead, with
+	// Graph's own check of the transaction ID to keep it from writing twice.
+	found, ok, err := c.microsoftFind(ctx, access, calendarID, event.StartAt, event.EndAt, transaction)
+	if (err != nil && !errors.Is(err, errTooManyEvents)) || ok {
 		return found, err
 	}
 	showAs := "busy"
@@ -370,9 +383,7 @@ func (c Client) microsoftFind(ctx context.Context, access, calendarID string, st
 		}
 		address = answer.NextLink
 	}
-	// More events than ZeitBoard reads at once: the create goes ahead, with
-	// Graph's own check of the transaction ID to keep it from writing twice.
-	return Written{}, false, nil
+	return Written{}, false, errTooManyEvents
 }
 
 func (c Client) microsoftDelete(ctx context.Context, access, eventID string, written Written) error {

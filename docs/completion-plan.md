@@ -1695,7 +1695,7 @@ hangs cannot hold a sign-in for long. Three were acted on:
 - **The approval read for creates alone.** Listing writes read the approval in force for every
   write, though only a create's is ever used.
 
-### An undone time's unconfirmed create is removed — 2026-10-16
+### An undone time's unconfirmed create is looked for — 2026-10-16
 
 A review of the sixth round noted a gap older than ADR-0065. A create can land in the owner's
 calendar with its answer lost, or as the app quits. If its time was undone before a retry
@@ -1707,11 +1707,17 @@ came back on every reading as busy time ZeitBoard did not recognise.
   time goes.
 - The removal looks where ZeitBoard writes the time: the CalDAV object named by it, the Google
   event under the acceptance's ID, or the Microsoft event with its transaction ID, over the time
-  the approval records. It removes what it finds if it is ZeitBoard's. Finding nothing, or
-  another's event, it leaves the calendar as it is.
+  the approval records. Finding nothing, or another's event, it is done.
+- Finding ZeitBoard's own event, it cannot tell whether the owner changed it since: it never knew
+  the version it wrote. So the event waits for the owner, as a changed one does, at the address
+  and version found. The owner removes it or keeps it.
 - A create landing after the undo gives that removal the event's address and version, so it
-  removes exactly what landed.
+  removes exactly what landed, with nothing to ask.
 - A time accepted again meanwhile is written once the removal is done, as with any removal.
+- A review of the first version found it removed what it found unasked, which could take an
+  owner's change with it. It also took a Microsoft lookup cut short by a busy time for finding
+  nothing. Both are fixed: what is found waits for the owner, and a lookup cut short is a failure
+  to retry.
 
 ## Where the completion goal stands — 2026-09-27
 

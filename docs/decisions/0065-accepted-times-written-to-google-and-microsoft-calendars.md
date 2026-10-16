@@ -89,7 +89,8 @@ events that the owner has since changed. Each provider offers what those rules n
      written afresh.
    - A time undone before its create was confirmed may still be in the calendar. What that create
      wrote is looked for by the name it was written under: in Google its ID, in Microsoft its
-     transaction ID over the time it took. It is removed if it is ZeitBoard's.
+     transaction ID over the time it took. ZeitBoard's own event found there waits for the owner,
+     who may have changed it, to remove or keep.
 7. **Stopping and removing.**
    - Stopping writing forgets what was written, as ADR-0053 does. The account stays signed in
      for reading. Removing the account withdraws its access: Google revokes the grant, and
@@ -129,6 +130,6 @@ events that the owner has since changed. Each provider offers what those rules n
   accounts after a fourth review"). A fifth recorded every outcome of a create only for the
   acceptance it carried (completion plan, "Writing to accounts after a fifth review"). A sixth
   kept a pass to its own time of writing, and let an undo settle a create's conflict (completion
-  plan, "Writing to accounts after a sixth review"). A time undone before its create was confirmed
-  now has what that create wrote looked for and removed (completion plan, "An undone time's
-  unconfirmed create is removed").
+  plan, "Writing to accounts after a sixth review"). What the create of a time undone before it
+  was confirmed wrote is now looked for, and left for the owner if found (completion plan, "An
+  undone time's unconfirmed create is looked for").

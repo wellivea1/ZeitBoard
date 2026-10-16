@@ -280,19 +280,15 @@ func (a *App) carryCalendarWrite(ctx context.Context, store *storage.Store, targ
 		write.Approval = accepted.Approval
 		result = writer.create(ctx, accepted, now.Truncate(time.Second))
 	case storage.CalendarWriteDelete:
-		if write.Href != "" {
-			result = writer.remove(ctx, write.EventID, write.Href, write.ETag)
-			break
-		}
-		// Undone before its create was confirmed: look for what it wrote.
-		created, found, err := store.CalendarWriteUnconfirmed(ctx, write.EventID)
+		created, unconfirmed, err := store.CalendarWriteUnconfirmed(ctx, write.EventID)
 		switch {
 		case err != nil:
 			return false
-		case found:
-			result = writer.removeUnconfirmed(ctx, created)
+		case unconfirmed:
+			// Undone before its create was confirmed: look for what it wrote.
+			result = writer.findUnconfirmed(ctx, created)
 		default:
-			result = calendarWriteResult{outcome: calendarWriteDone}
+			result = writer.remove(ctx, write.EventID, write.Href, write.ETag)
 		}
 	default:
 		return false
@@ -309,6 +305,8 @@ func (a *App) carryCalendarWrite(ctx context.Context, store *storage.Store, targ
 		err = store.MarkCalendarWriteRemoved(ctx, target, write.EventID)
 	case result.outcome == calendarWriteConflict:
 		err = store.MarkCalendarWriteConflict(ctx, target, write, result.detail, now)
+	case result.outcome == calendarWriteFound:
+		err = store.MarkCalendarWriteFound(ctx, target, write.EventID, result.href, result.etag, result.detail, now)
 	default:
 		err = store.DeferCalendarWrite(ctx, target, write, result.detail, now.Add(calendarWriteRetryDelay(write.Attempts+1)), now)
 	}

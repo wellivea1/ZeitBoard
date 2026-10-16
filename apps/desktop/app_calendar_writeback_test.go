@@ -214,8 +214,9 @@ func ownUIDs(t *testing.T, app *App) map[string]string {
 }
 
 // An accepted time whose create landed with its answer lost, undone before
-// the create was confirmed, is looked for and removed by the next pass.
-func TestACalDAVCreateUnconfirmedAtAnUndoIsRemoved(t *testing.T) {
+// the create was confirmed, is found by the next pass. ZeitBoard cannot tell
+// whether it was changed since, so it waits for the owner, who can remove it.
+func TestACalDAVCreateUnconfirmedAtAnUndoWaitsForTheOwner(t *testing.T) {
 	app, fake, _, sourceID, ids := writeBackApp(t)
 	ctx := context.Background()
 	turnOnWriting(t, app, sourceID)
@@ -237,8 +238,17 @@ func TestACalDAVCreateUnconfirmedAtAnUndoIsRemoved(t *testing.T) {
 		t.Fatal(err)
 	}
 	app.writeCalendarPass(ctx)
+	status := writeStatus(t, app)
+	if len(fake.uids(t)) != 1 || len(status.Problems) != 1 || !status.Problems[0].Conflict || !status.Problems[0].Removing ||
+		status.Problems[0].Detail != unconfirmedFound {
+		t.Fatalf("what the unconfirmed create wrote did not wait for the owner: %+v", status)
+	}
+	if _, err := app.ResolveCalendarWriteConflict(CalendarWriteConflictInput{EventID: status.Problems[0].EventID, Decision: "remove"}); err != nil {
+		t.Fatal(err)
+	}
+	app.writeCalendarPass(ctx)
 	if uids := fake.uids(t); len(uids) != 0 {
-		t.Fatalf("what the unconfirmed create wrote stayed: %v", uids)
+		t.Fatalf("removing it anyway left %v", uids)
 	}
 	if status := writeStatus(t, app); status.Summary != "The next time you accept is added to Owner calendar." || len(status.Problems) != 0 {
 		t.Fatalf("after removing it: %+v", status)
