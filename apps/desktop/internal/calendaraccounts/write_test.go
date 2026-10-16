@@ -459,6 +459,39 @@ func TestAMicrosoftCreateLooksOnEveryPage(t *testing.T) {
 	}
 }
 
+// The create of a time undone before it was confirmed is looked for by the
+// name it was written under and removed if it is ZeitBoard's. Nothing there,
+// or another's event under that name, leaves the calendar as it is.
+func TestAnUnconfirmedCreateIsLookedForAndRemoved(t *testing.T) {
+	for _, provider := range []Provider{Google, Microsoft} {
+		t.Run(string(provider), func(t *testing.T) {
+			fake := newFakeCalendars(t, provider)
+			client, ctx := fake.client(), context.Background()
+			accepted := acceptedTime("calendar_event_owned_01")
+			removeUnconfirmed := func(approval string) error {
+				return client.RemoveUnconfirmed(ctx, "access", "mine", accepted.EventID, approval, accepted.StartAt, accepted.EndAt)
+			}
+			if err := removeUnconfirmed("decision_first"); err != nil || len(fake.events) != 0 {
+				t.Fatalf("with nothing written: %v; %d held", err, len(fake.events))
+			}
+			if _, err := client.CreateEvent(ctx, "access", "mine", accepted, "decision_first", "writing_now"); err != nil {
+				t.Fatal(err)
+			}
+			if err := removeUnconfirmed("decision_first"); err != nil || fake.shown() != 0 {
+				t.Fatalf("with its create landed: %v; %d shown", err, fake.shown())
+			}
+			if provider == Microsoft {
+				return
+			}
+			taken := googleEventID(accepted.EventID, "decision_other")
+			fake.events[taken] = map[string]any{"id": taken, "etag": `"0"`}
+			if err := removeUnconfirmed("decision_other"); err != nil || fake.shown() != 1 {
+				t.Fatalf("with another's event under the name: %v; %d shown", err, fake.shown())
+			}
+		})
+	}
+}
+
 func TestWritingIsAskedForAndReadFromWhatWasGranted(t *testing.T) {
 	auth, err := Client{Provider: Google, ClientID: "x", Write: true}.Begin("http://127.0.0.1:1")
 	if err != nil || !strings.Contains(mustQuery(t, auth.URL).Get("scope"), "calendar.events.owned") {

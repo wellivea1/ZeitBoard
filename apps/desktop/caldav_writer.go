@@ -146,6 +146,27 @@ func (w calDAVWriter) remove(ctx context.Context, _, href, etag string) calendar
 	}
 }
 
+// removeUnconfirmed removes what the create of a time undone before it was
+// confirmed may have written: the object named by the time, if it carries
+// ZeitBoard's UID for it. Nothing there, or another's object, is left.
+func (w calDAVWriter) removeUnconfirmed(ctx context.Context, created storage.UnconfirmedCreate) calendarWriteResult {
+	href := w.objectURL(created.EventID)
+	uid, etag, status, err := w.fetch(ctx, href)
+	switch {
+	case err != nil:
+		return calendarWriteResult{outcome: calendarWriteFailed, detail: calendarErrorDetail(err)}
+	case status == http.StatusNotFound || status == http.StatusGone:
+		return calendarWriteResult{outcome: calendarWriteDone}
+	case status != http.StatusOK:
+		return calendarWriteResult{outcome: calendarWriteFailed, detail: calendarStatusDetail(status)}
+	case uid != calendarcore.OwnUID(created.EventID):
+		return calendarWriteResult{outcome: calendarWriteDone}
+	}
+	// Removed as it was just read, so a change made meanwhile is not lost
+	// unseen: the next attempt reads it again.
+	return w.remove(ctx, created.EventID, href, etag)
+}
+
 // probe checks that the sign-in opens the calendar and may add events to it,
 // before ZeitBoard keeps it.
 func (w calDAVWriter) probe(ctx context.Context) error {

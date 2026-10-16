@@ -3255,3 +3255,20 @@ putting an event back above, and keeping a changed event by the store's test of 
 transaction. A cancel that lands just after a refresh, and a wait for the browser that runs out,
 are not timed in tests. Each is one statement: what a refresh answers is kept with a context no
 cancel reaches, and the five minutes apply to the wait for the browser alone.
+
+## An undone time's unconfirmed create is removed — 2026-10-16
+
+Go tests in the store, `internal/calendaraccounts` and the desktop. The CalDAV and Microsoft
+stand-ins can store a create and answer as though it failed, as the Google one already could.
+
+- The store:
+  - A time undone before its create was confirmed leaves a removal with no address. It records
+    what to look for, and is gone once done, taking that record with it.
+  - A create that lands for an acceptance undone meanwhile gives that removal its address and
+    version. A conflict or failure for it changes nothing.
+- The provider package, for Google and Microsoft: with nothing written, the lookup finds nothing
+  and changes nothing. With the create landed, its event is removed. Under the name, another's
+  Google event is left.
+- The desktop, for CalDAV, Google and Microsoft: an accepted time whose create landed with its
+  answer lost, undone before a retry, is removed from the calendar by the next pass, with no
+  problems left. With the trigger switched off, these tests fail.

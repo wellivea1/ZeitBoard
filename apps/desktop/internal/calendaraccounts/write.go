@@ -102,6 +102,29 @@ func (c Client) DeleteEvent(ctx context.Context, access, calendarID, eventID str
 	return c.googleDelete(ctx, access, calendarID, eventID, written)
 }
 
+// RemoveUnconfirmed removes what a create may have written for a time undone
+// before the create was confirmed, its answer lost or the app quitting first.
+// It is looked for by the name the acceptance was written under, between
+// start and end in Microsoft, and removed if it is ZeitBoard's; finding
+// nothing, or another's event, leaves the calendar as it is.
+func (c Client) RemoveUnconfirmed(ctx context.Context, access, calendarID, eventID, approval string, start, end time.Time) error {
+	if c.Provider == Microsoft {
+		if !start.Before(end) {
+			return nil // no time to look in
+		}
+		found, ok, err := c.microsoftFind(ctx, access, calendarID, start, end, TransactionID(eventID, approval))
+		if err != nil || !ok {
+			return err
+		}
+		return c.microsoftDelete(ctx, access, eventID, found)
+	}
+	err := c.googleDelete(ctx, access, calendarID, eventID, Written{ID: googleEventID(eventID, approval)})
+	if errors.Is(err, ErrNotOurs) {
+		return nil
+	}
+	return err
+}
+
 // CanWrite reports whether ZeitBoard may add events to a calendar: in Google
 // one the owner owns, which is all its write scope reaches; in Microsoft one
 // the owner can edit.
@@ -274,7 +297,7 @@ func (c Client) microsoftCreate(ctx context.Context, access, calendarID string, 
 	// What an earlier attempt wrote, its answer lost or the app quitting
 	// before it came, is looked for first. Graph also drops a second create
 	// with the same transaction ID.
-	if found, ok, err := c.microsoftFind(ctx, access, calendarID, event, transaction); err != nil || ok {
+	if found, ok, err := c.microsoftFind(ctx, access, calendarID, event.StartAt, event.EndAt, transaction); err != nil || ok {
 		return found, err
 	}
 	showAs := "busy"
@@ -313,11 +336,11 @@ func (c Client) microsoftCreate(ctx context.Context, access, calendarID string, 
 }
 
 // microsoftFind looks for an acceptance already written, by its transaction
-// ID, over every page of the time it takes.
-func (c Client) microsoftFind(ctx context.Context, access, calendarID string, event calendarcore.Event, transaction string) (Written, bool, error) {
+// ID, over every page of the time it takes, from start to end.
+func (c Client) microsoftFind(ctx context.Context, access, calendarID string, start, end time.Time, transaction string) (Written, bool, error) {
 	query := url.Values{
-		"startDateTime": {event.StartAt.UTC().Format(time.RFC3339)},
-		"endDateTime":   {event.EndAt.UTC().Format(time.RFC3339)},
+		"startDateTime": {start.UTC().Format(time.RFC3339)},
+		"endDateTime":   {end.UTC().Format(time.RFC3339)},
 		"$select":       {"id,changeKey,transactionId"},
 		"$top":          {"100"},
 	}

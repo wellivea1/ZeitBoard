@@ -27,6 +27,7 @@ type fakeCalDAV struct {
 	privileges []string
 	failOnce   map[string]bool // paths whose next PUT fails
 	redirect   bool
+	losing     bool // a PUT is stored, then answered as if it failed
 }
 
 type fakeCalendarObject struct{ body, etag string }
@@ -88,6 +89,10 @@ func (f *fakeCalDAV) ServeHTTP(response http.ResponseWriter, request *http.Reque
 		default:
 			body, _ := io.ReadAll(request.Body)
 			response.Header().Set("ETag", f.store(path, string(body)))
+			if f.losing {
+				response.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
 			response.WriteHeader(http.StatusCreated)
 		}
 	case http.MethodGet:
@@ -206,6 +211,38 @@ func ownUIDs(t *testing.T, app *App) map[string]string {
 		uids[proposalID] = calendarcore.OwnUID(event.EventID)
 	}
 	return uids
+}
+
+// An accepted time whose create landed with its answer lost, undone before
+// the create was confirmed, is looked for and removed by the next pass.
+func TestACalDAVCreateUnconfirmedAtAnUndoIsRemoved(t *testing.T) {
+	app, fake, _, sourceID, ids := writeBackApp(t)
+	ctx := context.Background()
+	turnOnWriting(t, app, sourceID)
+	if _, err := app.DecideLocalProposals(LocalProposalsDecisionInput{ProposalIDs: ids[:1], Decision: storage.ProposalApproved}); err != nil {
+		t.Fatal(err)
+	}
+	losing := func(lose bool) {
+		fake.mu.Lock()
+		defer fake.mu.Unlock()
+		fake.losing = lose
+	}
+	losing(true)
+	app.writeCalendarPass(ctx)
+	losing(false)
+	if uids := fake.uids(t); len(uids) != 1 {
+		t.Fatalf("the create did not land: %v", uids)
+	}
+	if _, err := app.UndoLocalProposalDecision(LocalProposalUndoInput{ProposalID: ids[0]}); err != nil {
+		t.Fatal(err)
+	}
+	app.writeCalendarPass(ctx)
+	if uids := fake.uids(t); len(uids) != 0 {
+		t.Fatalf("what the unconfirmed create wrote stayed: %v", uids)
+	}
+	if status := writeStatus(t, app); status.Summary != "The next time you accept is added to Owner calendar." || len(status.Problems) != 0 {
+		t.Fatalf("after removing it: %+v", status)
+	}
 }
 
 func writeStatus(t *testing.T, app *App) CalendarWriteBackDTO {
