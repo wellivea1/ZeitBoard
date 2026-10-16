@@ -3172,3 +3172,18 @@ and Graph drops a create that repeats a transaction ID.
     no second event is written.
 - The window: an account that already allows writing says so, turns writing on with "Checking
   that ZeitBoard can add events to Owner…" and no Cancel, then shows the status.
+
+## The server's credentials helpers have tests of their own — 2026-10-15
+
+`apps/server/internal/auth` was covered only through the API's tests. Its own tests, with
+synthetic values only, now check:
+
+- A device ID is `device_` and 24 hex digits, and 64 drawn in a row are all different.
+- A device token is 43 URL-safe characters that decode to 32 bytes, and 64 are all different.
+- A token is kept as its SHA-256: the same token gives the same hash, another a different one.
+- Only `Bearer` and a token give a token. Surrounding spaces are dropped, and a token of only
+  spaces, another scheme, a bare token or a leading space give none.
+- The enrollment secret matches only itself. One differing in case, longer or shorter does not,
+  and an empty secret matches nothing, even another empty one.
+
+Statement coverage of the package is 88.9%; what remains is the system's random source failing.
