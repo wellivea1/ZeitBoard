@@ -136,7 +136,13 @@ func (a *App) ConnectCalendarAccount(input CalendarAccountInput) (CalendarAccoun
 // in use: reading, and adding events while accepted times are written to the
 // account.
 func (a *App) ReconnectCalendarAccount(input CalendarAccountRef) (CalendarAccountCalendarsDTO, error) {
-	ctx := a.applicationContext()
+	// Held first, so whether the account is written to cannot change while
+	// this sign-in asks for what writing needs.
+	ctx, done, err := a.beginCalendarSignIn()
+	if err != nil {
+		return CalendarAccountCalendarsDTO{}, err
+	}
+	defer done()
 	store, account, err := a.calendarAccount(ctx, input.AccountID)
 	if err != nil {
 		return CalendarAccountCalendarsDTO{}, err
@@ -147,12 +153,7 @@ func (a *App) ReconnectCalendarAccount(input CalendarAccountRef) (CalendarAccoun
 	}
 	client := a.accountClient(account)
 	client.Write = writing == account.AccountID
-	held, done, err := a.beginCalendarSignIn()
-	if err != nil {
-		return CalendarAccountCalendarsDTO{}, err
-	}
-	defer done()
-	return a.signInCalendarAccount(held, client, &account)
+	return a.signInCalendarAccount(ctx, client, &account)
 }
 
 // CancelCalendarSignIn stops the sign-in under way, or turning writing on,
@@ -317,7 +318,9 @@ func (a *App) signInCalendarAccount(ctx context.Context, client calendaraccounts
 		return CalendarAccountCalendarsDTO{}, asSentence(err)
 	}
 	openSignInPage(a.applicationContext(), auth.URL)
-	code, err := receiver.Wait(ctx, auth.State)
+	waiting, stop := context.WithTimeout(ctx, calendarSignInTimeout)
+	defer stop()
+	code, err := receiver.Wait(waiting, auth.State)
 	if err != nil {
 		return CalendarAccountCalendarsDTO{}, signInStopped(err)
 	}
@@ -390,14 +393,15 @@ func signInStopped(err error) error {
 }
 
 // beginCalendarSignIn holds the one sign-in, or turning writing on, that may
-// run at a time, until it is done, five minutes pass, or it is cancelled.
+// run at a time, until it is done or cancelled. Waiting for the browser has a
+// limit of its own.
 func (a *App) beginCalendarSignIn() (context.Context, func(), error) {
 	a.calendarAccountsMu.Lock()
 	defer a.calendarAccountsMu.Unlock()
 	if a.calendarSignInCancel != nil {
 		return nil, nil, errors.New("ZeitBoard is already signing in to a calendar account. Finish or cancel that first.")
 	}
-	ctx, cancel := context.WithTimeout(a.applicationContext(), calendarSignInTimeout)
+	ctx, cancel := context.WithCancel(a.applicationContext())
 	a.calendarSignInCancel = cancel
 	return ctx, func() {
 		a.calendarAccountsMu.Lock()
@@ -430,21 +434,24 @@ func (a *App) accountAccess(ctx context.Context, store *storage.Store, account s
 	}
 	client := a.accountClient(account)
 	token, err := client.Refresh(ctx, account.RefreshToken)
+	// What the provider answered is kept even if the caller gives up now: a
+	// rotated refresh token is the only one the provider still honours.
+	keep := context.WithoutCancel(ctx)
 	if errors.Is(err, calendaraccounts.ErrSignInEnded) {
 		ended := fmt.Sprintf("The sign-in to %s has ended. Sign in to it again to keep reading its calendars.", account.Label)
-		_ = store.RecordCalendarAccountProblem(ctx, account.AccountID, ended)
+		_ = store.RecordCalendarAccountProblem(keep, account.AccountID, ended)
 		return client, "", errors.New(ended)
 	}
 	if err != nil {
 		return client, "", asSentence(err)
 	}
 	if token.Refresh != account.RefreshToken {
-		if err := store.RotateCalendarAccountToken(ctx, account.AccountID, token.Refresh); err != nil {
+		if err := store.RotateCalendarAccountToken(keep, account.AccountID, token.Refresh); err != nil {
 			return client, "", err
 		}
 	}
 	if account.Problem != "" {
-		_ = store.RecordCalendarAccountProblem(ctx, account.AccountID, "")
+		_ = store.RecordCalendarAccountProblem(keep, account.AccountID, "")
 	}
 	a.holdAccessToken(account.AccountID, token)
 	return client, token.Access, nil

@@ -3220,12 +3220,11 @@ check that a calendar takes events until the app gives up on it.
   - A create that lands for an acceptance no longer in force turns the write waiting for the new
     acceptance into the removal of what landed, at its address and version. Once that is removed,
     the new acceptance is queued afresh.
-  - A write says whether a create was sent for it, from when that is recorded until the write
-    goes, and the record goes with the write.
 - The provider package:
-  - ZeitBoard's own Google event, removed when no create was sent for it, is put back with a new
-    version. Removed by the owner after a create was sent, a retry keeps it removed, takes it as
-    written, and undoing it later is no failure.
+  - ZeitBoard's own Google event, written in an earlier time of writing and removed, is put back
+    with a new version, marked with this time. Removed by the owner after this time wrote it, a
+    retry keeps it removed, takes it as written, and undoing it later is no failure.
+  - A Google create's body carries the time of writing.
   - In a time holding more events than ZeitBoard reads, a Microsoft create goes ahead after the
     pages it reads, and Graph's check of the transaction ID keeps it from writing twice.
 - The desktop:
@@ -3234,8 +3233,15 @@ check that a calendar takes events until the app gives up on it.
     one already under way. Afterwards, writing turns on.
   - With every create's answer lost and the owner removing one event, a retry keeps that removal
     and counts all three times as written. Writing stopped, the owner clearing the calendar, and
-    writing turned on again, all three are put back with no second post. With the desktop made to
-    say no create was ever sent, this test fails.
+    writing turned on again a minute later, all three are put back with no second post, though
+    the first attempt to put them back is refused. With one name for every time of writing, this
+    test fails.
   - A time no approval records waits for the owner as a conflict.
 - The window: turning writing on for an account's calendar offers Cancel at once, and cancelling
   shows "Turning writing on was cancelled."
+
+The fourth review's fixes are covered by the same tests: the time of writing by the tests of
+putting an event back above, and keeping a changed event by the store's test of it, now in one
+transaction. A cancel that lands just after a refresh, and a wait for the browser that runs out,
+are not timed in tests. Each is one statement: what a refresh answers is kept with a context no
+cancel reaches, and the five minutes apply to the wait for the browser alone.

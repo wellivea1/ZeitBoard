@@ -59,10 +59,12 @@ type syntheticAccount struct {
 	// for the app to give up on it, as when the app quits mid-refresh.
 	// checking is the same for the check that a calendar takes events.
 	// losing stores a Google create and answers as if it failed, as an
-	// answer lost on the way back would.
+	// answer lost on the way back would; refusing turns Google's updates
+	// away, as an outage would.
 	quitting func()
 	checking func()
 	losing   bool
+	refusing bool
 }
 
 func accountApp(t *testing.T, provider calendaraccounts.Provider) (*App, *syntheticAccount) {

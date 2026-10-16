@@ -1607,9 +1607,8 @@ Seven are fixed, each with a test; two are left as they are, with reasons:
   new acceptance is written after, through the same trigger.
 - **No clocks in putting an event back.** Putting a removed Google event back compared Google's
   time of removal with the computer's time of turning writing on, which a wrong clock could flip.
-  ZeitBoard now records each create before sending it, in a table the write's going takes with
-  it. An event removed after a create was sent was removed by the owner, and stays removed. One no
-  create was sent for since writing was turned on is put back.
+  This round recorded each create before sending it instead; the fourth review below replaced
+  that record with a mark on the event itself.
 - **Cancel at any point.** The window offered Cancel once the desktop announced that the browser
   had opened, and could miss that announcement or act on another sign-in's. Turning writing on is
   now held from start to finish, as a sign-in is. Cancel always stops it, whether or not the
@@ -1626,6 +1625,35 @@ Seven are fixed, each with a test; two are left as they are, with reasons:
   from taking another time's event. Removals come one per undo, so the request costs little.
 - **No change: names from before.** As in the second review: no release carried writing to an
   account.
+
+### Writing to accounts after a fourth review — 2026-10-16
+
+A fresh high-effort review of the third round raised eight findings. Six are fixed, and two are
+left as they are, with reasons:
+
+- **The time of writing on the event.** A create recorded before sending counted as sent even
+  when its answer said it had not landed, such as a refused token or a failed attempt to put an
+  event back. A retry then took an event removed while writing was off for the owner's removal,
+  and never put it back. The record is gone. Each Google event now carries a private mark naming
+  the time of writing that wrote it, from turning writing on to stopping. A removed event that
+  this time of writing wrote stays removed; one an earlier time wrote is put back. Nothing an
+  attempt does or fails to do can change that.
+- **A rotated refresh token survives a cancel.** Cancelling while turning writing on, just as
+  Microsoft answered a refresh with a new refresh token, failed to keep it, and the sign-in would
+  have ended. What a refresh answers is now kept whatever the caller does next.
+- **Keeping a changed event in one step.** Keeping it, and forgetting it when the time was not
+  accepted again, were two statements; a time accepted between them was never written. They are
+  one transaction now.
+- **Five minutes for the browser alone.** The limit for waiting in the browser covered all of
+  turning writing on, and its message blamed the browser even when none was asked. It covers the
+  wait for the browser only, and cancelling is the one way the rest stops.
+- **“Sign in again” holds first.** It read whether the account is written to before holding the
+  one sign-in that may run, so writing turned on in between could make it ask for too little.
+- **One wording for cancelling.** A second helper for the same sign-in's errors is gone.
+- **No change: the read before each create, on Microsoft.** It is what finds an event already
+  written when writing is turned on again, as well as one a lost answer left. Graph moves a
+  deleted event where ZeitBoard does not look, which ADR-0065 records as a residual.
+- **No change: the read before each Google removal.** As in the third review.
 
 ## Where the completion goal stands — 2026-09-27
 

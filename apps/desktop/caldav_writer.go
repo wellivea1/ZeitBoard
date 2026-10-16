@@ -76,7 +76,7 @@ func (w calDAVWriter) objectURL(eventID string) string {
 // its own: If-None-Match finds an earlier attempt. A CalDAV calendar keeps
 // nothing of an event removed from it, so the event is named by the time
 // alone.
-func (w calDAVWriter) create(ctx context.Context, accepted storage.AcceptedTime, _ bool, stamp time.Time) calendarWriteResult {
+func (w calDAVWriter) create(ctx context.Context, accepted storage.AcceptedTime, stamp time.Time) calendarWriteResult {
 	event := accepted.Event
 	body, err := calendarcore.CalendarObject(event, stamp)
 	if err != nil {

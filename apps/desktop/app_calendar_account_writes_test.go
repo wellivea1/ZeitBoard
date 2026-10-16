@@ -68,6 +68,8 @@ func (s *syntheticAccount) serveGoogleWrites(r *http.Request, path string, write
 			write(http.StatusNotFound, map[string]string{"error": "notFound"})
 		case r.Method == http.MethodGet:
 			write(http.StatusOK, event)
+		case r.Method == http.MethodPut && s.refusing:
+			write(http.StatusServiceUnavailable, map[string]string{"error": "backendError"})
 		case r.Method == http.MethodPut && r.Header.Get("If-Match") != event["etag"]:
 			write(http.StatusPreconditionFailed, map[string]string{"error": "conditionNotMet"})
 		case r.Method == http.MethodPut:
@@ -599,12 +601,21 @@ func TestGooglePutsBackOnlyWhatWasRemovedWhileWritingWasOff(t *testing.T) {
 	}
 
 	// Writing stopped, the owner clears the calendar; turned on again, every
-	// accepted time is written there again.
+	// accepted time is written there again, even after the first attempt to
+	// put them back fails.
 	if _, err := app.DisableCalendarWriteBack(); err != nil {
 		t.Fatal(err)
 	}
 	remove(events[ids[0]].EventID, events[ids[2]].EventID)
+	later := app.currentTime().Add(time.Minute) // turned on again later, as it would be
+	app.nowFn = func() time.Time { return later }
 	enable()
+	fake.with(func(s *syntheticAccount) { s.refusing = true })
+	app.writeCalendarPass(ctx)
+	fake.with(func(s *syntheticAccount) { s.refusing = false })
+	if _, err := app.RetryCalendarWrites(); err != nil {
+		t.Fatal(err)
+	}
 	app.writeCalendarPass(ctx)
 	held(3, "3 accepted times are in Owner.")
 	fake.with(func(s *syntheticAccount) {
@@ -620,7 +631,7 @@ func TestATimeWithNoApprovalWaitsForTheOwner(t *testing.T) {
 	accepted := storage.AcceptedTime{Event: calendarcore.Event{
 		EventID: "calendar_event_unrecorded", Ownership: calendarcore.OwnershipAppOwned,
 	}}
-	result := accountEventWriter{}.create(context.Background(), accepted, false, time.Time{})
+	result := accountEventWriter{}.create(context.Background(), accepted, time.Time{})
 	if result.outcome != calendarWriteConflict || result.detail != "ZeitBoard has no record of accepting this time, so it was not written." {
 		t.Fatalf("a time with no approval: %+v", result)
 	}

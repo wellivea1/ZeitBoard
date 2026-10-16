@@ -232,8 +232,7 @@ func TestATimeAcceptedAgainMidRemovalIsWrittenAfter(t *testing.T) {
 }
 
 // A write that lands after its acceptance was undone, and the time accepted
-// again, is removed first; then the new acceptance is written. Whether a
-// create was sent goes with the write.
+// again, is removed first; then the new acceptance is written.
 func TestAWriteLandingForAnUndoneAcceptanceIsRemovedFirst(t *testing.T) {
 	store, ctx, now := writeBackStore(t)
 	if err := store.SetCalendarWriteTarget(ctx, CalendarWriteTarget{SourceID: "calendar_source_import_01"}, now); err != nil {
@@ -249,15 +248,6 @@ func TestAWriteLandingForAnUndoneAcceptanceIsRemovedFirst(t *testing.T) {
 		}
 		return writes[0]
 	}
-	if due().Sent {
-		t.Fatal("a write never sent says it was")
-	}
-	if err := store.MarkCalendarWriteSent(ctx, id); err != nil {
-		t.Fatal(err)
-	}
-	if !due().Sent {
-		t.Fatal("a sent write does not say so")
-	}
 
 	// Undone and accepted again while the write was on its way: the
 	// acceptance it carried is no longer the one in force.
@@ -270,18 +260,14 @@ func TestAWriteLandingForAnUndoneAcceptanceIsRemovedFirst(t *testing.T) {
 		t.Fatal(err)
 	}
 	if write := due(); write.State != CalendarWriteDelete || write.Href != testCollection+"relanded.ics" ||
-		write.ETag != `"etag-landed"` || write.Sent {
+		write.ETag != `"etag-landed"` {
 		t.Fatalf("what landed for the undone acceptance: %+v", write)
 	}
 	if err := store.MarkCalendarWriteRemoved(ctx, id); err != nil {
 		t.Fatal(err)
 	}
-	if write := due(); write.State != CalendarWriteCreate || write.Href != "" || write.Sent {
+	if write := due(); write.State != CalendarWriteCreate || write.Href != "" {
 		t.Fatalf("the new acceptance after the removal: %+v", write)
-	}
-	var sends int
-	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM local_calendar_write_sends`).Scan(&sends); err != nil || sends != 0 {
-		t.Fatalf("%d sends outlived their writes: %v", sends, err)
 	}
 }
 

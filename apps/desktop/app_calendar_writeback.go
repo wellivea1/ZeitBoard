@@ -274,12 +274,7 @@ func (a *App) carryCalendarWrite(ctx context.Context, store *storage.Store, writ
 			// Undone since it was listed: the undo dropped this write.
 			return false
 		}
-		// Recorded before it is sent, so a create cut off by quitting still
-		// counts as one the calendar may hold.
-		if err := store.MarkCalendarWriteSent(ctx, write.EventID); err != nil {
-			return false
-		}
-		result = writer.create(ctx, accepted, write.Sent, now.Truncate(time.Second))
+		result = writer.create(ctx, accepted, now.Truncate(time.Second))
 	case storage.CalendarWriteDelete:
 		result = writer.remove(ctx, write.EventID, write.Href, write.ETag)
 	default:

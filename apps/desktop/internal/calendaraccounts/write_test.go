@@ -259,23 +259,24 @@ func TestGoogleWritesOnlyItsOwnEventsAndLeavesChangedOnes(t *testing.T) {
 	if theirs, err := client.CanWrite(ctx, "access", "theirs"); err != nil || theirs {
 		t.Fatalf("a shared calendar: %v, %v", theirs, err)
 	}
-	if _, err := client.CreateEvent(ctx, "access", "mine", acceptedTime("calendar_event_owned_01"), "", false); err == nil {
+	if _, err := client.CreateEvent(ctx, "access", "mine", acceptedTime("calendar_event_owned_01"), "", "writing_now"); err == nil {
 		t.Fatal("a time with no approval was written")
 	}
 
 	first := acceptedTime("calendar_event_owned_01")
-	written, err := client.CreateEvent(ctx, "access", "mine", first, "decision_first", false)
+	written, err := client.CreateEvent(ctx, "access", "mine", first, "decision_first", "writing_now")
 	if err != nil || written.ID != googleEventID(first.EventID, "decision_first") || written.Version == "" {
 		t.Fatalf("written %+v, %v", written, err)
 	}
 	// The answer was lost, so it is written again: the first is found.
-	again, err := client.CreateEvent(ctx, "access", "mine", first, "decision_first", true)
+	again, err := client.CreateEvent(ctx, "access", "mine", first, "decision_first", "writing_now")
 	if err != nil || again != written || fake.posts != 1 {
 		t.Fatalf("a retried create gave %+v, %v after %d posts", again, err, fake.posts)
 	}
 	stored := fake.events[written.ID]
+	private := stored["extendedProperties"].(map[string]any)["private"].(map[string]any)
 	if stored["transparency"] != "opaque" || stored["start"].(map[string]any)["timeZone"] != "America/New_York" ||
-		stored["reminders"].(map[string]any)["useDefault"] != false {
+		stored["reminders"].(map[string]any)["useDefault"] != false || private["zeitboardWriting"] != "writing_now" {
 		t.Fatalf("stored %+v", stored)
 	}
 
@@ -289,12 +290,12 @@ func TestGoogleWritesOnlyItsOwnEventsAndLeavesChangedOnes(t *testing.T) {
 	second := acceptedTime("calendar_event_owned_02")
 	taken := googleEventID(second.EventID, "decision_second")
 	fake.events[taken] = map[string]any{"id": taken, "etag": `"0"`}
-	if _, err := client.CreateEvent(ctx, "access", "mine", second, "decision_second", false); !errors.Is(err, ErrTaken) {
+	if _, err := client.CreateEvent(ctx, "access", "mine", second, "decision_second", "writing_now"); !errors.Is(err, ErrTaken) {
 		t.Fatalf("an event in the way read as %v", err)
 	}
 
 	// A removal finds this time's own event, at the version ZeitBoard wrote.
-	third, err := client.CreateEvent(ctx, "access", "mine", acceptedTime("calendar_event_owned_03"), "decision_third", false)
+	third, err := client.CreateEvent(ctx, "access", "mine", acceptedTime("calendar_event_owned_03"), "decision_third", "writing_now")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -326,14 +327,14 @@ func TestGoogleWritesATimeAcceptedAgainAfresh(t *testing.T) {
 	fake := newFakeCalendars(t, Google)
 	client, ctx := fake.client(), context.Background()
 	accepted := acceptedTime("calendar_event_owned_01")
-	written, err := client.CreateEvent(ctx, "access", "mine", accepted, "decision_first", false)
+	written, err := client.CreateEvent(ctx, "access", "mine", accepted, "decision_first", "writing_now")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := client.DeleteEvent(ctx, "access", "mine", accepted.EventID, written); err != nil {
 		t.Fatal(err)
 	}
-	rewritten, err := client.CreateEvent(ctx, "access", "mine", accepted, "decision_again", false)
+	rewritten, err := client.CreateEvent(ctx, "access", "mine", accepted, "decision_again", "writing_now")
 	if err != nil || rewritten.ID == written.ID || fake.posts != 2 || fake.shown() != 1 {
 		t.Fatalf("accepted again: %+v, %v; %d posts, %d shown", rewritten, err, fake.posts, fake.shown())
 	}
@@ -349,28 +350,28 @@ func TestGoogleWritesATimeAcceptedAgainAfresh(t *testing.T) {
 
 // ZeitBoard's own event removed while writing was off is put back when it is
 // turned on again, as turning writing on writes every accepted time. One the
-// owner removed after a create was sent stays removed, even when that create
-// lost its answer.
-func TestGoogleRemovedEventsComeBackOnlyWhenNotSentSince(t *testing.T) {
+// owner removed after it was written in this time of writing stays removed,
+// even when the create that wrote it lost its answer.
+func TestGoogleRemovedEventsComeBackOnlyFromAnEarlierWriting(t *testing.T) {
 	fake := newFakeCalendars(t, Google)
 	client, ctx := fake.client(), context.Background()
 	accepted := acceptedTime("calendar_event_owned_01")
 
 	// Written while writing was on before, then removed while it was off.
-	before, err := client.CreateEvent(ctx, "access", "mine", accepted, "decision_first", false)
+	before, err := client.CreateEvent(ctx, "access", "mine", accepted, "decision_first", "writing_before")
 	if err != nil {
 		t.Fatal(err)
 	}
 	fake.removeByOwner(before.ID)
-	back, err := client.CreateEvent(ctx, "access", "mine", accepted, "decision_first", false)
+	back, err := client.CreateEvent(ctx, "access", "mine", accepted, "decision_first", "writing_now")
 	if err != nil || back.ID != before.ID || back.Version == before.Version || fake.shown() != 1 {
 		t.Fatalf("writing turned on again: %+v, %v; %d shown", back, err, fake.shown())
 	}
 
-	// The owner removes it after a create was sent and its answer lost: the
-	// retry keeps it removed and takes it as written.
+	// The owner removes it after a create in this time of writing lost its
+	// answer: the retry keeps it removed and takes it as written.
 	fake.removeByOwner(back.ID)
-	retried, err := client.CreateEvent(ctx, "access", "mine", accepted, "decision_first", true)
+	retried, err := client.CreateEvent(ctx, "access", "mine", accepted, "decision_first", "writing_now")
 	if err != nil || retried.ID != back.ID || fake.shown() != 0 || fake.posts != 1 {
 		t.Fatalf("a retry after the owner's removal: %+v, %v; %d shown, %d posts", retried, err, fake.shown(), fake.posts)
 	}
@@ -393,7 +394,7 @@ func TestMicrosoftWritesOnceAndLeavesChangedOnes(t *testing.T) {
 	}
 
 	first := acceptedTime("calendar_event_owned_01")
-	written, err := client.CreateEvent(ctx, "access", "mine", first, "decision_first", false)
+	written, err := client.CreateEvent(ctx, "access", "mine", first, "decision_first", "writing_now")
 	if err != nil || written.ID == "" || written.Version == "" || fake.views != 1 {
 		t.Fatalf("written %+v, %v after %d views", written, err, fake.views)
 	}
@@ -405,7 +406,7 @@ func TestMicrosoftWritesOnceAndLeavesChangedOnes(t *testing.T) {
 	// Written again, its answer lost or the app quitting first, where Graph
 	// no longer drops the repeat: the first is found before posting.
 	fake.lapsed = true
-	if again, err := client.CreateEvent(ctx, "access", "mine", first, "decision_first", true); err != nil ||
+	if again, err := client.CreateEvent(ctx, "access", "mine", first, "decision_first", "writing_now"); err != nil ||
 		again != written || fake.posts != 1 || fake.views != 2 {
 		t.Fatalf("a retried create gave %+v, %v after %d posts, %d views", again, err, fake.posts, fake.views)
 	}
@@ -425,7 +426,7 @@ func TestMicrosoftWritesOnceAndLeavesChangedOnes(t *testing.T) {
 		t.Fatalf("an event already gone read as %v; %d left", err, len(fake.events))
 	}
 
-	if _, err := client.CreateEvent(ctx, "access", "mine", first, "decision_again", false); err != nil || fake.posts != 2 || len(fake.events) != 1 {
+	if _, err := client.CreateEvent(ctx, "access", "mine", first, "decision_again", "writing_now"); err != nil || fake.posts != 2 || len(fake.events) != 1 {
 		t.Fatalf("accepted again: %v; %d posts, %d held", err, fake.posts, len(fake.events))
 	}
 }
@@ -436,13 +437,13 @@ func TestAMicrosoftCreateLooksOnEveryPage(t *testing.T) {
 	fake := newFakeCalendars(t, Microsoft)
 	client, ctx := fake.client(), context.Background()
 	accepted := acceptedTime("calendar_event_owned_01")
-	written, err := client.CreateEvent(ctx, "access", "mine", accepted, "decision_first", false)
+	written, err := client.CreateEvent(ctx, "access", "mine", accepted, "decision_first", "writing_now")
 	if err != nil {
 		t.Fatal(err)
 	}
 	fake.events["other"] = map[string]any{"id": "other", "transactionId": "someone-elses"}
 	fake.paged, fake.lapsed, fake.views = true, true, 0
-	again, err := client.CreateEvent(ctx, "access", "mine", accepted, "decision_first", true)
+	again, err := client.CreateEvent(ctx, "access", "mine", accepted, "decision_first", "writing_now")
 	if err != nil || again != written || fake.posts != 1 || fake.views < 2 {
 		t.Fatalf("found %+v, %v after %d posts, %d pages", again, err, fake.posts, fake.views)
 	}
@@ -452,7 +453,7 @@ func TestAMicrosoftCreateLooksOnEveryPage(t *testing.T) {
 		fake.events[fmt.Sprintf("a-%03d", n)] = map[string]any{"id": "filler", "transactionId": "someone-elses"}
 	}
 	fake.lapsed, fake.views = false, 0
-	past, err := client.CreateEvent(ctx, "access", "mine", accepted, "decision_first", true)
+	past, err := client.CreateEvent(ctx, "access", "mine", accepted, "decision_first", "writing_now")
 	if err != nil || past != written || fake.posts != 1 || fake.views != maxPages {
 		t.Fatalf("past the pages read: %+v, %v after %d posts, %d pages", past, err, fake.posts, fake.views)
 	}
