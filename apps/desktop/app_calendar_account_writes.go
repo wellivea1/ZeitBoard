@@ -2,12 +2,13 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
-	calendarcore "non24.app/core/calendar"
 	storage "non24.app/core/storage/sqlite"
 	"non24.app/desktop/internal/calendaraccounts"
 )
@@ -25,40 +26,53 @@ type AccountWriteBackInput struct {
 
 // EnableAccountWriteBack starts writing accepted times to a calendar brought
 // in from an account, once the account allows adding events and the calendar
-// is one ZeitBoard may add to.
+// is one ZeitBoard may add to. It is held as a sign-in is, so the window can
+// cancel it at any point, whether or not the browser was asked.
 func (a *App) EnableAccountWriteBack(input AccountWriteBackInput) (CalendarWriteBackDTO, error) {
-	ctx := a.applicationContext()
 	store, err := a.requireStore()
 	if err != nil {
 		return CalendarWriteBackDTO{}, err
 	}
-	account, calendar, found, err := accountCalendar(ctx, store, strings.TrimSpace(input.SourceID))
+	ctx, done, err := a.beginCalendarSignIn()
 	if err != nil {
 		return CalendarWriteBackDTO{}, err
 	}
+	defer done()
+	if err := a.turnAccountWritingOn(ctx, store, strings.TrimSpace(input.SourceID)); err != nil {
+		if ctx.Err() != nil {
+			return CalendarWriteBackDTO{}, errors.New("Turning writing on was cancelled.")
+		}
+		return CalendarWriteBackDTO{}, err
+	}
+	// Writing is on now, whatever a cancel arriving after this would say.
+	a.calendarWriter.nudge()
+	return a.calendarWriteBack(a.applicationContext(), store)
+}
+
+func (a *App) turnAccountWritingOn(ctx context.Context, store *storage.Store, sourceID string) error {
+	account, calendar, found, err := accountCalendar(ctx, store, sourceID)
+	if err != nil {
+		return err
+	}
 	if !found {
-		return CalendarWriteBackDTO{}, storage.ErrCalendarNotWritable
+		return storage.ErrCalendarNotWritable
 	}
 	if account, err = a.allowWriting(ctx, account); err != nil {
-		return CalendarWriteBackDTO{}, err
+		return err
 	}
 	client, access, err := a.accountAccess(ctx, store, account)
 	if err != nil {
-		return CalendarWriteBackDTO{}, err
+		return err
 	}
 	writable, err := client.CanWrite(ctx, access, calendar.CalendarID)
 	if err != nil {
 		a.forgetRefusedAccess(account.AccountID, err)
-		return CalendarWriteBackDTO{}, asSentence(err)
+		return asSentence(err)
 	}
 	if !writable {
-		return CalendarWriteBackDTO{}, fmt.Errorf("ZeitBoard can add events only to a calendar of your own, and %s is not.", calendar.Label)
+		return fmt.Errorf("ZeitBoard can add events only to a calendar of your own, and %s is not.", calendar.Label)
 	}
-	if err := store.SetCalendarWriteTarget(ctx, storage.CalendarWriteTarget{SourceID: calendar.SourceID}, a.currentTime()); err != nil {
-		return CalendarWriteBackDTO{}, err
-	}
-	a.calendarWriter.nudge()
-	return a.calendarWriteBack(ctx, store)
+	return store.SetCalendarWriteTarget(ctx, storage.CalendarWriteTarget{SourceID: calendar.SourceID}, a.currentTime())
 }
 
 // allowWriting gives back the account as it stands once it allows adding
@@ -70,7 +84,7 @@ func (a *App) allowWriting(ctx context.Context, account storage.CalendarAccount)
 	}
 	client := a.accountClient(account)
 	client.Write = true
-	if _, err := a.signInCalendarAccount(client, &account); err != nil {
+	if _, err := a.signInCalendarAccount(ctx, client, &account); err != nil {
 		return storage.CalendarAccount{}, err
 	}
 	_, signedIn, err := a.calendarAccount(ctx, account.AccountID)
@@ -86,9 +100,7 @@ func (a *App) allowWriting(ctx context.Context, account storage.CalendarAccount)
 // eventWriter carries writes to the calendar written to: a CalDAV collection
 // (ADR-0053) or an account's calendar (ADR-0065).
 type eventWriter interface {
-	// create writes an accepted time; retry says an earlier attempt may have
-	// written it with its answer lost.
-	create(ctx context.Context, event calendarcore.Event, stamp time.Time, retry bool) calendarWriteResult
+	create(ctx context.Context, accepted storage.AcceptedTime, stamp time.Time) calendarWriteResult
 	remove(ctx context.Context, eventID, href, etag string) calendarWriteResult
 }
 
@@ -107,9 +119,18 @@ func (a *App) eventWriterFor(ctx context.Context, store *storage.Store, target s
 		return nil, err
 	}
 	return accountEventWriter{
-		client: client, access: access, calendarID: target.CalendarID,
+		client: client, access: access, calendarID: target.CalendarID, writing: writingName(target.EnabledAt),
 		refused: func(err error) { a.forgetRefusedAccess(account.AccountID, err) },
 	}, nil
+}
+
+// writingName names one time of writing to a calendar, from turning it on to
+// stopping, by the moment it was turned on. That moment is kept to the
+// nanosecond, so no two times of writing share it; it is only ever compared
+// for equality, never with a provider's clock.
+func writingName(enabledAt time.Time) string {
+	sum := sha256.Sum256([]byte(enabledAt.UTC().Format(time.RFC3339Nano)))
+	return hex.EncodeToString(sum[:8])
 }
 
 // accountEventWriter writes to one calendar of an account. The provider
@@ -119,11 +140,16 @@ type accountEventWriter struct {
 	client     calendaraccounts.Client
 	access     string
 	calendarID string
+	writing    string // this time of writing to the calendar
 	refused    func(error)
 }
 
-func (w accountEventWriter) create(ctx context.Context, event calendarcore.Event, _ time.Time, retry bool) calendarWriteResult {
-	written, err := w.client.CreateEvent(ctx, w.access, w.calendarID, event, retry)
+func (w accountEventWriter) create(ctx context.Context, accepted storage.AcceptedTime, _ time.Time) calendarWriteResult {
+	if accepted.Approval == "" {
+		// Its event is named by the approval, which no record holds.
+		return calendarWriteResult{outcome: calendarWriteConflict, detail: "ZeitBoard has no record of accepting this time, so it was not written."}
+	}
+	written, err := w.client.CreateEvent(ctx, w.access, w.calendarID, accepted.Event, accepted.Approval, w.writing)
 	switch {
 	case errors.Is(err, calendaraccounts.ErrTaken):
 		return calendarWriteResult{outcome: calendarWriteConflict, detail: err.Error()}
@@ -148,12 +174,12 @@ func (w accountEventWriter) remove(ctx context.Context, eventID, href, etag stri
 
 // deferCalendarWrites leaves writes waiting, saying why, when the account
 // cannot be signed in to for any of them. It reports whether any was.
-func (a *App) deferCalendarWrites(ctx context.Context, store *storage.Store, due []storage.CalendarWrite, reason string) bool {
+func (a *App) deferCalendarWrites(ctx context.Context, store *storage.Store, target storage.CalendarWriteTarget, due []storage.CalendarWrite, reason string) bool {
 	now := a.currentTime().UTC()
 	deferred := false
 	for _, write := range due {
 		retryAt := now.Add(calendarWriteRetryDelay(write.Attempts + 1))
-		deferred = store.DeferCalendarWrite(ctx, write.EventID, reason, retryAt, now) == nil || deferred
+		deferred = store.DeferCalendarWrite(ctx, target, write, reason, retryAt, now) == nil || deferred
 	}
 	return deferred
 }

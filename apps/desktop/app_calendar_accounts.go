@@ -100,9 +100,6 @@ type CalendarAccountSourceDTO struct {
 	AccountLabel   string `json:"accountLabel"`
 	RefreshedLabel string `json:"refreshedLabel"`
 	Failure        string `json:"failure,omitempty"`
-	// Writes says the account already lets ZeitBoard add events, so turning
-	// writing on asks nothing in the browser (ADR-0065).
-	Writes bool `json:"writes,omitempty"`
 }
 
 // ConnectCalendarAccount signs in to an account through the owner's app
@@ -126,7 +123,12 @@ func (a *App) ConnectCalendarAccount(input CalendarAccountInput) (CalendarAccoun
 			return CalendarAccountCalendarsDTO{}, errors.New("Paste the client secret Google gave with the client ID.")
 		}
 	}
-	return a.signInCalendarAccount(a.calendarAccountClient(provider, clientID, secret), nil)
+	ctx, done, err := a.beginCalendarSignIn()
+	if err != nil {
+		return CalendarAccountCalendarsDTO{}, err
+	}
+	defer done()
+	return a.signInCalendarAccount(ctx, a.calendarAccountClient(provider, clientID, secret), nil)
 }
 
 // ReconnectCalendarAccount signs in again with the registration an account
@@ -134,7 +136,13 @@ func (a *App) ConnectCalendarAccount(input CalendarAccountInput) (CalendarAccoun
 // in use: reading, and adding events while accepted times are written to the
 // account.
 func (a *App) ReconnectCalendarAccount(input CalendarAccountRef) (CalendarAccountCalendarsDTO, error) {
-	ctx := a.applicationContext()
+	// Held first, so whether the account is written to cannot change while
+	// this sign-in asks for what writing needs.
+	ctx, done, err := a.beginCalendarSignIn()
+	if err != nil {
+		return CalendarAccountCalendarsDTO{}, err
+	}
+	defer done()
 	store, account, err := a.calendarAccount(ctx, input.AccountID)
 	if err != nil {
 		return CalendarAccountCalendarsDTO{}, err
@@ -145,10 +153,11 @@ func (a *App) ReconnectCalendarAccount(input CalendarAccountRef) (CalendarAccoun
 	}
 	client := a.accountClient(account)
 	client.Write = writing == account.AccountID
-	return a.signInCalendarAccount(client, &account)
+	return a.signInCalendarAccount(ctx, client, &account)
 }
 
-// CancelCalendarSignIn stops waiting for the browser.
+// CancelCalendarSignIn stops the sign-in under way, or turning writing on,
+// whether or not it is waiting for the browser.
 func (a *App) CancelCalendarSignIn() {
 	a.calendarAccountsMu.Lock()
 	defer a.calendarAccountsMu.Unlock()
@@ -292,17 +301,13 @@ func (a *App) accountClient(account storage.CalendarAccount) calendaraccounts.Cl
 
 // signInCalendarAccount opens the provider's sign-in in the browser, waits
 // for it to come back to a one-time loopback address, and keeps the account
-// it signed in to: any account, or only the one wanted.
-func (a *App) signInCalendarAccount(client calendaraccounts.Client, want *storage.CalendarAccount) (CalendarAccountCalendarsDTO, error) {
+// it signed in to: any account, or only the one wanted. ctx is the one
+// beginCalendarSignIn holds.
+func (a *App) signInCalendarAccount(ctx context.Context, client calendaraccounts.Client, want *storage.CalendarAccount) (CalendarAccountCalendarsDTO, error) {
 	store, err := a.requireStore()
 	if err != nil {
 		return CalendarAccountCalendarsDTO{}, err
 	}
-	ctx, done, err := a.beginCalendarSignIn()
-	if err != nil {
-		return CalendarAccountCalendarsDTO{}, err
-	}
-	defer done()
 	receiver, err := calendaraccounts.Listen()
 	if err != nil {
 		return CalendarAccountCalendarsDTO{}, asSentence(err)
@@ -313,7 +318,9 @@ func (a *App) signInCalendarAccount(client calendaraccounts.Client, want *storag
 		return CalendarAccountCalendarsDTO{}, asSentence(err)
 	}
 	openSignInPage(a.applicationContext(), auth.URL)
-	code, err := receiver.Wait(ctx, auth.State)
+	waiting, stop := context.WithTimeout(ctx, calendarSignInTimeout)
+	defer stop()
+	code, err := receiver.Wait(waiting, auth.State)
 	if err != nil {
 		return CalendarAccountCalendarsDTO{}, signInStopped(err)
 	}
@@ -352,13 +359,24 @@ func (a *App) signInCalendarAccount(client calendaraccounts.Client, want *storag
 		return CalendarAccountCalendarsDTO{}, err
 	}
 	if writing == account.AccountID && !calendaraccounts.Writes(client.Provider, account.Scopes) {
-		return CalendarAccountCalendarsDTO{}, fmt.Errorf("Accepted times are written to a calendar of %s, so signing in to it again must allow adding events. Use “Sign in again” on the account, or stop writing first.", label)
+		return CalendarAccountCalendarsDTO{}, writingKept(client, label)
 	}
 	if err := store.SaveCalendarAccount(ctx, account); err != nil {
 		return CalendarAccountCalendarsDTO{}, err
 	}
 	a.holdAccessToken(account.AccountID, token)
 	return accountCalendarsDTO(ctx, store, account, calendars)
+}
+
+// writingKept refuses a sign-in that would take adding events from the
+// account written to, saying what to do instead: a sign-in that asked for it
+// was refused it in the browser, while the form asks only to read and
+// “Sign in again” asks for both.
+func writingKept(client calendaraccounts.Client, label string) error {
+	if client.Write {
+		return fmt.Errorf("Accepted times are written to a calendar of %s, so signing in to it again must allow adding events. Allow that when %s asks, or stop writing first.", label, providerName(client.Provider))
+	}
+	return fmt.Errorf("Accepted times are written to a calendar of %s, so signing in to it must allow adding events. Use “Sign in again” on the account, which asks for that, or stop writing first.", label)
 }
 
 // signInStopped words why a sign-in stopped: cancelled, out of time, or the
@@ -374,15 +392,16 @@ func signInStopped(err error) error {
 	}
 }
 
-// beginCalendarSignIn holds the one sign-in that may wait for the browser at
-// a time, until it comes back, five minutes pass, or it is cancelled.
+// beginCalendarSignIn holds the one sign-in, or turning writing on, that may
+// run at a time, until it is done or cancelled. Waiting for the browser has a
+// limit of its own.
 func (a *App) beginCalendarSignIn() (context.Context, func(), error) {
 	a.calendarAccountsMu.Lock()
 	defer a.calendarAccountsMu.Unlock()
 	if a.calendarSignInCancel != nil {
-		return nil, nil, errors.New("ZeitBoard is already waiting for a sign-in in your browser.")
+		return nil, nil, errors.New("ZeitBoard is already signing in to a calendar account. Finish or cancel that first.")
 	}
-	ctx, cancel := context.WithTimeout(a.applicationContext(), calendarSignInTimeout)
+	ctx, cancel := context.WithCancel(a.applicationContext())
 	a.calendarSignInCancel = cancel
 	return ctx, func() {
 		a.calendarAccountsMu.Lock()
@@ -415,21 +434,27 @@ func (a *App) accountAccess(ctx context.Context, store *storage.Store, account s
 	}
 	client := a.accountClient(account)
 	token, err := client.Refresh(ctx, account.RefreshToken)
+	// What the provider answered is kept even if the caller gives up now, so
+	// a rotated refresh token is never lost to a cancel. A refresh cut off
+	// before its answer leaves the token kept before, which still holds:
+	// Microsoft does not revoke a refresh token for being used, and Google's
+	// do not rotate.
+	keep := context.WithoutCancel(ctx)
 	if errors.Is(err, calendaraccounts.ErrSignInEnded) {
 		ended := fmt.Sprintf("The sign-in to %s has ended. Sign in to it again to keep reading its calendars.", account.Label)
-		_ = store.RecordCalendarAccountProblem(ctx, account.AccountID, ended)
+		_ = store.RecordCalendarAccountProblem(keep, account.AccountID, ended)
 		return client, "", errors.New(ended)
 	}
 	if err != nil {
 		return client, "", asSentence(err)
 	}
 	if token.Refresh != account.RefreshToken {
-		if err := store.RotateCalendarAccountToken(ctx, account.AccountID, token.Refresh); err != nil {
+		if err := store.RotateCalendarAccountToken(keep, account.AccountID, token.Refresh); err != nil {
 			return client, "", err
 		}
 	}
 	if account.Problem != "" {
-		_ = store.RecordCalendarAccountProblem(ctx, account.AccountID, "")
+		_ = store.RecordCalendarAccountProblem(keep, account.AccountID, "")
 	}
 	a.holdAccessToken(account.AccountID, token)
 	return client, token.Access, nil
@@ -628,7 +653,6 @@ func calendarAccountSources(ctx context.Context, store *storage.Store, now time.
 			AccountLabel:   account.Label,
 			RefreshedLabel: calendarRefreshedLabel(calendar.RefreshedAt, now, location),
 			Failure:        calendar.Failure,
-			Writes:         calendaraccounts.Writes(calendaraccounts.Provider(account.Provider), account.Scopes),
 		}
 	}
 	return sources, nil

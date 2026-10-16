@@ -1549,7 +1549,151 @@ The others are fixed, each with a test:
   - A host name keeps its spelling at the start of an error only when it is one: "e.g." is not.
 - **Left as a residual.** An acceptance's moment is kept to the second. A time undone and
   accepted again within one second has the same Microsoft transaction ID, and Graph could take
-  it for the removed event. ADR-0065 records this.
+  it for the removed event. ADR-0065 records this. The second review below removed it.
+
+### Writing to accounts after a second review — 2026-10-15
+
+A fresh high-effort review of those fixes (PR #89) raised nine findings. Eight are fixed, each
+with a test. Checking them turned up a ninth fault, older than both reviews, which is fixed too:
+
+- **Each acceptance named by its approval.** The moment of acceptance, kept to the second, could
+  be shared by two acceptances, so a removed Google event had to be put back when met. A retry
+  could not tell that from an event the owner had removed after an attempt whose answer was lost,
+  and put the owner's removal back. Each acceptance is now named by the approval that accepted
+  it, which no other acceptance shares. ZeitBoard's own Google event is put back only if it was
+  removed before writing to the calendar began. One removed since was the owner's doing and stays
+  removed, as it would had the answer come back. The second-precision residual is gone. The third
+  review below replaced the clocks this compared with whether a create was sent.
+- **Every Microsoft create looks first.** Looking only on a retry missed an attempt cut off by
+  quitting or a crash, which counts no failed attempt, and it searched again after every failed
+  sign-in. Each create now looks, over every page, before posting. One read per write is cheap
+  for times ZeitBoard writes a few of a day, and the retry flag is gone from every writer.
+- **Every Google removal checks the mark.** An event's ID no longer names its time alone, so a
+  removal now reads the event first and leaves one without this time's mark. A version it holds
+  still goes as `If-Match`.
+- **Accepted again during a removal.** Found while checking the above, in ADR-0053's queue for
+  CalDAV and accounts alike: a time accepted again while its earlier acceptance was still being
+  removed found that removal in its place, and was never written. A trigger now queues it once
+  the removal settles. A time the owner left out stays out. The third review changed what keeping
+  the changed event does.
+- **Cancel only for a sign-in that opened.** Whether the browser would open came from a flag the
+  sources list read earlier, which a sign-in made since could leave stale. Then a real sign-in ran
+  with no Cancel. The desktop now announces a sign-in as it opens the browser, and only then does
+  the window offer to cancel. A sign-in also reloads the calendar list, so the flag stays fresh.
+  The third review replaced all of this with a Cancel that works at any point.
+- **Advice that fits the path.** Refused a sign-in that would take adding events from the account
+  written to, “Sign in again” was told to use “Sign in again”. It now asks the owner to allow
+  adding events when the provider asks. The form, which asks only to read, still points to “Sign
+  in again”.
+- **Tests that test.** The quitting test cancelled before the pass began, so it never reached the
+  refresh. It now quits during the refresh, and checks the pass got there. The stopping check read
+  the status from before it stopped; it reads what stopping returned.
+- **No change: names from before.** The first finding was that writes queued before an upgrade
+  would get new names. No release or tag carried writing to an account, so no such write exists.
+
+### Writing to accounts after a third review — 2026-10-16
+
+A fresh high-effort review of the second round (PR #90, before it merged) raised nine findings.
+Seven are fixed, each with a test; two are left as they are, with reasons:
+
+- **Keeping a changed event is respected.** After the owner kept a changed event in a CalDAV
+  calendar, the trigger queued the time accepted again. Its create then took the kept event over
+  at its current version, so a later undo would have deleted it. The trigger now runs only after
+  a removal is done. Keeping a changed event for a time accepted again leaves that event standing
+  for the time, at the version ZeitBoard wrote, so removing it later asks the owner first.
+- **A create landing for an undone acceptance.** A create still on its way when its acceptance
+  was undone, and the time accepted again, was recorded as the new acceptance's write. A write is
+  now recorded only for the acceptance in force. Otherwise what landed is removed first, and the
+  new acceptance is written after, through the same trigger.
+- **No clocks in putting an event back.** Putting a removed Google event back compared Google's
+  time of removal with the computer's time of turning writing on, which a wrong clock could flip.
+  This round recorded each create before sending it instead; the fourth review below replaced
+  that record with a mark on the event itself.
+- **Cancel at any point.** The window offered Cancel once the desktop announced that the browser
+  had opened, and could miss that announcement or act on another sign-in's. Turning writing on is
+  now held from start to finish, as a sign-in is. Cancel always stops it, whether or not the
+  browser was asked, and no other sign-in starts meanwhile. The announcement is gone, and so is
+  the flag saying an account already allows writing. So is the reload after every sign-in that
+  kept that flag fresh.
+- **A busy calendar.** A Microsoft create that found more events in its time than ZeitBoard reads
+  failed every time. It now goes ahead, with Graph's own check of the transaction ID against
+  writing twice. The one read before each create stays, as the second review chose.
+- **A time with no approval.** One no approval records cannot be named, and was retried forever.
+  It now waits for the owner as a conflict.
+- **No change: a read before each Google removal.** The review suggested deleting first and
+  reading only after a refusal. The read is what checks ZeitBoard's mark, which keeps a removal
+  from taking another time's event. Removals come one per undo, so the request costs little.
+- **No change: names from before.** As in the second review: no release carried writing to an
+  account.
+
+### Writing to accounts after a fourth review — 2026-10-16
+
+A fresh high-effort review of the third round raised eight findings. Six are fixed, and two are
+left as they are, with reasons:
+
+- **The time of writing on the event.** A create recorded before sending counted as sent even
+  when its answer said it had not landed, such as a refused token or a failed attempt to put an
+  event back. A retry then took an event removed while writing was off for the owner's removal,
+  and never put it back. The record is gone. Each Google event now carries a private mark naming
+  the time of writing that wrote it, from turning writing on to stopping. A removed event that
+  this time of writing wrote stays removed; one an earlier time wrote is put back. Nothing an
+  attempt does or fails to do can change that.
+- **A rotated refresh token survives a cancel.** Cancelling while turning writing on, just as
+  Microsoft answered a refresh with a new refresh token, failed to keep it, and the sign-in would
+  have ended. What a refresh answers is now kept whatever the caller does next.
+- **Keeping a changed event in one step.** Keeping it, and forgetting it when the time was not
+  accepted again, were two statements; a time accepted between them was never written. They are
+  one transaction now.
+- **Five minutes for the browser alone.** The limit for waiting in the browser covered all of
+  turning writing on, and its message blamed the browser even when none was asked. It covers the
+  wait for the browser only, and cancelling is the one way the rest stops.
+- **“Sign in again” holds first.** It read whether the account is written to before holding the
+  one sign-in that may run, so writing turned on in between could make it ask for too little.
+- **One wording for cancelling.** A second helper for the same sign-in's errors is gone.
+- **No change: the read before each create, on Microsoft.** It is what finds an event already
+  written when writing is turned on again, as well as one a lost answer left. Graph moves a
+  deleted event where ZeitBoard does not look, which ADR-0065 records as a residual.
+- **No change: the read before each Google removal.** As in the third review.
+
+### Writing to accounts after a fifth review — 2026-10-16
+
+A fresh high-effort review of the fourth round raised ten candidate findings, unverified. Six
+repeat ones the earlier rounds settled, and are left with the reasons given there. Four were acted
+on:
+
+- **Every outcome on the write carried.** Only a successful create checked that its acceptance
+  was still the one in force. A refused or failed create for an acceptance undone meanwhile, the
+  time accepted again, marked the new acceptance's write as a conflict or delayed it. Each write
+  is now listed with the approval in force. Whatever becomes of it, written, conflict or failure,
+  is recorded only while that approval still is, in one statement.
+- **Writing on is never reported as cancelled.** A cancel arriving after writing was turned on
+  could still be reported, had reading the status then failed. Only the steps before writing is
+  on can now be cancelled.
+- **Words for the wait.** While writing is turned on, the window now says so first. It no longer
+  opens with what to do if the browser asks, which it may not.
+- **What a cut-off refresh leaves.** The comment on keeping a refresh's answer said a rotated
+  token was the only one still honoured. A refresh cut off before its answer leaves the token kept
+  before, which still holds: Microsoft does not revoke a refresh token for being used, and Google's
+  do not rotate.
+
+### Writing to accounts after a sixth review — 2026-10-16
+
+A fresh high-effort review of the fifth round raised ten candidate findings, unverified. Seven
+repeat ones the earlier rounds settled, or ask for what the design chose on purpose: a kept event
+standing for its time, and a time accepted again written even if it has ended meanwhile, as any
+waiting create is. Each provider request is bounded by its own twenty seconds, so a request that
+hangs cannot hold a sign-in for long. Three were acted on:
+
+- **A pass keeps to its time of writing.** A pass still carrying writes when writing stopped and
+  was turned on again, or for another calendar, recorded what it carried on the writes queued for
+  the new time of writing, and carried them on with the old calendar's writer. A pass now checks
+  before each write that writing is on as it began. It lists only writes of its own time of
+  writing, and records every outcome only for that time, in the same statement.
+- **Undoing settles a create's conflict.** A create that met a conflict outlived its time's undo,
+  and a time accepted again found it in its place, never to be written once the owner left it out.
+  A trigger now settles such a conflict when its time is undone.
+- **The approval read for creates alone.** Listing writes read the approval in force for every
+  write, though only a create's is ever used.
 
 ## Where the completion goal stands — 2026-09-27
 
