@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { HomeSetupGuide } from "./HomeSetupGuide";
 
@@ -67,7 +67,9 @@ describe("HomeSetupGuide", () => {
     fireEvent.click(
       await screen.findByRole("button", { name: "Hide the note “More you can set up”" }),
     );
-    expect(screen.queryByRole("complementary")).toBeNull();
+    // The note can be found a moment before it listens for being closed; it
+    // then reads that it was, and goes.
+    await waitFor(() => expect(screen.queryByRole("complementary")).toBeNull());
     unmount();
 
     const { container } = render(<HomeSetupGuide />);

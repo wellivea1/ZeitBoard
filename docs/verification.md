@@ -3292,3 +3292,10 @@ stand-ins can store a create and answer as though it failed, as the Google one a
   answer lost, undone before a retry, waits for the owner as a removal. The problem says
   ZeitBoard may have added it and cannot tell whether it changed. Removed anyway, it leaves the
   calendar, with no problems left. With the trigger switched off, these tests fail.
+
+## A setup-guide test that passed by luck — 2026-10-16
+
+The setup guide's "closes for good" clicked the note's × as soon as it found it, then checked at
+once that the note was gone. React can show the note a moment before it subscribes to being
+closed, so the check failed on a CI run that changed nothing it tested. The test now waits for the
+note to go. Eight runs of the file in a row pass, and the full window suite passes.
