@@ -1695,6 +1695,48 @@ hangs cannot hold a sign-in for long. Three were acted on:
 - **The approval read for creates alone.** Listing writes read the approval in force for every
   write, though only a create's is ever used.
 
+### An undone time's unconfirmed create is looked for — 2026-10-16
+
+A review of the sixth round noted a gap older than ADR-0065. A create can land in the owner's
+calendar with its answer lost, or as the app quits. If its time was undone before a retry
+confirmed it, ZeitBoard forgot the write, and the event stayed in the calendar for good. It then
+came back on every reading as busy time ZeitBoard did not recognise.
+
+- Undoing a time whose create is not yet confirmed now turns its write into a removal of
+  whatever that create wrote. A trigger records the approval it was written under, and the time
+  it was written for, before the time goes.
+- The removal looks where ZeitBoard writes the time: the CalDAV object named by it, the Google
+  event under the acceptance's ID, or the Microsoft event with its transaction ID, over the time
+  the approval records. Finding nothing, or another's event, it is done.
+- Finding ZeitBoard's own event, it cannot tell whether the owner changed it since: it never knew
+  the version it wrote. So the event waits for the owner, as a changed one does, at the address
+  and version found. The owner removes it or keeps it.
+- A create landing after the undo gives that removal the event's address and version, so it
+  removes exactly what landed, with nothing to ask.
+- A time accepted again meanwhile is written once the removal is done, as with any removal.
+- A review of the first version found it removed what it found unasked, which could take an
+  owner's change with it. What is found now waits for the owner.
+- A second review found that a Microsoft lookup cut short by a time holding more events than
+  ZeitBoard reads, retried, would wait for good. A time accepted again would wait behind it. The
+  lookup now gives up there, as a create there goes ahead. What to look for keeps the event's own
+  time, not one read back from the approval. One rule names the approval in force, for the
+  trigger and the queue alike. A removal that knows its address uses it.
+- An undo while the calendar cannot be reached leaves its lookup waiting with the other writes,
+  and a time accepted again waits behind it. Nothing could be written then anyway, and once the
+  calendar answers, the lookup settles and the time is written.
+- A third review raised small points, now fixed:
+  - A lookup that learns its address from a create landing late starts that removal afresh,
+    with no backoff or reason left over.
+  - A record of what to look for that cannot be read waits, saying so, instead of being tried
+    again at once.
+  - The rule for the approval in force is one constant again.
+- The third review also asked for things left as they are, each with its reason:
+  - A Microsoft time holding more events than ZeitBoard reads gives up the lookup. That is a
+    calendar with thousands of events within one accepted block.
+  - An event from an earlier time of writing that a lookup finds goes to the owner. Asking is
+    safe, and the time was undone.
+  - Three readings of a Google event remain, and each judges what it reads for its own purpose.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and

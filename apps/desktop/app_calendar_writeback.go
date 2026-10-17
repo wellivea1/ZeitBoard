@@ -280,7 +280,22 @@ func (a *App) carryCalendarWrite(ctx context.Context, store *storage.Store, targ
 		write.Approval = accepted.Approval
 		result = writer.create(ctx, accepted, now.Truncate(time.Second))
 	case storage.CalendarWriteDelete:
-		result = writer.remove(ctx, write.EventID, write.Href, write.ETag)
+		if write.Href != "" {
+			result = writer.remove(ctx, write.EventID, write.Href, write.ETag)
+			break
+		}
+		// Undone before its create was confirmed: look for what it wrote.
+		created, unconfirmed, err := store.CalendarWriteUnconfirmed(ctx, write.EventID)
+		switch {
+		case err != nil && ctx.Err() != nil:
+			return false
+		case err != nil:
+			result = calendarWriteResult{outcome: calendarWriteFailed, detail: "ZeitBoard could not read what to look for."}
+		case unconfirmed:
+			result = writer.findUnconfirmed(ctx, created)
+		default:
+			result = calendarWriteResult{outcome: calendarWriteDone} // nothing known to look for
+		}
 	default:
 		return false
 	}
@@ -296,6 +311,8 @@ func (a *App) carryCalendarWrite(ctx context.Context, store *storage.Store, targ
 		err = store.MarkCalendarWriteRemoved(ctx, target, write.EventID)
 	case result.outcome == calendarWriteConflict:
 		err = store.MarkCalendarWriteConflict(ctx, target, write, result.detail, now)
+	case result.outcome == calendarWriteFound:
+		err = store.MarkCalendarWriteFound(ctx, target, write.EventID, result.href, result.etag, result.detail, now)
 	default:
 		err = store.DeferCalendarWrite(ctx, target, write, result.detail, now.Add(calendarWriteRetryDelay(write.Attempts+1)), now)
 	}
@@ -336,7 +353,7 @@ func (a *App) calendarWriteBack(ctx context.Context, store *storage.Store) (Cale
 				StartAt:  rfc3339OrEmpty(write.StartAt),
 				Detail:   write.Detail,
 				Conflict: write.State == storage.CalendarWriteConflict,
-				Removing: write.Href != "",
+				Removing: write.State == storage.CalendarWriteDelete || write.Href != "",
 			}
 			if !problem.Conflict {
 				problem.RetryAt = rfc3339OrEmpty(write.NextAttemptAt)

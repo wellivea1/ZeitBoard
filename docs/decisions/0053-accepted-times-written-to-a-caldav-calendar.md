@@ -82,3 +82,8 @@ remove an event of its own that the owner has since changed, for instance by mov
 - Update, 2026-10-16: a pass ends where writing stops or moves to another calendar, and records
   what it carried only for the time of writing it began in. Undoing a time settles a create of it
   that met a conflict, so the time accepted again is written afresh.
+- Update, 2026-10-16: a time undone before its create was confirmed was forgotten, though the
+  create may have landed with its answer lost, or as the app quit. Now what that create wrote is
+  looked for where ZeitBoard writes the time. Finding nothing, or another's event, the calendar is
+  left as it is. Finding ZeitBoard's own, which the owner may have changed since, it waits for the
+  owner to remove or keep, as a changed event does.

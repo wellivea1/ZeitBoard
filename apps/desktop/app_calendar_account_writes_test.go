@@ -113,6 +113,10 @@ func (s *syntheticAccount) serveGraphWrites(r *http.Request, path string, write 
 		event["id"] = id
 		s.stamp(event)
 		s.stored[id] = event
+		if s.losing {
+			write(http.StatusServiceUnavailable, map[string]string{"error": "ServiceUnavailable"})
+			return true
+		}
 		write(http.StatusCreated, event)
 	case strings.HasPrefix(path, "/me/events/"):
 		id := strings.TrimPrefix(path, "/me/events/")
@@ -623,6 +627,48 @@ func TestGooglePutsBackOnlyWhatWasRemovedWhileWritingWasOff(t *testing.T) {
 			t.Errorf("%d events written: one was written twice rather than put back", s.posts)
 		}
 	})
+}
+
+// An accepted time whose create landed with its answer lost, undone before
+// the create was confirmed, is found by the name it was written under. It
+// waits for the owner, who can remove it.
+func TestAnAccountCreateUnconfirmedAtAnUndoWaitsForTheOwner(t *testing.T) {
+	for _, provider := range []calendaraccounts.Provider{calendaraccounts.Google, calendaraccounts.Microsoft} {
+		t.Run(string(provider), func(t *testing.T) {
+			app, fake, _, sourceID, ids := writeApp(t, provider)
+			ctx := context.Background()
+			if _, err := app.EnableAccountWriteBack(AccountWriteBackInput{SourceID: sourceID}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := app.DecideLocalProposals(LocalProposalsDecisionInput{ProposalIDs: ids[:1], Decision: storage.ProposalApproved}); err != nil {
+				t.Fatal(err)
+			}
+			fake.with(func(s *syntheticAccount) { s.losing = true })
+			app.writeCalendarPass(ctx)
+			fake.with(func(s *syntheticAccount) { s.losing = false })
+			eventID := ownEvents(t, app)[ids[0]].EventID
+			if !fake.written()[eventID] {
+				t.Fatal("the create did not land")
+			}
+			if _, err := app.UndoLocalProposalDecision(LocalProposalUndoInput{ProposalID: ids[0]}); err != nil {
+				t.Fatal(err)
+			}
+			app.writeCalendarPass(ctx)
+			status := writeStatus(t, app)
+			if !fake.written()[eventID] || len(status.Problems) != 1 || !status.Problems[0].Conflict ||
+				!status.Problems[0].Removing || status.Problems[0].Detail != unconfirmedFound {
+				t.Fatalf("what the unconfirmed create wrote did not wait for the owner: %+v", status)
+			}
+			if _, err := app.ResolveCalendarWriteConflict(CalendarWriteConflictInput{EventID: eventID, Decision: "remove"}); err != nil {
+				t.Fatal(err)
+			}
+			app.writeCalendarPass(ctx)
+			status = writeStatus(t, app)
+			if fake.written()[eventID] || status.Summary != "The next time you accept is added to Owner." || len(status.Problems) != 0 {
+				t.Fatalf("removing it anyway: %+v, held %v", status, fake.written())
+			}
+		})
+	}
 }
 
 // A time no approval records cannot be named, so it waits for the owner

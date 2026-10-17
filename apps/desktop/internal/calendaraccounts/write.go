@@ -102,6 +102,42 @@ func (c Client) DeleteEvent(ctx context.Context, access, calendarID, eventID str
 	return c.googleDelete(ctx, access, calendarID, eventID, written)
 }
 
+// FindUnconfirmed looks for what a create may have written for a time undone
+// before the create was confirmed, its answer lost or the app quitting first:
+// by the name the acceptance was written under, between start and end in
+// Microsoft. It finds only ZeitBoard's own event for the time, shown, and
+// says where it is and at what version. A Microsoft time holding more events
+// than ZeitBoard reads cannot be searched, and the lookup gives up rather
+// than wait on it for good.
+func (c Client) FindUnconfirmed(ctx context.Context, access, calendarID, eventID, approval string, start, end time.Time) (Written, bool, error) {
+	if c.Provider == Microsoft {
+		found, ok, err := c.microsoftFind(ctx, access, calendarID, start, end, TransactionID(eventID, approval))
+		if errors.Is(err, errTooManyEvents) {
+			return Written{}, false, nil
+		}
+		return found, ok, err
+	}
+	id := googleEventID(eventID, approval)
+	address := c.googleEventsAddress(calendarID) + "/" + id
+	var existing googleMarked
+	status, err := c.call(ctx, http.MethodGet, address, access, nil, nil, &existing)
+	switch {
+	case err != nil:
+		return Written{}, false, err
+	case status == http.StatusNotFound || status == http.StatusGone:
+		return Written{}, false, nil
+	case status != http.StatusOK:
+		return Written{}, false, answered(address, status)
+	case existing.Status == "cancelled", existing.ExtendedProperties.Private[ownMark] != eventID:
+		return Written{}, false, nil
+	}
+	return Written{ID: id, Version: existing.ETag}, true, nil
+}
+
+// errTooManyEvents is a time holding more events than ZeitBoard reads at
+// once, so it cannot tell whether one of them is the event looked for.
+var errTooManyEvents = errors.New("the time holds more events than ZeitBoard reads at once")
+
 // CanWrite reports whether ZeitBoard may add events to a calendar: in Google
 // one the owner owns, which is all its write scope reaches; in Microsoft one
 // the owner can edit.
@@ -274,7 +310,10 @@ func (c Client) microsoftCreate(ctx context.Context, access, calendarID string, 
 	// What an earlier attempt wrote, its answer lost or the app quitting
 	// before it came, is looked for first. Graph also drops a second create
 	// with the same transaction ID.
-	if found, ok, err := c.microsoftFind(ctx, access, calendarID, event, transaction); err != nil || ok {
+	// More events than ZeitBoard reads at once, the create goes ahead, with
+	// Graph's own check of the transaction ID to keep it from writing twice.
+	found, ok, err := c.microsoftFind(ctx, access, calendarID, event.StartAt, event.EndAt, transaction)
+	if (err != nil && !errors.Is(err, errTooManyEvents)) || ok {
 		return found, err
 	}
 	showAs := "busy"
@@ -313,11 +352,11 @@ func (c Client) microsoftCreate(ctx context.Context, access, calendarID string, 
 }
 
 // microsoftFind looks for an acceptance already written, by its transaction
-// ID, over every page of the time it takes.
-func (c Client) microsoftFind(ctx context.Context, access, calendarID string, event calendarcore.Event, transaction string) (Written, bool, error) {
+// ID, over every page of the time it takes, from start to end.
+func (c Client) microsoftFind(ctx context.Context, access, calendarID string, start, end time.Time, transaction string) (Written, bool, error) {
 	query := url.Values{
-		"startDateTime": {event.StartAt.UTC().Format(time.RFC3339)},
-		"endDateTime":   {event.EndAt.UTC().Format(time.RFC3339)},
+		"startDateTime": {start.UTC().Format(time.RFC3339)},
+		"endDateTime":   {end.UTC().Format(time.RFC3339)},
 		"$select":       {"id,changeKey,transactionId"},
 		"$top":          {"100"},
 	}
@@ -347,9 +386,7 @@ func (c Client) microsoftFind(ctx context.Context, access, calendarID string, ev
 		}
 		address = answer.NextLink
 	}
-	// More events than ZeitBoard reads at once: the create goes ahead, with
-	// Graph's own check of the transaction ID to keep it from writing twice.
-	return Written{}, false, nil
+	return Written{}, false, errTooManyEvents
 }
 
 func (c Client) microsoftDelete(ctx context.Context, access, eventID string, written Written) error {

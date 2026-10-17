@@ -102,8 +102,31 @@ func (s *Store) initializeCalendarWriteBack(ctx context.Context) error {
 		WHEN NEW.ownership = 'app_owned' AND EXISTS(SELECT 1 FROM local_calendar_write_target) BEGIN
 		INSERT OR IGNORE INTO local_calendar_writes(event_id, state, title, start_at, updated_at)
 		VALUES(NEW.event_id, 'create', NEW.title, NEW.start_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')); END`,
-		// A time that goes (undone, its task deleted, data erased) is not
-		// written if it was not yet, and is removed if it was.
+		// The creates of times undone before they were confirmed, by the
+		// approval each was written under and the time it was written for.
+		`CREATE TABLE IF NOT EXISTS local_calendar_write_unconfirmed(
+			event_id TEXT PRIMARY KEY REFERENCES local_calendar_writes(event_id) ON DELETE CASCADE,
+			approval TEXT NOT NULL,
+			start_at TEXT NOT NULL,
+			end_at TEXT NOT NULL
+		)`,
+		// A time undone before its create was confirmed may still be in the
+		// calendar, the create's answer lost or the app quitting first. Its
+		// write becomes a removal of whatever that create wrote, looked for by
+		// the approval it was written under. Nothing there, the removal is
+		// done; something there, the owner decides.
+		`CREATE TRIGGER IF NOT EXISTS local_calendar_write_undone_create BEFORE DELETE ON local_calendar_events
+		WHEN OLD.ownership = 'app_owned' BEGIN
+		INSERT OR REPLACE INTO local_calendar_write_unconfirmed(event_id, approval, start_at, end_at)
+		SELECT event.event_id, ` + approvalOfEvent + `, OLD.start_at, OLD.end_at
+		FROM (SELECT OLD.event_id AS event_id, OLD.proposal_id AS proposal_id) AS event
+		WHERE EXISTS(SELECT 1 FROM local_calendar_writes WHERE event_id = OLD.event_id AND state = 'create');
+		UPDATE local_calendar_writes SET state = 'delete', href = '', etag = '', attempts = 0, next_attempt_at = '',
+			detail = '', updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+		WHERE event_id = OLD.event_id AND state = 'create'; END`,
+		// A time that goes (undone, its task deleted, data erased) is removed
+		// if it was written; one whose create was not yet confirmed is looked
+		// for first, above.
 		`CREATE TRIGGER IF NOT EXISTS local_calendar_write_on_remove AFTER DELETE ON local_calendar_events
 		WHEN OLD.ownership = 'app_owned' BEGIN
 		DELETE FROM local_calendar_writes WHERE event_id = OLD.event_id AND state = 'create';
@@ -291,23 +314,81 @@ func (s *Store) MarkCalendarWritten(ctx context.Context, target CalendarWriteTar
 		return err
 	}
 	if changed, _ := result.RowsAffected(); changed == 0 {
-		// Undone while it was being written, and perhaps accepted again: the
-		// write waiting for the new acceptance removes this one first.
-		result, err = tx.ExecContext(ctx, `UPDATE local_calendar_writes SET state = 'delete', href = ?, etag = ?,
-			attempts = 0, next_attempt_at = '', detail = '', updated_at = ? WHERE event_id = ? AND state = 'create'
-			AND `+inThisWriting, href, etag, stamp, event.EventID, writing)
-		if err != nil {
+		// Undone while it was being written: the removal its undo queued now
+		// knows where the event is, and removes it at the version written. A
+		// time accepted again since is written once that removal is done.
+		if err := removeWhatLanded(ctx, tx, event, href, etag, stamp, writing); err != nil {
 			return err
-		}
-		if changed, _ := result.RowsAffected(); changed == 0 {
-			if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO local_calendar_writes(event_id, state, href, etag, title, start_at, updated_at)
-				SELECT ?, 'delete', ?, ?, ?, ?, ? WHERE `+inThisWriting,
-				event.EventID, href, etag, event.Title, formatSQLiteTime(event.StartAt.UTC()), stamp, writing); err != nil {
-				return err
-			}
 		}
 	}
 	return tx.Commit()
+}
+
+// removeWhatLanded queues the removal of an event written for an acceptance
+// undone meanwhile, at the address and version it landed at.
+func removeWhatLanded(ctx context.Context, tx *sql.Tx, event calendarcore.Event, href, etag, stamp, writing string) error {
+	for _, statement := range []string{
+		// The removal the undo queued, which looked for it.
+		`UPDATE local_calendar_writes SET href = ?, etag = ?, attempts = 0, next_attempt_at = '', detail = '',
+			updated_at = ? WHERE event_id = ? AND state = 'delete' AND href = '' AND ` + inThisWriting,
+		// Any other write in its place, which waits for the removal.
+		`UPDATE local_calendar_writes SET state = 'delete', href = ?, etag = ?, attempts = 0, next_attempt_at = '',
+			detail = '', updated_at = ? WHERE event_id = ? AND state = 'create' AND ` + inThisWriting,
+	} {
+		result, err := tx.ExecContext(ctx, statement, href, etag, stamp, event.EventID, writing)
+		if err != nil {
+			return err
+		}
+		if changed, _ := result.RowsAffected(); changed == 1 {
+			return nil
+		}
+	}
+	_, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO local_calendar_writes(event_id, state, href, etag, title, start_at, updated_at)
+		SELECT ?, 'delete', ?, ?, ?, ?, ? WHERE `+inThisWriting,
+		event.EventID, href, etag, event.Title, formatSQLiteTime(event.StartAt.UTC()), stamp, writing)
+	return err
+}
+
+// MarkCalendarWriteFound leaves for the owner what the create of a time
+// undone before it was confirmed was found to have written: ZeitBoard cannot
+// tell whether it was changed since, so the owner decides whether it goes.
+// It is found at href, at version etag.
+func (s *Store) MarkCalendarWriteFound(ctx context.Context, target CalendarWriteTarget, eventID, href, etag, detail string, now time.Time) error {
+	_, err := s.db.ExecContext(ctx, `UPDATE local_calendar_writes SET state = 'conflict', href = ?, etag = ?, detail = ?,
+		updated_at = ? WHERE event_id = ? AND state = 'delete' AND href = '' AND `+inThisWriting,
+		href, etag, detail, formatSQLiteTime(now.UTC()), eventID, formatSQLiteTime(target.EnabledAt))
+	return err
+}
+
+// UnconfirmedCreate is the create of a time undone before it was confirmed:
+// what it may have written is looked for by the approval it was written
+// under, in the time it was written for.
+type UnconfirmedCreate struct {
+	EventID        string
+	Approval       string
+	StartAt, EndAt time.Time
+}
+
+// CalendarWriteUnconfirmed returns what a removal with no address looks for,
+// if there is anything.
+func (s *Store) CalendarWriteUnconfirmed(ctx context.Context, eventID string) (UnconfirmedCreate, bool, error) {
+	created := UnconfirmedCreate{EventID: eventID}
+	var startAt, endAt string
+	err := s.db.QueryRowContext(ctx, `SELECT approval, start_at, end_at FROM local_calendar_write_unconfirmed
+		WHERE event_id = ?`, eventID).Scan(&created.Approval, &startAt, &endAt)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return UnconfirmedCreate{}, false, nil
+	case err != nil:
+		return UnconfirmedCreate{}, false, err
+	}
+	if created.StartAt, err = parseCalendarTime(startAt); err != nil {
+		return UnconfirmedCreate{}, false, err
+	}
+	if created.EndAt, err = parseCalendarTime(endAt); err != nil {
+		return UnconfirmedCreate{}, false, err
+	}
+	return created, true, nil
 }
 
 // MarkCalendarWriteRemoved records that an undone time left the calendar

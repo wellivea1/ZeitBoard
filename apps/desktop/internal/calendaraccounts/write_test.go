@@ -459,6 +459,49 @@ func TestAMicrosoftCreateLooksOnEveryPage(t *testing.T) {
 	}
 }
 
+// The create of a time undone before it was confirmed is looked for by the
+// name it was written under. ZeitBoard's own event there is found, with
+// where it is and at what version; nothing there, or another's event, is not.
+func TestAnUnconfirmedCreateIsLookedFor(t *testing.T) {
+	for _, provider := range []Provider{Google, Microsoft} {
+		t.Run(string(provider), func(t *testing.T) {
+			fake := newFakeCalendars(t, provider)
+			client, ctx := fake.client(), context.Background()
+			accepted := acceptedTime("calendar_event_owned_01")
+			find := func(approval string) (Written, bool, error) {
+				return client.FindUnconfirmed(ctx, "access", "mine", accepted.EventID, approval, accepted.StartAt, accepted.EndAt)
+			}
+			if _, ok, err := find("decision_first"); err != nil || ok {
+				t.Fatalf("with nothing written: %v, %v", ok, err)
+			}
+			written, err := client.CreateEvent(ctx, "access", "mine", accepted, "decision_first", "writing_now")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if found, ok, err := find("decision_first"); err != nil || !ok || found != written || fake.shown() != 1 {
+				t.Fatalf("with its create landed: %+v, %v, %v; %d shown", found, ok, err, fake.shown())
+			}
+			if provider == Microsoft {
+				// More events in the time than ZeitBoard reads: it cannot be
+				// searched, and the lookup gives up rather than wait for good.
+				for n := range maxPages {
+					fake.events[fmt.Sprintf("a-%03d", n)] = map[string]any{"id": "filler", "transactionId": "someone-elses"}
+				}
+				fake.paged, fake.views = true, 0
+				if _, ok, err := find("decision_first"); err != nil || ok || fake.views != maxPages {
+					t.Fatalf("past the pages read: %v, %v after %d pages", ok, err, fake.views)
+				}
+				return
+			}
+			taken := googleEventID(accepted.EventID, "decision_other")
+			fake.events[taken] = map[string]any{"id": taken, "etag": `"0"`}
+			if _, ok, err := find("decision_other"); err != nil || ok {
+				t.Fatalf("with another's event under the name: %v, %v", ok, err)
+			}
+		})
+	}
+}
+
 func TestWritingIsAskedForAndReadFromWhatWasGranted(t *testing.T) {
 	auth, err := Client{Provider: Google, ClientID: "x", Write: true}.Begin("http://127.0.0.1:1")
 	if err != nil || !strings.Contains(mustQuery(t, auth.URL).Get("scope"), "calendar.events.owned") {

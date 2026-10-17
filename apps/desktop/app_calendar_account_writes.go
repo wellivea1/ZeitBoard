@@ -102,6 +102,9 @@ func (a *App) allowWriting(ctx context.Context, account storage.CalendarAccount)
 type eventWriter interface {
 	create(ctx context.Context, accepted storage.AcceptedTime, stamp time.Time) calendarWriteResult
 	remove(ctx context.Context, eventID, href, etag string) calendarWriteResult
+	// findUnconfirmed looks for what the create of a time undone before it
+	// was confirmed may have written: nothing there, the removal is done.
+	findUnconfirmed(ctx context.Context, created storage.UnconfirmedCreate) calendarWriteResult
 }
 
 // eventWriterFor is the writer for the calendar written to, with an account's
@@ -170,6 +173,18 @@ func (w accountEventWriter) remove(ctx context.Context, eventID, href, etag stri
 		return calendarWriteResult{outcome: calendarWriteFailed, detail: asSentence(err).Error()}
 	}
 	return calendarWriteResult{outcome: calendarWriteDone}
+}
+
+func (w accountEventWriter) findUnconfirmed(ctx context.Context, created storage.UnconfirmedCreate) calendarWriteResult {
+	found, ok, err := w.client.FindUnconfirmed(ctx, w.access, w.calendarID, created.EventID, created.Approval, created.StartAt, created.EndAt)
+	switch {
+	case err != nil:
+		w.refused(err)
+		return calendarWriteResult{outcome: calendarWriteFailed, detail: asSentence(err).Error()}
+	case !ok:
+		return calendarWriteResult{outcome: calendarWriteDone}
+	}
+	return calendarWriteResult{outcome: calendarWriteFound, href: found.ID, etag: found.Version, detail: unconfirmedFound}
 }
 
 // deferCalendarWrites leaves writes waiting, saying why, when the account
