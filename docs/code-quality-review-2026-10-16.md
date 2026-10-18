@@ -46,8 +46,24 @@ By their own tests, the packages that carry the most risk:
 | `core/storage/sqlite` | 73.6% |
 | `core/calendar` | 70.8% |
 
-The window's coverage is not measured. That needs `@vitest/coverage-v8`, a download not made
-without the owner's word. Its 621 tests run on every pull request.
+The window's own code, measured 2026-10-18 by `npm run coverage` in `apps/desktop/frontend` with
+`@vitest/coverage-v8`, which the owner allowed:
+
+| Measure | Covered |
+|---|---|
+| Statements | 85.0% |
+| Branches | 78.6% |
+| Functions | 85.0% |
+| Lines | 88.8% |
+
+## Dependencies
+
+`npm audit` lists nine advisories in the tooling that builds and tests the window: Vitest's
+mocker, PostCSS, browserslist, nanoid, brace-expansion, source-map-js, undici and
+baseline-browser-mapping. None of it ships in the app. The window's bundle holds its own code
+and its runtime libraries, and the desktop, server and companion are Go and Kotlin. The coverage
+package adds no advisory of its own; it shares Vitest's. Moving the tooling to patched versions is
+a download, and waits on the owner like any other.
 
 ## Reviews
 
@@ -92,4 +108,3 @@ test fail:
 - **The providers.** Google, Microsoft and CalDAV are checked against stand-ins that behave as their
   documentation says. ADR-0065 records the two behaviours of Graph's that need a real account to
   confirm.
-- **The window's coverage**, as above, is not measured.
