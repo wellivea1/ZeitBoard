@@ -151,12 +151,13 @@ export function StartupSettings() {
         </section>
         <section className="data-control-card" aria-label="Current session">
           <h3>While ZeitBoard is running</h3>
-          <p>
-            Closing the window hides it in the tray and anything you turned on keeps running. Quit
-            stops it until the next launch.
-          </p>
-          {status && !status.trayAvailable && (
+          {status && !status.trayAvailable ? (
             <p>The tray is unavailable. Closing the window will quit; hiding is disabled.</p>
+          ) : (
+            <p>
+              Closing the window hides it in the tray and anything you turned on keeps running. Quit
+              stops it until the next launch.
+            </p>
           )}
           <button
             type="button"

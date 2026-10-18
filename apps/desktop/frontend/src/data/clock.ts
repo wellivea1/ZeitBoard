@@ -3,7 +3,8 @@ import { findWailsMethod, type WailsRoot } from "./wailsBridge";
 
 // The clock setting (ADR-0057): which clock times are written on, and why.
 // The desktop resolves "system" against Windows' regional format, so every
-// label it writes and every time the window writes agree.
+// label it writes and every time the window writes agree. Elsewhere there is
+// no format it reads, and "system" is the twelve-hour clock.
 
 export type ClockPreference = "system" | Clock;
 
@@ -13,6 +14,8 @@ export interface ClockSetting {
   clock: Clock;
   /** The computer's own clock. */
   system: Clock;
+  /** The system: "windows", "macos" or "linux". */
+  platform: string;
   revision: number;
   /** True when a stale edit lost to what was already stored. */
   conflict: boolean;
@@ -25,7 +28,14 @@ const CLOCKS: readonly Clock[] = ["12", "24"];
 /** Outside the desktop the browser's own clock is the only one there is. */
 export function clockUnavailable(): ClockSetting {
   const clock = localeClock();
-  return { preference: "system", clock, system: clock, revision: 0, conflict: false };
+  return {
+    preference: "system",
+    clock,
+    system: clock,
+    platform: "windows",
+    revision: 0,
+    conflict: false,
+  };
 }
 
 export function normalizeClockSetting(value: unknown): ClockSetting | undefined {
@@ -40,6 +50,7 @@ export function normalizeClockSetting(value: unknown): ClockSetting | undefined 
     preference,
     clock,
     system,
+    platform: typeof record.platform === "string" && record.platform ? record.platform : "windows",
     revision: typeof record.revision === "number" ? record.revision : 0,
     conflict: record.conflict === true,
     ...(message ? { message } : {}),

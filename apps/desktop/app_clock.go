@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"path/filepath"
+	"runtime"
 	"sync/atomic"
 
 	"non24.app/core/civilfmt"
@@ -36,6 +37,11 @@ type ClockSettingDTO struct {
 	// Clock is the clock in use, and System the computer's own: "12" or "24".
 	Clock  string `json:"clock"`
 	System string `json:"system"`
+
+	// Platform names the system: "windows", "macos" or "linux". Only Windows
+	// has a regional format ZeitBoard reads; elsewhere System is the
+	// twelve-hour clock ZeitBoard has always written.
+	Platform string `json:"platform"`
 
 	Revision uint64 `json:"revision"`
 	Conflict bool   `json:"conflict"`
@@ -87,7 +93,7 @@ func validateRegionalSettings(state RegionalSettingsDTO) error {
 	case clockSystem, clock12, clock24:
 		return nil
 	}
-	return errors.New("the clock must follow Windows, or be 12-hour or 24-hour")
+	return errors.New("the clock must follow the computer, or be 12-hour or 24-hour")
 }
 
 func regionalStore(path string) localSettingsStore[RegionalSettingsDTO] {
@@ -105,6 +111,24 @@ func systemClock() civilfmt.Clock {
 		return civilfmt.TwentyFourHour
 	}
 	return civilfmt.TwelveHour
+}
+
+// startClock puts the stored clock in use, or the computer's own when the
+// stored one cannot be read.
+func (a *App) startClock() {
+	a.systemClock = systemClock()
+	if err := a.loadRegionalFromDisk(); err != nil {
+		a.regionalErr = clockUnreadable(runtime.GOOS)
+	}
+}
+
+// clockUnreadable says which clock is in use when the stored one cannot be
+// read: Windows' own, or elsewhere ZeitBoard's default.
+func clockUnreadable(goos string) string {
+	if goos == "windows" {
+		return "The stored clock could not be read, so Windows' own is in use."
+	}
+	return "The stored clock could not be read, so ZeitBoard's default is in use."
 }
 
 // GetClockSetting says which clock times are written on, and why.
@@ -145,6 +169,7 @@ func (a *App) clockSettingLocked(conflict bool) ClockSettingDTO {
 		Preference: a.regional.Clock,
 		Clock:      clockName(a.regional.clock(a.systemClock)),
 		System:     clockName(a.systemClock),
+		Platform:   platformName(runtime.GOOS),
 		Revision:   a.regionalRevision,
 		Conflict:   conflict,
 		Message:    a.regionalErr,

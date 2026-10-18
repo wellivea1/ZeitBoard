@@ -347,10 +347,7 @@ func NewApp() *App {
 	}
 	// The clock is put in use even without a data directory: it is then the
 	// computer's own.
-	app.systemClock = systemClock()
-	if regionalErr := app.loadRegionalFromDisk(); regionalErr != nil {
-		app.regionalErr = "The stored clock could not be read, so Windows' own is in use."
-	}
+	app.startClock()
 	return app
 }
 

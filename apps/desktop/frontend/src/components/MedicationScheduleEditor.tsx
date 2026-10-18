@@ -266,8 +266,8 @@ export function MedicationScheduleEditor({
               }
             />
             <span>
-              Show this label through Windows at the times you entered, including predicted sleep
-              overlaps. Notification copy: "Reminder you set: {medication.label}."
+              Show this label as a desktop notification at the times you entered, including
+              predicted sleep overlaps. Notification copy: "Reminder you set: {medication.label}."
             </span>
           </label>
         )}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 
@@ -39,7 +40,7 @@ func TestTheClockFollowsTheComputerUntilChosen(t *testing.T) {
 		t.Fatal(err)
 	}
 	if setting.Preference != clockSystem || setting.Clock != clock24 || setting.System != clock24 ||
-		setting.Revision != 0 {
+		setting.Revision != 0 || setting.Platform != platformName(runtime.GOOS) {
 		t.Fatalf("setting %+v", setting)
 	}
 	if displayClock() != civilfmt.TwentyFourHour {
@@ -111,5 +112,18 @@ func TestAStaleClockEditLosesToWhatIsStored(t *testing.T) {
 	}
 	if !stale.Conflict || stale.Preference != clock24 || displayClock() != civilfmt.TwentyFourHour {
 		t.Fatalf("the stale edit was applied: %+v", stale)
+	}
+}
+
+// A stored clock that cannot be read leaves the computer's own in use, named
+// as the clock setting names it on each system.
+func TestAnUnreadableClockSaysWhichIsInUse(t *testing.T) {
+	if message := clockUnreadable("windows"); !strings.Contains(message, "Windows' own") {
+		t.Errorf("windows is told %q", message)
+	}
+	for _, goos := range []string{"darwin", "linux"} {
+		if message := clockUnreadable(goos); strings.Contains(message, "Windows") || !strings.Contains(message, "ZeitBoard's default") {
+			t.Errorf("%s is told %q", goos, message)
+		}
 	}
 }

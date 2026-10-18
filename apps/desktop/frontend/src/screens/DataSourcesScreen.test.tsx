@@ -1,7 +1,13 @@
-import { render, screen, within } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DataSourcesScreen } from "./DataSourcesScreen";
+
+// A computer away from New York, which the screen once assumed for everyone.
+vi.mock("../utils/civilTime", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../utils/civilTime")>()),
+  localZone: () => "Europe/London",
+}));
 
 afterEach(() => {
   delete (globalThis as { go?: unknown }).go;
@@ -66,6 +72,40 @@ describe("DataSourcesScreen structure", () => {
       ],
     });
     expect(await within(connected).findByText(/3 records/)).toBeVisible();
+  });
+
+  // Calendars were read, and an added file's floating times placed, in New
+  // York's zone whatever this computer's was.
+  it("reads calendars in this computer's zone", async () => {
+    const getCalendar = vi.fn(async () => ({}));
+    (globalThis as { go?: unknown }).go = { main: { App: { GetCalendar: getCalendar } } };
+    render(<DataSourcesScreen />);
+    await waitFor(() => expect(getCalendar).toHaveBeenCalled());
+    expect(getCalendar).toHaveBeenCalledWith(expect.objectContaining({ zoneId: "Europe/London" }));
+  });
+
+  // The row read "Not connected" whatever Settings said.
+  it("says what desktop activity is doing", async () => {
+    (globalThis as { go?: unknown }).go = {
+      main: {
+        App: {
+          GetActivityCollection: async () => ({
+            enabled: true,
+            running: true,
+            supported: true,
+            zoneId: "Europe/London",
+            recordCount: 14,
+            lastError: "",
+          }),
+        },
+      },
+    };
+    render(<DataSourcesScreen />);
+    const row = (await screen.findByRole("heading", { name: "Desktop activity" })).closest(
+      "article",
+    );
+    expect(row).toHaveTextContent("14 records of when this computer was active, idle or locked");
+    expect(row).toHaveTextContent("Running");
   });
 
   // Somebody who used to add an entry here must be told where it went rather

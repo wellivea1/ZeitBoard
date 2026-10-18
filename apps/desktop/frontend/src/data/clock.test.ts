@@ -6,7 +6,14 @@ function rootWith(methods: Record<string, (input?: unknown) => Promise<unknown>>
   return { go: { main: { App: methods } } };
 }
 
-const stored = { preference: "24", clock: "24", system: "12", revision: 3, conflict: false };
+const stored = {
+  preference: "24",
+  clock: "24",
+  system: "12",
+  platform: "windows",
+  revision: 3,
+  conflict: false,
+};
 
 afterEach(() => {
   setWindowClock("12");

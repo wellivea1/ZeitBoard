@@ -60,6 +60,28 @@ describe("ClockSettings", () => {
     );
   });
 
+  // Away from Windows there is no regional format to follow, and the first
+  // choice offered to follow Windows anyway.
+  it.each(["macos", "linux"])("names ZeitBoard's own default on %s", async (platform) => {
+    install({
+      GetClockSetting: async () => ({
+        preference: "system",
+        clock: "12",
+        system: "12",
+        platform,
+        revision: 1,
+        conflict: false,
+      }),
+    });
+    render(<ClockSettings />);
+    const first = await screen.findByRole("radio", { name: /ZeitBoard's default/ });
+    expect(first).toBeChecked();
+    expect(first.closest("label")).toHaveTextContent(
+      "The 12-hour clock, until you choose another.",
+    );
+    expect(screen.queryByText(/Windows/)).toBeNull();
+  });
+
   it("saves a choice and puts it in use at once", async () => {
     const saves = stub("12");
     render(<ClockSettings />);

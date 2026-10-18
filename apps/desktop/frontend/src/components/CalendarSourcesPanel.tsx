@@ -16,6 +16,7 @@ import {
   loadCalendarWriteBack,
   type CalendarWriteBack,
 } from "../data/calendarWriteBack";
+import { localZone } from "../utils/civilTime";
 
 // The calendars ZeitBoard reads, and adding another. This used to sit in a
 // narrow column beside the calendar board; it is set up once and rarely
@@ -97,11 +98,12 @@ function sourceKind(source: CalendarSource) {
 export function CalendarSourcesPanel({
   sources,
   available,
-  zoneId = "America/New_York",
+  zoneId = localZone() || "America/New_York",
   onChanged,
 }: {
   sources: CalendarSource[];
   available: boolean;
+  /** Where an added calendar's floating times are placed: this computer's zone. */
   zoneId?: string;
   onChanged: () => void;
 }) {

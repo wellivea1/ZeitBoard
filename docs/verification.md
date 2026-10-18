@@ -3370,3 +3370,35 @@ Seen in the running desktop:
 - **What the estimator sees.** Rhythm › Sources said "All entries feed the estimate" when none was
   excluded. The estimate reads only the 21 latest main sleeps, so it now says "None excluded from
   the estimate".
+- **The clock.** Settings › Display offered "As Windows does" on every system, though only
+  Windows has a regional format the desktop reads. Elsewhere that choice is the twelve-hour clock
+  ZeitBoard has always written, and is now named "ZeitBoard's default". The desktop sends its
+  system with the clock setting; a Go test checks it, and component tests check the wording for
+  macOS and Linux. A stored clock that cannot be read no longer says "Windows' own is in use"
+  away from Windows, where it is ZeitBoard's default.
+- **Medication reminders.** The opt-in read "Show this label through Windows". It now reads "as a
+  desktop notification". Where notifications are unavailable, the medication screen already says
+  that enabled reminders will not be shown.
+- **The tray.** Where there is no tray, "While ZeitBoard is running" said both that closing the
+  window hides it in the tray and that closing it quits. Now it says only the second.
+
+## Data Sources says what is true — 2026-10-18
+
+Found reading Data Sources while checking other systems:
+
+- **Calendars in this computer's zone.** The screen read calendars in New York's zone whatever
+  the computer's was, and handed that zone on to every calendar added there. The desktop places an
+  added file's floating times in it, so away from New York they landed hours out. The screen now
+  uses this computer's zone, as Home and Plan always have.
+- **Desktop activity.** The row read "Not connected · Off" whatever Settings said. It now says
+  what Settings › This computer says: off until turned on there, running with how many records
+  (and whether sleep and wake are read from Windows), stopped with the reason, or unavailable on
+  a system that cannot record it. Until the status is read, the row is left out, as the sync row
+  is.
+- **Activity away from Windows.** Only Windows records desktop activity, yet elsewhere the card
+  offered a time zone and an Enable button that could never work, and promised reading sleep and
+  wake from Windows. It now says ZeitBoard cannot record desktop activity on this system, and
+  mentions Windows' log only where it can be read.
+
+Component tests cover each, and the screen's run as a computer in London. All four new tests fail
+without the change.

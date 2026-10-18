@@ -4,6 +4,7 @@ import { ActivityExportPanel } from "../components/ActivityExportPanel";
 import { CalendarSourcesPanel } from "../components/CalendarSourcesPanel";
 import { DataSourceStatusPanel } from "../components/DataSourceStatusPanel";
 import { SleepImportPanel } from "../components/SleepImportPanel";
+import { loadActivityCollection } from "../data/activityCollection";
 import { loadBackendSyncStatus, type BackendSyncStatus } from "../data/backendSync";
 import {
   calendarDataChangedEvent,
@@ -16,12 +17,17 @@ import { loadSleepSources, sleepSourcesUnavailable } from "../data/sleepEntries"
 import { loadSourceStatuses } from "../data/sourceStatus";
 import { sleepDataChangedEvent } from "../data/sleepDataEvents";
 import { useLoaded } from "../state/useLoaded";
+import { localZone } from "../utils/civilTime";
 
 // Data Sources is about where records come from: what is connected, and how to
 // bring more in. Recording last night is in Log. Calendars moved here from
 // beside the calendar board, because adding one is set-up, not planning.
 
-const calendarZone = "America/New_York";
+// The zone a calendar is read in, and an added file's floating times placed in:
+// this computer's, as on Home and Plan. It was New York's for everyone.
+function calendarZone() {
+  return localZone() || "America/New_York";
+}
 
 interface CalendarSources {
   ready: boolean;
@@ -31,20 +37,17 @@ interface CalendarSources {
 }
 
 function useCalendarSources(): CalendarSources {
-  const [state, setState] = useState<CalendarSources>({
+  const [state, setState] = useState<CalendarSources>(() => ({
     ready: false,
     available: false,
-    zoneId: calendarZone,
+    zoneId: calendarZone(),
     sources: [],
-  });
+  }));
   useEffect(() => {
     let current = true;
     const load = () => {
-      void loadCalendar({
-        startCivilDate: todayCivilDate(calendarZone),
-        days: 1,
-        zoneId: calendarZone,
-      }).then(
+      const zoneId = calendarZone();
+      void loadCalendar({ startCivilDate: todayCivilDate(zoneId), days: 1, zoneId }).then(
         (result) => {
           if (!current) return;
           setState({
@@ -81,6 +84,8 @@ export function DataSourcesScreen() {
   });
   const [syncStatus, setSyncStatus] = useState<BackendSyncStatus | undefined>(undefined);
   const calendars = useCalendarSources();
+  // Without an answer the row is left out, as the sync row is.
+  const { data: activity } = useLoaded(loadActivityCollection);
 
   useEffect(() => {
     let current = true;
@@ -105,6 +110,7 @@ export function DataSourcesScreen() {
           sourceStatuses={sourceStatuses}
           syncStatus={syncStatus}
           calendarSources={calendars.ready ? calendars.sources : undefined}
+          activity={activity}
         />
         <CalendarSourcesPanel
           sources={calendars.sources}
