@@ -1739,6 +1739,20 @@ came back on every reading as busy time ZeitBoard did not recognise.
     safe, and the time was undone.
   - Three readings of a Google event remain, and each judges what it reads for its own purpose.
 
+### The owner's choices — 2026-10-18
+
+Asked what only they could decide, the owner chose:
+
+- **Encryption.** Keep Windows' file encryption, not encryption inside the database, and keep
+  ZeitBoard working on other systems. On those, Settings now names the system's own disk
+  encryption, FileVault on a Mac or full-disk encryption elsewhere, and never Windows. A refusal
+  to encrypt there says the same. The desktop vets clean for Linux and macOS, and CI already
+  builds and tests it on Linux.
+- **Checking the running app.** Through Claude in Chrome, against the desktop's development
+  address and a throwaway data folder, never the owner's own.
+- **The window's coverage.** Add `@vitest/coverage-v8` and record the figure.
+- **The screen-reader pass.** Narrator, turned on for it, through the development window.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and
@@ -1763,7 +1777,7 @@ or deferred with its reason.
 
 | # | Limitation | Disposition |
 |---|---|---|
-| 1 | ~~The local database is not encrypted at rest.~~ | Resolved 2026-10-12 on Windows editions with file encryption: by choice, Windows encrypts the data folder and every file in it (ADR-0063). Owner-only permissions remain everywhere. Encryption inside the database itself waits on adopting a driver (ADR-0035's update). |
+| 1 | ~~The local database is not encrypted at rest.~~ | Resolved 2026-10-12 on Windows editions with file encryption: by choice, Windows encrypts the data folder and every file in it (ADR-0063). Owner-only permissions remain everywhere. The owner chose, 2026-10-18, to keep Windows' file encryption rather than encrypt inside the database; other systems are pointed to their own disk encryption (ADR-0063's update). |
 | 2 | ~~A calendar file is refreshed by importing the updated file again, under the same name.~~ | Resolved 2026-10-12: a calendar subscribed by its private address is read again every hour (ADR-0062). A file still refreshes by importing it again. |
 | 3 | Accepted times go to one calendar at a time, by CalDAV or from a Google or Microsoft account, and the calendar's host can read their task names (ADR-0053, ADR-0065; disclosed in the offer). | Accepted by design. |
 | 4 | Estimates use recorded sleep only. Multi-source inference stays in shadow mode after a negative promotion decision (ADR-0031). | Deferred analysis work. It ships only after a candidate passes the measured gate. |
@@ -1786,9 +1800,9 @@ tests and a verification entry. Where it waits on something outside the code, th
 
 **Standing, 2026-10-12.** Every function in the table is delivered. One possible extension waits
 on the owner rather than on code:
-- Encryption inside the database needs a new SQLite driver, which is a download and a dependency,
-  and a decision on who holds the key. Windows' file encryption covers the files in the meantime
-  (ADR-0063).
+- ~~Encryption inside the database needs a new SQLite driver, which is a download and a
+  dependency, and a decision on who holds the key.~~ Decided 2026-10-18: the owner keeps Windows'
+  file encryption (ADR-0063's update).
 
 | Function | Named in | Status |
 |---|---|---|
@@ -1805,4 +1819,4 @@ on the owner rather than on code:
 | Activity collected while the app is closed | Roadmap, slice 11 | Delivered 2026-10-12 (ADR-0060) from Windows' own power log, by a separate choice. The collector itself still stops when ZeitBoard quits |
 | OAuth calendar providers | Roadmap, slice 6 and phase 3 | Delivered 2026-10-12: Google and Microsoft accounts sign in through an app the owner registers, with no registration in ZeitBoard's name, and are read every hour (ADR-0064). Accepted times can be written to one of their calendars, with CalDAV write-back's guarantees (ADR-0065). Calendars that publish an address can also subscribe by it (ADR-0062) |
 | Packaged cloud skills for assistants | Roadmap, phase 4 | Delivered 2026-10-12 for Claude (ADR-0061), with its privacy and threat review. ChatGPT and Claude on the web take remote servers only, which ZeitBoard does not expose |
-| Encrypting the local database | Roadmap, phase 2; limitation 1 | Delivered 2026-10-12 with Windows' file encryption, by choice (ADR-0063). Encryption inside the database, with a key ZeitBoard holds, would need `ncruces/go-sqlite3`'s encrypting VFS: a new pre-v1 dependency to download, and a key-custody decision for the owner |
+| Encrypting the local database | Roadmap, phase 2; limitation 1 | Delivered 2026-10-12 with Windows' file encryption, by choice (ADR-0063). Encryption inside the database, with a key ZeitBoard holds, would need `ncruces/go-sqlite3`'s encrypting VFS: a new pre-v1 dependency to download, and a key-custody decision for the owner. The owner chose not to, 2026-10-18 (ADR-0063's update) |

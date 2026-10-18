@@ -48,3 +48,7 @@ the file open.
   the real round trip runs only in CI, on a throwaway Windows account.
 - Not done: page-level encryption with a key ZeitBoard holds, which waits on adopting the driver
   in ADR-0035's update.
+- Update, 2026-10-18: the owner chose to keep Windows' file encryption rather than encrypt inside
+  the database, and to keep ZeitBoard working on other systems. There Settings names the system's
+  own disk encryption, FileVault on a Mac or the disk encryption most Linux systems offer when
+  installed, and never speaks of Windows. A refusal to encrypt says the same.

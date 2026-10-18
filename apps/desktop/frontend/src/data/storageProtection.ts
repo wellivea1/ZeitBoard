@@ -20,6 +20,8 @@ export interface StorageProtectionFile {
 /** The choice to have Windows encrypt ZeitBoard's folder, and how far it went. */
 export interface StorageEncryption {
   supported: boolean;
+  /** The operating system: windows, macos, linux, or another as Go names it. */
+  platform: string;
   chosen: boolean;
   encryptedFiles: number;
   files: number;
@@ -38,6 +40,7 @@ export interface StorageProtection {
 
 const noEncryption: StorageEncryption = {
   supported: false,
+  platform: "windows",
   chosen: false,
   encryptedFiles: 0,
   files: 0,
@@ -92,6 +95,7 @@ function encryption(value: unknown): StorageEncryption {
   const files = count(value.files);
   return {
     supported: value.supported === true,
+    platform: str(value.platform) ?? "windows",
     chosen: value.chosen === true,
     // More encrypted than there are files cannot be, so it reads as none.
     encryptedFiles: count(value.encryptedFiles) <= files ? count(value.encryptedFiles) : 0,

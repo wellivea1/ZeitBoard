@@ -26,6 +26,7 @@ describe("normalizeStorageProtection", () => {
     const plain = normalizeStorageProtection(payload());
     expect(plain?.encryption).toEqual({
       supported: false,
+      platform: "windows",
       chosen: false,
       encryptedFiles: 0,
       files: 0,
@@ -45,6 +46,11 @@ describe("normalizeStorageProtection", () => {
       payload({ encryption: { supported: true, encryptedFiles: 9, files: 4 } }),
     );
     expect(impossible?.encryption.encryptedFiles).toBe(0);
+  });
+
+  it("says which system the files are on", () => {
+    const mac = normalizeStorageProtection(payload({ encryption: { platform: "macos" } }));
+    expect(mac?.encryption.platform).toBe("macos");
   });
 
   it("accepts a complete report", () => {

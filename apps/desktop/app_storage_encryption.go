@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 
 	"non24.app/desktop/platform/efs"
@@ -48,9 +49,15 @@ type StorageEncryptionInput struct {
 
 // StorageEncryptionDTO is the choice and how far Windows has carried it out.
 type StorageEncryptionDTO struct {
-	// Supported is false on a Windows without file encryption, such as Home.
+	// Supported is false on a Windows without file encryption, such as Home,
+	// and on every other system.
 	Supported bool `json:"supported"`
 	Chosen    bool `json:"chosen"`
+
+	// Platform is the operating system: windows, macos or linux, or another
+	// as Go names it. Where ZeitBoard cannot encrypt its files itself, the
+	// window points to that system's own disk encryption.
+	Platform string `json:"platform"`
 
 	// EncryptedFiles of Files are encrypted now. Pending says the files do
 	// not match the choice yet, which the next start puts right.
@@ -117,7 +124,7 @@ func applyStorageEncryption(dir string, crypt fileCrypt) error {
 		if !encrypt {
 			return nil
 		}
-		return errors.New("Windows on this computer cannot encrypt files.")
+		return noFileEncryption(runtime.GOOS)
 	}
 	paths, err := storagePaths(dir)
 	if err != nil {
@@ -155,7 +162,7 @@ func applyStorageEncryption(dir string, crypt fileCrypt) error {
 
 // storageEncryptionStatus reads back what Windows says about each file.
 func storageEncryptionStatus(dir string, crypt fileCrypt, problem string) StorageEncryptionDTO {
-	status := StorageEncryptionDTO{Problem: problem}
+	status := StorageEncryptionDTO{Problem: problem, Platform: platformName(runtime.GOOS)}
 	chosen, saved, err := readStorageEncryptionChoice(dir)
 	if err != nil && status.Problem == "" {
 		status.Problem = "The saved encryption choice could not be read."
@@ -193,7 +200,7 @@ func (a *App) SetStorageEncryption(input StorageEncryptionInput) (StorageProtect
 	}
 	crypt := a.storageCrypt()
 	if status, err := crypt.Check(dir); input.Encrypt && (err != nil || status == efs.Unsupported) {
-		return StorageProtectionDTO{}, errors.New("Windows on this computer cannot encrypt files.")
+		return StorageProtectionDTO{}, noFileEncryption(runtime.GOOS)
 	}
 	if err := writeStorageEncryptionChoice(dir, input.Encrypt); err != nil {
 		return StorageProtectionDTO{}, errors.New("The choice could not be saved. Nothing was changed.")
@@ -205,6 +212,24 @@ func (a *App) SetStorageEncryption(input StorageEncryptionInput) (StorageProtect
 	}
 	a.storageEncryptionProblem = ""
 	return a.GetStorageProtection()
+}
+
+// platformName names an operating system as the window words it.
+func platformName(goos string) string {
+	if goos == "darwin" {
+		return "macos"
+	}
+	return goos
+}
+
+// noFileEncryption says why encrypting ZeitBoard's files was refused: a
+// Windows without file encryption, or a system ZeitBoard does not encrypt
+// files on, where encrypting the disk protects them instead.
+func noFileEncryption(goos string) error {
+	if goos == "windows" {
+		return errors.New("Windows on this computer cannot encrypt files.")
+	}
+	return errors.New("ZeitBoard encrypts its files on Windows only. Encrypting this computer's disk protects them here.")
 }
 
 func (a *App) storageCrypt() fileCrypt {
