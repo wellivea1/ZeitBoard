@@ -3370,3 +3370,24 @@ Seen in the running desktop:
 - **What the estimator sees.** Rhythm › Sources said "All entries feed the estimate" when none was
   excluded. The estimate reads only the 21 latest main sleeps, so it now says "None excluded from
   the estimate".
+
+## Data Sources says what is true — 2026-10-18
+
+Found reading Data Sources while checking other systems:
+
+- **Calendars in this computer's zone.** The screen read calendars in New York's zone whatever
+  the computer's was, and handed that zone on to every calendar added there. The desktop places an
+  added file's floating times in it, so away from New York they landed hours out. The screen now
+  uses this computer's zone, as Home and Plan always have.
+- **Desktop activity.** The row read "Not connected · Off" whatever Settings said. It now says
+  what Settings › This computer says: off until turned on there, running with how many records
+  (and whether sleep and wake are read from Windows), stopped with the reason, or unavailable on
+  a system that cannot record it. Until the status is read, the row is left out, as the sync row
+  is.
+- **Activity away from Windows.** Only Windows records desktop activity, yet elsewhere the card
+  offered a time zone and an Enable button that could never work, and promised reading sleep and
+  wake from Windows. It now says ZeitBoard cannot record desktop activity on this system, and
+  mentions Windows' log only where it can be read.
+
+Component tests cover each, and the screen's run as a computer in London. All four new tests fail
+without the change.

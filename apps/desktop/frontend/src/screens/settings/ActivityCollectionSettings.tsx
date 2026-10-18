@@ -212,8 +212,9 @@ export function ActivityCollectionSettings() {
             Once on, it continues when you hide or close the window and resumes when ZeitBoard
             reopens; Quit from the tray stops it. It cannot collect while the computer is asleep or
             the app is closed, and gaps between polls are kept as possible suspend and resume
-            evidence. With sleep and wake read from Windows, the times Windows noted while ZeitBoard
-            was closed are read when it runs again.
+            evidence.
+            {status?.powerLog.supported &&
+              " With sleep and wake read from Windows, the times Windows noted while ZeitBoard was closed are read when it runs again."}
           </p>
         </details>
       </div>
@@ -229,44 +230,50 @@ export function ActivityCollectionSettings() {
               <dd>{status?.recordCount ?? "Unavailable"}</dd>
             </div>
           </dl>
-          {status && !status.supported && (
-            <p>This platform does not support activity collection.</p>
-          )}
-          <label className="reaching-field">
-            <span>Activity time zone</span>
-            <input
-              list="activity-zones"
-              value={zone}
-              disabled={busy || !status || status.enabled}
-              onChange={(event) => setZone(event.target.value)}
-            />
-            <datalist id="activity-zones">
-              {zones.map((item) => (
-                <option key={item} value={item} />
-              ))}
-            </datalist>
-          </label>
-          <button
-            className="button primary"
-            type="button"
-            disabled={busy || !canToggleCollection(status, zone)}
-            onClick={() =>
-              void run(() =>
-                setActivityCollection(!status?.enabled, status?.enabled ? status.zoneId : zone),
-              )
-            }
-          >
-            {status?.enabled ? "Turn off activity collection" : "Enable local activity collection"}
-          </button>
-          {status?.enabled && !status.running && (
-            <button
-              type="button"
-              className="button secondary"
-              disabled={busy}
-              onClick={() => void run(() => setActivityCollection(true, status.zoneId))}
-            >
-              Retry collection
-            </button>
+          {status && !status.supported && !status.enabled ? (
+            // Nothing here could turn it on, so nothing is offered.
+            <p>ZeitBoard cannot record desktop activity on this system.</p>
+          ) : (
+            <>
+              <label className="reaching-field">
+                <span>Activity time zone</span>
+                <input
+                  list="activity-zones"
+                  value={zone}
+                  disabled={busy || !status || status.enabled}
+                  onChange={(event) => setZone(event.target.value)}
+                />
+                <datalist id="activity-zones">
+                  {zones.map((item) => (
+                    <option key={item} value={item} />
+                  ))}
+                </datalist>
+              </label>
+              <button
+                className="button primary"
+                type="button"
+                disabled={busy || !canToggleCollection(status, zone)}
+                onClick={() =>
+                  void run(() =>
+                    setActivityCollection(!status?.enabled, status?.enabled ? status.zoneId : zone),
+                  )
+                }
+              >
+                {status?.enabled
+                  ? "Turn off activity collection"
+                  : "Enable local activity collection"}
+              </button>
+              {status?.enabled && !status.running && (
+                <button
+                  type="button"
+                  className="button secondary"
+                  disabled={busy}
+                  onClick={() => void run(() => setActivityCollection(true, status.zoneId))}
+                >
+                  Retry collection
+                </button>
+              )}
+            </>
           )}
         </section>
         {status?.powerLog.supported && (

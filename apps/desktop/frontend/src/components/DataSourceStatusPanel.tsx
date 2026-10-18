@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import type { ActivityCollection } from "../data/activityCollection";
 import type { BackendSyncStatus } from "../data/backendSync";
 import type { CalendarSource } from "../data/calendar";
 import type { SleepSourceSummary, SleepSources } from "../data/sleepEntries";
@@ -74,6 +75,59 @@ function SyncRow({ status }: { status: BackendSyncStatus }) {
   );
 }
 
+// What this computer records of itself, in the words Settings › This computer
+// uses. The row once read "Not connected" whatever the setting was.
+function ActivityRow({ status }: { status: ActivityCollection }) {
+  const settings = <a href="#/settings/computer">Settings</a>;
+  if (!status.supported && !status.enabled) {
+    return (
+      <SourceRow
+        icon="sources"
+        name="Desktop activity"
+        detail="This system cannot record it."
+        status="Unavailable"
+      />
+    );
+  }
+  if (!status.enabled) {
+    return (
+      <SourceRow
+        icon="sources"
+        name="Desktop activity"
+        detail={<>Off unless you turn it on in {settings}.</>}
+        status="Off"
+      />
+    );
+  }
+  const records = `${status.recordCount} ${status.recordCount === 1 ? "record" : "records"}`;
+  if (!status.running) {
+    return (
+      <SourceRow
+        icon="sources"
+        name="Desktop activity"
+        detail={
+          <>
+            {status.lastError || "It has stopped."} {records} kept. Retry in {settings}.
+          </>
+        }
+        status="Stopped"
+        state="error"
+      />
+    );
+  }
+  return (
+    <SourceRow
+      icon="sources"
+      name="Desktop activity"
+      detail={`${records} of when this computer was active, idle or locked${
+        status.powerLog.enabled ? ", and sleep and wake read from Windows" : ""
+      }`}
+      status="Running"
+      state="available"
+    />
+  );
+}
+
 // The nights more than one record describes are listed where the estimator's
 // view of the sources is: Rhythm › Sources.
 function OverlapNote({ count }: { count: number }) {
@@ -93,6 +147,7 @@ export function DataSourceStatusPanel({
   sourceStatuses = [],
   syncStatus,
   calendarSources,
+  activity,
 }: {
   /** Undefined while loading, like each row here: it waits rather than claiming none. */
   sleepSources?: SleepSources;
@@ -100,6 +155,7 @@ export function DataSourceStatusPanel({
   sourceStatuses?: SourceStatus[];
   syncStatus?: BackendSyncStatus;
   calendarSources?: CalendarSource[];
+  activity?: ActivityCollection;
 }) {
   const summaries = sleepSources?.sources ?? [];
   const localUnavailable = sleepSources?.status === "unavailable";
@@ -159,7 +215,7 @@ export function DataSourceStatusPanel({
             state={importedCalendars.length > 0 ? "available" : "off"}
           />
         )}
-        <SourceRow icon="sources" name="Device activity" detail="Not connected" status="Off" />
+        {activity && <ActivityRow status={activity} />}
       </div>
       <OverlapNote count={sleepSources?.overlapCount ?? 0} />
     </section>

@@ -1770,7 +1770,11 @@ synthetic nights. What it found:
   double plot, a row for each day and the next, with the days to come above today. Sources no longer
   says every entry feeds the estimate, which reads only the latest 21 sleeps.
 - **Settings › This computer.** Login startup spoke of Windows everywhere and offered a switch that
-  could not work away from it. Each system is now told what starts ZeitBoard at sign-in.
+  could not work away from it. Each system is now told what starts ZeitBoard at sign-in. Desktop
+  activity, also Windows' alone, now says so elsewhere instead of offering an Enable button.
+- **Data Sources.** Calendars were read, and an added file's floating times placed, in New York's
+  zone on every computer. They now use this computer's zone. The desktop activity row read "Not
+  connected" whatever Settings said; it now says what Settings does.
 - **Everything else.** Log, Sharing, Data Sources, the other settings and the assistant rail
   showed no defect. No screen is wider than the window, at the window's minimum size of 900 by 620
   as well.

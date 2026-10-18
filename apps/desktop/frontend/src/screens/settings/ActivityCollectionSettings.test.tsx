@@ -70,6 +70,17 @@ it("shows a failed collector as stopped and requires an explicit retry", async (
   expect(set).toHaveBeenCalledWith({ enabled: true, zoneId: "UTC" });
 });
 
+// Away from Windows nothing records desktop activity, and the card offered a
+// time zone and a switch that could never turn it on.
+it("says plainly where desktop activity cannot be recorded", async () => {
+  install({ GetActivityCollection: async () => ({ ...initial, supported: false }) });
+  render(<ActivityCollectionSettings />);
+  await screen.findByText("ZeitBoard cannot record desktop activity on this system.");
+  expect(screen.queryByRole("button", { name: "Enable local activity collection" })).toBeNull();
+  expect(screen.queryByLabelText("Activity time zone")).toBeNull();
+  expect(screen.queryByText(/Windows/)).toBeNull();
+});
+
 // Reading Windows' log is a choice of its own: it says what it reads before it
 // is made, and waits for desktop activity to be on.
 it("offers to read sleep and wake from Windows once activity is on", async () => {

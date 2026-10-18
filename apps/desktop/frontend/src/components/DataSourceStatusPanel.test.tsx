@@ -73,6 +73,65 @@ describe("DataSourceStatusPanel", () => {
     );
   });
 
+  // Desktop activity is said in the words Settings uses, rather than the fixed
+  // "Not connected" the row once read, and is left out until it is known.
+  it("says whether this computer records its own activity", () => {
+    const activity = {
+      enabled: false,
+      running: false,
+      supported: true,
+      zoneId: "UTC",
+      recordCount: 0,
+      lastError: "",
+      powerLog: { supported: true, enabled: false, entries: 0, sinceLabel: "", lastError: "" },
+    };
+    const row = () => screen.getByRole("heading", { name: "Desktop activity" }).closest("article");
+    const { rerender } = render(<DataSourceStatusPanel />);
+    expect(screen.queryByRole("heading", { name: "Desktop activity" })).toBeNull();
+
+    rerender(<DataSourceStatusPanel activity={activity} />);
+    expect(row()).toHaveTextContent("Off unless you turn it on in Settings.");
+    expect(screen.getByRole("link", { name: "Settings" })).toHaveAttribute(
+      "href",
+      "#/settings/computer",
+    );
+
+    rerender(
+      <DataSourceStatusPanel
+        activity={{
+          ...activity,
+          enabled: true,
+          running: true,
+          recordCount: 1,
+          powerLog: { ...activity.powerLog, enabled: true },
+        }}
+      />,
+    );
+    expect(row()).toHaveTextContent(
+      "1 record of when this computer was active, idle or locked, and sleep and wake read from Windows",
+    );
+    expect(row()).toHaveTextContent("Running");
+
+    rerender(
+      <DataSourceStatusPanel
+        activity={{
+          ...activity,
+          enabled: true,
+          recordCount: 6,
+          lastError: "Records could not be saved.",
+        }}
+      />,
+    );
+    expect(row()).toHaveTextContent(
+      "Records could not be saved. 6 records kept. Retry in Settings.",
+    );
+    expect(row()).toHaveTextContent("Stopped");
+
+    rerender(<DataSourceStatusPanel activity={{ ...activity, supported: false }} />);
+    expect(row()).toHaveTextContent("This system cannot record it.");
+    expect(row()).toHaveTextContent("Unavailable");
+  });
+
   it("points to the nights with more than one record", () => {
     const sources = {
       status: "ready" as const,
