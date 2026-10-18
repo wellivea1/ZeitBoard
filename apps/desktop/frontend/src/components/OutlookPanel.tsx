@@ -44,6 +44,23 @@ function segmentTitle(segment: OutlookSegment) {
   } ${segment.rangeLabel}`;
 }
 
+// Each axis label has its own stretch of the strip: "Now" what is left of
+// today, and each day its hours from its tick to the next, or to the strip's
+// end. A label too long for its stretch is left off (outlook.css), so none runs
+// into the next or past the window's edge, and the tick still marks the day.
+function axisRooms(data: OutlookData) {
+  const ends = [...data.days.map((day) => day.offsetHours), data.horizonHours];
+  return [
+    { label: "Now", from: 0, to: ends[0] ?? data.horizonHours, now: true },
+    ...data.days.map((day, index) => ({
+      label: day.label,
+      from: day.offsetHours,
+      to: ends[index + 1] ?? data.horizonHours,
+      now: false,
+    })),
+  ];
+}
+
 function OutlookTimeline({ data }: { data: OutlookData }) {
   const placedEvents = data.commitments.filter(
     (commitment) => commitment.offsetHours !== undefined && commitment.durationHours !== undefined,
@@ -120,15 +137,21 @@ function OutlookTimeline({ data }: { data: OutlookData }) {
           </>
         )}
 
-        {/* The day labels live outside the tracks. Inside they were clipped by
-            the overflow that keeps the bands' rounded corners. */}
+        {/* The labels live outside the tracks. Inside they were clipped by the
+            overflow that keeps the bands' rounded corners. */}
         <span />
         <div className="outlook-axis" aria-hidden="true">
-          <small className="outlook-axis-now">Now</small>
-          {data.days.map((day) => (
-            <small key={day.label} style={{ left: percent(day.offsetHours, data.horizonHours) }}>
-              {day.label}
-            </small>
+          {axisRooms(data).map((room) => (
+            <span
+              key={room.label}
+              className="outlook-axis-room"
+              style={{
+                left: percent(room.from, data.horizonHours),
+                width: percent(room.to - room.from, data.horizonHours),
+              }}
+            >
+              <small className={room.now ? "outlook-axis-now" : undefined}>{room.label}</small>
+            </span>
           ))}
         </div>
       </div>

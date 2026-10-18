@@ -1753,6 +1753,31 @@ Asked what only they could decide, the owner chose:
 - **The window's coverage.** Add `@vitest/coverage-v8` and record the figure.
 - **The screen-reader pass.** Narrator, turned on for it, through the development window.
 
+### The running app — 2026-10-18
+
+Claude in Chrome could not reach the desktop's development address, because the browser connected
+to it runs on another computer. The built-in browser pane now loads the Wails bridge it once
+blocked, so the window was checked there instead, against a throwaway data folder holding 22
+synthetic nights. What it found:
+
+- **Home.** The label of Fig. 1's last day ran past the window's edge, and the page scrolled
+  sideways. Each label now keeps to its own stretch of the axis, and one that does not fit is left
+  off.
+- **Plan › Week.** The time of now sat over the hour beside it, half hiding it, and ignored the
+  24-hour clock. The hour now gives way, and the time follows the window's clock.
+- **Rhythm.** The actogram's right half repeated each row's own sleep, where the time probe said
+  the next day. With the forecast shown, time ran up the page and then down it. It is now a true
+  double plot, a row for each day and the next, with the days to come above today. Sources no longer
+  says every entry feeds the estimate, which reads only the latest 21 sleeps.
+- **Settings › This computer.** Login startup spoke of Windows everywhere and offered a switch that
+  could not work away from it. Each system is now told what starts ZeitBoard at sign-in.
+- **Everything else.** Log, Sharing, Data Sources, the other settings and the assistant rail
+  showed no defect. No screen is wider than the window, at the window's minimum size of 900 by 620
+  as well.
+
+The Narrator pass has not run. When the window and Narrator were asked for, on 2026-10-18,
+control was declined, so the pass waits until the owner allows it. Nothing was turned on or typed.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and
@@ -1767,7 +1792,7 @@ who it waits on.
 | C4 assistant and agents | Every criterion met | — | — |
 | C5 live portal | Done | The independent review and the exposure gate (`portal-design.md` section 12); the portal stays off by default until then | An independent reviewer |
 | C6 notifications | Acceptance met | — | — |
-| C7 daily-use UX | Done but for one check | A screen-reader pass on real assistive technology: NVDA or Narrator on the desktop, TalkBack on the phone | The owner's permission to install or turn on a screen reader |
+| C7 daily-use UX | Done but for one check | A screen-reader pass on real assistive technology: NVDA or Narrator on the desktop, TalkBack on the phone | The owner allowing control of the window for the Narrator pass they chose on 2026-10-18 (declined when asked that day) |
 | C8 release | Material review findings resolved; upgrade regressions in CI | Clean-machine install, update across two published commits with rollback, Android bootstrap, service install and purge ceremony (`install-update-design.md`); production APK signing; private pilot and its measures; release artifacts and disposition | A clean Windows 11 VM, the owner's keystore, pilot participants |
 
 ### Known limitations and their dispositions

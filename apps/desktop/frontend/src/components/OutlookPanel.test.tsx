@@ -115,6 +115,31 @@ describe("OutlookPanel", () => {
     expect(container.querySelector(".outlook-track")?.textContent).toBe("");
   });
 
+  // A day beginning in the strip's last hours ran its label past the window's
+  // edge, and one beginning just after now ran its label into "Now". Each label
+  // now has only its own stretch, and the stylesheet leaves off a label its
+  // stretch cannot hold.
+  it("gives each axis label only its own stretch of the strip", () => {
+    const days = [
+      { label: "Thu, Aug 6", offsetHours: 0.5 },
+      { label: "Fri, Aug 7", offsetHours: 24.5 },
+      { label: "Sat, Aug 8", offsetHours: 48.5 },
+    ];
+    const { container } = render(<OutlookPanel data={{ ...base, horizonHours: 50, days }} />);
+    const rooms = [...container.querySelectorAll<HTMLElement>(".outlook-axis-room")].map(
+      (room) => ({
+        label: room.textContent,
+        from: parseFloat(room.style.left),
+        to: parseFloat(room.style.left) + parseFloat(room.style.width),
+      }),
+    );
+    expect(rooms.map((room) => room.label)).toEqual(["Now", ...days.map((day) => day.label)]);
+    expect(rooms[0]?.from).toBe(0);
+    rooms.forEach((room, index) => {
+      expect(room.to).toBeCloseTo(rooms[index + 1]?.from ?? 100);
+    });
+  });
+
   // Reachable hours and fixed events used to be separate lists restating days
   // the strip already showed. They are rows on the same axis now.
   it("draws reachable hours and events on the timeline's own axis", () => {

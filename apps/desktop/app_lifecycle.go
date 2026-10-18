@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -194,12 +195,25 @@ func (a *App) startupSettingsLocked() (StartupSettingsDTO, error) {
 	}
 	result.Available, result.Registered, result.MatchesCurrent, result.StartHidden = registration.Available, registration.Registered, registration.MatchesCurrent, registration.StartHidden
 	if !result.Available {
-		result.Message = "Login startup is unavailable on this platform."
+		result.Message = noLoginStartup(runtime.GOOS)
 	}
 	if result.Registered && !result.MatchesCurrent {
 		result.Message = "The startup entry points to another installation. Save to use this executable, or disable login startup."
 	}
 	return result, nil
+}
+
+// noLoginStartup says what starts ZeitBoard at sign-in where it cannot register
+// itself: Windows is the only system it does that on.
+func noLoginStartup(goos string) string {
+	switch goos {
+	case "windows":
+		return "Login startup is unavailable on this computer."
+	case "darwin":
+		return "ZeitBoard does not add itself to a Mac's login items. To open it when you sign in, add it in System Settings › General › Login Items."
+	default:
+		return "ZeitBoard does not start itself when you sign in here. Your desktop's startup applications can start it."
+	}
 }
 
 func (a *App) GetStartupSettings() (StartupSettingsDTO, error) {

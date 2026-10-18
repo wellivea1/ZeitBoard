@@ -3311,3 +3311,62 @@ in the desktop and component tests in the window:
   On a Mac it points to FileVault, in System Settings › Privacy & Security. On Linux it points to
   encrypting the whole disk. On neither does it speak of Windows or offer to encrypt with it.
 - The desktop module vets clean for Linux and macOS as well as Windows.
+
+## Day labels kept inside Home's figure — 2026-10-18
+
+Seen in the running desktop: the label of Fig. 1's last day, which began two and a half hours
+before the strip's end, ran past the window's edge, and Home scrolled sideways. A day beginning
+just after now would have run its label into "Now" the same way.
+
+Each label now has its own stretch of the axis: "Now" what is left of today, and each day its hours
+to the next tick or the strip's end. A label its stretch cannot hold is left off whole, and the
+tick still marks its day. A component test checks that each stretch ends where the next begins,
+and the last at the strip's end. In the running window, Home is no wider than the window, the last
+day's label is left off and the others stay where they were. With the first day moved to just
+after now, "Now" gives way and the day's label hangs from its tick.
+
+## Week's time of now — 2026-10-18
+
+Seen in the running desktop: at 2:43 the time of now in Plan › Week sat over "3 AM", which showed
+half of itself from behind it. The time of now was also written on the twelve-hour clock whatever
+the window's clock: "3:43" among "15:00" and "18:00".
+
+An hour within half the two labels' height of now, 17 pixels, is now left off, and the time of now
+is written on the window's clock. Component tests for the board check both, and fail without the
+change. In the running window at 2:45, the gutter shows "2:45" with no "3 AM" behind it. On the
+24-hour clock it shows "03:00" in place of the hour, and the clock was then set back.
+
+## Rhythm's actogram as a true double plot — 2026-10-18
+
+Seen in the running desktop: each row of Rhythm's actogram was a sleep, and its right half the
+same sleep moved a day on, while the time probe, as ui-refactor-plan.md §7 requires, called that
+half the next day. With the forecast shown, the observed rows ran newest first and the forecast
+rows oldest first under them, so the now line sat between the oldest night and tomorrow.
+
+The actogram now has a row for each civil day, holding the 48 hours from its midnight. A sleep is
+drawn whole, named and focusable on the row of the day it began, and faded where the rows either
+side repeat it. Rows still run newest first, and the days to come sit above today, under no line
+but the now line. A day with nothing in its 48 hours has no row, and a dashed rule marks the jump.
+Context markers follow the same rule. The probe says "predicted" only for a time after now.
+
+Tests of the layout check the next day on the right, the end of last night on today's row, the
+days to come above today with the now line between, the days left out with the rule, and markers
+on their day and the day before. The probe tests cover the following day, the newest-first order
+and "predicted" after now. In the running window, with 22 synthetic nights and the forecast shown,
+Oct 24 is at the top, the now line is between Oct 19 and today, and the drift runs as one slant
+through both.
+
+## Settings say what each system offers — 2026-10-18
+
+Seen in the running desktop:
+
+- **Login startup.** Settings › This computer spoke of Windows on every system: "Starting with
+  Windows", and "check Windows Settings → Apps → Startup". Where ZeitBoard cannot register itself,
+  it offered a switch and a save that could never work. Now the intro says "Starting at sign-in".
+  Where startup is unavailable, the card says what can start ZeitBoard instead, with no switch.
+  On a Mac that is Login Items in System Settings, elsewhere the desktop's startup applications,
+  and for a data profile of its own the existing reason. A Go test checks each system's words, and
+  a component test the card. The desktop vets clean for macOS and Linux.
+- **What the estimator sees.** Rhythm › Sources said "All entries feed the estimate" when none was
+  excluded. The estimate reads only the 21 latest main sleeps, so it now says "None excluded from
+  the estimate".

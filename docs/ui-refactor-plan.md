@@ -212,7 +212,9 @@ tabular numerals (minute precision — the charts' native resolution).
   the chip reads `Sat Jul 18 · 03:24` — the *second* plot resolves to the
   next civil day, exactly as the double plot implies. Hovering a forecast
   row appends the qualifier `predicted`; the probe never turns a range into
-  a point claim beyond the cursor position itself.
+  a point claim beyond the cursor position itself. (Since 2026-10-18 rows
+  are days, holding both what happened and what is forecast, so the
+  qualifier marks any time after now while the forecast is shown.)
 - **Drift chart:** a vertical hairline snaps to the nearest cycle; the chip
   reads the cycle's date + observed onset (and fitted onset when they
   differ), e.g. `Jul 12 · onset 02:47 (fit 02:52)`.

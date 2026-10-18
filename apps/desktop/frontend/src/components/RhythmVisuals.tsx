@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { Fragment, useCallback, useState } from "react";
 import type { RhythmDriftPoint, RhythmSleepBand } from "../data/rhythm";
 import type { RhythmActogram, RhythmDrift } from "../data/rhythm";
 import {
@@ -6,13 +6,17 @@ import {
   type RhythmMarker,
   type RhythmMarkerKind,
 } from "../data/rhythmMarkers";
+import {
+  actogramLayout,
+  DOUBLE_PLOT_HOURS,
+  type ActogramRow as ActogramRowLayout,
+  type PlacedBand,
+  type PlacedMarker,
+} from "./actogramLayout";
 import { RhythmMarkerGlyph } from "./RhythmMarkerGlyph";
 import { TimeProbe } from "./TimeProbe";
 import { civilProbeLabel, formatCivilDate, formatClock, useTimeProbe } from "./timeProbeLogic";
 import { hourOfDay } from "../utils/relativeTime";
-
-const DOUBLE_PLOT_HOURS = 48;
-const DAY_HOURS = 24;
 
 function hourToPercent(hour: number) {
   return `${(hour / DOUBLE_PLOT_HOURS) * 100}%`;
@@ -30,96 +34,84 @@ function bandAriaLabel(band: RhythmSleepBand) {
   return `${prefix}: ${band.day}, ${band.startLabel} to ${band.wakeLabel}, ${band.durationLabel}, ${band.source}`;
 }
 
-function ActogramBand({ band, duplicate = false }: { band: RhythmSleepBand; duplicate?: boolean }) {
-  const startHour = duplicate ? band.startHour + 24 : band.startHour;
+// A sleep is named and focused once, on the row of the day it began; on the
+// rows either side it is drawn again, faded, as the double plot repeats it.
+function ActogramBand({ placed }: { placed: PlacedBand }) {
+  const { band, from, to, primary } = placed;
   return (
     <span
-      className={`actogram-band is-${band.kind}${duplicate ? " is-duplicate" : ""}`}
-      style={bandStyle(startHour, band.durationHours)}
-      tabIndex={duplicate ? undefined : 0}
-      aria-hidden={duplicate || undefined}
-      aria-label={duplicate ? undefined : bandAriaLabel(band)}
-      role={duplicate ? undefined : "img"}
+      className={`actogram-band is-${band.kind}${primary ? "" : " is-duplicate"}`}
+      style={bandStyle(from, to - from)}
+      tabIndex={primary ? 0 : undefined}
+      aria-hidden={primary ? undefined : true}
+      aria-label={primary ? bandAriaLabel(band) : undefined}
+      role={primary ? "img" : undefined}
     />
   );
 }
 
-function ActogramMarker({
-  marker,
-  duplicate = false,
-}: {
-  marker: RhythmMarker;
-  duplicate?: boolean;
-}) {
-  const hour = duplicate ? marker.hour + DAY_HOURS : marker.hour;
+function ActogramMarker({ placed }: { placed: PlacedMarker }) {
+  const { marker, hour, primary } = placed;
   const label = `${marker.kindLabel}, self-reported context: ${marker.rangeLabel}${marker.note ? `. Note: ${marker.note}` : ""}`;
   return (
     <span
-      className={`actogram-marker${duplicate ? " is-duplicate" : ""}`}
+      className={`actogram-marker${primary ? "" : " is-duplicate"}`}
       style={{ left: hourToPercent(hour) }}
-      role={duplicate ? undefined : "img"}
-      aria-hidden={duplicate || undefined}
-      aria-label={duplicate ? undefined : label}
-      tabIndex={duplicate ? undefined : 0}
+      role={primary ? "img" : undefined}
+      aria-hidden={primary ? undefined : true}
+      aria-label={primary ? label : undefined}
+      tabIndex={primary ? 0 : undefined}
     >
       <RhythmMarkerGlyph kind={marker.kind} decorative />
     </span>
   );
 }
 
-function ActogramRow({
-  band,
-  now,
-  markers,
-}: {
-  band: RhythmSleepBand;
-  now: RhythmActogram["now"];
-  markers: RhythmMarker[];
-}) {
-  const duplicateFits = band.startHour + 24 < DOUBLE_PLOT_HOURS;
-  const showNowTick = Boolean(
-    band.zoneId && now.zoneId && band.civilDate === now.civilDate && band.zoneId === now.zoneId,
-  );
+function ActogramRow({ row }: { row: ActogramRowLayout }) {
   const resolveProbe = useCallback(
     (fraction: number) => ({
       position: fraction,
-      label: civilProbeLabel(band.civilDate, fraction * DOUBLE_PLOT_HOURS * 60, {
-        predicted: band.kind === "forecast",
+      label: civilProbeLabel(row.civilDate, fraction * DOUBLE_PLOT_HOURS * 60, {
+        predicted:
+          row.predictedFrom !== undefined && fraction * DOUBLE_PLOT_HOURS > row.predictedFrom,
       }),
-      zoneId: band.zoneId,
+      zoneId: row.zoneId,
     }),
-    [band.civilDate, band.kind, band.zoneId],
+    [row.civilDate, row.predictedFrom, row.zoneId],
   );
   const probe = useTimeProbe(resolveProbe);
 
   return (
-    <div className="actogram-visual-row">
-      <time>{band.day}</time>
+    <div className="actogram-visual-row" data-gap-above={row.gapAbove || undefined}>
+      <time dateTime={row.civilDate}>{row.label}</time>
       <div
         className="actogram-visual-track has-time-probe"
         onPointerMove={probe.onPointerMove}
         onPointerLeave={probe.onPointerLeave}
       >
-        {band.originalStartHour !== undefined && band.originalDurationHours !== undefined && (
-          <span
-            className="actogram-band is-original"
-            style={bandStyle(band.originalStartHour, band.originalDurationHours)}
-            aria-hidden="true"
-            title={band.originalLabel}
-          />
+        {row.bands.map(({ band, primary }) =>
+          primary &&
+          band.originalStartHour !== undefined &&
+          band.originalDurationHours !== undefined ? (
+            <span
+              className="actogram-band is-original"
+              style={bandStyle(band.originalStartHour, band.originalDurationHours)}
+              aria-hidden="true"
+              title={band.originalLabel}
+              key={`${band.id}-original`}
+            />
+          ) : null,
         )}
-        <ActogramBand band={band} />
-        {duplicateFits && <ActogramBand band={band} duplicate />}
-        {markers.map((marker) => (
-          <ActogramMarker marker={marker} key={marker.markerId} />
+        {row.bands.map((placed) => (
+          <ActogramBand placed={placed} key={placed.band.id} />
         ))}
-        {markers.map((marker) => (
-          <ActogramMarker marker={marker} duplicate key={`${marker.markerId}-duplicate`} />
+        {row.markers.map((placed) => (
+          <ActogramMarker placed={placed} key={placed.marker.markerId} />
         ))}
-        {showNowTick && (
+        {row.nowHour !== undefined && (
           <span
             className="actogram-now-tick"
-            style={{ left: hourToPercent(now.hour) }}
+            style={{ left: hourToPercent(row.nowHour) }}
             aria-hidden="true"
           />
         )}
@@ -137,26 +129,21 @@ export function ActogramPanel({
   markers?: RhythmMarker[];
 }) {
   const [showForecast, setShowForecast] = useState(false);
-  const forecastRows = showForecast ? actogram.forecastRows : [];
-  const allBands = [...actogram.observedRows, ...forecastRows];
-  const rowKey = (civilDate: string, zoneId?: string) => (zoneId ? `${civilDate}::${zoneId}` : "");
-  const plottedRows = new Set(allBands.map((band) => rowKey(band.civilDate, band.zoneId)));
-  const plottedMarkers = markers.filter((marker) =>
-    plottedRows.has(rowKey(marker.civilDate, marker.zoneId)),
-  );
-  const hiddenMarkerCount = markers.length - plottedMarkers.length;
+  const layout = actogramLayout(actogram, markers, showForecast);
+  const hiddenMarkerCount = markers.length - layout.markers.length;
   const presentMarkerKinds = (
     ["travel", "illness", "disruption", "forced_schedule"] as RhythmMarkerKind[]
-  ).filter((kind) => plottedMarkers.some((marker) => marker.kind === kind));
-  const markersByRow = new Map<string, RhythmMarker[]>();
-  for (const marker of plottedMarkers) {
-    const key = rowKey(marker.civilDate, marker.zoneId);
-    const sameRow = markersByRow.get(key) ?? [];
-    sameRow.push(marker);
-    markersByRow.set(key, sameRow);
-  }
-  const markersFor = (band: RhythmSleepBand) =>
-    markersByRow.get(rowKey(band.civilDate, band.zoneId)) ?? [];
+  ).filter((kind) => layout.markers.some((marker) => marker.kind === kind));
+  // The table lists each sleep once, in the chart's order, with the context
+  // marked on the day it began.
+  const listed = layout.rows.flatMap((row) =>
+    row.bands
+      .filter((placed) => placed.primary)
+      .map(({ band }) => ({
+        band,
+        markers: row.markers.filter((placed) => placed.primary).map((placed) => placed.marker),
+      })),
+  );
 
   return (
     <section className="rhythm-visual-surface actogram-panel" aria-labelledby="actogram-title">
@@ -190,16 +177,15 @@ export function ActogramPanel({
           <span>0 (48)</span>
         </div>
         <div className="actogram-visual-grid">
-          {actogram.observedRows.map((band) => (
-            <ActogramRow band={band} now={actogram.now} markers={markersFor(band)} key={band.id} />
-          ))}
-          {showForecast && (
-            <div className="actogram-now-line" aria-hidden="true">
-              <span>{actogram.now.label}</span>
-            </div>
-          )}
-          {forecastRows.map((band) => (
-            <ActogramRow band={band} now={actogram.now} markers={markersFor(band)} key={band.id} />
+          {layout.rows.map((row, index) => (
+            <Fragment key={row.civilDate}>
+              {index === layout.nowLineAbove && (
+                <div className="actogram-now-line" aria-hidden="true">
+                  <span>{actogram.now.label}</span>
+                </div>
+              )}
+              <ActogramRow row={row} />
+            </Fragment>
           ))}
         </div>
       </div>
@@ -249,7 +235,7 @@ export function ActogramPanel({
           </tr>
         </thead>
         <tbody>
-          {allBands.map((band) => (
+          {listed.map(({ band, markers: context }) => (
             <tr key={band.id}>
               <td>{band.day}</td>
               <td>{band.startLabel}</td>
@@ -257,7 +243,7 @@ export function ActogramPanel({
               <td>{band.durationLabel}</td>
               <td>{band.source}</td>
               <td>
-                {markersFor(band)
+                {context
                   .map(
                     (marker) =>
                       `${marker.kindLabel}: ${marker.rangeLabel}${marker.note ? `; ${marker.note}` : ""}`,
