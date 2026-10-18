@@ -1,6 +1,7 @@
 package main
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 
@@ -39,7 +40,7 @@ func TestTheClockFollowsTheComputerUntilChosen(t *testing.T) {
 		t.Fatal(err)
 	}
 	if setting.Preference != clockSystem || setting.Clock != clock24 || setting.System != clock24 ||
-		setting.Revision != 0 {
+		setting.Revision != 0 || setting.Platform != platformName(runtime.GOOS) {
 		t.Fatalf("setting %+v", setting)
 	}
 	if displayClock() != civilfmt.TwentyFourHour {

@@ -3370,6 +3370,14 @@ Seen in the running desktop:
 - **What the estimator sees.** Rhythm › Sources said "All entries feed the estimate" when none was
   excluded. The estimate reads only the 21 latest main sleeps, so it now says "None excluded from
   the estimate".
+- **The clock.** Settings › Display offered "As Windows does" on every system, though only
+  Windows has a regional format the desktop reads. Elsewhere that choice is the twelve-hour clock
+  ZeitBoard has always written, and is now named "ZeitBoard's default". The desktop sends its
+  system with the clock setting; a Go test checks it, and component tests check the wording for
+  macOS and Linux.
+- **Medication reminders.** The opt-in read "Show this label through Windows". It now reads "as a
+  desktop notification". Where notifications are unavailable, the medication screen already says
+  that enabled reminders will not be shown.
 
 ## Data Sources says what is true — 2026-10-18
 

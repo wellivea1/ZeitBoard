@@ -1771,7 +1771,9 @@ synthetic nights. What it found:
   says every entry feeds the estimate, which reads only the latest 21 sleeps.
 - **Settings › This computer.** Login startup spoke of Windows everywhere and offered a switch that
   could not work away from it. Each system is now told what starts ZeitBoard at sign-in. Desktop
-  activity, also Windows' alone, now says so elsewhere instead of offering an Enable button.
+  activity, also Windows' alone, now says so elsewhere instead of offering an Enable button. The
+  clock's first choice, "As Windows does", is "ZeitBoard's default" where there is no Windows
+  format to follow, and medication reminders say "desktop notification" rather than Windows.
 - **Data Sources.** Calendars were read, and an added file's floating times placed, in New York's
   zone on every computer. They now use this computer's zone. The desktop activity row read "Not
   connected" whatever Settings said; it now says what Settings does.

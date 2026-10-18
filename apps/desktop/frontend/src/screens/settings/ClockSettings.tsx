@@ -14,15 +14,27 @@ import { setWindowClock, type Clock } from "../../utils/windowClock";
 
 const sample = (clock: Clock) => timeOfDay(15, 40, clock);
 
-const CHOICES: { preference: ClockPreference; title: string; hint: (system: Clock) => string }[] = [
-  {
-    preference: "system",
-    title: "As Windows does",
-    hint: (system) => `Follows the regional format, now the ${system}-hour clock.`,
-  },
-  { preference: "12", title: "12-hour", hint: () => "With AM and PM." },
-  { preference: "24", title: "24-hour", hint: () => "From 00:00 to 23:59." },
-];
+// Only Windows has a regional format ZeitBoard reads. Elsewhere the first
+// choice is the clock ZeitBoard writes until another is chosen, and says so.
+function choices(
+  platform: string,
+): { preference: ClockPreference; title: string; hint: (system: Clock) => string }[] {
+  return [
+    platform === "windows"
+      ? {
+          preference: "system",
+          title: "As Windows does",
+          hint: (system) => `Follows the regional format, now the ${system}-hour clock.`,
+        }
+      : {
+          preference: "system",
+          title: "ZeitBoard's default",
+          hint: (system) => `The ${system}-hour clock, until you choose another.`,
+        },
+    { preference: "12", title: "12-hour", hint: () => "With AM and PM." },
+    { preference: "24", title: "24-hour", hint: () => "From 00:00 to 23:59." },
+  ];
+}
 
 export function ClockSettings() {
   const [setting, setSetting] = useState<ClockSetting>();
@@ -72,7 +84,7 @@ export function ClockSettings() {
         <fieldset className="clock-picker" disabled={busy}>
           <legend className="sr-only">Clock</legend>
           <div className="clock-options">
-            {CHOICES.map((choice) => {
+            {choices(setting.platform).map((choice) => {
               const clock = choice.preference === "system" ? setting.system : choice.preference;
               const selected = setting.preference === choice.preference;
               return (

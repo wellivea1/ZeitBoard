@@ -262,7 +262,9 @@ describe("MedicationsScreen", () => {
     fireEvent.change(within(editor).getByLabelText(/^Schedule time zone/), {
       target: { value: "UTC" },
     });
-    const reminderOptIn = within(editor).getByLabelText(/Show this label through Windows/);
+    const reminderOptIn = within(editor).getByLabelText(
+      /Show this label as a desktop notification/,
+    );
     expect(reminderOptIn.closest("label")).toHaveTextContent("including predicted sleep overlaps");
     fireEvent.click(reminderOptIn);
     fireEvent.change(within(editor).getByLabelText(/^Clinician guidance, entered by you/), {

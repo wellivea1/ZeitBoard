@@ -39,3 +39,10 @@ reader's clock was therefore not one change but seventy, and nothing stopped the
 - The visitor's availability page on the owner's server still writes a twelve-hour clock.
 - Nothing stored changes with the clock. Records keep instants and "HH:MM" civil times; only what
   is shown changes.
+
+## Update, 2026-10-18: away from Windows
+
+Only Windows has a regional format the desktop reads. Elsewhere "system" stands for the
+twelve-hour clock ZeitBoard has always written, so Settings › Display names that choice
+"ZeitBoard's default" there, not "As Windows does". The desktop says which system it runs on with
+the clock setting, as the storage status does since ADR-0063's update.
