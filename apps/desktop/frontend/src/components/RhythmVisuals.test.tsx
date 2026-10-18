@@ -35,12 +35,12 @@ describe("chronological time probes", () => {
     expect(forecastToggle).not.toBeChecked();
     fireEvent.click(forecastToggle);
     const commitsAfterToggle = commits;
-    const observedRow = container.querySelector(".actogram-visual-row");
-    const forecastRow = Array.from(container.querySelectorAll(".actogram-visual-row")).at(-1);
-    const observedTrack = observedRow?.querySelector(".actogram-visual-track");
-    const track = forecastRow?.querySelector(".actogram-visual-track");
-    expect(observedTrack).not.toBeNull();
+    // Newest first, with the days to come above today.
+    const rows = Array.from(container.querySelectorAll(".actogram-visual-row"));
+    const track = rows[0]?.querySelector(".actogram-visual-track");
+    const observedTrack = rows.at(-1)?.querySelector(".actogram-visual-track");
     expect(track).not.toBeNull();
+    expect(observedTrack).not.toBeNull();
     setTrackBounds(observedTrack as Element, 480);
     setTrackBounds(track as Element, 480);
 
@@ -52,13 +52,28 @@ describe("chronological time probes", () => {
     fireEvent.pointerMove(observedTrack as Element, { clientX: 120 });
 
     expect(container.querySelectorAll(".time-probe:not([hidden])")).toHaveLength(1);
-    expect(visibleProbeLabel(container)).toHaveTextContent("Mon Jun 15 · 12:00 PM");
+    expect(visibleProbeLabel(container)).toHaveTextContent("Wed Jun 10 · 12:00 PM");
     expect(commits).toBe(commitsAfterToggle);
 
     fireEvent.pointerLeave(observedTrack as Element);
 
     expect(visibleProbeLabel(container)).toBeNull();
     expect(commits).toBe(commitsAfterToggle);
+  });
+
+  // A row holds what has happened and what is predicted: today's is predicted
+  // only after now, at 1:30 PM.
+  it("calls a time predicted only once it is after now", () => {
+    const { container } = render(<ActogramPanel actogram={rhythmFixture.actogram} />);
+    fireEvent.click(screen.getByLabelText("Show forecast"));
+    const today = container.querySelector('time[datetime="2026-06-16"]')?.nextElementSibling;
+    expect(today).not.toBeNull();
+    setTrackBounds(today as Element, 480);
+
+    fireEvent.pointerMove(today as Element, { clientX: 120 });
+    expect(visibleProbeLabel(container)).toHaveTextContent(/^Tue Jun 16 · 12:00 PM$/);
+    fireEvent.pointerMove(today as Element, { clientX: 140 });
+    expect(visibleProbeLabel(container)).toHaveTextContent("Tue Jun 16 · 2:00 PM · predicted");
   });
 
   it("renders self-reported context with exact present-type legend and table text", () => {

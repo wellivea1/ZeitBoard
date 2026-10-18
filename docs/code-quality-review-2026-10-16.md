@@ -102,9 +102,11 @@ test fail:
 
 - **Who reviewed.** The reviews were automated. The independent review that milestone C5 asks for,
   before the clinician portal may be exposed, is still for a person.
-- **The running app.** The desktop window has not been driven end to end here. The browser pane
-  that would show it blocks the Wails bridge, so the window is checked by its component tests and
-  by stand-in pages for each screen.
+- **The running app.** On 2026-10-18 every screen of the desktop window was checked in the
+  built-in browser pane, which now loads the Wails bridge. It ran against a throwaway data folder
+  holding synthetic nights. The check found five defects, all now fixed and recorded in the
+  completion plan's "The running app". The screen-reader pass with Narrator is separate, and still
+  to come.
 - **The providers.** Google, Microsoft and CalDAV are checked against stand-ins that behave as their
   documentation says. ADR-0065 records the two behaviours of Graph's that need a real account to
   confirm.

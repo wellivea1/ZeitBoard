@@ -1753,6 +1753,27 @@ Asked what only they could decide, the owner chose:
 - **The window's coverage.** Add `@vitest/coverage-v8` and record the figure.
 - **The screen-reader pass.** Narrator, turned on for it, through the development window.
 
+### The running app — 2026-10-18
+
+Claude in Chrome could not reach the desktop's development address, because the browser connected
+to it runs on another computer. The built-in browser pane now loads the Wails bridge it once
+blocked, so the window was checked there instead, against a throwaway data folder holding 22
+synthetic nights. What it found:
+
+- **Home.** The label of Fig. 1's last day ran past the window's edge, and the page scrolled
+  sideways. Each label now keeps to its own stretch of the axis, and one that does not fit is left
+  off.
+- **Plan › Week.** The time of now sat over the hour beside it, half hiding it, and ignored the
+  24-hour clock. The hour now gives way, and the time follows the window's clock.
+- **Rhythm.** The actogram's right half repeated each row's own sleep, where the time probe said
+  the next day. With the forecast shown, time ran up the page and then down it. It is now a true
+  double plot, a row for each day and the next, with the days to come above today. Sources no longer
+  says every entry feeds the estimate, which reads only the latest 21 sleeps.
+- **Settings › This computer.** Login startup spoke of Windows everywhere and offered a switch that
+  could not work away from it. Each system is now told what starts ZeitBoard at sign-in.
+- **Everything else.** Log, Sharing, Data Sources, the other settings and the assistant rail
+  showed no defect. No screen is wider than the window.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and

@@ -3,7 +3,8 @@ import { useEffect, useRef, type CSSProperties } from "react";
 import type { CalendarEventSegment } from "../data/calendar";
 import type { ProposalDecision } from "../state/approvals";
 import { Icon } from "./Icon";
-import { axisHour } from "../utils/relativeTime";
+import { axisHour, timeOfDay } from "../utils/relativeTime";
+import { windowClock } from "../utils/windowClock";
 import {
   minuteClock,
   MIN_BLOCK_MINUTES,
@@ -22,8 +23,23 @@ type BoardStyle = CSSProperties & { "--hour"?: string; "--days"?: number };
 
 const gutterHours = [3, 6, 9, 12, 15, 18, 21];
 
+// How near the time of now an hour in the gutter may be, in pixels: half the
+// height of each label (week.css). A nearer hour gives way to now rather than
+// show half of itself from behind it.
+const NOW_CLEARANCE = 17;
+
+function hoursClearOfNow(nowMinute: number | undefined, hour: number) {
+  if (nowMinute === undefined) return gutterHours;
+  return gutterHours.filter(
+    (value) => (Math.abs(value * 60 - nowMinute) / 60) * hour >= NOW_CLEARANCE,
+  );
+}
+
+// The time of now on the window's clock. The twelve-hour clock leaves off AM
+// or PM, which the hours in the gutter say.
 function nowLabel(minute: number) {
   const hour = Math.floor(minute / 60);
+  if (windowClock() === "24") return timeOfDay(hour, minute % 60);
   return `${((hour + 11) % 12) + 1}:${String(minute % 60).padStart(2, "0")}`;
 }
 
@@ -255,7 +271,7 @@ export function WeekBoard({
         </div>
         <div className="week-grid">
           <div className="week-gutter" aria-hidden="true">
-            {gutterHours.map((value) => (
+            {hoursClearOfNow(today?.nowMinute, hour).map((value) => (
               <span style={{ top: `${value * hour}px` }} key={value}>
                 {axisHour(value)}
               </span>

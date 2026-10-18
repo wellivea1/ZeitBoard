@@ -360,6 +360,14 @@ Tabs (Panel, span 12, 44px):  [ Actogram* ] [ Drift ] [ Sources ]
 └────────────────────────────────────────────────────────────────────────────────┘
 ```
 
+> **As built, 2026-10-18.** A row is a civil day holding the 48 hours from its midnight, so each
+> day is drawn on its own row and again on the right of the row before: the following day the
+> time probe names there (ui-refactor-plan.md §7). A sleep is named once, on the row of the day it
+> began, and faded where the rows either side repeat it. With the newest day on top, the days to
+> come sit *above* today, the now line between them. The forecast rows under the past in the
+> diagram above would run time up the page and then down it. A day with nothing in its 48 hours
+> has no row, and a dashed rule marks the jump.
+
 **Placement & geometry (exact):**
 - Panel: Grid `span 12`. Min-height 560px (grows with row count).
 - **Day-label gutter:** fixed **64px** left column. Labels right-aligned, 11px,

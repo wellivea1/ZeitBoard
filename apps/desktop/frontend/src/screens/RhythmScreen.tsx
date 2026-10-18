@@ -104,9 +104,11 @@ function SourcesPanel() {
                   </p>
                 </div>
                 <small>
+                  {/* Not "all feed the estimate": the estimate reads only the
+                      21 latest main sleeps. */}
                   {source.suppressed > 0
                     ? "Excluded entries stay stored but do not feed the estimate"
-                    : "All entries feed the estimate"}
+                    : "None excluded from the estimate"}
                 </small>
               </article>
             ))}

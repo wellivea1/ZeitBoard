@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -131,5 +133,20 @@ func TestLoginStartupIsExplicitAndDoesNotGrantCollectionOrSync(t *testing.T) {
 	}
 	if s, err := a.GetStartupSettings(); err != nil || !s.Registered {
 		t.Fatal("failed write forgot durable registration")
+	}
+}
+
+// Away from Windows nothing registers ZeitBoard at sign-in, so Settings says
+// what does on that system rather than offer a switch that cannot work.
+func TestEachSystemIsToldWhatStartsZeitBoardAtSignIn(t *testing.T) {
+	a, _, _, _ := lifecycleApp(t)
+	a.startupControl = &fakeAutostart{}
+	if s, err := a.GetStartupSettings(); err != nil || s.Available || s.Message != noLoginStartup(runtime.GOOS) {
+		t.Fatalf("startup where it cannot register: %#v %v", s, err)
+	}
+	for goos, want := range map[string]string{"darwin": "Login Items", "linux": "startup applications"} {
+		if message := noLoginStartup(goos); !strings.Contains(message, want) || strings.Contains(message, "Windows") {
+			t.Errorf("%s is told %q", goos, message)
+		}
 	}
 }

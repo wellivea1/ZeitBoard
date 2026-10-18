@@ -1526,6 +1526,19 @@ textarea {
   font-weight: 750;
   text-align: right;
 }
+/* Days with nothing in their 48 hours have no row; a dashed rule over the
+   track marks where they were left out. */
+.actogram-visual-row[data-gap-above] {
+  position: relative;
+}
+.actogram-visual-row[data-gap-above]::before {
+  content: "";
+  position: absolute;
+  top: -4px;
+  right: 0;
+  left: 60px;
+  border-top: 1px dashed var(--actogram-grid);
+}
 .actogram-visual-track {
   --probe-line: var(--actogram-grid);
   position: relative;

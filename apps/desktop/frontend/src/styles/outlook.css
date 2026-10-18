@@ -185,22 +185,41 @@
   color: var(--muted);
   font-size: 10.5px;
   font-weight: 700;
+  line-height: 16px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
-.outlook-axis small {
+/* A label's own stretch of the axis, one line high. It wraps, so a label too
+   long for it falls to a second line, which is never shown: left off whole
+   rather than cut short or run into its neighbour. */
+.outlook-axis-room {
   position: absolute;
   top: 0;
+  height: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  overflow: hidden;
+}
+
+/* Holds the first line, so that even a room's only label wraps when it is too
+   long for the room. */
+.outlook-axis-room::before {
+  content: "";
+  height: 100%;
+}
+
+.outlook-axis small {
   padding-left: 5px;
   font-size: inherit;
   white-space: nowrap;
   box-shadow: inset 1px 0 0 var(--divider);
 }
 
+/* "Now" needs room for a gap as well, so the next day's hairline never touches
+   it. */
 .outlook-axis .outlook-axis-now {
-  left: 0;
-  padding-left: 0;
+  padding: 0 6px 0 0;
   color: var(--accent);
   font-family: var(--font-serif);
   font-size: 13px;

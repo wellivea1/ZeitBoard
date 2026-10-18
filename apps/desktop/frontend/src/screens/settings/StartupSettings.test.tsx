@@ -49,6 +49,21 @@ it("allows explicit quit when the tray is unavailable and prevents hiding", asyn
   await waitFor(() => expect(quit).toHaveBeenCalledOnce());
 });
 
+// Settings spoke of Windows on every system, and offered a switch that could
+// never be saved where ZeitBoard does not register itself.
+it("says what starts ZeitBoard where it cannot start itself", async () => {
+  const message =
+    "ZeitBoard does not add itself to a Mac's login items. To open it when you sign in, add it in System Settings › General › Login Items.";
+  install({ GetStartupSettings: async () => ({ ...initial, available: false, message }) });
+  render(<StartupSettings />);
+  await screen.findByText(message);
+  expect(screen.getByText("Unavailable")).toBeInTheDocument();
+  expect(screen.getAllByText(message)).toHaveLength(1);
+  expect(screen.queryByLabelText("Start ZeitBoard when I sign in")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Save startup settings" })).toBeNull();
+  expect(screen.queryByText(/Windows/)).toBeNull();
+});
+
 it("does not disguise missing startup services as an off registration", async () => {
   render(<StartupSettings />);
   await screen.findByText(/Open the ZeitBoard desktop app to manage startup/);

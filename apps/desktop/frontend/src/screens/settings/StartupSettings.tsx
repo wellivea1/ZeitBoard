@@ -9,7 +9,7 @@ import {
 import { createCoalescedRefresh, type CoalescedRefresh } from "../../utils/coalescedRefresh";
 
 function registrationLabel(status: StartupStatus | null) {
-  if (!status) return "Unavailable";
+  if (!status?.available) return "Unavailable";
   if (!status.registered) return "Off";
   return status.matchesCurrent ? "Registered with Windows" : "Needs updating";
 }
@@ -96,7 +96,7 @@ export function StartupSettings() {
       <div className="data-control-intro">
         <h2 id="startup-title">Startup and background work</h2>
         <p className="settings-copy">
-          Starting with Windows turns nothing else on: activity, sync and reminders keep their own
+          Starting at sign-in turns nothing else on: activity, sync and reminders keep their own
           settings.
         </p>
       </div>
@@ -104,42 +104,50 @@ export function StartupSettings() {
         <section className="data-control-card" aria-label="Login startup">
           <h3>When you sign in</h3>
           <p>{registrationLabel(status)}</p>
-          <label className="startup-toggle">
-            <input
-              type="checkbox"
-              checked={enabled}
-              disabled={busy || !status?.available}
-              onChange={(event) => {
-                dirty.current = true;
-                setEnabled(event.target.checked);
-              }}
-            />
-            <span>Start ZeitBoard when I sign in</span>
-          </label>
-          <label className="startup-toggle">
-            <input
-              type="checkbox"
-              checked={hidden}
-              disabled={busy || !status?.available || !enabled}
-              onChange={(event) => {
-                dirty.current = true;
-                setHidden(event.target.checked);
-              }}
-            />
-            <span>Start in the tray</span>
-          </label>
-          <p>
-            If ZeitBoard does not open, check Windows Settings → Apps → Startup. After moving the
-            app, save this again.
-          </p>
-          <button
-            type="button"
-            className="button primary"
-            disabled={busy || !status?.available}
-            onClick={() => void run(save)}
-          >
-            Save startup settings
-          </button>
+          {status && !status.available ? (
+            // Away from Windows, or for a data profile of its own, ZeitBoard
+            // cannot register itself, and the desktop says what can instead.
+            <p>{status.message}</p>
+          ) : (
+            <>
+              <label className="startup-toggle">
+                <input
+                  type="checkbox"
+                  checked={enabled}
+                  disabled={busy || !status?.available}
+                  onChange={(event) => {
+                    dirty.current = true;
+                    setEnabled(event.target.checked);
+                  }}
+                />
+                <span>Start ZeitBoard when I sign in</span>
+              </label>
+              <label className="startup-toggle">
+                <input
+                  type="checkbox"
+                  checked={hidden}
+                  disabled={busy || !status?.available || !enabled}
+                  onChange={(event) => {
+                    dirty.current = true;
+                    setHidden(event.target.checked);
+                  }}
+                />
+                <span>Start in the tray</span>
+              </label>
+              <p>
+                If ZeitBoard does not open, check Windows Settings → Apps → Startup. After moving
+                the app, save this again.
+              </p>
+              <button
+                type="button"
+                className="button primary"
+                disabled={busy || !status?.available}
+                onClick={() => void run(save)}
+              >
+                Save startup settings
+              </button>
+            </>
+          )}
         </section>
         <section className="data-control-card" aria-label="Current session">
           <h3>While ZeitBoard is running</h3>
@@ -168,7 +176,7 @@ export function StartupSettings() {
           </button>
         </section>
       </div>
-      {status?.message && <p className="settings-copy">{status.message}</p>}
+      {status?.available && status.message && <p className="settings-copy">{status.message}</p>}
       {error && (
         <p className="form-error" role="alert">
           {error}
