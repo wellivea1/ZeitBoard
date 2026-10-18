@@ -28,6 +28,19 @@ function encryptionState(encryption: StorageEncryption) {
   return "Not encrypted.";
 }
 
+// Where ZeitBoard cannot encrypt its files itself, the system's own disk
+// encryption is the way, named as each system names it.
+function noEncryptionCopy(platform: string) {
+  switch (platform) {
+    case "windows":
+      return "This edition of Windows cannot encrypt files; that comes with Pro, Enterprise and Education. Device encryption or BitLocker, in Windows Settings, encrypts the whole disk instead.";
+    case "macos":
+      return "ZeitBoard encrypts its files only on Windows. On a Mac, FileVault, in System Settings › Privacy & Security, encrypts the whole disk, and these files with it.";
+    default:
+      return "ZeitBoard encrypts its files only on Windows. Here, encrypting the whole disk, which most systems offer when they are installed, protects these files with everything else.";
+  }
+}
+
 // Windows' file encryption (ADR-0063). What it protects, what it does not, and
 // how the files could be lost are said before the choice is made.
 function StorageEncryptionControl({
@@ -44,12 +57,8 @@ function StorageEncryptionControl({
   if (!encryption.supported) {
     return (
       <div className="storage-encryption">
-        <h4>Encrypted by Windows</h4>
-        <p className="settings-copy">
-          This edition of Windows cannot encrypt files; that comes with Pro, Enterprise and
-          Education. Device encryption or BitLocker, in Windows Settings, encrypts the whole disk
-          instead.
-        </p>
+        <h4>{encryption.platform === "windows" ? "Encrypted by Windows" : "Encryption"}</h4>
+        <p className="settings-copy">{noEncryptionCopy(encryption.platform)}</p>
       </div>
     );
   }

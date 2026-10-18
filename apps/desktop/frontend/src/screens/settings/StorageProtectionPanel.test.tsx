@@ -67,10 +67,26 @@ describe("StorageProtectionPanel", () => {
 
   it("points elsewhere where Windows cannot encrypt files", async () => {
     install({
-      GetStorageProtection: async () => report({ supported: false }),
+      GetStorageProtection: async () => report({ supported: false, platform: "windows" }),
     });
     render(<StorageProtectionPanel />);
     expect(await screen.findByText(/This edition of Windows cannot encrypt files/)).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Encrypt with Windows" })).toBeNull();
+  });
+
+  // On another system the disk encryption it has is the way, and Windows is
+  // not mentioned as though it were there.
+  it.each([
+    ["macos", /FileVault, in System Settings › Privacy & Security/],
+    ["linux", /encrypting the whole disk, which most systems offer when they are installed/],
+  ])("points %s to its own disk encryption", async (platform, copy) => {
+    install({
+      GetStorageProtection: async () => report({ supported: false, platform }),
+    });
+    render(<StorageProtectionPanel />);
+    expect(await screen.findByText(copy)).toBeVisible();
+    expect(screen.getByRole("heading", { name: "Encryption" })).toBeVisible();
+    expect(screen.queryByText(/This edition of Windows/)).toBeNull();
     expect(screen.queryByRole("button", { name: "Encrypt with Windows" })).toBeNull();
   });
 });

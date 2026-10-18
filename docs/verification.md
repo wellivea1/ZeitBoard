@@ -3299,3 +3299,15 @@ The setup guide's "closes for good" clicked the note's × as soon as it found it
 once that the note was gone. React can show the note a moment before it subscribes to being
 closed, so the check failed on a CI run that changed nothing it tested. The test now waits for the
 note to go. Eight runs of the file in a row pass, and the full window suite passes.
+
+## Encryption named for each system — 2026-10-18
+
+The owner kept Windows' file encryption and asked that ZeitBoard keep working elsewhere. Go tests
+in the desktop and component tests in the window:
+
+- Windows, macOS and Linux are named windows, macos and linux. A refusal to encrypt names Windows
+  only on Windows, and the status of the files says which system they are on.
+- Without file encryption on Windows, Settings still points to BitLocker and device encryption.
+  On a Mac it points to FileVault, in System Settings › Privacy & Security. On Linux it points to
+  encrypting the whole disk. On neither does it speak of Windows or offer to encrypt with it.
+- The desktop module vets clean for Linux and macOS as well as Windows.

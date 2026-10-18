@@ -107,3 +107,6 @@ VFS. Serialize would allow an in-memory working copy, encrypted whole on each
 write. That rewrites the entire database on every commit, and Takeout's activity
 minutes alone can make it large. It also loses whatever was not yet written if
 the process dies. Neither is a better route than the page cipher above.
+
+_Update, 2026-10-18:_ the owner chose not to adopt that driver for now. Windows' file encryption
+stays (ADR-0063's update), and on other systems Settings names their own disk encryption.

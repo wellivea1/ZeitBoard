@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -144,7 +145,7 @@ func TestWithoutWindowsEncryptionTheChoiceIsRefused(t *testing.T) {
 	app.storageCryptSource = crypt
 	t.Setenv("ZEITBOARD_DATA_DIR", syntheticDataFolder(t))
 	if _, err := app.SetStorageEncryption(StorageEncryptionInput{Encrypt: true}); err == nil ||
-		!strings.Contains(err.Error(), "cannot encrypt files") {
+		err.Error() != noFileEncryption(runtime.GOOS).Error() {
 		t.Fatalf("chose encryption without it: %v", err)
 	}
 
@@ -154,6 +155,24 @@ func TestWithoutWindowsEncryptionTheChoiceIsRefused(t *testing.T) {
 	}
 	if err := applyStorageEncryption(dir, crypt); err == nil {
 		t.Fatal("a choice Windows cannot carry out read as done")
+	}
+}
+
+// Every system says which it is, and one ZeitBoard does not encrypt files on
+// is pointed to its own disk encryption, not told about Windows.
+func TestEachSystemIsToldWhatProtectsItsFiles(t *testing.T) {
+	for goos, want := range map[string]string{"windows": "windows", "darwin": "macos", "linux": "linux"} {
+		if got := platformName(goos); got != want {
+			t.Errorf("%s is named %q", goos, got)
+		}
+	}
+	if !strings.Contains(noFileEncryption("windows").Error(), "Windows on this computer") ||
+		strings.Contains(noFileEncryption("linux").Error(), "Windows on this computer") {
+		t.Fatalf("refusals: %v; %v", noFileEncryption("windows"), noFileEncryption("linux"))
+	}
+	status := storageEncryptionStatus(syntheticDataFolder(t), newSyntheticCrypt(), "")
+	if status.Platform != platformName(runtime.GOOS) {
+		t.Fatalf("this system reads as %q", status.Platform)
 	}
 }
 
