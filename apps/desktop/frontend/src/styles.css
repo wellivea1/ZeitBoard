@@ -1537,7 +1537,7 @@ textarea {
   top: -4px;
   right: 0;
   left: 60px;
-  border-top: 1px dashed var(--actogram-grid);
+  border-top: 1px dashed var(--subtle);
 }
 .actogram-visual-track {
   --probe-line: var(--actogram-grid);
