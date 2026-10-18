@@ -18,7 +18,9 @@ leaving a particular screen open.
 This is the current completion sequence. `roadmap.md`, the feature specs and ADRs supply detailed
 requirements; older phase prompts are historical where their descriptions contradict delivered code
 or later owner decisions. The [September review](product-quality-review-2026-09-08.md) records the
-current UX repairs and recovered owner direction. Preserve that uncommitted work.
+current UX repairs and recovered owner direction. Preserve that uncommitted work. The
+[code quality review](code-quality-review-2026-10-16.md) records what the code's quality rests on,
+and where that evidence stops.
 
 ## Review conclusions that change the plan
 
