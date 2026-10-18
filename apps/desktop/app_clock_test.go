@@ -114,3 +114,16 @@ func TestAStaleClockEditLosesToWhatIsStored(t *testing.T) {
 		t.Fatalf("the stale edit was applied: %+v", stale)
 	}
 }
+
+// A stored clock that cannot be read leaves the computer's own in use, named
+// as the clock setting names it on each system.
+func TestAnUnreadableClockSaysWhichIsInUse(t *testing.T) {
+	if message := clockUnreadable("windows"); !strings.Contains(message, "Windows' own") {
+		t.Errorf("windows is told %q", message)
+	}
+	for _, goos := range []string{"darwin", "linux"} {
+		if message := clockUnreadable(goos); strings.Contains(message, "Windows") || !strings.Contains(message, "ZeitBoard's default") {
+			t.Errorf("%s is told %q", goos, message)
+		}
+	}
+}

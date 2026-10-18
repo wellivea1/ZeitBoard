@@ -3374,7 +3374,8 @@ Seen in the running desktop:
   Windows has a regional format the desktop reads. Elsewhere that choice is the twelve-hour clock
   ZeitBoard has always written, and is now named "ZeitBoard's default". The desktop sends its
   system with the clock setting; a Go test checks it, and component tests check the wording for
-  macOS and Linux.
+  macOS and Linux. A stored clock that cannot be read no longer says "Windows' own is in use"
+  away from Windows, where it is ZeitBoard's default.
 - **Medication reminders.** The opt-in read "Show this label through Windows". It now reads "as a
   desktop notification". Where notifications are unavailable, the medication screen already says
   that enabled reminders will not be shown.

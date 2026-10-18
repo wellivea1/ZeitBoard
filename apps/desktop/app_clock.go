@@ -113,6 +113,24 @@ func systemClock() civilfmt.Clock {
 	return civilfmt.TwelveHour
 }
 
+// startClock puts the stored clock in use, or the computer's own when the
+// stored one cannot be read.
+func (a *App) startClock() {
+	a.systemClock = systemClock()
+	if err := a.loadRegionalFromDisk(); err != nil {
+		a.regionalErr = clockUnreadable(runtime.GOOS)
+	}
+}
+
+// clockUnreadable says which clock is in use when the stored one cannot be
+// read: Windows' own, or elsewhere ZeitBoard's default.
+func clockUnreadable(goos string) string {
+	if goos == "windows" {
+		return "The stored clock could not be read, so Windows' own is in use."
+	}
+	return "The stored clock could not be read, so ZeitBoard's default is in use."
+}
+
 // GetClockSetting says which clock times are written on, and why.
 func (a *App) GetClockSetting() (ClockSettingDTO, error) {
 	a.regionalMu.RLock()
