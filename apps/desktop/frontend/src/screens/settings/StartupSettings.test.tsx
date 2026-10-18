@@ -44,6 +44,8 @@ it("allows explicit quit when the tray is unavailable and prevents hiding", asyn
   });
   render(<StartupSettings />);
   await screen.findByText(/The tray is unavailable/);
+  // Not also told, beside it, that closing hides the window in the tray.
+  expect(screen.queryByText(/hides it in the tray/)).toBeNull();
   expect(screen.getByRole("button", { name: "Hide to tray" })).toBeDisabled();
   fireEvent.click(screen.getByRole("button", { name: "Quit ZeitBoard" }));
   await waitFor(() => expect(quit).toHaveBeenCalledOnce());

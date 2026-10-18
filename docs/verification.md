@@ -3379,6 +3379,8 @@ Seen in the running desktop:
 - **Medication reminders.** The opt-in read "Show this label through Windows". It now reads "as a
   desktop notification". Where notifications are unavailable, the medication screen already says
   that enabled reminders will not be shown.
+- **The tray.** Where there is no tray, "While ZeitBoard is running" said both that closing the
+  window hides it in the tray and that closing it quits. Now it says only the second.
 
 ## Data Sources says what is true — 2026-10-18
 
