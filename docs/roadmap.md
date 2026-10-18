@@ -446,12 +446,14 @@ M-E's separately reviewed local agent projection.
 
 **Small debts (fold into adjacent slices):** finish ordered local/server migrations; ~~
 → domain decoder (now duplicated across desktop storage, server readmodel, and
-the sync validator);~~ establish one versioned assistant action registry; extract
-context-aware desktop feature services at behavior boundaries; add
-repository-backed long-history pages; ~~prefer a CA-cert path over localhost
+the sync validator);~~ ~~establish one versioned assistant action registry~~ (delivered
+2026-09-27, ADR-0050); extract context-aware desktop feature services at behavior boundaries;
+~~add repository-backed long-history pages~~ (delivered 2026-09-27 for sleep and medication);
+~~prefer a CA-cert path over localhost
 skip-verify for the
 MCP client~~ (delivered 2026-10-11, ADR-0055: the desktop and the MCP connector trust a chosen
-certificate, and the daemon keeps its localhost one); medication tracking M-A..M-C is delivered and M-D..M-F remain specified
+certificate, and the daemon keeps its localhost one); medication tracking M-A..M-F is delivered
+(M-D and M-E under ADR-0048 and ADR-0051, M-F under ADR-0058)
 ([`medication-feature-plan.md`](medication-feature-plan.md), slices M-A..M-F:
 benchmarked against Medisafe; fixed-clock regimens + wake-relative display,
 reminder collision forecasts, adherence-in-rhythm-context, association-not-
