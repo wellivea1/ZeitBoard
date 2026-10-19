@@ -76,6 +76,8 @@ it("says plainly where desktop activity cannot be recorded", async () => {
   install({ GetActivityCollection: async () => ({ ...initial, supported: false }) });
   render(<ActivityCollectionSettings />);
   await screen.findByText("ZeitBoard cannot record desktop activity on this system.");
+  // The word Data Sources uses for the same state.
+  expect(screen.getByText("Unavailable")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "Enable local activity collection" })).toBeNull();
   expect(screen.queryByLabelText("Activity time zone")).toBeNull();
   expect(screen.queryByText(/Windows/)).toBeNull();

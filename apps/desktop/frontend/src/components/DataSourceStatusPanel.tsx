@@ -1,5 +1,10 @@
 import type { ReactNode } from "react";
-import type { ActivityCollection } from "../data/activityCollection";
+import {
+  activityState,
+  activityStateLabels,
+  type ActivityCollection,
+  type ActivityState,
+} from "../data/activityCollection";
 import type { BackendSyncStatus } from "../data/backendSync";
 import type { CalendarSource } from "../data/calendar";
 import type { SleepSourceSummary, SleepSources } from "../data/sleepEntries";
@@ -75,55 +80,38 @@ function SyncRow({ status }: { status: BackendSyncStatus }) {
   );
 }
 
-// What this computer records of itself, in the words Settings › This computer
-// uses. The row once read "Not connected" whatever the setting was.
+const activityRowStates: Record<ActivityState, SourceRowProps["state"]> = {
+  unavailable: "off",
+  off: "off",
+  stopped: "error",
+  running: "available",
+};
+
+// What this computer records of itself, in the state Settings › This computer
+// shows. The row once read "Not connected" whatever the setting was.
 function ActivityRow({ status }: { status: ActivityCollection }) {
+  const state = activityState(status);
   const settings = <a href="#/settings/computer">Settings</a>;
-  if (!status.supported && !status.enabled) {
-    return (
-      <SourceRow
-        icon="sources"
-        name="Desktop activity"
-        detail="This system cannot record it."
-        status="Unavailable"
-      />
-    );
-  }
-  if (!status.enabled) {
-    return (
-      <SourceRow
-        icon="sources"
-        name="Desktop activity"
-        detail={<>Off unless you turn it on in {settings}.</>}
-        status="Off"
-      />
-    );
-  }
   const records = `${status.recordCount} ${status.recordCount === 1 ? "record" : "records"}`;
-  if (!status.running) {
-    return (
-      <SourceRow
-        icon="sources"
-        name="Desktop activity"
-        detail={
-          <>
-            {status.lastError || "It has stopped."} {records} kept. Retry in {settings}.
-          </>
-        }
-        status="Stopped"
-        state="error"
-      />
-    );
-  }
+  const details: Record<ActivityState, ReactNode> = {
+    unavailable: "This system cannot record it.",
+    off: <>Off unless you turn it on in {settings}.</>,
+    stopped: (
+      <>
+        {status.lastError || "It has stopped."} {records} kept. Retry in {settings}.
+      </>
+    ),
+    running: `${records} of when this computer was active, idle or locked${
+      status.powerLog.enabled ? ", and sleep and wake read from Windows" : ""
+    }`,
+  };
   return (
     <SourceRow
       icon="sources"
       name="Desktop activity"
-      detail={`${records} of when this computer was active, idle or locked${
-        status.powerLog.enabled ? ", and sleep and wake read from Windows" : ""
-      }`}
-      status="Running"
-      state="available"
+      detail={details[state]}
+      status={activityStateLabels[state]}
+      state={activityRowStates[state]}
     />
   );
 }

@@ -1,3 +1,4 @@
+import { localZone } from "../utils/civilTime";
 import { findWailsMethod, type WailsRoot } from "./wailsBridge";
 
 // Reaching hours are when the people this person needs to reach are available —
@@ -259,7 +260,7 @@ export function daySpans(hours: readonly ReachingDayHours[], day: number): DaySp
 
 /** timeZones lists what this machine offers, with the current zone first. */
 export function timeZones(): string[] {
-  const current = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const current = localZone();
   const supported =
     typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
   const rest = supported.filter((zone) => zone !== current);

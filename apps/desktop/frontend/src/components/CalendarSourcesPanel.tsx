@@ -98,13 +98,10 @@ function sourceKind(source: CalendarSource) {
 export function CalendarSourcesPanel({
   sources,
   available,
-  zoneId = localZone() || "America/New_York",
   onChanged,
 }: {
   sources: CalendarSource[];
   available: boolean;
-  /** Where an added calendar's floating times are placed: this computer's zone. */
-  zoneId?: string;
   onChanged: () => void;
 }) {
   const [removing, setRemoving] = useState<string | null>(null);
@@ -303,7 +300,8 @@ export function CalendarSourcesPanel({
         <CalendarImportPanel
           key={refill ? `refill-${refill.endpoint}` : "add"}
           available={available}
-          zoneId={zoneId}
+          // An added calendar's floating times are placed in this computer's zone.
+          zoneId={localZone()}
           onChanged={onChanged}
           refill={refill}
         />

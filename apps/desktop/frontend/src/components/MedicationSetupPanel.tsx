@@ -7,12 +7,9 @@ import {
   type MedicationUpdateInput,
 } from "../data/medications";
 import { MedicationScheduleEditor } from "./MedicationScheduleEditor";
+import { localZone } from "../utils/civilTime";
 
 const emptyMedication: MedicationInput = { label: "", form: "", strengthLabel: "" };
-
-function localMedicationZone(): string {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-}
 
 function MedicationErasurePanel({
   medication,
@@ -58,7 +55,7 @@ function MedicationEditor({
     onChange({
       ...medication,
       startedLocal: startedLocal || undefined,
-      startedZoneId: startedLocal ? medication.startedZoneId || localMedicationZone() : undefined,
+      startedZoneId: startedLocal ? medication.startedZoneId || localZone() : undefined,
     });
   };
 

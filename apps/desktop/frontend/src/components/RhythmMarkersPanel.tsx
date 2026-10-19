@@ -9,14 +9,11 @@ import {
   type RhythmMarkersData,
 } from "../data/rhythmMarkers";
 import { RhythmMarkerGlyph } from "./RhythmMarkerGlyph";
+import { localZone } from "../utils/civilTime";
 
 function localInputNow() {
   const now = new Date();
   return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
-}
-
-function browserZone() {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York";
 }
 
 const markerKinds = Object.keys(rhythmMarkerKindLabels) as RhythmMarkerKind[];
@@ -44,7 +41,7 @@ export function RhythmMarkersPanel({
   const [kind, setKind] = useState<RhythmMarkerKind>("travel");
   const [startLocal, setStartLocal] = useState(localInputNow);
   const [endLocal, setEndLocal] = useState("");
-  const [zoneId, setZoneId] = useState(browserZone);
+  const [zoneId, setZoneId] = useState(localZone);
   const [note, setNote] = useState("");
   const [eraseID, setEraseID] = useState("");
 

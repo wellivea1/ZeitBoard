@@ -82,6 +82,17 @@ is recorded in the completion plan, which keeps what was declined and why:
   reviews of PR #92 led to two redesigns: what is found waits for the owner, and a lookup a busy
   time defeats gives up rather than wait for good.
 - A security review of PR #89 found no vulnerabilities.
+- PR #97, which made Data Sources and Settings say what is true on every computer, was reviewed
+  twice, on 2026-10-18 at medium and then low effort. Usage limits cut both runs short. Only the
+  simplification reviewer finished, and its eight findings were applied in PR #98:
+  - Settings and Data Sources now name desktop activity's state through one helper. A system that
+    cannot record had read "Off" on one screen and "Unavailable" on the other.
+  - The computer's zone is read in one place, where eleven had each written their own fallback.
+  - The calendar zone is no longer copied into state that the browser preview's fixture could
+    overwrite with UTC.
+  - The rest made repeated code shorter.
+
+  The bug-finding reviewers did not report before being stopped.
 
 Two points the reviews raised more than once are settled by the project's own rules:
 

@@ -14,26 +14,28 @@ import { setWindowClock, type Clock } from "../../utils/windowClock";
 
 const sample = (clock: Clock) => timeOfDay(15, 40, clock);
 
-// Only Windows has a regional format ZeitBoard reads. Elsewhere the first
-// choice is the clock ZeitBoard writes until another is chosen, and says so.
-function choices(
-  platform: string,
-): { preference: ClockPreference; title: string; hint: (system: Clock) => string }[] {
-  return [
-    platform === "windows"
-      ? {
-          preference: "system",
-          title: "As Windows does",
-          hint: (system) => `Follows the regional format, now the ${system}-hour clock.`,
-        }
-      : {
-          preference: "system",
-          title: "ZeitBoard's default",
-          hint: (system) => `The ${system}-hour clock, until you choose another.`,
-        },
-    { preference: "12", title: "12-hour", hint: () => "With AM and PM." },
-    { preference: "24", title: "24-hour", hint: () => "From 00:00 to 23:59." },
-  ];
+interface Choice {
+  preference: ClockPreference;
+  title: string;
+  hint: string;
+}
+
+const FIXED_CHOICES: Choice[] = [
+  { preference: "12", title: "12-hour", hint: "With AM and PM." },
+  { preference: "24", title: "24-hour", hint: "From 00:00 to 23:59." },
+];
+
+// Only Windows has a regional format ZeitBoard reads. Elsewhere this choice is
+// the clock ZeitBoard writes until another is chosen, and says so.
+function systemChoice({ platform, system }: ClockSetting): Choice {
+  const windows = platform === "windows";
+  return {
+    preference: "system",
+    title: windows ? "As Windows does" : "ZeitBoard's default",
+    hint: windows
+      ? `Follows the regional format, now the ${system}-hour clock.`
+      : `The ${system}-hour clock, until you choose another.`,
+  };
 }
 
 export function ClockSettings() {
@@ -84,7 +86,7 @@ export function ClockSettings() {
         <fieldset className="clock-picker" disabled={busy}>
           <legend className="sr-only">Clock</legend>
           <div className="clock-options">
-            {choices(setting.platform).map((choice) => {
+            {[systemChoice(setting), ...FIXED_CHOICES].map((choice) => {
               const clock = choice.preference === "system" ? setting.system : choice.preference;
               const selected = setting.preference === choice.preference;
               return (
@@ -104,7 +106,7 @@ export function ClockSettings() {
                     {sample(clock)}
                   </span>
                   <strong>{choice.title}</strong>
-                  <small>{choice.hint(setting.system)}</small>
+                  <small>{choice.hint}</small>
                 </label>
               );
             })}

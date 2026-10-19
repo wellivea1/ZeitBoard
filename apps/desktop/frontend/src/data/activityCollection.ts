@@ -21,6 +21,26 @@ export interface ActivityCollection {
   powerLog: PowerLogReading;
 }
 
+export type ActivityState = "unavailable" | "off" | "stopped" | "running";
+
+/**
+ * What desktop activity is doing, in one word for every screen that says it:
+ * unavailable where its status cannot be read or the system cannot record it,
+ * otherwise off, stopped or running.
+ */
+export function activityState(status: ActivityCollection | null | undefined): ActivityState {
+  if (!status || (!status.supported && !status.enabled)) return "unavailable";
+  if (status.running) return "running";
+  return status.enabled ? "stopped" : "off";
+}
+
+export const activityStateLabels: Record<ActivityState, string> = {
+  unavailable: "Unavailable",
+  off: "Off",
+  stopped: "Stopped",
+  running: "Running",
+};
+
 const noPowerLog: PowerLogReading = {
   supported: false,
   enabled: false,

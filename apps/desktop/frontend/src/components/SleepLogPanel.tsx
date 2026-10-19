@@ -19,12 +19,7 @@ import {
   type SleepEntryInput,
   type SleepLogPage,
 } from "../data/sleepEntries";
-
-const fallbackSleepZone = "America/New_York";
-
-function browserZone() {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone || fallbackSleepZone;
-}
+import { localZone } from "../utils/civilTime";
 
 function dateTimeInputValue(value: Date) {
   const local = new Date(value.getTime() - value.getTimezoneOffset() * 60_000);
@@ -38,7 +33,7 @@ function initialSleepForm(): SleepEntryInput {
   return {
     startLocal: dateTimeInputValue(start),
     endLocal: dateTimeInputValue(end),
-    zoneId: browserZone(),
+    zoneId: localZone(),
     classification: "principal",
   };
 }

@@ -4,14 +4,11 @@ import type {
   MedicationEventInput,
   MedicationEventStatus,
 } from "../data/medications";
+import { localZone } from "../utils/civilTime";
 
 function localInputNow() {
   const now = new Date();
   return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
-}
-
-function browserZone() {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York";
 }
 
 export function MedicationLogForm({
@@ -28,7 +25,7 @@ export function MedicationLogForm({
   const active = medications.filter((medication) => medication.active);
   const [medicationId, setMedicationID] = useState("");
   const [doseLocal, setDoseLocal] = useState(localInputNow);
-  const [zoneId, setZoneID] = useState(browserZone);
+  const [zoneId, setZoneID] = useState(localZone);
   const [status, setStatus] = useState<MedicationEventStatus>("taken");
   const [scheduled, setScheduled] = useState(false);
   const [note, setNote] = useState("");

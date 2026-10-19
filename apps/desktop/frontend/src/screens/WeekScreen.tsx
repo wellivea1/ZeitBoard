@@ -360,7 +360,7 @@ function WeekFoot({
 }
 
 export function WeekScreen() {
-  const zoneId = localZone() || "America/New_York";
+  const zoneId = localZone();
   const today = todayCivilDate(zoneId);
   const [days, setDays] = useDaysShown();
   const [start, setStart] = useState(today);
