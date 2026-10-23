@@ -81,10 +81,6 @@ func (s *Store) initialize(ctx context.Context) error {
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_source_external
 			ON source_observations(source_id, external_id) WHERE external_id <> ''`,
 		`CREATE INDEX IF NOT EXISTS idx_source_observations_source ON source_observations(source_id)`,
-		// Spans one algorithm's observations, such as those read from Windows'
-		// power log, without parsing the evidence of every other one.
-		`CREATE INDEX IF NOT EXISTS idx_source_observations_algorithm
-			ON source_observations(source_id, json_extract(evidence_json, '$.algorithm'), observed_utc)`,
 		`CREATE TABLE IF NOT EXISTS source_collection_preferences (
 			source_id TEXT PRIMARY KEY,
 			enabled INTEGER NOT NULL CHECK(enabled IN (0, 1)),
@@ -351,6 +347,14 @@ func (s *Store) initialize(ctx context.Context) error {
 			return fmt.Errorf("migrate sqlite: %w", err)
 		}
 	}
+	// Spans one algorithm's observations, such as those read from Windows'
+	// power log, without parsing the evidence of every other one. It only
+	// speeds a span, so failing to build it is not fatal: evidence SQLite
+	// cannot parse, which no build writes but a damaged file could hold, would
+	// otherwise keep the whole database from opening. Only a span that meets
+	// it fails then, as before the index, and the next opening tries again.
+	_, _ = s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_source_observations_algorithm
+		ON source_observations(source_id, json_extract(evidence_json, '$.algorithm'), observed_utc)`)
 	if err := s.initializeSleepAnalysis(ctx); err != nil {
 		return err
 	}

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -108,6 +109,86 @@ func TestOneAlgorithmsSpanReadsItsIndex(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer store.Close()
+	spanReadsItsIndex(t, store)
+}
+
+// A database from the build before the index holds observations and no index
+// of their algorithm. Opening it builds one over what is kept.
+func TestOpeningBuildsTheIndexOverWhatWasKept(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "earlier.db")
+	store, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	at := time.Date(2026, 10, 11, 6, 12, 0, 0, time.UTC)
+	kept := []domain.SourceObservation{
+		{ID: "power-log-1", SourceID: "desktop-activity", ExternalID: "windows-power-log:1", Kind: "activity",
+			ObservedAt: domain.MustZonedInstant(at, "UTC"), RecordedAt: at,
+			Evidence: domain.Evidence{Algorithm: "windows-power-log-v1"}, Payload: json.RawMessage(`{"state":"suspended"}`)},
+		{ID: "activity-synthetic-1", SourceID: "desktop-activity", Kind: "activity",
+			ObservedAt: domain.MustZonedInstant(at.Add(time.Hour), "UTC"), RecordedAt: at,
+			Evidence: domain.Evidence{Algorithm: "activity-v3"}, Payload: json.RawMessage(`{"state":"idle"}`)},
+	}
+	if err := store.Append(ctx, kept); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.ExecContext(ctx, `DROP INDEX idx_source_observations_algorithm`); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := Open(path)
+	if err != nil {
+		t.Fatalf("a database holding observations did not open: %v", err)
+	}
+	defer reopened.Close()
+	if span, err := reopened.SourceObservationSpan(ctx, "desktop-activity", "windows-power-log-v1"); err != nil || span.Count != 1 || !span.Latest.Equal(at) {
+		t.Errorf("span of what was kept before %+v, %v", span, err)
+	}
+	spanReadsItsIndex(t, reopened)
+}
+
+// Evidence SQLite cannot parse, which no build writes but a damaged file could
+// hold, leaves the index unbuilt rather than the database unopened.
+func TestEvidenceSQLiteCannotParseStillOpens(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "damaged.db")
+	store, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	for _, statement := range []string{
+		`DROP INDEX idx_source_observations_algorithm`,
+		`INSERT INTO source_observations(
+			id, source_id, kind, observed_utc, zone_id, recorded_at, evidence_json, payload_json
+		) VALUES('damaged-1', 'desktop-activity', 'activity', '2026-10-11T06:12:00Z', 'UTC',
+			'2026-10-11T06:12:00Z', CAST('{"algorithm":' AS BLOB), CAST('{}' AS BLOB))`,
+	} {
+		if _, err := store.db.ExecContext(ctx, statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := store.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	reopened, err := Open(path)
+	if err != nil {
+		t.Fatalf("one damaged evidence kept the database from opening: %v", err)
+	}
+	defer reopened.Close()
+	if span, err := reopened.SourceObservationSpan(ctx, "desktop-activity", ""); err != nil || span.Count != 1 {
+		t.Errorf("whole span %+v, %v", span, err)
+	}
+}
+
+// spanReadsItsIndex fails the test unless SQLite answers one algorithm's span
+// from idx_source_observations_algorithm alone.
+func spanReadsItsIndex(t *testing.T, store *Store) {
+	t.Helper()
 	query, args := spanQuery("desktop-activity", "windows-power-log-v1")
 	rows, err := store.db.QueryContext(context.Background(), "EXPLAIN QUERY PLAN "+query, args...)
 	if err != nil {

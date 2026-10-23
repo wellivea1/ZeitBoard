@@ -3461,7 +3461,11 @@ The review's last four findings are fixed by the change after:
 - **Reading Windows' log.** Every read of desktop activity's status spans what was read from
   Windows' log, and Data Sources reads it each minute. Finding those records meant parsing the
   evidence of every observation the desktop had kept. An index on the algorithm now answers alone.
-  A test reads SQLite's query plan, and fails without the index.
+  A test reads SQLite's query plan, and fails without the index. Building the index parses every
+  evidence already kept, and one SQLite cannot parse would keep the whole database from opening
+  were that failure fatal. No build writes such evidence, but a damaged file could hold it, so the
+  build is not fatal: only a span that meets it fails. Tests open a database kept before the index,
+  and one holding damaged evidence, which fails against a fatal build.
 - **A start with no test.** Nothing tested the desktop's start when the stored clock cannot be
   read. A test now saves the 24-hour clock, damages every copy of the file and starts again. The
   system's clock is in use, and Settings says the stored one could not be read.
