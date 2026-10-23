@@ -3534,14 +3534,18 @@ Each now reads through `useLoaded`, the one way a view reads from the desktop. I
 a time and keeps only the newest answer, and a value a change returned outlasts a read that started
 before it. Its own tests cover each of these. Moving the views to it found two more things:
 
-- **Calendars claimed before they were read.** Data Sources said "No calendars yet" while still
-  reading them. When the read failed, both lists went on saying there were none. They now say
-  nothing until the calendars are read, and say when they could not be.
+- **Lists claimed before they were read.** Data Sources said "No calendars yet" while still
+  reading them, and both of its lists went on saying there were none when the read failed. Home's
+  diary said "Nothing is fixed in the next three days" and its doses "No medications listed" in the
+  same two cases, beside a column that already said "Checking…". Log › Context said the desktop
+  service was unavailable until its first read answered. Each now says nothing, or that it is
+  checking, until it has read, and says when it could not read.
 - **Views that went stale with time.** Home's diary starts today and runs 72 hours ahead, but was
   read only when a record or a calendar changed, so after midnight it missed the last day of its
   span. Plan › Week's note that the estimate is old was read only when sleep was recorded. Both are
   now read again as time passes, as the rest of Home is.
 
 The race test now shows that the outdated answer is never drawn, and it fails against the code
-before PR #99. The two tests of calendars not yet read, and of a read that failed, fail against
-PR #99's. A new Week test steps to the next days and finds their nights read.
+before PR #99. The tests of lists not yet read, and of reads that failed, fail against the code
+before the change: two for Data Sources, two for Home's columns and one for Context. A new Week
+test steps to the next days and finds their nights read.

@@ -143,14 +143,26 @@ export function NeedsYou() {
   );
 }
 
-export function Diary({ days }: { days: DiaryDay[] }) {
+// A diary not yet read, or one that could not be, is not an empty one.
+export function Diary({
+  days,
+}: {
+  /** Undefined while the calendar is read; null when it could not be. */
+  days: DiaryDay[] | null | undefined;
+}) {
   return (
     <section className="home-column" aria-labelledby="diary-title">
       <h2 id="diary-title" className="section-title">
         In the diary
       </h2>
-      {days.length === 0 ? (
-        <p className="home-empty">Nothing is fixed in the next three days.</p>
+      {!days || days.length === 0 ? (
+        <p className="home-empty">
+          {days === undefined
+            ? "Checking…"
+            : days === null
+              ? "The calendar could not be read just now."
+              : "Nothing is fixed in the next three days."}
+        </p>
       ) : (
         days.map((day) => (
           <div className="diary-day" key={day.key}>
@@ -180,7 +192,8 @@ export function Doses({
   available,
   onLog,
 }: {
-  data: MedicationsData | null;
+  /** Undefined while they are read; null when they could not be. */
+  data: MedicationsData | null | undefined;
   busy: boolean;
   available: boolean;
   onLog: (input: MedicationEventInput) => Promise<void>;
@@ -200,7 +213,15 @@ export function Doses({
         />
       ) : (
         <p className="home-empty">
-          No medications listed. <a href="#/log/medications">Add one in Log</a>.
+          {data === undefined ? (
+            "Checking…"
+          ) : data === null ? (
+            "Your medications could not be read just now."
+          ) : (
+            <>
+              No medications listed. <a href="#/log/medications">Add one in Log</a>.
+            </>
+          )}
         </p>
       )}
       <a

@@ -60,4 +60,35 @@ describe("LogScreen marker ownership", () => {
     await waitFor(() => expect(addMarker).toHaveBeenCalledTimes(1));
     expect(getMarkers).toHaveBeenCalledTimes(1);
   });
+
+  // Until the first read answered, Context said the desktop service was
+  // unavailable, as Sharing once said to open the desktop app.
+  it("reads the markers before saying anything of them", async () => {
+    let answer!: (value: unknown) => void;
+    (globalThis as { go?: unknown }).go = {
+      main: { App: { GetRhythmMarkers: () => new Promise((resolve) => (answer = resolve)) } },
+    };
+    render(<LogScreen tab="context" onSelect={() => {}} />);
+    const context = screen.getByRole("tabpanel");
+    expect(context).toHaveTextContent("Reading your records…");
+    expect(context).not.toHaveTextContent("Desktop service unavailable");
+
+    answer(structuredClone(markerResponse));
+    expect(await screen.findByText("Private travel context")).toBeVisible();
+  });
+
+  it("says why when the markers could not be read", async () => {
+    (globalThis as { go?: unknown }).go = {
+      main: {
+        App: {
+          GetRhythmMarkers: async () => {
+            throw new Error("The marker store could not be opened.");
+          },
+        },
+      },
+    };
+    render(<LogScreen tab="context" onSelect={() => {}} />);
+    expect(await screen.findByText("Desktop service unavailable")).toBeVisible();
+    expect(screen.getByText("The marker store could not be opened.")).toBeVisible();
+  });
 });

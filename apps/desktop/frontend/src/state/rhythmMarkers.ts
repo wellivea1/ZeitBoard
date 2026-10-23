@@ -22,7 +22,8 @@ import { createCoalescedRefresh, type CoalescedRefresh } from "../utils/coalesce
 // second surface can render markers without a second copy of this logic.
 
 export interface RhythmMarkersState {
-  data: RhythmMarkersData;
+  /** Undefined until the first read settles: not yet read is not unavailable. */
+  data: RhythmMarkersData | undefined;
   busy: boolean;
   exporting: boolean;
   error: string;
@@ -33,7 +34,7 @@ export interface RhythmMarkersState {
 }
 
 export function useRhythmMarkers(): RhythmMarkersState {
-  const [data, setData] = useState(unavailableRhythmMarkers);
+  const [data, setData] = useState<RhythmMarkersData | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState("");
@@ -59,6 +60,8 @@ export function useRhythmMarkers(): RhythmMarkersState {
         setError("");
       },
       (reason) => {
+        // A first read that fails is shown as unavailable, with its reason.
+        setData((current) => current ?? unavailableRhythmMarkers);
         setError(reason instanceof Error ? reason.message : "Rhythm markers could not be loaded.");
       },
     );
@@ -116,7 +119,7 @@ export function useRhythmMarkers(): RhythmMarkersState {
   };
 
   const exportAll = () => {
-    if (exporting || data.status === "unavailable") return;
+    if (exporting || !data || data.status === "unavailable") return;
     setExporting(true);
     setError("");
     void exportRhythmMarkers().then(

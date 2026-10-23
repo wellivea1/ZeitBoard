@@ -238,7 +238,7 @@ export function RhythmScreen({
           {chart((ready) => (
             <ActogramPanel
               actogram={ready.actogram}
-              markers={mode === "fixture" ? [] : markers.data.markers}
+              markers={mode === "fixture" ? [] : (markers.data?.markers ?? [])}
             />
           ))}
         </ScreenTabPanel>
