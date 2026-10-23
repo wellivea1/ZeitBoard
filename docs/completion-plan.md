@@ -1783,6 +1783,9 @@ synthetic nights. What it found:
 
 The Narrator pass has not run. When the window and Narrator were asked for, on 2026-10-18,
 control was declined, so the pass waits until the owner allows it. Nothing was turned on or typed.
+In its place, on 2026-10-23, the accessibility tree of every screen was swept in the browser pane:
+names, headings and landmarks, with no gap found. The verification log records it. Real
+assistive technology is still the check C7 asks for.
 
 ## Where the completion goal stands — 2026-09-27
 

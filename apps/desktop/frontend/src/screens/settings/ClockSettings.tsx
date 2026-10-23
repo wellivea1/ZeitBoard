@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  clockUnavailable,
   loadClockSetting,
   saveClockSetting,
   type ClockPreference,
@@ -47,7 +46,11 @@ export function ClockSettings() {
   useEffect(() => {
     let current = true;
     void loadClockSetting().then((loaded) => {
-      if (current) setSetting(loaded ?? clockUnavailable());
+      if (!current) return;
+      // A desktop that does not answer is not stood in for, as the browser's
+      // clock would claim to be Windows' on any system.
+      if (loaded) setSetting(loaded);
+      else setError("The clock setting could not be read. The window keeps the clock it has.");
     });
     return () => {
       current = false;

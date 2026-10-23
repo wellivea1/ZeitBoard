@@ -77,8 +77,9 @@ export function DataSourcesScreen() {
   });
   const [syncStatus, setSyncStatus] = useState<BackendSyncStatus | undefined>(undefined);
   const calendars = useCalendarSources();
-  // Without an answer the row is left out, as the sync row is.
-  const { data: activity } = useLoaded(loadActivityCollection);
+  // It says what is happening now, so it is read again as time passes. Without
+  // an answer the row is left out, as the sync row is.
+  const { data: activity } = useLoaded(loadActivityCollection, { expires: true });
 
   useEffect(() => {
     let current = true;

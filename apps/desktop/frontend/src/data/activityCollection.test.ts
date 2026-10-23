@@ -23,8 +23,9 @@ describe("activityState", () => {
     expect(activityState({ ...off, enabled: true, running: true })).toBe("running");
   });
 
-  // Collection that is somehow on where it cannot run can still be turned off.
-  it("does not hide collection that is on", () => {
-    expect(activityState({ ...off, supported: false, enabled: true })).toBe("stopped");
+  // Collection left on where it cannot run, as in a data folder brought from
+  // Windows, is not "stopped": no retry could start it there.
+  it("calls collection left on where it cannot run unavailable", () => {
+    expect(activityState({ ...off, supported: false, enabled: true })).toBe("unavailable");
   });
 });

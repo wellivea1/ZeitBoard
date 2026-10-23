@@ -96,40 +96,62 @@ describe("DataSourceStatusPanel", () => {
       "#/settings/computer",
     );
 
+    // Records kept are counted whatever the state, as Settings counts them.
+    rerender(<DataSourceStatusPanel activity={{ ...activity, recordCount: 2140 }} />);
+    expect(row()).toHaveTextContent("Off unless you turn it on in Settings. 2140 records kept.");
+
+    const running = { ...activity, enabled: true, running: true, recordCount: 1 };
     rerender(
       <DataSourceStatusPanel
-        activity={{
-          ...activity,
-          enabled: true,
-          running: true,
-          recordCount: 1,
-          powerLog: { ...activity.powerLog, enabled: true },
-        }}
+        activity={{ ...running, powerLog: { ...activity.powerLog, enabled: true } }}
       />,
     );
     expect(row()).toHaveTextContent(
-      "1 record of when this computer was active, idle or locked, and sleep and wake read from Windows",
+      "Recording when this computer is active, idle or locked. 1 record kept. Sleep and wake are read from Windows' log.",
     );
     expect(row()).toHaveTextContent("Running");
 
+    // Reading Windows' log is not claimed while it fails.
     rerender(
       <DataSourceStatusPanel
         activity={{
-          ...activity,
-          enabled: true,
-          recordCount: 6,
-          lastError: "Records could not be saved.",
+          ...running,
+          powerLog: { ...activity.powerLog, enabled: true, lastError: "Could not be read." },
         }}
       />,
     );
-    expect(row()).toHaveTextContent(
-      "Records could not be saved. 6 records kept. Retry in Settings.",
+    expect(row()).toHaveTextContent("Windows' log could not be read.");
+    expect(row()).not.toHaveTextContent("Sleep and wake are read");
+
+    // The reason already says what to do, and is not told twice.
+    const reason =
+      "Activity collection stopped because its records could not be saved. Retry collection or check local storage.";
+    rerender(
+      <DataSourceStatusPanel
+        activity={{ ...activity, enabled: true, recordCount: 6, lastError: reason }}
+      />,
     );
+    expect(row()).toHaveTextContent(`${reason} 6 records kept. See Settings.`);
     expect(row()).toHaveTextContent("Stopped");
 
     rerender(<DataSourceStatusPanel activity={{ ...activity, supported: false }} />);
     expect(row()).toHaveTextContent("This system cannot record it.");
     expect(row()).toHaveTextContent("Unavailable");
+
+    // Left on where it cannot run, as in a data folder brought from Windows: no
+    // retry could start it, so the row says to turn it off.
+    rerender(
+      <DataSourceStatusPanel
+        activity={{
+          ...activity,
+          supported: false,
+          enabled: true,
+          lastError: "Activity collection is unavailable on this platform.",
+        }}
+      />,
+    );
+    expect(row()).toHaveTextContent("This system cannot record it. Turn it off in Settings.");
+    expect(row()).not.toHaveTextContent("Retry");
   });
 
   it("points to the nights with more than one record", () => {

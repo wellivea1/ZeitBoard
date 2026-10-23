@@ -26,10 +26,11 @@ export type ActivityState = "unavailable" | "off" | "stopped" | "running";
 /**
  * What desktop activity is doing, in one word for every screen that says it:
  * unavailable where its status cannot be read or the system cannot record it,
+ * even if it was left on there, as in a data folder brought from Windows;
  * otherwise off, stopped or running.
  */
 export function activityState(status: ActivityCollection | null | undefined): ActivityState {
-  if (!status || (!status.supported && !status.enabled)) return "unavailable";
+  if (!status || !status.supported) return "unavailable";
   if (status.running) return "running";
   return status.enabled ? "stopped" : "off";
 }

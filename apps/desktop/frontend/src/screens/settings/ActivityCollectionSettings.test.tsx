@@ -78,9 +78,30 @@ it("says plainly where desktop activity cannot be recorded", async () => {
   await screen.findByText("ZeitBoard cannot record desktop activity on this system.");
   // The word Data Sources uses for the same state.
   expect(screen.getByText("Unavailable")).toBeInTheDocument();
+  expect(screen.queryByText(/Off unless you turn it on/)).toBeNull();
   expect(screen.queryByRole("button", { name: "Enable local activity collection" })).toBeNull();
   expect(screen.queryByLabelText("Activity time zone")).toBeNull();
   expect(screen.queryByText(/Windows/)).toBeNull();
+});
+
+// Left on where it cannot run, as in a data folder brought from Windows, it can
+// only be turned off: Retry, which the desktop always refuses there, is gone.
+it("offers only turning off collection left on where it cannot run", async () => {
+  const off = vi.fn(async () => ({ ...initial, supported: false }));
+  install({
+    GetActivityCollection: async () => ({
+      ...initial,
+      supported: false,
+      enabled: true,
+      lastError: "Activity collection is unavailable on this platform.",
+    }),
+    SetActivityCollection: off,
+  });
+  render(<ActivityCollectionSettings />);
+  await screen.findByText("ZeitBoard cannot record desktop activity on this system.");
+  expect(screen.queryByRole("button", { name: "Retry collection" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Turn off activity collection" }));
+  await waitFor(() => expect(off).toHaveBeenCalledWith({ enabled: false, zoneId: "UTC" }));
 });
 
 // Reading Windows' log is a choice of its own: it says what it reads before it

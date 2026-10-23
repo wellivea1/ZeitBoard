@@ -13,8 +13,7 @@ import { timeZones } from "../../data/reachingHours";
 import { createCoalescedRefresh, type CoalescedRefresh } from "../../utils/coalescedRefresh";
 
 // The zone records are kept in, and the switch, with Retry once collection has
-// stopped by itself. Shown only where the system can record, or collection is
-// on and can still be turned off.
+// stopped by itself. Shown only where the system can record.
 function CollectionControls({
   status,
   zone,
@@ -251,17 +250,17 @@ export function ActivityCollectionSettings() {
       <div className="data-control-intro">
         <h2 id="activity-heading">Desktop activity</h2>
         <p className="settings-copy">
-          Off unless you turn it on. Records only when this computer is active, idle or locked:
-          never keystrokes, window titles, screenshots or browsing. It stays on this computer and
-          does not change estimates or planning.
+          {status?.supported !== false && "Off unless you turn it on. "}Records only when this
+          computer is active, idle or locked: never keystrokes, window titles, screenshots or
+          browsing. It stays on this computer and does not change estimates or planning.
         </p>
         <details className="settings-more fold">
           <summary>When it runs</summary>
           <p className="settings-copy">
-            Once on, it continues when you hide or close the window and resumes when ZeitBoard
-            reopens; Quit from the tray stops it. It cannot collect while the computer is asleep or
-            the app is closed, and gaps between polls are kept as possible suspend and resume
-            evidence.
+            Once on, it continues while ZeitBoard runs, with its window open or hidden, and resumes
+            when ZeitBoard reopens; quitting stops it. It cannot collect while the computer is
+            asleep or the app is closed, and gaps between polls are kept as possible suspend and
+            resume evidence.
             {status?.powerLog.supported &&
               " With sleep and wake read from Windows, the times Windows noted while ZeitBoard was closed are read when it runs again."}
           </p>
@@ -280,8 +279,21 @@ export function ActivityCollectionSettings() {
             </div>
           </dl>
           {status && activityState(status) === "unavailable" ? (
-            // Nothing here could turn it on, so nothing is offered.
-            <p>ZeitBoard cannot record desktop activity on this system.</p>
+            // Nothing here could turn it on, so nothing is offered but turning
+            // off collection left on, as in a data folder brought from Windows.
+            <>
+              <p>ZeitBoard cannot record desktop activity on this system.</p>
+              {status.enabled && (
+                <button
+                  className="button primary"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void run(() => setActivityCollection(false, status.zoneId))}
+                >
+                  Turn off activity collection
+                </button>
+              )}
+            </>
           ) : (
             <CollectionControls
               status={status}

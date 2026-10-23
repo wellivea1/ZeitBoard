@@ -3377,8 +3377,8 @@ Seen in the running desktop:
   macOS and Linux. A stored clock that cannot be read no longer says "Windows' own is in use"
   away from Windows, where it is ZeitBoard's default.
 - **Medication reminders.** The opt-in read "Show this label through Windows". It now reads "as a
-  desktop notification". Where notifications are unavailable, the medication screen already says
-  that enabled reminders will not be shown.
+  desktop notification". Where notifications cannot be shown, the medication screen's reminder line
+  says so: once a reminder is on, and since 2026-10-23 before any is.
 - **The tray.** Where there is no tray, "While ZeitBoard is running" said both that closing the
   window hides it in the tray and that closing it quits. Now it says only the second.
 
@@ -3402,3 +3402,47 @@ Found reading Data Sources while checking other systems:
 
 Component tests cover each, and the screen's run as a computer in London. All four new tests fail
 without the change.
+
+## What the review of Data Sources and Settings found — 2026-10-23
+
+An automated review of PR #97 had its bug-finding reviewers stopped by usage limits, then resumed.
+Three of the five reported. PR #98 fixes every finding they made:
+
+- **A row that went stale.** The desktop activity row was read once per visit, so it could say
+  "Running" after collection had stopped. Hiding the window keeps the screen mounted. It is now
+  read again on focus, on showing and each minute, like the other statements about the present.
+- **A retry that could never work.** Collection left on where it cannot run, as in a data folder
+  brought from Windows, read "Stopped… Retry in Settings", and Settings offered Retry, which the
+  desktop always refuses there. It is now "Unavailable" on both screens, and only turning it off
+  is offered.
+- **Promises a system cannot keep.** The activity intro said "Off unless you turn it on" where it
+  cannot be turned on. "When it runs" promised a tray Quit where there may be no tray. And
+  "While ZeitBoard is running" spoke of the tray before it was known whether there was one. Each
+  now holds on every system. Without a tray, the card says that quitting stops what was turned on.
+- **Counts and claims about Windows' log.** The row called every record a poll of when the computer
+  was active, idle or locked, though the count includes what was read from Windows' log. It also
+  said that log was read while reading it failed. The count is now simply records kept, said in
+  every state as Settings says it, and the log is mentioned as read only when it was.
+- **Advice twice.** A stopped collector's reason already says to retry, and the row no longer
+  repeats it.
+- **A stand-in clock.** When the desktop did not answer, Settings › Display showed the browser's
+  clock as "As Windows does" on any system. It now says the setting could not be read.
+- **Reminders.** Before any reminder was on, the medication screen did not say that notifications
+  cannot be shown here. Its reminder line now says so, and keeps the "disabled" status the window
+  requires while none is on.
+- **The date twice.** Found in the same sweep of the accessibility tree: each actogram band was
+  named "Sleep interval: Oct 17, Oct 17, 5:27 PM…", the day said before a start that carries it.
+
+Eight component tests and a Go test cover these. The eight fail against the code before the fix.
+The reviewer of cross-file effects and the one for language pitfalls were stopped again by usage
+limits before reporting.
+
+## Every screen's names, headings and landmarks — 2026-10-23
+
+The running window was swept in the built-in browser pane, which draws the same Chromium
+accessibility tree WebView2 gives a screen reader. Sixteen screens were swept, from Home to every
+settings tab. Each has one `h1`, one `main` and the two navigation landmarks, and no heading level
+is skipped. No focusable control lacks an accessible name, no image lacks alternative text, and no
+drawing is left unlabeled. The browser's own tree confirmed the names on the two busiest screens,
+Plan › Week and Rhythm. This is not the screen-reader pass with Narrator, which still waits on the
+owner.

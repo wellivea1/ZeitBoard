@@ -92,17 +92,36 @@ const activityRowStates: Record<ActivityState, SourceRowProps["state"]> = {
 function ActivityRow({ status }: { status: ActivityCollection }) {
   const state = activityState(status);
   const settings = <a href="#/settings/computer">Settings</a>;
-  const records = `${status.recordCount} ${status.recordCount === 1 ? "record" : "records"}`;
+  // The count holds whatever was read from Windows' log as well as the polls,
+  // and is said whatever the state, as Settings says it.
+  const records = `${status.recordCount} ${status.recordCount === 1 ? "record" : "records"} kept.`;
+  const kept = status.recordCount > 0 ? ` ${records}` : "";
+  const powerLog = status.powerLog;
   const details: Record<ActivityState, ReactNode> = {
-    unavailable: "This system cannot record it.",
-    off: <>Off unless you turn it on in {settings}.</>,
-    stopped: (
+    unavailable: status.enabled ? (
       <>
-        {status.lastError || "It has stopped."} {records} kept. Retry in {settings}.
+        This system cannot record it. Turn it off in {settings}.{kept}
+      </>
+    ) : (
+      `This system cannot record it.${kept}`
+    ),
+    off: (
+      <>
+        Off unless you turn it on in {settings}.{kept}
       </>
     ),
-    running: `${records} of when this computer was active, idle or locked${
-      status.powerLog.enabled ? ", and sleep and wake read from Windows" : ""
+    // The reason already says what to do; Settings is where to do it.
+    stopped: (
+      <>
+        {status.lastError || "It has stopped."} {records} See {settings}.
+      </>
+    ),
+    running: `Recording when this computer is active, idle or locked. ${records}${
+      !powerLog.enabled
+        ? ""
+        : powerLog.lastError
+          ? " Windows' log could not be read."
+          : " Sleep and wake are read from Windows' log."
     }`,
   };
   return (

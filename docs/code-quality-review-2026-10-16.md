@@ -92,7 +92,12 @@ is recorded in the completion plan, which keeps what was declined and why:
     overwrite with UTC.
   - The rest made repeated code shorter.
 
-  The bug-finding reviewers did not report before being stopped.
+  The bug-finding reviewers were then resumed. Three of the five reported, and PR #98 also fixes
+  everything they found, recorded in the verification log as "What the review of Data Sources and
+  Settings found". Among them: a status row read only once, a Retry the desktop always refuses,
+  promises of a tray that may not exist, and a clock stood in for when the desktop does not
+  answer. The reviewers of cross-file effects and of language pitfalls were stopped again by usage
+  limits.
 
 Two points the reviews raised more than once are settled by the project's own rules:
 
