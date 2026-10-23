@@ -22,8 +22,8 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
@@ -115,7 +115,9 @@ internal fun RhythmDial(
             .widthIn(max = 360.dp)
             .fillMaxWidth()
             .aspectRatio(1f)
-            .semantics { contentDescription = description },
+            // One stop, read as its description, which already says what the
+            // centre does; the centre's capitals were read again after it.
+            .clearAndSetSemantics { contentDescription = description },
         contentAlignment = Alignment.Center,
     ) {
         Canvas(modifier = Modifier.fillMaxSize()) {
