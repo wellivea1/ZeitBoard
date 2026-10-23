@@ -496,3 +496,18 @@ func TestMedicationSleepIndexUsesPrincipalHalfOpenIntervals(t *testing.T) {
 		t.Fatalf("next interval = %#v ok=%v", next, ok)
 	}
 }
+
+// Where notifications cannot be shown, the medication screen says so before a
+// reminder is turned on: the opt-in otherwise promised a notification that
+// could never come.
+func TestRemindersSayTheyAreUnavailableBeforeAnyIsOn(t *testing.T) {
+	app := newTestApp(t)
+	if status, _ := app.medicationReminderStatus(nil); status != "disabled" {
+		t.Fatalf("with notifications available, status = %q", status)
+	}
+	app.setMedicationReminderError("Desktop notifications are unavailable; enabled reminders will not be shown.")
+	status, message := app.medicationReminderStatus(nil)
+	if status != "disabled" || !strings.Contains(message, "notifications are unavailable") {
+		t.Fatalf("with no notifications, status = %q, %q", status, message)
+	}
+}

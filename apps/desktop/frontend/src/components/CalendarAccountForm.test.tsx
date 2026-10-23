@@ -50,7 +50,7 @@ function desktop(methods: Record<string, unknown>) {
 }
 
 function openAccountTab(onChanged = vi.fn()) {
-  render(<CalendarImportPanel available zoneId="America/New_York" onChanged={onChanged} />);
+  render(<CalendarImportPanel available onChanged={onChanged} />);
   fireEvent.click(screen.getByRole("tab", { name: "Google or Microsoft" }));
   return onChanged;
 }
@@ -148,7 +148,6 @@ describe("CalendarAccountForm", () => {
       accountId: account.accountId,
       calendarId: "owner@example.test",
       label: "Owner",
-      zoneId: "America/New_York",
     });
     fireEvent.click(screen.getByRole("button", { name: "Bring in Owner" }));
     await waitFor(() => expect(onChanged).toHaveBeenCalledOnce());

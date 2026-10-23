@@ -104,7 +104,9 @@ describe("DataSourcesScreen structure", () => {
     const row = (await screen.findByRole("heading", { name: "Desktop activity" })).closest(
       "article",
     );
-    expect(row).toHaveTextContent("14 records of when this computer was active, idle or locked");
+    expect(row).toHaveTextContent(
+      "Recording when this computer is active, idle or locked. 14 records kept.",
+    );
     expect(row).toHaveTextContent("Running");
   });
 

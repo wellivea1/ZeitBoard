@@ -18,6 +18,7 @@ import {
   MedicationReportControls,
   MedicationReportPreviewBody,
 } from "./MedicationClinicalReportSections";
+import { localZone } from "../utils/civilTime";
 
 function localDate(daysFromToday = 0): string {
   const value = new Date();
@@ -27,10 +28,6 @@ function localDate(daysFromToday = 0): string {
   const month = String(value.getMonth() + 1).padStart(2, "0");
   const day = String(value.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
-}
-
-function localZone(): string {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
 }
 
 function initialInput(): MedicationClinicalReportInput {

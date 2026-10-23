@@ -4,7 +4,7 @@ import { ActivityExportPanel } from "../components/ActivityExportPanel";
 import { CalendarSourcesPanel } from "../components/CalendarSourcesPanel";
 import { DataSourceStatusPanel } from "../components/DataSourceStatusPanel";
 import { SleepImportPanel } from "../components/SleepImportPanel";
-import { loadActivityCollection } from "../data/activityCollection";
+import { loadActivityCollection, type ActivityCollection } from "../data/activityCollection";
 import { loadBackendSyncStatus, type BackendSyncStatus } from "../data/backendSync";
 import {
   calendarDataChangedEvent,
@@ -23,37 +23,30 @@ import { localZone } from "../utils/civilTime";
 // bring more in. Recording last night is in Log. Calendars moved here from
 // beside the calendar board, because adding one is set-up, not planning.
 
-// The zone a calendar is read in, and an added file's floating times placed in:
-// this computer's, as on Home and Plan. It was New York's for everyone.
-function calendarZone() {
-  return localZone() || "America/New_York";
-}
-
 interface CalendarSources {
   ready: boolean;
   available: boolean;
-  zoneId: string;
   sources: CalendarSource[];
 }
 
 function useCalendarSources(): CalendarSources {
-  const [state, setState] = useState<CalendarSources>(() => ({
+  const [state, setState] = useState<CalendarSources>({
     ready: false,
     available: false,
-    zoneId: calendarZone(),
     sources: [],
-  }));
+  });
   useEffect(() => {
     let current = true;
     const load = () => {
-      const zoneId = calendarZone();
+      // Read in this computer's zone, as on Home and Plan. It was New York's
+      // for everyone.
+      const zoneId = localZone();
       void loadCalendar({ startCivilDate: todayCivilDate(zoneId), days: 1, zoneId }).then(
         (result) => {
           if (!current) return;
           setState({
             ready: true,
             available: result.source === "local",
-            zoneId: result.data.zoneId,
             sources: result.data.sources,
           });
         },
@@ -84,8 +77,12 @@ export function DataSourcesScreen() {
   });
   const [syncStatus, setSyncStatus] = useState<BackendSyncStatus | undefined>(undefined);
   const calendars = useCalendarSources();
-  // Without an answer the row is left out, as the sync row is.
-  const { data: activity } = useLoaded(loadActivityCollection);
+  // It says what is happening now, so it is read again as time passes, and a
+  // read that fails says so (null) rather than leave the last answer standing.
+  const { data: activity } = useLoaded<ActivityCollection | null>(loadActivityCollection, {
+    expires: true,
+    fallback: () => null,
+  });
 
   useEffect(() => {
     let current = true;
@@ -115,7 +112,6 @@ export function DataSourcesScreen() {
         <CalendarSourcesPanel
           sources={calendars.sources}
           available={calendars.available}
-          zoneId={calendars.zoneId}
           onChanged={notifyCalendarDataChanged}
         />
         <SleepImportPanel />

@@ -82,6 +82,30 @@ describe("ClockSettings", () => {
     expect(screen.queryByText(/Windows/)).toBeNull();
   });
 
+  // The browser's clock once stood in for a desktop that did not answer, and
+  // offered "As Windows does" on any system.
+  it("says the setting could not be read rather than stand in for it", async () => {
+    install({
+      GetClockSetting: async () => {
+        throw new Error("not ready");
+      },
+    });
+    render(<ClockSettings />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The clock setting could not be read.",
+    );
+    expect(screen.queryByRole("radio")).toBeNull();
+  });
+
+  // Outside the desktop the clock is the browser's, and was offered as
+  // Windows' on any system.
+  it("names the browser's clock as the browser's outside the desktop", async () => {
+    render(<ClockSettings />);
+    const first = await screen.findByRole("radio", { name: /As this browser does/ });
+    expect(first).toBeChecked();
+    expect(screen.queryByText(/Windows/)).toBeNull();
+  });
+
   it("saves a choice and puts it in use at once", async () => {
     const saves = stub("12");
     render(<ClockSettings />);

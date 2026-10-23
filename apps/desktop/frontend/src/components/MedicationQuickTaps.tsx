@@ -4,7 +4,7 @@ import type {
   MedicationEventStatus,
   MedicationLog,
 } from "../data/medications";
-import { zoneWords } from "../utils/civilTime";
+import { localZone, zoneWords } from "../utils/civilTime";
 import { clockTime, relativeDay } from "../utils/relativeTime";
 
 // One tap per dose. Recording "taken now" used to mean choosing the medication
@@ -16,10 +16,6 @@ import { clockTime, relativeDay } from "../utils/relativeTime";
 function localInputNow() {
   const now = new Date();
   return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
-}
-
-function browserZone() {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York";
 }
 
 function lastEventWording(event: MedicationLog | undefined, now: Date) {
@@ -56,7 +52,7 @@ function usualWording(medication: MedicationDefinition) {
       : "";
   // The schedule keeps its own zone; say so when this computer is elsewhere.
   const zone =
-    schedule.zoneId && schedule.zoneId !== browserZone() ? ` ${zoneWords(schedule.zoneId)}` : "";
+    schedule.zoneId && schedule.zoneId !== localZone() ? ` ${zoneWords(schedule.zoneId)}` : "";
   return `Usually at ${list}${zone}${cycle}`;
 }
 
@@ -96,7 +92,7 @@ export function MedicationQuickTaps({
     void onLog({
       medicationId: medication.medicationId,
       doseLocal: localInputNow(),
-      zoneId: browserZone(),
+      zoneId: localZone(),
       status,
       scheduled: false,
       note: "",

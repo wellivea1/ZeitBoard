@@ -29,9 +29,10 @@ function bandStyle(startHour: number, durationHours: number) {
   };
 }
 
+// The start already carries its date, so the day is not said again before it.
 function bandAriaLabel(band: RhythmSleepBand) {
   const prefix = band.kind === "forecast" ? "Predicted sleep window" : "Sleep interval";
-  return `${prefix}: ${band.day}, ${band.startLabel} to ${band.wakeLabel}, ${band.durationLabel}, ${band.source}`;
+  return `${prefix}: ${band.startLabel} to ${band.wakeLabel}, ${band.durationLabel}, ${band.source}`;
 }
 
 // A sleep is named and focused once, on the row of the day it began; on the

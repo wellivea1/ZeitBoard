@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import type { Task, TaskInput } from "../data/tasks";
+import { localZone } from "../utils/civilTime";
 
 function civilInput(instant?: string): string {
   if (!instant) return "";
@@ -26,7 +27,7 @@ export function TaskEditor({
   const [start, setStart] = useState(civilInput(task?.earliestStartAt));
   const [finish, setFinish] = useState(civilInput(task?.latestFinishAt));
   const [afterWake, setAfterWake] = useState(task?.preferredAfterWakeMinutes ?? 0);
-  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const zone = localZone();
   const submit = (event: FormEvent) => {
     event.preventDefault();
     onSave({

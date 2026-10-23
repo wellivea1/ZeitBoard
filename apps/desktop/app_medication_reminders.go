@@ -187,10 +187,16 @@ func (a *App) medicationReminderStatus(medications []storage.MedicationRecord) (
 			enabled++
 		}
 	}
+	state := a.medicationReminderServiceState()
 	if enabled == 0 {
+		// Where notifications cannot be shown at all, as away from Windows, that
+		// is said before a reminder is turned on, not only after. The status
+		// stays "disabled": the window holds it to whether any reminder is on.
+		if !state.Running && state.LastError != "" {
+			return "disabled", "Desktop reminders are off. " + state.LastError
+		}
 		return "disabled", "Desktop reminders are off. Enable them only on a clock schedule you entered."
 	}
-	state := a.medicationReminderServiceState()
 	if state.LastError != "" {
 		if state.Running {
 			return "error", state.LastError

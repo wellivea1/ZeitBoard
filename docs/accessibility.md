@@ -87,3 +87,11 @@ A UI change includes a keyboard pass and the accessible affordances above wherev
 don't compromise the visuals (accessible names, non-color-only cues, and a chart text
 equivalent when a chart is added). It is not blocked on full screen-reader parity for
 inherently visual features.
+
+## Checked with a screen reader
+
+On 2026-10-23 Narrator was run through the desktop window by keyboard alone. Every stop on
+Settings, Home, Rhythm and Log was announced with its name, role and state, and following a link
+announces the new screen. The same day, every screen's names, headings and landmarks were swept in
+the running window, and no gap was found. Both are in [`verification.md`](verification.md).
+TalkBack on the phone is still to do.

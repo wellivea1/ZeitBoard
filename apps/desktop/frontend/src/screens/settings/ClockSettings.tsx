@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  clockUnavailable,
   loadClockSetting,
   saveClockSetting,
   type ClockPreference,
@@ -14,26 +13,29 @@ import { setWindowClock, type Clock } from "../../utils/windowClock";
 
 const sample = (clock: Clock) => timeOfDay(15, 40, clock);
 
-// Only Windows has a regional format ZeitBoard reads. Elsewhere the first
-// choice is the clock ZeitBoard writes until another is chosen, and says so.
-function choices(
-  platform: string,
-): { preference: ClockPreference; title: string; hint: (system: Clock) => string }[] {
-  return [
+interface Choice {
+  preference: ClockPreference;
+  title: string;
+  hint: string;
+}
+
+const FIXED_CHOICES: Choice[] = [
+  { preference: "12", title: "12-hour", hint: "With AM and PM." },
+  { preference: "24", title: "24-hour", hint: "From 00:00 to 23:59." },
+];
+
+// What following the computer means: Windows' regional format, which only
+// Windows has for ZeitBoard to read; outside the desktop, the browser's
+// language; elsewhere nothing, so it is the clock ZeitBoard writes until
+// another is chosen.
+function systemChoice({ platform, system }: ClockSetting): Choice {
+  const [title, hint] =
     platform === "windows"
-      ? {
-          preference: "system",
-          title: "As Windows does",
-          hint: (system) => `Follows the regional format, now the ${system}-hour clock.`,
-        }
-      : {
-          preference: "system",
-          title: "ZeitBoard's default",
-          hint: (system) => `The ${system}-hour clock, until you choose another.`,
-        },
-    { preference: "12", title: "12-hour", hint: () => "With AM and PM." },
-    { preference: "24", title: "24-hour", hint: () => "From 00:00 to 23:59." },
-  ];
+      ? ["As Windows does", `Follows the regional format, now the ${system}-hour clock.`]
+      : platform === ""
+        ? ["As this browser does", `Follows its language, now the ${system}-hour clock.`]
+        : ["ZeitBoard's default", `The ${system}-hour clock, until you choose another.`];
+  return { preference: "system", title, hint };
 }
 
 export function ClockSettings() {
@@ -45,7 +47,11 @@ export function ClockSettings() {
   useEffect(() => {
     let current = true;
     void loadClockSetting().then((loaded) => {
-      if (current) setSetting(loaded ?? clockUnavailable());
+      if (!current) return;
+      // A desktop that does not answer is not stood in for, as the browser's
+      // clock would claim to be Windows' on any system.
+      if (loaded) setSetting(loaded);
+      else setError("The clock setting could not be read. The window keeps the clock it has.");
     });
     return () => {
       current = false;
@@ -84,7 +90,7 @@ export function ClockSettings() {
         <fieldset className="clock-picker" disabled={busy}>
           <legend className="sr-only">Clock</legend>
           <div className="clock-options">
-            {choices(setting.platform).map((choice) => {
+            {[systemChoice(setting), ...FIXED_CHOICES].map((choice) => {
               const clock = choice.preference === "system" ? setting.system : choice.preference;
               const selected = setting.preference === choice.preference;
               return (
@@ -104,7 +110,7 @@ export function ClockSettings() {
                     {sample(clock)}
                   </span>
                   <strong>{choice.title}</strong>
-                  <small>{choice.hint(setting.system)}</small>
+                  <small>{choice.hint}</small>
                 </label>
               );
             })}

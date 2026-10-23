@@ -4,8 +4,26 @@ export function zoneWords(zoneId: string) {
   return slash < 0 ? zoneId : `${zoneId.slice(slash + 1).replace(/_/g, " ")} time`;
 }
 
-export function localZone() {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone;
+let checkedZone: { reported: string; zone: string } | undefined;
+
+/**
+ * This computer's zone. Where ICU cannot name the host's zone it reports
+ * "Etc/Unknown", which no formatter accepts, and every screen that formats a
+ * date would fail; then it is UTC, as the desktop's own zone is in that case.
+ */
+export function localZone(): string {
+  const reported = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  if (checkedZone?.reported !== reported) {
+    let zone = "UTC";
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: reported });
+      zone = reported || zone;
+    } catch {
+      // A zone the formatter refuses is no zone to write times in.
+    }
+    checkedZone = { reported, zone };
+  }
+  return checkedZone.zone;
 }
 
 export function civilMinute(instant: string | number, zone = localZone()): string {

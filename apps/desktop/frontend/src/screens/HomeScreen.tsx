@@ -77,7 +77,7 @@ function useHomeCalendar() {
   useEffect(() => {
     let current = true;
     const load = () => {
-      const zoneId = localZone() || "America/New_York";
+      const zoneId = localZone();
       void loadCalendar({ startCivilDate: todayCivilDate(zoneId), days: 4, zoneId }).then(
         (result) => {
           if (current) setDays(result.data.days);

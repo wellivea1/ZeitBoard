@@ -1,12 +1,9 @@
 import { useState, type FormEvent } from "react";
 import type { MedicationDefinition, MedicationScheduleInput } from "../data/medications";
+import { localZone } from "../utils/civilTime";
 
 type ScheduleDraft = Omit<MedicationScheduleInput, "medicationId" | "revision">;
 type TimedScheduleKind = "fixed_clock" | "cycling";
-
-function browserZone(): string {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York";
-}
 
 function todayCivil(): string {
   const now = new Date();
@@ -17,7 +14,7 @@ function draftFor(medication: MedicationDefinition): ScheduleDraft {
   const schedule = medication.schedule;
   return {
     kind: schedule?.kind ?? "none",
-    zoneId: schedule?.zoneId ?? browserZone(),
+    zoneId: schedule?.zoneId ?? localZone(),
     civilTimes: schedule?.civilTimes ?? [],
     daysOn: schedule?.daysOn ?? 1,
     daysOff: schedule?.daysOff ?? 1,

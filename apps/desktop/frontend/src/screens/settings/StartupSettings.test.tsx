@@ -69,6 +69,9 @@ it("says what starts ZeitBoard where it cannot start itself", async () => {
 it("does not disguise missing startup services as an off registration", async () => {
   render(<StartupSettings />);
   await screen.findByText(/Open the ZeitBoard desktop app to manage startup/);
+  // Nor is a tray claimed, or denied, before it is known whether there is one.
+  expect(screen.queryByText(/hides it in the tray/)).toBeNull();
+  expect(screen.queryByText(/The tray is unavailable/)).toBeNull();
   expect(screen.getByRole("button", { name: "Save startup settings" })).toBeDisabled();
   install({ GetStartupSettings: async () => initial });
   fireEvent.click(screen.getByRole("button", { name: "Refresh startup status" }));

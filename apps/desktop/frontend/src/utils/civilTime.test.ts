@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { civilCandidates, selectedCivilInstant } from "./civilTime";
+import { describe, expect, it, vi } from "vitest";
+import { civilCandidates, localZone, selectedCivilInstant } from "./civilTime";
 
 describe("exact civil-time choices", () => {
   it("refuses skipped clock times and invalid dates", () => {
@@ -26,5 +26,24 @@ describe("exact civil-time choices", () => {
     expect(selectedCivilInstant("2026-09-21T13:45", undefined, "UTC")).toBe(
       "2026-09-21T13:45:00.000Z",
     );
+  });
+});
+
+// Where ICU cannot name the host's zone it reports "Etc/Unknown", which every
+// formatter refuses, and Data Sources, Home and Plan failed to open.
+describe("localZone", () => {
+  it("is UTC where the computer's zone cannot be named", () => {
+    const resolved = Intl.DateTimeFormat.prototype.resolvedOptions;
+    const unknown = vi
+      .spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions")
+      .mockImplementation(function (this: Intl.DateTimeFormat) {
+        return { ...resolved.call(this), timeZone: "Etc/Unknown" };
+      });
+    try {
+      expect(localZone()).toBe("UTC");
+    } finally {
+      unknown.mockRestore();
+    }
+    expect(localZone()).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
   });
 });

@@ -52,7 +52,6 @@ export interface AccountCalendarInput {
   accountId: string;
   calendarId: string;
   label: string;
-  zoneId: string;
 }
 
 type UnknownRecord = Record<string, unknown>;

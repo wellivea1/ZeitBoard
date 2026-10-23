@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  activityState,
+  activityStateLabels,
   loadActivityCollection,
   setActivityCollection,
   setPowerLogReading,
@@ -10,14 +12,60 @@ import {
 import { timeZones } from "../../data/reachingHours";
 import { createCoalescedRefresh, type CoalescedRefresh } from "../../utils/coalescedRefresh";
 
-function collectionLabel(status: ActivityCollection | null) {
-  if (!status) return "Unavailable";
-  if (status.running) return "Running";
-  return status.enabled ? "Stopped" : "Off";
-}
-
-function canToggleCollection(status: ActivityCollection | null, zone: string) {
-  return status !== null && (status.enabled || (status.supported && zone.length > 0));
+// The zone records are kept in, and the switch, with Retry once collection has
+// stopped by itself. Shown only where the system can record.
+function CollectionControls({
+  status,
+  zone,
+  zones,
+  busy,
+  onZone,
+  onSet,
+}: {
+  status: ActivityCollection | null;
+  zone: string;
+  zones: string[];
+  busy: boolean;
+  onZone: (zone: string) => void;
+  onSet: (enabled: boolean, zoneId: string) => void;
+}) {
+  const canToggle = status !== null && (status.enabled || zone.length > 0);
+  return (
+    <>
+      <label className="reaching-field">
+        <span>Activity time zone</span>
+        <input
+          list="activity-zones"
+          value={zone}
+          disabled={busy || !status || status.enabled}
+          onChange={(event) => onZone(event.target.value)}
+        />
+        <datalist id="activity-zones">
+          {zones.map((item) => (
+            <option key={item} value={item} />
+          ))}
+        </datalist>
+      </label>
+      <button
+        className="button primary"
+        type="button"
+        disabled={busy || !canToggle}
+        onClick={() => onSet(!status?.enabled, status?.enabled ? status.zoneId : zone)}
+      >
+        {status?.enabled ? "Turn off activity collection" : "Enable local activity collection"}
+      </button>
+      {status?.enabled && !status.running && (
+        <button
+          type="button"
+          className="button secondary"
+          disabled={busy}
+          onClick={() => onSet(true, status.zoneId)}
+        >
+          Retry collection
+        </button>
+      )}
+    </>
+  );
 }
 
 // The records kept so far: exported to a private file, or deleted with the
@@ -202,17 +250,17 @@ export function ActivityCollectionSettings() {
       <div className="data-control-intro">
         <h2 id="activity-heading">Desktop activity</h2>
         <p className="settings-copy">
-          Off unless you turn it on. Records only when this computer is active, idle or locked:
-          never keystrokes, window titles, screenshots or browsing. It stays on this computer and
-          does not change estimates or planning.
+          {status?.supported !== false && "Off unless you turn it on. "}Records only when this
+          computer is active, idle or locked: never keystrokes, window titles, screenshots or
+          browsing. It stays on this computer and does not change estimates or planning.
         </p>
         <details className="settings-more fold">
           <summary>When it runs</summary>
           <p className="settings-copy">
-            Once on, it continues when you hide or close the window and resumes when ZeitBoard
-            reopens; Quit from the tray stops it. It cannot collect while the computer is asleep or
-            the app is closed, and gaps between polls are kept as possible suspend and resume
-            evidence.
+            Once on, it continues while ZeitBoard runs, with its window open or hidden, and resumes
+            when ZeitBoard reopens; quitting stops it. It cannot collect while the computer is
+            asleep or the app is closed, and gaps between polls are kept as possible suspend and
+            resume evidence.
             {status?.powerLog.supported &&
               " With sleep and wake read from Windows, the times Windows noted while ZeitBoard was closed are read when it runs again."}
           </p>
@@ -223,57 +271,38 @@ export function ActivityCollectionSettings() {
           <dl className="sync-status-list">
             <div>
               <dt>Collection</dt>
-              <dd>{collectionLabel(status)}</dd>
+              <dd>{activityStateLabels[activityState(status)]}</dd>
             </div>
             <div>
               <dt>Saved records</dt>
               <dd>{status?.recordCount ?? "Unavailable"}</dd>
             </div>
           </dl>
-          {status && !status.supported && !status.enabled ? (
-            // Nothing here could turn it on, so nothing is offered.
-            <p>ZeitBoard cannot record desktop activity on this system.</p>
-          ) : (
+          {status && activityState(status) === "unavailable" ? (
+            // Nothing here could turn it on, so nothing is offered but turning
+            // off collection left on, as in a data folder brought from Windows.
             <>
-              <label className="reaching-field">
-                <span>Activity time zone</span>
-                <input
-                  list="activity-zones"
-                  value={zone}
-                  disabled={busy || !status || status.enabled}
-                  onChange={(event) => setZone(event.target.value)}
-                />
-                <datalist id="activity-zones">
-                  {zones.map((item) => (
-                    <option key={item} value={item} />
-                  ))}
-                </datalist>
-              </label>
-              <button
-                className="button primary"
-                type="button"
-                disabled={busy || !canToggleCollection(status, zone)}
-                onClick={() =>
-                  void run(() =>
-                    setActivityCollection(!status?.enabled, status?.enabled ? status.zoneId : zone),
-                  )
-                }
-              >
-                {status?.enabled
-                  ? "Turn off activity collection"
-                  : "Enable local activity collection"}
-              </button>
-              {status?.enabled && !status.running && (
+              <p>ZeitBoard cannot record desktop activity on this system.</p>
+              {status.enabled && (
                 <button
+                  className="button primary"
                   type="button"
-                  className="button secondary"
                   disabled={busy}
-                  onClick={() => void run(() => setActivityCollection(true, status.zoneId))}
+                  onClick={() => void run(() => setActivityCollection(false, status.zoneId))}
                 >
-                  Retry collection
+                  Turn off activity collection
                 </button>
               )}
             </>
+          ) : (
+            <CollectionControls
+              status={status}
+              zone={zone}
+              zones={zones}
+              busy={busy}
+              onZone={setZone}
+              onSet={(enabled, zoneId) => void run(() => setActivityCollection(enabled, zoneId))}
+            />
           )}
         </section>
         {status?.powerLog.supported && (

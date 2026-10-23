@@ -41,7 +41,7 @@ describe("CalendarImportPanel", () => {
     (globalThis as { go?: unknown }).go = {
       main: { App: { PreviewCalendarFile: preview, ImportCalendarFile: commit } },
     };
-    render(<CalendarImportPanel available zoneId="America/New_York" onChanged={onChanged} />);
+    render(<CalendarImportPanel available onChanged={onChanged} />);
 
     const selected = {
       name: "commitments.ics",
@@ -62,8 +62,11 @@ describe("CalendarImportPanel", () => {
     expect(preview).toHaveBeenCalledWith({
       fileName: "commitments.ics",
       contents: "BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n",
-      zoneId: "America/New_York",
     });
+    // No zone goes with it: the desktop places floating times in its own zone,
+    // the one every refresh uses, so they cannot move when read again.
+    const [sent] = preview.mock.calls[0] as unknown[];
+    expect(sent).not.toHaveProperty("zoneId");
     expect(commit).toHaveBeenCalledOnce();
   });
 
@@ -74,7 +77,7 @@ describe("CalendarImportPanel", () => {
     (globalThis as { go?: unknown }).go = {
       main: { App: { PreviewCalDAVCalendar: preview, ImportCalDAVCalendar: commit } },
     };
-    render(<CalendarImportPanel available zoneId="UTC" onChanged={onChanged} />);
+    render(<CalendarImportPanel available onChanged={onChanged} />);
 
     fireEvent.click(screen.getByRole("tab", { name: "CalDAV account" }));
     fireEvent.change(screen.getByLabelText("Collection URL"), {
@@ -108,7 +111,7 @@ describe("CalendarImportPanel", () => {
     (globalThis as { go?: unknown }).go = {
       main: { App: { PreviewCalendarSubscription: preview, SubscribeCalendar: subscribe } },
     };
-    render(<CalendarImportPanel available zoneId="America/New_York" onChanged={onChanged} />);
+    render(<CalendarImportPanel available onChanged={onChanged} />);
 
     fireEvent.click(screen.getByRole("tab", { name: "Private address" }));
     expect(screen.getByText(/Anyone holding the address can read the calendar/)).toBeVisible();
@@ -124,7 +127,6 @@ describe("CalendarImportPanel", () => {
     expect(preview).toHaveBeenCalledWith({
       address: "webcal://calendar.example.test/ical/synthetic/basic.ics",
       label: "Work",
-      zoneId: "America/New_York",
     });
 
     fireEvent.click(subscribeButton);

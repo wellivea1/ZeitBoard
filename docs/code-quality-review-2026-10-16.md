@@ -82,6 +82,25 @@ is recorded in the completion plan, which keeps what was declined and why:
   reviews of PR #92 led to two redesigns: what is found waits for the owner, and a lookup a busy
   time defeats gives up rather than wait for good.
 - A security review of PR #89 found no vulnerabilities.
+- PR #97, which made Data Sources and Settings say what is true on every computer, was reviewed
+  twice, on 2026-10-18 at medium and then low effort. Usage limits cut both runs short. Only the
+  simplification reviewer finished, and its eight findings were applied in PR #98:
+  - Settings and Data Sources now name desktop activity's state through one helper. A system that
+    cannot record had read "Off" on one screen and "Unavailable" on the other.
+  - The computer's zone is read in one place, where eleven had each written their own fallback.
+  - The calendar zone is no longer copied into state that the browser preview's fixture could
+    overwrite with UTC.
+  - The rest made repeated code shorter.
+
+  The bug-finding reviewers were then resumed, and in the end all five reported. PR #98 fixes
+  everything they found, recorded in the verification log as "What the review of Data Sources and
+  Settings found". Among the findings:
+  - a status row read only once;
+  - a Retry the desktop always refuses;
+  - promises of a tray that may not exist;
+  - a clock stood in for when the desktop does not answer;
+  - a host zone no formatter accepts, which stopped three screens opening;
+  - calendars placed in one zone when added and another when refreshed.
 
 Two points the reviews raised more than once are settled by the project's own rules:
 
@@ -105,8 +124,9 @@ test fail:
 - **The running app.** On 2026-10-18 every screen of the desktop window was checked in the
   built-in browser pane, which now loads the Wails bridge. It ran against a throwaway data folder
   holding synthetic nights. The check found five defects, all now fixed and recorded in the
-  completion plan's "The running app". The screen-reader pass with Narrator is separate, and still
-  to come.
+  completion plan's "The running app". On 2026-10-23 Narrator was run through the window by
+  keyboard, and the accessibility tree of every screen was swept. TalkBack on the phone is still to
+  do.
 - **The providers.** Google, Microsoft and CalDAV are checked against stand-ins that behave as their
   documentation says. ADR-0065 records the two behaviours of Graph's that need a real account to
   confirm.

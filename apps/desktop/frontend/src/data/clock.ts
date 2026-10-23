@@ -14,7 +14,7 @@ export interface ClockSetting {
   clock: Clock;
   /** The computer's own clock. */
   system: Clock;
-  /** The system: "windows", "macos" or "linux". */
+  /** The system: "windows", "macos" or "linux"; "" outside the desktop. */
   platform: string;
   revision: number;
   /** True when a stale edit lost to what was already stored. */
@@ -25,14 +25,17 @@ export interface ClockSetting {
 const PREFERENCES: readonly ClockPreference[] = ["system", "12", "24"];
 const CLOCKS: readonly Clock[] = ["12", "24"];
 
-/** Outside the desktop the browser's own clock is the only one there is. */
-export function clockUnavailable(): ClockSetting {
+/**
+ * Outside the desktop the browser's own clock is the only one there is, and no
+ * system is named ("").
+ */
+function clockUnavailable(): ClockSetting {
   const clock = localeClock();
   return {
     preference: "system",
     clock,
     system: clock,
-    platform: "windows",
+    platform: "",
     revision: 0,
     conflict: false,
   };

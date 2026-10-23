@@ -3377,8 +3377,8 @@ Seen in the running desktop:
   macOS and Linux. A stored clock that cannot be read no longer says "Windows' own is in use"
   away from Windows, where it is ZeitBoard's default.
 - **Medication reminders.** The opt-in read "Show this label through Windows". It now reads "as a
-  desktop notification". Where notifications are unavailable, the medication screen already says
-  that enabled reminders will not be shown.
+  desktop notification". Where notifications cannot be shown, the medication screen's reminder line
+  says so: once a reminder is on, and since 2026-10-23 before any is.
 - **The tray.** Where there is no tray, "While ZeitBoard is running" said both that closing the
   window hides it in the tray and that closing it quits. Now it says only the second.
 
@@ -3402,3 +3402,98 @@ Found reading Data Sources while checking other systems:
 
 Component tests cover each, and the screen's run as a computer in London. All four new tests fail
 without the change.
+
+## What the review of Data Sources and Settings found — 2026-10-23
+
+An automated review of PR #97 had its bug-finding reviewers stopped by usage limits, then resumed.
+Three of the five reported. PR #98 fixes every finding they made:
+
+- **A row that went stale.** The desktop activity row was read once per visit, so it could say
+  "Running" after collection had stopped. Hiding the window keeps the screen mounted. It is now
+  read again on focus, on showing and each minute, like the other statements about the present.
+- **A retry that could never work.** Collection left on where it cannot run, as in a data folder
+  brought from Windows, read "Stopped… Retry in Settings", and Settings offered Retry, which the
+  desktop always refuses there. It is now "Unavailable" on both screens, and only turning it off
+  is offered.
+- **Promises a system cannot keep.** The activity intro said "Off unless you turn it on" where it
+  cannot be turned on. "When it runs" promised a tray Quit where there may be no tray. And
+  "While ZeitBoard is running" spoke of the tray before it was known whether there was one. Each
+  now holds on every system. Without a tray, the card says that quitting stops what was turned on.
+- **Counts and claims about Windows' log.** The row called every record a poll of when the computer
+  was active, idle or locked, though the count includes what was read from Windows' log. It also
+  said that log was read while reading it failed. The count is now simply records kept, said in
+  every state as Settings says it, and the log is mentioned as read only when it was.
+- **Advice twice.** A stopped collector's reason already says to retry, and the row no longer
+  repeats it.
+- **A stand-in clock.** When the desktop did not answer, Settings › Display showed the browser's
+  clock as "As Windows does" on any system. It now says the setting could not be read.
+- **Reminders.** Before any reminder was on, the medication screen did not say that notifications
+  cannot be shown here. Its reminder line now says so, and keeps the "disabled" status the window
+  requires while none is on.
+- **The date twice.** Found in the same sweep of the accessibility tree: each actogram band was
+  named "Sleep interval: Oct 17, Oct 17, 5:27 PM…", the day said before a start that carries it.
+
+Eight component tests and a Go test cover these. The eight fail against the code before the fix.
+
+The reviewers of cross-file effects and of language pitfalls, stopped again by usage limits, then
+reported as well. PR #98 fixes what they found:
+
+- **A zone no formatter accepts.** Where ICU cannot name the host's zone, the window's Intl
+  reports "Etc/Unknown". Data Sources, Home and Plan then failed to open, because formatting a date
+  in it throws. The computer's zone is now UTC in that case, as the desktop's own is.
+- **A failed read.** Once the desktop activity row had been read, a later read that failed left the
+  last answer standing. It now says its status could not be read.
+- **One zone for a calendar.** A calendar added from Data Sources was placed in the window's zone,
+  but each refresh is placed in the desktop's, and the two can differ. All-day events could then
+  move hours on the first refresh. The window now sends no zone, so the desktop places floating
+  times in the zone its refreshes use.
+- **The browser's clock.** Outside the desktop, the clock the browser preview offered as "As
+  Windows does" is now "As this browser does".
+
+Each has a test that fails against the code before the fix.
+
+## Every screen's names, headings and landmarks — 2026-10-23
+
+The running window was swept in the built-in browser pane, which draws the same Chromium
+accessibility tree WebView2 gives a screen reader. Sixteen screens were swept, from Home to every
+settings tab. Each has one `h1`, one `main` and the two navigation landmarks, and no heading level
+is skipped. No focusable control lacks an accessible name, no image lacks alternative text, and no
+drawing is left unlabeled. The browser's own tree confirmed the names on the two busiest screens,
+Plan › Week and Rhythm.
+
+## Narrator through the running window — 2026-10-23
+
+The owner chose the pass on 2026-10-18 and allowed control of the window and Narrator on 2026-10-23.
+Narrator ran over the development window, on a throwaway data folder of synthetic nights. The
+window was driven by keyboard alone: Tab, Shift+Tab, arrow keys, and Enter only on links the log
+had confirmed. A UI Automation listener logged every focus change inside that window and nowhere
+else: the name, role and state Narrator reads. Screenshots show Narrator's focus box on each stop.
+Narrator was then turned off.
+
+- **Settings › Display.** The appearance presets and the clock are each one stop, a radio group
+  that says which is chosen. The two switches say whether they are on.
+- **Home.** Following a link puts focus on the new screen's `main`, so the screen is announced. The
+  order follows the page:
+  - "How this is worked out";
+  - "I am going to sleep" and "I woke up";
+  - "Full rhythm" and "Log sleep";
+  - the setup links;
+  - each note's close button, which says Settings lists hidden notes;
+  - "Accept" and "Decline" for each suggestion, named with its task.
+- **Rhythm.** The tab list is one stop and says which tab is chosen. "Show forecast" says it is off.
+  Each actogram band is a graphic, named in full: "Sleep interval: Oct 17, 5:27 PM to Oct 18, 1:27
+  AM, 8 hr 0 min, Imported sleep". Shift+Tab retraces the same path.
+- **Log › Sleep.** Recording a night, the core task, is reachable and named. "Add a past night" is
+  a disclosure that says it is collapsed. Each night's Edit, Exclude and Delete carry the night in
+  their names, as in "Exclude Sat, Oct 17, 5:27 PM – 1:27 AM from estimates".
+- **The assistant** is a toggle button that says whether it is open.
+
+Two things to know:
+
+- Narrator's scan mode keeps the arrow keys in web content, so they do not move between tabs while
+  it is on. Tab reaches the chosen tab, and the arrows work there with scan mode off.
+- Tab and button names drawn in capitals by CSS reach Narrator in capitals ("ACTOGRAM"). The
+  browser's own tree keeps their written case.
+
+What Narrator spoke was not recorded as text. The log holds what UI Automation gave it, which is
+what it reads.
