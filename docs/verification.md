@@ -3594,6 +3594,44 @@ adb shell am instrument -w -e class org.non24.planner.ScreenAccessibilityTest or
 
 TalkBack itself, on the emulator or the owner's phone, is still to do.
 
+## TalkBack through the companion — 2026-10-23
+
+TalkBack needed no download after all: TalkBack 16 comes with the owner's Google Play emulator
+(Android 16). The pass ran there read-only, so nothing it did was kept, and the companion started
+in sample mode. TalkBack's own log, set to verbose in its developer settings, recorded what it
+spoke. It does not take `adb shell input swipe` as a gesture, so its swipe to the next item was
+sent as real touchscreen events through the emulator console. Every destination was read from top
+to bottom, then the screens that changed were read again more slowly, so that each stop was spoken
+in full.
+
+What it read well:
+
+- headings, announced as such;
+- words drawn in capitals, read as written, and the date in full, "Friday 23 October";
+- the destination bar, "Plan, Tab, 2 of 5", and which one is selected;
+- the data source choice, "Selected, Sample data, Radio button, 1 of 2";
+- a disabled button, "Connect and sync, Button, disabled";
+- a filled field with its name, "2026-10-22 23:10:00 -04:00, Edit box, Sleep time". The phone
+  sweep's change to field labels holds.
+
+What it found, now fixed:
+
+- **The forecast twice.** The dial's description held the forecast's sentence, and TalkBack read it
+  again straight after, from the line under the dial. The description leaves it out now.
+- **The key in four stops.** "Likely asleep", "Cannot say", "Plans" and "Now" were a stop each. The
+  key is one now: "Key: Likely asleep, Cannot say, Plans, Now".
+- **Rows in halves.** Each row of a record was two stops, its key and then its value. It is one now:
+  "Sleep: Thu, Oct 22 23:10 EDT".
+- **Switches named twice.** A switch's title was read, then the switch with the same name. The
+  whole row is the switch now, read once with its state, "On, 24-hour time, Use 24-hour labels for
+  displayed times, Switch", and the row is the target.
+- **"fixture-contract-v1".** Sample mode named its estimate in the code's words under the dial. It
+  says "sample-v1" now.
+
+The phone sweep now also fails on a field that holds a value but carries no name beyond it, which
+TalkBack would read as a bare value. The whole instrumented suite passed on the same emulator, 25
+tests.
+
 ## The companion's lint — 2026-10-23
 
 Android lint passed with ten warnings and two hints. Two warnings remain, both asking for SDK 37,

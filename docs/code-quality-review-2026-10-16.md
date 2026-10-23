@@ -136,7 +136,8 @@ test fail:
   completion plan's "The running app". On 2026-10-23 Narrator was run through the window by
   keyboard, and the accessibility tree of every screen was swept. The phone's tree was swept the
   same day on the emulator, by an instrumented test that found no headings marked; they were added.
-  TalkBack on the phone is still to do.
+  TalkBack itself was then run through every destination on an emulator that carries it, and what
+  it found was fixed.
 - **The providers.** Google, Microsoft and CalDAV are checked against stand-ins that behave as their
   documentation says. ADR-0065 records the two behaviours of Graph's that need a real account to
   confirm.

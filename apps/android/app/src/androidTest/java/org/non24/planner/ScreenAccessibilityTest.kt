@@ -45,10 +45,16 @@ class ScreenAccessibilityTest {
                 // what is scrolled out of view is not in the tree.
                 while (true) {
                     headings += headings(nodes)
-                    for (control in nodes.filter { it.isClickable || it.isCheckable }) {
+                    for (control in nodes.filter { it.isClickable || it.isCheckable || it.isEditable }) {
                         val bounds = Rect().also(control::getBoundsInScreen)
                         val name = spoken(control)
                         if (name.isBlank()) nameless += "${control.className} at ${bounds.toShortString()}"
+                        // A filled field is read by its value, which names
+                        // nothing; TalkBack then says what it is from its hint
+                        // or the label it holds.
+                        if (control.isEditable && control.hintText.isNullOrBlank() && childrenSpoken(control).isBlank()) {
+                            nameless += "a field holding \"${control.text}\" at ${bounds.toShortString()}"
+                        }
                         if (!control.isVisibleToUser) continue
                         val key = "${control.className} $name"
                         val (width, height) = targets[key] ?: (0f to 0f)
@@ -125,12 +131,14 @@ class ScreenAccessibilityTest {
     private fun spoken(node: AccessibilityNodeInfo): String {
         val own = listOf(node.contentDescription, node.text, node.hintText)
             .firstOrNull { !it.isNullOrBlank() }
-        if (own != null) return own.toString()
-        return (0 until node.childCount)
+        return own?.toString() ?: childrenSpoken(node)
+    }
+
+    private fun childrenSpoken(node: AccessibilityNodeInfo): String =
+        (0 until node.childCount)
             .mapNotNull(node::getChild)
             .joinToString(" ", transform = ::spoken)
             .trim()
-    }
 
     private companion object {
         const val TAG = "ScreenAccessibility"

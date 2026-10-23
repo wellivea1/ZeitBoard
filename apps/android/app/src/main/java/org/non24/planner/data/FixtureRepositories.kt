@@ -65,7 +65,8 @@ fun fixtureEstimateRepository(now: Instant = Instant.now()): EstimateRepository 
                 "Forecast windows include explicit temporal uncertainty.",
             ),
             createdAt = now.minusSeconds(3600),
-            algorithmVersion = "fixture-contract-v1",
+            // Shown under the dial; "fixture" is a word for the code.
+            algorithmVersion = "sample-v1",
             provenance = Provenance(
                 acquisitionMethod = AcquisitionMethod.FIXTURE,
                 evidenceStatus = EvidenceStatus.SYNTHETIC,
