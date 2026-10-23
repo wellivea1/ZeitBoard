@@ -96,13 +96,13 @@ private fun DrawScope.hatchedArc(outer: Float, inner: Float, start: Float, sweep
 internal fun RhythmDial(
     segments: List<DialSegment>,
     nights: List<TimeWindow>,
-    plans: List<DialPlan> = emptyList(),
     now: Instant,
     zone: ZoneId,
     use24HourTime: Boolean,
     reading: DialCenter,
     description: String,
     modifier: Modifier = Modifier,
+    plans: List<DialPlan> = emptyList(),
 ) {
     val measurer = rememberTextMeasurer()
     // Drawing is not composable: take the theme's colours in with it.

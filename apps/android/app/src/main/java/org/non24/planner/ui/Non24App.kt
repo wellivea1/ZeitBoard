@@ -48,6 +48,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -575,7 +576,7 @@ private fun ServerSleepReviewScreen(
     companion: CompanionState, state: SleepReviewState, busy: Boolean, use24HourTime: Boolean,
     onReview: (String) -> Unit, onSave: (SleepReview, String, String, String, Boolean) -> Unit, onSync: () -> Unit,
 ) {
-    var visibleCount by remember { mutableStateOf(15) }
+    var visibleCount by remember { mutableIntStateOf(15) }
     val review = state.context
     var start by remember(review) { mutableStateOf(review?.let { formatReviewInput(it.effective.start, it.effective.zoneId) }.orEmpty()) }
     var end by remember(review) { mutableStateOf(review?.let { formatReviewInput(it.effective.end, it.effective.zoneId) }.orEmpty()) }
@@ -783,7 +784,7 @@ private fun CorrectionScreen(
 
 @Composable
 private fun SyncedTasksScreen(companion: CompanionState, state: AppUiState, syncing: Boolean, onSync: () -> Unit) {
-    var visibleCount by remember { mutableStateOf(25) }
+    var visibleCount by remember { mutableIntStateOf(25) }
     ScreenColumn {
         ScreenHeader("From your server", "Tasks", "Downloaded task state, including edits and completion on your other devices.")
         if (state.settings.dataMode == DataMode.FIXTURE) {

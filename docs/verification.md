@@ -3593,3 +3593,24 @@ adb shell am instrument -w -e class org.non24.planner.ScreenAccessibilityTest or
 ```
 
 TalkBack itself, on the emulator or the owner's phone, is still to do.
+
+## The companion's lint — 2026-10-23
+
+Android lint passed with ten warnings and two hints. Two warnings remain, both asking for SDK 37,
+which is a download. The rest:
+
+- **The outbox's transactions** use KTX's `transaction` block. One page of corrections asked
+  whether more were left after marking itself kept. Inside the block that question would come
+  before the mark, so a failure to ask would roll the page back. It is asked after the commit now,
+  which keeps the page as before.
+- **A preferences write that fails** is rolled back with KTX's `edit`. The write itself cannot use
+  it, because KTX's `edit` drops the result of `commit` that decides the rollback; lint is told so
+  beside it.
+- **The trust manager** is a delegate, not a trust-all: every chain goes to the platform's own
+  managers, the system's roots first and then the owner's certificate. Lint is told so beside it.
+- **Compose conventions.** The dial takes its modifier first among its optional parameters, and
+  two counters hold primitive state.
+
+The whole instrumented suite passed on the emulator, 25 tests, the outbox's queueing, batching,
+enqueueing and acknowledging among them. The five tests against a disposable server skip
+themselves without one. `DurablePreferencesTest` fails a write and finds the rollback.

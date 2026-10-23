@@ -2,6 +2,7 @@ package org.non24.planner.data
 
 import android.content.ContentValues
 import android.database.sqlite.SQLiteDatabase
+import androidx.core.database.sqlite.transaction
 import java.time.Instant
 import java.time.ZoneId
 import kotlinx.serialization.json.Json
@@ -25,24 +26,23 @@ class SQLiteSyncOutboxStore(
     override fun queueLocalCorrections(homeZone: ZoneId, knownSources: Map<String, SourceSyncRevision>, now: Instant, limit: Int): LocalCorrectionQueueResult {
         require(limit in 1..100)
         val db = writable()
-        db.beginTransaction()
-        try {
-            // Fixture corrections have no Health Connect source row and never enter this page.
-            val candidates = """FROM sleep_corrections c
-                JOIN health_sleep_episodes e ON e.id = c.target_episode_id
-                WHERE e.acquisition_method = 'HEALTH_CONNECT' AND e.evidence_status = 'IMPORTED'
-                AND ((NOT EXISTS (SELECT 1 FROM sync_outbox o WHERE o.record_id = c.id)
-                    AND NOT EXISTS (SELECT 1 FROM sync_replica r WHERE r.record_id = c.id))
-                    OR (NOT EXISTS (SELECT 1 FROM sync_replica r WHERE r.record_id = e.sync_observation_id)
-                        AND NOT EXISTS (SELECT 1 FROM sync_outbox o WHERE o.record_id = e.sync_observation_id)))
-                AND NOT EXISTS (SELECT 1 FROM sync_erased_records d WHERE d.record_id IN (c.id, e.sync_observation_id))
-                AND NOT EXISTS (SELECT 1 FROM erased_health_sources d WHERE d.observation_id = e.sync_observation_id)
-                AND (c.sync_hold_zone IS NULL OR c.sync_hold_zone != ?)"""
+        // Fixture corrections have no Health Connect source row and never enter this page.
+        val candidates = """FROM sleep_corrections c
+            JOIN health_sleep_episodes e ON e.id = c.target_episode_id
+            WHERE e.acquisition_method = 'HEALTH_CONNECT' AND e.evidence_status = 'IMPORTED'
+            AND ((NOT EXISTS (SELECT 1 FROM sync_outbox o WHERE o.record_id = c.id)
+                AND NOT EXISTS (SELECT 1 FROM sync_replica r WHERE r.record_id = c.id))
+                OR (NOT EXISTS (SELECT 1 FROM sync_replica r WHERE r.record_id = e.sync_observation_id)
+                    AND NOT EXISTS (SELECT 1 FROM sync_outbox o WHERE o.record_id = e.sync_observation_id)))
+            AND NOT EXISTS (SELECT 1 FROM sync_erased_records d WHERE d.record_id IN (c.id, e.sync_observation_id))
+            AND NOT EXISTS (SELECT 1 FROM erased_health_sources d WHERE d.observation_id = e.sync_observation_id)
+            AND (c.sync_hold_zone IS NULL OR c.sync_hold_zone != ?)"""
+        val held = db.transaction {
             val corrections = db.rawQuery("SELECT c.* $candidates ORDER BY c.sequence LIMIT ?", arrayOf(homeZone.id, limit.toString())).use { rows ->
                 buildList { while (rows.moveToNext()) add(readSleepCorrection(rows)) }
             }
             val known = knownSources.toMutableMap()
-            this.knownSources().forEach { (id, revision) -> if (known[id]?.revision?.isAfter(revision.revision) != true) known[id] = revision }
+            this@SQLiteSyncOutboxStore.knownSources().forEach { (id, revision) -> if (known[id]?.revision?.isAfter(revision.revision) != true) known[id] = revision }
             corrections.forEach { correction ->
                 val source = db.rawQuery("SELECT * FROM health_sleep_episodes WHERE id = ?", arrayOf(correction.targetEpisodeId)).use { check(it.moveToFirst()); readSleepEpisode(it) }
                 if (SyncContract.holdReason(source, homeZone) != null) {
@@ -59,11 +59,12 @@ class SQLiteSyncOutboxStore(
                     db.update("sleep_corrections", ContentValues().apply { putNull("sync_hold_zone") }, "id = ?", arrayOf(correction.id))
                 }
             }
-            val held = db.rawQuery("SELECT COUNT(*) FROM sleep_corrections WHERE sync_hold_zone IS NOT NULL", null).use { it.moveToFirst(); it.getInt(0) }
-            db.setTransactionSuccessful()
-            val hasMore = db.rawQuery("SELECT 1 $candidates LIMIT 1", arrayOf(homeZone.id)).use { it.moveToFirst() }
-            return LocalCorrectionQueueResult(hasMore, held)
-        } finally { db.endTransaction() }
+            db.rawQuery("SELECT COUNT(*) FROM sleep_corrections WHERE sync_hold_zone IS NOT NULL", null).use { it.moveToFirst(); it.getInt(0) }
+        }
+        // Asked once this page is committed, as it was marked kept before: a
+        // failure to ask does not undo the page.
+        val hasMore = db.rawQuery("SELECT 1 $candidates LIMIT 1", arrayOf(homeZone.id)).use { it.moveToFirst() }
+        return LocalCorrectionQueueResult(hasMore, held)
     }
 
     override fun activateScope(scope: String) {
@@ -103,8 +104,7 @@ class SQLiteSyncOutboxStore(
     override fun prepareBatch(limit: Int, knownSources: Map<String, SourceSyncRevision>): List<OutboxRecord> {
         val batch = pending(limit)
         val db = writable()
-        db.beginTransaction()
-        try {
+        return db.transaction {
             val prepared = batch.mapNotNull { record ->
                 val remote = db.rawQuery("SELECT payload FROM sync_replica WHERE record_id = ?", arrayOf(record.recordId)).use {
                     if (it.moveToFirst()) Json.parseToJsonElement(it.getString(0)).jsonObject else null
@@ -143,9 +143,8 @@ class SQLiteSyncOutboxStore(
                     }
                 }
             }
-            db.setTransactionSuccessful()
-            return prepared.distinctBy { it.recordId }
-        } finally { db.endTransaction() }
+            prepared.distinctBy { it.recordId }
+        }
     }
 
     override fun reconcileAccepted() {
@@ -158,8 +157,7 @@ class SQLiteSyncOutboxStore(
     override fun enqueue(records: List<OutboxRecord>) {
         if (records.isEmpty()) return
         val database = writable()
-        database.beginTransaction()
-        try {
+        database.transaction {
             for (record in records) {
                 val observationId = outboxObservationId(record.kind, record.payload)
                 val erased = database.rawQuery(
@@ -191,17 +189,13 @@ class SQLiteSyncOutboxStore(
                     }
                 }
             }
-            database.setTransactionSuccessful()
-        } finally {
-            database.endTransaction()
         }
     }
 
     override fun markSynced(recordIds: List<String>, at: Instant) {
         if (recordIds.isEmpty()) return
         val database = writable()
-        database.beginTransaction()
-        try {
+        database.transaction {
             for (recordId in recordIds) {
                 val values = ContentValues().apply { put(COLUMN_SYNCED_AT, at.toEpochMilli()) }
                 database.update(
@@ -211,9 +205,6 @@ class SQLiteSyncOutboxStore(
                     arrayOf(recordId),
                 )
             }
-            database.setTransactionSuccessful()
-        } finally {
-            database.endTransaction()
         }
     }
 

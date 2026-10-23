@@ -1,5 +1,6 @@
 package org.non24.planner.data
 
+import android.annotation.SuppressLint
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.InputStream
@@ -100,7 +101,11 @@ internal object ServerTrust {
             }.socketFactory
         }
 
-    /** The system's roots, and then the chosen certificate as a further anchor. */
+    /**
+     * The system's roots, and then the chosen certificate as a further anchor.
+     * Not a trust-all: every chain is checked by the platform's own managers.
+     */
+    @SuppressLint("CustomX509TrustManager")
     fun trustManager(certificatePem: String): X509TrustManager {
         val system = managerFor(null)
         val anchors = KeyStore.getInstance(KeyStore.getDefaultType()).apply {
