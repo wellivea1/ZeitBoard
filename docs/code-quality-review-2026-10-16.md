@@ -132,8 +132,9 @@ test fail:
   built-in browser pane, which now loads the Wails bridge. It ran against a throwaway data folder
   holding synthetic nights. The check found five defects, all now fixed and recorded in the
   completion plan's "The running app". On 2026-10-23 Narrator was run through the window by
-  keyboard, and the accessibility tree of every screen was swept. TalkBack on the phone is still to
-  do.
+  keyboard, and the accessibility tree of every screen was swept. The phone's tree was swept the
+  same day on the emulator, by an instrumented test that found no headings marked; they were added.
+  TalkBack on the phone is still to do.
 - **The providers.** Google, Microsoft and CalDAV are checked against stand-ins that behave as their
   documentation says. ADR-0065 records the two behaviours of Graph's that need a real account to
   confirm.

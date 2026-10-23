@@ -65,7 +65,9 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -493,6 +495,7 @@ private fun HealthConnectPanel(
             }
             Text(
                 "READ SLEEP",
+                modifier = Modifier.readAs("Read sleep"),
                 style = MaterialTheme.typography.labelSmall,
                 color = SageDark,
             )
@@ -559,7 +562,7 @@ private fun HealthConnectPanel(
             }
             HealthConnectAvailability.UNAVAILABLE -> {
                 Text(
-                    "Synthetic fixture mode remains available on devices without Health Connect.",
+                    "Sample data stays available on devices without Health Connect.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
@@ -717,7 +720,7 @@ private fun CorrectionScreen(
                 ) {
                     PrimaryButton(
                         text = "Save correction",
-                        onClick = { latest?.let { onSave(it, startText, endText) } },
+                        onClick = { onSave(latest, startText, endText) },
                         enabled = canSave,
                         modifier = Modifier.widthIn(min = 150.dp),
                     )
@@ -928,7 +931,7 @@ private fun SettingsScreen(
         SectionHeading("Data source")
         RuledSection {
             Text(
-                "Fixture mode is always labeled and contains synthetic data only.",
+                "Sample data is always labeled as such, and none of it is yours.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1228,7 +1231,7 @@ private fun DataRow(label: String, value: String) {
     ) {
         Text(
             label.uppercase(Locale.ROOT),
-            modifier = Modifier.width(keyWidth),
+            modifier = Modifier.width(keyWidth).readAs(label),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -1325,7 +1328,9 @@ private fun SegmentedDataMode(
     ) {
         Row(modifier = Modifier.fillMaxWidth().height(44.dp).selectableGroup()) {
             DataModeOption(
-                text = "Fixture",
+                // "Sample data", as the banner over it says; "fixture" is a word
+                // for the code.
+                text = "Sample data",
                 selected = selected == DataMode.FIXTURE,
                 onClick = { onSelected(DataMode.FIXTURE) },
                 modifier = Modifier.weight(1f),
@@ -1392,6 +1397,9 @@ private fun DenseTextField(
     ) {
         Text(
             label.uppercase(Locale.ROOT),
+            // The field below carries this name, so it is read once, there,
+            // rather than first in capitals and again as the field.
+            modifier = Modifier.clearAndSetSemantics {},
             style = MaterialTheme.typography.labelSmall,
             color = if (focused) SageDark else MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -1543,15 +1551,26 @@ private fun RuledSection(
     }
 }
 
+// Drawn in capitals, given to a screen reader as written: some voices read a
+// word in capitals letter by letter, and a braille display shows it so.
+private fun Modifier.readAs(text: String) = semantics { contentDescription = text }
+
+// A screen's title and its sections are headings, so TalkBack can move from one
+// to the next, as a screen reader does through the desktop's.
 @Composable
 private fun ScreenHeader(kicker: String, title: String, description: String) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
             kicker.uppercase(Locale.ROOT),
+            modifier = Modifier.readAs(kicker),
             style = MaterialTheme.typography.labelSmall,
             color = Muted,
         )
-        Text(title, style = MaterialTheme.typography.headlineLarge)
+        Text(
+            title,
+            modifier = Modifier.semantics { heading() },
+            style = MaterialTheme.typography.headlineLarge,
+        )
         Text(
             description,
             style = MaterialTheme.typography.bodyMedium.copy(fontFamily = ReadingSerif),
@@ -1564,7 +1583,7 @@ private fun ScreenHeader(kicker: String, title: String, description: String) {
 private fun SectionHeading(text: String) {
     Text(
         text.uppercase(Locale.ROOT),
-        modifier = Modifier.padding(top = 10.dp),
+        modifier = Modifier.padding(top = 10.dp).readAs(text).semantics { heading() },
         style = MaterialTheme.typography.labelMedium,
         color = Ink,
     )
@@ -1716,10 +1735,11 @@ private fun BrandBar(now: Instant) {
                 style = MaterialTheme.typography.headlineMedium.copy(fontStyle = FontStyle.Italic, fontWeight = FontWeight.Medium),
                 color = Ink,
             )
+            val today = now.atZone(ZoneId.systemDefault())
             Text(
-                DateTimeFormatter.ofPattern("EEE d MMM", locale)
-                    .format(now.atZone(ZoneId.systemDefault()))
-                    .uppercase(locale),
+                DateTimeFormatter.ofPattern("EEE d MMM", locale).format(today).uppercase(locale),
+                // "FRI 23 OCT" is read as the whole date.
+                modifier = Modifier.readAs(DateTimeFormatter.ofPattern("EEEE d MMMM", locale).format(today)),
                 style = MaterialTheme.typography.labelSmall,
                 color = Muted,
             )
@@ -1770,6 +1790,7 @@ private fun DestinationBar(
                 ) {
                     Text(
                         destination.label.uppercase(locale),
+                        modifier = Modifier.readAs(destination.label),
                         style = MaterialTheme.typography.labelMedium,
                         color = if (selected) Ink else Muted,
                         maxLines = 1,

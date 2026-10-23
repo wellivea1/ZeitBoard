@@ -20,8 +20,9 @@ Native Kotlin and Jetpack Compose companion for ZeitBoard.
   Health Connect adapter.
 - `ui`: one application view model and five Compose destinations.
 
-The Android app does not implement estimation. Fixture mode exposes a labeled synthetic estimate. My
-data mode imports recent sleep after READ_SLEEP permission and downloads estimates from the Go core
+The Android app does not implement estimation. Fixture mode, shown as "Sample data", exposes a
+labeled synthetic estimate. My data mode imports recent sleep after READ_SLEEP permission and
+downloads estimates from the Go core
 on the enrolled server. It works as a read-only forecast/task companion without Health Connect
 permission. Cached forecasts show their age, expiry and uncertainty; refused or unavailable server
 data never becomes a sample forecast.

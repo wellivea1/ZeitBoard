@@ -94,4 +94,9 @@ On 2026-10-23 Narrator was run through the desktop window by keyboard alone. Eve
 Settings, Home, Rhythm and Log was announced with its name, role and state, and following a link
 announces the new screen. The same day, every screen's names, headings and landmarks were swept in
 the running window, and no gap was found. Both are in [`verification.md`](verification.md).
-TalkBack on the phone is still to do.
+
+On the phone, `ScreenAccessibilityTest` walks the tree TalkBack reads, on every destination and a
+page at a time. Its first run found no heading marked anywhere, so each screen's title and section
+titles are headings now. Words drawn in capitals are given to TalkBack as written, a field's label
+is read once, as the field, and the dial is one stop read as its description. Every control has a
+name, and every target is at least 48 by 48dp. TalkBack itself on the phone is still to do.

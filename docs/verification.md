@@ -3551,3 +3551,45 @@ The race test now shows that the outdated answer is never drawn, and it fails ag
 before PR #99. The tests of lists not yet read, and of reads that failed, fail against the code
 before the change: two for Data Sources, two for Home's columns, one for Context and one for the
 decision history. A new Week test steps to the next days and finds their nights read.
+
+## The phone's accessibility tree — 2026-10-23
+
+TalkBack is not on the test emulator, and installing it is a download. What TalkBack reads is the
+accessibility tree, so a new instrumented test, `ScreenAccessibilityTest`, walks that tree on each
+of the companion's five destinations. It opens each with the click TalkBack's double tap sends and
+reads it a page at a time, as TalkBack scrolls, since what is scrolled out of view is not in the
+tree. The sweep found:
+
+- **No headings.** Not one heading was marked anywhere in the companion, so TalkBack could not move
+  from section to section as a screen reader does through the desktop's. Each screen's title and
+  section titles are headings now:
+  - Now: Latest sleep, Health Connect;
+  - Plan: Tasks;
+  - Log: Correct sleep;
+  - Doses: Medication event;
+  - Settings: Settings, Data source, Your server, Display, Privacy.
+- **Capitals.** Section titles, the destination bar, the keys of each record's rows and the date
+  at the top are drawn in capitals, and reached TalkBack so, as in "FRI 23 OCT". Each is now given
+  as written, and the date in full, "Friday 23 October".
+- **The dial's centre twice.** The dial carries a description that already says what its centre
+  does, but the centre's three lines were nodes of their own beside it, read again in capitals. The
+  dial is now one stop.
+- **Labels twice.** Each text field's label, drawn in capitals above it, was a node of its own
+  before the field, which carries the same name. It is read once now, as the field.
+- **"Fixture".** Settings' data source choice was read, and shown, as "Fixture", a word for the
+  code, under a banner that says "Sample data". It now says "Sample data", as do three sentences
+  that said "fixture". The permissions rationale no longer calls a forecast downloaded from the
+  owner's server a future one.
+
+Every control on every page has a name, and the test fails if one does not. Every target is at
+least 48 by 48dp, and the test fails below the design's smallest, 44dp. Before the change, the test
+ran against the app installed from 2026-10-11 and failed: Now had no heading. It ran in sample mode
+on the emulator (Android 16), with the app installed over its data. It needs Android 14 or later,
+because without a screen reader on, Compose sends no change events and the tree must be read afresh
+(`UiAutomation.clearCache`). CI has no emulator, so it runs by hand:
+
+```
+adb shell am instrument -w -e class org.non24.planner.ScreenAccessibilityTest org.non24.planner.test/androidx.test.runner.AndroidJUnitRunner
+```
+
+TalkBack itself, on the emulator or the owner's phone, is still to do.
