@@ -1796,7 +1796,8 @@ rows and each switch read in several stops.
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and
-who it waits on.
+who it waits on. What each remaining step needs, how to run it and where to record it is in
+[`release-checks.md`](release-checks.md).
 
 | Milestone | Software | Remaining | Waits on |
 |---|---|---|---|
