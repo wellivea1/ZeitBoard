@@ -18,7 +18,7 @@ import org.junit.runner.RunWith
  * TalkBack reads the accessibility tree. The test emulator has no TalkBack, so
  * this walks that tree itself on each destination, as the desktop's screens
  * were swept: every screen has a heading to move to, and everything that can
- * be tapped or switched says what it is.
+ * be tapped or switched says what it is and is large enough to touch.
  *
  * It needs Android 14: without a screen reader on, Compose sends no change
  * events, so the tree must be read afresh each time (UiAutomation.clearCache).
@@ -31,7 +31,7 @@ class ScreenAccessibilityTest {
         InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
 
     @Test
-    fun everyDestinationHasHeadingsAndNamedControls() {
+    fun everyDestinationHasHeadingsAndNamedControlsLargeEnoughToTouch() {
         ActivityScenario.launch(MainActivity::class.java).use {
             for (destination in listOf("Now", "Plan", "Log", "Doses", "Settings")) {
                 val headings = linkedSetOf<String>()
@@ -50,13 +50,14 @@ class ScreenAccessibilityTest {
                         val name = spoken(control)
                         if (name.isBlank()) nameless += "${control.className} at ${bounds.toShortString()}"
                         if (!control.isVisibleToUser) continue
-                        val (width, height) = targets["${control.className} $name"] ?: (0f to 0f)
-                        targets["${control.className} $name"] =
-                            maxOf(width, bounds.width() / density) to maxOf(height, bounds.height() / density)
+                        val key = "${control.className} $name"
+                        val (width, height) = targets[key] ?: (0f to 0f)
+                        targets[key] = maxOf(width, bounds.width() / density) to maxOf(height, bounds.height() / density)
                     }
                     val scroller = nodes.firstOrNull { scrollForward in it.actionList } ?: break
-                    if (pages++ == MAX_PAGES || !scroller.performAction(scrollForward.id)) break
+                    if (pages == MAX_PAGES || !scroller.performAction(scrollForward.id)) break
                     nodes = settled()
+                    pages++
                 }
                 val smallest = targets.minByOrNull { (_, size) -> minOf(size.first, size.second) }
                 Log.i(TAG, "$destination, $pages pages, headings: $headings, smallest target: $smallest")
