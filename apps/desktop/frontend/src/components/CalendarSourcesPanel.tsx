@@ -1,9 +1,10 @@
 import { ConfirmDelete } from "./ConfirmDelete";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Notice } from "./Notice";
 import { CalendarImportPanel, type CalDAVRefill } from "./CalendarImportPanel";
 import { CalendarWriteBackForm, CalendarWriteBackStatus } from "./CalendarWriteBack";
 import {
+  calendarDataChangedEvent,
   refreshCalendarSource,
   removeCalendarSource,
   type CalendarAccountSource,
@@ -16,6 +17,7 @@ import {
   loadCalendarWriteBack,
   type CalendarWriteBack,
 } from "../data/calendarWriteBack";
+import { useLoaded } from "../state/useLoaded";
 
 // The calendars ZeitBoard reads, and adding another. This used to sit in a
 // narrow column beside the calendar board; it is set up once and rarely
@@ -30,29 +32,14 @@ const kindLabels: Record<CalendarSource["kind"], string> = {
 };
 
 // The write-back status, re-read when the writer reports progress and when the
-// calendars change (removing the calendar written to stops writing).
-function useCalendarWriteBack(sources: CalendarSource[]) {
-  const [writeBack, setWriteBack] = useState<CalendarWriteBack | undefined>();
-  useEffect(() => {
-    let current = true;
-    const load = () => {
-      void loadCalendarWriteBack().then(
-        (status) => {
-          if (current) setWriteBack(status);
-        },
-        () => {
-          if (current) setWriteBack(undefined);
-        },
-      );
-    };
-    load();
-    window.addEventListener(calendarWriteBackChangedEvent, load);
-    return () => {
-      current = false;
-      window.removeEventListener(calendarWriteBackChangedEvent, load);
-    };
-  }, [sources]);
-  return [writeBack, setWriteBack] as const;
+// calendars change (removing the calendar written to stops writing). A status
+// a change returned is kept over a read that started before it.
+function useCalendarWriteBack() {
+  const { data, set } = useLoaded<CalendarWriteBack | undefined>(loadCalendarWriteBack, {
+    events: [calendarWriteBackChangedEvent, calendarDataChangedEvent],
+    fallback: () => undefined,
+  });
+  return [data, set] as const;
 }
 
 // Where a subscribed calendar comes from, by host alone, and whether its last
@@ -99,7 +86,8 @@ export function CalendarSourcesPanel({
   available,
   onChanged,
 }: {
-  sources: CalendarSource[];
+  /** Undefined until they are read; null when they could not be. */
+  sources: CalendarSource[] | null | undefined;
   available: boolean;
   onChanged: () => void;
 }) {
@@ -110,8 +98,8 @@ export function CalendarSourcesPanel({
   const [refill, setRefill] = useState<CalDAVRefill | undefined>();
   const [refreshed, setRefreshed] = useState("");
   const [offering, setOffering] = useState<string | null>(null);
-  const [writeBack, setWriteBack] = useCalendarWriteBack(sources);
-  const sourceBeingRemoved = sources.find((source) => source.sourceId === removing);
+  const [writeBack, setWriteBack] = useCalendarWriteBack();
+  const sourceBeingRemoved = sources?.find((source) => source.sourceId === removing);
   const writingTo = writeBack?.on ? writeBack.sourceId : undefined;
 
   const remove = (sourceId: string) => {
@@ -180,9 +168,13 @@ export function CalendarSourcesPanel({
         can also be written to one of your calendars, by CalDAV or from a Google or Microsoft
         account, as ZeitBoard’s own events. Your own events are never changed.
       </Notice>
-      {sources.length === 0 ? (
+      {sources === null && (
+        <p className="calendar-source-empty">The calendars could not be read.</p>
+      )}
+      {sources?.length === 0 && (
         <p className="calendar-source-empty">No calendars yet. Adding one is optional.</p>
-      ) : (
+      )}
+      {sources && sources.length > 0 && (
         <ul className="calendar-source-list">
           {sources.map((source) => {
             const writingHere = writingTo === source.sourceId;

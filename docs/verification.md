@@ -3518,3 +3518,30 @@ Two things to know:
 
 What Narrator spoke was not recorded as text. The log holds what UI Automation gave it, which is
 what it reads.
+
+## One way to read from the desktop — 2026-10-23
+
+The calendar race the review found had a kind, and a search for it found four more. Each was a
+loader of its own that read again on events and guarded only against leaving the screen, so two
+reads in flight could land out of order:
+
+- Home's diary and doses, where an older read landing last could drop a dose just logged there;
+- Plan › Week's nights, doses and the estimate's age;
+- the status of writing accepted times to a calendar;
+- Data Sources' calendars, which PR #99 had fixed with a counter of their own.
+
+Each now reads through `useLoaded`, the one way a view reads from the desktop. It runs one read at
+a time and keeps only the newest answer, and a value a change returned outlasts a read that started
+before it. Its own tests cover each of these. Moving the views to it found two more things:
+
+- **Calendars claimed before they were read.** Data Sources said "No calendars yet" while still
+  reading them. When the read failed, both lists went on saying there were none. They now say
+  nothing until the calendars are read, and say when they could not be.
+- **Views that went stale with time.** Home's diary starts today and runs 72 hours ahead, but was
+  read only when a record or a calendar changed, so after midnight it missed the last day of its
+  span. Plan › Week's note that the estimate is old was read only when sleep was recorded. Both are
+  now read again as time passes, as the rest of Home is.
+
+The race test now shows that the outdated answer is never drawn, and it fails against the code
+before PR #99. The two tests of calendars not yet read, and of a read that failed, fail against
+PR #99's. A new Week test steps to the next days and finds their nights read.

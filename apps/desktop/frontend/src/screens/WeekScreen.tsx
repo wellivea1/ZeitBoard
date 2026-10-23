@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PlaceholderNotice } from "../components/AppShell";
 import { Icon } from "../components/Icon";
 import { WeekBoard } from "../components/WeekBoard";
@@ -15,11 +15,7 @@ import {
   type CalendarData,
   type CalendarEventSegment,
 } from "../data/calendar";
-import {
-  loadMedications,
-  medicationDataChangedEvent,
-  type MedicationsData,
-} from "../data/medications";
+import { loadMedications, medicationDataChangedEvent } from "../data/medications";
 import type { OverviewData } from "../data/overview";
 import { loadSleepEntriesBetween, type SleepEntry } from "../data/sleepEntries";
 import { sleepDataChangedEvent } from "../data/sleepDataEvents";
@@ -77,29 +73,6 @@ function useNow() {
   return now;
 }
 
-/** Reloads `load` now and whenever one of `events` fires. */
-function useReloading<T>(load: () => Promise<T>, events: string[], initial: T) {
-  const [value, setValue] = useState<T>(initial);
-  const key = events.join(" ");
-  useEffect(() => {
-    let current = true;
-    const run = () =>
-      void load().then(
-        (result) => {
-          if (current) setValue(result);
-        },
-        () => undefined,
-      );
-    run();
-    for (const name of key.split(" ")) window.addEventListener(name, run);
-    return () => {
-      current = false;
-      for (const name of key.split(" ")) window.removeEventListener(name, run);
-    };
-  }, [load, key]);
-  return value;
-}
-
 // The nights the board shows: those touching its days, with a day to spare on
 // each side, which covers any time zone's offset from UTC.
 function sleepRange(start: string, days: number) {
@@ -109,7 +82,9 @@ function sleepRange(start: string, days: number) {
   to.setUTCDate(to.getUTCDate() + days + 1);
   return [from.toISOString(), to.toISOString()] as const;
 }
-const loadDoses = () => loadMedications();
+// One empty list until the nights are read, so the columns are not worked out
+// again on every render.
+const noSleep: SleepEntry[] = [];
 const loadFreshness = () => loadOverview().then((result) => result.data);
 
 function useCalendarRange(start: string, days: number, zoneId: string) {
@@ -365,17 +340,21 @@ export function WeekScreen() {
   const [days, setDays] = useDaysShown();
   const [start, setStart] = useState(today);
   const calendar = useCalendarRange(start, days, zoneId);
-  const loadSleep = useCallback(() => {
-    const [from, to] = sleepRange(start, days);
-    return loadSleepEntriesBetween(from, to).then((data) => data.entries);
-  }, [start, days]);
-  const sleep = useReloading(loadSleep, [sleepDataChangedEvent], [] as SleepEntry[]);
-  const medications = useReloading<MedicationsData | null>(
-    loadDoses,
-    [medicationDataChangedEvent],
-    null,
+  const { data: sleep = noSleep } = useLoaded(
+    () => {
+      const [from, to] = sleepRange(start, days);
+      return loadSleepEntriesBetween(from, to).then((data) => data.entries);
+    },
+    { events: [sleepDataChangedEvent], key: `${start} ${days}` },
   );
-  const overview = useReloading<OverviewData | null>(loadFreshness, [sleepDataChangedEvent], null);
+  const { data: medications = null } = useLoaded(loadMedications, {
+    events: [medicationDataChangedEvent],
+  });
+  // Says how old the estimate is, which changes as time passes.
+  const { data: overview = null } = useLoaded(loadFreshness, {
+    events: [sleepDataChangedEvent],
+    expires: true,
+  });
   const { data: sourceStatuses } = useLoaded(loadSourceStatuses, {
     events: [sleepDataChangedEvent],
     fallback: () => [],

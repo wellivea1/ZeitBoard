@@ -1,11 +1,10 @@
-import { useEffect, useState } from "react";
 import { PageHeader } from "../components/AppShell";
 import { ActivityExportPanel } from "../components/ActivityExportPanel";
 import { CalendarSourcesPanel } from "../components/CalendarSourcesPanel";
 import { DataSourceStatusPanel } from "../components/DataSourceStatusPanel";
 import { SleepImportPanel } from "../components/SleepImportPanel";
 import { loadActivityCollection, type ActivityCollection } from "../data/activityCollection";
-import { loadBackendSyncStatus, type BackendSyncStatus } from "../data/backendSync";
+import { loadBackendSyncStatus } from "../data/backendSync";
 import {
   calendarDataChangedEvent,
   loadCalendar,
@@ -24,48 +23,16 @@ import { localZone } from "../utils/civilTime";
 // beside the calendar board, because adding one is set-up, not planning.
 
 interface CalendarSources {
-  ready: boolean;
   available: boolean;
   sources: CalendarSource[];
 }
 
-function useCalendarSources(): CalendarSources {
-  const [state, setState] = useState<CalendarSources>({
-    ready: false,
-    available: false,
-    sources: [],
-  });
-  useEffect(() => {
-    // Only the newest read may land: an older answer arriving last would bring
-    // back a calendar removed since. Leaving the screen outdates them all.
-    let latest = 0;
-    const load = () => {
-      const request = ++latest;
-      // Read in this computer's zone, as on Home and Plan. It was New York's
-      // for everyone.
-      const zoneId = localZone();
-      void loadCalendar({ startCivilDate: todayCivilDate(zoneId), days: 1, zoneId }).then(
-        (result) => {
-          if (request !== latest) return;
-          setState({
-            ready: true,
-            available: result.source === "local",
-            sources: result.data.sources,
-          });
-        },
-        () => {
-          if (request === latest) setState((previous) => ({ ...previous, ready: true }));
-        },
-      );
-    };
-    load();
-    window.addEventListener(calendarDataChangedEvent, load);
-    return () => {
-      latest += 1;
-      window.removeEventListener(calendarDataChangedEvent, load);
-    };
-  }, []);
-  return state;
+// Read in this computer's zone, as on Home and Plan. It was New York's for
+// everyone.
+async function loadCalendarSources(): Promise<CalendarSources> {
+  const zoneId = localZone();
+  const result = await loadCalendar({ startCivilDate: todayCivilDate(zoneId), days: 1, zoneId });
+  return { available: result.source === "local", sources: result.data.sources };
 }
 
 export function DataSourcesScreen() {
@@ -78,28 +45,22 @@ export function DataSourcesScreen() {
     events: [sleepDataChangedEvent],
     fallback: () => [],
   });
-  const [syncStatus, setSyncStatus] = useState<BackendSyncStatus | undefined>(undefined);
-  const calendars = useCalendarSources();
+  // The sync row simply stays hidden when its status cannot be read.
+  const { data: syncStatus } = useLoaded(loadBackendSyncStatus);
+  // Read again whenever a calendar is added, refreshed or removed. Nothing is
+  // said of them before the first read lands, and a failed read says so (null)
+  // rather than claim there are none.
+  const { data: calendars } = useLoaded<CalendarSources | null>(loadCalendarSources, {
+    events: [calendarDataChangedEvent],
+    fallback: () => null,
+  });
+  const calendarSources = calendars === null ? null : calendars?.sources;
   // It says what is happening now, so it is read again as time passes, and a
   // read that fails says so (null) rather than leave the last answer standing.
   const { data: activity } = useLoaded<ActivityCollection | null>(loadActivityCollection, {
     expires: true,
     fallback: () => null,
   });
-
-  useEffect(() => {
-    let current = true;
-    void loadBackendSyncStatus()
-      .then((loaded) => {
-        if (current) setSyncStatus(loaded);
-      })
-      .catch(() => {
-        // The sync row simply stays hidden when status is unavailable.
-      });
-    return () => {
-      current = false;
-    };
-  }, []);
 
   return (
     <>
@@ -109,12 +70,12 @@ export function DataSourcesScreen() {
           sleepSources={sleepSources}
           sourceStatuses={sourceStatuses}
           syncStatus={syncStatus}
-          calendarSources={calendars.ready ? calendars.sources : undefined}
+          calendarSources={calendarSources}
           activity={activity}
         />
         <CalendarSourcesPanel
-          sources={calendars.sources}
-          available={calendars.available}
+          sources={calendarSources}
+          available={calendars?.available ?? false}
           onChanged={notifyCalendarDataChanged}
         />
         <SleepImportPanel />
