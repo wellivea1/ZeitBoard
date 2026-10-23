@@ -3538,7 +3538,8 @@ before it. Its own tests cover each of these. Moving the views to it found two m
   reading them, and both of its lists went on saying there were none when the read failed. Home's
   diary said "Nothing is fixed in the next three days" and its doses "No medications listed" in the
   same two cases, beside a column that already said "Checking…". Log › Context said the desktop
-  service was unavailable until its first read answered. Each now says nothing, or that it is
+  service was unavailable until its first read answered. Plan's decision history said "No decisions
+  yet", under a count of 0, before every source had answered. Each now says nothing, or that it is
   checking, until it has read, and says when it could not read.
 - **Views that went stale with time.** Home's diary starts today and runs 72 hours ahead, but was
   read only when a record or a calendar changed, so after midnight it missed the last day of its
@@ -3547,5 +3548,5 @@ before it. Its own tests cover each of these. Moving the views to it found two m
 
 The race test now shows that the outdated answer is never drawn, and it fails against the code
 before PR #99. The tests of lists not yet read, and of reads that failed, fail against the code
-before the change: two for Data Sources, two for Home's columns and one for Context. A new Week
-test steps to the next days and finds their nights read.
+before the change: two for Data Sources, two for Home's columns, one for Context and one for the
+decision history. A new Week test steps to the next days and finds their nights read.

@@ -294,9 +294,7 @@ export function DecisionHistory() {
 
   return (
     <details className="decision-history">
-      <summary>
-        Decision history <span className="count">{total}</span>
-      </summary>
+      <summary>Decision history {summary.ready && <span className="count">{total}</span>}</summary>
       <p className="plan-empty">Only your own planner decisions can be undone.</p>
       <div className="approval-decision-list">
         {local.decided.map((proposal) => (
@@ -363,7 +361,10 @@ export function DecisionHistory() {
       {local.taskConflictHistory.map((item) => (
         <TaskConflictHistoryCard item={item} key={item.reviewToken} />
       ))}
-      {total === 0 && <p className="plan-empty">No decisions yet.</p>}
+      {/* Said only once every source has answered, as the queue above does. */}
+      {summary.ready && !summary.incomplete && total === 0 && (
+        <p className="plan-empty">No decisions yet.</p>
+      )}
     </details>
   );
 }
