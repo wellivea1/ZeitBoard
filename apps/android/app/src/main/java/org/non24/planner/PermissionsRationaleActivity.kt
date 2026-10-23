@@ -49,8 +49,8 @@ private fun PermissionsRationale() {
                     "or turn automatic refresh off in ZeitBoard Settings.",
             )
             Text(
-                "Android does not calculate an estimated sleep-wake phase. Any displayed " +
-                    "forecast is an explicitly labeled synthetic fixture or a future imported result.",
+                "Android does not calculate an estimated sleep-wake phase. A forecast shown here " +
+                    "is either labeled sample data or one downloaded from your own server.",
             )
         }
     }

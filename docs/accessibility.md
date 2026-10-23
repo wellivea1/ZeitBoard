@@ -97,6 +97,6 @@ the running window, and no gap was found. Both are in [`verification.md`](verifi
 
 On the phone, `ScreenAccessibilityTest` walks the tree TalkBack reads, on every destination and a
 page at a time. Its first run found no heading marked anywhere, so each screen's title and section
-titles are headings now. Words drawn in capitals are given to TalkBack as written, and the dial is
-one stop read as its description. Every control has a name. TalkBack itself on the phone is still
-to do.
+titles are headings now. Words drawn in capitals are given to TalkBack as written, a field's label
+is read once, as the field, and the dial is one stop read as its description. Every control has a
+name, and every target is at least 48 by 48dp. TalkBack itself on the phone is still to do.

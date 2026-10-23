@@ -27,6 +27,8 @@ import org.junit.runner.RunWith
 @SdkSuppress(minSdkVersion = Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
 class ScreenAccessibilityTest {
     private val automation = InstrumentationRegistry.getInstrumentation().uiAutomation
+    private val density =
+        InstrumentationRegistry.getInstrumentation().targetContext.resources.displayMetrics.density
 
     @Test
     fun everyDestinationHasHeadingsAndNamedControls() {
@@ -34,22 +36,37 @@ class ScreenAccessibilityTest {
             for (destination in listOf("Now", "Plan", "Log", "Doses", "Settings")) {
                 val headings = linkedSetOf<String>()
                 val nameless = linkedSetOf<String>()
+                // The largest each control was seen: one cut by a page's edge
+                // is whole on the next.
+                val targets = mutableMapOf<String, Pair<Float, Float>>()
                 var nodes = open(destination)
                 var pages = 1
                 // The whole screen, a page at a time, as TalkBack scrolls it:
                 // what is scrolled out of view is not in the tree.
                 while (true) {
                     headings += headings(nodes)
-                    nameless += nodes
-                        .filter { (it.isClickable || it.isCheckable) && spoken(it).isBlank() }
-                        .map { "${it.className} at ${Rect().also(it::getBoundsInScreen).toShortString()}" }
+                    for (control in nodes.filter { it.isClickable || it.isCheckable }) {
+                        val bounds = Rect().also(control::getBoundsInScreen)
+                        val name = spoken(control)
+                        if (name.isBlank()) nameless += "${control.className} at ${bounds.toShortString()}"
+                        if (!control.isVisibleToUser) continue
+                        val (width, height) = targets["${control.className} $name"] ?: (0f to 0f)
+                        targets["${control.className} $name"] =
+                            maxOf(width, bounds.width() / density) to maxOf(height, bounds.height() / density)
+                    }
                     val scroller = nodes.firstOrNull { scrollForward in it.actionList } ?: break
                     if (pages++ == MAX_PAGES || !scroller.performAction(scrollForward.id)) break
                     nodes = settled()
                 }
-                Log.i(TAG, "$destination, $pages pages, headings: $headings")
+                val smallest = targets.minByOrNull { (_, size) -> minOf(size.first, size.second) }
+                Log.i(TAG, "$destination, $pages pages, headings: $headings, smallest target: $smallest")
                 assertTrue("$destination has no heading", headings.isNotEmpty())
                 assertEquals("$destination has controls with no name", emptyList<String>(), nameless.toList())
+                // The design's smallest target (ui-ux-design.md, "Touch targets").
+                val small = targets
+                    .filter { (_, size) -> size.first < MIN_TARGET_DP || size.second < MIN_TARGET_DP }
+                    .map { (control, size) -> "$control ${size.first.toInt()}x${size.second.toInt()}dp" }
+                assertEquals("$destination has targets under ${MIN_TARGET_DP}dp", emptyList<String>(), small)
             }
         }
     }
@@ -117,6 +134,7 @@ class ScreenAccessibilityTest {
     private companion object {
         const val TAG = "ScreenAccessibility"
         const val MAX_PAGES = 12
+        const val MIN_TARGET_DP = 44f
         val scrollForward: AccessibilityNodeInfo.AccessibilityAction =
             AccessibilityNodeInfo.AccessibilityAction.ACTION_SCROLL_FORWARD
     }

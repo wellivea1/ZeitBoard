@@ -3574,8 +3574,16 @@ tree. The sweep found:
 - **The dial's centre twice.** The dial carries a description that already says what its centre
   does, but the centre's three lines were nodes of their own beside it, read again in capitals. The
   dial is now one stop.
+- **Labels twice.** Each text field's label, drawn in capitals above it, was a node of its own
+  before the field, which carries the same name. It is read once now, as the field.
+- **"Fixture".** Settings' data source choice was read, and shown, as "Fixture", a word for the
+  code, under a banner that says "Sample data". It now says "Sample data", as do three sentences
+  that said "fixture". The permissions rationale no longer calls a forecast downloaded from the
+  owner's server a future one.
 
-Every control on every page has a name, and the test fails if one does not. It ran in sample mode
+Every control on every page has a name, and the test fails if one does not. Every target is at
+least 48 by 48dp, and the test fails below the design's smallest, 44dp. Before the change, the test
+ran against the app installed from 2026-10-11 and failed: Now had no heading. It ran in sample mode
 on the emulator (Android 16), with the app installed over its data. It needs Android 14 or later,
 because without a screen reader on, Compose sends no change events and the tree must be read afresh
 (`UiAutomation.clearCache`). CI has no emulator, so it runs by hand:

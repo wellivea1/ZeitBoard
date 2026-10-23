@@ -65,6 +65,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -561,7 +562,7 @@ private fun HealthConnectPanel(
             }
             HealthConnectAvailability.UNAVAILABLE -> {
                 Text(
-                    "Synthetic fixture mode remains available on devices without Health Connect.",
+                    "Sample data stays available on devices without Health Connect.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
             }
@@ -930,7 +931,7 @@ private fun SettingsScreen(
         SectionHeading("Data source")
         RuledSection {
             Text(
-                "Fixture mode is always labeled and contains synthetic data only.",
+                "Sample data is always labeled as such, and none of it is yours.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1327,7 +1328,9 @@ private fun SegmentedDataMode(
     ) {
         Row(modifier = Modifier.fillMaxWidth().height(44.dp).selectableGroup()) {
             DataModeOption(
-                text = "Fixture",
+                // "Sample data", as the banner over it says; "fixture" is a word
+                // for the code.
+                text = "Sample data",
                 selected = selected == DataMode.FIXTURE,
                 onClick = { onSelected(DataMode.FIXTURE) },
                 modifier = Modifier.weight(1f),
@@ -1394,6 +1397,9 @@ private fun DenseTextField(
     ) {
         Text(
             label.uppercase(Locale.ROOT),
+            // The field below carries this name, so it is read once, there,
+            // rather than first in capitals and again as the field.
+            modifier = Modifier.clearAndSetSemantics {},
             style = MaterialTheme.typography.labelSmall,
             color = if (focused) SageDark else MaterialTheme.colorScheme.onSurfaceVariant,
         )
