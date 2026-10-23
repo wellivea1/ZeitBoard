@@ -71,9 +71,10 @@ verifies the APK.
 **Needs:** a reviewer who did not write the portal.
 
 Give them `portal-design.md`, `threat-model.md`, `privacy.md`, the TLS and reverse-proxy runbook in
-`self-hosting.md`, and the portal's code and tests in `apps/server`. Their task is item 6 of the
-exposure gate in `portal-design.md` section 12: find every high- and medium-severity issue, and see
-each resolved.
+`self-hosting.md`, and the code with its tests: `apps/server/internal/portal`, the public side, and
+`apps/server/internal/portalbridge`, which decides what the public side may see (its leak tests are
+in `leak_test.go`). Their task is item 6 of the exposure gate in `portal-design.md` section 12: find
+every high- and medium-severity issue, and see each resolved.
 
 The portal stays off (`portal.enabled` is false) until the whole gate passes. Turning it on is then
 the owner's decision, not part of the review.
