@@ -17,8 +17,10 @@ once all of them pass:
 | Contracts and synthetic fixtures | the v1 contracts and the fixtures generated from them |
 | Installer tooling (dry-run) | the install and update scripts |
 
-On main: `gofmt` and `go vet` are clean in every module, and ESLint reports nothing. No TODO,
-FIXME, XXX or HACK marker is left in the source.
+On main: `gofmt` and `go vet` are clean in every module, and ESLint reports nothing. Android lint
+reported ten warnings and two hints; since 2026-10-23 two warnings remain, both asking for SDK 37,
+a download. The rest were fixed, or, where the code means it, suppressed with the reason beside
+them. No TODO, FIXME, XXX or HACK marker is left in the source.
 
 One check failed on a run that changed nothing it tested: the setup guide's "closes for good". The
 test clicked the note's × as soon as it could find it, and React can show a note a moment before
