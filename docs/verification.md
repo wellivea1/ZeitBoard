@@ -3530,9 +3530,10 @@ reads in flight could land out of order:
 - the status of writing accepted times to a calendar;
 - Data Sources' calendars, which PR #99 had fixed with a counter of their own.
 
-Each now reads through `useLoaded`, the one way a view reads from the desktop. It runs one read at
-a time and keeps only the newest answer, and a value a change returned outlasts a read that started
-before it. Its own tests cover each of these. Moving the views to it found two more things:
+Each now reads through `useLoaded`, the hook views share for reading from the desktop. It runs one
+read at a time and keeps only the newest answer, and a value a change returned outlasts a read that
+started before it. Its own tests cover each of these. Every other loader that reads again on events
+was checked, and each coalesces its reads or numbers them. Moving the views found two more things:
 
 - **Lists claimed before they were read.** Data Sources said "No calendars yet" while still
   reading them, and both of its lists went on saying there were none when the read failed. Home's
