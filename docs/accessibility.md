@@ -99,4 +99,10 @@ On the phone, `ScreenAccessibilityTest` walks the tree TalkBack reads, on every 
 page at a time. Its first run found no heading marked anywhere, so each screen's title and section
 titles are headings now. Words drawn in capitals are given to TalkBack as written, a field's label
 is read once, as the field, and the dial is one stop read as its description. Every control has a
-name, and every target is at least 48 by 48dp. TalkBack itself on the phone is still to do.
+name, and every target is at least 48 by 48dp.
+
+The same day TalkBack itself was run through every destination, on an emulator that carries it,
+and what it spoke was recorded. It read headings, tabs, choices, switches and filled fields as
+they should be. It also found what the tree could not show: the forecast read twice, the dial's key
+and each record's rows split into several stops, and a switch's title read twice. Each is now one
+stop. The verification log has what it said.

@@ -37,6 +37,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -71,6 +72,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
@@ -361,7 +363,6 @@ private fun NowDial(state: AppUiState, companion: CompanionState, connected: Boo
     }
     val reading = dialCenter(nights.firstOrNull()?.end, now, zone, use24, current)
     val lead = leadParts(ahead, now, zone, use24)
-    val sentence = lead.joinToString("") { it.text }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -376,10 +377,11 @@ private fun NowDial(state: AppUiState, companion: CompanionState, connected: Boo
             zone = zone,
             use24HourTime = use24,
             reading = reading,
+            // The forecast's sentence is not repeated here: TalkBack reads it
+            // next, from the line under the dial.
             description = listOf(
                 "The next 24 hours and the last ${nights.size} recorded nights.",
                 "${reading.kicker.lowercase(Locale.ROOT).replaceFirstChar { it.uppercase() }} ${reading.figure}, ${reading.detail}.",
-                sentence,
                 if (plans.isEmpty()) "" else "Plans: " + plans.joinToString("; ") {
                     "${it.title}, ${clock.format(it.start)} to ${clock.format(it.end)}"
                 } + ".",
@@ -433,8 +435,10 @@ private fun NowDial(state: AppUiState, companion: CompanionState, connected: Boo
 @Composable
 private fun DialLegend(showPlans: Boolean) {
     val palette = LocalAlmanacPalette.current
+    // One stop for TalkBack rather than one for each colour.
+    val keys = listOfNotNull("Likely asleep", "Cannot say", "Plans".takeIf { showPlans }, "Now")
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = "Key: " + keys.joinToString(", ") },
         horizontalArrangement = Arrangement.spacedBy(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -617,10 +621,7 @@ private fun ServerSleepReviewScreen(
                             modifier = Modifier.weight(1f).selectable(classification == value, role = Role.RadioButton) { classification = value }.padding(vertical = 12.dp))
                     }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("Exclude from estimates", modifier = Modifier.weight(1f))
-                    CompactSwitch(checked = excluded, onCheckedChange = { excluded = it }, label = "Exclude from estimates")
-                }
+                SwitchRow("Exclude from estimates", excluded, { excluded = it }, titleStyle = LocalTextStyle.current)
                 PrimaryButton(if (review.needsReview) "Save reviewed resolution" else "Save correction", { onSave(review, start, end, classification, excluded) }, enabled = !busy && !state.loading && !state.stale && !state.pending)
             }
         }
@@ -947,27 +948,12 @@ private fun SettingsScreen(
 
         SectionHeading("Display")
         RuledSection {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(3.dp),
-                ) {
-                    Text("24-hour time", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "Use 24-hour labels for displayed times.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                CompactSwitch(
-                    checked = state.settings.use24HourTime,
-                    onCheckedChange = onUse24HourChanged,
-                )
-            }
+            SwitchRow(
+                "24-hour time",
+                checked = state.settings.use24HourTime,
+                onCheckedChange = onUse24HourChanged,
+                detail = "Use 24-hour labels for displayed times.",
+            )
         }
 
         SectionHeading("Privacy")
@@ -1114,15 +1100,12 @@ private fun BackendConnectionSection(
     if (connected) {
         SectionHeading("Automatic refresh")
         RuledSection {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Refresh in background", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                CompactSwitch(
-                    checked = state.settings.backgroundSyncEnabled,
-                    onCheckedChange = viewModel::setBackgroundSyncEnabled,
-                    enabled = !busy,
-                    label = "Refresh in background",
-                )
-            }
+            SwitchRow(
+                "Refresh in background",
+                checked = state.settings.backgroundSyncEnabled,
+                onCheckedChange = viewModel::setBackgroundSyncEnabled,
+                enabled = !busy,
+            )
             Text(
                 "Off by default. When enabled, Android attempts hourly sync, including permitted sleep imports. " +
                     "Battery settings can delay jobs; force-stopping pauses them until you reopen ZeitBoard. " +
@@ -1146,15 +1129,12 @@ private fun BackendConnectionSection(
 
         SectionHeading("Time requests")
         RuledSection {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Tell me when someone asks for a time", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                CompactSwitch(
-                    checked = state.settings.timeRequestNotices,
-                    onCheckedChange = { on -> if (on) onEnableNotices() else viewModel.setTimeRequestNotices(false) },
-                    enabled = !busy,
-                    label = "Tell me when someone asks for a time",
-                )
-            }
+            SwitchRow(
+                "Tell me when someone asks for a time",
+                checked = state.settings.timeRequestNotices,
+                onCheckedChange = { on -> if (on) onEnableNotices() else viewModel.setTimeRequestNotices(false) },
+                enabled = !busy,
+            )
             Text(
                 "Off by default. When on, this phone asks your server about every 15 minutes, while it has a connection, " +
                     "whether anyone you shared a link with asked for a time or wrote about one. A notice says only that, " +
@@ -1226,13 +1206,14 @@ private fun DataRow(label: String, value: String) {
     // sp so it grows with the font: a key breaks between words, never inside one.
     val keyWidth = with(LocalDensity.current) { 88.sp.toDp() }
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        // One stop, the key with its value: "Sleep: Thu, Oct 22 23:10 EDT".
+        modifier = Modifier.fillMaxWidth().clearAndSetSemantics { contentDescription = "$label: $value" },
         verticalAlignment = Alignment.Top,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
             label.uppercase(Locale.ROOT),
-            modifier = Modifier.width(keyWidth).readAs(label),
+            modifier = Modifier.width(keyWidth),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -1496,23 +1477,40 @@ private fun SecondaryButton(
     }
 }
 
+// A switch and what it switches, as one control. The whole row toggles it,
+// and TalkBack reads the title once, with the state; the title and the switch
+// were read as two stops that each said the title.
 @Composable
-private fun CompactSwitch(
+private fun SwitchRow(
+    title: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
     enabled: Boolean = true,
-    label: String = "24-hour time",
+    detail: String? = null,
+    titleStyle: TextStyle = MaterialTheme.typography.titleMedium,
 ) {
-    Box(
+    Row(
         modifier = Modifier
-            .size(48.dp)
-            .semantics { contentDescription = label }
-            .toggleable(
-                enabled = enabled,
-                value = checked,
-                role = Role.Switch,
-                onValueChange = onCheckedChange,
-            ),
+            .fillMaxWidth()
+            .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onCheckedChange),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(title, style = titleStyle)
+            detail?.let {
+                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        CompactSwitch(checked)
+    }
+}
+
+// The switch's look; SwitchRow makes the row around it the control.
+@Composable
+private fun CompactSwitch(checked: Boolean) {
+    Box(
+        modifier = Modifier.size(48.dp),
         contentAlignment = Alignment.Center,
     ) {
         Box(

@@ -1788,9 +1788,10 @@ alone, through Settings, Home, Rhythm and Log. Every stop was announced with its
 state. The same day, the accessibility tree of every screen was swept for names, headings and
 landmarks, and no gap was found. The verification log records both. On the phone, the tree TalkBack
 reads was swept on the emulator by an instrumented test, every destination a page at a time; it
-found no headings marked, and they were added. TalkBack itself on the phone is still
-to do: the test emulator has no TalkBack, and installing Android Accessibility Suite on it is a
-download.
+found no headings marked, and they were added. TalkBack itself then ran through every destination
+without a download, on the owner's Google Play emulator, which carries it. What it spoke was
+recorded, and what it found was fixed: the forecast read twice, and the dial's key, each record's
+rows and each switch read in several stops.
 
 ## Where the completion goal stands — 2026-09-27
 
@@ -1806,7 +1807,7 @@ who it waits on.
 | C4 assistant and agents | Every criterion met | — | — |
 | C5 live portal | Done | The independent review and the exposure gate (`portal-design.md` section 12); the portal stays off by default until then | An independent reviewer |
 | C6 notifications | Acceptance met | — | — |
-| C7 daily-use UX | Done but for the phone | TalkBack on the phone. The desktop's pass with Narrator was done 2026-10-23, and the phone's accessibility tree was swept on the emulator the same day (verification log) | The owner's permission to install Android Accessibility Suite on the test emulator (a download), or a pass on their own phone |
+| C7 daily-use UX | Done, Narrator and TalkBack passes recorded 2026-10-23 | — | — |
 | C8 release | Material review findings resolved; upgrade regressions in CI | Clean-machine install, update across two published commits with rollback, Android bootstrap, service install and purge ceremony (`install-update-design.md`); production APK signing; private pilot and its measures; release artifacts and disposition | A clean Windows 11 VM, the owner's keystore, pilot participants |
 
 ### Known limitations and their dispositions

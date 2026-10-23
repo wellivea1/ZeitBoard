@@ -22,7 +22,7 @@ class FixtureAndMedicationRepositoryTest {
 
         assertTrue(sleepRepository.sourceEpisodes.value.isNotEmpty())
         assertNotNull(estimate)
-        assertEquals("fixture-contract-v1", estimate?.algorithmVersion)
+        assertEquals("sample-v1", estimate?.algorithmVersion)
         assertEquals(AcquisitionMethod.FIXTURE, estimate?.provenance?.acquisitionMethod)
         assertEquals(EvidenceStatus.SYNTHETIC, estimate?.provenance?.evidenceStatus)
     }
