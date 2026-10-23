@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { calendarDataChangedEvent } from "../data/calendar";
 import { DataSourcesScreen } from "./DataSourcesScreen";
 
 // A computer away from New York, which the screen once assumed for everyone.
@@ -82,6 +83,55 @@ describe("DataSourcesScreen structure", () => {
     render(<DataSourcesScreen />);
     await waitFor(() => expect(getCalendar).toHaveBeenCalled());
     expect(getCalendar).toHaveBeenCalledWith(expect.objectContaining({ zoneId: "Europe/London" }));
+  });
+
+  // Two reads in flight, the newer answering first: the older one, landing
+  // last, brought back a calendar removed in between.
+  it("lets only the newest read of the calendars land", async () => {
+    const calendarWith = (labels: string[]) => ({
+      status: "empty",
+      message: "No calendar events in this range.",
+      fixtureMode: false,
+      zoneId: "Europe/London",
+      startCivilDate: "2026-10-23",
+      endCivilDate: "2026-10-23",
+      updatedLabel: "Updated now",
+      sources: labels.map((label, index) => ({
+        sourceId: `calendar_source_${index}`,
+        label,
+        kind: "ics",
+        readOnly: true,
+        visibleEvents: 0,
+        coverageLabel: "Oct 1 to Nov 1",
+        coverageStart: "2026-10-01T00:00:00Z",
+        coverageEnd: "2026-11-01T00:00:00Z",
+      })),
+      days: [
+        {
+          civilDate: "2026-10-23",
+          label: "Fri, Oct 23",
+          isToday: true,
+          events: [],
+          predictions: [],
+        },
+      ],
+      warnings: [],
+    });
+    const answers: ((value: unknown) => void)[] = [];
+    (globalThis as { go?: unknown }).go = {
+      main: { App: { GetCalendar: () => new Promise((resolve) => answers.push(resolve)) } },
+    };
+    render(<DataSourcesScreen />);
+    await waitFor(() => expect(answers).toHaveLength(1));
+    window.dispatchEvent(new Event(calendarDataChangedEvent));
+    await waitFor(() => expect(answers).toHaveLength(2));
+
+    answers[1]!(calendarWith(["Work"]));
+    const calendars = screen.getByRole("region", { name: "Calendars" });
+    expect(await within(calendars).findByText("Work")).toBeVisible();
+    answers[0]!(calendarWith(["Work", "Removed since"]));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(within(calendars).queryByText("Removed since")).toBeNull();
   });
 
   // The row read "Not connected" whatever Settings said.

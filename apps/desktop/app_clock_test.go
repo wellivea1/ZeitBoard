@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -125,5 +127,38 @@ func TestAnUnreadableClockSaysWhichIsInUse(t *testing.T) {
 		if message := clockUnreadable(goos); strings.Contains(message, "Windows") || !strings.Contains(message, "ZeitBoard's default") {
 			t.Errorf("%s is told %q", goos, message)
 		}
+	}
+}
+
+// At start, a stored clock that cannot be read, nor any copy kept beside it,
+// leaves the computer's own clock in use, and the setting says so in that
+// system's words. It runs startClock, as NewApp does, rather than check the
+// words alone.
+func TestAnUnreadableStoredClockGivesWayAtStart(t *testing.T) {
+	restoreClockAfter(t)
+	app := newTestApp(t)
+	saveClock(t, app, clock24)
+	copies, err := filepath.Glob(filepath.Join(app.configDir, regionalFileName+"*"))
+	if err != nil || len(copies) == 0 {
+		t.Fatalf("stored clock files %v: %v", copies, err)
+	}
+	for _, path := range copies {
+		if err := os.WriteFile(path, []byte("not a clock"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	restarted := newTestApp(t)
+	restarted.configDir = app.configDir
+	restarted.startClock()
+	setting, err := restarted.GetClockSetting()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if setting.Message != clockUnreadable(runtime.GOOS) || setting.Preference != clockSystem {
+		t.Fatalf("after an unreadable clock: %+v", setting)
+	}
+	if displayClock() != restarted.systemClock {
+		t.Errorf("the window writes on %v, not the computer's %v", displayClock(), restarted.systemClock)
 	}
 }

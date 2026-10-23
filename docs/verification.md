@@ -3452,6 +3452,23 @@ reported as well. PR #98 fixes what they found:
 
 Each has a test that fails against the code before the fix.
 
+The review's last four findings are fixed by the change after:
+
+- **A removed calendar brought back.** Data Sources reads its calendars again whenever one is
+  added or removed. Two reads in flight could answer out of order, and the older, landing last,
+  brought back a calendar removed in between. Only the newest read now lands, and none lands once
+  the screen is left. Its test fails against the code before the fix.
+- **Reading Windows' log.** Every read of desktop activity's status spans what was read from
+  Windows' log, and Data Sources reads it each minute. Finding those records meant parsing the
+  evidence of every observation the desktop had kept. An index on the algorithm now answers alone.
+  A test reads SQLite's query plan, and fails without the index.
+- **A start with no test.** Nothing tested the desktop's start when the stored clock cannot be
+  read. A test now saves the 24-hour clock, damages every copy of the file and starts again. The
+  system's clock is in use, and Settings says the stored one could not be read.
+- **The plan against itself.** The completion plan's record of the running app said Data Sources
+  had defects, then a line later that it had none. It filed the clock and the reminder wording
+  under Settings › This computer. Each is now under its own screen.
+
 ## Every screen's names, headings and landmarks — 2026-10-23
 
 The running window was swept in the built-in browser pane, which draws the same Chromium

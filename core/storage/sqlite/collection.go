@@ -125,9 +125,8 @@ type ObservationSpan struct {
 func (s *Store) SourceObservationSpan(ctx context.Context, source domain.DataSourceID, algorithm string) (ObservationSpan, error) {
 	var span ObservationSpan
 	var oldest, latest sql.NullString
-	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*), MIN(observed_utc), MAX(observed_utc) FROM source_observations
-		WHERE source_id = ? AND (? = '' OR json_extract(evidence_json, '$.algorithm') = ?)`,
-		source, algorithm, algorithm).Scan(&span.Count, &oldest, &latest)
+	query, args := spanQuery(source, algorithm)
+	err := s.db.QueryRowContext(ctx, query, args...).Scan(&span.Count, &oldest, &latest)
 	if err != nil || span.Count == 0 {
 		return span, err
 	}
@@ -136,6 +135,18 @@ func (s *Store) SourceObservationSpan(ctx context.Context, source domain.DataSou
 	}
 	span.Latest, err = time.Parse(time.RFC3339Nano, latest.String)
 	return span, err
+}
+
+// spanQuery writes the span's query in one form for each case, so that one
+// algorithm's span reads idx_source_observations_algorithm alone. A single
+// form that let an empty algorithm match them all would read and parse every
+// observation of the source.
+func spanQuery(source domain.DataSourceID, algorithm string) (string, []any) {
+	query := `SELECT COUNT(*), MIN(observed_utc), MAX(observed_utc) FROM source_observations WHERE source_id = ?`
+	if algorithm == "" {
+		return query, []any{source}
+	}
+	return query + ` AND json_extract(evidence_json, '$.algorithm') = ?`, []any{source, algorithm}
 }
 
 // WriteSourceObservations streams one database snapshot into an owner-selected

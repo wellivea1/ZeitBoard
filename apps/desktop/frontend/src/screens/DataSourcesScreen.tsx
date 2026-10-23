@@ -36,14 +36,17 @@ function useCalendarSources(): CalendarSources {
     sources: [],
   });
   useEffect(() => {
-    let current = true;
+    // Only the newest read may land: an older answer arriving last would bring
+    // back a calendar removed since. Leaving the screen outdates them all.
+    let latest = 0;
     const load = () => {
+      const request = ++latest;
       // Read in this computer's zone, as on Home and Plan. It was New York's
       // for everyone.
       const zoneId = localZone();
       void loadCalendar({ startCivilDate: todayCivilDate(zoneId), days: 1, zoneId }).then(
         (result) => {
-          if (!current) return;
+          if (request !== latest) return;
           setState({
             ready: true,
             available: result.source === "local",
@@ -51,14 +54,14 @@ function useCalendarSources(): CalendarSources {
           });
         },
         () => {
-          if (current) setState((previous) => ({ ...previous, ready: true }));
+          if (request === latest) setState((previous) => ({ ...previous, ready: true }));
         },
       );
     };
     load();
     window.addEventListener(calendarDataChangedEvent, load);
     return () => {
-      current = false;
+      latest += 1;
       window.removeEventListener(calendarDataChangedEvent, load);
     };
   }, []);

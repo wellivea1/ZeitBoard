@@ -1771,15 +1771,16 @@ synthetic nights. What it found:
   says every entry feeds the estimate, which reads only the latest 21 sleeps.
 - **Settings › This computer.** Login startup spoke of Windows everywhere and offered a switch that
   could not work away from it. Each system is now told what starts ZeitBoard at sign-in. Desktop
-  activity, also Windows' alone, now says so elsewhere instead of offering an Enable button. The
-  clock's first choice, "As Windows does", is "ZeitBoard's default" where there is no Windows
-  format to follow, and medication reminders say "desktop notification" rather than Windows.
+  activity, also Windows' alone, now says so elsewhere instead of offering an Enable button.
+- **Settings › Display.** The clock's first choice, "As Windows does", is "ZeitBoard's default"
+  where there is no Windows format to follow.
+- **Log › Medications.** Reminders say "desktop notification" rather than Windows.
 - **Data Sources.** Calendars were read, and an added file's floating times placed, in New York's
   zone on every computer. They now use this computer's zone. The desktop activity row read "Not
   connected" whatever Settings said; it now says what Settings does.
-- **Everything else.** Log, Sharing, Data Sources, the other settings and the assistant rail
-  showed no defect. No screen is wider than the window, at the window's minimum size of 900 by 620
-  as well.
+- **Everything else.** Log's other tabs, Sharing, the other settings and the assistant rail showed
+  no defect. No screen is wider than the window, at the window's minimum size of 900 by 620 as
+  well.
 
 Control of the window and Narrator was declined when first asked, on 2026-10-18. Nothing was
 turned on or typed. The owner allowed it on 2026-10-23, and the Narrator pass ran then, by keyboard

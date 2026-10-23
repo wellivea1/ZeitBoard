@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -95,5 +96,34 @@ func TestARecordReadTwiceIsKeptOnce(t *testing.T) {
 	}
 	if none, err := store.SourceObservationSpan(ctx, "desktop-activity", "nothing-v1"); err != nil || none.Count != 0 || !none.Latest.IsZero() {
 		t.Errorf("an algorithm with nothing kept gave %+v, %v", none, err)
+	}
+}
+
+// Every read of desktop activity's status spans what was read from Windows'
+// log, and Data Sources reads it each minute. That span searches its own index
+// rather than parse the evidence of every observation the desktop has kept.
+func TestOneAlgorithmsSpanReadsItsIndex(t *testing.T) {
+	store, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	query, args := spanQuery("desktop-activity", "windows-power-log-v1")
+	rows, err := store.db.QueryContext(context.Background(), "EXPLAIN QUERY PLAN "+query, args...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	var plan []string
+	for rows.Next() {
+		var id, parent, unused int
+		var detail string
+		if err := rows.Scan(&id, &parent, &unused, &detail); err != nil {
+			t.Fatal(err)
+		}
+		plan = append(plan, detail)
+	}
+	if len(plan) != 1 || !strings.Contains(plan[0], "COVERING INDEX idx_source_observations_algorithm") {
+		t.Fatalf("plan %q", plan)
 	}
 }

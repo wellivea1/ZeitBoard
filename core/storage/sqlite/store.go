@@ -81,6 +81,10 @@ func (s *Store) initialize(ctx context.Context) error {
 		`CREATE UNIQUE INDEX IF NOT EXISTS idx_source_external
 			ON source_observations(source_id, external_id) WHERE external_id <> ''`,
 		`CREATE INDEX IF NOT EXISTS idx_source_observations_source ON source_observations(source_id)`,
+		// Spans one algorithm's observations, such as those read from Windows'
+		// power log, without parsing the evidence of every other one.
+		`CREATE INDEX IF NOT EXISTS idx_source_observations_algorithm
+			ON source_observations(source_id, json_extract(evidence_json, '$.algorithm'), observed_utc)`,
 		`CREATE TABLE IF NOT EXISTS source_collection_preferences (
 			source_id TEXT PRIMARY KEY,
 			enabled INTEGER NOT NULL CHECK(enabled IN (0, 1)),
