@@ -119,7 +119,6 @@ export function hasLocalCalendarService(
 export interface CalendarFileInput {
   fileName: string;
   contents: string;
-  zoneId: string;
 }
 
 export interface CalDAVInput {
@@ -127,14 +126,12 @@ export interface CalDAVInput {
   label: string;
   username: string;
   password: string;
-  zoneId: string;
 }
 
 /** A calendar's private address, as its provider publishes it (ADR-0062). */
 export interface CalendarSubscriptionInput {
   address: string;
   label: string;
-  zoneId: string;
 }
 
 export interface CalendarImportEvent {

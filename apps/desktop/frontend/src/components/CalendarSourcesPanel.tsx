@@ -16,7 +16,6 @@ import {
   loadCalendarWriteBack,
   type CalendarWriteBack,
 } from "../data/calendarWriteBack";
-import { localZone } from "../utils/civilTime";
 
 // The calendars ZeitBoard reads, and adding another. This used to sit in a
 // narrow column beside the calendar board; it is set up once and rarely
@@ -300,8 +299,6 @@ export function CalendarSourcesPanel({
         <CalendarImportPanel
           key={refill ? `refill-${refill.endpoint}` : "add"}
           available={available}
-          // An added calendar's floating times are placed in this computer's zone.
-          zoneId={localZone()}
           onChanged={onChanged}
           refill={refill}
         />

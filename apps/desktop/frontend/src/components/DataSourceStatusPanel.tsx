@@ -89,7 +89,17 @@ const activityRowStates: Record<ActivityState, SourceRowProps["state"]> = {
 
 // What this computer records of itself, in the state Settings › This computer
 // shows. The row once read "Not connected" whatever the setting was.
-function ActivityRow({ status }: { status: ActivityCollection }) {
+function ActivityRow({ status }: { status: ActivityCollection | null }) {
+  if (!status) {
+    return (
+      <SourceRow
+        icon="sources"
+        name="Desktop activity"
+        detail="Its status could not be read."
+        status={activityStateLabels.unavailable}
+      />
+    );
+  }
   const state = activityState(status);
   const settings = <a href="#/settings/computer">Settings</a>;
   // The count holds whatever was read from Windows' log as well as the polls,
@@ -162,7 +172,8 @@ export function DataSourceStatusPanel({
   sourceStatuses?: SourceStatus[];
   syncStatus?: BackendSyncStatus;
   calendarSources?: CalendarSource[];
-  activity?: ActivityCollection;
+  /** Undefined while loading; null when its status could not be read. */
+  activity?: ActivityCollection | null;
 }) {
   const summaries = sleepSources?.sources ?? [];
   const localUnavailable = sleepSources?.status === "unavailable";
@@ -222,7 +233,7 @@ export function DataSourceStatusPanel({
             state={importedCalendars.length > 0 ? "available" : "off"}
           />
         )}
-        {activity && <ActivityRow status={activity} />}
+        {activity !== undefined && <ActivityRow status={activity} />}
       </div>
       <OverlapNote count={sleepSources?.overlapCount ?? 0} />
     </section>

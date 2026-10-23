@@ -97,6 +97,15 @@ describe("ClockSettings", () => {
     expect(screen.queryByRole("radio")).toBeNull();
   });
 
+  // Outside the desktop the clock is the browser's, and was offered as
+  // Windows' on any system.
+  it("names the browser's clock as the browser's outside the desktop", async () => {
+    render(<ClockSettings />);
+    const first = await screen.findByRole("radio", { name: /As this browser does/ });
+    expect(first).toBeChecked();
+    expect(screen.queryByText(/Windows/)).toBeNull();
+  });
+
   it("saves a choice and puts it in use at once", async () => {
     const saves = stub("12");
     render(<ClockSettings />);

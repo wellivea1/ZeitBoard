@@ -24,17 +24,18 @@ const FIXED_CHOICES: Choice[] = [
   { preference: "24", title: "24-hour", hint: "From 00:00 to 23:59." },
 ];
 
-// Only Windows has a regional format ZeitBoard reads. Elsewhere this choice is
-// the clock ZeitBoard writes until another is chosen, and says so.
+// What following the computer means: Windows' regional format, which only
+// Windows has for ZeitBoard to read; outside the desktop, the browser's
+// language; elsewhere nothing, so it is the clock ZeitBoard writes until
+// another is chosen.
 function systemChoice({ platform, system }: ClockSetting): Choice {
-  const windows = platform === "windows";
-  return {
-    preference: "system",
-    title: windows ? "As Windows does" : "ZeitBoard's default",
-    hint: windows
-      ? `Follows the regional format, now the ${system}-hour clock.`
-      : `The ${system}-hour clock, until you choose another.`,
-  };
+  const [title, hint] =
+    platform === "windows"
+      ? ["As Windows does", `Follows the regional format, now the ${system}-hour clock.`]
+      : platform === ""
+        ? ["As this browser does", `Follows its language, now the ${system}-hour clock.`]
+        : ["ZeitBoard's default", `The ${system}-hour clock, until you choose another.`];
+  return { preference: "system", title, hint };
 }
 
 export function ClockSettings() {

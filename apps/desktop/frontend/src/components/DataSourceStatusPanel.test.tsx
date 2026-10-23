@@ -152,6 +152,11 @@ describe("DataSourceStatusPanel", () => {
     );
     expect(row()).toHaveTextContent("This system cannot record it. Turn it off in Settings.");
     expect(row()).not.toHaveTextContent("Retry");
+
+    // A read that failed says so, rather than leave the last answer standing.
+    rerender(<DataSourceStatusPanel activity={null} />);
+    expect(row()).toHaveTextContent("Its status could not be read.");
+    expect(row()).toHaveTextContent("Unavailable");
   });
 
   it("points to the nights with more than one record", () => {

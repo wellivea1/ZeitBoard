@@ -360,7 +360,6 @@ const newSignIn = "";
 export function CalendarAccountForm({
   available,
   busy,
-  zoneId,
   onBusy,
   onReport,
   onError,
@@ -368,7 +367,6 @@ export function CalendarAccountForm({
 }: {
   available: boolean;
   busy: boolean;
-  zoneId: string;
   onBusy: (busy: boolean) => void;
   onReport: (report: CalendarImportReport | null) => void;
   onError: (message: string) => void;
@@ -450,7 +448,6 @@ export function CalendarAccountForm({
     accountId: choosing?.account.accountId ?? "",
     calendarId: calendar.calendarId,
     label: calendar.name,
-    zoneId,
   });
 
   const preview = (calendar: AccountCalendarChoice) =>

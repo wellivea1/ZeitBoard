@@ -202,7 +202,6 @@ function CalDAVForm({
 function SubscriptionForm({
   available,
   busy,
-  zoneId,
   report,
   onBusy,
   onReport,
@@ -211,7 +210,6 @@ function SubscriptionForm({
 }: {
   available: boolean;
   busy: boolean;
-  zoneId: string;
   report: CalendarImportReport | null;
   onBusy: (busy: boolean) => void;
   onReport: (report: CalendarImportReport | null) => void;
@@ -227,7 +225,7 @@ function SubscriptionForm({
     onBusy(true);
     onError("");
     const operation = commit ? subscribeCalendar : previewCalendarSubscription;
-    void operation({ address: address.trim(), label: label.trim(), zoneId }).then(
+    void operation({ address: address.trim(), label: label.trim() }).then(
       (next) => {
         onBusy(false);
         onReport(next);
@@ -304,14 +302,15 @@ export interface CalDAVRefill {
   label: string;
 }
 
+// No zone is sent with a calendar added here: the desktop places its floating
+// times in its own zone, the one every refresh uses, so they never move when
+// the calendar is read again.
 export function CalendarImportPanel({
   available,
-  zoneId,
   onChanged,
   refill,
 }: {
   available: boolean;
-  zoneId: string;
   onChanged: () => void;
   /** A calendar to import again: its address and name, ready for a sign-in. */
   refill?: CalDAVRefill;
@@ -386,7 +385,7 @@ export function CalendarImportPanel({
     setBusy(true);
     setError("");
     const operation = commit ? importCalendarFile : previewCalendarFile;
-    void operation({ ...file, zoneId }).then(
+    void operation(file).then(
       (next) => {
         setBusy(false);
         setReport(next);
@@ -412,7 +411,6 @@ export function CalendarImportPanel({
       label: caldav.label.trim(),
       username: caldav.username.trim(),
       password: caldav.password,
-      zoneId,
     }).then(
       (next) => {
         setBusy(false);
@@ -498,7 +496,6 @@ export function CalendarImportPanel({
         <SubscriptionForm
           available={available}
           busy={busy}
-          zoneId={zoneId}
           report={report}
           onBusy={setBusy}
           onReport={setReport}
@@ -510,7 +507,6 @@ export function CalendarImportPanel({
         <CalendarAccountForm
           available={available}
           busy={busy}
-          zoneId={zoneId}
           onBusy={setBusy}
           onReport={setReport}
           onError={setError}

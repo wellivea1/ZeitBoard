@@ -1781,11 +1781,13 @@ synthetic nights. What it found:
   showed no defect. No screen is wider than the window, at the window's minimum size of 900 by 620
   as well.
 
-The Narrator pass has not run. When the window and Narrator were asked for, on 2026-10-18,
-control was declined, so the pass waits until the owner allows it. Nothing was turned on or typed.
-In its place, on 2026-10-23, the accessibility tree of every screen was swept in the browser pane:
-names, headings and landmarks, with no gap found. The verification log records it. Real
-assistive technology is still the check C7 asks for.
+Control of the window and Narrator was declined when first asked, on 2026-10-18. Nothing was
+turned on or typed. The owner allowed it on 2026-10-23, and the Narrator pass ran then, by keyboard
+alone, through Settings, Home, Rhythm and Log. Every stop was announced with its name, role and
+state. The same day, the accessibility tree of every screen was swept for names, headings and
+landmarks, and no gap was found. The verification log records both. TalkBack on the phone is still
+to do: the test emulator has no TalkBack, and installing Android Accessibility Suite on it is a
+download.
 
 ## Where the completion goal stands — 2026-09-27
 
@@ -1801,7 +1803,7 @@ who it waits on.
 | C4 assistant and agents | Every criterion met | — | — |
 | C5 live portal | Done | The independent review and the exposure gate (`portal-design.md` section 12); the portal stays off by default until then | An independent reviewer |
 | C6 notifications | Acceptance met | — | — |
-| C7 daily-use UX | Done but for one check | A screen-reader pass on real assistive technology: NVDA or Narrator on the desktop, TalkBack on the phone | The owner allowing control of the window for the Narrator pass they chose on 2026-10-18 (declined when asked that day) |
+| C7 daily-use UX | Done but for the phone | TalkBack on the phone. The desktop's pass with Narrator was done 2026-10-23 (verification log) | The owner's permission to install Android Accessibility Suite on the test emulator (a download), or a pass on their own phone |
 | C8 release | Material review findings resolved; upgrade regressions in CI | Clean-machine install, update across two published commits with rollback, Android bootstrap, service install and purge ceremony (`install-update-design.md`); production APK signing; private pilot and its measures; release artifacts and disposition | A clean Windows 11 VM, the owner's keystore, pilot participants |
 
 ### Known limitations and their dispositions

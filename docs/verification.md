@@ -3434,8 +3434,23 @@ Three of the five reported. PR #98 fixes every finding they made:
   named "Sleep interval: Oct 17, Oct 17, 5:27 PM…", the day said before a start that carries it.
 
 Eight component tests and a Go test cover these. The eight fail against the code before the fix.
-The reviewer of cross-file effects and the one for language pitfalls were stopped again by usage
-limits before reporting.
+
+The reviewers of cross-file effects and of language pitfalls, stopped again by usage limits, then
+reported as well. PR #98 fixes what they found:
+
+- **A zone no formatter accepts.** Where ICU cannot name the host's zone, the window's Intl
+  reports "Etc/Unknown". Data Sources, Home and Plan then failed to open, because formatting a date
+  in it throws. The computer's zone is now UTC in that case, as the desktop's own is.
+- **A failed read.** Once the desktop activity row had been read, a later read that failed left the
+  last answer standing. It now says its status could not be read.
+- **One zone for a calendar.** A calendar added from Data Sources was placed in the window's zone,
+  but each refresh is placed in the desktop's, and the two can differ. All-day events could then
+  move hours on the first refresh. The window now sends no zone, so the desktop places floating
+  times in the zone its refreshes use.
+- **The browser's clock.** Outside the desktop, the clock the browser preview offered as "As
+  Windows does" is now "As this browser does".
+
+Each has a test that fails against the code before the fix.
 
 ## Every screen's names, headings and landmarks — 2026-10-23
 
@@ -3444,5 +3459,41 @@ accessibility tree WebView2 gives a screen reader. Sixteen screens were swept, f
 settings tab. Each has one `h1`, one `main` and the two navigation landmarks, and no heading level
 is skipped. No focusable control lacks an accessible name, no image lacks alternative text, and no
 drawing is left unlabeled. The browser's own tree confirmed the names on the two busiest screens,
-Plan › Week and Rhythm. This is not the screen-reader pass with Narrator, which still waits on the
-owner.
+Plan › Week and Rhythm.
+
+## Narrator through the running window — 2026-10-23
+
+The owner chose the pass on 2026-10-18 and allowed control of the window and Narrator on 2026-10-23.
+Narrator ran over the development window, on a throwaway data folder of synthetic nights. The
+window was driven by keyboard alone: Tab, Shift+Tab, arrow keys, and Enter only on links the log
+had confirmed. A UI Automation listener logged every focus change inside that window and nowhere
+else: the name, role and state Narrator reads. Screenshots show Narrator's focus box on each stop.
+Narrator was then turned off.
+
+- **Settings › Display.** The appearance presets and the clock are each one stop, a radio group
+  that says which is chosen. The two switches say whether they are on.
+- **Home.** Following a link puts focus on the new screen's `main`, so the screen is announced. The
+  order follows the page:
+  - "How this is worked out";
+  - "I am going to sleep" and "I woke up";
+  - "Full rhythm" and "Log sleep";
+  - the setup links;
+  - each note's close button, which says Settings lists hidden notes;
+  - "Accept" and "Decline" for each suggestion, named with its task.
+- **Rhythm.** The tab list is one stop and says which tab is chosen. "Show forecast" says it is off.
+  Each actogram band is a graphic, named in full: "Sleep interval: Oct 17, 5:27 PM to Oct 18, 1:27
+  AM, 8 hr 0 min, Imported sleep". Shift+Tab retraces the same path.
+- **Log › Sleep.** Recording a night, the core task, is reachable and named. "Add a past night" is
+  a disclosure that says it is collapsed. Each night's Edit, Exclude and Delete carry the night in
+  their names, as in "Exclude Sat, Oct 17, 5:27 PM – 1:27 AM from estimates".
+- **The assistant** is a toggle button that says whether it is open.
+
+Two things to know:
+
+- Narrator's scan mode keeps the arrow keys in web content, so they do not move between tabs while
+  it is on. Tab reaches the chosen tab, and the arrows work there with scan mode off.
+- Tab and button names drawn in capitals by CSS reach Narrator in capitals ("ACTOGRAM"). The
+  browser's own tree keeps their written case.
+
+What Narrator spoke was not recorded as text. The log holds what UI Automation gave it, which is
+what it reads.

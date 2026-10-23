@@ -4,7 +4,7 @@ import { ActivityExportPanel } from "../components/ActivityExportPanel";
 import { CalendarSourcesPanel } from "../components/CalendarSourcesPanel";
 import { DataSourceStatusPanel } from "../components/DataSourceStatusPanel";
 import { SleepImportPanel } from "../components/SleepImportPanel";
-import { loadActivityCollection } from "../data/activityCollection";
+import { loadActivityCollection, type ActivityCollection } from "../data/activityCollection";
 import { loadBackendSyncStatus, type BackendSyncStatus } from "../data/backendSync";
 import {
   calendarDataChangedEvent,
@@ -77,9 +77,12 @@ export function DataSourcesScreen() {
   });
   const [syncStatus, setSyncStatus] = useState<BackendSyncStatus | undefined>(undefined);
   const calendars = useCalendarSources();
-  // It says what is happening now, so it is read again as time passes. Without
-  // an answer the row is left out, as the sync row is.
-  const { data: activity } = useLoaded(loadActivityCollection, { expires: true });
+  // It says what is happening now, so it is read again as time passes, and a
+  // read that fails says so (null) rather than leave the last answer standing.
+  const { data: activity } = useLoaded<ActivityCollection | null>(loadActivityCollection, {
+    expires: true,
+    fallback: () => null,
+  });
 
   useEffect(() => {
     let current = true;
