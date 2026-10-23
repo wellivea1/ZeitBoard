@@ -34,15 +34,18 @@ computer may be put to sleep.
 ## 2. A clean Windows 11 machine (C8)
 
 **Needs:** a fresh Windows 11 virtual machine with Git and nothing else for development. The
-scripts are in `scripts/installer`; what each does is in `install-update-design.md`.
+scripts are in `scripts/installer`; what each does is in `install-update-design.md`. A fresh
+Windows does not run scripts, so each is run from the repository as
+`powershell -ExecutionPolicy Bypass -File scripts\installer\<script>.ps1`.
 
 1. **Install.** Clone the repository and run `install.ps1`. **Passes** if the tray app launches and
    the installer's closing hash check passes.
 2. **Update and roll back.** Install at one published commit; once the next is published, run
    `update.ps1`, then `update.ps1 -Rollback`. **Passes** if each step verifies its hashes, the
    rollback brings back the earlier build, and the data is untouched.
-3. **Android bootstrap.** On the same machine, with no JDK or Android SDK, run
-   `build-android.ps1`. **Passes** if it finds or installs both and builds the debug APK.
+3. **Android bootstrap.** On the same machine, with no JDK or Android SDK, run `build-android.ps1`;
+   it asks before accepting the Android SDK licences (`-AcceptAndroidLicenses` gives that consent
+   in advance). **Passes** if it installs both and builds the debug APK.
 4. **Server.** In an elevated PowerShell, run `install-server.ps1`, restart the machine, then run
    `uninstall.ps1 -RemoveServer`. **Passes** if the service is running after the restart, and the
    uninstall removes it while keeping the server's data root.
@@ -57,8 +60,9 @@ in `verification.md`.
 
 **Needs:** the owner's production keystore and alias. ZeitBoard never creates or chooses one.
 
-Run `build-android.ps1 -Release`, giving the passwords at its prompt or in
-`ZEITBOARD_KEYSTORE_PASS` and `ZEITBOARD_KEY_PASS`. **Passes** if `apksigner` verifies the APK.
+Run `build-android.ps1 -Release -Keystore <path> -KeystoreAlias <alias>`, giving the passwords at
+its prompt or in `ZEITBOARD_KEYSTORE_PASS` and `ZEITBOARD_KEY_PASS`. **Passes** if `apksigner`
+verifies the APK.
 
 **Record:** the "Release APK" row of `install-update-design.md` section 9.
 
