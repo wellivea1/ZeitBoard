@@ -104,6 +104,11 @@ is recorded in the completion plan, which keeps what was declined and why:
   - an older read of the calendars that, landing last, brought back one removed since;
   - a span of Windows' log that parsed every observation kept.
 
+  A search for the calendar race's kind then found four more loaders with it, on Home, Plan › Week
+  and the calendar written to. Each now reads through `useLoaded`, which keeps only the newest
+  answer. Every other loader that reads again on events either coalesces its reads or numbers
+  them. The verification log's "One way to read from the desktop" has the detail.
+
 Two points the reviews raised more than once are settled by the project's own rules:
 
 - **Compatibility with development data.** The owner's clarification of 2026-09-08, at the head

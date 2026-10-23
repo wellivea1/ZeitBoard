@@ -85,38 +85,40 @@ describe("DataSourcesScreen structure", () => {
     expect(getCalendar).toHaveBeenCalledWith(expect.objectContaining({ zoneId: "Europe/London" }));
   });
 
-  // Two reads in flight, the newer answering first: the older one, landing
-  // last, brought back a calendar removed in between.
+  // What the desktop answers for a day, holding the calendars named.
+  const calendarWith = (labels: string[]) => ({
+    status: "empty",
+    message: "No calendar events in this range.",
+    fixtureMode: false,
+    zoneId: "Europe/London",
+    startCivilDate: "2026-10-23",
+    endCivilDate: "2026-10-23",
+    updatedLabel: "Updated now",
+    sources: labels.map((label, index) => ({
+      sourceId: `calendar_source_${index}`,
+      label,
+      kind: "ics",
+      readOnly: true,
+      visibleEvents: 0,
+      coverageLabel: "Oct 1 to Nov 1",
+      coverageStart: "2026-10-01T00:00:00Z",
+      coverageEnd: "2026-11-01T00:00:00Z",
+    })),
+    days: [
+      {
+        civilDate: "2026-10-23",
+        label: "Fri, Oct 23",
+        isToday: true,
+        events: [],
+        predictions: [],
+      },
+    ],
+    warnings: [],
+  });
+
+  // A calendar removed while the screen was reading came back when that older
+  // read answered last. Its answer is dropped, and the screen reads again.
   it("lets only the newest read of the calendars land", async () => {
-    const calendarWith = (labels: string[]) => ({
-      status: "empty",
-      message: "No calendar events in this range.",
-      fixtureMode: false,
-      zoneId: "Europe/London",
-      startCivilDate: "2026-10-23",
-      endCivilDate: "2026-10-23",
-      updatedLabel: "Updated now",
-      sources: labels.map((label, index) => ({
-        sourceId: `calendar_source_${index}`,
-        label,
-        kind: "ics",
-        readOnly: true,
-        visibleEvents: 0,
-        coverageLabel: "Oct 1 to Nov 1",
-        coverageStart: "2026-10-01T00:00:00Z",
-        coverageEnd: "2026-11-01T00:00:00Z",
-      })),
-      days: [
-        {
-          civilDate: "2026-10-23",
-          label: "Fri, Oct 23",
-          isToday: true,
-          events: [],
-          predictions: [],
-        },
-      ],
-      warnings: [],
-    });
     const answers: ((value: unknown) => void)[] = [];
     (globalThis as { go?: unknown }).go = {
       main: { App: { GetCalendar: () => new Promise((resolve) => answers.push(resolve)) } },
@@ -124,14 +126,52 @@ describe("DataSourcesScreen structure", () => {
     render(<DataSourcesScreen />);
     await waitFor(() => expect(answers).toHaveLength(1));
     window.dispatchEvent(new Event(calendarDataChangedEvent));
-    await waitFor(() => expect(answers).toHaveLength(2));
-
-    answers[1]!(calendarWith(["Work"]));
-    const calendars = screen.getByRole("region", { name: "Calendars" });
-    expect(await within(calendars).findByText("Work")).toBeVisible();
     answers[0]!(calendarWith(["Work", "Removed since"]));
-    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    await waitFor(() => expect(answers).toHaveLength(2));
+    const calendars = screen.getByRole("region", { name: "Calendars" });
     expect(within(calendars).queryByText("Removed since")).toBeNull();
+    answers[1]!(calendarWith(["Work"]));
+    expect(await within(calendars).findByText("Work")).toBeVisible();
+    expect(within(calendars).queryByText("Removed since")).toBeNull();
+  });
+
+  // Both lists said there were no calendars while they were still being read,
+  // and went on saying it when the read failed.
+  it("says nothing of the calendars before they are read", async () => {
+    let answer!: (value: unknown) => void;
+    (globalThis as { go?: unknown }).go = {
+      main: { App: { GetCalendar: () => new Promise((resolve) => (answer = resolve)) } },
+    };
+    render(<DataSourcesScreen />);
+    const calendars = screen.getByRole("region", { name: "Calendars" });
+    expect(within(calendars).queryByText(/No calendars yet/)).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Calendars", level: 3 })).toBeNull();
+
+    answer(calendarWith([]));
+    expect(await within(calendars).findByText(/No calendars yet/)).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Calendars", level: 3 }).closest("article"),
+    ).toHaveTextContent("None added");
+  });
+
+  it("says when the calendars could not be read", async () => {
+    (globalThis as { go?: unknown }).go = {
+      main: {
+        App: {
+          GetCalendar: async () => {
+            throw new Error("The calendar store could not be opened.");
+          },
+        },
+      },
+    };
+    render(<DataSourcesScreen />);
+    const calendars = screen.getByRole("region", { name: "Calendars" });
+    expect(await within(calendars).findByText("The calendars could not be read.")).toBeVisible();
+    expect(within(calendars).queryByText(/No calendars yet/)).toBeNull();
+    const row = screen.getByRole("heading", { name: "Calendars", level: 3 }).closest("article");
+    expect(row).toHaveTextContent("They could not be read.");
+    expect(row).not.toHaveTextContent("None added");
   });
 
   // The row read "Not connected" whatever Settings said.

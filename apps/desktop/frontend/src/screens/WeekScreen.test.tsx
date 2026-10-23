@@ -39,6 +39,7 @@ beforeEach(() => {
   decide.mockReset();
   pending = [];
   window.localStorage.clear();
+  delete (globalThis as { go?: unknown }).go;
 });
 
 describe("Plan › Week", () => {
@@ -136,5 +137,26 @@ describe("Plan › Week", () => {
     expect(title()).not.toBe(before);
     fireEvent.click(screen.getByRole("button", { name: "Today" }));
     expect(container.querySelector(".week-day-head[data-today]")).not.toBeNull();
+  });
+
+  // The nights drawn are those of the days shown, so stepping on reads again.
+  it("reads the nights again for the next days", async () => {
+    const starts: string[] = [];
+    (globalThis as { go?: unknown }).go = {
+      main: {
+        App: {
+          GetSleepEntriesBetween: async ({ startAt }: { startAt: string }) => {
+            starts.push(startAt);
+            return { status: "empty", empty: true, message: "No nights here.", entries: [] };
+          },
+        },
+      },
+    };
+    render(<WeekScreen />);
+    await waitFor(() => expect(starts).toHaveLength(1));
+
+    fireEvent.click(await screen.findByRole("button", { name: "The 4 days after" }));
+    await waitFor(() => expect(starts).toHaveLength(2));
+    expect(Date.parse(starts[1]!) - Date.parse(starts[0]!)).toBe(4 * 86_400_000);
   });
 });

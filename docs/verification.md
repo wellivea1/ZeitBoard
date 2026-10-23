@@ -3518,3 +3518,36 @@ Two things to know:
 
 What Narrator spoke was not recorded as text. The log holds what UI Automation gave it, which is
 what it reads.
+
+## One way to read from the desktop — 2026-10-23
+
+The calendar race the review found had a kind, and a search for it found four more. Each was a
+loader of its own that read again on events and guarded only against leaving the screen, so two
+reads in flight could land out of order:
+
+- Home's diary and doses, where an older read landing last could drop a dose just logged there;
+- Plan › Week's nights, doses and the estimate's age;
+- the status of writing accepted times to a calendar;
+- Data Sources' calendars, which PR #99 had fixed with a counter of their own.
+
+Each now reads through `useLoaded`, the hook views share for reading from the desktop. It runs one
+read at a time and keeps only the newest answer, and a value a change returned outlasts a read that
+started before it. Its own tests cover each of these. Every other loader that reads again on events
+was checked, and each coalesces its reads or numbers them. Moving the views found two more things:
+
+- **Lists claimed before they were read.** Data Sources said "No calendars yet" while still
+  reading them, and both of its lists went on saying there were none when the read failed. Home's
+  diary said "Nothing is fixed in the next three days" and its doses "No medications listed" in the
+  same two cases, beside a column that already said "Checking…". Log › Context said the desktop
+  service was unavailable until its first read answered. Plan's decision history said "No decisions
+  yet", under a count of 0, before every source had answered. Each now says nothing, or that it is
+  checking, until it has read, and says when it could not read.
+- **Views that went stale with time.** Home's diary starts today and runs 72 hours ahead, but was
+  read only when a record or a calendar changed, so after midnight it missed the last day of its
+  span. Plan › Week's note that the estimate is old was read only when sleep was recorded. Both are
+  now read again as time passes, as the rest of Home is.
+
+The race test now shows that the outdated answer is never drawn, and it fails against the code
+before PR #99. The tests of lists not yet read, and of reads that failed, fail against the code
+before the change: two for Data Sources, two for Home's columns, one for Context and one for the
+decision history. A new Week test steps to the next days and finds their nights read.

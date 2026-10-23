@@ -72,62 +72,30 @@ function useHomeProjection() {
 
 // The diary reads the calendar itself: events stay listed while the forecast
 // is withheld, and the times accepted in Plan are calendar events too.
-function useHomeCalendar() {
-  const [days, setDays] = useState<CalendarDay[]>([]);
-  useEffect(() => {
-    let current = true;
-    const load = () => {
-      const zoneId = localZone();
-      void loadCalendar({ startCivilDate: todayCivilDate(zoneId), days: 4, zoneId }).then(
-        (result) => {
-          if (current) setDays(result.data.days);
-        },
-        () => undefined,
-      );
-    };
-    load();
-    window.addEventListener(sleepDataChangedEvent, load);
-    window.addEventListener(calendarDataChangedEvent, load);
-    return () => {
-      current = false;
-      window.removeEventListener(sleepDataChangedEvent, load);
-      window.removeEventListener(calendarDataChangedEvent, load);
-    };
-  }, []);
-  return days;
+async function loadDiary(): Promise<CalendarDay[]> {
+  const zoneId = localZone();
+  const result = await loadCalendar({ startCivilDate: todayCivilDate(zoneId), days: 4, zoneId });
+  return result.data.days;
 }
 
+// Undefined while the medications are read, and null when they could not be.
 function useHomeMedications() {
-  const [data, setData] = useState<MedicationsData | null>(null);
+  const { data, set } = useLoaded<MedicationsData | null>(loadMedications, {
+    events: [medicationDataChangedEvent],
+    fallback: () => null,
+  });
   const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    let current = true;
-    const load = () =>
-      void loadMedications().then(
-        (loaded) => {
-          if (current) setData(loaded);
-        },
-        () => {
-          if (current) setData(null);
-        },
-      );
-    load();
-    window.addEventListener(medicationDataChangedEvent, load);
-    return () => {
-      current = false;
-      window.removeEventListener(medicationDataChangedEvent, load);
-    };
-  }, []);
   const log = async (input: MedicationEventInput) => {
     setBusy(true);
     try {
-      setData(await logMedicationEvent(input));
+      // Kept over a read that started earlier, which would not have the dose.
+      set(await logMedicationEvent(input));
       notifyMedicationDataChanged();
     } finally {
       setBusy(false);
     }
   };
-  const available = hasLocalMedicationService() && data !== null && data.status !== "unavailable";
+  const available = hasLocalMedicationService() && Boolean(data && data.status !== "unavailable");
   return { data, busy, available, log };
 }
 
@@ -138,7 +106,13 @@ function compactDrift(label: string) {
 
 export function HomeScreen() {
   const { overview, mode, outlook, loading } = useHomeProjection();
-  const calendar = useHomeCalendar();
+  // It starts today and runs 72 hours ahead, so like the lead it is read again
+  // as time passes, not only when a record or a calendar changes.
+  const { data: calendar } = useLoaded<CalendarDay[] | null>(loadDiary, {
+    events: [sleepDataChangedEvent, calendarDataChangedEvent],
+    expires: true,
+    fallback: () => null,
+  });
   const medications = useHomeMedications();
   const hasEstimate = overview.status === "estimated";
   const tone = stateTone(overview.state);
@@ -186,7 +160,7 @@ export function HomeScreen() {
           <HomeSetupGuide />
           <section className="home-columns" aria-label="Today and the days ahead">
             <NeedsYou />
-            <Diary days={diaryDays(calendar, outlook, medications.data)} />
+            <Diary days={calendar && diaryDays(calendar, outlook, medications.data ?? null)} />
             <Doses
               data={medications.data}
               busy={medications.busy}

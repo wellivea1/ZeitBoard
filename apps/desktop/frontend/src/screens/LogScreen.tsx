@@ -1,4 +1,5 @@
 import { PageHeader } from "../components/AppShell";
+import { Loading } from "../components/Loading";
 import { RhythmMarkersPanel } from "../components/RhythmMarkersPanel";
 import { ScreenTabPanel, ScreenTabs, type ScreenTab } from "../components/ScreenTabs";
 import { SleepLogPanel } from "../components/SleepLogPanel";
@@ -38,16 +39,21 @@ export function LogScreen({ tab, onSelect }: { tab: LogTab; onSelect: (tab: LogT
         </ScreenTabPanel>
 
         <ScreenTabPanel name="log" id="context" active={tab}>
-          <RhythmMarkersPanel
-            data={markers.data}
-            busy={markers.busy}
-            exporting={markers.exporting}
-            error={markers.error}
-            announcement={markers.announcement}
-            onAdd={markers.append}
-            onDelete={markers.erase}
-            onExport={markers.exportAll}
-          />
+          {/* It said the desktop service was unavailable until the first read. */}
+          {markers.data ? (
+            <RhythmMarkersPanel
+              data={markers.data}
+              busy={markers.busy}
+              exporting={markers.exporting}
+              error={markers.error}
+              announcement={markers.announcement}
+              onAdd={markers.append}
+              onDelete={markers.erase}
+              onExport={markers.exportAll}
+            />
+          ) : (
+            <Loading />
+          )}
         </ScreenTabPanel>
       </section>
     </>

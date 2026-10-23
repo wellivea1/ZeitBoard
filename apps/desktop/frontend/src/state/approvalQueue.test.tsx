@@ -319,6 +319,27 @@ describe("shared approval queue", () => {
     window.removeEventListener("zeitboard:medication-data-changed", medicationsChanged);
     window.removeEventListener("zeitboard:sleep-data-changed", tasksChanged);
   });
+  // The history said "No decisions yet", under a count of 0, before every
+  // source had answered.
+  it("says nothing of past decisions before every source answers", async () => {
+    let answer: ((value: unknown) => void) | undefined;
+    install({ GetAgentProposals: vi.fn(() => new Promise((resolve) => (answer = resolve))) });
+    const { container } = render(
+      <Providers>
+        <Probe />
+        <DecisionHistory />
+      </Providers>,
+    );
+    const history = container.querySelector("details.decision-history")!;
+    await vi.waitFor(() => expect(answer).toBeDefined());
+    expect(history).not.toHaveTextContent("No decisions yet");
+    expect(history.querySelector(".count")).toBeNull();
+
+    answer!({ pending: [], history: [], nextExpiryAt: "" });
+    expect(await screen.findByText(/ready$/)).toBeInTheDocument();
+    expect(history).toHaveTextContent("No decisions yet");
+    expect(history.querySelector(".count")).toHaveTextContent("0");
+  });
   // Found walking the app: with the server's machine off, Plan showed "Could
   // not reach ZeitBoard's server." as a red alert over the owner's own
   // suggestions, the style kept for a decision that failed.

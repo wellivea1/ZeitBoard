@@ -145,6 +145,35 @@ function ActivityRow({ status }: { status: ActivityCollection | null }) {
   );
 }
 
+// The calendars added, by name. A read that failed says so rather than claim
+// there are none.
+function CalendarsRow({ sources }: { sources: CalendarSource[] | null }) {
+  if (!sources) {
+    return (
+      <SourceRow
+        icon="calendar"
+        name="Calendars"
+        detail="They could not be read."
+        status="Unavailable"
+      />
+    );
+  }
+  const imported = sources.filter((source) => source.readOnly);
+  return (
+    <SourceRow
+      icon="calendar"
+      name="Calendars"
+      detail={
+        imported.length > 0
+          ? imported.map((source) => source.label).join(" · ")
+          : "None added. Suggested times only avoid what ZeitBoard knows about."
+      }
+      status={imported.length > 0 ? `${imported.length} added` : "None"}
+      state={imported.length > 0 ? "available" : "off"}
+    />
+  );
+}
+
 // The nights more than one record describes are listed where the estimator's
 // view of the sources is: Rhythm › Sources.
 function OverlapNote({ count }: { count: number }) {
@@ -171,13 +200,13 @@ export function DataSourceStatusPanel({
   /** What a phone found when it last checked each source (ADR-0054). */
   sourceStatuses?: SourceStatus[];
   syncStatus?: BackendSyncStatus;
-  calendarSources?: CalendarSource[];
+  /** Undefined while loading; null when they could not be read. */
+  calendarSources?: CalendarSource[] | null;
   /** Undefined while loading; null when its status could not be read. */
   activity?: ActivityCollection | null;
 }) {
   const summaries = sleepSources?.sources ?? [];
   const localUnavailable = sleepSources?.status === "unavailable";
-  const importedCalendars = calendarSources?.filter((source) => source.readOnly) ?? [];
   return (
     <section className="data-source-registry" aria-labelledby="source-registry-title">
       <div className="data-source-section-heading">
@@ -220,19 +249,7 @@ export function DataSourceStatusPanel({
           );
         })}
         {syncStatus && <SyncRow status={syncStatus} />}
-        {calendarSources && (
-          <SourceRow
-            icon="calendar"
-            name="Calendars"
-            detail={
-              importedCalendars.length > 0
-                ? importedCalendars.map((source) => source.label).join(" · ")
-                : "None added. Suggested times only avoid what ZeitBoard knows about."
-            }
-            status={importedCalendars.length > 0 ? `${importedCalendars.length} added` : "None"}
-            state={importedCalendars.length > 0 ? "available" : "off"}
-          />
-        )}
+        {calendarSources !== undefined && <CalendarsRow sources={calendarSources} />}
         {activity !== undefined && <ActivityRow status={activity} />}
       </div>
       <OverlapNote count={sleepSources?.overlapCount ?? 0} />
