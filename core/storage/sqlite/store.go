@@ -347,6 +347,14 @@ func (s *Store) initialize(ctx context.Context) error {
 			return fmt.Errorf("migrate sqlite: %w", err)
 		}
 	}
+	// Spans one algorithm's observations, such as those read from Windows'
+	// power log, without parsing the evidence of every other one. It only
+	// speeds a span, so failing to build it is not fatal: evidence SQLite
+	// cannot parse, which no build writes but a damaged file could hold, would
+	// otherwise keep the whole database from opening. Only a span that meets
+	// it fails then, as before the index, and the next opening tries again.
+	_, _ = s.db.ExecContext(ctx, `CREATE INDEX IF NOT EXISTS idx_source_observations_algorithm
+		ON source_observations(source_id, json_extract(evidence_json, '$.algorithm'), observed_utc)`)
 	if err := s.initializeSleepAnalysis(ctx); err != nil {
 		return err
 	}

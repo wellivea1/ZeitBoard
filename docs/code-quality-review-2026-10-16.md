@@ -93,14 +93,16 @@ is recorded in the completion plan, which keeps what was declined and why:
   - The rest made repeated code shorter.
 
   The bug-finding reviewers were then resumed, and in the end all five reported. PR #98 fixes
-  everything they found, recorded in the verification log as "What the review of Data Sources and
-  Settings found". Among the findings:
+  most of what they found, and the change after it the last four. The verification log records
+  both as "What the review of Data Sources and Settings found". Among the findings:
   - a status row read only once;
   - a Retry the desktop always refuses;
   - promises of a tray that may not exist;
   - a clock stood in for when the desktop does not answer;
   - a host zone no formatter accepts, which stopped three screens opening;
-  - calendars placed in one zone when added and another when refreshed.
+  - calendars placed in one zone when added and another when refreshed;
+  - an older read of the calendars that, landing last, brought back one removed since;
+  - a span of Windows' log that parsed every observation kept.
 
 Two points the reviews raised more than once are settled by the project's own rules:
 
