@@ -269,11 +269,12 @@ export function AssistantSettings({ syncKey }: { syncKey: string }) {
   } else if (!connection.reachable) {
     body = <p className="settings-copy">{connection.message}</p>;
   } else if (!connection.offered) {
+    // Said by the desktop for a server too old to offer a sign-in; otherwise
+    // the server's configuration names a provider of its own.
     body = (
       <p className="settings-copy">
-        Your server's configuration names the assistant's provider, and a ChatGPT sign-in never
-        replaces it. To use your ChatGPT plan instead, remove the provider from the server's
-        configuration.
+        {connection.message ??
+          "Your server's configuration names the assistant's provider, and a ChatGPT sign-in never replaces it. To use your ChatGPT plan instead, remove the provider from the server's configuration."}
       </p>
     );
   } else if (connection.state === "connected") {

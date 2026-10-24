@@ -92,3 +92,12 @@ PKCE, returning to a one-time loopback address.
 - Update, 2026-10-15: a code review of this change found the all-day, token, consent and
   cancellation cases now written into decisions 3 to 5. They are fixed, with a test each (completion
   plan, "Calendar accounts after review").
+
+- Update, 2026-10-24: the browser's answer is now taken by the loopback receiver that the ChatGPT
+  sign-in brought (ADR-0066), so the two sign-ins share it.
+  - It answers only at the redirect's root.
+  - It takes only a request whose Host names the receiver's own address: 127.0.0.1, or for
+    Microsoft localhost or ::1. A page that rebinds its own name to loopback is turned away.
+  - It refuses an answer that names a parameter twice.
+
+  The redirects, the five-minute wait and the wording are unchanged.

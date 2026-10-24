@@ -95,7 +95,8 @@ func (a *App) GetAssistantConnection() (AssistantConnectionDTO, error) {
 	var refused backendHTTPError
 	if errors.As(err, &refused) && refused.StatusCode == http.StatusNotFound {
 		// A server from before ADR-0066 offers no sign-in.
-		return AssistantConnectionDTO{Reachable: true}, nil
+		return AssistantConnectionDTO{Reachable: true,
+			Message: "Your server is from before signing in to ChatGPT. Update it to use your ChatGPT plan."}, nil
 	}
 	if err != nil {
 		return AssistantConnectionDTO{Message: sanitizeBackendError(err)}, nil
