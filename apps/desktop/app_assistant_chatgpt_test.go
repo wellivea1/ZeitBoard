@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -322,5 +323,72 @@ func TestAnAssistantReplySaysWhyItDidNotAnswer(t *testing.T) {
 	reply, err := app.SendAssistantMessage(AssistantMessageInput{Message: "find 45 minutes for my call"})
 	if err != nil || reply.Reason != "usage_limit" || reply.Auth != "chatgpt_plan" || len(reply.Proposals) != 0 {
 		t.Fatalf("reply %+v, %v", reply, err)
+	}
+}
+
+// Once the browser has answered, Cancel no longer stops the sign-in: the
+// server is told, so a code it has spent is not left half used.
+func TestCancellingAfterTheBrowserAnsweredStillFinishes(t *testing.T) {
+	app := newTestApp(t)
+	backend := newChatGPTBackend(t)
+	configureBackendForTest(t, app, backend.server.URL)
+	withBrowser(t, backend.browser(""))
+
+	reached, release := make(chan struct{}), make(chan struct{})
+	inner := backend.server.Config.Handler
+	backend.server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/assistant/chatgpt/finish" {
+			close(reached)
+			<-release
+		}
+		inner.ServeHTTP(w, r)
+	})
+	done := make(chan error, 1)
+	go func() {
+		connected, err := app.ConnectChatGPT()
+		if err == nil && connected.State != "connected" {
+			err = errors.New("not connected: " + connected.State)
+		}
+		done <- err
+	}()
+	<-reached
+	app.CancelChatGPTSignIn()
+	close(release)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("a sign-in cancelled after the browser answered ended as %v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("the sign-in did not finish")
+	}
+}
+
+// No answer of the server's is shown as it came, and a store that cannot be
+// read is not mistaken for sync turned off.
+func TestFailuresReadAsSentences(t *testing.T) {
+	for _, tc := range []struct {
+		err  error
+		want string
+	}{
+		{backendHTTPError{StatusCode: http.StatusConflict, Message: `{"error":"ChatGPT: plan_not_shared","problem":"plan_not_shared"}`},
+			chatGPTProblems["plan_not_shared"]},
+		{backendHTTPError{StatusCode: http.StatusConflict, Message: `{"error":"ChatGPT: something_new","problem":"something_new"}`},
+			"ChatGPT could not do that. Try again."},
+		{backendHTTPError{StatusCode: http.StatusInternalServerError, Message: `{"error":"the ChatGPT connection could not be kept"}`},
+			"Your server could not finish that. Try again."},
+		{backendHTTPError{StatusCode: http.StatusNotFound, Message: "404 page not found"},
+			"Your server does not offer signing in to ChatGPT. Set the assistant's provider to chatgpt in its configuration."},
+	} {
+		if got := chatGPTFailure(tc.err).Error(); got != tc.want || strings.Contains(got, "{") {
+			t.Errorf("%v read as %q", tc.err, got)
+		}
+	}
+
+	app := newTestApp(t)
+	app.storeErr = errors.New("the local store could not be opened")
+	if connection, err := app.GetAssistantConnection(); err != nil || connection.Reachable ||
+		connection.Message != "The local store could not be opened." {
+		t.Errorf("a store that cannot be read read as %+v, %v", connection, err)
 	}
 }

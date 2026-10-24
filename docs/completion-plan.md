@@ -1934,6 +1934,26 @@ its ten findings, and all are fixed:
 
 Each fix that changes behaviour has a test.
 
+### The ChatGPT sign-in's computer half after an automated review — 2026-10-24
+
+The same reviewer then read PR #106, the computer's half, at medium effort, and raised ten
+findings:
+
+| Finding | Disposition |
+|---|---|
+| The desktop gave up on finishing a sign-in after 60 seconds, before the server's own limit | Already fixed with the server's review: the desktop waits 130 seconds, past the server's two minutes |
+| Cancel, after the browser had answered, stopped the server midway through the code's exchange | Once the browser answers, the server is told whatever the owner clicks; only quitting stops it |
+| The browser tab said "ZeitBoard is signed in." before the server had accepted the answer | It says ZeitBoard has the answer and finishes signing in; the window says how it went |
+| A problem the desktop did not word, or a server error, reached the owner as raw JSON | Every failure is a sentence; none of the server's answers is shown as it came |
+| After a reply, the rail's header forgot what the sign-in still needed | Kept until the status is read again |
+| The card said the assistant was signed in whatever the server answered | Only a connected answer says so; anything else reads "Signing in did not finish." |
+| The chat offered example prompts the assistant could not answer before signing in | Offered only where they can be answered |
+| A local store that could not be read was taken for sync turned off | Sync turned off has its own error now, and anything else is said as it is |
+| The card read the sign-in again after each change it had made itself | It keeps what each change returns; the event is for the rail |
+| The client for the sign-in routes was set up three times over | One function |
+
+Each change in behaviour has a test.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and

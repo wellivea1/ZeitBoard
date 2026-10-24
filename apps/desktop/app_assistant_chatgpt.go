@@ -85,11 +85,11 @@ func connectionDTO(response chatGPTStatusResponse) AssistantConnectionDTO {
 // OpenAI, and none at all while sync is off.
 func (a *App) GetAssistantConnection() (AssistantConnectionDTO, error) {
 	cfg, token, err := a.requireBackendSync()
+	if errors.Is(err, errBackendSyncOff) {
+		return AssistantConnectionDTO{Message: "Connect your server above to set up the assistant."}, nil
+	}
 	if err != nil {
-		if !cfg.Enabled {
-			return AssistantConnectionDTO{Message: "Connect your server above to set up the assistant."}, nil
-		}
-		return AssistantConnectionDTO{Message: sanitizeBackendError(err)}, nil
+		return AssistantConnectionDTO{Message: asSentence(err).Error()}, nil
 	}
 	var response chatGPTStatusResponse
 	err = a.newPassiveBackendClient(cfg, token).getJSON(a.applicationContext(), "/v1/assistant/chatgpt", &response)
@@ -109,9 +109,9 @@ func (a *App) GetAssistantConnection() (AssistantConnectionDTO, error) {
 // the server's sign-in in the browser, waits for the browser to come back, and
 // passes the answer to the server.
 func (a *App) ConnectChatGPT() (AssistantConnectionDTO, error) {
-	cfg, token, err := a.requireBackendSync()
+	client, err := a.chatGPTClient()
 	if err != nil {
-		return AssistantConnectionDTO{}, errors.New("Connect your server under Settings › Sync first.")
+		return AssistantConnectionDTO{}, err
 	}
 	ctx, done, err := a.beginChatGPTSignIn()
 	if err != nil {
@@ -124,7 +124,6 @@ func (a *App) ConnectChatGPT() (AssistantConnectionDTO, error) {
 	}
 	defer receiver.Close()
 
-	client := a.newDesktopBackendClient(cfg, token).patient(chatGPTServerTimeout)
 	var begun struct {
 		SchemaVersion string `json:"schema_version"`
 		SignIn        struct {
@@ -148,8 +147,11 @@ func (a *App) ConnectChatGPT() (AssistantConnectionDTO, error) {
 		return AssistantConnectionDTO{}, chatGPTSignInStopped(err)
 	}
 	a.showDesktopWindow()
+	// Once the browser has answered, the server is told even if the owner
+	// cancels now: stopping halfway could leave its code spent or an earlier
+	// grant withdrawn. Only quitting stops it.
 	var finished chatGPTStatusResponse
-	if err := client.postJSON(ctx, "/v1/assistant/chatgpt/finish", map[string]string{
+	if err := client.postJSON(a.applicationContext(), "/v1/assistant/chatgpt/finish", map[string]string{
 		"state": begun.SignIn.State, "code": answer.Get("code"), "clientId": answer.Get("client_id"),
 	}, &finished); err != nil {
 		return AssistantConnectionDTO{}, chatGPTFailure(err)
@@ -181,7 +183,8 @@ func (a *App) OpenAssistantPage(input AssistantPageInput) error {
 	return nil
 }
 
-// CancelChatGPTSignIn stops the sign-in waiting for the browser.
+// CancelChatGPTSignIn stops the sign-in waiting for the browser. Once the
+// browser has answered, the sign-in finishes.
 func (a *App) CancelChatGPTSignIn() {
 	a.chatGPTSignInMu.Lock()
 	defer a.chatGPTSignInMu.Unlock()
@@ -192,15 +195,14 @@ func (a *App) CancelChatGPTSignIn() {
 
 // ListAssistantModels lists the models the owner's plan offers.
 func (a *App) ListAssistantModels() ([]AssistantModelDTO, error) {
-	cfg, token, err := a.requireBackendSync()
+	client, err := a.chatGPTClient()
 	if err != nil {
-		return nil, errors.New("Connect your server under Settings › Sync first.")
+		return nil, err
 	}
 	var response struct {
 		SchemaVersion string              `json:"schema_version"`
 		Models        []AssistantModelDTO `json:"models"`
 	}
-	client := a.newDesktopBackendClient(cfg, token).patient(chatGPTServerTimeout)
 	if err := client.getJSON(a.applicationContext(), "/v1/assistant/chatgpt/models", &response); err != nil {
 		return nil, chatGPTFailure(err)
 	}
@@ -225,9 +227,9 @@ func (a *App) DisconnectChatGPT() (AssistantConnectionDTO, error) {
 }
 
 func (a *App) chatGPTChange(method, path string, payload any) (AssistantConnectionDTO, error) {
-	cfg, token, err := a.requireBackendSync()
+	client, err := a.chatGPTClient()
 	if err != nil {
-		return AssistantConnectionDTO{}, errors.New("Connect your server under Settings › Sync first.")
+		return AssistantConnectionDTO{}, err
 	}
 	var body []byte
 	if payload != nil {
@@ -236,11 +238,20 @@ func (a *App) chatGPTChange(method, path string, payload any) (AssistantConnecti
 		}
 	}
 	var response chatGPTStatusResponse
-	client := a.newDesktopBackendClient(cfg, token).patient(chatGPTServerTimeout)
 	if err := client.doJSON(a.applicationContext(), method, path, body, &response); err != nil {
 		return AssistantConnectionDTO{}, chatGPTFailure(err)
 	}
 	return connectionDTO(response), nil
+}
+
+// chatGPTClient is the client for the server's sign-in routes, which may take
+// as long as the server allows them.
+func (a *App) chatGPTClient() (desktopBackendClient, error) {
+	cfg, token, err := a.requireBackendSync()
+	if err != nil {
+		return desktopBackendClient{}, errors.New("Connect your server under Settings › Sync first.")
+	}
+	return a.newDesktopBackendClient(cfg, token).patient(chatGPTServerTimeout), nil
 }
 
 // beginChatGPTSignIn holds the one sign-in that may wait at a time, until it
@@ -292,7 +303,8 @@ var chatGPTProblems = map[string]string{
 	"refused":           "ChatGPT refused the sign-in. Try again.",
 }
 
-// chatGPTFailure words a failed request to the server's ChatGPT routes.
+// chatGPTFailure words a failed request to the server's ChatGPT routes. No
+// answer of the server's is shown as it came.
 func chatGPTFailure(err error) error {
 	var refused backendHTTPError
 	if !errors.As(err, &refused) {
@@ -309,8 +321,12 @@ func chatGPTFailure(err error) error {
 			return errors.New(sentence)
 		}
 	}
-	if refused.StatusCode == http.StatusNotFound {
-		return errors.New("Your server does not offer signing in to ChatGPT. Update it, or set an API key on it.")
+	switch {
+	case refused.StatusCode == http.StatusNotFound:
+		return errors.New("Your server does not offer signing in to ChatGPT. Set the assistant's provider to chatgpt in its configuration.")
+	case refused.StatusCode >= 500:
+		return errors.New("Your server could not finish that. Try again.")
+	default:
+		return errors.New("ChatGPT could not do that. Try again.")
 	}
-	return asSentence(err)
 }
