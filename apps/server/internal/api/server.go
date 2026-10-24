@@ -17,6 +17,7 @@ import (
 	"non24.app/core/recompute"
 	"non24.app/server/internal/assistant"
 	"non24.app/server/internal/auth"
+	"non24.app/server/internal/chatgpt"
 	"non24.app/server/internal/projection"
 	"non24.app/server/internal/provider"
 	"non24.app/server/internal/readmodel"
@@ -33,6 +34,7 @@ type Server struct {
 	store            *store.Store
 	enrollmentSecret string
 	assistant        *assistant.Service
+	chatgpt          *chatgpt.Account
 	portal           *portalAdmin
 	now              func() time.Time
 }
@@ -41,9 +43,18 @@ type deviceContextKey struct{}
 
 type Option func(*Server)
 
-func WithProvider(llm provider.LLM, status provider.Status) Option {
+func WithProvider(llm provider.LLM) Option {
 	return func(s *Server) {
-		s.assistant = assistant.New(llm, status, s.store)
+		s.assistant = assistant.New(llm, s.store)
+	}
+}
+
+// WithChatGPT offers the owner's devices a sign-in with ChatGPT for the
+// assistant (ADR-0066). The daemon passes it only when the configuration
+// names no other provider.
+func WithChatGPT(account *chatgpt.Account) Option {
+	return func(s *Server) {
+		s.chatgpt = account
 	}
 }
 
@@ -53,7 +64,7 @@ func New(st *store.Store, enrollmentSecret string, opts ...Option) *Server {
 		enrollmentSecret: enrollmentSecret,
 		now:              func() time.Time { return time.Now().UTC() },
 	}
-	server.assistant = assistant.New(provider.DisabledClient{}, provider.DisabledClient{}.Status(), st)
+	server.assistant = assistant.New(provider.DisabledClient{}, st)
 	for _, opt := range opts {
 		opt(server)
 	}
@@ -68,6 +79,16 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /v1/devices/{id}/revoke", s.requireDevice(http.HandlerFunc(s.handleRevokeDevice)))
 	mux.Handle("GET /v1/status", s.requireDevice(http.HandlerFunc(s.handleStatus)))
 	mux.Handle("POST /v1/assistant/message", s.requireDevice(http.HandlerFunc(s.handleAssistantMessage)))
+	// Answered whether or not a ChatGPT sign-in is offered, so a device can
+	// tell "not offered" from a server too old to say.
+	mux.Handle("GET /v1/assistant/chatgpt", s.requireDevice(http.HandlerFunc(s.handleChatGPTStatus)))
+	if s.chatgpt != nil {
+		mux.Handle("GET /v1/assistant/chatgpt/models", s.requireDevice(http.HandlerFunc(s.handleChatGPTModels)))
+		mux.Handle("POST /v1/assistant/chatgpt/sign-in", s.requireDevice(http.HandlerFunc(s.handleChatGPTSignIn)))
+		mux.Handle("POST /v1/assistant/chatgpt/finish", s.requireDevice(http.HandlerFunc(s.handleChatGPTFinish)))
+		mux.Handle("PUT /v1/assistant/chatgpt/model", s.requireDevice(http.HandlerFunc(s.handleChatGPTModel)))
+		mux.Handle("DELETE /v1/assistant/chatgpt", s.requireDevice(http.HandlerFunc(s.handleChatGPTDisconnect)))
+	}
 	mux.Handle("GET /v1/proposals", s.requireDevice(http.HandlerFunc(s.handleListProposals)))
 	mux.Handle("POST /v1/proposals", s.requireDevice(http.HandlerFunc(s.handleCreateProposal)))
 	mux.Handle("POST /v1/proposals/{id}/decision", s.requireDevice(http.HandlerFunc(s.handleProposalDecision)))
@@ -133,7 +154,13 @@ func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
+// assistantWriteTimeout is how long an assistant message may take: two model
+// calls, the second with a smaller context, outlast the server's usual limit
+// on a response.
+const assistantWriteTimeout = 150 * time.Second
+
 func (s *Server) handleAssistantMessage(w http.ResponseWriter, r *http.Request) {
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(assistantWriteTimeout))
 	device := deviceFromContext(r.Context())
 	var req assistant.MessageRequest
 	if err := decodeBody(w, r, syncmodel.MaxRequestBytes, &req); err != nil {

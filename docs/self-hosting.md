@@ -52,8 +52,8 @@ Keys:
 | n/a | `ZEITBOARD_DATA_KEY` | Yes, unless key file is set | The at-rest encryption key value. |
 | `enrollmentSecretFile` | `ZEITBOARD_ENROLLMENT_SECRET_FILE` | Yes, unless env secret is set | File containing the device enrollment secret. |
 | n/a | `ZEITBOARD_ENROLLMENT_SECRET` | Yes, unless secret file is set | Secret used only to enroll new devices. |
-| `assistant.provider` | `ZEITBOARD_LLM_PROVIDER` | No | `disabled`, `openai`, `anthropic`, `openrouter`, `opencode_zen`, or `openai_compatible` (a server you run that speaks OpenAI's chat completions, such as Ollama or llama.cpp). |
-| `assistant.model` | `ZEITBOARD_LLM_MODEL` | Required when a provider is enabled | Provider model name. |
+| `assistant.provider` | `ZEITBOARD_LLM_PROVIDER` | No | `disabled`, `chatgpt`, `openai`, `anthropic`, `openrouter`, `opencode_zen`, or `openai_compatible` (a server you run that speaks OpenAI's chat completions, such as Ollama or llama.cpp). Left unset, `disabled` or `chatgpt`, the owner may sign the assistant in to their ChatGPT plan from a device (ADR-0066). |
+| `assistant.model` | `ZEITBOARD_LLM_MODEL` | Required when a provider is enabled, except `chatgpt` | Provider model name. With a ChatGPT sign-in, the model a new connection starts with; without it, the plan's first listed model. |
 | `assistant.apiKeyFile` | `ZEITBOARD_LLM_API_KEY_FILE` | Required when provider key env is absent, except for `openai_compatible` | File containing the provider API key. |
 | n/a | `ZEITBOARD_LLM_API_KEY` | Required when a provider is enabled and no key file is set, except for `openai_compatible` | Provider API key; never returned by status APIs. |
 | `assistant.endpoint` | `ZEITBOARD_LLM_ENDPOINT` | Required for `opencode_zen` and `openai_compatible`, optional override otherwise | HTTPS, or plain HTTP only to this machine (`127.0.0.1`, `::1`, `localhost`): the assistant's context never crosses a network unencrypted. |
@@ -218,6 +218,25 @@ ZEITBOARD_LLM_ENDPOINT=http://127.0.0.1:11434/v1/chat/completions
 
 The daemon asks the model for JSON. A small model will often answer with something the daemon
 cannot use; the assistant then says so, and no proposal is created.
+
+### The owner's ChatGPT plan
+
+With no provider configured, or `assistant.provider` set to `chatgpt`, the owner can sign the
+assistant in to their ChatGPT Plus or Pro plan from Settings › Sync on their computer, with no API
+key (ADR-0066). The requests then count against the plan.
+
+- **The server holds the sign-in.** It builds the address the computer opens in the browser, and
+  trades the one-time code the browser brings back.
+- **The refresh token** is kept encrypted with the data key, in the server's database, and rotated
+  on every use. It never reaches a device, a log or a response.
+- **What is sent.** The daemon sends OpenAI the same minimized, redacted context as for any provider.
+  It asks OpenAI to keep none of it (`store: false`), and goes only to `auth.openai.com` and
+  `api.openai.com`.
+- **Where it can sign in from.** The daemon needs outbound HTTPS to those two hosts. The computer
+  signing in needs a browser, and a free loopback port for the browser's return.
+
+A configured provider always wins: with `openai`, `anthropic` or any other set, no sign-in is
+offered.
 
 ## Availability Portal
 

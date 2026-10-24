@@ -15,11 +15,11 @@
   runs no service and collects no telemetry. The operator of an instance controls the
   data and is its data controller.
 - **Bring-your-own LLM.** The assistant uses the user's own provider key (OpenCode Zen /
-  OpenRouter / OpenAI / Anthropic, modeled on OpenCode), or a model the user runs
-  themselves behind an OpenAI-compatible endpoint, in which case the context stays on their
-  machines. The project ships no keys; only minimized, redacted context is sent, to the
-  provider the user chose and discloses — that provider relationship and its terms are the
-  user's. Context crosses a network only over HTTPS.
+  OpenRouter / OpenAI / Anthropic, modeled on OpenCode), the user's own ChatGPT plan through a
+  sign-in (ADR-0066, below), or a model the user runs themselves behind an OpenAI-compatible
+  endpoint, in which case the context stays on their machines. The project ships no keys; only
+  minimized, redacted context is sent, to the provider the user chose and discloses — that
+  provider relationship and its terms are the user's. Context crosses a network only over HTTPS.
 - No advertising, data brokerage, or third-party tracking SDKs.
 - User-controlled acquisition, correction, export, sharing, and deletion.
 - Data minimization at collection, storage, logging, projection, and testing.
@@ -385,6 +385,33 @@ Anyone who creates a request receives a one-time code proving they wrote it.
 Holding the shared link and its passcode is not enough to read someone else's
 request: several people can hold the same link and still cannot see each
 other's asks.
+
+## The assistant on the owner's ChatGPT plan (ADR-0066)
+
+When the server's configuration names no other provider, the owner can sign the assistant in to
+their ChatGPT plan from Settings › Sync. Requests then count against the plan, not an API key.
+
+- **What is sent** is the same minimized, redacted planning context as with any provider. It holds
+  windows, durations, counts and opaque ids. When a message asks about medication, it also holds
+  dose timing relative to waking, with no names. It never holds titles, notes, labels or sleep
+  records.
+- **Whom it is tied to.** The requests reach OpenAI tied to the owner's ChatGPT account, not to an
+  API organisation. ZeitBoard asks OpenAI to keep none of them (`store: false`).
+  - OpenAI's Sign in with ChatGPT documentation states no retention or training terms for these
+    requests. It points to OpenAI's policies, and ZeitBoard cannot check what OpenAI does.
+  - The relationship and its terms are the owner's with OpenAI. Settings says so before the owner
+    signs in.
+- **What ZeitBoard does not get.** The sign-in gives ZeitBoard no access to the owner's ChatGPT
+  conversations, and ZeitBoard asks for none.
+- **What the server keeps.** The server keeps the refresh token, the account's email (to show which
+  account is connected) and its subject identifier, encrypted with the data key. Access tokens are
+  held in memory only.
+  - None of it reaches a device, a log, the connector or the portal.
+  - Devices see whether the assistant is connected, the email and the model.
+- **Disconnecting.** Settings › Sync asks OpenAI to withdraw the grant and forgets the account. If
+  OpenAI does not confirm, Settings says to remove ZeitBoard in ChatGPT's settings too.
+- **Usage limits.** When a limit is reached, ZeitBoard says so and links to ChatGPT's usage
+  settings. It never guesses when the limit resets.
 
 ## Agent connectors
 

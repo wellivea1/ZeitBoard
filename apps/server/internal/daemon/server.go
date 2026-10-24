@@ -15,6 +15,7 @@ import (
 	"non24.app/core/tlstrust"
 	"non24.app/server/internal/analysis"
 	"non24.app/server/internal/api"
+	"non24.app/server/internal/chatgpt"
 	"non24.app/server/internal/config"
 	"non24.app/server/internal/portal"
 	"non24.app/server/internal/portalbridge"
@@ -26,29 +27,29 @@ import (
 const shutdownTimeout = 15 * time.Second
 
 func ValidateConfig(configPath string) error {
-	_, _, _, _, err := loadRuntimeConfig(configPath)
+	_, _, _, err := loadRuntimeConfig(configPath)
 	return err
 }
 
-func loadRuntimeConfig(configPath string) (config.Config, provider.LLM, provider.Status, *tls.Config, error) {
+func loadRuntimeConfig(configPath string) (config.Config, provider.LLM, *tls.Config, error) {
 	cfg, err := config.Load(configPath)
 	if err != nil {
-		return config.Config{}, nil, provider.Status{}, nil, fmt.Errorf("load config: %w", err)
+		return config.Config{}, nil, nil, fmt.Errorf("load config: %w", err)
 	}
-	llm, providerStatus, err := provider.New(provider.Config{
+	llm, _, err := provider.New(provider.Config{
 		Name:     provider.Name(cfg.Assistant.Provider),
 		Model:    cfg.Assistant.Model,
 		APIKey:   cfg.Assistant.APIKey,
 		Endpoint: cfg.Assistant.Endpoint,
 	})
 	if err != nil {
-		return config.Config{}, nil, provider.Status{}, nil, fmt.Errorf("configure provider: %w", err)
+		return config.Config{}, nil, nil, fmt.Errorf("configure provider: %w", err)
 	}
 	tlsConfig, err := cfg.TLSConfig()
 	if err != nil {
-		return config.Config{}, nil, provider.Status{}, nil, fmt.Errorf("configure TLS: %w", err)
+		return config.Config{}, nil, nil, fmt.Errorf("configure TLS: %w", err)
 	}
-	return cfg, llm, providerStatus, tlsConfig, nil
+	return cfg, llm, tlsConfig, nil
 }
 
 func Serve(configPath string, stop <-chan struct{}) error {
@@ -56,7 +57,7 @@ func Serve(configPath string, stop <-chan struct{}) error {
 }
 
 func serve(configPath string, stop <-chan struct{}, ready chan<- struct{}) error {
-	cfg, llm, providerStatus, tlsConfig, err := loadRuntimeConfig(configPath)
+	cfg, llm, tlsConfig, err := loadRuntimeConfig(configPath)
 	if err != nil {
 		return err
 	}
@@ -66,7 +67,17 @@ func serve(configPath string, stop <-chan struct{}, ready chan<- struct{}) error
 	}
 	defer st.Close()
 
-	options := []api.Option{api.WithProvider(llm, providerStatus)}
+	options := []api.Option{}
+	if provider.OffersChatGPT(provider.Name(cfg.Assistant.Provider)) {
+		// The owner may sign in to ChatGPT from a device (ADR-0066).
+		account, err := chatgpt.Open(context.Background(), st, chatgpt.Options{DefaultModel: cfg.Assistant.Model})
+		if err != nil {
+			return err
+		}
+		llm = provider.NewChatGPT(account)
+		options = append(options, api.WithChatGPT(account))
+	}
+	options = append(options, api.WithProvider(llm))
 	var publicHandler http.Handler
 	closeStreams := func() {}
 	if cfg.Portal.Enabled {

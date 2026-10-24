@@ -46,7 +46,7 @@ func (f *fakeProvider) Status() provider.Status {
 func TestAssistantCreatesPendingProposalOnlyThroughScheduler(t *testing.T) {
 	st, device := testStoreAndDevice(t)
 	fake := &fakeProvider{responses: []provider.Response{{Text: `{"schema_version":"v1","recommended_action":"propose_place_task","target":{"task_id":"task_flexible_01"},"answer":"I can queue this for approval."}`}}}
-	service := New(fake, fake.Status(), st)
+	service := New(fake, st)
 	service.now = fixedNow
 
 	resp, err := service.HandleMessage(context.Background(), device, MessageRequest{
@@ -85,7 +85,7 @@ func TestAssistantRejectsUnknownActionWithoutProposal(t *testing.T) {
 		{Text: `{"schema_version":"v1","recommended_action":"delete_calendar","target":{"task_id":"task_flexible_01"}}`},
 		{Text: `{"schema_version":"v1","recommended_action":"delete_calendar","target":{"task_id":"task_flexible_01"}}`},
 	}}
-	service := New(fake, fake.Status(), st)
+	service := New(fake, st)
 	service.now = fixedNow
 
 	resp, err := service.HandleMessage(context.Background(), device, MessageRequest{
@@ -136,7 +136,7 @@ func TestModelIsShownExactlyTheActionsItMayName(t *testing.T) {
 func TestAssistantRedactsContextSentToProvider(t *testing.T) {
 	st, device := testStoreAndDevice(t)
 	fake := &fakeProvider{responses: []provider.Response{{Text: `{"schema_version":"v1","recommended_action":"answer_only","answer":"You have a predicted waking window available."}`}}}
-	service := New(fake, fake.Status(), st)
+	service := New(fake, st)
 	service.now = fixedNow
 	planning := planningContext()
 	planning.MedicationFacts = []MedicationFactContext{
@@ -197,7 +197,7 @@ func TestAssistantRedactsContextSentToProvider(t *testing.T) {
 
 func TestAssistantNoProviderUsesLocalFallbackAndNoNetwork(t *testing.T) {
 	st, device := testStoreAndDevice(t)
-	service := New(provider.DisabledClient{}, provider.DisabledClient{}.Status(), st)
+	service := New(provider.DisabledClient{}, st)
 	service.now = fixedNow
 
 	resp, err := service.HandleMessage(context.Background(), device, MessageRequest{
@@ -223,7 +223,7 @@ func TestAssistantNoProviderUsesLocalFallbackAndNoNetwork(t *testing.T) {
 func TestAssistantUsageLimitFallsBackCalmly(t *testing.T) {
 	st, device := testStoreAndDevice(t)
 	fake := &fakeProvider{errs: []error{provider.ErrUsageLimit}}
-	service := New(fake, fake.Status(), st)
+	service := New(fake, st)
 	service.now = fixedNow
 
 	resp, err := service.HandleMessage(context.Background(), device, MessageRequest{
@@ -245,7 +245,7 @@ func TestAssistantUsageLimitFallsBackCalmly(t *testing.T) {
 func TestAssistantMedicalPromptRefusesWithoutProposal(t *testing.T) {
 	st, device := testStoreAndDevice(t)
 	fake := &fakeProvider{responses: []provider.Response{{Text: `{"schema_version":"v1","recommended_action":"answer_only","answer":"bad"}`}}}
-	service := New(fake, fake.Status(), st)
+	service := New(fake, st)
 	service.now = fixedNow
 
 	resp, err := service.HandleMessage(context.Background(), device, MessageRequest{
@@ -270,7 +270,7 @@ func TestAssistantMedicalPromptRefusesWithoutProposal(t *testing.T) {
 func TestAssistantMedicationFactsAreDeterministicAndProviderFree(t *testing.T) {
 	st, device := testStoreAndDevice(t)
 	fake := &fakeProvider{responses: []provider.Response{{Text: `{"schema_version":"v1","recommended_action":"answer_only","answer":"You should take 5 mg at 8 PM."}`}}}
-	service := New(fake, fake.Status(), st)
+	service := New(fake, st)
 	service.now = fixedNow
 	planning := planningContext()
 	planning.MedicationFacts = []MedicationFactContext{
@@ -316,7 +316,7 @@ func TestAssistantMedicationFactsAreDeterministicAndProviderFree(t *testing.T) {
 func TestAssistantMarkerFactsDoNotIncludeMedicationFacts(t *testing.T) {
 	st, device := testStoreAndDevice(t)
 	fake := &fakeProvider{responses: []provider.Response{{Text: `{"schema_version":"v1","recommended_action":"answer_only","answer":"provider should not run"}`}}}
-	service := New(fake, fake.Status(), st)
+	service := New(fake, st)
 	service.now = fixedNow
 	planning := planningContext()
 	planning.MedicationFacts = []MedicationFactContext{{
@@ -349,7 +349,7 @@ func TestAssistantMarkerFactsDoNotIncludeMedicationFacts(t *testing.T) {
 func TestAssistantRejectsInvalidPlanningContextBeforeProvider(t *testing.T) {
 	st, device := testStoreAndDevice(t)
 	fake := &fakeProvider{responses: []provider.Response{{Text: `{"schema_version":"v1","recommended_action":"answer_only","answer":"provider should not run"}`}}}
-	service := New(fake, fake.Status(), st)
+	service := New(fake, st)
 	planning := planningContext()
 	planning.FixedEvents[0].EndAt = planning.FixedEvents[0].StartAt
 
@@ -376,7 +376,7 @@ func TestAssistantMalformedOutputRetriesOnceThenAnswerOnly(t *testing.T) {
 		{Text: `not json`},
 		{Text: `{"schema_version":"v1","recommended_action":"answer_only","answer":"I cannot make a safe proposal."}`},
 	}}
-	service := New(fake, fake.Status(), st)
+	service := New(fake, st)
 	service.now = fixedNow
 
 	resp, err := service.HandleMessage(context.Background(), device, MessageRequest{
@@ -401,7 +401,7 @@ func TestApprovalTokenWorksOnceAndExpires(t *testing.T) {
 		{Text: `{"schema_version":"v1","recommended_action":"propose_place_task","target":{"task_id":"task_flexible_01"}}`},
 		{Text: `{"schema_version":"v1","recommended_action":"propose_place_task","target":{"task_id":"task_flexible_01"}}`},
 	}}
-	service := New(fake, fake.Status(), st)
+	service := New(fake, st)
 	service.now = fixedNow
 
 	resp, err := service.HandleMessage(context.Background(), device, MessageRequest{SchemaVersion: SchemaVersion, Message: "Queue a task.", Context: planningContext()})
@@ -525,7 +525,7 @@ func TestAssistantScreensUnsolicitedDosingAdviceInModelAnswer(t *testing.T) {
 	fake := &fakeProvider{responses: []provider.Response{{
 		Text: `{"schema_version":"v1","recommended_action":"answer_only","answer":"Your afternoon looks open. Also, start taking 5 mg an hour before bed."}`,
 	}}}
-	service := New(fake, fake.Status(), st)
+	service := New(fake, st)
 	service.now = fixedNow
 
 	resp, err := service.HandleMessage(context.Background(), device, MessageRequest{
@@ -553,7 +553,7 @@ func TestAssistantAllowsOrdinarySchedulingAnswer(t *testing.T) {
 	fake := &fakeProvider{responses: []provider.Response{{
 		Text: `{"schema_version":"v1","recommended_action":"answer_only","answer":"You should be awake from about 2 PM. Take the 3 PM slot; it is the best time before your predicted sleep."}`,
 	}}}
-	service := New(fake, fake.Status(), st)
+	service := New(fake, st)
 	service.now = fixedNow
 
 	resp, err := service.HandleMessage(context.Background(), device, MessageRequest{
@@ -566,5 +566,73 @@ func TestAssistantAllowsOrdinarySchedulingAnswer(t *testing.T) {
 	}
 	if resp.Result == ResultRefused {
 		t.Fatalf("ordinary scheduling answer was falsely refused: %+v", resp)
+	}
+}
+
+// unconfiguredProvider is a provider that can be set up from a device and is
+// not yet, as a ChatGPT account before its sign-in.
+type unconfiguredProvider struct{ problem provider.Reason }
+
+func (u unconfiguredProvider) Complete(context.Context, provider.Request) (provider.Response, error) {
+	return provider.Response{}, errors.New("an unconfigured provider was called")
+}
+
+func (u unconfiguredProvider) Status() provider.Status {
+	return provider.Status{Provider: "chatgpt", Auth: "chatgpt_plan", Problem: u.problem}
+}
+
+// A provider that cannot answer for a reason the owner can act on is asked
+// once, and the answer says why, with the reason for the window to word.
+func TestAProviderThatCannotAnswerSaysWhy(t *testing.T) {
+	for _, reason := range []provider.Reason{
+		provider.ReasonUsageLimit, provider.ReasonBusy, provider.ReasonSignInEnded, provider.ReasonPlanNotShared,
+		provider.ReasonNotEligible, provider.ReasonNotEnabled, provider.ReasonModelUnavailable, provider.ReasonRefused,
+	} {
+		st, device := testStoreAndDevice(t)
+		fake := &fakeProvider{errs: []error{provider.Unavailable{Reason: reason}}}
+		service := New(fake, st)
+		service.now = fixedNow
+		resp, err := service.HandleMessage(context.Background(), device, MessageRequest{
+			SchemaVersion: SchemaVersion,
+			Message:       "Find 30 minutes for taxes before tomorrow.",
+			Context:       planningContext(),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.Reason != reason || resp.Result != ResultAnswerOnly || len(resp.Proposals) != 0 ||
+			!strings.Contains(strings.ToLower(resp.Answer), "no proposal was created") {
+			t.Errorf("%s answered %+v", reason, resp)
+		}
+		if len(fake.requests) != 1 {
+			t.Errorf("%s asked the provider %d times", reason, len(fake.requests))
+		}
+	}
+
+	// An API key's usage limit says so with the same reason.
+	st, device := testStoreAndDevice(t)
+	fake := &fakeProvider{errs: []error{provider.ErrUsageLimit}}
+	service := New(fake, st)
+	service.now = fixedNow
+	resp, err := service.HandleMessage(context.Background(), device, MessageRequest{
+		SchemaVersion: SchemaVersion, Message: "Find 30 minutes for taxes before tomorrow.", Context: planningContext(),
+	})
+	if err != nil || resp.Reason != provider.ReasonUsageLimit || len(fake.requests) != 1 {
+		t.Errorf("a usage limit answered %+v, %v after %d calls", resp, err, len(fake.requests))
+	}
+}
+
+// A provider not yet set up is not called, and the answer says what to do.
+func TestAProviderNotYetSetUpSaysWhatItNeeds(t *testing.T) {
+	for _, reason := range []provider.Reason{provider.ReasonSignInNeeded, provider.ReasonSignInEnded, provider.ReasonModelNeeded} {
+		st, device := testStoreAndDevice(t)
+		service := New(unconfiguredProvider{problem: reason}, st)
+		service.now = fixedNow
+		resp, err := service.HandleMessage(context.Background(), device, MessageRequest{
+			SchemaVersion: SchemaVersion, Message: "Find 30 minutes for taxes before tomorrow.", Context: planningContext(),
+		})
+		if err != nil || resp.Reason != reason || !strings.Contains(resp.Answer, "Settings › Sync") || resp.Backend.Configured {
+			t.Errorf("%s answered %+v, %v", reason, resp, err)
+		}
 	}
 }

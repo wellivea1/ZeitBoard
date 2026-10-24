@@ -3652,3 +3652,53 @@ which is a download. The rest:
 The whole instrumented suite passed on the emulator, 25 tests, the outbox's queueing, batching,
 enqueueing and acknowledging among them. The five tests against a disposable server skip
 themselves without one. `DurablePreferencesTest` fails a write and finds the rollback.
+
+## The assistant on a ChatGPT plan, the server's side — 2026-10-24
+
+ADR-0066's server half, checked against a synthetic OpenAI (`internal/chatgpt/chatgpttest`). It
+plays the issuer, with discovery, a published RS256 key, a token endpoint that rotates refresh
+tokens and refuses a reused one, and revocation. It also plays the API, with a model catalog and
+streamed responses. Nothing reached OpenAI.
+
+- **Signing in.**
+  - A first sign-in registers a client and names ZeitBoard and the server's host, a version 4
+    `urn:uuid:`.
+  - It keeps a connection that shares the plan, with the plan's first listed model.
+  - A later sign-in reuses the registration and the host, and the connection survives the server
+    starting again.
+  - The refresh token, email and subject are not in the database or its write-ahead log as granted.
+- **What a sign-in refuses:**
+  - a state not waiting, one already used, and one past ten minutes;
+  - the placeholder client, a malformed one, and any redirect but `http://127.0.0.1:<port>/auth/callback`;
+  - ID tokens from another issuer, for another audience or party, with another nonce, expired, from
+    the future, without a subject, signed with another key, or naming an unpublished key.
+  - A stray answer leaves the waiting sign-in to finish, once.
+- **Refreshing.** Eight requests at once, each wanting a fresh token, made one refresh. The rotated
+  token is the one kept.
+- **Ending.**
+  - **A spent refresh token** ends the sign-in and keeps the account. Signing in again hints at it,
+    refuses another account and accepts the same one.
+  - **A sign-in without plan usage** is revoked at once, and the next one asks for consent anew.
+  - **Disconnecting** revokes the token held and forgets the account.
+  - **A refused access token** is renewed once and the request sent again.
+- **Problems.** Thirteen failed answers each became their problem, from HTTP errors and from
+  failures inside the stream, and none repeats ChatGPT's text:
+  - the plan's limit, and its `v2` alias;
+  - not eligible, and the client not enabled;
+  - not answering, a server error and a stream cut short;
+  - an unsupported parameter, a model gone and an incomplete response;
+  - plan scope withdrawn.
+- **The assistant.**
+  - Each reason is answered at once, with one model call and no proposal.
+  - A provider not yet set up is not called, and says what it needs.
+  - An API key's usage limit gives the same reason.
+- **The device API.**
+  - A device signed in, listed models without the hidden one, chose a model and refused an unlisted
+    one. It asked the assistant through the plan, met the plan's limit as `usage_limit`, and
+    disconnected.
+  - No answer carried a token or the account's subject. A stray answer is a 409, never a 401 or 403.
+  - A server naming a provider offers no sign-in, and its routes do not exist.
+- **The portal** may not import the `chatgpt` package.
+
+`go vet`, `gofmt` and the whole server suite passed. The `chatgpt` package also passed under the
+race detector.

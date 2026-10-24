@@ -1793,6 +1793,30 @@ without a download, on the owner's Google Play emulator, which carries it. What 
 recorded, and what it found was fixed: the forecast read twice, and the dial's key, each record's
 rows and each switch read in several stops.
 
+### The assistant on the owner's ChatGPT plan, the server's side — 2026-10-24
+
+The owner asked for a review of OpenAI's Sign in with ChatGPT for the assistant, and a sketch of
+its place in the window. ADR-0066 records what was decided. This is the server's half:
+
+- **One sign-in, held by the server.** The server builds the authorization address and trades the
+  code. A device only relays the browser's answer, so no token ever reaches one. It is offered only
+  when the configuration names no other provider.
+- **The DevKit's protocol in Go**, with no new dependency:
+  - discovery kept to the issuer's origin;
+  - dynamic registration, kept before the exchange;
+  - the resource on every token request;
+  - a host ID kept for good;
+  - ID tokens verified with the issuer's RS256 keys and pinned to the account;
+  - refreshes one at a time, kept before use, ending only on the codes that spend the token;
+  - revocation on disconnecting, and on any sign-in that does not share the plan.
+- **Sealed and audited.** The connection is one encrypted setting in the server's database, and the
+  owner's changes are audited with the device that made them.
+- **Problems, not messages.** ChatGPT's codes become reasons the owner can act on. The assistant
+  answers with the reason at once, and no ChatGPT text is shown or kept. An assistant message now
+  has 150 seconds for its two model calls, where the server's 30-second limit cut the second short.
+- **Tested against a stand-in.** A synthetic OpenAI (`chatgpttest`) plays the issuer and the API,
+  in the package's tests and over the device API.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and
@@ -1860,4 +1884,5 @@ on the owner rather than on code:
 | Activity collected while the app is closed | Roadmap, slice 11 | Delivered 2026-10-12 (ADR-0060) from Windows' own power log, by a separate choice. The collector itself still stops when ZeitBoard quits |
 | OAuth calendar providers | Roadmap, slice 6 and phase 3 | Delivered 2026-10-12: Google and Microsoft accounts sign in through an app the owner registers, with no registration in ZeitBoard's name, and are read every hour (ADR-0064). Accepted times can be written to one of their calendars, with CalDAV write-back's guarantees (ADR-0065). Calendars that publish an address can also subscribe by it (ADR-0062) |
 | Packaged cloud skills for assistants | Roadmap, phase 4 | Delivered 2026-10-12 for Claude (ADR-0061), with its privacy and threat review. ChatGPT and Claude on the web take remote servers only, which ZeitBoard does not expose |
+| The assistant on the owner's ChatGPT plan, through Sign in with ChatGPT | The owner's request, 2026-10-24 | The server's side delivered 2026-10-24 (ADR-0066). The computer's sign-in, its Settings card and the rail follow. A real sign-in waits on the owner's own account |
 | Encrypting the local database | Roadmap, phase 2; limitation 1 | Delivered 2026-10-12 with Windows' file encryption, by choice (ADR-0063). Encryption inside the database, with a key ZeitBoard holds, would need `ncruces/go-sqlite3`'s encrypting VFS: a new pre-v1 dependency to download, and a key-custody decision for the owner. The owner chose not to, 2026-10-18 (ADR-0063's update) |

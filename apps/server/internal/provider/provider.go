@@ -45,6 +45,42 @@ type Status struct {
 	Configured bool   `json:"configured"`
 	Provider   string `json:"provider"`
 	Model      string `json:"model,omitempty"`
+	// Auth names what pays for the provider's answers when it is not an API
+	// key: "chatgpt_plan" for the owner's ChatGPT plan (ADR-0066).
+	Auth string `json:"auth,omitempty"`
+	// Problem says why a provider that can be set up is not configured yet,
+	// as a Reason.
+	Problem Reason `json:"problem,omitempty"`
+}
+
+// Reason is why a provider could not answer, in terms the owner can act on.
+// The window words each one.
+type Reason string
+
+const (
+	ReasonUsageLimit       Reason = "usage_limit"
+	ReasonBusy             Reason = "busy"
+	ReasonSignInNeeded     Reason = "sign_in_needed"
+	ReasonSignInEnded      Reason = "sign_in_ended"
+	ReasonPlanNotShared    Reason = "plan_not_shared"
+	ReasonNotEligible      Reason = "not_eligible"
+	ReasonNotEnabled       Reason = "not_enabled"
+	ReasonModelNeeded      Reason = "model_needed"
+	ReasonModelUnavailable Reason = "model_unavailable"
+	ReasonRefused          Reason = "refused"
+)
+
+// Unavailable is a provider that could not answer for a Reason. Retrying the
+// same request does not help, so the assistant answers with the reason at
+// once. A usage limit is ErrUsageLimit too.
+type Unavailable struct {
+	Reason Reason
+}
+
+func (u Unavailable) Error() string { return "provider unavailable: " + string(u.Reason) }
+
+func (u Unavailable) Is(target error) bool {
+	return target == ErrUsageLimit && u.Reason == ReasonUsageLimit
 }
 
 type Request struct {
@@ -73,9 +109,19 @@ func (DisabledClient) Status() Status {
 	return Status{Provider: string(Disabled), Configured: false}
 }
 
+// OffersChatGPT reports whether a configuration leaves the assistant to a
+// ChatGPT sign-in: it names no provider, or names ChatGPT. A sign-in never
+// replaces a provider the configuration names.
+func OffersChatGPT(name Name) bool {
+	name = normalizeName(name)
+	return name == Disabled || name == ChatGPT
+}
+
 func New(cfg Config) (LLM, Status, error) {
 	name := normalizeName(cfg.Name)
-	if name == Disabled || (cfg.APIKey == "" && name != OpenAICompatible) {
+	// ChatGPT is set up from a device rather than here; the daemon swaps in
+	// its client once it has the store to keep the sign-in in.
+	if name == Disabled || name == ChatGPT || (cfg.APIKey == "" && name != OpenAICompatible) {
 		client := DisabledClient{}
 		return client, client.Status(), nil
 	}
@@ -130,6 +176,8 @@ func normalizeName(name Name) Name {
 		return OpenCodeZen
 	case "openai_compatible", "openai-compatible":
 		return OpenAICompatible
+	case "chatgpt":
+		return ChatGPT
 	default:
 		return Name(strings.ToLower(strings.TrimSpace(string(name))))
 	}

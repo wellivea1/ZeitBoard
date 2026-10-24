@@ -178,6 +178,7 @@ func TestPortalPackageDoesNotReachPrivateData(t *testing.T) {
 		"non24.app/server/internal/api",
 		"non24.app/server/internal/portalbridge",
 		"non24.app/server/internal/provider",
+		"non24.app/server/internal/chatgpt",
 		"non24.app/core/estimation",
 		"non24.app/core/domain",
 	}
