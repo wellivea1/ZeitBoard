@@ -1848,6 +1848,34 @@ The computer relays and shows; it holds nothing (ADR-0066).
     window.
   - Its focus fell to the page once the sign-in button was gone; it now goes to the card's heading.
 
+### A review of the ChatGPT sign-in — 2026-10-24
+
+The whole of ADR-0066 was read again, end to end, on the server, the desktop and the window.
+
+- **Server.**
+  - The sign-in's state, the client's registration, the exchange, the ID token, and pinning the
+    account to the plan scope.
+  - Refreshes: one at a time, the rotated token kept before use, the codes that end a sign-in, and
+    a refreshed ID token verified.
+  - Requests: one retry on a refused token, and an end on the plan's codes.
+  - The stream, the model catalog, disconnecting, the error mapping, and the device API's statuses.
+- **Desktop and window.**
+  - The desktop's relay and its allowlist of pages.
+  - The loopback receiver.
+  - The card's states, the welcome, and the rail.
+
+What it found, and what became of each:
+
+| Finding | Disposition |
+|---|---|
+| Disconnecting an ended sign-in said ChatGPT had withdrawn ZeitBoard's access, when nothing was held to withdraw | Fixed: it says ZeitBoard holds no access, which is true either way |
+| The welcome's heading took the settings section's capitals, and the focus fell to the page after it | Fixed: the welcome is drawn over the whole window, and the focus goes to the card's heading (found by looking, in the browser pane) |
+| A server from before the sign-in, which answers the status route with 404, was said to name a provider of its own | Fixed: the card says the server is from before signing in to ChatGPT, and to update it |
+| An API key's usage limit left an empty row where the plan's Manage usage would be | Fixed: the row is drawn only with an action in it |
+| The calendar accounts' loopback receiver answered on any path and never read the Host header | Fixed: both sign-ins now share the stricter receiver (ADR-0064's update) |
+| A stream ending with a `[DONE]` marker reads as "not answering" | No change: a response without `response.completed` is not answering, whichever way it ends, as the DevKit treats it |
+| Any enrolled device may connect or disconnect the assistant's ChatGPT account | By design: enrolled devices are the owner's, and already read all that is synced. Each change is audited with the device that made it. The threat model says so |
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and

@@ -260,7 +260,8 @@ func TestTheConnectionSaysWhereItStands(t *testing.T) {
 	backend.mu.Lock()
 	backend.missing = true
 	backend.mu.Unlock()
-	if older, err := app.GetAssistantConnection(); err != nil || !older.Reachable || older.Offered {
+	if older, err := app.GetAssistantConnection(); err != nil || !older.Reachable || older.Offered ||
+		!strings.Contains(older.Message, "Update it") {
 		t.Errorf("an older server: %+v, %v", older, err)
 	}
 	if _, err := app.ListAssistantModels(); err == nil || !strings.Contains(err.Error(), "does not offer signing in to ChatGPT") {

@@ -3761,3 +3761,15 @@ ChatGPT sign-in brought (ADR-0066).
   test now also turns away another path and a rebound name.
 - The desktop's `go vet`, `gofmt` and whole Go suite passed. The receivers also passed under the
   race detector.
+
+## A review of the ChatGPT sign-in — 2026-10-24
+
+ADR-0066 was read again end to end; the completion plan lists what was covered. Each fix has a test:
+
+- **A server from before the sign-in** answers the status route with 404. The desktop now gives
+  it its own message: the server is from before signing in to ChatGPT, so update it. The card no
+  longer says such a server names a provider. A Go test and a window test check this.
+- **An API key's usage limit** leaves no empty row in the rail where the plan's Manage usage
+  would be. A rail test checks that nothing is offered and no row is drawn.
+
+`npm run check:web` passed, with 669 tests and both builds, and so did the desktop's whole Go suite.

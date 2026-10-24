@@ -54,6 +54,11 @@ function backendLabel(status: AssistantStatus | undefined): { text: string; mode
  * answer. The answer itself already says what happened.
  */
 function ReasonAction({ reason, plan }: { reason: AssistantReason | undefined; plan: boolean }) {
+  const action = reasonAction(reason, plan);
+  return action ? <div className="assistant-reason-actions">{action}</div> : null;
+}
+
+function reasonAction(reason: AssistantReason | undefined, plan: boolean): ReactNode {
   switch (reason) {
     case "usage_limit":
       // A key's limit is the operator's to raise; only the plan's has a page.
@@ -345,11 +350,7 @@ export function AssistantRail({ open, onClose }: { open: boolean; onClose: () =>
                 >
                   {message.text}
                 </div>
-                {message.reason && (
-                  <div className="assistant-reason-actions">
-                    <ReasonAction reason={message.reason} plan={plan} />
-                  </div>
-                )}
+                <ReasonAction reason={message.reason} plan={plan} />
                 {message.proposals?.map((proposal) => (
                   <ActionCard
                     proposal={currentProposal.get(proposal.proposalId) ?? proposal}

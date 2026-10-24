@@ -98,6 +98,26 @@ it("answers a reply that could not be given with what to do about it", async () 
   );
 });
 
+// An API key's limit is the operator's to raise: nothing is offered, and
+// no empty row is left where an action would be.
+it("offers nothing for a limit the owner's plan does not set", async () => {
+  install({
+    GetAssistantStatus: async () => ({ enabled: true, configured: true, provider: "anthropic" }),
+    SendAssistantMessage: async () => ({
+      ...reply("usage_limit", "The assistant's service hit its usage limit."),
+      provider: "anthropic",
+      auth: undefined,
+    }),
+  });
+  const { container } = render(<AssistantRail open onClose={() => undefined} />);
+  const composer = await screen.findByRole("textbox", { name: "Message the assistant" });
+  fireEvent.change(composer, { target: { value: "Find 90 minutes for paperwork" } });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  expect(await screen.findByText("The assistant's service hit its usage limit.")).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Manage usage" })).toBeNull();
+  expect(container.querySelector(".assistant-reason-actions")).toBeNull();
+});
+
 it("points an assistant not yet signed in to Settings › Sync", async () => {
   install({
     GetAssistantStatus: async () => ({

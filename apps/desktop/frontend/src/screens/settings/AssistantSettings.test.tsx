@@ -154,7 +154,18 @@ it("says what stands in the way when there is nothing to sign in to", async () =
   unmount();
 
   install({ GetAssistantConnection: async () => ({ reachable: true, offered: false }) });
-  render(<AssistantSettings syncKey="true device" />);
+  const configured = render(<AssistantSettings syncKey="true device" />);
   expect(await screen.findByText(/a ChatGPT sign-in never\s+replaces it/)).toBeVisible();
   expect(screen.queryByRole("button", { name: "Continue with ChatGPT" })).toBeNull();
+  configured.unmount();
+
+  // A server too old to offer a sign-in is not said to name a provider.
+  const older =
+    "Your server is from before signing in to ChatGPT. Update it to use your ChatGPT plan.";
+  install({
+    GetAssistantConnection: async () => ({ reachable: true, offered: false, message: older }),
+  });
+  render(<AssistantSettings syncKey="true device" />);
+  expect(await screen.findByText(older)).toBeVisible();
+  expect(screen.queryByText(/never\s+replaces it/)).toBeNull();
 });
