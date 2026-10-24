@@ -126,10 +126,11 @@ planned functions is done.
 
 ## 7. Three decisions
 
-- **The development-tool advisories.** `npm audit` lists nine, all in the tooling that builds and
-  tests the window; none ships in the app (`code-quality-review-2026-10-16.md`, Dependencies).
-  Fixing them means downloading newer tooling. The owner either allows that, after which the web
-  checks are run again, or accepts them as development-only.
+- **The development-tool advisories.** `npm audit` lists twelve as of 2026-10-24, up from nine,
+  all in the tooling that builds, lints and tests the window. None ships in the app
+  (`code-quality-review-2026-10-24.md`, Dependencies). Fixing them means downloading newer tooling.
+  The owner either allows that, after which the web checks are run again, or accepts them as
+  development-only.
 - **The ChatGPT mark.** OpenAI's guidelines show the ChatGPT mark on its sign-in button. The mark
   is in OpenAI's DevKit (`assets/`), and adding it is a download. The owner either allows it, or
   the button keeps its words alone.

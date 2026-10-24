@@ -19,8 +19,9 @@ This is the current completion sequence. `roadmap.md`, the feature specs and ADR
 requirements; older phase prompts are historical where their descriptions contradict delivered code
 or later owner decisions. The [September review](product-quality-review-2026-09-08.md) records the
 current UX repairs and recovered owner direction. Preserve that uncommitted work. The
-[code quality review](code-quality-review-2026-10-16.md) records what the code's quality rests on,
-and where that evidence stops.
+[code quality review](code-quality-review-2026-10-24.md) records what the code's quality rests on,
+and where that evidence stops; it follows the [first](code-quality-review-2026-10-16.md), and
+compares each measure with it.
 
 ## Review conclusions that change the plan
 
@@ -1875,6 +1876,20 @@ What it found, and what became of each:
 | The calendar accounts' loopback receiver answered on any path and never read the Host header | Fixed: both sign-ins now share the stricter receiver (ADR-0064's update) |
 | A stream ending with a `[DONE]` marker reads as "not answering" | No change: a response without `response.completed` is not answering, whichever way it ends, as the DevKit treats it |
 | Any enrolled device may connect or disconnect the assistant's ChatGPT account | By design: enrolled devices are the owner's, and already read all that is synced. Each change is audited with the device that made it. The threat model says so |
+
+### The whole application measured again — 2026-10-24
+
+The code quality review was repeated on the whole application
+([`code-quality-review-2026-10-24.md`](code-quality-review-2026-10-24.md)).
+
+- **Coverage** held or rose everywhere. The server's `provider` package was the exception, at
+  56.1%: the OpenAI and Anthropic clients had no test. They have one now, and it stands at 80.6%.
+- **Complexity** was measured for the Go code too, for the first time.
+  - Three functions were split, behaviour unchanged: the sync pull's page, the ChatGPT sign-in's
+    finish, and the assistant's planning context.
+  - Functions over a complexity of 24 went from 15 to 12. Each left over has a disposition in the
+    review.
+- **The advisories** number twelve, not nine. All are still in tooling, and none ships.
 
 ## Where the completion goal stands — 2026-09-27
 

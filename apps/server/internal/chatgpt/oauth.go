@@ -175,100 +175,37 @@ var clientIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,200}$`)
 func (a *Account) FinishSignIn(ctx context.Context, deviceID, state, code, clientID string) (Status, error) {
 	a.turns.Lock()
 	defer a.turns.Unlock()
-	a.mu.Lock()
-	begun := a.pending
-	if begun == nil || subtle.ConstantTimeCompare([]byte(begun.state), []byte(state)) != 1 {
-		a.mu.Unlock()
-		return Status{}, fail(SignInExpired, "sign_in_not_found")
-	}
-	a.pending = nil
-	a.mu.Unlock()
-	if !a.now().Before(begun.expires) {
-		return Status{}, fail(SignInExpired, "sign_in_expired")
+	begun, err := a.takePending(state)
+	if err != nil {
+		return Status{}, err
 	}
 	code = strings.TrimSpace(code)
 	if code == "" || len(code) > maxTokenBytes {
 		return Status{}, fail(Refused, "invalid_code")
 	}
-
-	current := a.current()
-	clientID = strings.TrimSpace(clientID)
-	if clientID == "" {
-		clientID = current.ClientID
+	current, clientID, err := a.register(ctx, a.current(), clientID)
+	if err != nil {
+		return Status{}, err
 	}
-	if !clientIDPattern.MatchString(clientID) || clientID == dynamicClient ||
-		(current.ClientID != "" && clientID != current.ClientID) {
-		return Status{}, fail(Refused, "registration_incomplete")
-	}
-	// Kept before the exchange, so an exchange that fails does not register
-	// a second client.
-	if current.ClientID == "" {
-		next := current
-		next.ClientID = clientID
-		if err := a.keep(ctx, next, "", ""); err != nil {
-			return Status{}, err
-		}
-		current = next
-	}
-
 	found, err := a.discover(ctx)
 	if err != nil {
 		return Status{}, err
 	}
-	answer, receivedAt, err := a.tokenRequest(ctx, found, url.Values{
-		"grant_type":    {"authorization_code"},
-		"client_id":     {clientID},
-		"code":          {code},
-		"code_verifier": {begun.verifier},
-		"redirect_uri":  {begun.redirect},
-		"resource":      {a.endpoints.API},
-	})
-	var refused *Error
-	if errors.As(err, &refused) && refused.Code == "invalid_client" {
-		// The registration is gone: the next sign-in registers anew.
-		current.ClientID = ""
-		_ = a.keep(ctx, current, "", "")
-	}
+	tokens, receivedAt, err := a.exchange(ctx, found, current, begun, clientID, code)
 	if err != nil {
 		return Status{}, err
 	}
-	tokens, err := readTokens(answer, strings.Fields(scope), false)
-	if err != nil {
-		return Status{}, err
-	}
-	if tokens.idToken == "" {
-		a.revoke(ctx, found, clientID, tokens.refresh)
-		return Status{}, fail(SignInEnded, "invalid_id_token")
-	}
-	who, err := a.verifyIDToken(ctx, found, tokens.idToken, clientID, begun.nonce, receivedAt)
+	who, err := a.admit(ctx, found, current, begun, clientID, tokens, receivedAt)
 	if err != nil {
 		a.revoke(ctx, found, clientID, tokens.refresh)
 		return Status{}, err
-	}
-	previous := current.Grant
-	if previous != nil && previous.Subject != who.Subject {
-		a.revoke(ctx, found, clientID, tokens.refresh)
-		return Status{}, fail(AccountMismatch, "account_mismatch")
-	}
-	if !slices.Contains(tokens.scopes, planScope) || tokens.refresh == "" {
-		a.revoke(ctx, found, clientID, tokens.refresh)
-		a.mu.Lock()
-		a.notice, a.reconsent = PlanNotShared, true
-		a.mu.Unlock()
-		return Status{}, fail(PlanNotShared, "")
 	}
 
+	previous := current.Grant
 	next := current
 	next.Grant = &grant{RefreshToken: tokens.refresh, Subject: who.Subject, Email: who.Email,
 		Scopes: tokens.scopes, ConnectedAt: a.now().UTC()}
-	if next.Model == "" {
-		next.Model = a.defaultModel
-	}
-	if next.Model == "" {
-		if models, err := a.readModels(ctx, tokens.access); err == nil && len(models) > 0 {
-			next.Model = models[0].Slug
-		}
-	}
+	next.Model = a.startingModel(ctx, next.Model, tokens.access)
 	if err := a.keep(ctx, next, "assistant_chatgpt_connected", deviceID); err != nil {
 		a.revoke(ctx, found, clientID, tokens.refresh)
 		return Status{}, err
@@ -282,6 +219,104 @@ func (a *Account) FinishSignIn(ctx context.Context, deviceID, state, code, clien
 		a.revoke(ctx, found, clientID, previous.RefreshToken)
 	}
 	return a.Status(), nil
+}
+
+// takePending takes the sign-in waiting for state, once. An answer for
+// another state leaves it waiting, so a stray request cannot spoil it.
+func (a *Account) takePending(state string) (pending, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	begun := a.pending
+	if begun == nil || subtle.ConstantTimeCompare([]byte(begun.state), []byte(state)) != 1 {
+		return pending{}, fail(SignInExpired, "sign_in_not_found")
+	}
+	a.pending = nil
+	if !a.now().Before(begun.expires) {
+		return pending{}, fail(SignInExpired, "sign_in_expired")
+	}
+	return *begun, nil
+}
+
+// register settles the client the answer names: the one a first sign-in
+// registered, which is kept before the exchange so an exchange that fails
+// does not register a second, or the one kept already.
+func (a *Account) register(ctx context.Context, current saved, clientID string) (saved, string, error) {
+	clientID = strings.TrimSpace(clientID)
+	if clientID == "" {
+		clientID = current.ClientID
+	}
+	if !clientIDPattern.MatchString(clientID) || clientID == dynamicClient ||
+		(current.ClientID != "" && clientID != current.ClientID) {
+		return saved{}, "", fail(Refused, "registration_incomplete")
+	}
+	if current.ClientID == "" {
+		current.ClientID = clientID
+		if err := a.keep(ctx, current, "", ""); err != nil {
+			return saved{}, "", err
+		}
+	}
+	return current, clientID, nil
+}
+
+// exchange trades the code for tokens. A client ChatGPT no longer knows is
+// forgotten, so the next sign-in registers anew.
+func (a *Account) exchange(ctx context.Context, found discovery, current saved, begun pending, clientID, code string) (tokens, time.Time, error) {
+	answer, receivedAt, err := a.tokenRequest(ctx, found, url.Values{
+		"grant_type":    {"authorization_code"},
+		"client_id":     {clientID},
+		"code":          {code},
+		"code_verifier": {begun.verifier},
+		"redirect_uri":  {begun.redirect},
+		"resource":      {a.endpoints.API},
+	})
+	var refused *Error
+	if errors.As(err, &refused) && refused.Code == "invalid_client" {
+		current.ClientID = ""
+		_ = a.keep(ctx, current, "", "")
+	}
+	if err != nil {
+		return tokens{}, receivedAt, err
+	}
+	granted, err := readTokens(answer, strings.Fields(scope), false)
+	return granted, receivedAt, err
+}
+
+// admit decides whether a sign-in's tokens may be kept: an ID token for this
+// sign-in, from the account the assistant used if it used one, with the plan
+// shared. A refusal is the caller's to withdraw.
+func (a *Account) admit(ctx context.Context, found discovery, current saved, begun pending, clientID string, granted tokens, receivedAt time.Time) (identity, error) {
+	if granted.idToken == "" {
+		return identity{}, fail(SignInEnded, "invalid_id_token")
+	}
+	who, err := a.verifyIDToken(ctx, found, granted.idToken, clientID, begun.nonce, receivedAt)
+	if err != nil {
+		return identity{}, err
+	}
+	if current.Grant != nil && current.Grant.Subject != who.Subject {
+		return identity{}, fail(AccountMismatch, "account_mismatch")
+	}
+	if !slices.Contains(granted.scopes, planScope) || granted.refresh == "" {
+		a.mu.Lock()
+		a.notice, a.reconsent = PlanNotShared, true
+		a.mu.Unlock()
+		return identity{}, fail(PlanNotShared, "")
+	}
+	return who, nil
+}
+
+// startingModel is the model a new connection asks: the one chosen before,
+// the configuration's, or the plan's first.
+func (a *Account) startingModel(ctx context.Context, chosen, access string) string {
+	if chosen != "" {
+		return chosen
+	}
+	if a.defaultModel != "" {
+		return a.defaultModel
+	}
+	if models, err := a.readModels(ctx, access); err == nil && len(models) > 0 {
+		return models[0].Slug
+	}
+	return ""
 }
 
 // token gives an access token for a request: the one held while it has more

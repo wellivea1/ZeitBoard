@@ -163,177 +163,16 @@ func (s *Store) applySyncPullPage(
 		return SyncPullPageResult{}, fmt.Errorf("read sync compaction state: %w", err)
 	}
 
-	syncedAt := time.Now().UTC()
-	result := SyncPullPageResult{}
-	for index, record := range prepared {
-		var seenID string
-		switch record.kind {
-		case preparedSyncPullObservation:
-			seenID = record.observation.record.ObservationID
-		case preparedSyncPullCorrection:
-			seenID = record.correction.record.CorrectionID
-		case preparedSyncPullTask:
-			seenID = taskRevisionRecordID(record.task.record.TaskID, record.task.record.Revision)
-		case preparedSyncPullMedication, preparedSyncPullMedicationEvent, preparedSyncPullMedicationCorrection:
-			seenID = record.medication.recordID
-		case preparedSyncPullMarker:
-			seenID = record.marker.record.MarkerID
-		case preparedSyncPullSourceReport:
-			seenID = record.report.report.ReportID
-		case preparedSyncPullPlacement, preparedSyncPullTombstone:
-			seenID = record.recordID
-		}
-		if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO local_sync_seen SELECT ? WHERE EXISTS(SELECT 1 FROM local_sync_state WHERE key='sync_reconcile' AND value='1')`, seenID); err != nil {
+	// The order matters: records before the evidence and corrections that
+	// name them, what was waiting once its parent has arrived, and
+	// tombstones last, so erasure wins over anything in the same page.
+	apply := syncPullApply{ctx: ctx, tx: tx, syncedAt: time.Now().UTC()}
+	for _, phase := range []func([]preparedSyncPullRecord) error{
+		apply.records, apply.medicationEvidence, apply.corrections,
+		apply.waitingCorrections, apply.waitingMedication, apply.tombstones,
+	} {
+		if err := phase(prepared); err != nil {
 			return SyncPullPageResult{}, err
-		}
-		var applied bool
-		handled := true
-		switch record.kind {
-		case preparedSyncPullObservation:
-			applied, err = insertSyncedSleepObservationTx(ctx, tx, record.observation, syncedAt)
-		case preparedSyncPullTask:
-			applied, err = applySyncedTaskTx(ctx, tx, record.task, syncedAt)
-		case preparedSyncPullPlacement:
-			err = markPlacementPushedTx(ctx, tx, record.recordID, syncedAt)
-		case preparedSyncPullMedication:
-			applied, err = applySyncedMedicationTx(ctx, tx, record.medication, syncedAt)
-		case preparedSyncPullMarker:
-			applied, err = insertSyncedMarkerTx(ctx, tx, record.marker, syncedAt)
-		case preparedSyncPullSourceReport:
-			applied, err = insertSyncedSourceReportTx(ctx, tx, record.report)
-		default:
-			handled = false
-		}
-		if err != nil {
-			return SyncPullPageResult{}, fmt.Errorf("apply sync pull record %d: %w", index, err)
-		}
-		if applied {
-			result.Applied++
-		} else if handled {
-			result.Skipped++
-		}
-	}
-
-	for _, kind := range []preparedSyncPullKind{preparedSyncPullMedicationEvent, preparedSyncPullMedicationCorrection} {
-		for index, record := range prepared {
-			if record.kind != kind {
-				continue
-			}
-			applied, err := insertSyncedMedicationEvidenceTx(ctx, tx, record.medication, syncedAt)
-			if errors.Is(err, errSyncParentMissing) {
-				if err := deferMedicationRecordTx(ctx, tx, record.medication); err != nil {
-					return SyncPullPageResult{}, err
-				}
-				result.Skipped++
-				continue
-			}
-			if err != nil {
-				return SyncPullPageResult{}, fmt.Errorf("apply sync pull %s %d: %w", record.medication.kind, index, err)
-			}
-			if applied {
-				result.Applied++
-			} else {
-				result.Skipped++
-			}
-		}
-	}
-
-	for index, record := range prepared {
-		if record.kind != preparedSyncPullCorrection {
-			continue
-		}
-		applied, applyErr := insertSyncedSleepCorrectionTx(ctx, tx, record.correction, syncedAt)
-		if errors.Is(applyErr, ErrSleepObservationMissing) {
-			if _, err := tx.ExecContext(ctx, `INSERT INTO local_sync_deferred_corrections VALUES(?,?,?) ON CONFLICT(correction_id) DO NOTHING`, record.correction.record.CorrectionID, record.correction.record.TargetObservationID, record.correction.encoded); err != nil {
-				return SyncPullPageResult{}, err
-			}
-			result.Skipped++
-			continue
-		}
-		if applyErr != nil {
-			return SyncPullPageResult{}, fmt.Errorf("apply sync pull correction %d: %w", index, applyErr)
-		}
-		if applied {
-			result.Applied++
-		} else {
-			result.Skipped++
-		}
-	}
-	// A correction can precede its source across page boundaries. Keep its
-	// immutable payload until the source arrives rather than losing it at cursor
-	// advance. Tombstones below erase both applied and deferred copies.
-	var deferred []preparedSyncedSleepCorrection
-	if err := readJSONRows(ctx, tx, `SELECT payload_json FROM local_sync_deferred_corrections WHERE target_id IN(SELECT observation_id FROM local_sleep_observations) LIMIT 500`, func(data []byte) error {
-		var record SleepCorrectionRecord
-		if err := json.Unmarshal(data, &record); err != nil {
-			return err
-		}
-		prepared, err := prepareSyncedSleepCorrection(record)
-		if err == nil {
-			deferred = append(deferred, prepared)
-		}
-		return err
-	}); err != nil {
-		return SyncPullPageResult{}, err
-	}
-	for _, record := range deferred {
-		applied, err := insertSyncedSleepCorrectionTx(ctx, tx, record, syncedAt)
-		if err != nil {
-			return SyncPullPageResult{}, err
-		}
-		if applied {
-			result.Applied++
-		}
-		if _, err := tx.ExecContext(ctx, `DELETE FROM local_sync_deferred_corrections WHERE correction_id=?`, record.record.CorrectionID); err != nil {
-			return SyncPullPageResult{}, err
-		}
-	}
-	waited, err := applyDeferredMedicationRecordsTx(ctx, tx, syncedAt)
-	if err != nil {
-		return SyncPullPageResult{}, err
-	}
-	result.Applied += waited
-
-	for index, record := range prepared {
-		if record.kind != preparedSyncPullTombstone {
-			continue
-		}
-		var applied bool
-		recordKind, err := syncPullTombstoneKindTx(ctx, tx, record.recordID, record.recordKind)
-		if err != nil {
-			return SyncPullPageResult{}, fmt.Errorf("classify sync pull tombstone %d: %w", index, err)
-		}
-		switch recordKind {
-		case "placement":
-			applied, err = erasePlacementRecordTx(ctx, tx, record.recordID)
-		case "task":
-			applied, err = eraseSyncedTaskRecordTx(ctx, tx, record.recordID)
-			if err == nil {
-				_, err = tx.ExecContext(ctx,
-					`DELETE FROM local_sleep_erasures WHERE record_id = ?`,
-					record.recordID,
-				)
-			}
-		case SyncKindMedication:
-			// Any erased revision means the definition was deleted.
-			medicationID, _, _ := splitRevisionRecordID(record.recordID)
-			applied, err = eraseMedicationTx(ctx, tx, medicationID, erasedElsewhere)
-		case SyncKindMedicationEvent:
-			applied, err = eraseMedicationEventTx(ctx, tx, record.recordID, erasedElsewhere)
-		case SyncKindMedicationCorrection:
-			applied, err = eraseMedicationCorrectionTx(ctx, tx, record.recordID, erasedElsewhere)
-		case SyncKindContextMarker:
-			applied, err = eraseMarkerTx(ctx, tx, record.recordID, erasedElsewhere)
-		case SyncKindSourceReport:
-			applied, err = eraseSourceReportTx(ctx, tx, record.recordID, erasedElsewhere)
-		default:
-			applied, err = eraseSyncedSleepRecordTx(ctx, tx, record.recordID)
-		}
-		if err != nil {
-			return SyncPullPageResult{}, fmt.Errorf("apply sync pull tombstone %d: %w", index, err)
-		}
-		if applied {
-			result.TombstonesApplied++
 		}
 	}
 
@@ -353,6 +192,7 @@ func (s *Store) applySyncPullPage(
 		return SyncPullPageResult{}, fmt.Errorf("commit sync pull page: %w", err)
 	}
 
+	result := apply.result
 	if !hasTombstones && !compactionPending {
 		return result, nil
 	}
@@ -365,6 +205,222 @@ func (s *Store) applySyncPullPage(
 		return result, fmt.Errorf("clear pending sync compaction: %w", err)
 	}
 	return result, nil
+}
+
+// syncPullApply applies one page's records inside its transaction, phase by
+// phase, counting what each did.
+type syncPullApply struct {
+	ctx      context.Context
+	tx       *sql.Tx
+	syncedAt time.Time
+	result   SyncPullPageResult
+}
+
+// count adds one record's outcome: applied, or seen and kept as it was.
+func (a *syncPullApply) count(applied bool) {
+	if applied {
+		a.result.Applied++
+	} else {
+		a.result.Skipped++
+	}
+}
+
+// seenID is the record's id as the reconciliation after an enrollment
+// remembers it.
+func (record preparedSyncPullRecord) seenID() string {
+	switch record.kind {
+	case preparedSyncPullObservation:
+		return record.observation.record.ObservationID
+	case preparedSyncPullCorrection:
+		return record.correction.record.CorrectionID
+	case preparedSyncPullTask:
+		return taskRevisionRecordID(record.task.record.TaskID, record.task.record.Revision)
+	case preparedSyncPullMedication, preparedSyncPullMedicationEvent, preparedSyncPullMedicationCorrection:
+		return record.medication.recordID
+	case preparedSyncPullMarker:
+		return record.marker.record.MarkerID
+	case preparedSyncPullSourceReport:
+		return record.report.report.ReportID
+	default:
+		return record.recordID
+	}
+}
+
+// records notes every record as seen, and applies those that stand on their
+// own: observations, tasks, placements, medications, markers and reports.
+func (a *syncPullApply) records(prepared []preparedSyncPullRecord) error {
+	for index, record := range prepared {
+		if _, err := a.tx.ExecContext(a.ctx, `INSERT OR IGNORE INTO local_sync_seen SELECT ? WHERE EXISTS(SELECT 1 FROM local_sync_state WHERE key='sync_reconcile' AND value='1')`, record.seenID()); err != nil {
+			return err
+		}
+		var applied bool
+		var err error
+		switch record.kind {
+		case preparedSyncPullObservation:
+			applied, err = insertSyncedSleepObservationTx(a.ctx, a.tx, record.observation, a.syncedAt)
+		case preparedSyncPullTask:
+			applied, err = applySyncedTaskTx(a.ctx, a.tx, record.task, a.syncedAt)
+		case preparedSyncPullPlacement:
+			err = markPlacementPushedTx(a.ctx, a.tx, record.recordID, a.syncedAt)
+		case preparedSyncPullMedication:
+			applied, err = applySyncedMedicationTx(a.ctx, a.tx, record.medication, a.syncedAt)
+		case preparedSyncPullMarker:
+			applied, err = insertSyncedMarkerTx(a.ctx, a.tx, record.marker, a.syncedAt)
+		case preparedSyncPullSourceReport:
+			applied, err = insertSyncedSourceReportTx(a.ctx, a.tx, record.report)
+		default:
+			// Evidence, corrections and tombstones have phases of their own.
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("apply sync pull record %d: %w", index, err)
+		}
+		a.count(applied)
+	}
+	return nil
+}
+
+// medicationEvidence applies dose events, then their corrections. One whose
+// medication has not arrived waits for it.
+func (a *syncPullApply) medicationEvidence(prepared []preparedSyncPullRecord) error {
+	for _, kind := range []preparedSyncPullKind{preparedSyncPullMedicationEvent, preparedSyncPullMedicationCorrection} {
+		for index, record := range prepared {
+			if record.kind != kind {
+				continue
+			}
+			applied, err := insertSyncedMedicationEvidenceTx(a.ctx, a.tx, record.medication, a.syncedAt)
+			if errors.Is(err, errSyncParentMissing) {
+				if err := deferMedicationRecordTx(a.ctx, a.tx, record.medication); err != nil {
+					return err
+				}
+				a.result.Skipped++
+				continue
+			}
+			if err != nil {
+				return fmt.Errorf("apply sync pull %s %d: %w", record.medication.kind, index, err)
+			}
+			a.count(applied)
+		}
+	}
+	return nil
+}
+
+// corrections applies sleep corrections. One whose night has not arrived
+// waits for it.
+func (a *syncPullApply) corrections(prepared []preparedSyncPullRecord) error {
+	for index, record := range prepared {
+		if record.kind != preparedSyncPullCorrection {
+			continue
+		}
+		applied, applyErr := insertSyncedSleepCorrectionTx(a.ctx, a.tx, record.correction, a.syncedAt)
+		if errors.Is(applyErr, ErrSleepObservationMissing) {
+			if _, err := a.tx.ExecContext(a.ctx, `INSERT INTO local_sync_deferred_corrections VALUES(?,?,?) ON CONFLICT(correction_id) DO NOTHING`, record.correction.record.CorrectionID, record.correction.record.TargetObservationID, record.correction.encoded); err != nil {
+				return err
+			}
+			a.result.Skipped++
+			continue
+		}
+		if applyErr != nil {
+			return fmt.Errorf("apply sync pull correction %d: %w", index, applyErr)
+		}
+		a.count(applied)
+	}
+	return nil
+}
+
+// waitingCorrections applies the corrections that waited for a night this
+// page or an earlier one delivered. A correction can precede its night
+// across page boundaries; its immutable payload is kept until the night
+// arrives rather than lost at cursor advance. Tombstones erase both applied
+// and waiting copies.
+func (a *syncPullApply) waitingCorrections([]preparedSyncPullRecord) error {
+	var waiting []preparedSyncedSleepCorrection
+	if err := readJSONRows(a.ctx, a.tx, `SELECT payload_json FROM local_sync_deferred_corrections WHERE target_id IN(SELECT observation_id FROM local_sleep_observations) LIMIT 500`, func(data []byte) error {
+		var record SleepCorrectionRecord
+		if err := json.Unmarshal(data, &record); err != nil {
+			return err
+		}
+		prepared, err := prepareSyncedSleepCorrection(record)
+		if err == nil {
+			waiting = append(waiting, prepared)
+		}
+		return err
+	}); err != nil {
+		return err
+	}
+	for _, record := range waiting {
+		applied, err := insertSyncedSleepCorrectionTx(a.ctx, a.tx, record, a.syncedAt)
+		if err != nil {
+			return err
+		}
+		if applied {
+			a.result.Applied++
+		}
+		if _, err := a.tx.ExecContext(a.ctx, `DELETE FROM local_sync_deferred_corrections WHERE correction_id=?`, record.record.CorrectionID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// waitingMedication applies the medication records that waited for a
+// definition this page delivered.
+func (a *syncPullApply) waitingMedication([]preparedSyncPullRecord) error {
+	waited, err := applyDeferredMedicationRecordsTx(a.ctx, a.tx, a.syncedAt)
+	if err != nil {
+		return err
+	}
+	a.result.Applied += waited
+	return nil
+}
+
+// tombstones erases what the page says was erased elsewhere.
+func (a *syncPullApply) tombstones(prepared []preparedSyncPullRecord) error {
+	for index, record := range prepared {
+		if record.kind != preparedSyncPullTombstone {
+			continue
+		}
+		recordKind, err := syncPullTombstoneKindTx(a.ctx, a.tx, record.recordID, record.recordKind)
+		if err != nil {
+			return fmt.Errorf("classify sync pull tombstone %d: %w", index, err)
+		}
+		applied, err := a.erase(recordKind, record.recordID)
+		if err != nil {
+			return fmt.Errorf("apply sync pull tombstone %d: %w", index, err)
+		}
+		if applied {
+			a.result.TombstonesApplied++
+		}
+	}
+	return nil
+}
+
+// erase erases one record a tombstone names, by its kind.
+func (a *syncPullApply) erase(recordKind, recordID string) (bool, error) {
+	switch recordKind {
+	case "placement":
+		return erasePlacementRecordTx(a.ctx, a.tx, recordID)
+	case "task":
+		applied, err := eraseSyncedTaskRecordTx(a.ctx, a.tx, recordID)
+		if err == nil {
+			_, err = a.tx.ExecContext(a.ctx, `DELETE FROM local_sleep_erasures WHERE record_id = ?`, recordID)
+		}
+		return applied, err
+	case SyncKindMedication:
+		// Any erased revision means the definition was deleted.
+		medicationID, _, _ := splitRevisionRecordID(recordID)
+		return eraseMedicationTx(a.ctx, a.tx, medicationID, erasedElsewhere)
+	case SyncKindMedicationEvent:
+		return eraseMedicationEventTx(a.ctx, a.tx, recordID, erasedElsewhere)
+	case SyncKindMedicationCorrection:
+		return eraseMedicationCorrectionTx(a.ctx, a.tx, recordID, erasedElsewhere)
+	case SyncKindContextMarker:
+		return eraseMarkerTx(a.ctx, a.tx, recordID, erasedElsewhere)
+	case SyncKindSourceReport:
+		return eraseSourceReportTx(a.ctx, a.tx, recordID, erasedElsewhere)
+	default:
+		return eraseSyncedSleepRecordTx(a.ctx, a.tx, recordID)
+	}
 }
 
 func prepareSyncPullPage(page SyncPullPage) ([]preparedSyncPullRecord, bool, error) {
