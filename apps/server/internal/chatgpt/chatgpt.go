@@ -144,8 +144,8 @@ type access struct {
 
 // pending is one sign-in begun and not yet finished.
 type pending struct {
-	state, nonce, verifier, redirect, clientID string
-	expires                                    time.Time
+	state, nonce, verifier, redirect string
+	expires                          time.Time
 }
 
 // Account is the server's one ChatGPT connection.

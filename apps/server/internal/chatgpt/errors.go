@@ -36,6 +36,9 @@ const (
 	// SignInExpired is a browser's answer to a sign-in that is no longer
 	// waiting: it took too long, or another began since.
 	SignInExpired Problem = "sign_in_expired"
+	// TooLarge is a request too long for the model, or an answer it cut
+	// short: asked again with less, it may answer.
+	TooLarge Problem = "too_large"
 	// Refused is a request ChatGPT refused as such: ZeitBoard's to fix.
 	Refused Problem = "refused"
 )
@@ -94,6 +97,8 @@ func classify(status int, code string) Problem {
 		return PlanNotShared
 	case "model_not_found":
 		return ModelUnavailable
+	case "context_length_exceeded":
+		return TooLarge
 	case "subscription_sharing_invalid_user", "chatpass_v2_invalid_authorization_context", "invalid_client":
 		return SignInEnded
 	}

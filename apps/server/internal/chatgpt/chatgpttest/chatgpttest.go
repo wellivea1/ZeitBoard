@@ -41,6 +41,12 @@ type Server struct {
 	ExpiresIn int
 	// RefuseRefresh, when set, is the OAuth error a refresh answers with.
 	RefuseRefresh string
+	// RefreshScope, when set, is the scope a refresh states; otherwise a
+	// refresh leaves it unsaid, as it may.
+	RefreshScope string
+	// KeepRefreshToken answers a refresh without a new refresh token, the
+	// old one staying in force, as RFC 6749 section 6 allows.
+	KeepRefreshToken bool
 	// Claims, when set, changes an ID token's claims before it is signed.
 	Claims func(map[string]any)
 	// SignWith, when set, signs ID tokens with another key than the one
@@ -233,6 +239,12 @@ func (s *Server) serveToken(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": code})
 			return
 		}
+		if s.KeepRefreshToken {
+			access := "access-" + randomText(16)
+			s.access[access] = true
+			writeJSON(w, http.StatusOK, map[string]any{"access_token": access, "token_type": "Bearer", "expires_in": s.ExpiresIn})
+			return
+		}
 		s.refresh[form.Get("refresh_token")] = false
 	default:
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unsupported_grant_type"})
@@ -248,9 +260,11 @@ func (s *Server) serveToken(w http.ResponseWriter, r *http.Request) {
 		"access_token": access, "token_type": "Bearer", "expires_in": s.ExpiresIn,
 		"refresh_token": refresh, "id_token": s.idToken(form.Get("client_id"), nonce),
 	}
-	// A refresh leaves the scope unsaid, as it may.
+	// A refresh leaves the scope unsaid, as it may, unless told to state one.
 	if form.Get("grant_type") == "authorization_code" {
 		answer["scope"] = scope
+	} else if s.RefreshScope != "" {
+		answer["scope"] = s.RefreshScope
 	}
 	writeJSON(w, http.StatusOK, answer)
 }

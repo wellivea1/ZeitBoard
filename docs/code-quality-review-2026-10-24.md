@@ -175,6 +175,14 @@ section 7 says.
   Its findings and their dispositions are in the completion plan's "A review of the ChatGPT
   sign-in". Two of them, a dialog heading in the wrong style and focus lost after it, were found by
   looking at the window in the browser pane.
+- **The ChatGPT sign-in's server half (PR #105)** was then reviewed by an automated reviewer at
+  medium effort. It raised ten findings, and all ten are fixed (completion plan, "The ChatGPT
+  sign-in after an automated review"). Among them were five faults:
+  - a context too long that the assistant never asked again with less;
+  - a rotated token left live when the plan was withdrawn;
+  - consent not asked again;
+  - a refusal in the stream that did not end the sign-in;
+  - a sign-in route that could outlast the server's response limit.
 - **This review** found:
   - the providers' missing tests;
   - fifteen functions past the window's complexity limit and one past its length, all now split;

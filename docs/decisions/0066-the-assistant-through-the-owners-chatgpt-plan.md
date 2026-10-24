@@ -41,11 +41,17 @@ the app.
    token reaches a device, and the refresh token, which rotates on every use, has one holder. This
    replaces the review's first sketch, where the computer would trade the code itself and hand the
    refresh token over.
-3. **Only where nothing else is configured.**
-   - The server offers the sign-in when `assistant.provider` is unset, `disabled` or `chatgpt`.
+3. **Only where the configuration asks for it.**
+   - The server offers the sign-in only when `assistant.provider` is `chatgpt`. Left unset, or
+     `disabled`, the assistant stays off the network: as everywhere in ZeitBoard, nothing is on
+     until the operator turns it on.
    - A sign-in never replaces a provider the configuration names.
    - `assistant.model` sets the model a new connection starts with. Without it, the plan's first
      listed model is used. The owner can choose another of the plan's models.
+
+   (Changed the same day, after the automated review below. It had been offered also when the
+   provider was unset or `disabled`, so an operator who had turned the assistant off would still
+   have seen it offered.)
 4. **The DevKit's protocol, in Go, from the standard library.**
    - **Endpoints.** They come from `auth.openai.com`'s discovery document, and each must be on the
      issuer's origin.
@@ -169,3 +175,28 @@ What is left of OpenAI's guidelines:
 - **An invitation banner.** Home stays free of prompts; the Settings card is the invitation.
 - **The ChatGPT mark on the button.** It is OpenAI's asset to download, which the owner has not
   yet allowed.
+
+## Update, 2026-10-24: an automated review
+
+An automated reviewer read the server's half at medium effort and raised ten findings. Each is
+fixed, with a test where it changes behaviour:
+
+- **A context too long for the model.** It read as a refusal, so the assistant never asked again
+  with less, as it does for every other provider. `context_length_exceeded`, an answer cut short and
+  an answer too long are now `too_large`. The provider reports that as a context too large, and the
+  assistant asks once more with a compacted context.
+- **The plan withdrawn on a refresh.** The token that refresh had just rotated stayed live at
+  OpenAI. It is now withdrawn, and the next sign-in asks ChatGPT for consent anew. So does a sign-in
+  ended because the plan is no longer shared, wherever ChatGPT says so.
+- **A refusal inside the stream.** An `error` or `response.failed` event that ends the sign-in did
+  not end it, as the same code in a status does. It ends it now.
+- **A refresh that keeps its token.** RFC 6749 section 6 lets an issuer keep the refresh token and
+  leave it out of its answer. That ended the sign-in. Now the token in force carries on.
+- **The server's response limit.** Finishing a sign-in can ask OpenAI four things in turn, each
+  allowed fifteen seconds, and it could outlast the server's 30-second limit on a response. The
+  sign-in routes now have two minutes, and the desktop waits 130 seconds.
+- **Offered on a server set to `disabled`.** It is offered only when `assistant.provider` is
+  `chatgpt` now (decision 3). A model left in the configuration from another provider can then no
+  longer become the plan's.
+- **Code quality.** The bounded reading of an answer, written three times, is one function now. A
+  field the sign-in kept and never read is gone.

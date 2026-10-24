@@ -30,13 +30,17 @@ func (a *Account) Models(ctx context.Context) ([]Model, error) {
 	a.mu.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, requestTimeout)
 	defer cancel()
-	response, err := a.authorized(ctx, func(token string) (*http.Request, error) {
+	response, _, err := a.authorized(ctx, func(token string) (*http.Request, error) {
 		return a.modelsRequest(ctx, token)
 	})
 	if err != nil {
 		return nil, err
 	}
-	models, err := readCatalog(response)
+	body, err := readAnswer(response)
+	if err != nil {
+		return nil, err
+	}
+	models, err := readCatalog(body)
 	if err != nil {
 		return nil, err
 	}
@@ -54,16 +58,14 @@ func (a *Account) readModels(ctx context.Context, token string) ([]Model, error)
 	if err != nil {
 		return nil, err
 	}
-	response, err := a.client.Do(request)
+	status, body, err := a.send(request)
 	if err != nil {
-		return nil, fail(Busy, "network_error")
+		return nil, err
 	}
-	if response.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(response.Body, maxAnswerBytes))
-		response.Body.Close()
-		return nil, answered(response.StatusCode, body)
+	if status != http.StatusOK {
+		return nil, answered(status, body)
 	}
-	return readCatalog(response)
+	return readCatalog(body)
 }
 
 func (a *Account) modelsRequest(ctx context.Context, token string) (*http.Request, error) {
@@ -76,14 +78,19 @@ func (a *Account) modelsRequest(ctx context.Context, token string) (*http.Reques
 	return request, nil
 }
 
-// readCatalog reads ChatGPT's model catalog: the models it lists, each with a
-// slug and a name, skipping any that does not read as one.
-func readCatalog(response *http.Response) ([]Model, error) {
+// readAnswer reads at most maxAnswerBytes of an answer, and closes it.
+func readAnswer(response *http.Response) ([]byte, error) {
 	defer response.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(response.Body, maxAnswerBytes+1))
 	if err != nil || len(body) > maxAnswerBytes {
-		return nil, fail(Busy, "invalid_model_catalog")
+		return nil, fail(Busy, "invalid_response")
 	}
+	return body, nil
+}
+
+// readCatalog reads ChatGPT's model catalog: the models it lists, each with a
+// slug and a name, skipping any that does not read as one.
+func readCatalog(body []byte) ([]Model, error) {
 	var catalog struct {
 		Models []struct {
 			Slug        string `json:"slug"`
@@ -150,7 +157,7 @@ func (a *Account) Respond(ctx context.Context, instructions, input string) (stri
 	if err != nil {
 		return "", err
 	}
-	response, err := a.authorized(ctx, func(token string) (*http.Request, error) {
+	response, token, err := a.authorized(ctx, func(token string) (*http.Request, error) {
 		request, err := http.NewRequestWithContext(ctx, http.MethodPost, a.endpoints.API+"/responses", bytes.NewReader(body))
 		if err != nil {
 			return nil, err
@@ -173,35 +180,40 @@ func (a *Account) Respond(ctx context.Context, instructions, input string) (stri
 	if err != nil && errors.Is(ctx.Err(), context.Canceled) {
 		return "", context.Canceled
 	}
+	// A refusal inside the stream ends the sign-in as one in the status does.
+	var failed *Error
+	if errors.As(err, &failed) && (failed.Problem == SignInEnded || failed.Problem == PlanNotShared) {
+		a.endUnlessRefreshed(ctx, token, failed.Problem)
+	}
 	return text, err
 }
 
-// authorized sends a request with an access token. A token ChatGPT refuses
-// is dropped and the request sent once more with a fresh one; refused again,
-// or refused for a reason that only signing in again mends, the sign-in
-// ends. Any other refusal is returned as it is.
-func (a *Account) authorized(ctx context.Context, build func(token string) (*http.Request, error)) (*http.Response, error) {
+// authorized sends a request with an access token, and gives the answer and
+// the token it was sent with. A token ChatGPT refuses is dropped and the
+// request sent once more with a fresh one; refused again, or refused for a
+// reason that only signing in again mends, the sign-in ends. Any other
+// refusal is returned as it is.
+func (a *Account) authorized(ctx context.Context, build func(token string) (*http.Request, error)) (*http.Response, string, error) {
 	for attempt := 0; ; attempt++ {
 		token, err := a.token(ctx)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		request, err := build(token)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		response, err := a.client.Do(request)
 		if err != nil {
 			if errors.Is(ctx.Err(), context.Canceled) {
-				return nil, context.Canceled
+				return nil, "", context.Canceled
 			}
-			return nil, fail(Busy, "network_error")
+			return nil, "", fail(Busy, "network_error")
 		}
 		if response.StatusCode >= 200 && response.StatusCode < 300 {
-			return response, nil
+			return response, token, nil
 		}
-		body, _ := io.ReadAll(io.LimitReader(response.Body, maxAnswerBytes))
-		response.Body.Close()
+		body, _ := readAnswer(response)
 		refusal := answered(response.StatusCode, body)
 		planCode := strings.HasPrefix(refusal.Code, "subscription_sharing") || strings.HasPrefix(refusal.Code, "chatpass")
 		if response.StatusCode == http.StatusUnauthorized && !planCode {
@@ -214,7 +226,7 @@ func (a *Account) authorized(ctx context.Context, build func(token string) (*htt
 		if refusal.Problem == SignInEnded || refusal.Problem == PlanNotShared {
 			a.endUnlessRefreshed(ctx, token, refusal.Problem)
 		}
-		return nil, refusal
+		return nil, "", refusal
 	}
 }
 
@@ -240,13 +252,13 @@ func readStream(body io.Reader) (string, error) {
 		switch parsed.Type {
 		case "response.output_text.delta":
 			if text.Len()+len(parsed.Delta) > maxOutputBytes {
-				return false, fail(Refused, "response_too_large")
+				return false, fail(TooLarge, "response_too_large")
 			}
 			text.WriteString(parsed.Delta)
 		case "response.completed":
 			return true, nil
 		case "response.incomplete":
-			return false, fail(Refused, "response_incomplete")
+			return false, fail(TooLarge, "response_incomplete")
 		case "response.failed", "error":
 			return false, streamError(payload)
 		}

@@ -144,7 +144,7 @@ func (a *Account) BeginSignIn(ctx context.Context, redirect string) (SignIn, err
 		query.Set("prompt", "consent")
 	}
 	a.pending = &pending{state: state, nonce: nonce, verifier: verifier, redirect: redirect,
-		clientID: clientID, expires: a.now().Add(signInTimeout)}
+		expires: a.now().Add(signInTimeout)}
 	a.mu.Unlock()
 	authorize.RawQuery = query.Encode()
 	return SignIn{AuthorizationURL: authorize.String(), State: state}, nil
@@ -277,7 +277,7 @@ func (a *Account) exchange(ctx context.Context, found discovery, current saved, 
 	if err != nil {
 		return tokens{}, receivedAt, err
 	}
-	granted, err := readTokens(answer, strings.Fields(scope), false)
+	granted, err := readTokens(answer, strings.Fields(scope), "")
 	return granted, receivedAt, err
 }
 
@@ -376,7 +376,7 @@ func (a *Account) token(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	tokens, err := readTokens(answer, g.Scopes, true)
+	tokens, err := readTokens(answer, g.Scopes, g.RefreshToken)
 	if err != nil {
 		a.end(refreshing, current, SignInEnded)
 		return "", err
@@ -390,6 +390,8 @@ func (a *Account) token(ctx context.Context) (string, error) {
 		return "", err
 	}
 	if !slices.Contains(tokens.scopes, planScope) {
+		// The rotated token is live at OpenAI though it gives nothing here.
+		a.revoke(refreshing, found, current.ClientID, tokens.refresh)
 		a.end(refreshing, next, PlanNotShared)
 		return "", fail(PlanNotShared, "")
 	}
@@ -441,10 +443,15 @@ func (a *Account) confirm(ctx context.Context, found discovery, current saved, h
 }
 
 // end records that the sign-in stopped working. The account it was is kept,
-// so signing in again is to that account. Callers hold a.turns.
+// so signing in again is to that account; when the plan is no longer
+// shared, signing in again asks ChatGPT for consent anew. Callers hold
+// a.turns.
 func (a *Account) end(ctx context.Context, current saved, why Problem) {
 	a.mu.Lock()
 	a.access, a.models = access{}, nil
+	if why == PlanNotShared {
+		a.reconsent = true
+	}
 	a.mu.Unlock()
 	if current.Grant == nil {
 		return
@@ -578,9 +585,10 @@ type tokens struct {
 
 // readTokens checks a token answer: a bearer token with a lifetime, the
 // scopes granted (the earlier ones when a refresh does not say, and the ones
-// asked for when an exchange does not), and a refresh token on every refresh
-// and whenever offline access was granted.
-func readTokens(answer tokenAnswer, unstated []string, refreshing bool) (tokens, error) {
+// asked for when an exchange does not), and a refresh token whenever offline
+// access was granted. A refresh may leave its refresh token out, as RFC 6749
+// section 6 allows; kept is then the one still in force.
+func readTokens(answer tokenAnswer, unstated []string, kept string) (tokens, error) {
 	invalid := fail(SignInEnded, "invalid_token_response")
 	if !strings.EqualFold(answer.TokenType, "bearer") || answer.AccessToken == "" || answer.ExpiresIn <= 0 ||
 		len(answer.AccessToken) > maxTokenBytes || len(answer.RefreshToken) > maxTokenBytes || len(answer.IDToken) > maxTokenBytes {
@@ -590,12 +598,16 @@ func readTokens(answer tokenAnswer, unstated []string, refreshing bool) (tokens,
 	if len(scopes) == 0 {
 		scopes = slices.Clone(unstated)
 	}
-	if answer.RefreshToken == "" && (refreshing || slices.Contains(scopes, "offline_access")) {
+	refresh := answer.RefreshToken
+	if refresh == "" {
+		refresh = kept
+	}
+	if refresh == "" && slices.Contains(scopes, "offline_access") {
 		return tokens{}, invalid
 	}
 	return tokens{
 		access:   answer.AccessToken,
-		refresh:  answer.RefreshToken,
+		refresh:  refresh,
 		idToken:  answer.IDToken,
 		lifetime: time.Duration(answer.ExpiresIn * float64(time.Second)),
 		scopes:   scopes,

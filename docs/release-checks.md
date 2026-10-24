@@ -98,8 +98,7 @@ in for any of it.
 
 **Needs:**
 - the owner's ChatGPT Plus or Pro account;
-- the owner's server with no assistant provider configured, or `assistant.provider` set to
-  `chatgpt`;
+- the owner's server with `assistant.provider` set to `chatgpt` (`ZEITBOARD_LLM_PROVIDER=chatgpt`);
 - that server able to reach `auth.openai.com` and `api.openai.com`.
 
 Every other part of the sign-in was checked against a stand-in; only a real account shows OpenAI's

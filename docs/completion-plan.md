@@ -1801,7 +1801,7 @@ its place in the window. ADR-0066 records what was decided. This is the server's
 
 - **One sign-in, held by the server.** The server builds the authorization address and trades the
   code. A device only relays the browser's answer, so no token ever reaches one. It is offered only
-  when the configuration names no other provider.
+  when the configuration names ChatGPT (since the review below; at first, also when unset).
 - **The DevKit's protocol in Go**, with no new dependency:
   - discovery kept to the issuer's origin;
   - dynamic registration, kept before the exchange;
@@ -1913,6 +1913,26 @@ the same limits, and CI holds it there.
   and a function past either limit fails its module's job in CI. Its own tests check the counting.
 - **What the review records.** `code-quality-review-2026-10-24.md` has the table: none over 24 now,
   from fifteen, and the longest function is 168 lines.
+
+### The ChatGPT sign-in after an automated review — 2026-10-24
+
+An automated reviewer read PR #105, the server's half, at medium effort. ADR-0066's update lists
+its ten findings, and all are fixed:
+
+| Finding | Fix |
+|---|---|
+| A context too long for the model read as a refusal, so the assistant never asked again with less | `too_large`, which the provider reports as a context too large; the assistant asks once more, compacted |
+| The plan withdrawn on a refresh left the rotated token live | Withdrawn; the next sign-in asks for consent anew |
+| A sign-in ended for the plan did not ask for consent again | Every such end sets it |
+| A refusal inside the stream did not end the sign-in | It ends it, as in a status |
+| A refresh that kept its refresh token ended the sign-in | The token in force carries on (RFC 6749 section 6) |
+| Finishing a sign-in could outlast the server's 30-second response limit | The sign-in routes have two minutes, and the desktop waits 130 seconds |
+| A server set to `disabled` still offered the sign-in | Offered only when `assistant.provider` is `chatgpt` |
+| A model left from another provider became the plan's | Settled by the same: the model setting is ChatGPT's when the provider is |
+| The bounded read of an answer was written three times | One function |
+| A field the sign-in kept was never read | Removed |
+
+Each fix that changes behaviour has a test.
 
 ## Where the completion goal stands — 2026-09-27
 
