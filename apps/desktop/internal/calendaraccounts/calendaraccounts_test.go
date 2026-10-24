@@ -298,6 +298,26 @@ func TestTheReceiverTakesOnlyItsOwnAnswer(t *testing.T) {
 			t.Errorf("a wrong state answered %d", wrong.StatusCode)
 		}
 	}
+	// Neither another path nor a page that rebinds its own name to loopback
+	// is the answer, and neither ends the wait.
+	elsewhere, err := http.Get(redirect + "/elsewhere?code=stolen&state=expected-state")
+	if err == nil {
+		elsewhere.Body.Close()
+		if elsewhere.StatusCode != http.StatusNotFound {
+			t.Errorf("another path answered %d", elsewhere.StatusCode)
+		}
+	}
+	rebound, err := http.NewRequest(http.MethodGet, redirect+"/?code=stolen&state=expected-state", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rebound.Host = "attacker.example:" + strings.TrimPrefix(redirect, "http://127.0.0.1:")
+	if response, err := http.DefaultClient.Do(rebound); err == nil {
+		response.Body.Close()
+		if response.StatusCode != http.StatusNotFound {
+			t.Errorf("a rebound name answered %d", response.StatusCode)
+		}
+	}
 	right, err := http.Get(redirect + "/?code=synthetic-code&state=expected-state")
 	if err != nil {
 		t.Fatal(err)

@@ -3744,3 +3744,20 @@ reached OpenAI, and no browser was opened.
 
 `npm run check:web` passed, with 668 tests and both builds. So did the desktop's `go vet` and
 `gofmt`, and its whole Go suite.
+
+## One loopback receiver for both sign-ins — 2026-10-24
+
+The calendar accounts' sign-in (ADR-0064) now takes the browser's answer through the receiver the
+ChatGPT sign-in brought (ADR-0066).
+
+- **What it turns away, without ending the wait:**
+  - another path;
+  - a Host header naming another site, as from a page that rebinds its own name to loopback;
+  - a parameter given twice.
+- **What it takes.** A localhost receiver answers by 127.0.0.1, localhost and `[::1]`. It still
+  refuses a foreign host.
+- **The calendar's own tests passed unchanged**: the sign-in for Google and for Microsoft, a
+  refusal in the browser, cancelling, and the redirect by localhost for Microsoft. Its receiver
+  test now also turns away another path and a rebound name.
+- The desktop's `go vet`, `gofmt` and whole Go suite passed. The receivers also passed under the
+  race detector.

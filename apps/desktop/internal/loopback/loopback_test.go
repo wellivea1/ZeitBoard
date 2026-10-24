@@ -118,3 +118,44 @@ func TestARefusalEndsTheWait(t *testing.T) {
 		t.Errorf("a cancelled wait ended as %v", err)
 	}
 }
+
+// A receiver that answers by localhost, as a calendar provider's address
+// is, takes 127.0.0.1, localhost and ::1 by name, at the root, and still no
+// other host.
+func TestALocalhostReceiverAnswersByItsOwnNames(t *testing.T) {
+	for _, name := range []string{"127.0.0.1", "localhost", "::1", "attacker.example"} {
+		receiver, err := ListenLocalhost("")
+		if err != nil {
+			t.Fatal(err)
+		}
+		redirect := receiver.RedirectAs("localhost")
+		if !strings.HasPrefix(redirect, "http://localhost:") || strings.HasSuffix(redirect, "/") {
+			t.Fatalf("redirect %s", redirect)
+		}
+		port := strings.TrimPrefix(redirect, "http://localhost:")
+		host := name + ":" + port
+		if name == "::1" {
+			host = "[::1]:" + port
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		done := make(chan error, 1)
+		go func() {
+			_, err := receiver.Wait(ctx, "s")
+			done <- err
+		}()
+		// Sent to 127.0.0.1, with the Host header of each name.
+		status := get(t, receiver.Redirect()+"/?state=s&code=c", host)
+		want := http.StatusOK
+		if name == "attacker.example" {
+			want = http.StatusNotFound
+		}
+		if status != want {
+			t.Errorf("%s answered %d, not %d", name, status, want)
+		}
+		if err := <-done; (err == nil) != (want == http.StatusOK) {
+			t.Errorf("%s ended the wait as %v", name, err)
+		}
+		cancel()
+		receiver.Close()
+	}
+}
