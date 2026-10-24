@@ -234,7 +234,7 @@ export function AssistantSettings({ syncKey }: { syncKey: string }) {
       (result) =>
         result.revoked === false
           ? "Disconnected. ChatGPT did not confirm it withdrew ZeitBoard's access, so remove ZeitBoard in ChatGPT's settings too."
-          : "Disconnected. ChatGPT withdrew ZeitBoard's access.",
+          : "Disconnected. ZeitBoard holds no access to your ChatGPT account.",
       "Disconnecting did not finish.",
     );
 

@@ -116,7 +116,7 @@ side.
 3. Restart the server and ask again. **Passes** if it answers without signing in again, so the
    refresh token was kept and renewed.
 4. Choose **Disconnect**. **Passes** if:
-   - the card says ChatGPT withdrew ZeitBoard's access;
+   - the card says ZeitBoard holds no access to the ChatGPT account;
    - ChatGPT's settings no longer list ZeitBoard.
 5. Optionally, sign in and refuse the plan when ChatGPT asks. **Passes** if the card says the plan
    was not shared, and nothing is kept.
