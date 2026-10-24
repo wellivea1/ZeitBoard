@@ -325,28 +325,12 @@ func (a *App) getCalendar(ctx context.Context, input CalendarQueryInput) (Calend
 	if err != nil {
 		return CalendarDTO{}, err
 	}
-	zoneID := strings.TrimSpace(input.ZoneID)
-	if zoneID == "" {
-		zoneID = localZoneID()
-	}
-	location, err := time.LoadLocation(zoneID)
-	if err != nil {
-		return CalendarDTO{}, fmt.Errorf("load calendar zone %q: %w", zoneID, err)
-	}
-	days := input.Days
-	if days == 0 {
-		days = 5
-	}
-	if days < 1 || days > 14 {
-		return CalendarDTO{}, errors.New("calendar days must be between 1 and 14")
-	}
 	now := a.currentTime().UTC().Truncate(time.Minute)
-	start, err := calendarCivilDate(input.StartCivilDate, now, location)
+	span, err := calendarSpanOf(input, now)
 	if err != nil {
 		return CalendarDTO{}, err
 	}
-	end := start.AddDate(0, 0, days)
-	events, err := store.CalendarEvents(ctx, start.UTC(), end.UTC())
+	events, err := store.CalendarEvents(ctx, span.start.UTC(), span.end.UTC())
 	if err != nil {
 		return CalendarDTO{}, err
 	}
@@ -354,15 +338,7 @@ func (a *App) getCalendar(ctx context.Context, input CalendarQueryInput) (Calend
 	if err != nil {
 		return CalendarDTO{}, err
 	}
-	subscriptions, err := store.CalendarSubscriptions(ctx)
-	if err != nil {
-		return CalendarDTO{}, err
-	}
-	subscribed := make(map[string]storage.CalendarSubscription, len(subscriptions))
-	for _, subscription := range subscriptions {
-		subscribed[subscription.SourceID] = subscription
-	}
-	fromAccounts, err := calendarAccountSources(ctx, store, now, location)
+	sourceByID, warnings, err := calendarSourceDTOs(ctx, store, sources, events, span, now)
 	if err != nil {
 		return CalendarDTO{}, err
 	}
@@ -371,107 +347,20 @@ func (a *App) getCalendar(ctx context.Context, input CalendarQueryInput) (Calend
 		return CalendarDTO{}, err
 	}
 
-	sourceByID := make(map[string]CalendarSourceDTO, len(sources))
-	warnings := make([]string, 0)
-	visibleBySource := make(map[string]int, len(sources))
-	for _, event := range events {
-		visibleBySource[event.SourceID]++
-	}
-	for _, source := range sources {
-		visible := visibleBySource[source.SourceID]
-		coverageStart := source.CoverageStartAt.In(location)
-		coverageEnd := source.CoverageEndAt.In(location)
-		coverageLabel := coverageStart.Format("Jan 2, 2006") + " to " + coverageEnd.Format("Jan 2, 2006")
-		if !source.ReadOnly {
-			// The placements calendar has no range; it holds whatever is accepted.
-			coverageLabel = "Times you accept in Plan"
-		}
-		dto := CalendarSourceDTO{
-			SourceID:      source.SourceID,
-			Label:         source.Label,
-			Kind:          string(source.Kind),
-			ReadOnly:      source.ReadOnly,
-			Endpoint:      source.Endpoint,
-			VisibleEvents: visible,
-			CoverageLabel: coverageLabel,
-			CoverageStart: source.CoverageStartAt.UTC().Format(time.RFC3339),
-			CoverageEnd:   source.CoverageEndAt.UTC().Format(time.RFC3339),
-		}
-		if subscription, found := subscribed[source.SourceID]; found {
-			dto.Subscription = calendarSubscriptionDTO(subscription, now, location)
-		}
-		dto.Account = fromAccounts[source.SourceID]
-		sourceByID[source.SourceID] = dto
-		if source.ReadOnly && (start.UTC().Before(source.CoverageStartAt) || end.UTC().After(source.CoverageEndAt)) {
-			warnings = append(warnings, source.Label+" does not cover this entire date range; refresh the source to extend it.")
-		}
-	}
-
-	today := now.In(location).Format("2006-01-02")
-	dayDTOs := make([]CalendarDayDTO, days)
-	dayStarts := make([]time.Time, days+1)
-	for index := 0; index < days; index++ {
-		dayStart := start.AddDate(0, 0, index)
-		dayStarts[index] = dayStart
-		dayDTOs[index] = CalendarDayDTO{
-			CivilDate:   dayStart.Format("2006-01-02"),
-			Label:       dayStart.Format("Mon, Jan 2"),
-			IsToday:     dayStart.Format("2006-01-02") == today,
-			Events:      []CalendarEventSegmentDTO{},
-			Predictions: []CalendarBandSegmentDTO{},
-		}
-	}
-	dayStarts[days] = end
-
+	dayDTOs, dayStarts := calendarDays(span, now)
 	for _, event := range events {
 		first, last := calendarOverlappingDayIndexes(dayStarts, event.StartAt, event.EndAt, event.StartAt.Equal(event.EndAt))
 		for index := first; index < last; index++ {
-			if segment, include := calendarEventSegment(event, sourceByID[event.SourceID], dayStarts[index], dayStarts[index+1], location); include {
+			if segment, include := calendarEventSegment(event, sourceByID[event.SourceID], dayStarts[index], dayStarts[index+1], span.location); include {
 				dayDTOs[index].Events = append(dayDTOs[index].Events, segment)
 			}
 		}
 	}
 	if estimate.Status == "estimated" {
-		appendWindows := func(windows []domain.AvailabilityWindow, kind, title string) {
-			for _, window := range windows {
-				first, last := calendarOverlappingDayIndexes(dayStarts, window.Interval.Start.UTC, window.Interval.End.UTC, false)
-				for index := first; index < last; index++ {
-					if segment, include := calendarBandSegment(window, kind, title, dayStarts[index], dayStarts[index+1], location); include {
-						dayDTOs[index].Predictions = append(dayDTOs[index].Predictions, segment)
-					}
-				}
-			}
-		}
-		waking := estimate.Estimate.PredictedWakingWindows
-		// The stretch under way has no estimator window; draw it as the Home
-		// outlook does, or today reads blank until the night's onset band.
-		if stop, ok := outlook.CurrentWakingEnd(estimate.Estimate, now); ok {
-			from, fromErr := domain.NewZonedInstant(now, zoneID)
-			to, toErr := domain.NewZonedInstant(stop, zoneID)
-			if fromErr == nil && toErr == nil {
-				current := domain.AvailabilityWindow{
-					ID:         domain.AvailabilityWindowID(string(estimate.Estimate.ID) + "_current_waking"),
-					Kind:       domain.AvailabilityPredictedWake,
-					Interval:   domain.TimeRange{Start: from, End: to},
-					Confidence: estimate.Estimate.Confidence,
-					EstimateID: estimate.Estimate.ID,
-				}
-				waking = append([]domain.AvailabilityWindow{current}, waking...)
-			}
-		}
-		appendWindows(estimate.Estimate.PredictedSleepWindows, "predicted_sleep", "Predicted sleep window")
-		appendWindows(waking, "predicted_wake", "Predicted waking window")
+		addCalendarPredictions(dayDTOs, dayStarts, estimate, now, span)
 	}
 	for index := range dayDTOs {
-		sort.Slice(dayDTOs[index].Events, func(i, j int) bool {
-			if dayDTOs[index].Events[i].AllDay != dayDTOs[index].Events[j].AllDay {
-				return dayDTOs[index].Events[i].AllDay
-			}
-			if dayDTOs[index].Events[i].StartMinute == dayDTOs[index].Events[j].StartMinute {
-				return dayDTOs[index].Events[i].EventID < dayDTOs[index].Events[j].EventID
-			}
-			return dayDTOs[index].Events[i].StartMinute < dayDTOs[index].Events[j].StartMinute
-		})
+		sortCalendarDayEvents(dayDTOs[index].Events)
 	}
 
 	sourceDTOs := make([]CalendarSourceDTO, 0, len(sources))
@@ -487,14 +376,172 @@ func (a *App) getCalendar(ctx context.Context, input CalendarQueryInput) (Calend
 		Status:         estimate.Status,
 		Message:        message,
 		FixtureMode:    false,
-		ZoneID:         zoneID,
-		StartCivilDate: start.Format("2006-01-02"),
-		EndCivilDate:   end.AddDate(0, 0, -1).Format("2006-01-02"),
-		UpdatedLabel:   displayClock().Format(now.In(location), "Updated Jan 2, 3:04 PM MST"),
+		ZoneID:         span.zoneID,
+		StartCivilDate: span.start.Format("2006-01-02"),
+		EndCivilDate:   span.end.AddDate(0, 0, -1).Format("2006-01-02"),
+		UpdatedLabel:   displayClock().Format(now.In(span.location), "Updated Jan 2, 3:04 PM MST"),
 		Sources:        sourceDTOs,
 		Days:           dayDTOs,
 		Warnings:       warnings,
 	}, nil
+}
+
+// calendarSpan is the days a calendar view shows, in its zone.
+type calendarSpan struct {
+	zoneID     string
+	location   *time.Location
+	days       int
+	start, end time.Time
+}
+
+// calendarSpanOf reads the days asked for: from a civil date, in a zone, for
+// one to fourteen days, five unless said.
+func calendarSpanOf(input CalendarQueryInput, now time.Time) (calendarSpan, error) {
+	zoneID := strings.TrimSpace(input.ZoneID)
+	if zoneID == "" {
+		zoneID = localZoneID()
+	}
+	location, err := time.LoadLocation(zoneID)
+	if err != nil {
+		return calendarSpan{}, fmt.Errorf("load calendar zone %q: %w", zoneID, err)
+	}
+	days := input.Days
+	if days == 0 {
+		days = 5
+	}
+	if days < 1 || days > 14 {
+		return calendarSpan{}, errors.New("calendar days must be between 1 and 14")
+	}
+	start, err := calendarCivilDate(input.StartCivilDate, now, location)
+	if err != nil {
+		return calendarSpan{}, err
+	}
+	return calendarSpan{zoneID: zoneID, location: location, days: days, start: start, end: start.AddDate(0, 0, days)}, nil
+}
+
+// calendarSourceDTOs describes each calendar: what of the range it holds, how
+// it is refreshed, and the account it comes from. Each read-only one that
+// does not cover the range gives a warning.
+func calendarSourceDTOs(ctx context.Context, store *storage.Store, sources []storage.CalendarSourceRecord, events []calendarcore.Event, span calendarSpan, now time.Time) (map[string]CalendarSourceDTO, []string, error) {
+	subscriptions, err := store.CalendarSubscriptions(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	subscribed := make(map[string]storage.CalendarSubscription, len(subscriptions))
+	for _, subscription := range subscriptions {
+		subscribed[subscription.SourceID] = subscription
+	}
+	fromAccounts, err := calendarAccountSources(ctx, store, now, span.location)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	visibleBySource := make(map[string]int, len(sources))
+	for _, event := range events {
+		visibleBySource[event.SourceID]++
+	}
+	sourceByID := make(map[string]CalendarSourceDTO, len(sources))
+	warnings := make([]string, 0)
+	for _, source := range sources {
+		coverageStart := source.CoverageStartAt.In(span.location)
+		coverageEnd := source.CoverageEndAt.In(span.location)
+		coverageLabel := coverageStart.Format("Jan 2, 2006") + " to " + coverageEnd.Format("Jan 2, 2006")
+		if !source.ReadOnly {
+			// The placements calendar has no range; it holds whatever is accepted.
+			coverageLabel = "Times you accept in Plan"
+		}
+		dto := CalendarSourceDTO{
+			SourceID:      source.SourceID,
+			Label:         source.Label,
+			Kind:          string(source.Kind),
+			ReadOnly:      source.ReadOnly,
+			Endpoint:      source.Endpoint,
+			VisibleEvents: visibleBySource[source.SourceID],
+			CoverageLabel: coverageLabel,
+			CoverageStart: source.CoverageStartAt.UTC().Format(time.RFC3339),
+			CoverageEnd:   source.CoverageEndAt.UTC().Format(time.RFC3339),
+		}
+		if subscription, found := subscribed[source.SourceID]; found {
+			dto.Subscription = calendarSubscriptionDTO(subscription, now, span.location)
+		}
+		dto.Account = fromAccounts[source.SourceID]
+		sourceByID[source.SourceID] = dto
+		if source.ReadOnly && (span.start.UTC().Before(source.CoverageStartAt) || span.end.UTC().After(source.CoverageEndAt)) {
+			warnings = append(warnings, source.Label+" does not cover this entire date range; refresh the source to extend it.")
+		}
+	}
+	return sourceByID, warnings, nil
+}
+
+// calendarDays are the span's days, empty, with where each starts and where
+// the last ends.
+func calendarDays(span calendarSpan, now time.Time) ([]CalendarDayDTO, []time.Time) {
+	today := now.In(span.location).Format("2006-01-02")
+	dayDTOs := make([]CalendarDayDTO, span.days)
+	dayStarts := make([]time.Time, span.days+1)
+	for index := 0; index < span.days; index++ {
+		dayStart := span.start.AddDate(0, 0, index)
+		dayStarts[index] = dayStart
+		dayDTOs[index] = CalendarDayDTO{
+			CivilDate:   dayStart.Format("2006-01-02"),
+			Label:       dayStart.Format("Mon, Jan 2"),
+			IsToday:     dayStart.Format("2006-01-02") == today,
+			Events:      []CalendarEventSegmentDTO{},
+			Predictions: []CalendarBandSegmentDTO{},
+		}
+	}
+	dayStarts[span.days] = span.end
+	return dayDTOs, dayStarts
+}
+
+// addCalendarPredictions draws the forecast's sleep and waking windows on
+// the days they cross.
+func addCalendarPredictions(dayDTOs []CalendarDayDTO, dayStarts []time.Time, estimate localEstimateState, now time.Time, span calendarSpan) {
+	waking := estimate.Estimate.PredictedWakingWindows
+	// The stretch under way has no estimator window; draw it as the Home
+	// outlook does, or today reads blank until the night's onset band.
+	if stop, ok := outlook.CurrentWakingEnd(estimate.Estimate, now); ok {
+		from, fromErr := domain.NewZonedInstant(now, span.zoneID)
+		to, toErr := domain.NewZonedInstant(stop, span.zoneID)
+		if fromErr == nil && toErr == nil {
+			current := domain.AvailabilityWindow{
+				ID:         domain.AvailabilityWindowID(string(estimate.Estimate.ID) + "_current_waking"),
+				Kind:       domain.AvailabilityPredictedWake,
+				Interval:   domain.TimeRange{Start: from, End: to},
+				Confidence: estimate.Estimate.Confidence,
+				EstimateID: estimate.Estimate.ID,
+			}
+			waking = append([]domain.AvailabilityWindow{current}, waking...)
+		}
+	}
+	addCalendarBands(dayDTOs, dayStarts, estimate.Estimate.PredictedSleepWindows, "predicted_sleep", "Predicted sleep window", span.location)
+	addCalendarBands(dayDTOs, dayStarts, waking, "predicted_wake", "Predicted waking window", span.location)
+}
+
+// addCalendarBands draws windows of one kind on the days they cross.
+func addCalendarBands(dayDTOs []CalendarDayDTO, dayStarts []time.Time, windows []domain.AvailabilityWindow, kind, title string, location *time.Location) {
+	for _, window := range windows {
+		first, last := calendarOverlappingDayIndexes(dayStarts, window.Interval.Start.UTC, window.Interval.End.UTC, false)
+		for index := first; index < last; index++ {
+			if segment, include := calendarBandSegment(window, kind, title, dayStarts[index], dayStarts[index+1], location); include {
+				dayDTOs[index].Predictions = append(dayDTOs[index].Predictions, segment)
+			}
+		}
+	}
+}
+
+// sortCalendarDayEvents puts a day's all-day events first, then the rest by
+// when they start.
+func sortCalendarDayEvents(events []CalendarEventSegmentDTO) {
+	sort.Slice(events, func(i, j int) bool {
+		if events[i].AllDay != events[j].AllDay {
+			return events[i].AllDay
+		}
+		if events[i].StartMinute == events[j].StartMinute {
+			return events[i].EventID < events[j].EventID
+		}
+		return events[i].StartMinute < events[j].StartMinute
+	})
 }
 
 func parseCalendarFile(input CalendarFileInput, importedAt time.Time) (calendarcore.EventSet, error) {

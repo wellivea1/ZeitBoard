@@ -1891,6 +1891,29 @@ The code quality review was repeated on the whole application
     review.
 - **The advisories** number twelve, not nine. All are still in tooling, and none ships.
 
+### Every Go function within the window's limits — 2026-10-24
+
+The window's lint holds its functions to a complexity of 24 and 300 lines. The Go code now meets
+the same limits, and CI holds it there.
+
+- **The twelve functions left over 24, and one over 300 lines, were split**, with their behaviour
+  unchanged:
+  - the iCalendar parser's two;
+  - the recurrence expansion;
+  - the chat snapshot's sanitizer;
+  - the server store's sync batch and proposal page;
+  - the desktop's calendar read, pulled-page check and history template;
+  - the sleep contract's validation and fold;
+  - the decision validator;
+  - the local store's schema.
+
+  The decision validator named a different fault from run to run when several identifiers were
+  wrong; its order is fixed now.
+- **The limits are held by a test in each Go module.** `core/codequality` measures every function,
+  and a function past either limit fails its module's job in CI. Its own tests check the counting.
+- **What the review records.** `code-quality-review-2026-10-24.md` has the table: none over 24 now,
+  from fifteen, and the longest function is 168 lines.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and

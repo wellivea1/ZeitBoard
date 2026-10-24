@@ -414,132 +414,19 @@ func (s *Store) Append(ctx context.Context, deviceID string, records []syncmodel
 
 	accepted := 0
 	for _, record := range records {
-		var correctionTarget, medicationMember string
-		// A tombstoned record id can never be resurrected: a stale device
-		// re-pushing an erased record is a silent no-op, not a conflict.
-		var tombstoned int
-		err := tx.QueryRowContext(ctx,
-			`SELECT 1 FROM sync_tombstones WHERE record_id = ?`, record.RecordID,
-		).Scan(&tombstoned)
-		if err == nil {
+		links, erased, err := erasedRecord(ctx, tx, record)
+		if err != nil {
+			return 0, 0, err
+		}
+		if erased {
 			continue
 		}
-		if !errors.Is(err, sql.ErrNoRows) {
+		added, err := s.appendRecord(ctx, tx, deviceID, record, links)
+		if err != nil {
 			return 0, 0, err
 		}
-		if record.Kind == syncmodel.KindCorrection {
-			var correction struct {
-				TargetObservationID string `json:"target_observation_id"`
-			}
-			if err := json.Unmarshal(record.Payload, &correction); err != nil {
-				return 0, 0, errors.New("invalid correction payload")
-			}
-			correctionTarget = correction.TargetObservationID
-			// A provider can revise sleep while this device is offline. Erasing
-			// the original must also block new correction IDs that would retain
-			// its behavioral timestamps after the erasure.
-			err := tx.QueryRowContext(ctx, `SELECT 1 FROM sync_tombstones WHERE record_id = ?`, correction.TargetObservationID).Scan(&tombstoned)
-			if err == nil {
-				continue
-			}
-			if !errors.Is(err, sql.ErrNoRows) {
-				return 0, 0, err
-			}
-		}
-		if record.Kind == syncmodel.KindMedicationCorrection {
-			var correction struct {
-				TargetEventID string `json:"target_event_id"`
-			}
-			if err := json.Unmarshal(record.Payload, &correction); err != nil {
-				return 0, 0, errors.New("invalid medication correction payload")
-			}
-			// Deleting a dose deletes its corrections; one that arrives
-			// later from an offline device must not bring its times back.
-			correctionTarget = correction.TargetEventID
-			err := tx.QueryRowContext(ctx, `SELECT 1 FROM sync_tombstones WHERE record_id = ?`, correction.TargetEventID).Scan(&tombstoned)
-			if err == nil {
-				continue
-			}
-			if !errors.Is(err, sql.ErrNoRows) {
-				return 0, 0, err
-			}
-		}
-		if record.Kind == syncmodel.KindMedication || record.Kind == syncmodel.KindMedicationEvent {
-			medicationID, err := medicationIDOf(record)
-			if err != nil {
-				return 0, 0, err
-			}
-			err = tx.QueryRowContext(ctx,
-				`SELECT 1 FROM sync_medication_tombstones WHERE medication_id = ?`, medicationID,
-			).Scan(&tombstoned)
-			if err == nil {
-				continue
-			}
-			if !errors.Is(err, sql.ErrNoRows) {
-				return 0, 0, err
-			}
-			if record.Kind == syncmodel.KindMedicationEvent {
-				medicationMember = medicationID
-			}
-		}
-		if record.Kind == syncmodel.KindTask {
-			taskID, ok := taskIDFromRevisionRecordID(record.RecordID)
-			if ok {
-				err = tx.QueryRowContext(ctx,
-					`SELECT 1 FROM sync_task_tombstones WHERE task_id = ?`, taskID,
-				).Scan(&tombstoned)
-				if err == nil {
-					continue
-				}
-				if !errors.Is(err, sql.ErrNoRows) {
-					return 0, 0, err
-				}
-			}
-		}
-
-		sum := sha256.Sum256(record.Payload)
-		payloadHash := sum[:]
-
-		var existingSeq int64
-		var existingHash []byte
-		err = tx.QueryRowContext(ctx,
-			`SELECT seq, payload_hash FROM sync_records WHERE record_id = ?`,
-			record.RecordID,
-		).Scan(&existingSeq, &existingHash)
-		switch {
-		case err == nil:
-			if !bytes.Equal(existingHash, payloadHash) {
-				return 0, 0, ErrRecordConflict
-			}
-			continue
-		case errors.Is(err, sql.ErrNoRows):
-		default:
-			return 0, 0, err
-		}
-
-		createdAt := record.CreatedAt.UTC().Format(time.RFC3339Nano)
-		nonce := make([]byte, s.aead.NonceSize())
-		if _, err := rand.Read(nonce); err != nil {
-			return 0, 0, err
-		}
-		ciphertext := s.encrypt(nonce, record.Payload, recordAAD(record.RecordID, record.Kind, deviceID, createdAt))
-		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO sync_records(record_id, kind, device_id, created_at, nonce, ciphertext, payload_hash)
-			 VALUES(?, ?, ?, ?, ?, ?, ?)`,
-			record.RecordID, string(record.Kind), deviceID, createdAt, nonce, ciphertext, payloadHash,
-		); err != nil {
-			return 0, 0, err
-		}
-		accepted++
-		if correctionTarget != "" {
-			if _, err := tx.ExecContext(ctx, `INSERT INTO sync_correction_targets(record_id, observation_id) VALUES(?, ?)`, record.RecordID, correctionTarget); err != nil {
-				return 0, 0, err
-			}
-		}
-		if medicationMember != "" {
-			if _, err := tx.ExecContext(ctx, `INSERT INTO sync_medication_members(record_id, medication_id) VALUES(?, ?)`, record.RecordID, medicationMember); err != nil {
-				return 0, 0, err
-			}
+		if added {
+			accepted++
 		}
 	}
 
@@ -552,6 +439,127 @@ func (s *Store) Append(ctx context.Context, deviceID string, records []syncmodel
 	}
 	committed = true
 	return cursor, accepted, nil
+}
+
+// recordLinks are what a pushed record is filed under beside its own id: the
+// sleep observation or dose a correction corrects, and the medication a dose
+// belongs to.
+type recordLinks struct {
+	correctionTarget string
+	medicationMember string
+}
+
+// erasedRecord reports whether a pushed record, or what it depends on, was
+// erased, and gives the record's links. A tombstoned record id can never be
+// resurrected: a stale device re-pushing an erased record is a silent no-op,
+// not a conflict.
+func erasedRecord(ctx context.Context, tx *sql.Tx, record syncmodel.PushRecord) (recordLinks, bool, error) {
+	var links recordLinks
+	if erased, err := tombstoned(ctx, tx, `SELECT 1 FROM sync_tombstones WHERE record_id = ?`, record.RecordID); err != nil || erased {
+		return links, erased, err
+	}
+	switch record.Kind {
+	case syncmodel.KindCorrection:
+		var correction struct {
+			TargetObservationID string `json:"target_observation_id"`
+		}
+		if err := json.Unmarshal(record.Payload, &correction); err != nil {
+			return links, false, errors.New("invalid correction payload")
+		}
+		// A provider can revise sleep while this device is offline. Erasing
+		// the original must also block new correction IDs that would retain
+		// its behavioral timestamps after the erasure.
+		links.correctionTarget = correction.TargetObservationID
+		erased, err := tombstoned(ctx, tx, `SELECT 1 FROM sync_tombstones WHERE record_id = ?`, correction.TargetObservationID)
+		return links, erased, err
+	case syncmodel.KindMedicationCorrection:
+		var correction struct {
+			TargetEventID string `json:"target_event_id"`
+		}
+		if err := json.Unmarshal(record.Payload, &correction); err != nil {
+			return links, false, errors.New("invalid medication correction payload")
+		}
+		// Deleting a dose deletes its corrections; one that arrives
+		// later from an offline device must not bring its times back.
+		links.correctionTarget = correction.TargetEventID
+		erased, err := tombstoned(ctx, tx, `SELECT 1 FROM sync_tombstones WHERE record_id = ?`, correction.TargetEventID)
+		return links, erased, err
+	case syncmodel.KindMedication, syncmodel.KindMedicationEvent:
+		medicationID, err := medicationIDOf(record)
+		if err != nil {
+			return links, false, err
+		}
+		if record.Kind == syncmodel.KindMedicationEvent {
+			links.medicationMember = medicationID
+		}
+		erased, err := tombstoned(ctx, tx, `SELECT 1 FROM sync_medication_tombstones WHERE medication_id = ?`, medicationID)
+		return links, erased, err
+	case syncmodel.KindTask:
+		if taskID, ok := taskIDFromRevisionRecordID(record.RecordID); ok {
+			erased, err := tombstoned(ctx, tx, `SELECT 1 FROM sync_task_tombstones WHERE task_id = ?`, taskID)
+			return links, erased, err
+		}
+	}
+	return links, false, nil
+}
+
+// tombstoned reports whether a tombstone lookup finds its row.
+func tombstoned(ctx context.Context, tx *sql.Tx, query, id string) (bool, error) {
+	var found int
+	err := tx.QueryRowContext(ctx, query, id).Scan(&found)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
+}
+
+// appendRecord keeps a pushed record, encrypted, with its links. The same
+// payload again under its id is a no-op, and another payload a conflict.
+func (s *Store) appendRecord(ctx context.Context, tx *sql.Tx, deviceID string, record syncmodel.PushRecord, links recordLinks) (bool, error) {
+	sum := sha256.Sum256(record.Payload)
+	payloadHash := sum[:]
+
+	var existingSeq int64
+	var existingHash []byte
+	err := tx.QueryRowContext(ctx,
+		`SELECT seq, payload_hash FROM sync_records WHERE record_id = ?`,
+		record.RecordID,
+	).Scan(&existingSeq, &existingHash)
+	switch {
+	case err == nil:
+		if !bytes.Equal(existingHash, payloadHash) {
+			return false, ErrRecordConflict
+		}
+		return false, nil
+	case errors.Is(err, sql.ErrNoRows):
+	default:
+		return false, err
+	}
+
+	createdAt := record.CreatedAt.UTC().Format(time.RFC3339Nano)
+	nonce := make([]byte, s.aead.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return false, err
+	}
+	ciphertext := s.encrypt(nonce, record.Payload, recordAAD(record.RecordID, record.Kind, deviceID, createdAt))
+	if _, err := tx.ExecContext(ctx,
+		`INSERT INTO sync_records(record_id, kind, device_id, created_at, nonce, ciphertext, payload_hash)
+		 VALUES(?, ?, ?, ?, ?, ?, ?)`,
+		record.RecordID, string(record.Kind), deviceID, createdAt, nonce, ciphertext, payloadHash,
+	); err != nil {
+		return false, err
+	}
+	if links.correctionTarget != "" {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO sync_correction_targets(record_id, observation_id) VALUES(?, ?)`, record.RecordID, links.correctionTarget); err != nil {
+			return false, err
+		}
+	}
+	if links.medicationMember != "" {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO sync_medication_members(record_id, medication_id) VALUES(?, ?)`, record.RecordID, links.medicationMember); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
 }
 
 // EraseSyncRecords hard-deletes the named records' encrypted payloads and
@@ -942,19 +950,9 @@ func (s *Store) ListProposalPage(ctx context.Context, cursor ProposalPageCursor,
 		return ProposalPage{}, err
 	}
 	defer tx.Rollback()
-	if cursor.AfterRowID < 0 || cursor.ThroughRowID < 0 {
-		return ProposalPage{}, errors.New("proposal cursor must not be negative")
-	}
-	if cursor.AfterRowID == 0 {
-		if cursor.ThroughRowID != 0 || cursor.Active || !cursor.AsOf.IsZero() {
-			return ProposalPage{}, errors.New("initial proposal cursor must be empty")
-		}
-		if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(rowid), 0) FROM proposals`).Scan(&cursor.ThroughRowID); err != nil {
-			return ProposalPage{}, err
-		}
-		cursor.AsOf = requestTime
-	} else if cursor.ThroughRowID < cursor.AfterRowID || cursor.AsOf.IsZero() || cursor.AsOf.After(requestTime) {
-		return ProposalPage{}, errors.New("proposal continuation cursor is invalid")
+	cursor, err = settleProposalCursor(ctx, tx, cursor, requestTime)
+	if err != nil {
+		return ProposalPage{}, err
 	}
 	if cursor.ThroughRowID == 0 {
 		return ProposalPage{Records: []ProposalRecord{}}, nil
@@ -963,8 +961,61 @@ func (s *Store) ListProposalPage(ctx context.Context, cursor ProposalPageCursor,
 	// RFC3339Nano strings are not lexically ordered within a second. Compare
 	// whole UTC seconds, matching signed approval-token expiry exactly.
 	requestSecond := requestTime.Unix()
-	snapshotTime := cursor.AsOf.UTC()
-	snapshotSecond := snapshotTime.Unix()
+	query, args := proposalPageQuery(cursor, requestSecond, limit)
+	listed, err := s.proposalPageRows(ctx, tx, query, args, limit)
+	if err != nil {
+		return ProposalPage{}, err
+	}
+	page, err := s.proposalPage(listed, cursor, limit, requestTime)
+	if err != nil {
+		return ProposalPage{}, err
+	}
+	if err := pendingSummary(ctx, tx, cursor.Scope, requestSecond, &page); err != nil {
+		return ProposalPage{}, err
+	}
+	return page, tx.Commit()
+}
+
+// settleProposalCursor checks a continuation cursor, or makes the first one:
+// every row there is now, as of the request.
+func settleProposalCursor(ctx context.Context, tx *sql.Tx, cursor ProposalPageCursor, requestTime time.Time) (ProposalPageCursor, error) {
+	if cursor.AfterRowID < 0 || cursor.ThroughRowID < 0 {
+		return cursor, errors.New("proposal cursor must not be negative")
+	}
+	if cursor.AfterRowID != 0 {
+		if cursor.ThroughRowID < cursor.AfterRowID || cursor.AsOf.IsZero() || cursor.AsOf.After(requestTime) {
+			return cursor, errors.New("proposal continuation cursor is invalid")
+		}
+		return cursor, nil
+	}
+	if cursor.ThroughRowID != 0 || cursor.Active || !cursor.AsOf.IsZero() {
+		return cursor, errors.New("initial proposal cursor must be empty")
+	}
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(MAX(rowid), 0) FROM proposals`).Scan(&cursor.ThroughRowID); err != nil {
+		return cursor, err
+	}
+	cursor.AsOf = requestTime
+	return cursor, nil
+}
+
+// proposalScopeClause narrows a query over proposals to a queue: the
+// backend's own, or visitors' requests.
+func proposalScopeClause(scope ProposalScope) string {
+	switch scope {
+	case ProposalScopeBackend:
+		return " AND p.action_id <> ?"
+	case ProposalScopeVisitor:
+		return " AND p.action_id = ?"
+	default:
+		return ""
+	}
+}
+
+// proposalPageQuery selects one page of the cursor's queue: proposals still
+// active first, then the rest, each newest first, and with each active one
+// the approval nonce not yet used.
+func proposalPageQuery(cursor ProposalPageCursor, requestSecond int64, limit int) (string, []any) {
+	snapshotSecond := cursor.AsOf.UTC().Unix()
 	query := `SELECT p.rowid, p.id, p.action_id, p.device_id, p.status,
 			p.created_at, p.updated_at, p.expires_at, p.nonce, p.ciphertext,
 			approval.nonce
@@ -977,15 +1028,8 @@ func (s *Store) ListProposalPage(ctx context.Context, cursor ProposalPageCursor,
 		  AND unixepoch(substr(p.expires_at,1,19)||'Z') > ?
 		 WHERE p.rowid <= ?`
 	args := []any{requestSecond, string(ProposalPending), requestSecond, cursor.ThroughRowID}
-	scopeClause := ""
-	if cursor.Scope == ProposalScopeBackend {
-		scopeClause = " AND p.action_id <> ?"
-	}
-	if cursor.Scope == ProposalScopeVisitor {
-		scopeClause = " AND p.action_id = ?"
-	}
-	query += scopeClause
-	if scopeClause != "" {
+	if scopeClause := proposalScopeClause(cursor.Scope); scopeClause != "" {
+		query += scopeClause
 		args = append(args, ActionVisitorRequest)
 	}
 	if cursor.AfterRowID > 0 {
@@ -1009,28 +1053,36 @@ func (s *Store) ListProposalPage(ctx context.Context, cursor ProposalPageCursor,
 			p.rowid DESC
 		LIMIT ?`
 	args = append(args, string(ProposalPending), snapshotSecond, limit+1)
+	return query, args
+}
 
+// proposalPageRows reads a page's rows, one more than the page holds when
+// more remain. The rows are closed before the transaction is asked anything
+// else.
+func (s *Store) proposalPageRows(ctx context.Context, tx *sql.Tx, query string, args []any, limit int) ([]proposalPageRow, error) {
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
-		return ProposalPage{}, err
+		return nil, err
 	}
 	defer rows.Close()
-
 	listed := make([]proposalPageRow, 0, limit+1)
 	for rows.Next() {
 		row, err := s.scanProposalPageRow(rows)
 		if err != nil {
-			return ProposalPage{}, err
+			return nil, err
 		}
 		listed = append(listed, row)
 	}
 	if err := rows.Err(); err != nil {
-		return ProposalPage{}, err
+		return nil, err
 	}
-	if err := rows.Close(); err != nil {
-		return ProposalPage{}, err
-	}
+	return listed, rows.Close()
+}
 
+// proposalPage makes the rows a page: a continuation cursor when more remain,
+// and a decision token for each proposal still active with an unused nonce.
+func (s *Store) proposalPage(listed []proposalPageRow, cursor ProposalPageCursor, limit int, requestTime time.Time) (ProposalPage, error) {
+	snapshotTime := cursor.AsOf.UTC()
 	page := ProposalPage{Records: make([]ProposalRecord, 0, min(len(listed), limit))}
 	if len(listed) > limit {
 		page.HasMore = true
@@ -1062,16 +1114,20 @@ func (s *Store) ListProposalPage(ctx context.Context, cursor ProposalPageCursor,
 		}
 		page.Records = append(page.Records, record)
 	}
+	return page, nil
+}
+
+// pendingSummary counts the queue's proposals still awaiting a decision with
+// a nonce unused, and finds the soonest of them to lapse.
+func pendingSummary(ctx context.Context, tx *sql.Tx, scope ProposalScope, requestSecond int64, page *ProposalPage) error {
+	scopeClause := proposalScopeClause(scope)
 	countQuery := `SELECT COUNT(*),COALESCE(MIN(substr(p.expires_at,1,19)||'Z'),'') FROM proposals p WHERE p.status=? AND unixepoch(substr(p.expires_at,1,19)||'Z')>?
 		AND EXISTS(SELECT 1 FROM approval_nonces n WHERE n.proposal_id=p.id AND n.used_at='' AND unixepoch(substr(n.expires_at,1,19)||'Z')>?)` + scopeClause
 	countArgs := []any{string(ProposalPending), requestSecond, requestSecond}
 	if scopeClause != "" {
 		countArgs = append(countArgs, ActionVisitorRequest)
 	}
-	if err := tx.QueryRowContext(ctx, countQuery, countArgs...).Scan(&page.PendingCount, &page.NextExpiryAt); err != nil {
-		return ProposalPage{}, err
-	}
-	return page, tx.Commit()
+	return tx.QueryRowContext(ctx, countQuery, countArgs...).Scan(&page.PendingCount, &page.NextExpiryAt)
 }
 
 func proposalIsActiveAt(record ProposalRecord, at time.Time) bool {

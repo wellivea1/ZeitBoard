@@ -272,90 +272,116 @@ func decodeParameter(value string) (string, error) {
 	return result.String(), nil
 }
 
-func collectEventComponents(lines []contentLine) ([]component, error) {
-	stack := make([]string, 0, 4)
-	components := make([]component, 0)
-	var current *component
-	seenCalendar := false
-	closedCalendar := false
-	versionSeen := false
+// calendarWalk follows a calendar's lines: the components open, the event
+// being collected, and what the root has shown so far.
+type calendarWalk struct {
+	stack          []string
+	components     []component
+	current        *component
+	seenCalendar   bool
+	closedCalendar bool
+	versionSeen    bool
+}
 
+func collectEventComponents(lines []contentLine) ([]component, error) {
+	walk := calendarWalk{stack: make([]string, 0, 4), components: make([]component, 0)}
 	for _, line := range lines {
+		var err error
 		switch line.name {
 		case "BEGIN":
-			name := strings.ToUpper(strings.TrimSpace(line.value))
-			if name == "" {
-				return nil, fmt.Errorf("line %d: BEGIN component is empty", line.line)
-			}
-			if len(stack) == 0 {
-				if name != "VCALENDAR" || seenCalendar || closedCalendar {
-					return nil, fmt.Errorf("line %d: expected one VCALENDAR root", line.line)
-				}
-				seenCalendar = true
-			}
-			if name == "VEVENT" {
-				if len(stack) == 0 || stack[len(stack)-1] != "VCALENDAR" || current != nil {
-					return nil, fmt.Errorf("line %d: VEVENT must be a direct VCALENDAR child", line.line)
-				}
-				current = &component{index: len(components) + 1}
-			}
-			stack = append(stack, name)
+			err = walk.begin(line)
 		case "END":
-			name := strings.ToUpper(strings.TrimSpace(line.value))
-			if len(stack) == 0 || stack[len(stack)-1] != name {
-				return nil, fmt.Errorf("line %d: END:%s does not match the open component", line.line, name)
-			}
-			if name == "VEVENT" {
-				components = append(components, *current)
-				current = nil
-			}
-			stack = stack[:len(stack)-1]
-			if name == "VCALENDAR" {
-				closedCalendar = true
-			}
+			err = walk.end(line)
 		default:
-			if len(stack) == 0 {
-				return nil, fmt.Errorf("line %d: property appears outside VCALENDAR", line.line)
-			}
-			if len(stack) == 1 && stack[0] == "VCALENDAR" && line.name == "VERSION" {
-				if versionSeen {
-					return nil, fmt.Errorf("line %d: VERSION appears more than once", line.line)
-				}
-				if strings.TrimSpace(line.value) != "2.0" {
-					return nil, fmt.Errorf("line %d: unsupported iCalendar VERSION %q", line.line, line.value)
-				}
-				versionSeen = true
-			}
-			if current != nil && stack[len(stack)-1] == "VEVENT" {
-				current.lines = append(current.lines, line)
-			}
+			err = walk.property(line)
+		}
+		if err != nil {
+			return nil, err
 		}
 	}
-	if len(stack) != 0 {
-		return nil, fmt.Errorf("calendar ended with unclosed %s component", stack[len(stack)-1])
+	return walk.finish()
+}
+
+// begin opens a component: the one VCALENDAR root, or an event directly in it.
+func (w *calendarWalk) begin(line contentLine) error {
+	name := strings.ToUpper(strings.TrimSpace(line.value))
+	if name == "" {
+		return fmt.Errorf("line %d: BEGIN component is empty", line.line)
 	}
-	if !seenCalendar || !closedCalendar {
+	if len(w.stack) == 0 {
+		if name != "VCALENDAR" || w.seenCalendar || w.closedCalendar {
+			return fmt.Errorf("line %d: expected one VCALENDAR root", line.line)
+		}
+		w.seenCalendar = true
+	}
+	if name == "VEVENT" {
+		if len(w.stack) == 0 || w.stack[len(w.stack)-1] != "VCALENDAR" || w.current != nil {
+			return fmt.Errorf("line %d: VEVENT must be a direct VCALENDAR child", line.line)
+		}
+		w.current = &component{index: len(w.components) + 1}
+	}
+	w.stack = append(w.stack, name)
+	return nil
+}
+
+// end closes the component open last, keeping an event it closes.
+func (w *calendarWalk) end(line contentLine) error {
+	name := strings.ToUpper(strings.TrimSpace(line.value))
+	if len(w.stack) == 0 || w.stack[len(w.stack)-1] != name {
+		return fmt.Errorf("line %d: END:%s does not match the open component", line.line, name)
+	}
+	if name == "VEVENT" {
+		w.components = append(w.components, *w.current)
+		w.current = nil
+	}
+	w.stack = w.stack[:len(w.stack)-1]
+	if name == "VCALENDAR" {
+		w.closedCalendar = true
+	}
+	return nil
+}
+
+// property reads a line inside a component: the root's one VERSION, or a
+// line of the event being collected.
+func (w *calendarWalk) property(line contentLine) error {
+	if len(w.stack) == 0 {
+		return fmt.Errorf("line %d: property appears outside VCALENDAR", line.line)
+	}
+	if len(w.stack) == 1 && w.stack[0] == "VCALENDAR" && line.name == "VERSION" {
+		if w.versionSeen {
+			return fmt.Errorf("line %d: VERSION appears more than once", line.line)
+		}
+		if strings.TrimSpace(line.value) != "2.0" {
+			return fmt.Errorf("line %d: unsupported iCalendar VERSION %q", line.line, line.value)
+		}
+		w.versionSeen = true
+	}
+	if w.current != nil && w.stack[len(w.stack)-1] == "VEVENT" {
+		w.current.lines = append(w.current.lines, line)
+	}
+	return nil
+}
+
+// finish gives the events once the calendar is whole: its root closed, and
+// its version stated.
+func (w *calendarWalk) finish() ([]component, error) {
+	if len(w.stack) != 0 {
+		return nil, fmt.Errorf("calendar ended with unclosed %s component", w.stack[len(w.stack)-1])
+	}
+	if !w.seenCalendar || !w.closedCalendar {
 		return nil, errors.New("calendar is missing a complete VCALENDAR root")
 	}
-	if !versionSeen {
+	if !w.versionSeen {
 		return nil, errors.New("calendar is missing VERSION:2.0")
 	}
-	return components, nil
+	return w.components, nil
 }
 
 func parseEventComponent(item component, defaultZoneID string) (parsedEvent, error) {
-	uidLine, err := exactlyOne(item.lines, "UID", true)
+	uid, err := eventUID(item.lines)
 	if err != nil {
 		return parsedEvent{}, err
 	}
-	uid := strings.TrimSpace(uidLine.value)
-	if err := boundedText("UID", uid, 1, 400); err != nil {
-		return parsedEvent{}, err
-	}
-	if strings.ContainsAny(uid, "\r\n\x00") {
-		return parsedEvent{}, errors.New("UID contains a control character")
-	}
-
 	startLine, err := exactlyOne(item.lines, "DTSTART", true)
 	if err != nil {
 		return parsedEvent{}, err
@@ -372,52 +398,85 @@ func parseEventComponent(item component, defaultZoneID string) (parsedEvent, err
 		busy:            true,
 		componentNumber: item.index,
 	}
-	if line, err := exactlyOne(item.lines, "SUMMARY", false); err != nil {
-		return parsedEvent{}, err
-	} else if line.name != "" {
-		event.title, err = decodeText(line.value)
-		if err != nil {
-			return parsedEvent{}, fmt.Errorf("SUMMARY: %w", err)
+	// In this order, so a calendar with several faults is refused for the
+	// same one every time.
+	for _, read := range []func(*parsedEvent, []contentLine, string) error{
+		readEventText, readEventStatus, readEventDuration, readEventRecurrence,
+	} {
+		if err := read(&event, item.lines, defaultZoneID); err != nil {
+			return parsedEvent{}, err
 		}
-		event.title = strings.TrimSpace(event.title)
-		if event.title == "" {
-			event.title = "Busy"
-		}
+	}
+	return event, nil
+}
+
+// eventUID reads the one UID an event must have.
+func eventUID(lines []contentLine) (string, error) {
+	line, err := exactlyOne(lines, "UID", true)
+	if err != nil {
+		return "", err
+	}
+	uid := strings.TrimSpace(line.value)
+	if err := boundedText("UID", uid, 1, 400); err != nil {
+		return "", err
+	}
+	if strings.ContainsAny(uid, "\r\n\x00") {
+		return "", errors.New("UID contains a control character")
+	}
+	return uid, nil
+}
+
+// readEventText reads the title, location and notes, each at most once. An
+// event without a title is "Busy".
+func readEventText(event *parsedEvent, lines []contentLine, _ string) error {
+	title, err := optionalText(lines, "SUMMARY")
+	if err != nil {
+		return err
+	}
+	if title != "" {
+		event.title = title
 	}
 	if err := boundedText("event title", event.title, 1, maxTitleRunes); err != nil {
-		return parsedEvent{}, err
+		return err
 	}
-	if line, err := exactlyOne(item.lines, "LOCATION", false); err != nil {
-		return parsedEvent{}, err
-	} else if line.name != "" {
-		event.location, err = decodeText(line.value)
-		if err != nil {
-			return parsedEvent{}, fmt.Errorf("LOCATION: %w", err)
-		}
-		event.location = strings.TrimSpace(event.location)
-		if event.location != "" {
-			if err := boundedText("event location", event.location, 1, maxLocationRunes); err != nil {
-				return parsedEvent{}, err
-			}
+	if event.location, err = optionalText(lines, "LOCATION"); err != nil {
+		return err
+	}
+	if event.location != "" {
+		if err := boundedText("event location", event.location, 1, maxLocationRunes); err != nil {
+			return err
 		}
 	}
-	if line, err := exactlyOne(item.lines, "DESCRIPTION", false); err != nil {
-		return parsedEvent{}, err
-	} else if line.name != "" {
-		event.notes, err = decodeText(line.value)
-		if err != nil {
-			return parsedEvent{}, fmt.Errorf("DESCRIPTION: %w", err)
-		}
-		event.notes = strings.TrimSpace(event.notes)
-		if event.notes != "" {
-			if err := boundedText("event notes", event.notes, 1, maxNotesRunes); err != nil {
-				return parsedEvent{}, err
-			}
+	if event.notes, err = optionalText(lines, "DESCRIPTION"); err != nil {
+		return err
+	}
+	if event.notes != "" {
+		if err := boundedText("event notes", event.notes, 1, maxNotesRunes); err != nil {
+			return err
 		}
 	}
+	return nil
+}
 
-	if line, err := exactlyOne(item.lines, "STATUS", false); err != nil {
-		return parsedEvent{}, err
+// optionalText is a text property's decoded and trimmed value, or "" when
+// the event has none. It may appear at most once.
+func optionalText(lines []contentLine, name string) (string, error) {
+	line, err := exactlyOne(lines, name, false)
+	if err != nil || line.name == "" {
+		return "", err
+	}
+	text, err := decodeText(line.value)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", name, err)
+	}
+	return strings.TrimSpace(text), nil
+}
+
+// readEventStatus reads STATUS and TRANSP. A cancelled event, or a
+// transparent one, is not busy.
+func readEventStatus(event *parsedEvent, lines []contentLine, _ string) error {
+	if line, err := exactlyOne(lines, "STATUS", false); err != nil {
+		return err
 	} else if line.name != "" {
 		switch strings.ToUpper(strings.TrimSpace(line.value)) {
 		case "CANCELLED":
@@ -425,112 +484,133 @@ func parseEventComponent(item component, defaultZoneID string) (parsedEvent, err
 			event.busy = false
 		case "CONFIRMED", "TENTATIVE":
 		default:
-			return parsedEvent{}, fmt.Errorf("unsupported STATUS %q", line.value)
+			return fmt.Errorf("unsupported STATUS %q", line.value)
 		}
 	}
-	if line, err := exactlyOne(item.lines, "TRANSP", false); err != nil {
-		return parsedEvent{}, err
+	if line, err := exactlyOne(lines, "TRANSP", false); err != nil {
+		return err
 	} else if line.name != "" {
 		switch strings.ToUpper(strings.TrimSpace(line.value)) {
 		case "TRANSPARENT":
 			event.busy = false
 		case "OPAQUE":
 		default:
-			return parsedEvent{}, fmt.Errorf("unsupported TRANSP %q", line.value)
+			return fmt.Errorf("unsupported TRANSP %q", line.value)
 		}
 	}
+	return nil
+}
 
-	endLine, err := exactlyOne(item.lines, "DTEND", false)
+// readEventDuration reads how long an event lasts, from DTEND or DURATION
+// but never both. An all-day event with neither lasts a day. A timed one with
+// neither, or one that lasts no time, is not busy.
+func readEventDuration(event *parsedEvent, lines []contentLine, defaultZoneID string) error {
+	endLine, err := exactlyOne(lines, "DTEND", false)
 	if err != nil {
-		return parsedEvent{}, err
+		return err
 	}
-	durationLine, err := exactlyOne(item.lines, "DURATION", false)
+	durationLine, err := exactlyOne(lines, "DURATION", false)
 	if err != nil {
-		return parsedEvent{}, err
+		return err
 	}
 	if endLine.name != "" && durationLine.name != "" {
-		return parsedEvent{}, errors.New("DTEND and DURATION are mutually exclusive")
+		return errors.New("DTEND and DURATION are mutually exclusive")
 	}
 	switch {
 	case endLine.name != "":
-		end, err := parseTemporal(endLine, defaultZoneID)
-		if err != nil {
-			return parsedEvent{}, fmt.Errorf("DTEND: %w", err)
+		if err := readEventEnd(event, endLine, defaultZoneID); err != nil {
+			return err
 		}
-		if start.allDay != end.allDay {
-			return parsedEvent{}, errors.New("DTSTART and DTEND must use the same value type")
-		}
-		if end.value.Before(start.value) {
-			return parsedEvent{}, errors.New("DTEND precedes DTSTART")
-		}
-		if start.allDay {
-			days, err := civilDayDifference(start.value, end.value)
-			if err != nil {
-				return parsedEvent{}, err
-			}
-			event.duration.days = days
-		} else {
-			event.duration.clock = end.value.Sub(start.value)
-		}
-		event.hasDuration = true
 	case durationLine.name != "":
 		event.duration, err = parseICalDuration(durationLine.value)
 		if err != nil {
-			return parsedEvent{}, fmt.Errorf("DURATION: %w", err)
+			return fmt.Errorf("DURATION: %w", err)
 		}
 		event.hasDuration = true
-	case start.allDay:
+	case event.start.allDay:
 		event.duration.days = 1
 		event.hasDuration = true
 	default:
 		event.busy = false
 	}
 	if eventDurationLimit(event.duration) > maxEventDays*24*time.Hour {
-		return parsedEvent{}, fmt.Errorf("event duration exceeds %d days", maxEventDays)
+		return fmt.Errorf("event duration exceeds %d days", maxEventDays)
 	}
 	if event.busy && event.duration.days == 0 && event.duration.clock == 0 {
 		event.busy = false
 	}
+	return nil
+}
 
-	if line, err := exactlyOne(item.lines, "RECURRENCE-ID", false); err != nil {
-		return parsedEvent{}, err
+// readEventEnd reads DTEND, which must be of DTSTART's kind and not before
+// it.
+func readEventEnd(event *parsedEvent, line contentLine, defaultZoneID string) error {
+	start := event.start
+	end, err := parseTemporal(line, defaultZoneID)
+	if err != nil {
+		return fmt.Errorf("DTEND: %w", err)
+	}
+	if start.allDay != end.allDay {
+		return errors.New("DTSTART and DTEND must use the same value type")
+	}
+	if end.value.Before(start.value) {
+		return errors.New("DTEND precedes DTSTART")
+	}
+	if start.allDay {
+		days, err := civilDayDifference(start.value, end.value)
+		if err != nil {
+			return err
+		}
+		event.duration.days = days
+	} else {
+		event.duration.clock = end.value.Sub(start.value)
+	}
+	event.hasDuration = true
+	return nil
+}
+
+// readEventRecurrence reads what makes an event recur, or an exception to
+// one. An exception names the occurrence it replaces, and recurs no further.
+func readEventRecurrence(event *parsedEvent, lines []contentLine, defaultZoneID string) error {
+	if line, err := exactlyOne(lines, "RECURRENCE-ID", false); err != nil {
+		return err
 	} else if line.name != "" {
 		if values := line.params["RANGE"]; len(values) != 0 {
-			return parsedEvent{}, errors.New("RECURRENCE-ID RANGE is not supported")
+			return errors.New("RECURRENCE-ID RANGE is not supported")
 		}
 		value, err := parseTemporal(line, defaultZoneID)
 		if err != nil {
-			return parsedEvent{}, fmt.Errorf("RECURRENCE-ID: %w", err)
+			return fmt.Errorf("RECURRENCE-ID: %w", err)
 		}
 		event.recurrenceID = &value
 	}
-	if line, err := exactlyOne(item.lines, "RRULE", false); err != nil {
-		return parsedEvent{}, err
+	if line, err := exactlyOne(lines, "RRULE", false); err != nil {
+		return err
 	} else if line.name != "" {
 		event.rrule = strings.TrimSpace(line.value)
 	}
 	if event.recurrenceID != nil && event.rrule != "" {
-		return parsedEvent{}, errors.New("a recurrence exception cannot define RRULE")
+		return errors.New("a recurrence exception cannot define RRULE")
 	}
 
-	for _, line := range matching(item.lines, "RDATE") {
-		values, err := parseTemporalList(line, defaultZoneID, start.allDay)
+	for _, line := range matching(lines, "RDATE") {
+		values, err := parseTemporalList(line, defaultZoneID, event.start.allDay)
 		if err != nil {
-			return parsedEvent{}, fmt.Errorf("RDATE: %w", err)
+			return fmt.Errorf("RDATE: %w", err)
 		}
 		event.rdates = append(event.rdates, values...)
 	}
-	for _, line := range matching(item.lines, "EXDATE") {
-		values, err := parseTemporalList(line, defaultZoneID, start.allDay)
+	for _, line := range matching(lines, "EXDATE") {
+		values, err := parseTemporalList(line, defaultZoneID, event.start.allDay)
 		if err != nil {
-			return parsedEvent{}, fmt.Errorf("EXDATE: %w", err)
+			return fmt.Errorf("EXDATE: %w", err)
 		}
 		event.exdates = append(event.exdates, values...)
 	}
 	if event.recurrenceID != nil && (len(event.rdates) != 0 || len(event.exdates) != 0) {
-		return parsedEvent{}, errors.New("a recurrence exception cannot define RDATE or EXDATE")
+		return errors.New("a recurrence exception cannot define RDATE or EXDATE")
 	}
-	return event, nil
+	return nil
 }
 
 func exactlyOne(lines []contentLine, name string, required bool) (contentLine, error) {
@@ -756,12 +836,56 @@ func civilDayDifference(start, end time.Time) (int, error) {
 }
 
 func materializeEvents(parsed []parsedEvent, options ParseOptions) ([]Event, error) {
+	masters, exceptions, err := groupEvents(parsed)
+	if err != nil {
+		return nil, err
+	}
+	uids := make([]string, 0, len(masters))
+	for uid := range masters {
+		uids = append(uids, uid)
+	}
+	sort.Strings(uids)
+	m := materializer{options: options, events: make([]Event, 0, len(parsed))}
+	for _, uid := range uids {
+		if err := m.series(masters[uid], exceptions[uid]); err != nil {
+			return nil, err
+		}
+	}
+	// An exception whose series is not in the calendar stands on its own.
+	for uid, detached := range exceptions {
+		if _, found := masters[uid]; found {
+			continue
+		}
+		for _, exception := range detached {
+			if exception.cancelled {
+				continue
+			}
+			if err := m.add(exception, exception.start.value); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	events := m.events
+	sort.Slice(events, func(i, j int) bool {
+		if events[i].StartAt.Equal(events[j].StartAt) {
+			return events[i].EventID < events[j].EventID
+		}
+		return events[i].StartAt.Before(events[j].StartAt)
+	})
+	return events, nil
+}
+
+// groupEvents sorts a calendar's events into series by UID, with each
+// series' exceptions by the start they replace. A UID, or an exception,
+// given twice is refused.
+func groupEvents(parsed []parsedEvent) (map[string]parsedEvent, map[string]map[int64]parsedEvent, error) {
 	masters := make(map[string]parsedEvent)
 	exceptions := make(map[string]map[int64]parsedEvent)
 	for _, event := range parsed {
 		if event.recurrenceID == nil {
 			if existing, found := masters[event.uid]; found {
-				return nil, fmt.Errorf("VEVENT %d duplicates UID %q from VEVENT %d", event.componentNumber, event.uid, existing.componentNumber)
+				return nil, nil, fmt.Errorf("VEVENT %d duplicates UID %q from VEVENT %d", event.componentNumber, event.uid, existing.componentNumber)
 			}
 			masters[event.uid] = event
 			continue
@@ -771,109 +895,91 @@ func materializeEvents(parsed []parsedEvent, options ParseOptions) ([]Event, err
 			exceptions[event.uid] = make(map[int64]parsedEvent)
 		}
 		if existing, found := exceptions[event.uid][key]; found {
-			return nil, fmt.Errorf("VEVENT %d duplicates recurrence exception from VEVENT %d", event.componentNumber, existing.componentNumber)
+			return nil, nil, fmt.Errorf("VEVENT %d duplicates recurrence exception from VEVENT %d", event.componentNumber, existing.componentNumber)
 		}
 		exceptions[event.uid][key] = event
 	}
+	return masters, exceptions, nil
+}
 
-	uids := make([]string, 0, len(masters))
-	for uid := range masters {
-		uids = append(uids, uid)
-	}
-	sort.Strings(uids)
-	events := make([]Event, 0, len(parsed))
-	for _, uid := range uids {
-		master := masters[uid]
-		if master.cancelled {
-			continue
-		}
-		starts, err := recurrenceStarts(master, options.CoverageStart, options.CoverageEnd)
-		if err != nil {
-			return nil, fmt.Errorf("VEVENT %d recurrence: %w", master.componentNumber, err)
-		}
-		used := make(map[int64]bool)
-		for _, start := range starts {
-			selected := master
-			if exception, found := exceptions[uid][start.UTC().Unix()]; found {
-				if exception.recurrenceID.allDay != master.start.allDay || exception.start.allDay != master.start.allDay {
-					return nil, fmt.Errorf("VEVENT %d recurrence exception changes DATE/DATE-TIME value type", exception.componentNumber)
-				}
-				used[start.UTC().Unix()] = true
-				if exception.cancelled {
-					continue
-				}
-				if !exception.hasDuration {
-					exception.duration = master.duration
-					exception.hasDuration = master.hasDuration
-					exception.busy = exception.busy && eventDurationLimit(exception.duration) > 0
-				}
-				selected = exception
-				start = exception.start.value
-			}
-			built, include, err := buildImportedEvent(selected, start, options)
-			if err != nil {
-				return nil, fmt.Errorf("VEVENT %d: %w", selected.componentNumber, err)
-			}
-			if include {
-				events = append(events, built)
-				if len(events) > MaxMaterializedEvents {
-					return nil, fmt.Errorf("calendar materializes more than %d events", MaxMaterializedEvents)
-				}
-			}
-		}
-		for key, exception := range exceptions[uid] {
-			if used[key] || exception.cancelled {
-				continue
-			}
-			if exception.recurrenceID.allDay != master.start.allDay || exception.start.allDay != master.start.allDay {
-				return nil, fmt.Errorf("VEVENT %d recurrence exception changes DATE/DATE-TIME value type", exception.componentNumber)
-			}
-			if !exception.hasDuration {
-				exception.duration = master.duration
-				exception.hasDuration = master.hasDuration
-				exception.busy = exception.busy && eventDurationLimit(exception.duration) > 0
-			}
-			built, include, err := buildImportedEvent(exception, exception.start.value, options)
-			if err != nil {
-				return nil, fmt.Errorf("VEVENT %d: %w", exception.componentNumber, err)
-			}
-			if include {
-				events = append(events, built)
-				if len(events) > MaxMaterializedEvents {
-					return nil, fmt.Errorf("calendar materializes more than %d events", MaxMaterializedEvents)
-				}
-			}
-		}
-	}
+// materializer gathers the events a calendar gives, up to the cap.
+type materializer struct {
+	options ParseOptions
+	events  []Event
+}
 
-	for uid, detached := range exceptions {
-		if _, found := masters[uid]; found {
-			continue
-		}
-		for _, exception := range detached {
+// add builds the event that starts at start, if the coverage holds it.
+func (m *materializer) add(event parsedEvent, start time.Time) error {
+	built, include, err := buildImportedEvent(event, start, m.options)
+	if err != nil {
+		return fmt.Errorf("VEVENT %d: %w", event.componentNumber, err)
+	}
+	if !include {
+		return nil
+	}
+	m.events = append(m.events, built)
+	if len(m.events) > MaxMaterializedEvents {
+		return fmt.Errorf("calendar materializes more than %d events", MaxMaterializedEvents)
+	}
+	return nil
+}
+
+// series adds a series' occurrences, each replaced by its exception when it
+// has one, and then the exceptions that replace no occurrence the series
+// gave.
+func (m *materializer) series(master parsedEvent, exceptions map[int64]parsedEvent) error {
+	if master.cancelled {
+		return nil
+	}
+	starts, err := recurrenceStarts(master, m.options.CoverageStart, m.options.CoverageEnd)
+	if err != nil {
+		return fmt.Errorf("VEVENT %d recurrence: %w", master.componentNumber, err)
+	}
+	used := make(map[int64]bool)
+	for _, start := range starts {
+		selected := master
+		if exception, found := exceptions[start.UTC().Unix()]; found {
+			fitted, err := fitException(master, exception)
+			if err != nil {
+				return err
+			}
+			used[start.UTC().Unix()] = true
 			if exception.cancelled {
 				continue
 			}
-			built, include, err := buildImportedEvent(exception, exception.start.value, options)
-			if err != nil {
-				return nil, fmt.Errorf("VEVENT %d: %w", exception.componentNumber, err)
-			}
-			if include {
-				events = append(events, built)
-				if len(events) > MaxMaterializedEvents {
-					return nil, fmt.Errorf("calendar materializes more than %d events", MaxMaterializedEvents)
-				}
-			}
+			selected, start = fitted, fitted.start.value
+		}
+		if err := m.add(selected, start); err != nil {
+			return err
 		}
 	}
-
-	sort.Slice(events, func(i, j int) bool {
-		if events[i].StartAt.Equal(events[j].StartAt) {
-			return events[i].EventID < events[j].EventID
+	for key, exception := range exceptions {
+		if used[key] || exception.cancelled {
+			continue
 		}
-		return events[i].StartAt.Before(events[j].StartAt)
-	})
-	return events, nil
+		fitted, err := fitException(master, exception)
+		if err != nil {
+			return err
+		}
+		if err := m.add(fitted, fitted.start.value); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// fitException checks an exception against its series, whose kind of start
+// it must keep, and gives it the series' length when it states none.
+func fitException(master, exception parsedEvent) (parsedEvent, error) {
+	if exception.recurrenceID.allDay != master.start.allDay || exception.start.allDay != master.start.allDay {
+		return parsedEvent{}, fmt.Errorf("VEVENT %d recurrence exception changes DATE/DATE-TIME value type", exception.componentNumber)
+	}
+	if !exception.hasDuration {
+		exception.duration = master.duration
+		exception.hasDuration = master.hasDuration
+		exception.busy = exception.busy && eventDurationLimit(exception.duration) > 0
+	}
+	return exception, nil
 }
 
 func recurrenceStarts(event parsedEvent, coverageStart, coverageEnd time.Time) ([]time.Time, error) {

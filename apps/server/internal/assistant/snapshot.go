@@ -189,128 +189,184 @@ func sanitizeSnapshot(input *SnapshotContext, now time.Time, zoneID string, comp
 	if input == nil {
 		return nil
 	}
-	limit := func(full, small int) int {
-		if compact {
-			return small
-		}
-		return full
-	}
-	window := func(value SnapshotRange) (string, bool) {
-		if !value.End.After(value.Start) || value.Start.Before(now.Add(-48*time.Hour)) || value.End.After(now.Add(8*24*time.Hour)) {
-			return "", false
-		}
-		return civilRange(value.Start, value.End, zoneID), true
-	}
-	bounded := func(value *int, low, high int) *int {
-		if value == nil || *value < low || *value > high {
-			return nil
-		}
-		copied := *value
-		return &copied
-	}
-	rhythm := input.Rhythm
-	out := &redactedSnapshot{
-		Rhythm: redactedRhythm{
-			Status:               allowedValue(rhythm.Status, "estimated", "empty", "refused", "unavailable"),
-			Presence:             allowedValue(rhythm.Presence, "awake", "asleep", "unknown"),
-			Freshness:            allowedValue(rhythm.Freshness, "current", "stale", "withheld"),
-			FreshnessReason:      allowedValue(rhythm.FreshnessReason, "no_evidence", "evidence_aging", "evidence_stale", "expected_sleep_unrecorded", "no_sources_reporting"),
-			CycleMinutes:         bounded(rhythm.CycleMinutes, 60, 4320),
-			DriftMinutesPerCycle: bounded(rhythm.DriftMinutesPerCycle, -1440, 1440),
-			TypicalSleepMinutes:  bounded(rhythm.TypicalSleepMinutes, 1, 1440),
-			FitRating:            allowedValue(rhythm.FitRating, "low", "medium", "high"),
-		},
+	keep := snapshotSanitizer{now: now, zoneID: zoneID, compact: compact}
+	plans := input.Plans
+	return &redactedSnapshot{
+		Rhythm: keep.rhythm(input.Rhythm),
 		NeedsYou: SnapshotNeedsYou{
 			Suggestions:   boundedCount(input.NeedsYou.Suggestions),
 			TaskConflicts: boundedCount(input.NeedsYou.TaskConflicts),
 		},
+		Timeline:         keep.timeline(plans.Segments),
+		ReachableHours:   keep.reachableHours(plans.ReachableHours),
+		Commitments:      keep.commitments(plans.Commitments),
+		AwaitingDecision: keep.suggestions(plans.Suggestions),
+		Unplaced:         keep.unplaced(plans.Unplaced),
 	}
-	// An unreadable value reads as the least trusting one.
-	if out.Rhythm.Status == "" {
-		out.Rhythm.Status = "unavailable"
+}
+
+// snapshotSanitizer keeps each part of a snapshot that the model may read,
+// near now and in the owner's zone, fewer of each when compact.
+type snapshotSanitizer struct {
+	now     time.Time
+	zoneID  string
+	compact bool
+}
+
+// limit is how many of a kind are kept: full, or small when compact.
+func (k snapshotSanitizer) limit(full, small int) int {
+	if k.compact {
+		return small
 	}
-	if out.Rhythm.Freshness == "" {
-		out.Rhythm.Freshness = "withheld"
+	return full
+}
+
+// window states a range in civil time, when it is a range at all and lies
+// within two days before now and eight days after.
+func (k snapshotSanitizer) window(value SnapshotRange) (string, bool) {
+	if !value.End.After(value.Start) || value.Start.Before(k.now.Add(-48*time.Hour)) || value.End.After(k.now.Add(8*24*time.Hour)) {
+		return "", false
 	}
-	// Home states what is happening now only on current evidence.
-	if out.Rhythm.Presence == "" || out.Rhythm.Freshness != "current" {
-		out.Rhythm.Presence = "unknown"
+	return civilRange(value.Start, value.End, k.zoneID), true
+}
+
+func boundedValue(value *int, low, high int) *int {
+	if value == nil || *value < low || *value > high {
+		return nil
+	}
+	copied := *value
+	return &copied
+}
+
+// rhythm keeps the rhythm's allowlisted states and bounded numbers. An
+// unreadable value reads as the least trusting one, and what is happening
+// now is said only on current evidence, as Home says it.
+func (k snapshotSanitizer) rhythm(rhythm SnapshotRhythm) redactedRhythm {
+	out := redactedRhythm{
+		Status:               allowedValue(rhythm.Status, "estimated", "empty", "refused", "unavailable"),
+		Presence:             allowedValue(rhythm.Presence, "awake", "asleep", "unknown"),
+		Freshness:            allowedValue(rhythm.Freshness, "current", "stale", "withheld"),
+		FreshnessReason:      allowedValue(rhythm.FreshnessReason, "no_evidence", "evidence_aging", "evidence_stale", "expected_sleep_unrecorded", "no_sources_reporting"),
+		CycleMinutes:         boundedValue(rhythm.CycleMinutes, 60, 4320),
+		DriftMinutesPerCycle: boundedValue(rhythm.DriftMinutesPerCycle, -1440, 1440),
+		TypicalSleepMinutes:  boundedValue(rhythm.TypicalSleepMinutes, 1, 1440),
+		FitRating:            allowedValue(rhythm.FitRating, "low", "medium", "high"),
+	}
+	if out.Status == "" {
+		out.Status = "unavailable"
+	}
+	if out.Freshness == "" {
+		out.Freshness = "withheld"
+	}
+	if out.Presence == "" || out.Freshness != "current" {
+		out.Presence = "unknown"
 	}
 	if rhythm.SleepOnset != nil {
-		out.Rhythm.SleepLikelyBegins, _ = window(*rhythm.SleepOnset)
+		out.SleepLikelyBegins, _ = k.window(*rhythm.SleepOnset)
 	}
 	if rhythm.Wake != nil {
-		out.Rhythm.WakingLikely, _ = window(*rhythm.Wake)
+		out.WakingLikely, _ = k.window(*rhythm.Wake)
 	}
-	plans := input.Plans
-	for _, segment := range plans.Segments {
-		if len(out.Timeline) == limit(maxSnapshotSegments, 6) {
+	return out
+}
+
+func (k snapshotSanitizer) timeline(segments []SnapshotSegment) []redactedSegment {
+	var out []redactedSegment
+	for _, segment := range segments {
+		if len(out) == k.limit(maxSnapshotSegments, 6) {
 			break
 		}
 		presence := allowedValue(segment.Presence, "awake", "asleep", "uncertain", "unknown")
-		if span, ok := window(SnapshotRange{Start: segment.Start, End: segment.End}); ok && presence != "" {
-			out.Timeline = append(out.Timeline, redactedSegment{Presence: presence, Window: span})
+		if span, ok := k.window(SnapshotRange{Start: segment.Start, End: segment.End}); ok && presence != "" {
+			out = append(out, redactedSegment{Presence: presence, Window: span})
 		}
 	}
-	for _, reachable := range plans.ReachableHours {
-		if len(out.ReachableHours) == limit(maxSnapshotReachable, 2) {
+	return out
+}
+
+// reachableHours keeps each contact's hours by its opaque reference.
+func (k snapshotSanitizer) reachableHours(hours []SnapshotReachable) []redactedReachable {
+	var out []redactedReachable
+	for _, reachable := range hours {
+		if len(out) == k.limit(maxSnapshotReachable, 2) {
 			break
 		}
 		status := allowedValue(reachable.Status, "reachable", "partial", "unreachable")
-		span, ok := window(SnapshotRange{Start: reachable.Start, End: reachable.End})
+		span, ok := k.window(SnapshotRange{Start: reachable.Start, End: reachable.End})
 		if !ok || status == "" || (reachable.Contact != "" && !contactRefPattern.MatchString(reachable.Contact)) {
 			continue
 		}
 		entry := redactedReachable{Contact: reachable.Contact, Window: span, Status: status}
-		for _, part := range reachable.Reachable {
-			if text, ok := window(part); ok {
-				entry.LikelyAwake = append(entry.LikelyAwake, text)
-			}
-		}
-		for _, part := range reachable.Possible {
-			if text, ok := window(part); ok {
-				entry.Uncertain = append(entry.Uncertain, text)
-			}
-		}
-		out.ReachableHours = append(out.ReachableHours, entry)
+		entry.LikelyAwake = k.windows(reachable.Reachable)
+		entry.Uncertain = k.windows(reachable.Possible)
+		out = append(out, entry)
 	}
-	for _, commitment := range plans.Commitments {
-		if len(out.Commitments) == limit(maxSnapshotCommitments, 3) {
+	return out
+}
+
+// windows states each range that window keeps.
+func (k snapshotSanitizer) windows(ranges []SnapshotRange) []string {
+	var out []string
+	for _, part := range ranges {
+		if text, ok := k.window(part); ok {
+			out = append(out, text)
+		}
+	}
+	return out
+}
+
+// commitments keeps each commitment by its opaque reference: never a title.
+func (k snapshotSanitizer) commitments(commitments []SnapshotCommitment) []redactedCommitment {
+	var out []redactedCommitment
+	for _, commitment := range commitments {
+		if len(out) == k.limit(maxSnapshotCommitments, 3) {
 			break
 		}
 		conflict := allowedValue(commitment.Conflict, "none", "inside_predicted_sleep", "overlaps_predicted_sleep", "near_uncertain_boundary")
-		span, ok := window(SnapshotRange{Start: commitment.Start, End: commitment.End})
+		span, ok := k.window(SnapshotRange{Start: commitment.Start, End: commitment.End})
 		if !ok || conflict == "" || !commitmentRefPattern.MatchString(commitment.Ref) ||
 			(commitment.TaskID != "" && !contextIdentifierPattern.MatchString(commitment.TaskID)) {
 			continue
 		}
-		out.Commitments = append(out.Commitments, redactedCommitment{
+		out = append(out, redactedCommitment{
 			Ref: commitment.Ref, Window: span, AllDay: commitment.AllDay, Conflict: conflict, TaskID: commitment.TaskID,
 		})
 	}
-	for _, suggestion := range plans.Suggestions {
-		if len(out.AwaitingDecision) == limit(maxSnapshotSuggestions, 2) {
+	return out
+}
+
+// suggestions keeps the suggested times awaiting the owner, by id.
+func (k snapshotSanitizer) suggestions(suggestions []SnapshotSuggestion) []redactedSuggestion {
+	var out []redactedSuggestion
+	for _, suggestion := range suggestions {
+		if len(out) == k.limit(maxSnapshotSuggestions, 2) {
 			break
 		}
 		confidence := allowedValue(suggestion.Confidence, "low", "medium", "high")
-		span, ok := window(SnapshotRange{Start: suggestion.Start, End: suggestion.End})
+		span, ok := k.window(SnapshotRange{Start: suggestion.Start, End: suggestion.End})
 		if !ok || confidence == "" || !contextIdentifierPattern.MatchString(suggestion.ProposalID) ||
 			!contextIdentifierPattern.MatchString(suggestion.TaskID) {
 			continue
 		}
-		out.AwaitingDecision = append(out.AwaitingDecision, redactedSuggestion{
+		out = append(out, redactedSuggestion{
 			ProposalID: suggestion.ProposalID, TaskID: suggestion.TaskID, Window: span, Confidence: confidence,
 		})
 	}
-	for _, unplaced := range plans.Unplaced {
-		if len(out.Unplaced) == limit(maxSnapshotUnplaced, 2) {
+	return out
+}
+
+// unplaced keeps the tasks no time was found for, by id and reason.
+func (k snapshotSanitizer) unplaced(unplaced []SnapshotUnplaced) []redactedUnplaced {
+	var out []redactedUnplaced
+	for _, item := range unplaced {
+		if len(out) == k.limit(maxSnapshotUnplaced, 2) {
 			break
 		}
-		reason := allowedValue(unplaced.Reason, "no_available_interval", "outside_forecast_horizon", "estimate_unavailable", "invalid_constraints")
-		if reason == "" || !contextIdentifierPattern.MatchString(unplaced.TaskID) {
+		reason := allowedValue(item.Reason, "no_available_interval", "outside_forecast_horizon", "estimate_unavailable", "invalid_constraints")
+		if reason == "" || !contextIdentifierPattern.MatchString(item.TaskID) {
 			continue
 		}
-		out.Unplaced = append(out.Unplaced, redactedUnplaced{TaskID: unplaced.TaskID, Reason: reason})
+		out = append(out, redactedUnplaced{TaskID: item.TaskID, Reason: reason})
 	}
 	return out
 }

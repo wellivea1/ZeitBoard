@@ -668,14 +668,25 @@ func busyDomainEvents(ctx context.Context, query queryContext, start, end time.T
 }
 
 func validateProposalDecisionInput(input ProposalDecisionInput) error {
-	for name, value := range map[string]string{
-		"decision_id": input.DecisionID,
-		"proposal_id": input.ProposalID,
-		"task_id":     input.TaskID,
-		"estimate_id": input.EstimateID,
+	if err := validateDecidedProposal(input); err != nil {
+		return err
+	}
+	return validateDecisionRecord(input)
+}
+
+// validateDecidedProposal checks the proposal a decision is about: its ids,
+// its task's revision, its title, interval and zone, its confidence, and
+// the codes that explain it.
+func validateDecidedProposal(input ProposalDecisionInput) error {
+	// In a fixed order, so the same input is refused for the same reason.
+	for _, id := range []struct{ name, value string }{
+		{"decision_id", input.DecisionID},
+		{"proposal_id", input.ProposalID},
+		{"task_id", input.TaskID},
+		{"estimate_id", input.EstimateID},
 	} {
-		if !contractIdentifier.MatchString(value) {
-			return fmt.Errorf("%s must match the v1 identifier format", name)
+		if !contractIdentifier.MatchString(id.value) {
+			return fmt.Errorf("%s must match the v1 identifier format", id.name)
 		}
 	}
 	if input.TaskRevision < 1 {
@@ -701,21 +712,31 @@ func validateProposalDecisionInput(input ProposalDecisionInput) error {
 			return fmt.Errorf("invalid proposal explanation code %q", code)
 		}
 	}
+	return nil
+}
+
+// validateDecisionRecord checks the decision itself: what was decided, when,
+// and the snapshots of events and sleep it was decided against.
+func validateDecisionRecord(input ProposalDecisionInput) error {
 	if input.Decision != ProposalApproved && input.Decision != ProposalRejected {
 		return errors.New("decision must be approved or rejected")
 	}
 	if input.DecidedAt.IsZero() || input.SnapshotStartAt.IsZero() || input.SnapshotEndAt.IsZero() || !input.SnapshotStartAt.Before(input.SnapshotEndAt) {
 		return errors.New("decision and snapshot times are invalid")
 	}
-	decoded, err := hex.DecodeString(input.EventSnapshotHash)
-	if err != nil || len(decoded) != sha256.Size || input.EventSnapshotHash != strings.ToLower(input.EventSnapshotHash) {
+	if !lowercaseDigest(input.EventSnapshotHash) {
 		return errors.New("event snapshot hash must be a lowercase SHA-256 digest")
 	}
-	decoded, err = hex.DecodeString(input.SleepSnapshotHash)
-	if err != nil || len(decoded) != sha256.Size || input.SleepSnapshotHash != strings.ToLower(input.SleepSnapshotHash) {
+	if !lowercaseDigest(input.SleepSnapshotHash) {
 		return errors.New("sleep snapshot hash must be a lowercase SHA-256 digest")
 	}
 	return nil
+}
+
+// lowercaseDigest reports whether value is a SHA-256 digest in lowercase hex.
+func lowercaseDigest(value string) bool {
+	decoded, err := hex.DecodeString(value)
+	return err == nil && len(decoded) == sha256.Size && value == strings.ToLower(value)
 }
 
 func validatePlacementEvent(event calendarcore.Event, input ProposalDecisionInput, task TaskRecord) error {

@@ -14,7 +14,7 @@ pass:
 
 | Job | What it holds the code to |
 |---|---|
-| Go (core), Go (server), Go (server-windows), Go (desktop-service) | `go vet`, every test, and the race detector for core, server and desktop |
+| Go (core), Go (server), Go (server-windows), Go (desktop-service) | `go vet`, every test, and the race detector for core, server and desktop; since PR #109, through `core/codequality`, cyclomatic complexity at most 24 and functions at most 300 lines, as the window's lint |
 | Web format, lint, types, tests, and builds | Prettier; ESLint, with cyclomatic complexity at most 24 and functions at most 300 lines; UI modules at most 600 lines; TypeScript; Vitest (669 tests, from 621); both builds |
 | Android JVM tests, lint, and debug APK | the companion's tests, Android lint, a debug build |
 | Contracts and synthetic fixtures | the v1 contracts and the fixtures generated from them |
@@ -78,14 +78,15 @@ the Go code to any measure, so this review measured it. The scan reads every fun
 tests, in core, the server and the desktop, with Go's own parser. It counts each `if`, `for`,
 `case`, `&&` and `||`, closures included, as gocyclo does.
 
-| Measure | Before this review | After |
-|---|---|---|
-| Functions | 2,115 in 227 files | 2,134 in 227 files |
-| Complexity over 24 | 15 | 12 |
-| Complexity over 40 | 3 | 2 |
-| Longer than 150 lines | 7 | 6 |
+| Measure | Before this review | After PR #108 | After PR #109 |
+|---|---|---|---|
+| Functions | 2,115 in 227 files | 2,134 | 2,187 |
+| Complexity over 24 | 15 | 12 | 0 |
+| Complexity over 40 | 3 | 2 | 0 |
+| Longer than 150 lines | 7 | 6 | 2 |
+| Longer than 300 lines | 1 | 1 | 0 |
 
-Three were split, and nothing they do changed:
+**PR #108** split three functions, and nothing they do changed:
 
 - **`Store.applySyncPullPage`** (complexity 67, 238 lines) applies a pulled page in one
   transaction, in seven phases:
@@ -112,34 +113,40 @@ Three were split, and nothing they do changed:
   the windows and busy events, the tasks, the medication facts and the marker facts. The tests of
   the context's redaction pass unchanged.
 
-The twelve still over 24:
+**PR #109** brought every other function within the window's limits, the same way. In each, the
+checks, their order and their messages are unchanged:
 
-| Function | Complexity | Lines | Kind |
-|---|---|---|---|
-| `parseEventComponent`, `core/calendar` | 61 | 189 | iCalendar parser, a case for each property |
-| `sanitizeSnapshot`, server assistant | 46 | 129 | the chat snapshot's allowlist, field by field (ADR-0049) |
-| `materializeEvents`, `core/calendar` | 38 | 120 | recurrence expansion within the work and horizon caps |
-| `App.getCalendar`, desktop | 37 | 176 | reading a calendar of each kind |
-| `Store.Append`, server | 35 | 153 | a sync batch, checked and written in one transaction |
-| `Store.ListProposalPage`, server | 34 | 148 | a page of proposals by cursor and queue |
-| `ValidateCorrection`, `core/sleepv1` | 31 | 61 | the v1 contract's checks of a correction |
-| `Fold`, `core/sleepv1` | 30 | 106 | folding corrections into a night |
-| `validateProposalDecisionInput`, `core/storage/sqlite` | 29 | 50 | checks of a decision |
-| `collectEventComponents`, `core/calendar` | 29 | 70 | iCalendar parser |
-| `validatePullEnvelopePage`, desktop | 28 | 59 | checks of a pulled page |
-| `EncodeTranscriptionTemplate`, desktop history | 27 | 72 | the history template's encoder |
+| Function | Was | Now |
+|---|---|---|
+| `parseEventComponent`, `core/calendar` | 61, 189 lines | the UID and start, then one reader each for text, status, duration and recurrence |
+| `collectEventComponents`, `core/calendar` | 29 | a walk with a method each for BEGIN, END, a property, and the end of the calendar |
+| `materializeEvents`, `core/calendar` | 38 | the series grouped, then each series added. The check of an exception against its series was written twice, and adding an event at the cap three times; each is now one function |
+| `sanitizeSnapshot`, server assistant | 46 | one method for each part of the snapshot the model may read, with the allowlist in each beside its part |
+| `Store.Append`, server | 35 | a tombstone lookup it repeated five times is one function. Then whether a record, or what it depends on, was erased, and then keeping it |
+| `Store.ListProposalPage`, server | 34 | the cursor, the query for its queue, the rows, the page and its tokens, and the pending count |
+| `App.getCalendar`, desktop | 37, 176 lines | the days asked for, each calendar's description, the empty days, events and forecast bands placed on them, and a sort |
+| `ValidateCorrection`, `core/sleepv1` | 31 | identity, provenance and changes, checked in that order |
+| `Fold`, `core/sleepv1` | 30 | the targets, the checked corrections, the active leaves, and applying them |
+| `validateProposalDecisionInput`, `core/storage/sqlite` | 29 | the proposal decided on, then the record of the decision |
+| `validatePullEnvelopePage`, desktop | 28 | the page, then whether each record names itself |
+| `EncodeTranscriptionTemplate`, desktop history | 27 | what the template covers, then the writing |
+| `Store.initialize`, core | 340 lines | the schema is a named list the store applies |
 
-None was changed by this review:
-- Most are parsers and validators, where each branch is one rule; they read best as the list they
-  are.
-- The rest are store transactions and the desktop's calendar read.
-- Each is covered by its package's tests.
-- The desktop's calendar read is a candidate for extraction along with the desktop's `App` facade,
-  which the completion plan's limitation 7 accepts until a feature boundary calls for it.
+One of them had a latent fault. `validateProposalDecisionInput` checked four identifiers by ranging
+over a map, so with several invalid it named whichever came first on that run; it checks them in a
+fixed order now. Every test in core, the server and the desktop passed after each split.
 
-The two longest functions are `Store.initialize` in core (340 lines, complexity 16) and the
-server's `Store.Migrate` (168 lines, complexity 3). They are long because each lists every table and
-index, which reads best as the one list.
+**The limits hold from now on.** `core/codequality` measures every function as this review did. A
+test in each Go module runs it over that module's own source:
+- `core/codequality`;
+- `apps/server/internal/quality`;
+- `apps/desktop/internal/quality`.
+
+A function past 24 or 300 lines fails its module's job in CI, as it would fail the window's lint.
+Its own tests check the counting against a sample whose complexity is worked out by hand.
+
+The longest functions left are the server's `Store.Migrate` (168 lines, complexity 3), the
+server's schema list, and the daemon's `serve` (154 lines, complexity 19).
 
 ## Dependencies
 
@@ -170,7 +177,8 @@ section 7 says.
   looking at the window in the browser pane.
 - **This review** found:
   - the providers' missing tests;
-  - the three functions split above;
+  - fifteen functions past the window's complexity limit and one past its length, all now split;
+  - a validator that named a different fault from run to run;
   - the advisory count, nine on record against twelve now.
 
 ## Where the evidence stops
@@ -182,5 +190,6 @@ section 7 says.
   needs the owner's (`release-checks.md` section 6).
 - **The providers.** Google, Microsoft and CalDAV are still checked against stand-ins that behave as
   their documentation says.
-- **Complexity is a count, not a judgement.** The scan finds where to look; the dispositions above
-  are the judgement, and they are open to the independent reviewer's.
+- **Complexity is a count, not a judgement.** The limits keep functions small enough to read, but
+  not well named or well divided. The splits above are the agent's judgement of that, and open to
+  the independent reviewer's.

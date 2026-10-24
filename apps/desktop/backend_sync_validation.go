@@ -64,44 +64,7 @@ func validatePullEnvelopePage(page syncPullResponse, since int64) error {
 		}
 		last = item.Seq
 		seen[item.RecordID] = true
-		var fields map[string]json.RawMessage
-		if err := json.Unmarshal(item.Payload, &fields); err != nil {
-			return invalid
-		}
-		var id string
-		field := ""
-		switch item.Kind {
-		case "observation":
-			field = "observation_id"
-		case "correction":
-			field = "correction_id"
-		case "placement":
-			field = "placement_id"
-		case storage.SyncKindMedicationEvent:
-			field = "event_id"
-		case storage.SyncKindMedicationCorrection:
-			field = "correction_id"
-		case storage.SyncKindContextMarker:
-			field = "marker_id"
-		case storage.SyncKindSourceReport:
-			field = "report_id"
-		case "task", storage.SyncKindMedication:
-			// A revision's record id is its owner's id plus _r<revision>.
-			owner := "task_id"
-			if item.Kind == storage.SyncKindMedication {
-				owner = "medication_id"
-			}
-			var revision int
-			if json.Unmarshal(fields[owner], &id) != nil || json.Unmarshal(fields["revision"], &revision) != nil || revision < 1 || item.RecordID != fmt.Sprintf("%s_r%d", id, revision) {
-				return invalid
-			}
-			continue
-		case "tombstone":
-			field = "record_id"
-		default:
-			return invalid
-		}
-		if json.Unmarshal(fields[field], &id) != nil || id != item.RecordID {
+		if !envelopeNamesItself(item) {
 			return invalid
 		}
 	}
@@ -109,4 +72,40 @@ func validatePullEnvelopePage(page syncPullResponse, since int64) error {
 		return invalid
 	}
 	return nil
+}
+
+// envelopeIDFields name, for each kind, the payload field that holds its
+// record's id.
+var envelopeIDFields = map[string]string{
+	"observation":                        "observation_id",
+	"correction":                         "correction_id",
+	"placement":                          "placement_id",
+	storage.SyncKindMedicationEvent:      "event_id",
+	storage.SyncKindMedicationCorrection: "correction_id",
+	storage.SyncKindContextMarker:        "marker_id",
+	storage.SyncKindSourceReport:         "report_id",
+	"tombstone":                          "record_id",
+}
+
+// envelopeNamesItself reports whether a record is of a kind ZeitBoard knows,
+// and its payload names the record's own id. A revision's record id is its
+// owner's id plus _r<revision>.
+func envelopeNamesItself(item syncEnvelope) bool {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(item.Payload, &fields); err != nil {
+		return false
+	}
+	var id string
+	switch item.Kind {
+	case "task", storage.SyncKindMedication:
+		owner := "task_id"
+		if item.Kind == storage.SyncKindMedication {
+			owner = "medication_id"
+		}
+		var revision int
+		return json.Unmarshal(fields[owner], &id) == nil && json.Unmarshal(fields["revision"], &revision) == nil &&
+			revision >= 1 && item.RecordID == fmt.Sprintf("%s_r%d", id, revision)
+	}
+	field, known := envelopeIDFields[item.Kind]
+	return known && json.Unmarshal(fields[field], &id) == nil && id == item.RecordID
 }
