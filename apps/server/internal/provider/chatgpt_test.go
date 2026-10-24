@@ -70,11 +70,12 @@ func isReason(err error, reason Reason) bool {
 	return errors.As(err, &unavailable) && unavailable.Reason == reason
 }
 
-// A sign-in fills the provider only when the configuration names none, or
-// names ChatGPT.
-func TestASignInNeverReplacesAConfiguredProvider(t *testing.T) {
+// A sign-in is offered only when the configuration names ChatGPT: never in
+// place of another provider, and never on a server left without one.
+func TestASignInIsOfferedOnlyWhereTheConfigurationAsks(t *testing.T) {
 	for name, offers := range map[Name]bool{
-		"": true, "disabled": true, "local": true, "chatgpt": true, "ChatGPT": true,
+		"chatgpt": true, "ChatGPT": true,
+		"": false, "disabled": false, "local": false,
 		"openai": false, "anthropic": false, "openrouter": false, "openai-compatible": false,
 	} {
 		if OffersChatGPT(name) != offers {
@@ -83,5 +84,28 @@ func TestASignInNeverReplacesAConfiguredProvider(t *testing.T) {
 	}
 	if _, status, err := New(Config{Name: "chatgpt", Model: "synthetic"}); err != nil || status.Configured {
 		t.Errorf("a configuration naming ChatGPT built %+v, %v", status, err)
+	}
+}
+
+// A context too long for the model reads as it does from any provider, so
+// the assistant asks once more with less.
+func TestAContextTooLongReadsAsAnyProvidersDoes(t *testing.T) {
+	ctx := context.Background()
+	fake := chatgpttest.New(t)
+	account := chatGPTAccount(t, fake)
+	begun, err := account.BeginSignIn(ctx, "http://127.0.0.1:53682/auth/callback")
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, code, clientID := fake.Approve(begun.AuthorizationURL)
+	if _, err := account.FinishSignIn(ctx, "d", state, code, clientID); err != nil {
+		t.Fatal(err)
+	}
+	fake.Lock()
+	fake.Status, fake.Body = 400, `{"error":{"code":"context_length_exceeded"}}`
+	fake.Unlock()
+	_, err = NewChatGPT(account).Complete(ctx, Request{System: "s", User: "u"})
+	if !errors.Is(err, ErrContextTooLarge) || isReason(err, ReasonRefused) {
+		t.Errorf("a context too long answered %v", err)
 	}
 }

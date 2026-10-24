@@ -155,7 +155,7 @@ it("says what stands in the way when there is nothing to sign in to", async () =
 
   install({ GetAssistantConnection: async () => ({ reachable: true, offered: false }) });
   const configured = render(<AssistantSettings syncKey="true device" />);
-  expect(await screen.findByText(/a ChatGPT sign-in never\s+replaces it/)).toBeVisible();
+  expect(await screen.findByText(/set the assistant's provider to chatgpt/)).toBeVisible();
   expect(screen.queryByRole("button", { name: "Continue with ChatGPT" })).toBeNull();
   configured.unmount();
 
@@ -167,5 +167,5 @@ it("says what stands in the way when there is nothing to sign in to", async () =
   });
   render(<AssistantSettings syncKey="true device" />);
   expect(await screen.findByText(older)).toBeVisible();
-  expect(screen.queryByText(/never\s+replaces it/)).toBeNull();
+  expect(screen.queryByText(/set the assistant's provider to chatgpt/)).toBeNull();
 });

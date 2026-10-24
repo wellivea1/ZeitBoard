@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"non24.app/server/internal/chatgpt"
 	syncmodel "non24.app/server/internal/sync"
@@ -45,6 +46,18 @@ type chatGPTModelRequest struct {
 
 const maxChatGPTBodyBytes = 16 * 1024
 
+// chatGPTWriteTimeout is how long a sign-in route may take: finishing one
+// asks OpenAI in turn for its discovery document, the tokens, its keys and
+// the plan's models, each allowed fifteen seconds, and may withdraw an
+// earlier grant.
+const chatGPTWriteTimeout = 2 * time.Minute
+
+// patient lets one of these routes outlast the server's usual limit on a
+// response.
+func patient(w http.ResponseWriter) {
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(chatGPTWriteTimeout))
+}
+
 func (s *Server) handleChatGPTStatus(w http.ResponseWriter, _ *http.Request) {
 	s.writeChatGPTStatus(w, nil)
 }
@@ -58,6 +71,7 @@ func (s *Server) writeChatGPTStatus(w http.ResponseWriter, revoked *bool) {
 }
 
 func (s *Server) handleChatGPTModels(w http.ResponseWriter, r *http.Request) {
+	patient(w)
 	models, err := s.chatgpt.Models(r.Context())
 	if err != nil {
 		writeChatGPTError(w, err)
@@ -67,6 +81,7 @@ func (s *Server) handleChatGPTModels(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleChatGPTSignIn(w http.ResponseWriter, r *http.Request) {
+	patient(w)
 	var req chatGPTSignInRequest
 	if err := decodeBody(w, r, maxChatGPTBodyBytes, &req); err != nil {
 		writeDecodeError(w, err)
@@ -81,6 +96,7 @@ func (s *Server) handleChatGPTSignIn(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleChatGPTFinish(w http.ResponseWriter, r *http.Request) {
+	patient(w)
 	var req chatGPTFinishRequest
 	if err := decodeBody(w, r, maxChatGPTBodyBytes, &req); err != nil {
 		writeDecodeError(w, err)
@@ -95,6 +111,7 @@ func (s *Server) handleChatGPTFinish(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleChatGPTModel(w http.ResponseWriter, r *http.Request) {
+	patient(w)
 	var req chatGPTModelRequest
 	if err := decodeBody(w, r, maxChatGPTBodyBytes, &req); err != nil {
 		writeDecodeError(w, err)
@@ -109,6 +126,7 @@ func (s *Server) handleChatGPTModel(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleChatGPTDisconnect(w http.ResponseWriter, r *http.Request) {
+	patient(w)
 	device := deviceFromContext(r.Context())
 	revoked, err := s.chatgpt.Disconnect(r.Context(), device.ID)
 	if err != nil {

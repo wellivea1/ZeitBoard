@@ -388,8 +388,9 @@ other's asks.
 
 ## The assistant on the owner's ChatGPT plan (ADR-0066)
 
-When the server's configuration names no other provider, the owner can sign the assistant in to
-their ChatGPT plan from Settings › Sync. Requests then count against the plan, not an API key.
+When the server's configuration names ChatGPT as the assistant's provider, the owner can sign the
+assistant in to their ChatGPT plan from Settings › Sync. Requests then count against the plan, not
+an API key.
 
 - **What is sent** is the same minimized, redacted planning context as with any provider. It holds
   windows, durations, counts and opaque ids. When a message asks about medication, it also holds

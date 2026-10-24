@@ -69,7 +69,8 @@ func serve(configPath string, stop <-chan struct{}, ready chan<- struct{}) error
 
 	options := []api.Option{}
 	if provider.OffersChatGPT(provider.Name(cfg.Assistant.Provider)) {
-		// The owner may sign in to ChatGPT from a device (ADR-0066).
+		// The configuration lets the owner sign in to ChatGPT from a device
+		// (ADR-0066).
 		account, err := chatgpt.Open(context.Background(), st, chatgpt.Options{DefaultModel: cfg.Assistant.Model})
 		if err != nil {
 			return err

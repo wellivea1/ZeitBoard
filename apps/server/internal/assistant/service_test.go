@@ -636,3 +636,20 @@ func TestAProviderNotYetSetUpSaysWhatItNeeds(t *testing.T) {
 		}
 	}
 }
+
+// A context too large for the model is asked about once more, compacted.
+func TestAContextTooLargeIsAskedAgainSmaller(t *testing.T) {
+	st, device := testStoreAndDevice(t)
+	fake := &fakeProvider{
+		errs:      []error{provider.ErrContextTooLarge},
+		responses: []provider.Response{{}, {Text: `{"schema_version":"v1","recommended_action":"answer_only","answer":"Synthetic answer."}`}},
+	}
+	service := New(fake, st)
+	service.now = fixedNow
+	resp, err := service.HandleMessage(context.Background(), device, MessageRequest{
+		SchemaVersion: SchemaVersion, Message: "Find 30 minutes for taxes before tomorrow.", Context: planningContext(),
+	})
+	if err != nil || resp.Answer != "Synthetic answer." || resp.Reason != "" || len(fake.requests) != 2 {
+		t.Fatalf("answered %+v, %v after %d calls", resp, err, len(fake.requests))
+	}
+}

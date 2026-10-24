@@ -24,9 +24,10 @@ import (
 const (
 	// chatGPTSignInTimeout is how long a sign-in waits for the browser.
 	chatGPTSignInTimeout = 10 * time.Minute
-	// chatGPTServerTimeout covers what the server asks of OpenAI for a
-	// sign-in: the discovery document, the exchange, the keys, the models.
-	chatGPTServerTimeout = 60 * time.Second
+	// chatGPTServerTimeout outlasts the two minutes the server allows a
+	// sign-in route: the discovery document, the exchange, the keys and the
+	// models, each up to fifteen seconds, and withdrawing an earlier grant.
+	chatGPTServerTimeout = 130 * time.Second
 	// assistantMessageTimeout outlasts the 150 seconds the server allows an
 	// assistant message, two model calls that may think before answering.
 	assistantMessageTimeout = 160 * time.Second
@@ -37,8 +38,8 @@ const (
 type AssistantConnectionDTO struct {
 	// Reachable is false when there is no server to ask; Message says why.
 	Reachable bool `json:"reachable"`
-	// Offered is false when the server's configuration names a provider of
-	// its own, which a sign-in never replaces.
+	// Offered is false unless the server's configuration names ChatGPT as
+	// the assistant's provider.
 	Offered bool   `json:"offered"`
 	State   string `json:"state,omitempty"`
 	Email   string `json:"email,omitempty"`

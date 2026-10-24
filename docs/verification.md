@@ -3824,3 +3824,26 @@ tests passed.
   - the desktop: 827.
 
   The most complex is 24 and the longest 168 lines, within the limits of 24 and 300.
+
+## The ChatGPT sign-in after an automated review — 2026-10-24
+
+An automated reviewer raised ten findings on PR #105. Each fix that changes behaviour has a test
+against the synthetic OpenAI:
+
+- **A context too long for the model** (400, `context_length_exceeded`) reads as `too_large`. The
+  provider reports it as a context too large, and the assistant asks a second time and uses that
+  answer.
+- **A refresh that withdraws the plan** leaves no live token: the stand-in finds none still in force.
+  The sign-in reads as ended for the plan, and the next sign-in asks `prompt=consent`.
+- **Plan scope withdrawn, in a 403 or inside the stream**, ends the sign-in either way, and the next
+  sign-in asks for consent. `subscription_sharing_invalid_user` in a failed stream ends the sign-in
+  without asking for consent.
+- **A refresh that keeps its refresh token**: two refreshes leave the sign-in connected, with the
+  same token in force.
+- **Offered only when the configuration names `chatgpt`**: unset, `disabled`, `local` and every
+  other provider name offer no sign-in.
+- **The sign-in routes' two minutes** have no test that waits that long. The window is set where
+  the assistant message's is, and the desktop's 130 seconds outlast it.
+
+The server's whole suite, `go vet` and `gofmt` passed. So did the desktop's sign-in tests and the
+window's card tests, with the new wording for a server that does not offer the sign-in.

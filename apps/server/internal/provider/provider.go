@@ -109,12 +109,13 @@ func (DisabledClient) Status() Status {
 	return Status{Provider: string(Disabled), Configured: false}
 }
 
-// OffersChatGPT reports whether a configuration leaves the assistant to a
-// ChatGPT sign-in: it names no provider, or names ChatGPT. A sign-in never
-// replaces a provider the configuration names.
+// OffersChatGPT reports whether a configuration offers the owner's devices a
+// ChatGPT sign-in for the assistant: only when it names ChatGPT. Left unset,
+// or disabled, the assistant stays off the network, as everything is off
+// until the operator turns it on; and a sign-in never replaces a provider
+// the configuration names.
 func OffersChatGPT(name Name) bool {
-	name = normalizeName(name)
-	return name == Disabled || name == ChatGPT
+	return normalizeName(name) == ChatGPT
 }
 
 func New(cfg Config) (LLM, Status, error) {

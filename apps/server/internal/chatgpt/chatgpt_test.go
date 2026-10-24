@@ -425,7 +425,8 @@ func TestAFailedAnswerSaysWhy(t *testing.T) {
 		"server error":         {status: 500, body: `not json`, want: chatgpt.Busy},
 		"failed in stream":     {stream: []string{`{"type":"response.failed","response":{"error":{"code":"subscription_sharing_usage_limit_exceeded"}}}`}, want: chatgpt.UsageLimit},
 		"error event":          {stream: []string{`{"type":"error","code":"server_error","message":"secret text"}`}, want: chatgpt.Busy},
-		"incomplete":           {stream: []string{`{"type":"response.incomplete"}`}, want: chatgpt.Refused},
+		"incomplete":           {stream: []string{`{"type":"response.incomplete"}`}, want: chatgpt.TooLarge},
+		"context too long":     {status: 400, body: `{"error":{"code":"context_length_exceeded","message":"secret text"}}`, want: chatgpt.TooLarge},
 		"cut short":            {stream: []string{`{"type":"response.output_text.delta","delta":"half"}`}, want: chatgpt.Busy},
 		"plan scope withdrawn": {status: 403, body: `{"error":{"code":"chatpass_v2_scope_not_authorized"}}`, want: chatgpt.PlanNotShared},
 	} {
@@ -473,5 +474,101 @@ func TestOnlyAListedModelCanBeChosen(t *testing.T) {
 	}
 	if account.Status().Model != "synthetic-deep" {
 		t.Errorf("model %q", account.Status().Model)
+	}
+}
+
+// A refresh that no longer shares the plan withdraws the token it was just
+// given, ends the sign-in, and the next sign-in asks ChatGPT for consent anew.
+func TestAPlanWithdrawnOnARefreshAsksForConsentAgain(t *testing.T) {
+	fake := chatgpttest.New(t)
+	fake.ExpiresIn = 30 // every request refreshes
+	account, _ := open(t, ":memory:", fake, chatgpt.Options{})
+	if _, _, err := signIn(t, account, fake); err != nil {
+		t.Fatal(err)
+	}
+	fake.Lock()
+	fake.RefreshScope = "openid profile email offline_access"
+	fake.Unlock()
+	if _, err := account.Respond(ctx, "i", "q"); problemOf(err) != chatgpt.PlanNotShared {
+		t.Fatalf("a plan withdrawn answered %v", err)
+	}
+	if fake.RefreshToken() != "" {
+		t.Errorf("the rotated token %q is still live at OpenAI", fake.RefreshToken())
+	}
+	if status := account.Status(); status.State != chatgpt.Ended || status.Problem != chatgpt.PlanNotShared {
+		t.Errorf("after the plan was withdrawn: %+v", status)
+	}
+	begun, err := account.BeginSignIn(ctx, redirect)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if address, _ := url.Parse(begun.AuthorizationURL); address.Query().Get("prompt") != "consent" {
+		t.Errorf("signing in again asked %v", address.Query())
+	}
+}
+
+// A refusal of the plan, in the status or inside the stream, ends the sign-in
+// the same way, and the next sign-in asks for consent anew.
+func TestARefusalInTheStreamEndsTheSignInToo(t *testing.T) {
+	for name, tc := range map[string]struct {
+		status int
+		body   string
+		stream []string
+		want   chatgpt.Problem
+	}{
+		"plan scope, by status":   {status: 403, body: `{"error":{"code":"chatpass_v2_scope_not_authorized"}}`, want: chatgpt.PlanNotShared},
+		"plan scope, in a stream": {stream: []string{`{"type":"error","code":"chatpass_v2_scope_not_authorized"}`}, want: chatgpt.PlanNotShared},
+		"invalid user, in a stream": {
+			stream: []string{`{"type":"response.failed","response":{"error":{"code":"subscription_sharing_invalid_user"}}}`},
+			want:   chatgpt.SignInEnded,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fake := chatgpttest.New(t)
+			account, _ := open(t, ":memory:", fake, chatgpt.Options{})
+			if _, _, err := signIn(t, account, fake); err != nil {
+				t.Fatal(err)
+			}
+			fake.Lock()
+			fake.Status, fake.Body, fake.Stream = tc.status, tc.body, tc.stream
+			fake.Unlock()
+			if _, err := account.Respond(ctx, "i", "q"); problemOf(err) != tc.want {
+				t.Fatalf("answered %v", err)
+			}
+			if status := account.Status(); status.State != chatgpt.Ended || status.Problem != tc.want {
+				t.Errorf("after the refusal: %+v", status)
+			}
+			begun, err := account.BeginSignIn(ctx, redirect)
+			if err != nil {
+				t.Fatal(err)
+			}
+			address, _ := url.Parse(begun.AuthorizationURL)
+			if consent := address.Query().Get("prompt") == "consent"; consent != (tc.want == chatgpt.PlanNotShared) {
+				t.Errorf("signing in again asked %v", address.Query())
+			}
+		})
+	}
+}
+
+// A refresh may keep its refresh token and leave it out of the answer; the
+// sign-in carries on with the one in force.
+func TestARefreshThatKeepsItsTokenCarriesOn(t *testing.T) {
+	fake := chatgpttest.New(t)
+	fake.ExpiresIn = 30
+	account, _ := open(t, ":memory:", fake, chatgpt.Options{})
+	if _, _, err := signIn(t, account, fake); err != nil {
+		t.Fatal(err)
+	}
+	kept := fake.RefreshToken()
+	fake.Lock()
+	fake.KeepRefreshToken = true
+	fake.Unlock()
+	for range 2 {
+		if _, err := account.Respond(ctx, "i", "q"); err != nil {
+			t.Fatalf("a refresh that kept its token answered %v", err)
+		}
+	}
+	if status := account.Status(); status.State != chatgpt.Connected || fake.RefreshToken() != kept {
+		t.Errorf("after refreshes that kept the token: %+v, live %q, kept %q", status, fake.RefreshToken(), kept)
 	}
 }

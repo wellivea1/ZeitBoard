@@ -31,6 +31,10 @@ func (c chatGPTClient) Complete(ctx context.Context, input Request) (Response, e
 	defer cancel()
 	text, err := c.account.Respond(ctx, input.System, prompt(input))
 	var failed *chatgpt.Error
+	if errors.As(err, &failed) && failed.Problem == chatgpt.TooLarge {
+		// As with any provider, the assistant asks once more with less.
+		return Response{}, ErrContextTooLarge
+	}
 	if errors.As(err, &failed) {
 		return Response{}, Unavailable{Reason: chatGPTReason(failed.Problem)}
 	}
