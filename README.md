@@ -45,8 +45,9 @@ release ceremony rather than code.
 - **Your own server.** The self-hosted backend provides encrypted sync, server-side projections,
   passcode-protected availability links, time requests and notifications. The Android companion
   syncs Health Connect sleep, shows forecasts and tasks, and records doses as taken or skipped.
-- **Assistants.** The BYOK assistant and agents propose and never apply. ZeitBoard also offers a
-  local MCP connector, a Claude Desktop extension and a skill.
+- **Assistants.** The assistant and agents propose and never apply. The assistant uses the
+  server's own provider key, or the owner's ChatGPT plan through a sign-in the server holds
+  (ADR-0066). ZeitBoard also offers a local MCP connector, a Claude Desktop extension and a skill.
 - **This computer.** Local files are restricted to the owner's account. Windows can encrypt them
   by choice (ADR-0063). Everything can be exported or erased.
 - Browser-only desktop preview data is synthetic and visibly labeled `Sample data`; it is not used

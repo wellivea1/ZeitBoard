@@ -106,3 +106,19 @@ and what it spoke was recorded. It read headings, tabs, choices, switches and fi
 they should be. It also found what the tree could not show: the forecast read twice, the dial's key
 and each record's rows split into several stops, and a switch's title read twice. Each is now one
 stop. The verification log has what it said.
+
+## The assistant's ChatGPT sign-in — 2026-10-24
+
+The card in Settings › Sync and the one-time welcome (ADR-0066) follow the same rules.
+
+- **Labelled.** The card is a region named by its heading. The model is chosen with a labelled
+  native select.
+- **Spoken.** Waiting for the browser is a status line that names its Cancel. Errors are alerts and
+  outcomes are a polite status, so a screen reader hears them where they happen.
+- **The welcome is a modal dialog.** It is named by its title and described by its sentence, and
+  its one button takes the focus when it opens. Tab stays on that button and Escape closes it.
+  Closing returns the focus to where it was. When that control is gone, as the sign-in button is
+  once the plan is connected, the focus goes to the card's heading.
+- **The rail.** A reply that says why the assistant could not answer shows what to do beside it, as
+  a button or a link with its own name: Manage usage, Sign in under Settings, Choose a model or
+  Learn more. The plan's line by the composer names its Manage usage button the same way.

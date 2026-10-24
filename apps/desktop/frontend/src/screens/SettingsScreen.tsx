@@ -23,6 +23,7 @@ import { AppearanceSettings } from "./settings/AppearanceSettings";
 import { HiddenNotesSettings } from "./settings/HiddenNotesSettings";
 import { ActivityCollectionSettings } from "./settings/ActivityCollectionSettings";
 import { StartupSettings } from "./settings/StartupSettings";
+import { AssistantSettings } from "./settings/AssistantSettings";
 import { BackendSyncSettings } from "./settings/BackendSyncSettings";
 import { LocalAgentSettings } from "./settings/LocalAgentSettings";
 import { ReachingHoursSettings } from "./settings/ReachingHoursSettings";
@@ -300,6 +301,9 @@ export function SettingsScreen({
               onConfigure={handleConfigureBackendSync}
               onDisable={handleDisableBackendSync}
               onSyncNow={handleSyncNow}
+            />
+            <AssistantSettings
+              syncKey={`${backendSyncStatus.enabled} ${backendSyncStatus.deviceId}`}
             />
           </div>
         </ScreenTabPanel>

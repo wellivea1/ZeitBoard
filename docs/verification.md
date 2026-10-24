@@ -3702,3 +3702,45 @@ streamed responses. Nothing reached OpenAI.
 
 `go vet`, `gofmt` and the whole server suite passed. The `chatgpt` package also passed under the
 race detector.
+
+## The assistant on a ChatGPT plan, the computer's side — 2026-10-24
+
+ADR-0066's computer half was checked against a stand-in server and a scripted browser. Nothing
+reached OpenAI, and no browser was opened.
+
+- **The loopback receiver.**
+  - These were turned away, and none ended the wait: another path; the hosts `localhost` and
+    `attacker.example` against `127.0.0.1`; another state; a state or a code given twice; a
+    missing code.
+  - The sign-in's own answer was then taken.
+  - A refusal ended the wait with its code, kept to what reads as one.
+  - A cancelled wait ended as cancelled. It passed under the race detector.
+- **The bindings.**
+  - A sign-in returned to `http://127.0.0.1:<port>/auth/callback`, and handed the server the state,
+    the code and the client ID, and nothing else.
+  - A refusal in the browser said nothing changed and reached no server.
+  - A plan not shared was said as such.
+  - A `file:` sign-in address was refused before any browser opened.
+  - A second sign-in was refused while one waited, and Cancel stopped the wait.
+  - With sync off, nothing was asked. A server from before the sign-in offers none. A disconnection
+    ChatGPT did not confirm says so.
+  - Only ChatGPT's usage page and OpenAI's help open, never an address passed in.
+  - A reply carried what pays for it and why it did not answer.
+- **The window, in tests.**
+  - The card says what is sent before signing in, waits for the browser with a Cancel, and says once
+    that the plan now pays, then never again.
+  - It hands the focus to the card after that welcome.
+  - It chooses a model, opens the usage page, and disconnects, saying when ChatGPT did not confirm.
+  - It offers Sign in again to an ended sign-in.
+  - It says what stands in the way when there is nothing to sign in to.
+  - The rail names the plan, offers Manage usage by the composer, and answers a usage limit and an
+    ended sign-in with what to do. It reads the status again when the sign-in changes in Settings.
+- **The window, looked at.** The card, its waiting state, the welcome and the rail were shown in
+  the browser pane over a synthetic bridge.
+  - The welcome's heading had taken the settings section's capitals, so it now draws over the whole
+    window.
+  - Its focus fell to the page after "Got it", so it now goes to the card's heading.
+  - A stale empty list of models no longer flashes on a new connection.
+
+`npm run check:web` passed, with 668 tests and both builds. So did the desktop's `go vet` and
+`gofmt`, and its whole Go suite.

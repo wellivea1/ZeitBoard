@@ -125,10 +125,47 @@ the app.
 - **The official mark.** OpenAI's guidelines show the ChatGPT mark on the sign-in button. The mark is
   OpenAI's asset and is not in the repository: adding it is a download for the owner to allow.
 
-## Not done here
+## The owner's computer
 
-The owner's computer's side follows in the same slice:
-- the loopback answer;
-- the card in Settings › Sync;
-- the one-time welcome;
-- the rail's account of the plan and of each problem.
+The computer's side follows the same rules: it relays and shows, and holds nothing.
+
+- **The browser's return.** A loopback receiver (`internal/loopback`) listens on `127.0.0.1` alone,
+  at `/auth/callback`, for this sign-in only.
+  - It takes a GET whose Host header names that address exactly, which turns DNS rebinding away.
+  - The state must be the sign-in's, given once and compared in constant time. No other parameter
+    may come twice.
+  - The first answer ends the wait. Anything else is answered and ignored, so a stray request cannot
+    spoil the sign-in.
+  - The page it answers with keeps nothing: no caching, no referrer, and a policy that runs no
+    script.
+- **Bindings.**
+  - `ConnectChatGPT` asks the server for the address and opens only an `https` one. It waits ten
+    minutes for the browser, or until cancelled; one sign-in waits at a time. Then it hands the
+    server the state, the code and the client ID, and nothing else.
+  - `GetAssistantConnection`, `ListAssistantModels`, `ChooseAssistantModel` and
+    `DisconnectChatGPT` relay the server's answers.
+  - `OpenAssistantPage` opens ChatGPT's usage settings or OpenAI's help, from a list the desktop
+    holds. A server never chooses an address the window opens.
+- **Settings › Sync › Assistant.** A card states where the sign-in stands:
+  - nothing to sign in to;
+  - a provider the server's configuration names;
+  - not connected, with what is sent said before signing in;
+  - waiting for the browser;
+  - connected, with the account, the model, Manage usage and Disconnect;
+  - ended, with Sign in again.
+- **The welcome.** After the first connection, the window says once "You're using your ChatGPT
+  plan." with "Got it", as OpenAI's guidelines ask.
+- **The rail.**
+  - The header says "ChatGPT plan", or what the sign-in needs.
+  - The composer carries "Using your ChatGPT plan · Manage usage".
+  - A reply that says why the assistant could not answer shows what to do beside it.
+- **Waiting long enough.** An assistant message waits 160 seconds, past the server's 150. Before,
+  the desktop's 10-second limit gave up on any model slower than that.
+- **A desktop and server from either side of this change.** A desktop from before it reads the
+  server's new status fields as invalid, so the two are updated together, as they are installed.
+
+What is left of OpenAI's guidelines:
+- **"Buy app credits".** ZeitBoard sells none.
+- **An invitation banner.** Home stays free of prompts; the Settings card is the invitation.
+- **The ChatGPT mark on the button.** It is OpenAI's asset to download, which the owner has not
+  yet allowed.

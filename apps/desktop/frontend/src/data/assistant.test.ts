@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  listAssistantModels,
+  loadAssistantConnection,
   loadAssistantStatus,
+  normalizeAssistantConnection,
   normalizeAssistantReply,
   normalizeAssistantStatus,
   sendAssistantMessage,
+  usesChatGPTPlan,
 } from "./assistant";
 
 const proposal = {
@@ -75,5 +79,82 @@ describe("assistant adapter", () => {
     expect(sent).toEqual({ message: "when should I take melatonin?" });
     expect(reply.result).toBe("refused_medical");
     expect(reply.proposals).toEqual([]);
+  });
+
+  // ADR-0066: what pays for the assistant, and why it did not answer.
+  it("reads the plan and the reasons the server gives, and nothing else", () => {
+    const status = normalizeAssistantStatus({
+      enabled: true,
+      configured: false,
+      provider: "chatgpt",
+      auth: "chatgpt_plan",
+      problem: "sign_in_ended",
+    });
+    expect(status).toMatchObject({ auth: "chatgpt_plan", problem: "sign_in_ended" });
+    expect(usesChatGPTPlan(status)).toBe(true);
+    expect(usesChatGPTPlan(normalizeAssistantStatus({ enabled: true, configured: true }))).toBe(
+      false,
+    );
+    expect(
+      normalizeAssistantStatus({ enabled: true, problem: "anything" })?.problem,
+    ).toBeUndefined();
+
+    const reply = normalizeAssistantReply({
+      available: true,
+      result: "answer_only",
+      answer: "The plan's limit is reached.",
+      configured: true,
+      auth: "chatgpt_plan",
+      reason: "usage_limit",
+      proposals: [],
+    });
+    expect(reply).toMatchObject({ auth: "chatgpt_plan", reason: "usage_limit" });
+    expect(
+      normalizeAssistantReply({ available: true, reason: "made_up", proposals: [] })?.reason,
+    ).toBeUndefined();
+  });
+
+  it("reads where the ChatGPT sign-in stands", async () => {
+    expect(
+      normalizeAssistantConnection({
+        reachable: true,
+        offered: true,
+        state: "connected",
+        email: "owner@example.com",
+        model: "synthetic-fast",
+        revoked: false,
+      }),
+    ).toEqual({
+      reachable: true,
+      offered: true,
+      state: "connected",
+      email: "owner@example.com",
+      model: "synthetic-fast",
+      revoked: false,
+    });
+    expect(normalizeAssistantConnection({ offered: true })).toBeUndefined();
+    expect(normalizeAssistantConnection({ reachable: true, state: "odd" })?.state).toBeUndefined();
+    // A window without the desktop app has no sign-in to read.
+    expect(await loadAssistantConnection({})).toBeNull();
+  });
+
+  it("keeps only models that have a slug and a name", async () => {
+    const root = {
+      go: {
+        main: {
+          App: {
+            ListAssistantModels: async () => [
+              { slug: "synthetic-fast", displayName: "Synthetic Fast" },
+              { slug: "", displayName: "No slug" },
+              { slug: "synthetic-nameless" },
+              "not a model",
+            ],
+          },
+        },
+      },
+    };
+    expect(await listAssistantModels(root)).toEqual([
+      { slug: "synthetic-fast", displayName: "Synthetic Fast" },
+    ]);
   });
 });

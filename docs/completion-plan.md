@@ -1817,6 +1817,37 @@ its place in the window. ADR-0066 records what was decided. This is the server's
 - **Tested against a stand-in.** A synthetic OpenAI (`chatgpttest`) plays the issuer and the API,
   in the package's tests and over the device API.
 
+### The assistant on the owner's ChatGPT plan, the computer's side — 2026-10-24
+
+The computer relays and shows; it holds nothing (ADR-0066).
+
+- **The browser's return.**
+  - A loopback receiver takes one answer: on `127.0.0.1`, at `/auth/callback`, with Host exactly
+    that address and the sign-in's state once.
+  - Strays are turned away without ending the wait.
+  - Only an `https` address from the server is opened, and the server is handed the state, the
+    code and the client ID alone.
+  - Only ChatGPT's usage page and OpenAI's help open from the window, from the desktop's own list.
+- **Settings › Sync › Assistant.**
+  - The card says what is sent before the owner signs in.
+  - It waits ten minutes for the browser, or until cancelled.
+  - It shows the account and the model, which can be changed, with Manage usage and Disconnect.
+  - A sign-in that ended offers Sign in again.
+  - "You're using your ChatGPT plan." is shown once, as a modal dialog that hands the focus back.
+- **The rail.**
+  - The header says "ChatGPT plan".
+  - The composer carries "Using your ChatGPT plan · Manage usage".
+  - A reply that says why it could not answer shows what to do: Manage usage, Sign in under
+    Settings, Choose a model, or Learn more.
+- **Long enough to wait.** An assistant message waits 160 seconds. The desktop's 10-second limit
+  gave up on any model slower than that, where the server waited 30.
+- **Checked in the window.**
+  - The card, the waiting state, the welcome and the rail were looked at in the browser pane, over a
+    synthetic bridge, and nothing was opened.
+  - The welcome's heading had taken the settings section's style; it is now drawn over the whole
+    window.
+  - Its focus fell to the page once the sign-in button was gone; it now goes to the card's heading.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and
@@ -1829,7 +1860,7 @@ who it waits on. What each remaining step needs, how to run it and where to reco
 | C1 connected foundation | Done | Native login-start, suspend and resume evidence on the owner's machine; supported-device resource measurements | The owner's machine and phone |
 | C2 planning and approval | Acceptance met | — | — |
 | C3 medication and context | Done, device run recorded | — | — |
-| C4 assistant and agents | Every criterion met | — | — |
+| C4 assistant and agents | Every criterion met; the ChatGPT plan added 2026-10-24 (ADR-0066) | A sign-in with a real ChatGPT account | The owner's ChatGPT account |
 | C5 live portal | Done | The independent review and the exposure gate (`portal-design.md` section 12); the portal stays off by default until then | An independent reviewer |
 | C6 notifications | Acceptance met | — | — |
 | C7 daily-use UX | Done, Narrator and TalkBack passes recorded 2026-10-23 | — | — |
@@ -1884,5 +1915,5 @@ on the owner rather than on code:
 | Activity collected while the app is closed | Roadmap, slice 11 | Delivered 2026-10-12 (ADR-0060) from Windows' own power log, by a separate choice. The collector itself still stops when ZeitBoard quits |
 | OAuth calendar providers | Roadmap, slice 6 and phase 3 | Delivered 2026-10-12: Google and Microsoft accounts sign in through an app the owner registers, with no registration in ZeitBoard's name, and are read every hour (ADR-0064). Accepted times can be written to one of their calendars, with CalDAV write-back's guarantees (ADR-0065). Calendars that publish an address can also subscribe by it (ADR-0062) |
 | Packaged cloud skills for assistants | Roadmap, phase 4 | Delivered 2026-10-12 for Claude (ADR-0061), with its privacy and threat review. ChatGPT and Claude on the web take remote servers only, which ZeitBoard does not expose |
-| The assistant on the owner's ChatGPT plan, through Sign in with ChatGPT | The owner's request, 2026-10-24 | The server's side delivered 2026-10-24 (ADR-0066). The computer's sign-in, its Settings card and the rail follow. A real sign-in waits on the owner's own account |
+| The assistant on the owner's ChatGPT plan, through Sign in with ChatGPT | The owner's request, 2026-10-24 | Delivered 2026-10-24 (ADR-0066): the server holds the sign-in, the computer relays the browser's answer, and Settings › Sync, a one-time welcome and the rail show where it stands. Tested against a stand-in OpenAI. A real sign-in waits on the owner's own account (`release-checks.md` section 6) |
 | Encrypting the local database | Roadmap, phase 2; limitation 1 | Delivered 2026-10-12 with Windows' file encryption, by choice (ADR-0063). Encryption inside the database, with a key ZeitBoard holds, would need `ncruces/go-sqlite3`'s encrypting VFS: a new pre-v1 dependency to download, and a key-custody decision for the owner. The owner chose not to, 2026-10-18 (ADR-0063's update) |

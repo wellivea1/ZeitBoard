@@ -104,8 +104,12 @@ type App struct {
 	calendarAccessTokens     map[string]calendaraccounts.Token
 	calendarAccountEndpoints func(calendaraccounts.Provider) calendaraccounts.Endpoints
 	calendarAccountHTTP      calendaraccounts.Doer
-	sleepImportMu            sync.Mutex
-	sleepImportPending       map[string]pendingSleepImportFile
+	// chatGPTSignInMu guards the one ChatGPT sign-in waiting for the browser
+	// (ADR-0066).
+	chatGPTSignInMu     sync.Mutex
+	chatGPTSignInCancel context.CancelFunc
+	sleepImportMu       sync.Mutex
+	sleepImportPending  map[string]pendingSleepImportFile
 	// accountActivityMu guards the export being previewed and the nights
 	// worked out from the kept activity (ADR-0059).
 	accountActivityMu      sync.Mutex

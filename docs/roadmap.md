@@ -208,7 +208,10 @@ M-E's separately reviewed local agent projection.
    re-attached locally for display — and tests assert the redaction, the medical-refusal
    passthrough, and that the flow touches no endpoint that could apply a change. Provider disclosure
    comes from the backend (`Connected: <provider>` / `Offline`). The Claude-Desktop-over-MCP voice
-   path is documented in the self-hosting runbook. Claude packaging shipped 2026-10-12 (ADR-0061); any reviewer-gated
+   path is documented in the self-hosting runbook. _The owner's ChatGPT plan delivered 2026-10-24
+   (ADR-0066):_ with no provider configured, the owner signs the assistant in from Settings › Sync;
+   the server holds the sign-in, and the rail says the plan pays and what to do when it cannot
+   answer. Claude packaging shipped 2026-10-12 (ADR-0061); any reviewer-gated
    auto-apply stay future and separately gated. _Desktop-local agent endpoint delivered (ADR-0028):_
    the app serves its own loopback MCP (token + `Origin` rejection + an owner-only, inheritance-
    disabled descriptor ACL), exposing allowlisted read projections, `set_appearance` as the ADR-0021
