@@ -3803,3 +3803,24 @@ The method and numbers are in `code-quality-review-2026-10-24.md`.
 
 `gofmt`, `go vet` and every Go test passed in core, the server and the desktop. The window's 669
 tests passed.
+
+## Every Go function within the window's limits — 2026-10-24
+
+- **What was split.** The twelve Go functions left over complexity 24, and `Store.initialize` at 340
+  lines, were split. The method and the result are in `code-quality-review-2026-10-24.md`.
+- **Tests after each split:**
+  - the package's own tests;
+  - its callers: the desktop's calendar, sync and history tests, and the server's assistant, API and
+    store tests;
+  - in the end, every test in core, the server and the desktop.
+
+  All passed.
+- **The guard.** `core/codequality` checks its counting against a sample worked out by hand, with
+  complexity 10 counted by its branches, closure included. It reports a 302-line function and one
+  of complexity 49, and leaves test files and test data out.
+- **What each module measured:**
+  - core: 759 functions;
+  - the server: 601;
+  - the desktop: 827.
+
+  The most complex is 24 and the longest 168 lines, within the limits of 24 and 300.
