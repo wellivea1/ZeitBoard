@@ -3,8 +3,9 @@
 Every planned function is built, and the software of every milestone is done. What remains is
 evidence and decisions, and they need things only the owner has: their own computer and phone, a
 clean machine, the release signing key, a reviewer who did not write the portal, people for the
-pilot, and the owner's own decisions. Each step below says what it needs, what to do, what passing
-looks like, and where the result is recorded. None of it is started without the owner.
+pilot, a ChatGPT account, and the owner's own decisions. Each step below says what it needs, what
+to do, what passing looks like, and where the result is recorded. None of it is started without the
+owner.
 
 The completion plan's "Where the completion goal stands" keeps the overall picture; this is the
 how.
@@ -93,11 +94,44 @@ in for any of it.
 
 **Record:** a pilot report, from which the release decision follows.
 
-## 6. Two decisions
+## 6. The assistant on a real ChatGPT plan (ADR-0066)
+
+**Needs:**
+- the owner's ChatGPT Plus or Pro account;
+- the owner's server with no assistant provider configured, or `assistant.provider` set to
+  `chatgpt`;
+- that server able to reach `auth.openai.com` and `api.openai.com`.
+
+Every other part of the sign-in was checked against a stand-in; only a real account shows OpenAI's
+side.
+
+1. In Settings › Sync › Assistant, choose **Continue with ChatGPT**, sign in in the browser, and
+   allow ZeitBoard to use the plan. **Passes** if:
+   - the card shows the account and a model;
+   - "You're using your ChatGPT plan." is shown once.
+2. In the assistant rail, ask "What's my next good window?". **Passes** if:
+   - it answers;
+   - the rail says "ChatGPT plan";
+   - ChatGPT's usage settings show the use.
+3. Restart the server and ask again. **Passes** if it answers without signing in again, so the
+   refresh token was kept and renewed.
+4. Choose **Disconnect**. **Passes** if:
+   - the card says ChatGPT withdrew ZeitBoard's access;
+   - ChatGPT's settings no longer list ZeitBoard.
+5. Optionally, sign in and refuse the plan when ChatGPT asks. **Passes** if the card says the plan
+   was not shared, and nothing is kept.
+
+**Record:** a dated section in `verification.md`; then the ChatGPT row of the completion plan's
+planned functions is done.
+
+## 7. Three decisions
 
 - **The development-tool advisories.** `npm audit` lists nine, all in the tooling that builds and
   tests the window; none ships in the app (`code-quality-review-2026-10-16.md`, Dependencies).
   Fixing them means downloading newer tooling. The owner either allows that, after which the web
   checks are run again, or accepts them as development-only.
+- **The ChatGPT mark.** OpenAI's guidelines show the ChatGPT mark on its sign-in button. The mark
+  is in OpenAI's DevKit (`assets/`), and adding it is a download. The owner either allows it, or
+  the button keeps its words alone.
 - **The release disposition.** Once the checks above are in, the owner records in the completion
   plan whether ZeitBoard is released, how, and to whom.

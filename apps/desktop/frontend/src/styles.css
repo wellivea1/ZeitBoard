@@ -2429,6 +2429,92 @@ textarea {
   color: var(--subtle);
 }
 
+/* The assistant on the owner's ChatGPT plan (ADR-0066) */
+.assistant-plan-panel {
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+.assistant-plan-card {
+  max-width: 640px;
+}
+.assistant-plan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.data-control-card p.assistant-plan-problem {
+  margin-top: 8px;
+  color: var(--ink);
+}
+.assistant-plan-waiting {
+  flex: 1 1 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--panel-alt);
+  border: 1px solid var(--divider);
+  font-size: var(--type-label);
+}
+.plan-welcome-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(34, 31, 26, 0.45);
+}
+.plan-welcome {
+  width: min(420px, 100%);
+  padding: 22px 24px;
+  display: grid;
+  gap: 12px;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+}
+.plan-welcome h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-style: italic;
+  font-weight: 500;
+}
+.plan-welcome p {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-serif);
+  font-size: 15.5px;
+  line-height: 1.5;
+}
+.plan-welcome .button {
+  justify-self: start;
+}
+.assistant-reason-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+.assistant-plan-line {
+  flex: none;
+  margin: 0;
+  padding: 0 16px 4px;
+  font-size: var(--type-micro);
+  color: var(--subtle);
+}
+.assistant-plan-line button {
+  padding: 0;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
 /* Night appearance rule fields (ADR-0021) */
 .night-rule-fields {
   display: grid;

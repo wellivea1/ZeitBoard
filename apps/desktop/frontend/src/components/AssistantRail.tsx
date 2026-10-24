@@ -1,10 +1,14 @@
 import { reviewIsPending, reviewStatus } from "../data/reviewQueue";
 import { usePendingApprovalsCount } from "../state/approvalQueue";
-import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Icon } from "./Icon";
 import {
+  assistantConnectionChangedEvent,
   loadAssistantStatus,
+  openAssistantPage,
   sendAssistantMessage,
+  usesChatGPTPlan,
+  type AssistantReason,
   type AssistantReply,
   type AssistantStatus,
 } from "../data/assistant";
@@ -20,6 +24,8 @@ interface ChatMessage {
   role: "user" | "assistant";
   text: string;
   refusal?: boolean;
+  /** Why the assistant could not answer, when the owner can act on it. */
+  reason?: AssistantReason;
   proposals?: BackendProposal[];
 }
 
@@ -31,8 +37,63 @@ const examplePrompts = [
 
 function backendLabel(status: AssistantStatus | undefined): { text: string; mode: string } {
   if (!status?.enabled) return { text: "Offline", mode: "off" };
+  if (usesChatGPTPlan(status)) {
+    if (status.configured) return { text: "ChatGPT plan", mode: "connected" };
+    if (status.problem === "sign_in_ended")
+      return { text: "ChatGPT · sign in again", mode: "connected" };
+    if (status.problem === "model_needed")
+      return { text: "ChatGPT · choose a model", mode: "connected" };
+    return { text: "ChatGPT · not signed in", mode: "connected" };
+  }
   if (!status.configured) return { text: "Connected · no provider", mode: "connected" };
   return { text: `Connected: ${status.provider ?? "provider"}`, mode: "connected" };
+}
+
+/**
+ * What the owner can do about a reply that says why the assistant could not
+ * answer. The answer itself already says what happened.
+ */
+function ReasonAction({ reason, plan }: { reason: AssistantReason | undefined; plan: boolean }) {
+  switch (reason) {
+    case "usage_limit":
+      // A key's limit is the operator's to raise; only the plan's has a page.
+      return plan ? (
+        <button
+          className="button primary compact"
+          type="button"
+          onClick={() => void openAssistantPage("usage")}
+        >
+          Manage usage
+        </button>
+      ) : null;
+    case "sign_in_needed":
+    case "sign_in_ended":
+    case "plan_not_shared":
+      return (
+        <a className="button secondary compact" href="#/settings/sync">
+          Sign in under Settings
+        </a>
+      );
+    case "model_needed":
+    case "model_unavailable":
+      return (
+        <a className="button secondary compact" href="#/settings/sync">
+          Choose a model
+        </a>
+      );
+    case "not_eligible":
+      return (
+        <button
+          className="button ghost compact"
+          type="button"
+          onClick={() => void openAssistantPage("help")}
+        >
+          Learn more
+        </button>
+      );
+    default:
+      return null;
+  }
 }
 
 function ActionCard({
@@ -89,6 +150,49 @@ function ActionCard({
   );
 }
 
+/** The chat before its first message: what it can do, or what it needs. */
+function ChatEmpty({
+  status,
+  onExample,
+}: {
+  status: AssistantStatus | undefined;
+  onExample: (prompt: string) => void;
+}) {
+  let text: ReactNode;
+  if (!status?.enabled) {
+    text = status?.message ?? "Connect your self-hosted backend in Settings to start chatting.";
+  } else if (usesChatGPTPlan(status) && !status.configured) {
+    text = (
+      <>
+        Sign the assistant in to your ChatGPT plan under{" "}
+        <a href="#/settings/sync">Settings › Sync</a>.
+      </>
+    );
+  } else {
+    text =
+      "Ask about your rhythm, or have the assistant propose schedule changes — every change waits for your approval.";
+  }
+  return (
+    <div className="assistant-empty">
+      <p>{text}</p>
+      {status?.enabled && (
+        <div className="assistant-examples">
+          {examplePrompts.map((prompt) => (
+            <button
+              className="task-chip"
+              type="button"
+              key={prompt}
+              onClick={() => onExample(prompt)}
+            >
+              {prompt}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AssistantRail({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [status, setStatus] = useState<AssistantStatus>();
   const [tab, setTab] = useState<"chat" | "queue">("chat");
@@ -108,12 +212,17 @@ export function AssistantRail({ open, onClose }: { open: boolean; onClose: () =>
   useEffect(() => {
     if (!open) return;
     let current = true;
-    void loadAssistantStatus().then((loaded) => {
-      if (current) setStatus(loaded);
-    });
+    const readStatus = () =>
+      void loadAssistantStatus().then((loaded) => {
+        if (current) setStatus(loaded);
+      });
+    readStatus();
     refreshProposals();
+    // Signing in or out in Settings while the rail is open shows here.
+    window.addEventListener(assistantConnectionChangedEvent, readStatus);
     return () => {
       current = false;
+      window.removeEventListener(assistantConnectionChangedEvent, readStatus);
     };
   }, [open, refreshProposals]);
 
@@ -132,6 +241,7 @@ export function AssistantRail({ open, onClose }: { open: boolean; onClose: () =>
       role: "assistant",
       text: reply.answer,
       refusal: reply.result === "refused_medical",
+      ...(reply.reason ? { reason: reply.reason } : {}),
       ...(reply.proposals.length > 0 ? { proposals: reply.proposals } : {}),
     });
     if (reply.available) {
@@ -140,8 +250,11 @@ export function AssistantRail({ open, onClose }: { open: boolean; onClose: () =>
         configured: reply.configured,
         ...(reply.provider ? { provider: reply.provider } : {}),
         ...(reply.model ? { model: reply.model } : {}),
+        ...(reply.auth ? { auth: reply.auth } : {}),
       });
     }
+    // A sign-in that ended or a model gone changes what the header says.
+    if (reply.reason) void loadAssistantStatus().then(setStatus);
   };
 
   const send = (text: string) => {
@@ -176,6 +289,7 @@ export function AssistantRail({ open, onClose }: { open: boolean; onClose: () =>
 
   const totalPending = usePendingApprovalsCount();
   const backend = backendLabel(status);
+  const plan = usesChatGPTPlan(status);
   const pendingQueue = queue.proposals.filter((proposal) => reviewIsPending(proposal));
   const currentProposal = new Map(
     queue.proposals.map((proposal) => [proposal.proposalId, proposal]),
@@ -221,35 +335,21 @@ export function AssistantRail({ open, onClose }: { open: boolean; onClose: () =>
       {tab === "chat" ? (
         <>
           <div className="assistant-transcript" ref={transcriptRef} aria-live="polite">
-            {messages.length === 0 && (
-              <div className="assistant-empty">
-                <p>
-                  {status?.enabled
-                    ? "Ask about your rhythm, or have the assistant propose schedule changes — every change waits for your approval."
-                    : (status?.message ??
-                      "Connect your self-hosted backend in Settings to start chatting.")}
-                </p>
-                {status?.enabled && (
-                  <div className="assistant-examples">
-                    {examplePrompts.map((prompt) => (
-                      <button
-                        className="task-chip"
-                        type="button"
-                        key={prompt}
-                        onClick={() => send(prompt)}
-                      >
-                        {prompt}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+            {messages.length === 0 && <ChatEmpty status={status} onExample={send} />}
             {messages.map((message) => (
               <div className={`assistant-message is-${message.role}`} key={message.id}>
-                <div className="assistant-bubble" data-refusal={message.refusal || undefined}>
+                <div
+                  className="assistant-bubble"
+                  data-refusal={message.refusal || undefined}
+                  data-reason={message.reason}
+                >
                   {message.text}
                 </div>
+                {message.reason && (
+                  <div className="assistant-reason-actions">
+                    <ReasonAction reason={message.reason} plan={plan} />
+                  </div>
+                )}
                 {message.proposals?.map((proposal) => (
                   <ActionCard
                     proposal={currentProposal.get(proposal.proposalId) ?? proposal}
@@ -293,6 +393,14 @@ export function AssistantRail({ open, onClose }: { open: boolean; onClose: () =>
               Send
             </button>
           </div>
+          {plan && status?.configured && (
+            <p className="assistant-plan-line">
+              Using your ChatGPT plan ·{" "}
+              <button type="button" onClick={() => void openAssistantPage("usage")}>
+                Manage usage
+              </button>
+            </p>
+          )}
           <p className="assistant-disclaimer">
             Manages your schedule via approvals. Not medical advice.
           </p>

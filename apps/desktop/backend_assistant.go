@@ -33,7 +33,11 @@ type AssistantStatusDTO struct {
 	Configured bool   `json:"configured"`
 	Provider   string `json:"provider,omitempty"`
 	Model      string `json:"model,omitempty"`
-	Message    string `json:"message,omitempty"`
+	// Auth is "chatgpt_plan" when the owner's ChatGPT plan pays for the
+	// answers (ADR-0066), and Problem what a sign-in still needs.
+	Auth    string `json:"auth,omitempty"`
+	Problem string `json:"problem,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 type AssistantMessageInput struct {
@@ -41,22 +45,31 @@ type AssistantMessageInput struct {
 }
 
 type AssistantReplyDTO struct {
-	Available  bool                 `json:"available"`
-	Result     string               `json:"result"`
-	Answer     string               `json:"answer"`
-	Configured bool                 `json:"configured"`
-	Provider   string               `json:"provider,omitempty"`
-	Model      string               `json:"model,omitempty"`
-	Proposals  []BackendProposalDTO `json:"proposals"`
+	Available  bool   `json:"available"`
+	Result     string `json:"result"`
+	Answer     string `json:"answer"`
+	Configured bool   `json:"configured"`
+	Provider   string `json:"provider,omitempty"`
+	Model      string `json:"model,omitempty"`
+	Auth       string `json:"auth,omitempty"`
+	// Reason says why the provider gave no answer, when the owner can act on
+	// it: the plan's limit, a sign-in to renew.
+	Reason    string               `json:"reason,omitempty"`
+	Proposals []BackendProposalDTO `json:"proposals"`
+}
+
+// assistantBackendStatus is the provider as the server discloses it.
+type assistantBackendStatus struct {
+	Configured bool   `json:"configured"`
+	Provider   string `json:"provider"`
+	Model      string `json:"model,omitempty"`
+	Auth       string `json:"auth,omitempty"`
+	Problem    string `json:"problem,omitempty"`
 }
 
 type assistantStatusResponse struct {
-	SchemaVersion string `json:"schema_version"`
-	Assistant     struct {
-		Configured bool   `json:"configured"`
-		Provider   string `json:"provider"`
-		Model      string `json:"model,omitempty"`
-	} `json:"assistant"`
+	SchemaVersion string                 `json:"schema_version"`
+	Assistant     assistantBackendStatus `json:"assistant"`
 }
 
 type assistantMessageRequest struct {
@@ -131,16 +144,13 @@ type assistantFactScope struct {
 }
 
 type assistantMessageResponse struct {
-	SchemaVersion string `json:"schema_version"`
-	Backend       struct {
-		Configured bool   `json:"configured"`
-		Provider   string `json:"provider"`
-		Model      string `json:"model,omitempty"`
-	} `json:"backend"`
-	Result    string                     `json:"result"`
-	Action    string                     `json:"action"`
-	Answer    string                     `json:"answer"`
-	Proposals []assistantProposalSummary `json:"proposals"`
+	SchemaVersion string                     `json:"schema_version"`
+	Backend       assistantBackendStatus     `json:"backend"`
+	Result        string                     `json:"result"`
+	Action        string                     `json:"action"`
+	Answer        string                     `json:"answer"`
+	Reason        string                     `json:"reason,omitempty"`
+	Proposals     []assistantProposalSummary `json:"proposals"`
 }
 
 type assistantProposalSummary struct {
@@ -172,6 +182,8 @@ func (a *App) GetAssistantStatus() (AssistantStatusDTO, error) {
 		Configured: response.Assistant.Configured,
 		Provider:   response.Assistant.Provider,
 		Model:      response.Assistant.Model,
+		Auth:       response.Assistant.Auth,
+		Problem:    response.Assistant.Problem,
 	}, nil
 }
 
@@ -205,7 +217,7 @@ func (a *App) SendAssistantMessage(input AssistantMessageInput) (AssistantReplyD
 	if err != nil {
 		return AssistantReplyDTO{}, err
 	}
-	client := a.newDesktopBackendClient(cfg, token)
+	client := a.newDesktopBackendClient(cfg, token).patient(assistantMessageTimeout)
 	var response assistantMessageResponse
 	request := assistantMessageRequest{SchemaVersion: "v1", Message: message, Context: planning}
 	if err := client.postJSON(ctx, "/v1/assistant/message", request, &response); err != nil {
@@ -221,6 +233,8 @@ func (a *App) SendAssistantMessage(input AssistantMessageInput) (AssistantReplyD
 		Configured: response.Backend.Configured,
 		Provider:   response.Backend.Provider,
 		Model:      response.Backend.Model,
+		Auth:       response.Backend.Auth,
+		Reason:     response.Reason,
 		Proposals:  []BackendProposalDTO{},
 	}
 	for _, summary := range response.Proposals {

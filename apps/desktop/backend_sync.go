@@ -1171,6 +1171,16 @@ func (a *App) newDesktopBackendClient(cfg backendSyncConfig, token string) deskt
 	}
 }
 
+// patient is the client for a request that may take as long as timeout, such
+// as an assistant message whose model thinks before it answers. It shares the
+// connections of the client it comes from.
+func (c desktopBackendClient) patient(timeout time.Duration) desktopBackendClient {
+	client := *c.client
+	client.Timeout = timeout
+	c.client = &client
+	return c
+}
+
 // newPassiveBackendClient is for reads that happen on their own: Home's
 // overview, Rhythm, the decision queue's synced sources, the list of share
 // links. While the server is known to be down they give up at once instead of
