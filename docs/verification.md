@@ -3773,3 +3773,33 @@ ADR-0066 was read again end to end; the completion plan lists what was covered. 
   would be. A rail test checks that nothing is offered and no row is drawn.
 
 `npm run check:web` passed, with 669 tests and both builds, and so did the desktop's whole Go suite.
+
+## The whole application measured again — 2026-10-24
+
+The method and numbers are in `code-quality-review-2026-10-24.md`.
+
+- **Coverage.**
+  - Each Go module was measured with `go test -coverpkg=./... -coverprofile`, and the packages
+    carrying the most risk with `go test -cover`.
+  - The window was measured with `npm run coverage`.
+  - Every number held or rose. The server's `provider` package was the exception, at 56.1%, until
+    `hosted_test.go`. That test checks the OpenAI and Anthropic clients against a local stand-in:
+    what they ask, how they read an answer, that an answer without text is refused, and how a
+    usage limit, a context too large and a server failure read, without the provider's text. The
+    package is at 80.6% now.
+- **Complexity.** A standard-library scan of every non-test Go function, counting decisions as
+  gocyclo does, found 15 over 24 and 3 over 40.
+  - The sync pull's page, the ChatGPT sign-in's finish and the assistant's planning context were
+    split, behaviour unchanged.
+  - Core's sync suites and the store under the race detector passed. So did the desktop's sync,
+    assistant and redaction tests, and the `chatgpt` package under the race detector.
+  - 12 are over 24 and 2 over 40 now.
+- **Dependencies.**
+  - `npm audit` lists twelve advisories, up from nine. The new three are Vite's `launch-editor`,
+    zod and the coverage package.
+  - `npm ls zod` shows it comes only through the React hooks lint plugin. Nothing in the app imports
+    it, and the built bundle holds none of them.
+- No TODO, FIXME, XXX or HACK marker was found in the source.
+
+`gofmt`, `go vet` and every Go test passed in core, the server and the desktop. The window's 669
+tests passed.

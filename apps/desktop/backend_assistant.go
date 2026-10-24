@@ -247,7 +247,8 @@ func (a *App) SendAssistantMessage(input AssistantMessageInput) (AssistantReplyD
 // id, availability windows, task ids with bounds, and the assistant
 // snapshot's planning view — what Home says about now, the night ahead, the
 // next three days and what awaits the owner. Titles never leave the device;
-// the rail re-attaches them locally for display.
+// the rail re-attaches them locally for display. Medication and marker facts
+// are added only when the message is about them.
 func (a *App) assistantPlanningContext(ctx context.Context, scope assistantFactScope) (assistantContextPayload, error) {
 	now := a.currentTime().UTC().Truncate(time.Minute)
 	payload := assistantContextPayload{ZoneID: localZoneID(), Now: now}
@@ -266,65 +267,95 @@ func (a *App) assistantPlanningContext(ctx context.Context, scope assistantFactS
 		return payload, err
 	}
 	if state.Status == "estimated" {
-		if zoneID := strings.TrimSpace(state.Estimate.AsOf.ZoneID); zoneID != "" {
-			payload.ZoneID = zoneID
-		}
-		payload.EstimateID = string(state.Estimate.ID)
-		availability := localPlanningAvailability(state, now)
-		if len(availability) > maxBackendAssistantAvailability {
-			availability = availability[:maxBackendAssistantAvailability]
-		}
-		for _, window := range availability {
-			zoneID := strings.TrimSpace(window.Interval.Start.ZoneID)
-			if zoneID == "" {
-				zoneID = payload.ZoneID
-			}
-			payload.Availability = append(payload.Availability, assistantAvailabilityEntry{
-				Kind:       string(window.Kind),
-				StartAt:    window.Interval.Start.UTC,
-				EndAt:      window.Interval.End.UTC,
-				ZoneID:     zoneID,
-				Confidence: string(window.Confidence.Level),
-			})
-		}
-		if start, end, ok := planningSnapshotRange(availability); ok {
-			fixedEvents, _, eventErr := store.BusyDomainEvents(ctx, start, end, payload.ZoneID)
-			if eventErr != nil {
-				return payload, eventErr
-			}
-			if len(fixedEvents) > maxBackendAssistantFixedEvents {
-				fixedEvents = fixedEvents[:maxBackendAssistantFixedEvents]
-			}
-			for index, event := range fixedEvents {
-				zoneID := strings.TrimSpace(event.Interval.Start.ZoneID)
-				if zoneID == "" {
-					zoneID = payload.ZoneID
-				}
-				payload.FixedEvents = append(payload.FixedEvents, assistantFixedEventContext{
-					EventID: fmt.Sprintf("event_%03d", index+1),
-					StartAt: event.Interval.Start.UTC,
-					EndAt:   event.Interval.End.UTC,
-					ZoneID:  zoneID,
-				})
-			}
+		if err := addPlanningWindows(ctx, store, state, now, &payload); err != nil {
+			return payload, err
 		}
 	}
+	if payload.Tasks, err = assistantTasks(ctx, store); err != nil {
+		return payload, err
+	}
+	if scope.Medication {
+		if payload.MedicationFacts, err = a.assistantMedicationFacts(ctx); err != nil {
+			return payload, err
+		}
+	}
+	if scope.Markers {
+		if payload.Markers, err = a.assistantMarkerFacts(ctx); err != nil {
+			return payload, err
+		}
+	}
+	return payload, nil
+}
+
+// addPlanningWindows adds an estimate's zone and id, its availability
+// windows, and the busy events among them, each named only by its place.
+func addPlanningWindows(ctx context.Context, store *storage.Store, state localEstimateState, now time.Time, payload *assistantContextPayload) error {
+	if zoneID := strings.TrimSpace(state.Estimate.AsOf.ZoneID); zoneID != "" {
+		payload.ZoneID = zoneID
+	}
+	payload.EstimateID = string(state.Estimate.ID)
+	availability := localPlanningAvailability(state, now)
+	if len(availability) > maxBackendAssistantAvailability {
+		availability = availability[:maxBackendAssistantAvailability]
+	}
+	for _, window := range availability {
+		payload.Availability = append(payload.Availability, assistantAvailabilityEntry{
+			Kind:       string(window.Kind),
+			StartAt:    window.Interval.Start.UTC,
+			EndAt:      window.Interval.End.UTC,
+			ZoneID:     zoneOr(window.Interval.Start.ZoneID, payload.ZoneID),
+			Confidence: string(window.Confidence.Level),
+		})
+	}
+	start, end, ok := planningSnapshotRange(availability)
+	if !ok {
+		return nil
+	}
+	fixedEvents, _, err := store.BusyDomainEvents(ctx, start, end, payload.ZoneID)
+	if err != nil {
+		return err
+	}
+	if len(fixedEvents) > maxBackendAssistantFixedEvents {
+		fixedEvents = fixedEvents[:maxBackendAssistantFixedEvents]
+	}
+	for index, event := range fixedEvents {
+		payload.FixedEvents = append(payload.FixedEvents, assistantFixedEventContext{
+			EventID: fmt.Sprintf("event_%03d", index+1),
+			StartAt: event.Interval.Start.UTC,
+			EndAt:   event.Interval.End.UTC,
+			ZoneID:  zoneOr(event.Interval.Start.ZoneID, payload.ZoneID),
+		})
+	}
+	return nil
+}
+
+// zoneOr is a zone as stated, or the fallback when none is.
+func zoneOr(zoneID, fallback string) string {
+	if zoneID = strings.TrimSpace(zoneID); zoneID != "" {
+		return zoneID
+	}
+	return fallback
+}
+
+// assistantTasks are the open tasks by id, length and bounds: never a title.
+func assistantTasks(ctx context.Context, store *storage.Store) ([]assistantTaskContext, error) {
 	records, err := store.ListTasks(ctx)
 	if err != nil {
-		return payload, err
+		return nil, err
 	}
 	conflicts, err := store.TaskSyncConflictIDs(ctx)
 	if err != nil {
-		return payload, err
+		return nil, err
 	}
+	var tasks []assistantTaskContext
 	for _, record := range records {
 		if record.Status != storage.TaskStatusOpen {
 			continue
 		}
-		if len(payload.Tasks) >= maxBackendAssistantTasks {
+		if len(tasks) >= maxBackendAssistantTasks {
 			break
 		}
-		payload.Tasks = append(payload.Tasks, assistantTaskContext{
+		tasks = append(tasks, assistantTaskContext{
 			TaskID:                    record.TaskID,
 			DurationMinutes:           record.DurationMinutes,
 			EarliestStartAt:           record.EarliestStartAt,
@@ -334,69 +365,73 @@ func (a *App) assistantPlanningContext(ctx context.Context, scope assistantFactS
 			NeedsReview:               conflicts[record.TaskID],
 		})
 	}
+	return tasks, nil
+}
 
-	if !scope.Medication && !scope.Markers {
-		return payload, nil
+// assistantMedicationFacts are at most eight medications' timing facts, by
+// opaque id: never a name, a note or an amount.
+func (a *App) assistantMedicationFacts(ctx context.Context) ([]assistantMedicationFact, error) {
+	projection, err := a.agentMedicationProjection(ctx)
+	if err != nil {
+		return nil, err
 	}
-
-	if scope.Medication {
-		medicationProjection, err := a.agentMedicationProjection(ctx)
-		if err != nil {
-			return payload, err
+	medications := append([]agentMedicationDTO{}, projection.Medications...)
+	sort.Slice(medications, func(i, j int) bool {
+		return medications[i].MedicationID < medications[j].MedicationID
+	})
+	if len(medications) > 8 {
+		medications = medications[:8]
+	}
+	var facts []assistantMedicationFact
+	for _, medication := range medications {
+		fact := assistantMedicationFact{
+			MedicationID:     medication.MedicationID,
+			Active:           medication.Active,
+			ScheduleKind:     medication.ScheduleKind,
+			LoggedEventCount: medication.IncludedEventCount,
 		}
-		medications := append([]agentMedicationDTO{}, medicationProjection.Medications...)
-		sort.Slice(medications, func(i, j int) bool {
-			return medications[i].MedicationID < medications[j].MedicationID
+		if medication.Schedule != nil {
+			fact.ScheduledOccurrenceCount = medication.Schedule.Forecast.CoveredCount
+			fact.CollisionCount = medication.Schedule.Forecast.CollisionCount
+			fact.ScheduleZoneID = medication.Schedule.ZoneID
+			if len(medication.Schedule.Forecast.Occurrences) > 0 {
+				next := medication.Schedule.Forecast.Occurrences[0]
+				fact.NextScheduledCivilDate = next.CivilDate
+				fact.NextScheduledCivilTime = next.CivilTime
+			}
+		}
+		if latest := medication.LogSummary.Latest; latest != nil {
+			fact.LastLoggedStatus = latest.Status
+			fact.LastWakeRelation = latest.WakeRelation
+			fact.LastSleepRelation = latest.SleepRelation
+			fact.Confidence = latest.Confidence
+		}
+		facts = append(facts, fact)
+	}
+	return facts, nil
+}
+
+// assistantMarkerFacts are at most twelve context markers by kind and dates:
+// never a note.
+func (a *App) assistantMarkerFacts(ctx context.Context) ([]assistantMarkerFact, error) {
+	projection, err := a.agentMarkerProjection(ctx)
+	if err != nil {
+		return nil, err
+	}
+	markers := append([]agentMarkerDTO{}, projection.Markers...)
+	if len(markers) > 12 {
+		markers = markers[:12]
+	}
+	var facts []assistantMarkerFact
+	for _, marker := range markers {
+		facts = append(facts, assistantMarkerFact{
+			MarkerID:       marker.MarkerID,
+			Kind:           marker.Kind,
+			CivilStartDate: marker.CivilStartDate,
+			CivilEndDate:   marker.CivilEndDate,
 		})
-		if len(medications) > 8 {
-			medications = medications[:8]
-		}
-		for _, medication := range medications {
-			fact := assistantMedicationFact{
-				MedicationID:     medication.MedicationID,
-				Active:           medication.Active,
-				ScheduleKind:     medication.ScheduleKind,
-				LoggedEventCount: medication.IncludedEventCount,
-			}
-			if medication.Schedule != nil {
-				fact.ScheduledOccurrenceCount = medication.Schedule.Forecast.CoveredCount
-				fact.CollisionCount = medication.Schedule.Forecast.CollisionCount
-				fact.ScheduleZoneID = medication.Schedule.ZoneID
-				if len(medication.Schedule.Forecast.Occurrences) > 0 {
-					next := medication.Schedule.Forecast.Occurrences[0]
-					fact.NextScheduledCivilDate = next.CivilDate
-					fact.NextScheduledCivilTime = next.CivilTime
-				}
-			}
-			if latest := medication.LogSummary.Latest; latest != nil {
-				fact.LastLoggedStatus = latest.Status
-				fact.LastWakeRelation = latest.WakeRelation
-				fact.LastSleepRelation = latest.SleepRelation
-				fact.Confidence = latest.Confidence
-			}
-			payload.MedicationFacts = append(payload.MedicationFacts, fact)
-		}
 	}
-
-	if scope.Markers {
-		markerProjection, err := a.agentMarkerProjection(ctx)
-		if err != nil {
-			return payload, err
-		}
-		markers := append([]agentMarkerDTO{}, markerProjection.Markers...)
-		if len(markers) > 12 {
-			markers = markers[:12]
-		}
-		for _, marker := range markers {
-			payload.Markers = append(payload.Markers, assistantMarkerFact{
-				MarkerID:       marker.MarkerID,
-				Kind:           marker.Kind,
-				CivilStartDate: marker.CivilStartDate,
-				CivilEndDate:   marker.CivilEndDate,
-			})
-		}
-	}
-	return payload, nil
+	return facts, nil
 }
 
 func (a *App) localTaskTitles(ctx context.Context) (map[string]string, error) {
