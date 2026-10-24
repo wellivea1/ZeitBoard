@@ -30,26 +30,26 @@ const (
 )
 
 type Service struct {
-	llm    provider.LLM
-	status provider.Status
-	store  *store.Store
-	now    func() time.Time
+	llm   provider.LLM
+	store *store.Store
+	now   func() time.Time
 }
 
-func New(llm provider.LLM, status provider.Status, st *store.Store) *Service {
+func New(llm provider.LLM, st *store.Store) *Service {
 	if llm == nil {
 		llm = provider.DisabledClient{}
 	}
 	return &Service{
-		llm:    llm,
-		status: status,
-		store:  st,
-		now:    func() time.Time { return time.Now().UTC() },
+		llm:   llm,
+		store: st,
+		now:   func() time.Time { return time.Now().UTC() },
 	}
 }
 
+// Status is the provider's as it is now: a ChatGPT sign-in comes and goes
+// while the server runs.
 func (s *Service) Status() provider.Status {
-	return s.status
+	return s.llm.Status()
 }
 
 func (s *Service) HandleMessage(ctx context.Context, device store.Device, req MessageRequest) (MessageResponse, error) {
@@ -79,19 +79,22 @@ func (s *Service) HandleMessage(ctx context.Context, device store.Device, req Me
 	if err := validatePlanningContext(req.Context); err != nil {
 		return MessageResponse{}, err
 	}
-	if !s.status.Configured {
-		return s.answer(ResultAnswerOnly, "answer_only", localFallback(req.Message, s.status)), nil
+	if status := s.llm.Status(); !status.Configured {
+		if status.Problem != "" {
+			return s.unavailable(status.Problem), nil
+		}
+		return s.answer(ResultAnswerOnly, "answer_only", localFallback(req.Message, status)), nil
 	}
 
 	action, err := s.callModel(ctx, req, false)
-	if errors.Is(err, provider.ErrUsageLimit) {
-		return s.answer(ResultAnswerOnly, "answer_only", "The assistant's service hit its usage limit. I can still answer from local scheduling context, and no proposal was created."), nil
+	if reason, ok := unavailableReason(err); ok {
+		return s.unavailable(reason), nil
 	}
 	if err != nil {
 		action, err = s.callModel(ctx, req, true)
 	}
-	if errors.Is(err, provider.ErrUsageLimit) {
-		return s.answer(ResultAnswerOnly, "answer_only", "The assistant's service hit its usage limit. I can still answer from local scheduling context, and no proposal was created."), nil
+	if reason, ok := unavailableReason(err); ok {
+		return s.unavailable(reason), nil
 	}
 	if err != nil {
 		return s.answer(ResultUnknown, "answer_only", "I could not turn that into a safe schedule action. No proposal was created."), nil
@@ -294,7 +297,7 @@ func (s *Service) storePendingProposal(ctx context.Context, device store.Device,
 	}
 	return MessageResponse{
 		SchemaVersion: SchemaVersion,
-		Backend:       s.status,
+		Backend:       s.llm.Status(),
 		Result:        ResultProposal,
 		Action:        action.RecommendedAction,
 		Answer:        answer,
@@ -347,12 +350,49 @@ func (s *Service) resolveProposal(input PlanningContext, action modelAction) (sc
 func (s *Service) answer(result, action, answer string) MessageResponse {
 	return MessageResponse{
 		SchemaVersion: SchemaVersion,
-		Backend:       s.status,
+		Backend:       s.llm.Status(),
 		Result:        result,
 		Action:        action,
 		Answer:        answer,
 		Proposals:     []ProposalSummary{},
 	}
+}
+
+// unavailable answers for a provider that cannot answer, saying why.
+func (s *Service) unavailable(reason provider.Reason) MessageResponse {
+	response := s.answer(ResultAnswerOnly, "answer_only", unavailableAnswers[reason])
+	if response.Answer == "" {
+		response.Answer = unavailableAnswers[provider.ReasonBusy]
+	}
+	response.Reason = reason
+	return response
+}
+
+// unavailableReason reads why a provider could not answer, when retrying the
+// same request would not help.
+func unavailableReason(err error) (provider.Reason, bool) {
+	var unavailable provider.Unavailable
+	if errors.As(err, &unavailable) {
+		return unavailable.Reason, true
+	}
+	if errors.Is(err, provider.ErrUsageLimit) {
+		return provider.ReasonUsageLimit, true
+	}
+	return "", false
+}
+
+// unavailableAnswers word each reason for a window that does not know it.
+var unavailableAnswers = map[provider.Reason]string{
+	provider.ReasonUsageLimit:       "The assistant's service hit its usage limit. I can still answer from local scheduling context, and no proposal was created.",
+	provider.ReasonBusy:             "The assistant's service is not answering right now. Try again in a few minutes. No proposal was created.",
+	provider.ReasonSignInNeeded:     "The assistant is not signed in to ChatGPT. Sign in under Settings › Sync. No proposal was created.",
+	provider.ReasonSignInEnded:      "The assistant's ChatGPT sign-in has ended. Sign in again under Settings › Sync. No proposal was created.",
+	provider.ReasonPlanNotShared:    "ChatGPT did not share your plan with ZeitBoard. Sign in again under Settings › Sync and allow it. No proposal was created.",
+	provider.ReasonNotEligible:      "This ChatGPT account cannot share its plan with apps. It needs Plus or Pro. No proposal was created.",
+	provider.ReasonNotEnabled:       "OpenAI has not turned on plan usage for ZeitBoard's sign-in. The backend can use an API key instead. No proposal was created.",
+	provider.ReasonModelNeeded:      "Choose a model for the assistant under Settings › Sync. No proposal was created.",
+	provider.ReasonModelUnavailable: "Your plan no longer offers the assistant's model. Choose another under Settings › Sync. No proposal was created.",
+	provider.ReasonRefused:          "The assistant's service refused the request. No proposal was created.",
 }
 
 func taskByID(tasks []TaskContext, id string) (TaskContext, bool) {

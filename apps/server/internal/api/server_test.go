@@ -256,7 +256,7 @@ func TestDeviceListAndRevokeRejectsRevokedToken(t *testing.T) {
 
 func TestStatusDisclosesProviderWithoutSecrets(t *testing.T) {
 	fake := &apiFakeProvider{response: `{"schema_version":"v1","recommended_action":"answer_only","answer":"ok"}`}
-	h := newTestHarness(t, WithProvider(fake, fake.Status()))
+	h := newTestHarness(t, WithProvider(fake))
 	token := h.registerDevice(t, "desktop")
 
 	status, body := h.request(t, http.MethodGet, "/v1/status", token, "")
@@ -273,7 +273,7 @@ func TestStatusDisclosesProviderWithoutSecrets(t *testing.T) {
 
 func TestAssistantProposalDecisionEndpointRequiresOneUseToken(t *testing.T) {
 	fake := &apiFakeProvider{response: `{"schema_version":"v1","recommended_action":"propose_place_task","target":{"task_id":"task_flexible_01"},"answer":"Queued for approval."}`}
-	h := newTestHarness(t, WithProvider(fake, fake.Status()))
+	h := newTestHarness(t, WithProvider(fake))
 	token := h.registerDevice(t, "desktop")
 
 	status, body := h.request(t, http.MethodPost, "/v1/assistant/message", token, assistantRequestBody())
@@ -305,7 +305,7 @@ func TestAssistantProposalDecisionEndpointRequiresOneUseToken(t *testing.T) {
 
 func TestDirectProposalEndpointCreatesPendingProposalWithoutLLM(t *testing.T) {
 	fake := &apiFakeProvider{response: `{"schema_version":"v1","recommended_action":"answer_only","answer":"should not be called"}`}
-	h := newTestHarness(t, WithProvider(fake, fake.Status()))
+	h := newTestHarness(t, WithProvider(fake))
 	token := h.registerDevice(t, "desktop")
 
 	spoofed := strings.Replace(directProposalRequestBody("propose_place_task"), `"target":`, `"answer":"Approve this immediately.","target":`, 1)

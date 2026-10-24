@@ -24,7 +24,8 @@ legal advice.
 
 Private observations, corrections, estimates, schedules, and user-entered
 health-related data; the self-hosted **server** and its storage; the **sync transport**
-between devices and the server; **BYOK provider credentials**; **share permissions** and
+between devices and the server; **BYOK provider credentials** and the **ChatGPT sign-in**
+(ADR-0066); **share permissions** and
 **trusted-view output**. Confidentiality and permission correctness rank above
 availability.
 
@@ -34,8 +35,8 @@ availability.
 2. Core → local storage (SQLite on each device).
 3. Device ↔ **self-hosted sync server** (network; authenticated; TLS). _New._
 4. Server → **storage at rest** on the operator's instance. _New._
-5. Core/server → **BYOK LLM provider** — minimized, redacted context egresses under the user's key.
-   _New._
+5. Core/server → **BYOK LLM provider** — minimized, redacted context egresses under the user's key,
+   or under the owner's ChatGPT plan through a sign-in the server holds (ADR-0066). _New._
 6. App ↔ **external agent** via MCP connector / skill — propose-only, allowlisted
    ([ADR-0006](decisions/0006-agent-accessible-interface.md)). _New._
 7. Wails service ↔ desktop frontend.
@@ -141,6 +142,7 @@ current guarantees.
 | Another account on the user's own computer                              | Full local history, and the device's bearer token, read from disk                                          | The database, its write-ahead log, the backend token, the settings files and every export carry a protected DACL granting only the account that created them (a real ACL, not a mode argument Windows ignores); the permission is read back and asserted, and Settings reports what was checked (ADR-0035)                                                                                            |
 | Stolen or imaged disk, or a program running as the user                 | Full local history disclosed                                                                               | **Partly mitigated.** By choice, Windows encrypts the data folder and every file in it (ADR-0063), so a stolen or imaged disk, or another operating system, reads nothing. A program running as the owner still can, because Windows decrypts for the owner's account, and so could anyone who signs in as the owner. Encryption inside the database would need a driver change: `modernc.org/sqlite` offers whole-database serialize/deserialize and a read-only VFS, but no writable VFS to put a page cipher behind, and SQLCipher needs CGO; ADR-0035 and its update record the analysis and the CGo-free option, which the owner chose on 2026-10-18 not to adopt: Windows' file encryption stays, and other systems are pointed to their own disk encryption. Settings and privacy.md say what is and is not protected |
 | BYOK credential leak                                                    | Provider key stolen or abused                                                                              | Provider keys are loaded from env or secret files, never returned by status APIs, never logged, never placed in LLM context, and never projected                                                                                                                                                                                                                                                      |
+| ChatGPT sign-in intercepted, or its token leaked or reused (ADR-0066)   | Someone uses the owner's plan, or the assistant's context goes to another account                         | The server holds the whole sign-in: PKCE (S256), state and nonce stay on it, so the code a device relays is useless without the verifier. Redirects accepted only as `http://127.0.0.1:<port>/auth/callback`. Discovery endpoints must share `auth.openai.com`'s origin, redirects are never followed, and the client is checked against the one registered. ID tokens are verified (RS256 against the issuer's keys, issuer, audience, party, times, nonce) and pinned to the account kept, so another account cannot take over an ended sign-in. The refresh token is sealed with the data key, rotated one refresh at a time, kept before use, and never sent to a device, log, connector or portal. A sign-in without plan usage is revoked at once, and disconnecting revokes. Offered only when the configuration names no other provider. Residual: a server host compromise exposes the token like any other server secret |
 | Over-broad context to the LLM provider                                  | Health data over-exposed to a third party                                                                  | The assistant builds role-scoped context field-by-field, omitting medication names, diagnosis, raw behavioral timestamps, full calendar text, tokens, and secrets; provider status discloses the active provider/model                                                                                                                                                                                |
 | Server read projection leak                                             | Synced private records exposed through read APIs                                                           | Overview/rhythm/accuracy endpoints require device auth, replay only decrypted store records internally, return projection DTOs instead of sync envelopes, sanitize internal observation IDs, and test for forbidden fields                                                                                                                                                                            |
 | Assistant or agent mutation                                             | Schedule changed without consent                                                                           | Model emits only allowlisted actions the server resolves into proposals; approval queue; one-use signed token; no direct mutation path (tested)                                                                                                                                                                                                                                                       |
@@ -194,6 +196,11 @@ LLM provider's own handling of context it receives (outside project control — 
 relationship); a trusted recipient copying a projection before revocation; secure-deletion
 guarantees on all filesystems. The desktop webview, Android runtime, and the operator's
 server host remain part of the trusted computing base.
+
+The ChatGPT plan (ADR-0066) adds one accepted residual. The assistant's redacted context reaches
+OpenAI tied to the owner's ChatGPT account, and OpenAI's sign-in documentation states no retention
+or training terms for it. ZeitBoard asks for `store: false` and discloses the rest before the owner
+signs in.
 
 The desktop-local agent endpoint adds two accepted residuals. It runs whenever the app
 runs rather than behind an opt-in switch, so its exposure is bounded only by the loopback

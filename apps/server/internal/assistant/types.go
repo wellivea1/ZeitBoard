@@ -84,12 +84,15 @@ type RhythmMarkerFactContext struct {
 }
 
 type MessageResponse struct {
-	SchemaVersion string            `json:"schema_version"`
-	Backend       provider.Status   `json:"backend"`
-	Result        string            `json:"result"`
-	Action        string            `json:"action"`
-	Answer        string            `json:"answer"`
-	Proposals     []ProposalSummary `json:"proposals"`
+	SchemaVersion string          `json:"schema_version"`
+	Backend       provider.Status `json:"backend"`
+	Result        string          `json:"result"`
+	Action        string          `json:"action"`
+	Answer        string          `json:"answer"`
+	// Reason says why the provider gave no answer, when the owner can act
+	// on it: a usage limit, a sign-in to renew. The answer says so too.
+	Reason    provider.Reason   `json:"reason,omitempty"`
+	Proposals []ProposalSummary `json:"proposals"`
 }
 
 type ProposalSummary struct {

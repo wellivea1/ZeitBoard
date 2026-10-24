@@ -299,6 +299,14 @@ func (s *Store) Migrate(ctx context.Context) error {
 		)`,
 		`CREATE INDEX IF NOT EXISTS idx_recompute_runs_state_id
 			ON recompute_runs(state, id)`,
+		// Settings the server keeps for itself, each one encrypted whole, such
+		// as the assistant's ChatGPT sign-in (ADR-0066). See sealed_settings.go.
+		`CREATE TABLE IF NOT EXISTS sealed_settings (
+			name TEXT PRIMARY KEY,
+			updated_at TEXT NOT NULL,
+			nonce BLOB NOT NULL,
+			ciphertext BLOB NOT NULL
+		)`,
 	}
 	for _, statement := range statements {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {

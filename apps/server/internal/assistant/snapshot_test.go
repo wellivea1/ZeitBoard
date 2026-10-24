@@ -53,7 +53,7 @@ func planningSnapshot() *SnapshotContext {
 func TestAssistantSnapshotReachesTheModelAsEnumsIdsAndCivilTime(t *testing.T) {
 	st, device := testStoreAndDevice(t)
 	fake := &fakeProvider{responses: []provider.Response{{Text: `{"schema_version":"v1","recommended_action":"answer_only","answer":"You are likely awake until about 11 PM."}`}}}
-	service := New(fake, fake.Status(), st)
+	service := New(fake, st)
 	service.now = fixedNow
 	planning := planningContext()
 	planning.Snapshot = planningSnapshot()
