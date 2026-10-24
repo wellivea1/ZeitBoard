@@ -133,6 +133,34 @@ it("points an assistant not yet signed in to Settings › Sync", async () => {
     "#/settings/sync",
   );
   expect(screen.queryByText(/Using your ChatGPT plan/)).toBeNull();
+  // Examples are offered only where they can be answered.
+  expect(screen.queryByRole("button", { name: "What's my next good window?" })).toBeNull();
+});
+
+// A reply does not say what a sign-in still needs, so the header keeps it.
+it("keeps saying what the sign-in needs after a reply", async () => {
+  install({
+    GetAssistantStatus: async () => ({ ...planStatus, configured: false, problem: "model_needed" }),
+    SendAssistantMessage: async () => ({
+      available: true,
+      result: "answer_only",
+      answer: "Choose a model for the assistant under Settings › Sync.",
+      configured: false,
+      provider: "chatgpt",
+      auth: "chatgpt_plan",
+      proposals: [],
+    }),
+  });
+  render(<AssistantRail open onClose={() => undefined} />);
+  expect(await screen.findByText("ChatGPT · choose a model")).toBeVisible();
+  fireEvent.change(screen.getByRole("textbox", { name: "Message the assistant" }), {
+    target: { value: "Find 90 minutes for paperwork" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Send" }));
+  expect(
+    await screen.findByText("Choose a model for the assistant under Settings › Sync."),
+  ).toBeVisible();
+  expect(screen.getByText("ChatGPT · choose a model")).toBeVisible();
 });
 
 it("reads the status again when the sign-in changes in Settings", async () => {

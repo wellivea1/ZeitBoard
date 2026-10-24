@@ -168,7 +168,7 @@ func (r *Receiver) Wait(ctx context.Context, state string) (url.Values, error) {
 				answers <- answer{err: Refused{Code: printableCode(refusal)}}
 				return
 			}
-			fmt.Fprintf(w, answerPage, "ZeitBoard is signed in.")
+			fmt.Fprintf(w, answerPage, "ZeitBoard has the answer and finishes signing in.")
 			answers <- answer{query: query}
 		}),
 	}

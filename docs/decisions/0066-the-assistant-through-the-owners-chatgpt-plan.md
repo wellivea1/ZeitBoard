@@ -200,3 +200,16 @@ fixed, with a test where it changes behaviour:
   longer become the plan's.
 - **Code quality.** The bounded reading of an answer, written three times, is one function now. A
   field the sign-in kept and never read is gone.
+
+The same reviewer then read the computer's half. Its fixes:
+- Once the browser has answered, Cancel no longer stops the server midway through the code's
+  exchange.
+- The browser tab says only that ZeitBoard has the answer, since the window says how the sign-in
+  went.
+- No answer of the server's reaches the owner as it came.
+- The rail keeps what a sign-in still needs through a reply.
+- The card claims no sign-in that did not connect.
+- No example prompt is offered before signing in.
+- A store that cannot be read is not taken for sync turned off.
+
+The completion plan lists all ten findings.

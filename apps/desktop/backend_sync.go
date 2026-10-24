@@ -1013,6 +1013,10 @@ func titleConfidence(level string) string {
 	}
 }
 
+// errBackendSyncOff is sync turned off, as against a connection that cannot
+// be read.
+var errBackendSyncOff = errors.New("backend sync is off")
+
 func (a *App) requireBackendSync() (backendSyncConfig, string, error) {
 	a.backendConfigMu.RLock()
 	defer a.backendConfigMu.RUnlock()
@@ -1025,7 +1029,7 @@ func (a *App) requireBackendSync() (backendSyncConfig, string, error) {
 		return cfg, "", err
 	}
 	if !cfg.Enabled {
-		return cfg, "", errors.New("backend sync is off")
+		return cfg, "", errBackendSyncOff
 	}
 	if cfg.DeviceID == "" {
 		return cfg, "", errors.New("backend device is not enrolled")

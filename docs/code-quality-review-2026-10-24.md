@@ -183,6 +183,13 @@ section 7 says.
   - consent not asked again;
   - a refusal in the stream that did not end the sign-in;
   - a sign-in route that could outlast the server's response limit.
+- **The computer's half (PR #106)** was reviewed by the same reviewer at medium effort. It raised
+  ten findings, and all are settled (completion plan, "The ChatGPT sign-in's computer half after an
+  automated review"). Among them:
+  - a Cancel that could stop a sign-in midway;
+  - a browser page that claimed success early;
+  - raw server answers shown to the owner;
+  - a store fault read as sync turned off.
 - **This review** found:
   - the providers' missing tests;
   - fifteen functions past the window's complexity limit and one past its length, all now split;
