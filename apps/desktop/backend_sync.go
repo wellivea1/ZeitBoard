@@ -824,6 +824,9 @@ type BackendProposalDTO struct {
 	CreatedLabel  string   `json:"createdLabel"`
 	ExpiresLabel  string   `json:"expiresLabel"`
 	DecisionToken string   `json:"decisionToken,omitempty"`
+	// UndoneHere is an approval whose time was written here and then undone,
+	// which the server still records as approved.
+	UndoneHere bool `json:"undoneHere,omitempty"`
 }
 
 type BackendProposalPaginationDTO struct {
@@ -833,13 +836,17 @@ type BackendProposalPaginationDTO struct {
 }
 
 type BackendProposalsDTO struct {
-	DecisionRecorded bool                         `json:"decisionRecorded,omitempty"`
-	PendingCount     int                          `json:"pendingCount"`
-	NextExpiryAt     string                       `json:"nextExpiryAt"`
-	Status           string                       `json:"status"`
-	Message          string                       `json:"message,omitempty"`
-	Proposals        []BackendProposalDTO         `json:"proposals"`
-	Pagination       BackendProposalPaginationDTO `json:"pagination"`
+	DecisionRecorded bool `json:"decisionRecorded,omitempty"`
+	// DecisionNote is what the owner should know of the decision just asked
+	// for: why it was not made, or what an approval could not do. The queue
+	// itself is as Status says.
+	DecisionNote string                       `json:"decisionNote,omitempty"`
+	PendingCount int                          `json:"pendingCount"`
+	NextExpiryAt string                       `json:"nextExpiryAt"`
+	Status       string                       `json:"status"`
+	Message      string                       `json:"message,omitempty"`
+	Proposals    []BackendProposalDTO         `json:"proposals"`
+	Pagination   BackendProposalPaginationDTO `json:"pagination"`
 }
 type BackendProposalPageInput struct {
 	Cursor string `json:"cursor"`
@@ -884,7 +891,8 @@ func (a *App) getBackendProposalPage(cursor string) (BackendProposalsDTO, error)
 
 // DecideBackendProposal approves or rejects a pending synced proposal via the
 // backend decision endpoint, consuming the one-use token, then returns the
-// refreshed list. Nothing is applied locally; the backend records the decision.
+// refreshed list. Approving writes the task's accepted time here (ADR-0067),
+// and a time that no longer fits here is not approved at all.
 func (a *App) DecideBackendProposal(input BackendProposalDecisionInput) (BackendProposalsDTO, error) {
 	if input.Decision != "approved" && input.Decision != "rejected" {
 		return BackendProposalsDTO{}, errors.New("decision must be approved or rejected")
@@ -896,23 +904,73 @@ func (a *App) DecideBackendProposal(input BackendProposalDecisionInput) (Backend
 	if err != nil {
 		return BackendProposalsDTO{Status: "error", Message: sanitizeBackendError(err), Proposals: []BackendProposalDTO{}}, nil
 	}
+	ctx := a.applicationContext()
 	client := a.newDesktopBackendClient(cfg, token)
+	var accepted *storage.ProposalDecisionItem
+	if input.Decision == "approved" {
+		item, err := a.acceptance(ctx, client, input.ProposalID)
+		if err != nil {
+			result := a.fetchBackendProposals(ctx, cfg, token, "")
+			result.DecisionNote = "Not approved. " + acceptanceProblem(err)
+			return result, nil
+		}
+		accepted = &item
+	}
 	payload := map[string]string{"decision": input.Decision, "token": input.Token}
 	var decided map[string]json.RawMessage
-	ctx := a.applicationContext()
 	if err := client.postJSON(ctx, "/v1/proposals/"+url.PathEscape(input.ProposalID)+"/decision", payload, &decided); err != nil {
-		result := a.fetchBackendProposals(ctx, cfg, token, "")
-		result.Status = "error"
-		result.Message = sanitizeBackendError(err)
-		return result, nil
+		return a.backendDecisionFailed(ctx, cfg, token, sanitizeBackendError(err)), nil
 	}
+	unwritten := a.writeAcceptedTime(ctx, accepted)
 	result := a.fetchBackendProposals(ctx, cfg, token, "")
-	result.DecisionRecorded = true
+	result.DecisionRecorded, result.DecisionNote = true, unwritten
 	if result.Status != "ok" {
 		result.Status = "error"
 		result.Message = "Decision recorded. The queue could not be refreshed; refresh it before another decision."
 	}
 	return result, nil
+}
+
+// backendDecisionFailed is the refreshed queue with why a decision was not
+// recorded.
+func (a *App) backendDecisionFailed(ctx context.Context, cfg backendSyncConfig, token, message string) BackendProposalsDTO {
+	result := a.fetchBackendProposals(ctx, cfg, token, "")
+	result.Status = "error"
+	result.Message = message
+	return result
+}
+
+// writeAcceptedTime writes the time an approval accepted. The server has
+// recorded the approval either way, so a time not written is said plainly.
+func (a *App) writeAcceptedTime(ctx context.Context, accepted *storage.ProposalDecisionItem) string {
+	if accepted == nil {
+		return ""
+	}
+	store, err := a.requireStore()
+	if err == nil {
+		_, err = store.DecideProposals(ctx, []storage.ProposalDecisionItem{*accepted})
+	}
+	if errors.Is(err, storage.ErrStaleProposal) || errors.Is(err, storage.ErrProposalAlreadyDecided) {
+		return "Approved, but the time was not written here: the task, calendar or sleep records changed meanwhile. Ask the assistant for another time."
+	}
+	if err != nil {
+		return "Approved, but the time could not be written here. Ask the assistant for another time."
+	}
+	a.calendarWriter.nudge()
+	return ""
+}
+
+// acceptanceProblem says why a time was not accepted, as a sentence.
+func acceptanceProblem(err error) string {
+	var refused notAccepted
+	switch {
+	case errors.As(err, &refused):
+		return refused.why
+	case errors.Is(err, storage.ErrStaleProposal):
+		return "Your records changed while it was checked. Try again."
+	default:
+		return sanitizeBackendError(err)
+	}
 }
 
 func (a *App) fetchBackendProposals(ctx context.Context, cfg backendSyncConfig, token, cursor string) BackendProposalsDTO {
@@ -931,6 +989,7 @@ func (a *App) fetchBackendProposals(ctx context.Context, cfg backendSyncConfig, 
 		return BackendProposalsDTO{Status: "error", Message: sanitizeBackendError(err), Proposals: []BackendProposalDTO{}}
 	}
 	titles, _ := a.localTaskTitles(ctx)
+	undone := a.undoneHere(ctx)
 	proposals := make([]BackendProposalDTO, 0, len(response.Proposals))
 	for _, record := range response.Proposals {
 		if record.ActionID == visitorRequestActionID {
@@ -940,7 +999,9 @@ func (a *App) fetchBackendProposals(ctx context.Context, cfg backendSyncConfig, 
 			// cannot work.
 			continue
 		}
-		proposals = append(proposals, backendProposalDTO(record, titles))
+		dto := backendProposalDTO(record, titles)
+		dto.UndoneHere = dto.Status == "approved" && undone[dto.ProposalID]
+		proposals = append(proposals, dto)
 	}
 	return BackendProposalsDTO{
 		Status:       "ok",

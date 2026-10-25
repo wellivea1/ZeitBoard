@@ -468,7 +468,7 @@ func TestBackendProposalsListAndCrossDeviceDecision(t *testing.T) {
 	})
 	var decisions []map[string]string
 	var cursors []string
-	decided := false
+	decided := ""
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.URL.Path == "/v1/devices":
@@ -486,8 +486,8 @@ func TestBackendProposalsListAndCrossDeviceDecision(t *testing.T) {
 				"expiresAt":  "2026-03-12T10:15:00Z",
 				"payload":    json.RawMessage(payload),
 			}
-			if decided {
-				record["status"] = "approved"
+			if decided != "" {
+				record["status"] = decided
 			} else {
 				record["decisionToken"] = "one-use-token"
 			}
@@ -500,7 +500,7 @@ func TestBackendProposalsListAndCrossDeviceDecision(t *testing.T) {
 			var body map[string]string
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			decisions = append(decisions, body)
-			decided = true
+			decided = body["decision"]
 			_ = json.NewEncoder(w).Encode(map[string]any{"schema_version": "v1"})
 		default:
 			http.NotFound(w, r)
@@ -540,18 +540,21 @@ func TestBackendProposalsListAndCrossDeviceDecision(t *testing.T) {
 		t.Fatalf("proposal should carry reason labels: %#v", proposal)
 	}
 
+	// Declining needs nothing of this computer, so it shows the protocol
+	// alone; approving writes a time, which backend_proposal_accept_test.go
+	// covers.
 	refreshed, err := app.DecideBackendProposal(BackendProposalDecisionInput{
 		ProposalID: proposal.ProposalID,
-		Decision:   "approved",
+		Decision:   "rejected",
 		Token:      proposal.DecisionToken,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(decisions) != 1 || decisions[0]["decision"] != "approved" || decisions[0]["token"] != "one-use-token" {
+	if len(decisions) != 1 || decisions[0]["decision"] != "rejected" || decisions[0]["token"] != "one-use-token" {
 		t.Fatalf("decision endpoint payload = %#v", decisions)
 	}
-	if refreshed.Status != "ok" || len(refreshed.Proposals) != 1 || refreshed.Proposals[0].Status != "approved" {
+	if refreshed.Status != "ok" || len(refreshed.Proposals) != 1 || refreshed.Proposals[0].Status != "rejected" {
 		t.Fatalf("refreshed list should show the decision: %#v", refreshed)
 	}
 

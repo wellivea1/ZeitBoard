@@ -104,10 +104,13 @@ function reasonAction(reason: AssistantReason | undefined, plan: boolean): React
 function ActionCard({
   proposal,
   busy,
+  note,
   onDecide,
 }: {
   proposal: BackendProposal;
   busy: boolean;
+  /** Why the last decision on this card did not go as asked. */
+  note?: string;
   onDecide: (proposal: BackendProposal, decision: "approved" | "rejected") => void;
 }) {
   const decidable = reviewIsPending(proposal);
@@ -122,6 +125,7 @@ function ActionCard({
           <span className="task-chip">{proposal.reasonLabels.join(" · ")}</span>
         </div>
       )}
+      {note && <p className="assistant-action-note">{note}</p>}
       <footer>
         <a href="#/plan/tasks">View in Plan</a>
         {decidable ? (
@@ -287,9 +291,19 @@ export function AssistantRail({ open, onClose }: { open: boolean; onClose: () =>
     }
   };
 
+  // A decision that did not go as asked says why on its card: a time that no
+  // longer fits is not approved, and one approved but not written says so.
+  const [decisionNotes, setDecisionNotes] = useState<Record<string, string>>({});
   const onDecide = (proposal: BackendProposal, decision: "approved" | "rejected") => {
     if (!proposal.decisionToken) return;
-    void decideProposal(proposal, decision);
+    const noteFor = (note: string) =>
+      setDecisionNotes((notes) => ({ ...notes, [proposal.proposalId]: note }));
+    noteFor("");
+    void decideProposal(proposal, decision).then(
+      (result) =>
+        noteFor(result.decisionNote ?? (result.status === "error" ? (result.message ?? "") : "")),
+      () => noteFor("The decision could not be recorded."),
+    );
   };
 
   const totalPending = usePendingApprovalsCount();
@@ -355,6 +369,7 @@ export function AssistantRail({ open, onClose }: { open: boolean; onClose: () =>
                   <ActionCard
                     proposal={currentProposal.get(proposal.proposalId) ?? proposal}
                     busy={busy || busyProposalId !== null}
+                    note={decisionNotes[proposal.proposalId]}
                     onDecide={onDecide}
                     key={proposal.proposalId}
                   />
@@ -421,6 +436,7 @@ export function AssistantRail({ open, onClose }: { open: boolean; onClose: () =>
             <ActionCard
               proposal={proposal}
               busy={busy || busyProposalId !== null}
+              note={decisionNotes[proposal.proposalId]}
               onDecide={onDecide}
               key={proposal.proposalId}
             />

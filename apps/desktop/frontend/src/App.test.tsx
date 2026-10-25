@@ -1015,13 +1015,21 @@ describe("assistant rail", () => {
   });
 
   it("sends a message and renders the propose-only action card with decisions", async () => {
-    const decide = vi.fn(async () => ({
+    const decided = {
       pendingCount: 0,
       nextExpiryAt: "",
       pagination: { nextCursor: "", hasMore: false },
       status: "ok",
       proposals: [],
-    }));
+    };
+    // The first approval is refused here: the time no longer fits.
+    const decide = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ...decided,
+        decisionNote: "Not approved. That time has already begun.",
+      })
+      .mockResolvedValue(decided);
     (globalThis as { go?: unknown }).go = {
       main: {
         App: {
@@ -1083,9 +1091,13 @@ describe("assistant rail", () => {
     ).toBeVisible();
     expect(screen.getByRole("link", { name: "View in Plan" })).toBeVisible();
 
-    // Approve goes through the same one-use-token queue decision.
+    // Approve goes through the same one-use-token queue decision. A refused
+    // approval says why on its card, which stays to be decided.
+    fireEvent.click(screen.getByRole("button", { name: "Approve" }));
+    expect(await screen.findByText("Not approved. That time has already begun.")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Approve" }));
     await screen.findByText("approved");
+    expect(screen.queryByText("Not approved. That time has already begun.")).toBeNull();
     expect(decide).toHaveBeenCalledWith({
       proposalId: "proposal_srv_01",
       decision: "approved",

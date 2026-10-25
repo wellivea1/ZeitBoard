@@ -18,6 +18,7 @@ import {
 import { createCoalescedRefresh, type CoalescedRefresh } from "../utils/coalescedRefresh";
 
 import { emptyReviewSummary, reviewIsPending } from "../data/reviewQueue";
+import { notifyCalendarDataChanged } from "../data/calendar";
 
 const proposalFreshnessMs = 5_000;
 const initialData: BackendProposalsData = {
@@ -310,13 +311,19 @@ export function BackendProposalsProvider({ children }: { children: ReactNode }) 
         });
         if (loaded.status === "error")
           setDecisionError(loaded.message ?? "The decision could not be recorded.");
+        else if (loaded.decisionNote) setDecisionError(loaded.decisionNote);
         const retained =
           loaded.status === "error" ? retainKnownProposals(dataRef.current, loaded) : loaded;
         if (loaded.decisionRecorded && loaded.status === "error")
           retained.pendingCount = Math.max(0, retained.pendingCount - 1);
-        const next = withRecordedDecision(retained, proposal, decision);
+        // A decision refused here, such as a time that no longer fits, leaves
+        // the proposal to be decided.
+        const refused = loaded.decisionNote !== undefined && !loaded.decisionRecorded;
+        const next = refused ? retained : withRecordedDecision(retained, proposal, decision);
         lastLoadedAtRef.current = Date.now();
         publish(next);
+        // An approval writes the task's time on this computer (ADR-0067).
+        if (decision === "approved" && loaded.decisionRecorded) notifyCalendarDataChanged();
         return next;
       } finally {
         busyRef.current = null;

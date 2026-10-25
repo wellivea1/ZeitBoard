@@ -4,6 +4,8 @@
 - Date: 2026-09-21
 - Implements part of completion-plan C2; corrects a C1 analysis regression.
 - Supersedes separate counts and list contracts in ADR-0016 and ADR-0030.
+- Amended by [ADR-0067](0067-an-approved-proposal-becomes-the-tasks-time.md): approving a schedule
+  proposal now writes the task's time on the computer.
 
 ## Findings
 

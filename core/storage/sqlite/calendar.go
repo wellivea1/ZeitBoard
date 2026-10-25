@@ -270,6 +270,15 @@ func (s *Store) DecideProposal(ctx context.Context, input ProposalDecisionInput,
 type ProposalDecisionItem struct {
 	Input      ProposalDecisionInput
 	OwnedEvent *calendarcore.Event
+	// Replaces is the task's accepted time an approval takes the place of,
+	// undone in the same transaction, so a task keeps one accepted time.
+	Replaces *ProposalUndo
+}
+
+// ProposalUndo names the decision undone in a proposal's place.
+type ProposalUndo struct {
+	DecisionID string
+	ProposalID string
 }
 
 // DecideProposals records decisions on proposals of one plan in one
@@ -305,6 +314,9 @@ func (s *Store) DecideProposals(ctx context.Context, items []ProposalDecisionIte
 	}
 	records := make([]ProposalDecisionRecord, len(items))
 	for index, item := range items {
+		if err := replaceAcceptedTimeTx(ctx, tx, item); err != nil {
+			return nil, err
+		}
 		if records[index], err = recordProposalDecisionTx(ctx, tx, item.Input, item.OwnedEvent, tasks[index]); err != nil {
 			return nil, err
 		}
@@ -403,15 +415,48 @@ func recordProposalDecisionTx(ctx context.Context, tx *sql.Tx, input ProposalDec
 	return record, nil
 }
 
-func (s *Store) UndoProposalDecision(ctx context.Context, decisionID, proposalID string, decidedAt time.Time) (ProposalDecisionRecord, error) {
-	if !contractIdentifier.MatchString(decisionID) || !contractIdentifier.MatchString(proposalID) || decidedAt.IsZero() {
-		return ProposalDecisionRecord{}, errors.New("undo requires valid decision and proposal ids plus decided_at")
+// replaceAcceptedTimeTx undoes the accepted time an approval replaces, which
+// must still be an approval of the same task.
+func replaceAcceptedTimeTx(ctx context.Context, tx *sql.Tx, item ProposalDecisionItem) error {
+	if item.Replaces == nil {
+		return nil
 	}
+	if item.Input.Decision != ProposalApproved {
+		return errors.New("only an approval replaces an accepted time")
+	}
+	latest, found, err := latestProposalDecision(ctx, tx, item.Replaces.ProposalID)
+	if err != nil {
+		return err
+	}
+	if !found || latest.Decision != ProposalApproved || latest.TaskID != item.Input.TaskID {
+		return ErrStaleProposal
+	}
+	_, err = undoProposalDecisionTx(ctx, tx, item.Replaces.DecisionID, item.Replaces.ProposalID, item.Input.DecidedAt)
+	return err
+}
+
+func (s *Store) UndoProposalDecision(ctx context.Context, decisionID, proposalID string, decidedAt time.Time) (ProposalDecisionRecord, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return ProposalDecisionRecord{}, err
 	}
 	defer tx.Rollback()
+	undo, err := undoProposalDecisionTx(ctx, tx, decisionID, proposalID, decidedAt)
+	if err != nil {
+		return ProposalDecisionRecord{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return ProposalDecisionRecord{}, err
+	}
+	return undo, nil
+}
+
+// undoProposalDecisionTx undoes a proposal's latest decision, removing the
+// block an approval wrote.
+func undoProposalDecisionTx(ctx context.Context, tx *sql.Tx, decisionID, proposalID string, decidedAt time.Time) (ProposalDecisionRecord, error) {
+	if !contractIdentifier.MatchString(decisionID) || !contractIdentifier.MatchString(proposalID) || decidedAt.IsZero() {
+		return ProposalDecisionRecord{}, errors.New("undo requires valid decision and proposal ids plus decided_at")
+	}
 	latest, found, err := latestProposalDecision(ctx, tx, proposalID)
 	if err != nil {
 		return ProposalDecisionRecord{}, err
@@ -441,10 +486,31 @@ func (s *Store) UndoProposalDecision(ctx context.Context, decisionID, proposalID
 	if err := insertProposalDecision(ctx, tx, undo); err != nil {
 		return ProposalDecisionRecord{}, err
 	}
-	if err := tx.Commit(); err != nil {
-		return ProposalDecisionRecord{}, err
-	}
 	return undo, nil
+}
+
+// UndoneProposals names the proposals whose latest decision here was undone:
+// an approval made elsewhere, such as on the owner's server, may still say
+// otherwise.
+func (s *Store) UndoneProposals(ctx context.Context) (map[string]bool, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT proposal_id, decision FROM local_proposal_decisions ORDER BY rowid`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	undone := make(map[string]bool)
+	for rows.Next() {
+		var proposalID, decision string
+		if err := rows.Scan(&proposalID, &decision); err != nil {
+			return nil, err
+		}
+		if decision == ProposalUndone {
+			undone[proposalID] = true
+		} else {
+			delete(undone, proposalID)
+		}
+	}
+	return undone, rows.Err()
 }
 
 func (s *Store) ActiveProposalDecisions(ctx context.Context) ([]ProposalDecisionRecord, error) {

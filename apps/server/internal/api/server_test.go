@@ -372,6 +372,58 @@ func TestDirectProposalEndpointCreatesPendingProposalWithoutLLM(t *testing.T) {
 	}
 }
 
+// The owner's computer reads one proposal to check the time it asks for
+// before approving it. The read hands out no decision token, and names no
+// proposal that is not there.
+func TestADeviceReadsOneProposal(t *testing.T) {
+	h := newTestHarness(t)
+	agent := h.registerDevice(t, "mcp-agent")
+	desktop := h.registerDevice(t, "desktop")
+	status, body := h.request(t, http.MethodPost, "/v1/proposals", agent, directProposalRequestBody("propose_place_task"))
+	if status != http.StatusCreated {
+		t.Fatalf("create status = %d body = %s", status, body)
+	}
+	var created struct {
+		Proposals []struct {
+			ProposalID string `json:"proposalId"`
+		} `json:"proposals"`
+	}
+	if err := json.Unmarshal(body, &created); err != nil || len(created.Proposals) != 1 {
+		t.Fatalf("created %s, %v", body, err)
+	}
+	id := created.Proposals[0].ProposalID
+
+	status, body = h.request(t, http.MethodGet, "/v1/proposals/"+id, desktop, "")
+	if status != http.StatusOK {
+		t.Fatalf("read status = %d body = %s", status, body)
+	}
+	var read struct {
+		Proposal struct {
+			ProposalID    string               `json:"proposalId"`
+			ActionID      string               `json:"actionId"`
+			Status        store.ProposalStatus `json:"status"`
+			Payload       json.RawMessage      `json:"payload"`
+			DecisionToken string               `json:"decisionToken"`
+		} `json:"proposal"`
+	}
+	if err := json.Unmarshal(body, &read); err != nil {
+		t.Fatal(err)
+	}
+	if read.Proposal.ProposalID != id || read.Proposal.ActionID != "propose_place_task" ||
+		read.Proposal.Status != store.ProposalPending || !bytes.Contains(read.Proposal.Payload, []byte(`"schedule_proposals"`)) {
+		t.Fatalf("read %s", body)
+	}
+	if read.Proposal.DecisionToken != "" {
+		t.Error("a single read handed out a decision token")
+	}
+	if status, _ = h.request(t, http.MethodGet, "/v1/proposals/proposal_missing_01", desktop, ""); status != http.StatusNotFound {
+		t.Errorf("a missing proposal read as %d", status)
+	}
+	if status, _ = h.request(t, http.MethodGet, "/v1/proposals/"+id, "", ""); status != http.StatusUnauthorized {
+		t.Errorf("an unenrolled read answered %d", status)
+	}
+}
+
 func TestAnyEnrolledDeviceCanDecideViaListedToken(t *testing.T) {
 	h := newTestHarness(t)
 	agent := h.registerDevice(t, "mcp-agent")

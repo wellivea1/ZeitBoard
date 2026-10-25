@@ -320,6 +320,90 @@ func TestProposalApprovalMaterializesOwnedBlockAndUndoRemovesOnlyIt(t *testing.T
 	}
 }
 
+// An approval may take the place of the task's accepted time. The old block
+// goes and the new one is written in one transaction, so the task keeps one
+// accepted time. A replacement naming what is no longer the task's accepted
+// time changes nothing.
+func TestAnApprovalReplacesTheTasksAcceptedTime(t *testing.T) {
+	store, ctx := openCalendarTestStore(t)
+	created := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
+	if err := store.AddTask(ctx, TaskRecord{
+		TaskID: "task_moved_01", Title: "File paperwork", DurationMinutes: 60, Status: TaskStatusOpen, CreatedAt: created,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	snapshotStart := time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC)
+	snapshotEnd := time.Date(2026, 1, 7, 0, 0, 0, 0, time.UTC)
+	decidedAt := time.Date(2026, 1, 3, 12, 0, 0, 0, time.UTC)
+	approval := func(proposalID string, start time.Time) ProposalDecisionItem {
+		t.Helper()
+		_, fingerprint, err := store.BusyDomainEvents(ctx, snapshotStart, snapshotEnd, "UTC")
+		if err != nil {
+			t.Fatal(err)
+		}
+		sleepFingerprint, err := store.SleepPlanningFingerprint(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		input := ProposalDecisionInput{
+			DecisionID: "decision_" + proposalID, ProposalID: proposalID, TaskID: "task_moved_01", TaskRevision: 1,
+			EstimateID: "estimate_moved_01", ProposalTitle: "File paperwork",
+			ProposalStartAt: start, ProposalEndAt: start.Add(time.Hour), ZoneID: "America/New_York",
+			Confidence: "medium", ExplanationCodes: []string{"within_task_bounds"},
+			Decision: ProposalApproved, DecidedAt: decidedAt,
+			SnapshotStartAt: snapshotStart, SnapshotEndAt: snapshotEnd,
+			EventSnapshotHash: fingerprint, SleepSnapshotHash: sleepFingerprint,
+		}
+		return ProposalDecisionItem{Input: input, OwnedEvent: &calendarcore.Event{
+			EventID: "calendar_event_" + proposalID, SourceID: ZeitBoardCalendarSourceID, SourceRecordID: proposalID,
+			Title: "File paperwork", StartAt: start, EndAt: start.Add(time.Hour), ZoneID: "America/New_York",
+			Busy: true, Ownership: calendarcore.OwnershipAppOwned, CreatedAt: decidedAt,
+			TaskID: "task_moved_01", TaskRevision: 1, ProposalID: proposalID,
+		}}
+	}
+	if _, err := store.DecideProposals(ctx, []ProposalDecisionItem{approval("proposal_first_01", time.Date(2026, 1, 6, 15, 0, 0, 0, time.UTC))}); err != nil {
+		t.Fatal(err)
+	}
+	moved := approval("proposal_moved_01", time.Date(2026, 1, 6, 18, 0, 0, 0, time.UTC))
+	moved.Replaces = &ProposalUndo{DecisionID: "decision_replaced_01", ProposalID: "proposal_first_01"}
+	if _, err := store.DecideProposals(ctx, []ProposalDecisionItem{moved}); err != nil {
+		t.Fatal(err)
+	}
+	accepted := func() []string {
+		t.Helper()
+		events, err := store.OwnedCalendarEvents(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var ids []string
+		for _, event := range events {
+			ids = append(ids, event.ProposalID)
+		}
+		return ids
+	}
+	if got := accepted(); len(got) != 1 || got[0] != "proposal_moved_01" {
+		t.Fatalf("accepted times after the move: %v", got)
+	}
+	active, err := store.ActiveProposalDecisions(ctx)
+	if err != nil || len(active) != 1 || active[0].ProposalID != "proposal_moved_01" {
+		t.Fatalf("active decisions %#v, %v", active, err)
+	}
+
+	again := approval("proposal_again_01", time.Date(2026, 1, 6, 20, 0, 0, 0, time.UTC))
+	again.Replaces = &ProposalUndo{DecisionID: "decision_replaced_02", ProposalID: "proposal_first_01"}
+	if _, err := store.DecideProposals(ctx, []ProposalDecisionItem{again}); !errors.Is(err, ErrStaleProposal) {
+		t.Fatalf("replacing an undone time: %v", err)
+	}
+	if got := accepted(); len(got) != 1 || got[0] != "proposal_moved_01" {
+		t.Fatalf("a refused replacement changed the accepted times: %v", got)
+	}
+	// The replaced time reads as undone here, and the standing one does not.
+	undone, err := store.UndoneProposals(ctx)
+	if err != nil || !undone["proposal_first_01"] || undone["proposal_moved_01"] || len(undone) != 1 {
+		t.Fatalf("undone proposals %v, %v", undone, err)
+	}
+}
+
 func TestProposalDecisionRejectsTaskCalendarAndSleepRaces(t *testing.T) {
 	store, ctx := openCalendarTestStore(t)
 	created := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)

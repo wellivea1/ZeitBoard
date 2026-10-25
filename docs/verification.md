@@ -3938,3 +3938,43 @@ the queue honest about this: backend approvals do not claim a calendar block. So
 no time, and the planner went on suggesting one. The next change addresses it.
 
 The server's and the desktop's Go suites, `go vet`, `gofmt` and the whole web check passed.
+
+## An approved proposal becomes the task's time — 2026-10-25
+
+ADR-0067, checked against the same instance and GPT-6.1-Sol.
+
+Asked "Find 90 minutes for paperwork tomorrow evening", the model proposed "Move task "Paperwork"",
+Monday 7:00 to 8:30 PM. Approving it from the rail had these effects:
+- The card said "approved". In the throwaway profile's database, one decision
+  `decision_assistant_…` was approved for that time, with its app-owned block.
+- Plan said "Nothing is waiting for you", and the task read "Tomorrow 7:00 – 8:30 PM · 1 hour 30
+  minutes". The planner no longer suggested a time.
+- Decision history listed it once: "Approved · Paperwork · Assistant · Approved Oct 25, 6:44 PM
+  EDT", with Undo.
+
+Undo removed the block, and the planner suggested tonight again.
+
+The tests:
+
+- **Server.** A device reads one proposal, without a decision token. A missing proposal is not
+  found, and a read without enrollment is refused.
+- **Store.**
+  - An approval replaces the task's accepted time in one transaction.
+  - A replacement naming a time that is no longer the task's changes nothing.
+  - The replaced proposal reads as undone.
+- **Desktop.**
+  - Approving writes the time, and the planner then suggests no other.
+  - An approval takes the place of the task's time, even one overlapping it.
+  - A time that has begun, or is not the task's length, is not approved, and the server is not
+    asked. The owner reads why: "Not approved. That time lasts 30 minutes, but File paperwork
+    takes 1 hour."
+  - After an undo, the server's record reads as undone here.
+  - Declining still shows the decision protocol alone.
+- **Window.**
+  - A refused approval says why on its card, and the card can still be decided.
+  - The history lists an approved assistant proposal once, as the assistant's, with Undo, and says
+    "undone" once it is undone here.
+  - Approving reads the planner's list again.
+
+The server's, the desktop's and the store's Go suites, `go vet`, `gofmt` and the whole web check
+passed.

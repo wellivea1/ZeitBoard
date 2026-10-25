@@ -1064,7 +1064,8 @@ textarea {
 .decision-state[data-decision="rejected"] {
   color: var(--danger-text) !important;
 }
-.decision-state[data-decision="pending"] {
+.decision-state[data-decision="pending"],
+.decision-state[data-decision="undone"] {
   color: var(--muted) !important;
 }
 
@@ -2397,6 +2398,9 @@ textarea {
 }
 .assistant-action-card[data-status="rejected"] {
   opacity: 0.75;
+}
+.assistant-action-card .assistant-action-note {
+  color: var(--danger-text);
 }
 .assistant-composer {
   flex: none;
