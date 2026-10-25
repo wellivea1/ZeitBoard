@@ -3870,3 +3870,40 @@ review. The rest are fixed and checked:
   neither the success line nor the welcome.
 
 The desktop's Go suite, the loopback receiver's tests and the window's tests passed.
+
+## The assistant on a real ChatGPT plan — 2026-10-25
+
+The checks of `release-checks.md` section 6, run with the owner's own ChatGPT account. The server
+ran on a throwaway data directory with `assistant.provider` set to `chatgpt`. The desktop ran
+`wails dev` on a throwaway profile, enrolled with that server. The owner signed in; the rest was
+driven from the window.
+
+| Step | Result |
+|---|---|
+| 1. Sign in | **Passed.** OpenAI's discovery document met every check the server makes: its issuer, endpoints on the issuer's origin, S256 and RS256. The card showed the account and GPT-6.1-Sol, the first of eight models the plan lists. "You're using your ChatGPT plan." was shown once and stayed dismissed after a reload |
+| 2. Ask "What's my next good window?" | **Passed after the fixes below.** The rail's header says "ChatGPT plan" and its composer "Using your ChatGPT plan · Manage usage". Whether ChatGPT's usage page shows the use waits on the owner's look |
+| 3. Restart the server and ask again | **Passed.** The access token is held in memory only, so each of four restarts renewed the sign-in from the kept refresh token. The next question was answered with no new sign-in, and the sealed setting was rewritten at each renewal, keeping the rotated token |
+| 4. Disconnect | **Passed in ZeitBoard.** The card said "Disconnected. ZeitBoard holds no access to your ChatGPT account.", which it says only when OpenAI confirms the token withdrawn, and offered the sign-in again. Whether ChatGPT's settings still list ZeitBoard waits on the owner's look |
+| 5. Refuse the plan | Not run; it is optional |
+
+Choosing GPT-5.6-Luna and Daybreak Blue from the card worked, and each answered. The model was set
+back to GPT-6.1-Sol before disconnecting.
+
+The real model found three faults that every stand-in had passed. Each is fixed, with a test:
+
+- **An answer with a target.** Asked only a question, GPT-6.1-Sol filled the schema's target with
+  `{"task_id":"none"}`. The strict check refused the whole reply twice, and the owner read "I could
+  not turn that into a safe schedule action." An answer acts on nothing, so its target is now
+  dropped. The prompt now says a target belongs only with a proposal.
+- **"Records getting old" with nothing recorded.** The policy told the model to say the records
+  are getting old whenever freshness is not current, so it said so of an empty history. The policy
+  now says what each freshness reason means. A test keeps every reason the snapshot can carry
+  explained. The answer became "I can't identify your next good window yet because no sleep is
+  recorded."
+- **A proposal described as made when none was.** Asked for 90 minutes for a task with no estimate
+  to plan against, the model wrote "I'm proposing a 90-minute paperwork block…". That reached the
+  owner, though the server made no proposal. A proposal the server cannot make is now explained in
+  the server's own words: there is no current estimate to plan against, no reliable window fits,
+  or no task matches.
+
+The server's whole suite, `go vet` and `gofmt` passed.

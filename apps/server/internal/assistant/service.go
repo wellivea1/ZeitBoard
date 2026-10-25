@@ -29,6 +29,9 @@ const (
 	proposalTTL = 15 * time.Minute
 )
 
+// errTaskNotFound is a proposal for a task the planning context does not hold.
+var errTaskNotFound = errors.New("task not found")
+
 type Service struct {
 	llm   provider.LLM
 	store *store.Store
@@ -148,6 +151,12 @@ func parseModelAction(text string) (modelAction, error) {
 	if err := dec.Decode(&action); err != nil {
 		return modelAction{}, err
 	}
+	// The schema shows a target, and a model may fill it in when it only
+	// answers ({"task_id":"none"} from a ChatGPT model, for one). An answer
+	// acts on nothing, so its target is dropped rather than its answer lost.
+	if action.RecommendedAction == "answer_only" {
+		action.Target = nil
+	}
 	if err := validateAction(action, agentactions.ChatAssistant); err != nil {
 		return modelAction{}, err
 	}
@@ -223,13 +232,25 @@ func (s *Service) resolveAction(ctx context.Context, device store.Device, req Me
 	}
 	proposal, err := s.resolveProposal(req.Context, action)
 	if err != nil {
-		answer := action.Answer
-		if answer == "" {
-			answer = "I could not resolve that into a safe schedule proposal. No proposal was created."
-		}
-		return s.answer(ResultUnknown, action.RecommendedAction, answer), nil
+		// The model wrote its answer for a proposal, and none was made, so the
+		// owner hears why in the server's words rather than the model's.
+		return s.answer(ResultUnknown, action.RecommendedAction, unresolvedAnswer(req.Context, err)), nil
 	}
 	return s.storePendingProposal(ctx, device, action, proposal, "assistant")
+}
+
+// unresolvedAnswer says why a proposal the model asked for was not made.
+func unresolvedAnswer(input PlanningContext, err error) string {
+	switch {
+	case errors.Is(err, errTaskNotFound):
+		return "I could not match that to one of your tasks, so no proposal was created."
+	case errors.Is(err, scheduling.ErrNoReliableWindow) && len(input.Availability) == 0:
+		return "There is no current estimate to plan against yet, so no proposal was created."
+	case errors.Is(err, scheduling.ErrNoReliableWindow):
+		return "No reliable window fits that yet, so no proposal was created."
+	default:
+		return "I could not resolve that into a safe schedule proposal. No proposal was created."
+	}
 }
 
 func (s *Service) createPendingProposal(ctx context.Context, device store.Device, input PlanningContext, action modelAction, source string) (MessageResponse, error) {
@@ -313,7 +334,7 @@ func (s *Service) storePendingProposal(ctx context.Context, device store.Device,
 func (s *Service) resolveProposal(input PlanningContext, action modelAction) (scheduling.Proposal, error) {
 	task, ok := taskByID(input.Tasks, action.Target.TaskID)
 	if !ok {
-		return scheduling.Proposal{}, errors.New("task not found")
+		return scheduling.Proposal{}, errTaskNotFound
 	}
 	if action.Target.DurationMinutes > 0 {
 		task.DurationMinutes = action.Target.DurationMinutes

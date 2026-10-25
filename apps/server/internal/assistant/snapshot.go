@@ -238,6 +238,10 @@ func boundedValue(value *int, low, high int) *int {
 	return &copied
 }
 
+// freshnessReasons are why a snapshot's freshness may not be current. The
+// model's policy says what each one means for the owner.
+var freshnessReasons = []string{"no_evidence", "evidence_aging", "evidence_stale", "expected_sleep_unrecorded", "no_sources_reporting"}
+
 // rhythm keeps the rhythm's allowlisted states and bounded numbers. An
 // unreadable value reads as the least trusting one, and what is happening
 // now is said only on current evidence, as Home says it.
@@ -246,7 +250,7 @@ func (k snapshotSanitizer) rhythm(rhythm SnapshotRhythm) redactedRhythm {
 		Status:               allowedValue(rhythm.Status, "estimated", "empty", "refused", "unavailable"),
 		Presence:             allowedValue(rhythm.Presence, "awake", "asleep", "unknown"),
 		Freshness:            allowedValue(rhythm.Freshness, "current", "stale", "withheld"),
-		FreshnessReason:      allowedValue(rhythm.FreshnessReason, "no_evidence", "evidence_aging", "evidence_stale", "expected_sleep_unrecorded", "no_sources_reporting"),
+		FreshnessReason:      allowedValue(rhythm.FreshnessReason, freshnessReasons...),
 		CycleMinutes:         boundedValue(rhythm.CycleMinutes, 60, 4320),
 		DriftMinutesPerCycle: boundedValue(rhythm.DriftMinutesPerCycle, -1440, 1440),
 		TypicalSleepMinutes:  boundedValue(rhythm.TypicalSleepMinutes, 1, 1440),
