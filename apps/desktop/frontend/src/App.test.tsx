@@ -1052,7 +1052,7 @@ describe("assistant rail", () => {
                 title: "Place task “Call clinic”",
                 window: "Thu Jul 10, 11:00 AM to 11:45 AM EDT",
                 confidence: "Medium",
-                reasonLabels: ["Fits the predicted waking window"],
+                reasonLabels: ["Fits the predicted waking window", "Within the task's time bounds"],
                 createdLabel: "Proposed Jul 10, 8:00 AM",
                 expiresAt: "2099-01-01T00:00:00Z",
                 expiresLabel: "expires Jul 10, 8:15 AM",
@@ -1077,6 +1077,10 @@ describe("assistant rail", () => {
     ).toBeVisible();
     expect(screen.getByText("Place task “Call clinic”")).toBeVisible();
     expect(screen.getByText("Thu Jul 10, 11:00 AM to 11:45 AM EDT")).toBeVisible();
+    // Reasons read apart, as they do on every other card.
+    expect(
+      screen.getByText("Fits the predicted waking window · Within the task's time bounds"),
+    ).toBeVisible();
     expect(screen.getByRole("link", { name: "View in Plan" })).toBeVisible();
 
     // Approve goes through the same one-use-token queue decision.

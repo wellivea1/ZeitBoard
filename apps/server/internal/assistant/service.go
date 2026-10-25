@@ -236,7 +236,29 @@ func (s *Service) resolveAction(ctx context.Context, device store.Device, req Me
 		// owner hears why in the server's words rather than the model's.
 		return s.answer(ResultUnknown, action.RecommendedAction, unresolvedAnswer(req.Context, err)), nil
 	}
+	if awaitsDecision(req.Context.Snapshot, proposal) {
+		// A second decision for a time the owner is already deciding on
+		// would only repeat it.
+		return s.answer(ResultAnswerOnly, "answer_only", "A time that fits is already waiting for your decision in Plan, so no new proposal was created."), nil
+	}
 	return s.storePendingProposal(ctx, device, action, proposal, "assistant")
+}
+
+// awaitsDecision reports whether the owner's planner already suggests this
+// proposal's time: the same task, in the same minutes.
+func awaitsDecision(snapshot *SnapshotContext, proposal scheduling.Proposal) bool {
+	if snapshot == nil {
+		return false
+	}
+	start := proposal.Window.Start.UTC.Truncate(time.Minute)
+	end := proposal.Window.End.UTC.Truncate(time.Minute)
+	for _, suggestion := range snapshot.Plans.Suggestions {
+		if suggestion.TaskID == string(proposal.TaskID) &&
+			suggestion.Start.Truncate(time.Minute).Equal(start) && suggestion.End.Truncate(time.Minute).Equal(end) {
+			return true
+		}
+	}
+	return false
 }
 
 // unresolvedAnswer says why a proposal the model asked for was not made.

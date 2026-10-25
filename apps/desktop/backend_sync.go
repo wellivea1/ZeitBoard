@@ -930,6 +930,7 @@ func (a *App) fetchBackendProposals(ctx context.Context, cfg backendSyncConfig, 
 		a.recordBackendSyncError(cfg, err)
 		return BackendProposalsDTO{Status: "error", Message: sanitizeBackendError(err), Proposals: []BackendProposalDTO{}}
 	}
+	titles, _ := a.localTaskTitles(ctx)
 	proposals := make([]BackendProposalDTO, 0, len(response.Proposals))
 	for _, record := range response.Proposals {
 		if record.ActionID == visitorRequestActionID {
@@ -939,7 +940,7 @@ func (a *App) fetchBackendProposals(ctx context.Context, cfg backendSyncConfig, 
 			// cannot work.
 			continue
 		}
-		proposals = append(proposals, backendProposalDTO(record))
+		proposals = append(proposals, backendProposalDTO(record, titles))
 	}
 	return BackendProposalsDTO{
 		Status:       "ok",
@@ -954,7 +955,9 @@ func (a *App) fetchBackendProposals(ctx context.Context, cfg backendSyncConfig, 
 	}
 }
 
-func backendProposalDTO(record backendProposalRecord) BackendProposalDTO {
+// backendProposalDTO describes a proposal the server holds. Its task is named
+// by the title kept on this computer (titles never reach the server).
+func backendProposalDTO(record backendProposalRecord, titles map[string]string) BackendProposalDTO {
 	dto := BackendProposalDTO{
 		ExpiresAt:     record.ExpiresAt.UTC().Format(time.RFC3339Nano),
 		ProposalID:    record.ProposalID,
@@ -977,19 +980,22 @@ func backendProposalDTO(record backendProposalRecord) BackendProposalDTO {
 		return dto
 	}
 	item := payload.ScheduleProposals.Proposals[0]
-	dto.Title = backendProposalTitle(record.ActionID, item.TaskID)
+	dto.Title = backendProposalTitle(record.ActionID, titles[item.TaskID])
 	dto.Window = civilWindow(item.StartAt, item.EndAt, item.ZoneID)
 	dto.Confidence = titleConfidence(item.Confidence.Level)
 	dto.ReasonLabels = reasonLabels(item.ExplanationCodes)
 	return dto
 }
 
-func backendProposalTitle(action, taskID string) string {
+// backendProposalTitle names a proposal by its action and the task's title.
+// A task this computer does not hold is left unnamed: its id means nothing to
+// the owner.
+func backendProposalTitle(action, title string) string {
 	verb := agentactions.CardTitle(action)
-	if taskID == "" {
+	if title == "" {
 		return verb
 	}
-	return verb + " “" + taskID + "”"
+	return verb + " “" + title + "”"
 }
 
 func civilWindow(start, end time.Time, zoneID string) string {
