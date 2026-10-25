@@ -213,3 +213,25 @@ The same reviewer then read the computer's half. Its fixes:
 - A store that cannot be read is not taken for sync turned off.
 
 The completion plan lists all ten findings.
+
+## Update, 2026-10-25: a real sign-in
+
+The owner signed in with their own ChatGPT account (`release-checks.md` section 6). OpenAI's side
+behaved as this record assumed:
+- its discovery document met every check;
+- the plan listed eight models, and three of them, chosen in turn, each answered through the
+  streamed Responses API;
+- each server restart renewed the sign-in from the kept refresh token;
+- disconnecting withdrew the token, and OpenAI confirmed it.
+
+So nothing in the decision changes. The real model did find three faults in the assistant, which
+every provider shares and no stand-in had shown:
+- **A target with an answer.** A target sent with an answer is dropped, rather than the whole reply
+  refused.
+- **Freshness reasons.** The model is told what each one means, so an empty history is not called
+  old records.
+- **A proposal the server cannot make.** It is explained in the server's words, since the model
+  wrote its answer as if the proposal were made.
+
+`verification.md` records the run. The usage page and ChatGPT's own list of connected apps wait on
+the owner's look.

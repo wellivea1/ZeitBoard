@@ -79,6 +79,44 @@ func TestAssistantCreatesPendingProposalOnlyThroughScheduler(t *testing.T) {
 	validateScheduleProposalsPayload(t, payload.ScheduleProposals)
 }
 
+// A proposal the server cannot make is never described as made. The model
+// writes its answer for a proposal ("I'm proposing a 90-minute block", from
+// a ChatGPT model with nothing to plan against), so the owner hears why there
+// is none instead.
+func TestAProposalNotMadeIsNotDescribedAsMade(t *testing.T) {
+	noEstimate := planningContext()
+	noEstimate.EstimateID, noEstimate.Availability = "", nil
+	for name, test := range map[string]struct {
+		context PlanningContext
+		target  string
+		want    string
+	}{
+		"nothing to plan against": {noEstimate, `{"task_id":"task_flexible_01"}`, "There is no current estimate to plan against yet, so no proposal was created."},
+		// Fifteen hours is longer than any waking window the context holds.
+		"no window fits":  {planningContext(), `{"task_id":"task_flexible_01","duration_minutes":900}`, "No reliable window fits that yet, so no proposal was created."},
+		"a task not held": {planningContext(), `{"task_id":"task_missing_01"}`, "I could not match that to one of your tasks, so no proposal was created."},
+	} {
+		t.Run(name, func(t *testing.T) {
+			st, device := testStoreAndDevice(t)
+			fake := &fakeProvider{responses: []provider.Response{{Text: `{"schema_version":"v1","recommended_action":"propose_place_task","target":` + test.target + `,"answer":"I'm proposing a block before Friday."}`}}}
+			service := New(fake, st)
+			service.now = fixedNow
+
+			resp, err := service.HandleMessage(context.Background(), device, MessageRequest{
+				SchemaVersion: SchemaVersion,
+				Message:       "Find time for paperwork before Friday.",
+				Context:       test.context,
+			})
+			if err != nil || resp.Result != ResultUnknown || resp.Answer != test.want || len(resp.Proposals) != 0 {
+				t.Fatalf("answered %+v, %v", resp, err)
+			}
+			if count, err := st.CountProposals(context.Background()); err != nil || count != 0 {
+				t.Errorf("%d proposals, %v", count, err)
+			}
+		})
+	}
+}
+
 func TestAssistantRejectsUnknownActionWithoutProposal(t *testing.T) {
 	st, device := testStoreAndDevice(t)
 	fake := &fakeProvider{responses: []provider.Response{
@@ -105,6 +143,32 @@ func TestAssistantRejectsUnknownActionWithoutProposal(t *testing.T) {
 	}
 	if count != 0 {
 		t.Fatalf("proposal count = %d, want 0", count)
+	}
+}
+
+// A model may fill in the schema's target when it only answers, as a ChatGPT
+// model did on the first real sign-in. The owner still gets the answer, and
+// nothing is proposed.
+func TestAnAnswerWithATargetIsStillAnswered(t *testing.T) {
+	st, device := testStoreAndDevice(t)
+	answer := "There is not enough recent information to name your next good window."
+	fake := &fakeProvider{responses: []provider.Response{{Text: `{"schema_version":"v1","recommended_action":"answer_only","target":{"task_id":"none"},"answer":"` + answer + `"}`}}}
+	service := New(fake, st)
+	service.now = fixedNow
+
+	resp, err := service.HandleMessage(context.Background(), device, MessageRequest{
+		SchemaVersion: SchemaVersion,
+		Message:       "What's my next good window?",
+		Context:       planningContext(),
+	})
+	if err != nil || resp.Result != ResultAnswerOnly || resp.Answer != answer || len(resp.Proposals) != 0 {
+		t.Fatalf("answered %+v, %v", resp, err)
+	}
+	if len(fake.requests) != 1 {
+		t.Errorf("asked %d times; a usable answer is not asked again", len(fake.requests))
+	}
+	if count, err := st.CountProposals(context.Background()); err != nil || count != 0 {
+		t.Errorf("%d proposals, %v", count, err)
 	}
 }
 

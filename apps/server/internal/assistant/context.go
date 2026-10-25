@@ -96,7 +96,7 @@ func buildRedactedContext(input PlanningContext, compact bool) (json.RawMessage,
 			"Create proposals only; never apply schedule changes.",
 			"Use civil-time ranges and confidence.",
 			"No diagnosis, dosing, treatment timing, or exact phase claims.",
-			"If the snapshot's freshness is not current, say the records are getting old and state no current state; if it is withheld, state no time ahead either.",
+			"If the snapshot's freshness is not current, say why by its freshness_reason (no_evidence: no sleep is recorded yet; evidence_aging or evidence_stale: the records are getting old; expected_sleep_unrecorded: sleep was expected and none is recorded; no_sources_reporting: no source is reporting) and state no current state; if it is withheld, state no time ahead either.",
 		},
 		Snapshot: sanitizeSnapshot(input.Snapshot, input.Now, zoneID, compact),
 	}
@@ -405,6 +405,7 @@ func assistantSystemPrompt() string {
 		"Return only the assistant action JSON.",
 		"The context's snapshot is the owner's day as their Home screen states it: whether they are likely awake now, when sleep is likely to begin and waking to follow, reachable hours (each for a person named by their place in the owner's list, so contact_01 is the first), commitments and whether they fall in predicted sleep, suggested times awaiting their decision, and tasks that could not be placed.",
 		"The server resolves proposals; you never apply changes.",
+		"Give a target only with a proposal, naming a task from the context; leave it out of answer_only.",
 		"Use plain civil-time language with uncertainty.",
 		"Do not provide diagnosis, dosing, treatment timing, or exact phase claims.",
 	}, " ")

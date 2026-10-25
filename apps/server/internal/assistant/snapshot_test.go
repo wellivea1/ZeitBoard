@@ -139,6 +139,43 @@ func TestSnapshotSanitizingDropsWhatAModelMustNotRead(t *testing.T) {
 	}
 }
 
+// The model reads why freshness is not current only as a reason code, so its
+// policy says what each code means. Told to call every one of them "records
+// getting old", a ChatGPT model said so of a history with nothing in it.
+func TestTheModelIsToldWhatEachFreshnessReasonMeans(t *testing.T) {
+	snapshot := planningSnapshot()
+	snapshot.Rhythm.Freshness, snapshot.Rhythm.FreshnessReason = "withheld", "no_evidence"
+	planning := planningContext()
+	planning.Snapshot = snapshot
+	encoded, err := buildRedactedContext(planning, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sent struct {
+		Policy   []string `json:"policy"`
+		Snapshot struct {
+			Rhythm struct {
+				FreshnessReason string `json:"freshness_reason"`
+			} `json:"rhythm"`
+		} `json:"snapshot"`
+	}
+	if err := json.Unmarshal(encoded, &sent); err != nil {
+		t.Fatal(err)
+	}
+	if sent.Snapshot.Rhythm.FreshnessReason != "no_evidence" {
+		t.Fatalf("the model was sent reason %q", sent.Snapshot.Rhythm.FreshnessReason)
+	}
+	policy := strings.Join(sent.Policy, " ")
+	for _, reason := range freshnessReasons {
+		if !strings.Contains(policy, reason+":") && !strings.Contains(policy, reason+" or ") {
+			t.Errorf("the policy does not say what %s means: %s", reason, policy)
+		}
+	}
+	if !strings.Contains(policy, "no_evidence: no sleep is recorded yet") {
+		t.Errorf("an empty history is not described as one: %s", policy)
+	}
+}
+
 // The chat view has no sleep, task, medication, marker or sync section, so the
 // server's strict decoding refuses a request that carries one before anything
 // reaches a model.
