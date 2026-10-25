@@ -79,6 +79,51 @@ func TestAssistantCreatesPendingProposalOnlyThroughScheduler(t *testing.T) {
 	validateScheduleProposalsPayload(t, payload.ScheduleProposals)
 }
 
+// A time the planner already suggests for a task is not proposed again. A
+// ChatGPT model, asked for 90 minutes for a task, found the very time the
+// planner had already put before the owner, who then had two decisions for
+// one time. Another time for the task is still proposed.
+func TestATimeAlreadyAwaitingDecisionIsNotProposedAgain(t *testing.T) {
+	planned, err := New(nil, nil).resolveProposal(planningContext(), modelAction{Target: &ActionTarget{TaskID: "task_flexible_01"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, test := range map[string]struct {
+		start     time.Time
+		proposals int
+	}{
+		"the same time": {planned.Window.Start.UTC, 0},
+		"another time":  {planned.Window.Start.UTC.Add(2 * time.Hour), 1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			st, device := testStoreAndDevice(t)
+			fake := &fakeProvider{responses: []provider.Response{{Text: `{"schema_version":"v1","recommended_action":"propose_place_task","target":{"task_id":"task_flexible_01"},"answer":"This is a proposal."}`}}}
+			service := New(fake, st)
+			service.now = fixedNow
+			planning := planningContext()
+			planning.Snapshot = planningSnapshot()
+			planning.Snapshot.Plans.Suggestions = []SnapshotSuggestion{{
+				ProposalID: "proposal_local_01", TaskID: "task_flexible_01", Confidence: "medium",
+				Start: test.start, End: test.start.Add(planned.Window.End.UTC.Sub(planned.Window.Start.UTC)),
+			}}
+
+			resp, err := service.HandleMessage(context.Background(), device, MessageRequest{
+				SchemaVersion: SchemaVersion, Message: "Find 30 minutes for this before tonight.", Context: planning,
+			})
+			if err != nil || len(resp.Proposals) != test.proposals {
+				t.Fatalf("answered %+v, %v", resp, err)
+			}
+			if test.proposals == 0 && (resp.Result != ResultAnswerOnly ||
+				resp.Answer != "A time that fits is already waiting for your decision in Plan, so no new proposal was created.") {
+				t.Errorf("answered %+v", resp)
+			}
+			if count, err := st.CountProposals(context.Background()); err != nil || count != test.proposals {
+				t.Errorf("%d proposals stored, %v", count, err)
+			}
+		})
+	}
+}
+
 // A proposal the server cannot make is never described as made. The model
 // writes its answer for a proposal ("I'm proposing a 90-minute block", from
 // a ChatGPT model with nothing to plan against), so the owner hears why there

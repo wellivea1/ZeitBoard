@@ -3881,7 +3881,7 @@ driven from the window.
 | Step | Result |
 |---|---|
 | 1. Sign in | **Passed.** OpenAI's discovery document met every check the server makes: its issuer, endpoints on the issuer's origin, S256 and RS256. The card showed the account and GPT-6.1-Sol, the first of eight models the plan lists. "You're using your ChatGPT plan." was shown once and stayed dismissed after a reload |
-| 2. Ask "What's my next good window?" | **Passed after the fixes below.** The rail's header says "ChatGPT plan" and its composer "Using your ChatGPT plan · Manage usage". Whether ChatGPT's usage page shows the use waits on the owner's look |
+| 2. Ask "What's my next good window?" | **Passed after the fixes below.** The rail's header says "ChatGPT plan" and its composer "Using your ChatGPT plan · Manage usage". The owner saw the use on ChatGPT's usage page |
 | 3. Restart the server and ask again | **Passed.** The access token is held in memory only, so each of four restarts renewed the sign-in from the kept refresh token. The next question was answered with no new sign-in, and the sealed setting was rewritten at each renewal, keeping the rotated token |
 | 4. Disconnect | **Passed in ZeitBoard.** The card said "Disconnected. ZeitBoard holds no access to your ChatGPT account.", which it says only when OpenAI confirms the token withdrawn, and offered the sign-in again. Whether ChatGPT's settings still list ZeitBoard waits on the owner's look |
 | 5. Refuse the plan | Not run; it is optional |
@@ -3907,3 +3907,34 @@ The real model found three faults that every stand-in had passed. Each is fixed,
   or no task matches.
 
 The server's whole suite, `go vet` and `gofmt` passed.
+
+## A real proposal, end to end — 2026-10-25
+
+The same instance, signed in again, with 21 synthetic nights imported into the throwaway profile:
+a rhythm drifting 30 minutes a day, ending at 2 PM. Home estimated sleep between 5:45 and 7:15 AM
+and waking between 1:30 and 3:30 PM, with a drift of +30 minutes per cycle. A synthetic task,
+"Paperwork", took 90 minutes.
+
+Asked "Find 90 minutes for paperwork before Friday", GPT-6.1-Sol proposed tonight, 6:30 to
+8:00 PM. The server resolved it into a pending proposal with a card in the rail. Asked for
+"tomorrow evening instead", it proposed Monday at the same hours, and approving it recorded the
+decision. Declining an earlier proposal recorded that too.
+
+The run found four faults. Three are fixed here:
+
+- **The Plan page named a task by its id**, as `Place task "task_555ca22008a4590d"`, while the
+  rail named it "Paperwork". Both now name a proposal's task the same way: by the title kept on
+  this computer, or by the action alone for a task this computer does not hold.
+- **One time, two decisions.** The model proposed the very time the planner already suggested,
+  so the owner had two decisions for one time. The server now answers that a time that fits is
+  already waiting for the owner's decision, and makes no second proposal. Another time for the
+  same task is still proposed.
+- **The rail's reasons ran together**: "In a predicted waking windowWithin the task's time
+  bounds". They read apart now, with " · " between them, as on every other card.
+
+The fourth is larger. **Approving an assistant proposal wrote nothing.** The server recorded the
+approval, but no code on any device turned it into the task's accepted time. ADR-0046 had kept
+the queue honest about this: backend approvals do not claim a calendar block. So "Paperwork" kept
+no time, and the planner went on suggesting one. The next change addresses it.
+
+The server's and the desktop's Go suites, `go vet`, `gofmt` and the whole web check passed.

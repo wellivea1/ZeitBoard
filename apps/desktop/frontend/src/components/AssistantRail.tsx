@@ -119,11 +119,7 @@ function ActionCard({
       <p>{proposal.window}</p>
       {proposal.reasonLabels.length > 0 && (
         <div className="proposal-reasons">
-          {proposal.reasonLabels.map((reason) => (
-            <span className="task-chip" key={reason}>
-              {reason}
-            </span>
-          ))}
+          <span className="task-chip">{proposal.reasonLabels.join(" · ")}</span>
         </div>
       )}
       <footer>

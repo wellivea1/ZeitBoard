@@ -233,5 +233,5 @@ every provider shares and no stand-in had shown:
 - **A proposal the server cannot make.** It is explained in the server's words, since the model
   wrote its answer as if the proposal were made.
 
-`verification.md` records the run. The usage page and ChatGPT's own list of connected apps wait on
-the owner's look.
+`verification.md` records the run. The owner saw the use on ChatGPT's usage page. ChatGPT's own
+list of connected apps after disconnecting waits on the owner's look.

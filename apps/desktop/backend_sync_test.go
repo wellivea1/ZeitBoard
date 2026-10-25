@@ -438,6 +438,11 @@ func TestPullRetainsOrphanCorrectionAndReportsWaitingForSource(t *testing.T) {
 
 func TestBackendProposalsListAndCrossDeviceDecision(t *testing.T) {
 	app := newTestApp(t)
+	// The server knows the task by its id alone; its title stays here.
+	tasks, err := app.AddTask(TaskInput{Title: "File taxes", DurationMinutes: 90})
+	if err != nil {
+		t.Fatal(err)
+	}
 	payload := mustJSON(t, map[string]any{
 		"proposal_id": "proposal_abc123def456",
 		"action_id":   "propose_place_task",
@@ -448,7 +453,7 @@ func TestBackendProposalsListAndCrossDeviceDecision(t *testing.T) {
 			"algorithm_version": "assistant-scheduler-v1",
 			"proposals": []map[string]any{{
 				"proposal_id": "proposal_abc123def456",
-				"task_id":     "taxes",
+				"task_id":     tasks.Tasks[0].TaskID,
 				"start_at":    "2026-03-12T15:00:00Z",
 				"end_at":      "2026-03-12T16:30:00Z",
 				"zone_id":     "America/New_York",
@@ -528,8 +533,8 @@ func TestBackendProposalsListAndCrossDeviceDecision(t *testing.T) {
 	if proposal.Status != "pending" || proposal.DecisionToken != "one-use-token" {
 		t.Fatalf("pending proposal should carry the decision token: %#v", proposal)
 	}
-	if !strings.Contains(proposal.Title, "taxes") || proposal.Confidence != "Medium" {
-		t.Fatalf("proposal should be humanized from the payload: %#v", proposal)
+	if proposal.Title != "Place task “File taxes”" || proposal.Confidence != "Medium" {
+		t.Fatalf("proposal should be humanized from the payload and named by the task's title: %#v", proposal)
 	}
 	if len(proposal.ReasonLabels) == 0 {
 		t.Fatalf("proposal should carry reason labels: %#v", proposal)
@@ -854,6 +859,22 @@ func serverRhythmProjection(summary string) *estimation.RhythmProjection {
 		YMinHour:        0,
 		YMaxHour:        24,
 		DriftPoints:     []estimation.RhythmDriftPoint{},
+	}
+}
+
+// A proposal for a task this computer does not hold names no task. The Plan
+// page once showed `Place task "task_555ca22008a4590d"` for an assistant
+// proposal, while the rail named the same task by its title.
+func TestAProposalForATaskNotHeldHereNamesNoTask(t *testing.T) {
+	record := backendProposalRecord{
+		ActionID: "propose_place_task",
+		Payload: mustJSON(t, map[string]any{"schedule_proposals": map[string]any{"proposals": []map[string]any{{
+			"task_id": "task_555ca22008a4590d", "zone_id": "America/New_York",
+			"start_at": "2026-10-25T22:30:00Z", "end_at": "2026-10-26T00:00:00Z",
+		}}}}),
+	}
+	if title := backendProposalDTO(record, map[string]string{"task_other_01": "File taxes"}).Title; title != "Place task" {
+		t.Errorf("titled %q", title)
 	}
 }
 

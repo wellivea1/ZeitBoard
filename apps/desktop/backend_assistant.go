@@ -451,21 +451,15 @@ func (a *App) localTaskTitles(ctx context.Context) (map[string]string, error) {
 }
 
 // assistantProposalDTO maps a message-response proposal summary through the
-// shared backend-proposal mapping, then swaps the private local task title in
-// for the task id (titles exist only on this device).
+// shared backend-proposal mapping, which names its task as the queue does.
 func assistantProposalDTO(summary assistantProposalSummary, titles map[string]string) BackendProposalDTO {
 	var meta struct {
-		ActionID          string    `json:"action_id"`
-		CreatedAt         time.Time `json:"created_at"`
-		ExpiresAt         time.Time `json:"expires_at"`
-		ScheduleProposals struct {
-			Proposals []struct {
-				TaskID string `json:"task_id"`
-			} `json:"proposals"`
-		} `json:"schedule_proposals"`
+		ActionID  string    `json:"action_id"`
+		CreatedAt time.Time `json:"created_at"`
+		ExpiresAt time.Time `json:"expires_at"`
 	}
 	_ = json.Unmarshal(summary.Payload, &meta)
-	dto := backendProposalDTO(backendProposalRecord{
+	return backendProposalDTO(backendProposalRecord{
 		ProposalID:    summary.ProposalID,
 		ActionID:      meta.ActionID,
 		Status:        summary.Status,
@@ -473,13 +467,7 @@ func assistantProposalDTO(summary assistantProposalSummary, titles map[string]st
 		ExpiresAt:     meta.ExpiresAt,
 		Payload:       summary.Payload,
 		DecisionToken: summary.DecisionToken,
-	})
-	if len(meta.ScheduleProposals.Proposals) > 0 {
-		if title, ok := titles[meta.ScheduleProposals.Proposals[0].TaskID]; ok && title != "" {
-			dto.Title = backendProposalTitle(meta.ActionID, title)
-		}
-	}
-	return dto
+	}, titles)
 }
 
 // AppearanceClockDTO gives the appearance scheduler structured forecast
