@@ -3847,3 +3847,26 @@ against the synthetic OpenAI:
 
 The server's whole suite, `go vet` and `gofmt` passed. So did the desktop's sign-in tests and the
 window's card tests, with the new wording for a server that does not offer the sign-in.
+
+## The ChatGPT sign-in's computer half after an automated review — 2026-10-24
+
+An automated reviewer raised ten findings on PR #106. One was already fixed by the server's
+review. The rest are fixed and checked:
+
+- **Cancel after the browser answered.** A stand-in server held the hand-off while Cancel was
+  clicked. The sign-in still finished, connected.
+- **The browser page** answers "ZeitBoard has the answer and finishes signing in", and never "signed
+  in".
+- **Failures read as sentences.**
+  - A known problem gets its sentence.
+  - An unknown one reads "ChatGPT could not do that. Try again."
+  - A server error reads "Your server could not finish that. Try again."
+  - A 404 says how to offer the sign-in.
+  - None shows the server's JSON.
+- **A store that cannot be read** is said as it is, not as sync turned off.
+- **The rail** kept "ChatGPT · choose a model" through a reply that did not say it. It offers no
+  example prompts before signing in.
+- **The card** said "Signing in did not finish." for a sign-in that came back unconnected, showing
+  neither the success line nor the welcome.
+
+The desktop's Go suite, the loopback receiver's tests and the window's tests passed.

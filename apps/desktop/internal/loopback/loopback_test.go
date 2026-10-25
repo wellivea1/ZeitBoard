@@ -3,6 +3,7 @@ package loopback
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -75,8 +76,17 @@ func TestOnlyTheSignInsOwnAnswerIsTaken(t *testing.T) {
 	default:
 	}
 
-	if status := get(t, redirect+"?state=expected-state&code=the-code&client_id=client-1", ""); status != http.StatusOK {
-		t.Fatalf("the answer was turned away: %d", status)
+	// The page says the answer arrived, not how the sign-in went: the app
+	// finishes it and says so.
+	response, err := http.Get(redirect + "?state=expected-state&code=the-code&client_id=client-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, _ := io.ReadAll(response.Body)
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK || !strings.Contains(string(page), "has the answer") ||
+		strings.Contains(string(page), "signed in.") {
+		t.Fatalf("the answer was met with %d: %s", response.StatusCode, page)
 	}
 	got := <-done
 	if got.err != nil || got.query.Get("code") != "the-code" || got.query.Get("client_id") != "client-1" {

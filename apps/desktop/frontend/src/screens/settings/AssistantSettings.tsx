@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import {
-  assistantConnectionChangedEvent,
   cancelChatGPTSignIn,
   chooseAssistantModel,
   connectChatGPT,
@@ -155,8 +154,9 @@ export function AssistantSettings({ syncKey }: { syncKey: string }) {
     set,
     reload,
   } = useLoaded<AssistantConnection | null>(() => loadAssistantConnection(), {
+    // Only this card changes the sign-in, and it keeps what each change
+    // returns; the event is for the rail.
     key: syncKey,
-    events: [assistantConnectionChangedEvent],
     fallback: () => unreadable,
   });
   const connected = connection?.state === "connected";
@@ -186,8 +186,12 @@ export function AssistantSettings({ syncKey }: { syncKey: string }) {
       (result) => {
         setWaiting(false);
         set(result);
+        if (result.state !== "connected") {
+          setError("Signing in did not finish.");
+          return;
+        }
         setMessage(`The assistant is signed in to ${result.email ?? "your ChatGPT account"}.`);
-        if (result.state === "connected" && !welcomed()) setWelcome(true);
+        if (!welcomed()) setWelcome(true);
       },
       (reason: unknown) => {
         setWaiting(false);

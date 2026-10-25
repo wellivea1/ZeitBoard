@@ -122,6 +122,19 @@ it("chooses a model, opens usage, and disconnects, saying when ChatGPT did not c
   expect(await screen.findByRole("button", { name: "Continue with ChatGPT" })).toBeVisible();
 });
 
+// A sign-in that came back unconnected is not said to have succeeded.
+it("does not claim a sign-in that did not connect", async () => {
+  install({
+    GetAssistantConnection: async () => disconnected,
+    ConnectChatGPT: async () => ({ ...disconnected, problem: "plan_not_shared" }),
+  });
+  render(<AssistantSettings syncKey="true device" />);
+  fireEvent.click(await screen.findByRole("button", { name: "Continue with ChatGPT" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Signing in did not finish.");
+  expect(screen.queryByText(/is signed in to/)).toBeNull();
+  expect(screen.queryByRole("dialog")).toBeNull();
+});
+
 it("offers signing in again to an ended sign-in", async () => {
   install({
     GetAssistantConnection: async () => ({

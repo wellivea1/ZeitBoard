@@ -180,7 +180,8 @@ function ChatEmpty({
   return (
     <div className="assistant-empty">
       <p>{text}</p>
-      {status?.enabled && (
+      {/* Examples only where they can be answered. */}
+      {status?.enabled && !(usesChatGPTPlan(status) && !status.configured) && (
         <div className="assistant-examples">
           {examplePrompts.map((prompt) => (
             <button
@@ -250,13 +251,16 @@ export function AssistantRail({ open, onClose }: { open: boolean; onClose: () =>
       ...(reply.proposals.length > 0 ? { proposals: reply.proposals } : {}),
     });
     if (reply.available) {
-      setStatus({
+      // A reply does not say what a sign-in still needs; that is kept until
+      // the status is read again.
+      setStatus((previous) => ({
         enabled: true,
         configured: reply.configured,
         ...(reply.provider ? { provider: reply.provider } : {}),
         ...(reply.model ? { model: reply.model } : {}),
         ...(reply.auth ? { auth: reply.auth } : {}),
-      });
+        ...(!reply.configured && previous?.problem ? { problem: previous.problem } : {}),
+      }));
     }
     // A sign-in that ended or a model gone changes what the header says.
     if (reply.reason) void loadAssistantStatus().then(setStatus);
