@@ -16,30 +16,23 @@ import {
   undoSleepCorrection,
   type SleepCorrectionInput,
   type SleepEntry,
-  type SleepEntryInput,
   type SleepLogPage,
 } from "../data/sleepEntries";
-import { localZone } from "../utils/civilTime";
+import { civilMinute, localZone } from "../utils/civilTime";
+import { correctionForm, sleepFormInput, type SleepForm } from "../utils/sleepForm";
 
-function dateTimeInputValue(value: Date) {
-  const local = new Date(value.getTime() - value.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
-}
-
-function initialSleepForm(): SleepEntryInput {
+/** The last eight hours, ending now, in this computer's zone. */
+function initialSleepForm(): SleepForm {
   const end = new Date();
   end.setSeconds(0, 0);
   const start = new Date(end.getTime() - 8 * 60 * 60 * 1000);
+  const zoneId = localZone();
   return {
-    startLocal: dateTimeInputValue(start),
-    endLocal: dateTimeInputValue(end),
-    zoneId: localZone(),
+    start: { wall: civilMinute(start.getTime(), zoneId) },
+    end: { wall: civilMinute(end.getTime(), zoneId) },
+    zoneId,
     classification: "principal",
   };
-}
-
-function endAfterStart(input: SleepEntryInput) {
-  return new Date(input.endLocal).getTime() > new Date(input.startLocal).getTime();
 }
 
 const noEntries: SleepLogPage = {
@@ -69,13 +62,18 @@ export function SleepLogPanel() {
     key: entryPage,
   });
   const entriesData = loadedEntries ?? noEntries;
-  const [form, setForm] = useState<SleepEntryInput>(initialSleepForm);
+  const [form, setForm] = useState<SleepForm>(initialSleepForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingSnapshot, setEditingSnapshot] = useState<SleepEntry | null>(null);
   const [editExcluded, setEditExcluded] = useState(false);
-  const [editForm, setEditForm] = useState<SleepEntryInput>(initialSleepForm);
+  const [editForm, setEditForm] = useState<SleepForm>(initialSleepForm);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Each form says why it was not saved beside itself; a night's other
+  // actions say it above the log. One line for all three once put a failed
+  // correction's message under the form for adding a night, out of view.
+  const [addError, setAddError] = useState("");
+  const [editError, setEditError] = useState("");
   const [formError, setFormError] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
 
@@ -96,19 +94,18 @@ export function SleepLogPanel() {
   }, []);
 
   const submitEntry = async () => {
-    setFormError("");
-    if (!endAfterStart(form)) {
-      setFormError("Wake time must be after sleep start.");
-      return;
-    }
+    const ready = sleepFormInput(form);
+    setStatusMessage("");
+    setAddError("problem" in ready ? ready.problem : "");
+    if ("problem" in ready) return;
     setBusy(true);
     try {
-      await addSleepEntry(form);
+      await addSleepEntry(ready.input);
       notifySleepDataChanged();
       setStatusMessage("Night saved.");
       setForm(initialSleepForm());
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : "Could not save sleep entry.");
+      setAddError(error instanceof Error ? error.message : "Could not save sleep entry.");
     } finally {
       setBusy(false);
     }
@@ -119,36 +116,31 @@ export function SleepLogPanel() {
     setEditExcluded(entry.suppressed);
     setEditingId(entry.observationId);
     setDeletingId(null);
-    setEditForm({
-      startLocal: entry.effectiveStartLocal,
-      endLocal: entry.effectiveEndLocal,
-      zoneId: entry.zoneId,
-      classification: entry.effectiveClassification,
-    });
+    setEditForm(correctionForm(entry));
+    setEditError("");
     setFormError("");
   };
 
   const saveEdit = async () => {
     if (!editingId || !editingSnapshot) return;
-    setFormError("");
-    if (!endAfterStart(editForm)) {
-      setFormError("Wake time must be after sleep start.");
-      return;
-    }
+    const ready = sleepFormInput(editForm);
+    setStatusMessage("");
+    setEditError("problem" in ready ? ready.problem : "");
+    if ("problem" in ready) return;
     setBusy(true);
     try {
       const correction: SleepCorrectionInput = {
         observationId: editingId,
         reviewToken: editingSnapshot.reviewToken,
         excluded: editExcluded,
-        ...editForm,
+        ...ready.input,
       };
       await correctSleepEntry(correction);
       notifySleepDataChanged();
       setStatusMessage("Correction saved. The original stays in its history.");
       setEditingId(null);
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : "Could not append correction.");
+      setEditError(error instanceof Error ? error.message : "Could not append correction.");
     } finally {
       setBusy(false);
     }
@@ -230,6 +222,7 @@ export function SleepLogPanel() {
             onChange={setForm}
             submitLabel="Save sleep entry"
             disabled={busy || entriesData.status === "unavailable"}
+            error={addError}
           />
         </form>
       </details>
@@ -306,6 +299,7 @@ export function SleepLogPanel() {
                   entry={entry}
                   editing={editingId === entry.observationId}
                   editForm={editForm}
+                  editError={editError}
                   busy={busy}
                   deleteConfirming={deletingId === entry.observationId}
                   onBeginEdit={() => beginEdit(entry)}

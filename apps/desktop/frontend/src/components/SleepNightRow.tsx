@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Icon } from "./Icon";
 import { SleepEntryForm } from "./SleepEntryForm";
-import type { SleepEntry, SleepEntryInput } from "../data/sleepEntries";
+import type { SleepEntry } from "../data/sleepEntries";
+import type { SleepForm } from "../utils/sleepForm";
 import { ConfirmDelete } from "./ConfirmDelete";
 import { nightWording, sourceWording } from "../utils/sleepWording";
 
@@ -16,6 +17,7 @@ export function SleepNightRow({
   entry,
   editing,
   editForm,
+  editError,
   busy,
   deleteConfirming,
   onBeginEdit,
@@ -32,12 +34,14 @@ export function SleepNightRow({
 }: {
   entry: SleepEntry;
   editing: boolean;
-  editForm: SleepEntryInput;
+  editForm: SleepForm;
+  /** Why the correction was not saved. */
+  editError: string;
   busy: boolean;
   deleteConfirming: boolean;
   onBeginEdit: () => void;
   onCancelEdit: () => void;
-  onEditChange: (form: SleepEntryInput) => void;
+  onEditChange: (form: SleepForm) => void;
   onSaveEdit: () => void;
   editExcluded: boolean;
   onEditExcluded: (value: boolean) => void;
@@ -182,6 +186,7 @@ export function SleepNightRow({
             excluded={editExcluded}
             onExcludedChange={onEditExcluded}
             onCancel={onCancelEdit}
+            error={editError}
           />
         </form>
       )}

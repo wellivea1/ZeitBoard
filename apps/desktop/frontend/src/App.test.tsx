@@ -600,9 +600,10 @@ describe("desktop navigation", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save sleep entry" }));
 
     expect(await screen.findByText("Night saved.")).toBeVisible();
+    // Each time goes exact, with the offset it has in the night's zone.
     expect(addSleep).toHaveBeenCalledWith({
-      startLocal: "2026-03-01T22:00",
-      endLocal: "2026-03-02T06:00",
+      startLocal: "2026-03-01T22:00:00-05:00",
+      endLocal: "2026-03-02T06:00:00-05:00",
       zoneId: "America/New_York",
       classification: "principal",
     });

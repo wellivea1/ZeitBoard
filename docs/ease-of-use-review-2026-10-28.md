@@ -122,3 +122,9 @@ history. Finding the night and reading the result are both good.
 7. **Hold suggestions to the freshness Home keeps.** On evidence too old for Home, the planner
    should not offer times at High confidence, and the planner and the week board should place
    that morning the same way. (B)
+
+## Progress
+
+| # | Recommendation | State |
+|---:|---|---|
+| 1 | Correct with pickers | Done on the computer; the phone is next |
