@@ -78,3 +78,29 @@ export function selectedCivilInstant(
     (candidates.length === 1 ? candidates[0]!.instant : "")
   );
 }
+
+/**
+ * A stored time read in its zone: the wall clock it shows there and, when the
+ * value names its offset, the exact instant. "2026-10-25T06:00:00-04:00" in
+ * New York is 6:00 on Oct 25; a bare wall time names no instant of its own.
+ */
+export function zonedWall(value: string, zone: string): { wall: string; at?: string } {
+  if (/(?:[zZ]|[+-]\d\d:\d\d)$/.test(value)) {
+    const instant = Date.parse(value);
+    if (Number.isFinite(instant)) {
+      return { wall: civilMinute(instant, zone), at: new Date(instant).toISOString() };
+    }
+  }
+  return { wall: value.slice(0, 16) };
+}
+
+/**
+ * A wall time with the UTC offset of the instant chosen for it, in RFC 3339:
+ * "2026-11-01T01:30:00-05:00" is the second 1:30 that night in New York.
+ */
+export function offsetTimestamp(wall: string, instant: string): string {
+  const minutes = Math.round((Date.parse(`${wall}:00Z`) - Date.parse(instant)) / 60_000);
+  const whole = Math.abs(minutes);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${wall}:00${minutes < 0 ? "-" : "+"}${pad(Math.floor(whole / 60))}:${pad(whole % 60)}`;
+}

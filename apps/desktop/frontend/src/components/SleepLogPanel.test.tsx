@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SleepLogPanel } from "./SleepLogPanel";
 
@@ -87,6 +87,80 @@ describe("SleepLogPanel", () => {
     expect(await screen.findByText("Entries 51-51 of 51")).toBeVisible();
     expect(screen.getByText("Fri, Feb 20")).toBeVisible();
     expect(screen.queryByText("Thu, Jan 1")).not.toBeInTheDocument();
+  });
+
+  // The review of 2026-10-28 moved a wake time by retyping
+  // "2026-10-25T14:00:00-04:00", and a time it could not read was reported
+  // as "Wake time must be after sleep start." under the other form.
+  it("corrects a night with clock-time pickers and says what is wrong beside the form", async () => {
+    const stored = {
+      observationId: "observation_1",
+      startLocal: "2026-10-25T06:00:00-04:00",
+      endLocal: "2026-10-25T14:00:00-04:00",
+      startLabel: "Start",
+      endLabel: "End",
+      zoneId: "America/New_York",
+      classification: "principal",
+      effectiveStartLocal: "2026-10-25T06:00:00-04:00",
+      effectiveEndLocal: "2026-10-25T14:00:00-04:00",
+      effectiveStartLabel: "Effective start",
+      effectiveEndLabel: "Effective end",
+      effectiveClassification: "principal",
+      reviewToken: "synthetic-review-token",
+      needsReview: false,
+      sourceWindowLabel: "Synthetic source window",
+      activeEdits: [],
+      canUndo: false,
+      durationLabel: "8 hours",
+      suppressed: false,
+      sourceLabel: "Imported",
+      provenanceLabel: "file import / directly observed",
+      history: [],
+    };
+    const correct = vi.fn(async (input: unknown) => {
+      void input;
+      return stored;
+    });
+    (globalThis as { go?: unknown }).go = {
+      main: {
+        App: {
+          GetSleepLogPage: async () => ({
+            status: "ready",
+            empty: false,
+            message: "1 local sleep entry stored on this device.",
+            entries: [stored],
+            total: 1,
+            page: 0,
+            pageSize: 50,
+          }),
+          CorrectSleepEntry: correct,
+        },
+      },
+    };
+
+    render(<SleepLogPanel />);
+    fireEvent.click(await screen.findByRole("button", { name: /^Edit / }));
+    const form = screen.getByRole("button", { name: "Save correction" }).closest("form")!;
+    const wake = within(form).getByLabelText("Wake time");
+    expect(wake).toHaveAttribute("type", "datetime-local");
+    expect(wake).toHaveValue("2026-10-25T14:00");
+
+    fireEvent.change(wake, { target: { value: "2026-10-25T05:00" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Save correction" }));
+    expect(within(form).getByRole("alert")).toHaveTextContent(
+      "Wake time must be after sleep start.",
+    );
+    expect(correct).not.toHaveBeenCalled();
+
+    fireEvent.change(wake, { target: { value: "2026-10-25T13:00" } });
+    fireEvent.click(within(form).getByRole("button", { name: "Save correction" }));
+    await waitFor(() => expect(correct).toHaveBeenCalledTimes(1));
+    expect(correct.mock.calls[0]?.[0]).toMatchObject({
+      observationId: "observation_1",
+      startLocal: "2026-10-25T06:00:00-04:00",
+      endLocal: "2026-10-25T13:00:00-04:00",
+      zoneId: "America/New_York",
+    });
   });
 
   it("takes back a night's last edit in one click", async () => {

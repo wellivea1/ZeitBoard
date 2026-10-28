@@ -1862,6 +1862,23 @@ textarea {
 .sleep-entry-fields .button {
   align-self: end;
 }
+/* A time, and beneath it, only when needed, which occurrence of a repeated
+   clock time is meant or why a skipped one cannot be used. */
+.sleep-time-field {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+.sleep-time-note {
+  color: var(--confidence-low-text);
+  font-size: var(--type-label);
+  line-height: 1.5;
+}
+.sleep-entry-fields .sleep-entry-error,
+.sleep-entry-fields .sleep-entry-hint {
+  grid-column: 1 / -1;
+  margin: 0;
+}
 .form-error,
 .form-status {
   margin: 14px 0 0;

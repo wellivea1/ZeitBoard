@@ -3978,3 +3978,29 @@ The tests:
 
 The server's, the desktop's and the store's Go suites, `go vet`, `gofmt` and the whole web check
 passed.
+
+## Corrections with clock-time pickers — 2026-10-28
+
+Recommendation 1 of the ease-of-use review, on the computer. A night's correction opens with the
+same date-and-time pickers as "Add a past night", at the night's clock times in its own zone. It
+no longer opens with `2026-10-25T14:00:00-04:00` in a text box.
+
+How the times are sent:
+- A time left untouched goes back exactly as stored, to the second.
+- A changed time goes with the offset of the occurrence meant.
+- In the hour that repeats when the clocks go back, the form asks "Which 1:30 AM?". It offers
+  "The first, UTC−04:00" and "The second, UTC−05:00", and saves nothing until one is chosen.
+- A time skipped when the clocks go forward is refused: "2:30 AM did not happen that day in New
+  York time: the clocks went forward."
+
+Each form says why it was not saved beside itself. One shared line once put a correction's error
+under the form for adding a night.
+
+Checked in the running app:
+- Saturday's synthetic wake time, moved from 1:15 to 12:45 PM with the picker, read "5:30 AM –
+  12:45 PM · CORRECTED · first recorded … 1:15 PM EDT".
+- A wake time of 1:30 AM on Nov 1 offered both occurrences.
+- Saving without choosing said "Choose which 1:30 AM you mean." inside that form.
+
+The window's tests cover each case. The whole web check passed: 682 and 6 tests, format, lint,
+types and builds.
