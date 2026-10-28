@@ -277,15 +277,7 @@ func (a *App) buildLocalProposals(now time.Time) (localProposalBuild, error) {
 	if err != nil {
 		return localProposalBuild{}, err
 	}
-	latest, hasLatest := latestPrincipalSession(state.Sessions)
-	var wakeAnchor *domain.WakeAnchor
-	if hasLatest {
-		wakeAnchor = &domain.WakeAnchor{
-			ID:         "latest-wake",
-			At:         latest.Intervals[0].Interval.End,
-			Confidence: state.Estimate.Confidence,
-		}
-	}
+	wakeAnchor := planningWakeAnchor(state)
 	expiresAt := planningNow.Add(localProposalTTL)
 	scheduler := scheduling.Scheduler{}
 	// The planning snapshot is pinned to the start of a 30-minute bucket so a
@@ -398,13 +390,13 @@ func decidedProposalDTO(record storage.ProposalDecisionRecord) (ProposalDTO, err
 	}
 	return ProposalDTO{
 		ID:               record.ProposalID,
-		Origin:           "scheduler",
+		Origin:           decisionOrigin(record),
 		Kind:             "Place",
 		Title:            record.ProposalTitle,
 		To:               formatRange(domain.TimeRange{Start: start, End: end}),
 		StartAt:          start.UTC.Format(time.RFC3339),
 		EndAt:            end.UTC.Format(time.RFC3339),
-		RhythmContext:    "saved decision for this exact scheduler window",
+		RhythmContext:    "saved decision for this exact window",
 		Confidence:       confidenceTitle(domain.ConfidenceLevel(record.Confidence)),
 		ExplanationCodes: append([]string(nil), record.ExplanationCodes...),
 		ReasonLabels:     reasonLabels(record.ExplanationCodes),

@@ -91,6 +91,7 @@ func (s *Server) Handler() http.Handler {
 	}
 	mux.Handle("GET /v1/proposals", s.requireDevice(http.HandlerFunc(s.handleListProposals)))
 	mux.Handle("POST /v1/proposals", s.requireDevice(http.HandlerFunc(s.handleCreateProposal)))
+	mux.Handle("GET /v1/proposals/{id}", s.requireDevice(http.HandlerFunc(s.handleGetProposal)))
 	mux.Handle("POST /v1/proposals/{id}/decision", s.requireDevice(http.HandlerFunc(s.handleProposalDecision)))
 	mux.Handle("GET /v1/overview", s.requireDevice(http.HandlerFunc(s.handleOverview)))
 	mux.Handle("GET /v1/rhythm", s.requireDevice(http.HandlerFunc(s.handleRhythm)))
@@ -320,6 +321,26 @@ func (s *Server) handleCreateProposal(w http.ResponseWriter, r *http.Request) {
 type proposalDecisionRequest struct {
 	Decision string `json:"decision"`
 	Token    string `json:"token"`
+}
+
+// handleGetProposal reads one proposal, so the owner's computer can check the
+// time it asks for before approving it. It carries no decision token: the
+// list hands those out. Visitor requests keep to their own surface.
+func (s *Server) handleGetProposal(w http.ResponseWriter, r *http.Request) {
+	record, err := s.store.ProposalByID(r.Context(), strings.TrimSpace(r.PathValue("id")))
+	switch {
+	case errors.Is(err, store.ErrProposalNotFound), err == nil && record.ActionID == store.ActionVisitorRequest:
+		writeError(w, http.StatusNotFound, "proposal not found")
+		return
+	case err != nil:
+		writeError(w, http.StatusInternalServerError, "proposal read failed")
+		return
+	}
+	record.DecisionToken = ""
+	writeJSON(w, http.StatusOK, map[string]any{
+		"schema_version": syncmodel.SchemaVersion,
+		"proposal":       record,
+	})
 }
 
 func (s *Server) handleProposalDecision(w http.ResponseWriter, r *http.Request) {

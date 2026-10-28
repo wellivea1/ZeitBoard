@@ -26,7 +26,7 @@ import {
   type ProposalsSource,
   type UnplacedProposal,
 } from "../data/proposals";
-import { notifyCalendarDataChanged } from "../data/calendar";
+import { calendarDataChangedEvent, notifyCalendarDataChanged } from "../data/calendar";
 import { sleepDataChangedEvent } from "../data/sleepDataEvents";
 import { subscribeProjectionRefresh } from "../utils/projectionRefresh";
 
@@ -125,7 +125,12 @@ export function ApprovalsProvider({ children }: { children: ReactNode }) {
     const onSleepChanged = () => {
       if (busyRef.current === null) void refresh();
     };
-    const unsubscribe = subscribeProjectionRefresh(onSleepChanged, sleepDataChangedEvent);
+    // New busy time changes the plan as new sleep does: an accepted time, an
+    // imported calendar, a time accepted from the assistant's proposal.
+    const unsubscribe = subscribeProjectionRefresh(onSleepChanged, [
+      sleepDataChangedEvent,
+      calendarDataChangedEvent,
+    ]);
     return () => {
       mounted.current = false;
       unsubscribe();

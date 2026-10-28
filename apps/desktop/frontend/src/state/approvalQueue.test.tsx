@@ -1,9 +1,9 @@
 import { StrictMode, useState, type ReactNode } from "react";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { proposalsFixture } from "../data/proposals";
 import { ApprovalsProvider } from "./approvals";
-import { BackendProposalsProvider } from "./backendProposals";
+import { BackendProposalsProvider, useBackendProposals } from "./backendProposals";
 import { VisitorRequestsProvider, useVisitorRequests } from "./visitorRequests";
 import { AgentProposalsProvider } from "./agentProposals";
 import { ApprovalQueueProvider, useApprovalQueue } from "./approvalQueue";
@@ -410,6 +410,140 @@ describe("shared approval queue", () => {
     expect(screen.queryByLabelText("Block starts")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Switch view" }));
     expect(screen.getByLabelText("Block starts")).toHaveValue(draft);
+  });
+  // Approving an assistant's proposal writes the task's time on this
+  // computer, so the planner's own list is read again (ADR-0067).
+  it("reads the planner's list again after approving an assistant's proposal", async () => {
+    const pending = {
+      proposalId: "proposal_server_01",
+      action: "propose_place_task",
+      status: "pending",
+      title: "Place task “Paperwork”",
+      window: "Mon Oct 26, 7:00 PM to 8:30 PM EDT",
+      confidence: "High",
+      reasonLabels: [],
+      createdLabel: "Proposed now",
+      expiresAt: expiry,
+      expiresLabel: "expires later",
+      decisionToken: "one-use-token",
+    };
+    const page = {
+      pendingCount: 1,
+      nextExpiryAt: expiry,
+      pagination: { nextCursor: "", hasMore: false },
+    };
+    const getProposals = vi.fn(async () => proposalsFixture);
+    install({
+      GetProposals: getProposals,
+      GetBackendProposals: vi.fn(async () => ({ ...page, status: "ok", proposals: [pending] })),
+      DecideBackendProposal: vi.fn(async () => ({
+        ...page,
+        status: "ok",
+        decisionRecorded: true,
+        pendingCount: 0,
+        proposals: [{ ...pending, status: "approved", decisionToken: undefined }],
+      })),
+    });
+    function Approve() {
+      const backend = useBackendProposals();
+      const proposal = backend.data.proposals[0];
+      return proposal?.decisionToken ? (
+        <button onClick={() => void backend.decide(proposal, "approved")}>Approve it</button>
+      ) : null;
+    }
+    render(
+      <Providers>
+        <Approve />
+      </Providers>,
+    );
+    const approve = await screen.findByRole("button", { name: "Approve it" });
+    const before = getProposals.mock.calls.length;
+    fireEvent.click(approve);
+    await waitFor(() => expect(getProposals.mock.calls.length).toBeGreaterThan(before));
+  });
+  // An assistant's proposal approved here is also this computer's accepted
+  // time. History lists it once, as the assistant's, with its undo.
+  it("lists an approved assistant proposal once, as the assistant's, with its undo", async () => {
+    const accepted = {
+      ...proposalsFixture.proposals[0]!,
+      id: "proposal_server_01",
+      origin: "assistant" as const,
+      title: "Paperwork",
+      decision: "approved",
+      canUndo: true,
+    };
+    install({
+      GetProposals: async () => ({
+        ...proposalsFixture,
+        fixtureMode: false,
+        proposals: [accepted],
+      }),
+      GetBackendProposals: vi.fn(async () => ({
+        status: "ok",
+        pendingCount: 0,
+        nextExpiryAt: "",
+        pagination: { nextCursor: "", hasMore: false },
+        proposals: [
+          {
+            proposalId: "proposal_server_01",
+            action: "propose_place_task",
+            status: "approved",
+            title: "Place task “Paperwork”",
+            window: "Mon Oct 26, 6:30 PM to 8:00 PM EDT",
+            confidence: "High",
+            reasonLabels: [],
+            createdLabel: "Proposed Oct 25, 6:19 PM",
+            expiresAt: expiry,
+            expiresLabel: "expires Oct 25, 6:34 PM",
+          },
+        ],
+      })),
+    });
+    render(
+      <Providers>
+        <DecisionHistory />
+      </Providers>,
+    );
+    fireEvent.click(await screen.findByText(/Decision history/));
+    expect(await screen.findByText(/^Assistant ·/)).toBeVisible();
+    expect(screen.getByRole("button", { name: "Undo decision on Paperwork" })).toBeVisible();
+    expect(screen.queryByText("Place task “Paperwork”")).toBeNull();
+  });
+  // Undone here, the time is gone though the server records the approval:
+  // the history says undone, not approved.
+  it("says an approval undone here is undone", async () => {
+    install({
+      GetProposals: async () => ({ ...proposalsFixture, fixtureMode: false, proposals: [] }),
+      GetBackendProposals: vi.fn(async () => ({
+        status: "ok",
+        pendingCount: 0,
+        nextExpiryAt: "",
+        pagination: { nextCursor: "", hasMore: false },
+        proposals: [
+          {
+            proposalId: "proposal_server_01",
+            action: "propose_place_task",
+            status: "approved",
+            undoneHere: true,
+            title: "Place task “Paperwork”",
+            window: "Mon Oct 26, 6:30 PM to 8:00 PM EDT",
+            confidence: "High",
+            reasonLabels: [],
+            createdLabel: "Proposed Oct 25, 6:19 PM",
+            expiresAt: expiry,
+            expiresLabel: "expires Oct 25, 6:34 PM",
+          },
+        ],
+      })),
+    });
+    render(
+      <Providers>
+        <DecisionHistory />
+      </Providers>,
+    );
+    fireEvent.click(await screen.findByText(/Decision history/));
+    expect(await screen.findByText("undone")).toBeVisible();
+    expect(screen.queryByText("approved")).toBeNull();
   });
   it("serializes decisions and does not resurrect a confirmed decision after a refresh failure", async () => {
     let resolve!: (value: unknown) => void;

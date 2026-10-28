@@ -1954,6 +1954,21 @@ findings:
 
 Each change in behaviour has a test.
 
+### An approved proposal becomes the task's time — 2026-10-25
+
+A real proposal, end to end, showed that approving an assistant's or an agent's schedule
+proposal changed nothing: the server recorded the approval, and no device wrote the time
+(`verification.md`, "A real proposal, end to end"). C2 promised an approval flow, so this was a gap
+in it. ADR-0067 closes it:
+
+- Approving on the computer checks the proposed time still fits, records the approval, and writes
+  the time as accepting a planner suggestion does. A time that no longer fits is not approved, and
+  the owner reads why.
+- A task keeps one accepted time, so "Move task" moves it.
+- Decisions carry a note, so a refusal no longer locks the queue.
+- The history lists the approval once, as the assistant's, with Undo. Once undone, it reads
+  "undone".
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and

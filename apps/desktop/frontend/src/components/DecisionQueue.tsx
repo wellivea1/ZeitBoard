@@ -272,8 +272,11 @@ export function DecisionHistory() {
   const visitor = useVisitorRequests();
   const agent = useAgentProposals();
   const summary = useApprovalQueue();
+  // An assistant's proposal approved here is also this computer's accepted
+  // time, which can be undone; it is listed once, as that.
+  const decidedHere = new Set(local.decided.map((proposal) => proposal.id));
   const backendHistory = backend.data.proposals.filter(
-    (item) => !reviewIsPending(item, summary.now),
+    (item) => !reviewIsPending(item, summary.now) && !decidedHere.has(item.proposalId),
   );
   const visitorHistory = visitor.data.requests.filter(
     (item) => !reviewIsPending(item, summary.now),
@@ -295,7 +298,9 @@ export function DecisionHistory() {
   return (
     <details className="decision-history">
       <summary>Decision history {summary.ready && <span className="count">{total}</span>}</summary>
-      <p className="plan-empty">Only your own planner decisions can be undone.</p>
+      <p className="plan-empty">
+        Only the planner's decisions and times accepted here can be undone.
+      </p>
       <div className="approval-decision-list">
         {local.decided.map((proposal) => (
           <div key={`local-${proposal.id}`}>
@@ -307,7 +312,10 @@ export function DecisionHistory() {
               <span title={proposal.to}>
                 {blockWording(proposal.startAt, proposal.endAt, proposal.to, new Date(summary.now))}
               </span>
-              <small>Planner · {proposal.createdLabel}</small>
+              <small>
+                {proposal.origin === "assistant" ? "Assistant" : "Planner"} ·{" "}
+                {proposal.createdLabel}
+              </small>
             </div>
             <button
               className="button secondary compact"
@@ -322,8 +330,11 @@ export function DecisionHistory() {
         ))}
         {backendHistory.map((proposal) => (
           <div key={`backend-${proposal.proposalId}`}>
-            <span className="decision-state" data-decision={proposal.status}>
-              {reviewStatus(proposal, summary.now)}
+            <span
+              className="decision-state"
+              data-decision={proposal.undoneHere ? "undone" : proposal.status}
+            >
+              {proposal.undoneHere ? "undone" : reviewStatus(proposal, summary.now)}
             </span>
             <div>
               <strong>{proposal.title}</strong>

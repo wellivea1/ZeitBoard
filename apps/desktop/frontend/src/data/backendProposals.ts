@@ -27,6 +27,9 @@ export interface BackendProposal {
   expiresLabel: string;
   expiresAt: string;
   decisionToken?: string;
+  /** Approved, its time written here and then undone; the server still
+   *  records the approval. */
+  undoneHere?: boolean;
 }
 
 export interface BackendProposalPagination {
@@ -36,6 +39,9 @@ export interface BackendProposalPagination {
 
 export interface BackendProposalsData extends ReviewQueueSummary {
   decisionRecorded?: boolean;
+  /** What the owner should know of the decision just asked for: why it was
+   *  not made, or what an approval could not do. The queue is as status says. */
+  decisionNote?: string;
   status: "off" | "ok" | "error";
   message?: string;
   proposals: BackendProposal[];
@@ -105,6 +111,7 @@ export function normalizeProposal(value: unknown): BackendProposal | undefined {
     expiresLabel,
     expiresAt,
     ...(decisionToken ? { decisionToken } : {}),
+    ...(value.undoneHere === true ? { undoneHere: true } : {}),
   };
 }
 
@@ -125,8 +132,10 @@ export function normalizeBackendProposals(value: unknown): BackendProposalsData 
     }
   }
   const message = str(value.message);
+  const decisionNote = str(value.decisionNote);
   return {
     ...(value.decisionRecorded === true ? { decisionRecorded: true } : {}),
+    ...(decisionNote ? { decisionNote } : {}),
     ...summary,
     status,
     ...(message ? { message } : {}),
