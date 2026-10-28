@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+
+	"non24.app/core/ownerevents"
 )
 
 const (
@@ -84,6 +86,7 @@ const (
 	preparedSyncPullMedicationCorrection
 	preparedSyncPullMarker
 	preparedSyncPullSourceReport
+	preparedSyncPullOwnerEvent
 )
 
 type preparedSyncPullRecord struct {
@@ -94,6 +97,7 @@ type preparedSyncPullRecord struct {
 	medication  preparedMedicationSync
 	marker      preparedMarkerSync
 	report      preparedSourceReport
+	event       preparedOwnerEvent
 	recordID    string
 	recordKind  string
 }
@@ -241,6 +245,8 @@ func (record preparedSyncPullRecord) seenID() string {
 		return record.marker.record.MarkerID
 	case preparedSyncPullSourceReport:
 		return record.report.report.ReportID
+	case preparedSyncPullOwnerEvent:
+		return ownerevents.RecordID(record.event.record.EventID, record.event.record.Revision)
 	default:
 		return record.recordID
 	}
@@ -268,6 +274,8 @@ func (a *syncPullApply) records(prepared []preparedSyncPullRecord) error {
 			applied, err = insertSyncedMarkerTx(a.ctx, a.tx, record.marker, a.syncedAt)
 		case preparedSyncPullSourceReport:
 			applied, err = insertSyncedSourceReportTx(a.ctx, a.tx, record.report)
+		case preparedSyncPullOwnerEvent:
+			applied, err = applySyncedOwnerEventTx(a.ctx, a.tx, record.event, a.syncedAt)
 		default:
 			// Evidence, corrections and tombstones have phases of their own.
 			continue
@@ -418,6 +426,8 @@ func (a *syncPullApply) erase(recordKind, recordID string) (bool, error) {
 		return eraseMarkerTx(a.ctx, a.tx, recordID, erasedElsewhere)
 	case SyncKindSourceReport:
 		return eraseSourceReportTx(a.ctx, a.tx, recordID, erasedElsewhere)
+	case SyncKindOwnerEvent:
+		return eraseSyncedOwnerEventTx(a.ctx, a.tx, recordID)
 	default:
 		return eraseSyncedSleepRecordTx(a.ctx, a.tx, recordID)
 	}
@@ -489,6 +499,9 @@ func prepareSyncPullRecord(record SyncPullRecord) (preparedSyncPullRecord, error
 	case SyncPullSourceReport:
 		prepared, err := prepareSyncedSourceReport(value)
 		return preparedSyncPullRecord{kind: preparedSyncPullSourceReport, report: prepared}, err
+	case SyncPullOwnerEvent:
+		prepared, err := prepareSyncedOwnerEvent(value.Event)
+		return preparedSyncPullRecord{kind: preparedSyncPullOwnerEvent, event: prepared}, err
 	case SyncPullPlacement:
 		if !contractIdentifier.MatchString(value.PlacementID) {
 			return preparedSyncPullRecord{}, errors.New("placement record id is not a valid identifier")
@@ -866,7 +879,7 @@ func validateSyncPullTombstone(recordID, recordKind string) error {
 	switch recordKind {
 	case "", SleepSyncKindObservation, SleepSyncKindCorrection:
 		return nil
-	case "task", SyncKindMedication:
+	case "task", SyncKindMedication, SyncKindOwnerEvent:
 		if !taskRevisionIDPattern.MatchString(recordID) {
 			return fmt.Errorf("%s tombstone record_id must identify a revision", recordKind)
 		}
@@ -895,7 +908,7 @@ func syncPullTombstoneKindTx(
 	if match != nil {
 		revisionOf = match[1]
 	}
-	var task, sleep, medication, dose, correction, marker bool
+	var task, sleep, medication, dose, correction, marker, event bool
 	if err := tx.QueryRowContext(ctx, `
 		SELECT
 			EXISTS(SELECT 1 FROM local_task_sync_records WHERE record_id = ?)
@@ -909,10 +922,13 @@ func syncPullTombstoneKindTx(
 			OR EXISTS(SELECT 1 FROM local_sync_deferred_medication WHERE record_id = ? AND kind = 'medication_event'),
 			EXISTS(SELECT 1 FROM local_medication_event_corrections WHERE correction_id = ?)
 			OR EXISTS(SELECT 1 FROM local_sync_deferred_medication WHERE record_id = ? AND kind = 'medication_correction'),
-			EXISTS(SELECT 1 FROM local_rhythm_markers WHERE marker_id = ?)`,
+			EXISTS(SELECT 1 FROM local_rhythm_markers WHERE marker_id = ?),
+			EXISTS(SELECT 1 FROM local_owner_event_sync_records WHERE record_id = ?)
+			OR EXISTS(SELECT 1 FROM local_owner_events WHERE event_id = ?)`,
 		recordID, revisionOf, recordID, recordID, recordID,
 		recordID, revisionOf, recordID, recordID, recordID, recordID, recordID,
-	).Scan(&task, &sleep, &medication, &dose, &correction, &marker); err != nil {
+		recordID, revisionOf,
+	).Scan(&task, &sleep, &medication, &dose, &correction, &marker, &event); err != nil {
 		return "", err
 	}
 	var kinds []string
@@ -922,6 +938,7 @@ func syncPullTombstoneKindTx(
 	}{
 		{task, "task"}, {sleep, SleepSyncKindObservation}, {medication, SyncKindMedication},
 		{dose, SyncKindMedicationEvent}, {correction, SyncKindMedicationCorrection}, {marker, SyncKindContextMarker},
+		{event, SyncKindOwnerEvent},
 	} {
 		if candidate.held {
 			kinds = append(kinds, candidate.kind)

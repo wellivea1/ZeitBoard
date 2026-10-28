@@ -1,6 +1,7 @@
 package main
 
 import (
+	calendarcore "non24.app/core/calendar"
 	storage "non24.app/core/storage/sqlite"
 )
 
@@ -58,7 +59,7 @@ func (a *App) GetSetupGuide() (SetupGuideDTO, error) {
 	steps := []SetupStepDTO{
 		{ID: setupStepPhone, Done: len(reports) > 0 || !phoneNight.IsZero()},
 		{ID: setupStepReaching, Done: reachingSaved},
-		{ID: setupStepCalendar, Done: len(calendars) > 0},
+		{ID: setupStepCalendar, Done: ownCalendarCount(calendars) > 0},
 	}
 	if startup, err := a.GetStartupSettings(); err == nil && startup.Available {
 		steps = append(steps, SetupStepDTO{
@@ -66,4 +67,17 @@ func (a *App) GetSetupGuide() (SetupGuideDTO, error) {
 		})
 	}
 	return SetupGuideDTO{Steps: steps}, nil
+}
+
+// ownCalendarCount counts the calendars the owner connected. ZeitBoard's own,
+// the times accepted in Plan and the events added there, are not one: the
+// review of 2026-10-28 found "Your calendar" ticked by accepting a time.
+func ownCalendarCount(sources []storage.CalendarSourceRecord) int {
+	count := 0
+	for _, source := range sources {
+		if source.Kind != calendarcore.SourceZeitBoard {
+			count++
+		}
+	}
+	return count
 }

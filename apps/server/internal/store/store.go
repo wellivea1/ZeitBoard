@@ -190,6 +190,11 @@ func (s *Store) Migrate(ctx context.Context) error {
 			device_id TEXT NOT NULL,
 			erased_at TEXT NOT NULL
 		)`,
+		`CREATE TABLE IF NOT EXISTS sync_event_tombstones (
+			event_id TEXT PRIMARY KEY,
+			device_id TEXT NOT NULL,
+			erased_at TEXT NOT NULL
+		)`,
 		`CREATE TABLE IF NOT EXISTS sync_correction_targets (
 			record_id TEXT PRIMARY KEY REFERENCES sync_records(record_id) ON DELETE CASCADE,
 			observation_id TEXT NOT NULL
@@ -499,6 +504,11 @@ func erasedRecord(ctx context.Context, tx *sql.Tx, record syncmodel.PushRecord) 
 			erased, err := tombstoned(ctx, tx, `SELECT 1 FROM sync_task_tombstones WHERE task_id = ?`, taskID)
 			return links, erased, err
 		}
+	case syncmodel.KindEvent:
+		if eventID, ok := taskIDFromRevisionRecordID(record.RecordID); ok {
+			erased, err := tombstoned(ctx, tx, `SELECT 1 FROM sync_event_tombstones WHERE event_id = ?`, eventID)
+			return links, erased, err
+		}
 	}
 	return links, false, nil
 }
@@ -721,20 +731,11 @@ func expandTaskErasureTargets(
 			}
 			continue
 		}
-		if syncmodel.Kind(kind) != syncmodel.KindTask {
+		registry, revisioned := revisionRegistries[syncmodel.Kind(kind)]
+		if !revisioned {
 			continue
 		}
-		taskID, ok := taskIDFromRevisionRecordID(recordID)
-		if !ok {
-			return nil, fmt.Errorf("stored task record %q has an invalid revision id", recordID)
-		}
-		if _, err := tx.ExecContext(ctx,
-			`INSERT OR IGNORE INTO sync_task_tombstones(task_id, device_id, erased_at) VALUES(?, ?, ?)`,
-			taskID, deviceID, erasedAt,
-		); err != nil {
-			return nil, err
-		}
-		revisions, err := taskRevisionRecordIDsTx(ctx, tx, taskID)
+		revisions, err := expandRevisionErasure(ctx, tx, syncmodel.Kind(kind), registry, deviceID, recordID, erasedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -743,6 +744,27 @@ func expandTaskErasureTargets(
 		}
 	}
 	return result, nil
+}
+
+// revisionRegistries name, for each kind that syncs as revisions of one
+// thing, the table that refuses that thing's return once it is erased.
+var revisionRegistries = map[syncmodel.Kind]string{
+	syncmodel.KindTask:  `INSERT OR IGNORE INTO sync_task_tombstones(task_id, device_id, erased_at) VALUES(?, ?, ?)`,
+	syncmodel.KindEvent: `INSERT OR IGNORE INTO sync_event_tombstones(event_id, device_id, erased_at) VALUES(?, ?, ?)`,
+}
+
+// expandRevisionErasure turns one known revision into erasing what it is a
+// revision of: every revision retained, and a registry entry that refuses a
+// later one from an offline device.
+func expandRevisionErasure(ctx context.Context, tx *sql.Tx, kind syncmodel.Kind, registry, deviceID, recordID, erasedAt string) ([]string, error) {
+	id, ok := taskIDFromRevisionRecordID(recordID)
+	if !ok {
+		return nil, fmt.Errorf("stored %s record %q has an invalid revision id", kind, recordID)
+	}
+	if _, err := tx.ExecContext(ctx, registry, id, deviceID, erasedAt); err != nil {
+		return nil, err
+	}
+	return revisionRecordIDsTx(ctx, tx, kind, id)
 }
 
 // expandMedicationErasure turns one known medication revision into deleting the
@@ -811,11 +833,12 @@ func medicationIDOf(record syncmodel.PushRecord) (string, error) {
 	return payload.MedicationID, nil
 }
 
-func taskRevisionRecordIDsTx(ctx context.Context, tx *sql.Tx, taskID string) ([]string, error) {
-	pattern := escapeSQLLike(taskID) + `\_r%`
+// revisionRecordIDsTx lists the retained revisions of one task or event.
+func revisionRecordIDsTx(ctx context.Context, tx *sql.Tx, kind syncmodel.Kind, id string) ([]string, error) {
+	pattern := escapeSQLLike(id) + `\_r%`
 	rows, err := tx.QueryContext(ctx, `SELECT record_id FROM sync_records
 		WHERE kind = ? AND record_id LIKE ? ESCAPE '\'
-		ORDER BY seq`, string(syncmodel.KindTask), pattern)
+		ORDER BY seq`, string(kind), pattern)
 	if err != nil {
 		return nil, err
 	}
@@ -826,8 +849,8 @@ func taskRevisionRecordIDsTx(ctx context.Context, tx *sql.Tx, taskID string) ([]
 		if err := rows.Scan(&recordID); err != nil {
 			return nil, err
 		}
-		parsedTaskID, ok := taskIDFromRevisionRecordID(recordID)
-		if ok && parsedTaskID == taskID {
+		parsed, ok := taskIDFromRevisionRecordID(recordID)
+		if ok && parsed == id {
 			result = append(result, recordID)
 		}
 	}
