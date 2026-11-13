@@ -74,9 +74,10 @@ export function occurrences(field: SleepTimeField, zone: string) {
   return civilCandidates(field.wall, zone);
 }
 
-type FieldValue = { value: string; instant: string } | { problem: string };
+export type FieldValue = { value: string; instant: string } | { problem: string };
 
-function fieldValue(field: SleepTimeField, zone: string, what: string): FieldValue {
+/** One time as the desktop reads it, exact, or why it cannot be used. */
+export function fieldValue(field: SleepTimeField, zone: string, what: string): FieldValue {
   if (!field.wall) return { problem: `Enter ${what}.` };
   if (field.exact && field.at) return { value: field.exact, instant: field.at };
   if (civilCandidates(field.wall, zone).length === 0) {

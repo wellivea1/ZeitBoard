@@ -182,6 +182,18 @@ type syncPlacementPayload struct {
 	CreatedAt   string `json:"created_at"`
 }
 
+// syncEventPayload is one revision of an event the owner added (ADR-0068).
+type syncEventPayload struct {
+	EventID   string `json:"event_id"`
+	Title     string `json:"title"`
+	StartAt   string `json:"start_at"`
+	EndAt     string `json:"end_at"`
+	ZoneID    string `json:"zone_id"`
+	Revision  int    `json:"revision"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}
+
 type syncTombstonePayload struct {
 	RecordID string `json:"record_id"`
 }
@@ -869,6 +881,23 @@ func Build() ([]File, error) {
 			},
 			{
 				Seq:       6,
+				RecordID:  "event_synthetic_dentist_r2",
+				Kind:      "event",
+				DeviceID:  "device_desktop_01",
+				CreatedAt: ts(generatedAt),
+				Payload: syncEventPayload{
+					EventID:   "event_synthetic_dentist",
+					Title:     "Synthetic dentist, moved",
+					StartAt:   ts(generatedAt.Add(minutes(48 * 60))),
+					EndAt:     ts(generatedAt.Add(minutes(48*60 + 45))),
+					ZoneID:    "America/New_York",
+					Revision:  2,
+					CreatedAt: ts(generatedAt.Add(-time.Hour)),
+					UpdatedAt: ts(generatedAt),
+				},
+			},
+			{
+				Seq:       7,
 				RecordID:  "srcrep-5f60718293a4b5c6d7e8f90a",
 				Kind:      "source_report",
 				DeviceID:  "device_android_01",
@@ -1673,7 +1702,7 @@ func sleepReviewFixture() map[string]any {
 func companionFixture(refused bool) map[string]any {
 	result := map[string]any{
 		"schema_version": "v2", "contains_synthetic_data": true, "source_cursor": 2, "generated_at": "2026-09-02T12:00:00Z", "valid_until": "2026-09-02T12:15:00Z",
-		"algorithm_version": "theil-sen-sleep-start/v1", "provenance": "self_hosted_synced_sleep", "status": "estimated",
+		"algorithm_version": "theil-sen-sleep-start/v2", "provenance": "self_hosted_synced_sleep", "status": "estimated",
 		"freshness":  map[string]any{"state": "current", "reason": "", "explanation": "Based on recent synced sleep."},
 		"confidence": map[string]any{"level": "medium", "reasons": []string{"Synthetic contract example with explicit uncertainty."}},
 		"forecasts": []any{map[string]any{

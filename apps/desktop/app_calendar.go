@@ -446,7 +446,10 @@ func calendarSourceDTOs(ctx context.Context, store *storage.Store, sources []sto
 		coverageStart := source.CoverageStartAt.In(span.location)
 		coverageEnd := source.CoverageEndAt.In(span.location)
 		coverageLabel := coverageStart.Format("Jan 2, 2006") + " to " + coverageEnd.Format("Jan 2, 2006")
-		if !source.ReadOnly {
+		switch {
+		case source.SourceID == storage.OwnerEventsCalendarSourceID:
+			coverageLabel = "Events you add in Plan"
+		case !source.ReadOnly:
 			// The placements calendar has no range; it holds whatever is accepted.
 			coverageLabel = "Times you accept in Plan"
 		}
@@ -871,6 +874,15 @@ func calendarCivilDate(raw string, now time.Time, location *time.Location) (time
 	return parsed, nil
 }
 
+// segmentOwnership is "owner" for an event the owner added (ADR-0068), which
+// the window offers to change and delete; it is kept as a fixed commitment.
+func segmentOwnership(event calendarcore.Event) string {
+	if event.SourceID == storage.OwnerEventsCalendarSourceID {
+		return "owner"
+	}
+	return string(event.Ownership)
+}
+
 func calendarEventSegment(event calendarcore.Event, source CalendarSourceDTO, dayStart, dayEnd time.Time, location *time.Location) (CalendarEventSegmentDTO, bool) {
 	point := event.StartAt.Equal(event.EndAt)
 	if (!point && (!event.EndAt.After(dayStart.UTC()) || !event.StartAt.Before(dayEnd.UTC()))) ||
@@ -894,7 +906,7 @@ func calendarEventSegment(event calendarcore.Event, source CalendarSourceDTO, da
 		AllDay:          event.AllDay,
 		PointInTime:     point,
 		Busy:            event.Busy,
-		Ownership:       string(event.Ownership),
+		Ownership:       segmentOwnership(event),
 		ReadOnly:        source.ReadOnly,
 		ContinuesBefore: before,
 		ContinuesAfter:  after,

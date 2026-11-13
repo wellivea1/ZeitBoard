@@ -120,6 +120,37 @@ describe("calendar data adapter", () => {
     });
   });
 
+  it("reads an event the owner added, from ZeitBoard's own source", () => {
+    const withOwnerEvent = structuredClone(calendarResponse);
+    withOwnerEvent.sources[0] = {
+      ...withOwnerEvent.sources[0]!,
+      sourceId: "calendar_source_owner_events",
+      label: "Your events",
+      kind: "zeitboard",
+      readOnly: false,
+    };
+    Object.assign(withOwnerEvent.days[0]!.events[0]!, {
+      sourceId: "calendar_source_owner_events",
+      sourceLabel: "Your events",
+      sourceKind: "zeitboard",
+      ownership: "owner",
+      readOnly: false,
+    });
+    // One such event once made the whole calendar unreadable in the window.
+    expect(normalizeCalendar(withOwnerEvent)).toMatchObject({
+      days: [{ events: [{ ownership: "owner", readOnly: false }] }],
+    });
+
+    const readOnlyOwnerEvent = structuredClone(withOwnerEvent);
+    readOnlyOwnerEvent.days[0]!.events[0]!.readOnly = true;
+    expect(normalizeCalendar(readOnlyOwnerEvent)).toBeUndefined();
+
+    const fromAFile = structuredClone(calendarResponse);
+    fromAFile.days[0]!.events[0]!.ownership = "owner";
+    fromAFile.days[0]!.events[0]!.readOnly = false;
+    expect(normalizeCalendar(fromAFile)).toBeUndefined();
+  });
+
   it("rejects ownership contradictions and unknown source links", () => {
     const writableImport = structuredClone(calendarResponse);
     writableImport.days[0]!.events[0]!.readOnly = false;

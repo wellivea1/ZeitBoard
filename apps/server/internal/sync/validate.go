@@ -12,6 +12,7 @@ import (
 	"non24.app/core/domain"
 	"non24.app/core/markers"
 	"non24.app/core/medication"
+	"non24.app/core/ownerevents"
 	"non24.app/core/sleepv1"
 	"non24.app/core/sources"
 )
@@ -22,7 +23,7 @@ var identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{2,63}$`)
 // are minted only by the server's erase endpoint.
 func Pushable(kind Kind) bool {
 	switch kind {
-	case KindObservation, KindCorrection, KindTask, KindPlacement,
+	case KindObservation, KindCorrection, KindTask, KindPlacement, KindEvent,
 		KindMedication, KindMedicationEvent, KindMedicationCorrection, KindContextMarker, KindSourceReport:
 		return true
 	default:
@@ -112,6 +113,8 @@ func validatePayload(kind Kind, recordID string, payload json.RawMessage) error 
 		return validateTask(recordID, payload)
 	case KindPlacement:
 		return validatePlacement(recordID, payload)
+	case KindEvent:
+		return validateEvent(recordID, payload)
 	case KindMedication:
 		return validateMedication(recordID, payload)
 	case KindMedicationEvent:
@@ -125,6 +128,22 @@ func validatePayload(kind Kind, recordID string, payload json.RawMessage) error 
 	default:
 		return errors.New("unsupported record kind")
 	}
+}
+
+// validateEvent accepts one revision of an event under the id its revision
+// names. The desktop's store validates events with the same code.
+func validateEvent(recordID string, payload json.RawMessage) error {
+	var record ownerevents.Record
+	if err := decodeStrict(payload, &record); err != nil {
+		return errors.New("invalid event payload")
+	}
+	if err := record.Validate(); err != nil {
+		return fmt.Errorf("invalid event: %w", err)
+	}
+	if recordID != ownerevents.RecordID(record.EventID, record.Revision) {
+		return errors.New("an event's recordId must be <event_id>_r<revision>")
+	}
+	return nil
 }
 
 // The medication and marker records are validated by the same code that

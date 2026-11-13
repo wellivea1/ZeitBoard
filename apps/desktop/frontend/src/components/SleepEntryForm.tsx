@@ -13,7 +13,7 @@ import {
 // RFC 3339 text, "2026-10-25T14:00:00-04:00", to tell apart the hour that
 // happens twice when the clocks go back. Now only that hour asks.
 
-function TimeField({
+export function TimeField({
   label,
   field,
   zone,

@@ -447,3 +447,11 @@
   overflow: auto;
   border: 1px solid var(--line);
 }
+
+/* Said to the owner alone, above the page a link's reader sees. */
+.share-preview-note {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 15px;
+  line-height: 1.45;
+}

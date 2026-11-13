@@ -10,7 +10,9 @@
 .home-now {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 260px;
-  align-items: end;
+  /* The sentence stays where it is when the column beside it grows to ask a
+     question; aligned to the bottom, it dropped down the page. */
+  align-items: start;
   gap: 28px 64px;
   padding-top: 10px;
 }
@@ -472,4 +474,16 @@
   .home-columns {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* The diary's two ways on: the week itself, and a new event in it. */
+.home-more-row {
+  margin: 12px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+}
+
+.home-more-row .home-more {
+  margin-top: 0;
 }

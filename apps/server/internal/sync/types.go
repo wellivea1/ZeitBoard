@@ -28,6 +28,10 @@ const (
 	// and erases it on undo or when the task is deleted; the companion draws
 	// the next day's placements on its dial.
 	KindPlacement Kind = "placement"
+	// KindEvent carries one immutable revision of an event the owner added
+	// (ADR-0068), with id "<event_id>_r<revision>", as tasks sync. Deleting
+	// an event erases all its pushed revisions.
+	KindEvent Kind = "event"
 	// The medication kinds (ADR-0048). A definition is a mutable intention
 	// and syncs like a task, as immutable revisions "<medication_id>_r<n>";
 	// events and their corrections are append-only evidence whose record id

@@ -718,3 +718,47 @@ button.week-block-text {
     right: 6px;
   }
 }
+
+/* What can be added to a week: an event, which is fixed, and a task, which
+   is not. */
+.week-add {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* An empty part of a day starts an event there. */
+.week-day[data-addable] {
+  cursor: cell;
+}
+
+/* The form for an event the owner adds, set under the toolbar. */
+.event-form {
+  max-width: 720px;
+  display: grid;
+  gap: 10px;
+}
+
+.event-form .section-title {
+  margin: 0;
+}
+
+.event-form .event-form-title {
+  grid-column: 1 / -1;
+}
+
+.event-form .event-form-sleep {
+  color: var(--ink);
+}
+
+.week-inspector-confirm {
+  padding: 12px 0;
+  display: grid;
+  gap: 6px;
+  border-block: 1px solid var(--danger-border);
+  font-family: var(--font-serif);
+}
+
+.week-inspector-confirm p {
+  margin: 0;
+}

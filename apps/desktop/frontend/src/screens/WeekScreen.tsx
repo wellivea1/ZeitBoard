@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { PlaceholderNotice } from "../components/AppShell";
 import { Icon } from "../components/Icon";
+import { OwnerEventForm } from "../components/OwnerEventForm";
 import { WeekBoard } from "../components/WeekBoard";
 import { EventInspector, EventTable, SuggestionInspector } from "../components/WeekDetails";
 import { weekColumns, weekTitle } from "../components/weekLayout";
@@ -16,6 +17,7 @@ import {
   type CalendarEventSegment,
 } from "../data/calendar";
 import { loadMedications, medicationDataChangedEvent } from "../data/medications";
+import { hasOwnerEventService, type OwnerEvent } from "../data/ownerEvents";
 import type { OverviewData } from "../data/overview";
 import { loadSleepEntriesBetween, type SleepEntry } from "../data/sleepEntries";
 import { sleepDataChangedEvent } from "../data/sleepDataEvents";
@@ -24,6 +26,7 @@ import { useLoaded } from "../state/useLoaded";
 import { useApprovals } from "../state/approvals";
 import { localZone } from "../utils/civilTime";
 import { appLocale } from "../utils/appLocale";
+import type { SleepWindow } from "../utils/ownerEventForm";
 
 // Plan › Week: the calendar-native view, for arranging things rather than
 // glancing at them. Home says when sleep is likely in a sentence; here the
@@ -130,6 +133,46 @@ function useCalendarRange(start: string, days: number, zoneId: string) {
   return state;
 }
 
+/** Plan › Week with "Add an event" already open, as Home's diary links it. */
+const addEventHash = "#/plan/week/add-event";
+
+/** The event form: closed, open for a new event, or open on one to change. */
+type EventFormState = { event?: OwnerEvent; startWall?: string; key: number } | null;
+
+// The form for an event the owner adds (ADR-0068), and what it last did. It
+// opens from the toolbar, from an empty part of a day, from an event's
+// details, and from Home's diary by address.
+function useEventForm() {
+  const [form, setForm] = useState<EventFormState>(null);
+  const [notice, setNotice] = useState("");
+  const open = (next: { event?: OwnerEvent; startWall?: string } = {}) => {
+    setNotice("");
+    setForm((previous) => ({ ...next, key: (previous?.key ?? 0) + 1 }));
+  };
+  useEffect(() => {
+    const openFromAddress = () => {
+      if (window.location.hash !== addEventHash || !hasOwnerEventService()) return;
+      open();
+      // Opened once: a reload or a return to the week does not reopen it.
+      window.history.replaceState(null, "", "#/plan/week");
+    };
+    openFromAddress();
+    window.addEventListener("hashchange", openFromAddress);
+    return () => window.removeEventListener("hashchange", openFromAddress);
+  }, []);
+  const close = (message = "") => {
+    setForm(null);
+    setNotice(message);
+  };
+  return { form, notice, open, close };
+}
+
+function predictedSleep(data: CalendarData | null): SleepWindow[] {
+  return (data?.days ?? []).flatMap((day) =>
+    day.predictions.filter((band) => band.kind === "predicted_sleep"),
+  );
+}
+
 function sourceSummary(data: CalendarData) {
   const events = new Set(data.days.flatMap((day) => day.events.map((event) => event.eventId)));
   const count = `${events.size} ${events.size === 1 ? "event" : "events"}`;
@@ -147,12 +190,15 @@ function WeekToolbar({
   today,
   onStart,
   onDays,
+  onAddEvent,
 }: {
   start: string;
   days: DaysShown;
   today: string;
   onStart: (value: string) => void;
   onDays: (value: DaysShown) => void;
+  /** Absent where events cannot be added, as in the browser preview. */
+  onAddEvent?: () => void;
 }) {
   const last = addCivilDays(start, days - 1);
   const span = days === 1 ? "day" : `${days} days`;
@@ -214,9 +260,16 @@ function WeekToolbar({
           </button>
         ))}
       </div>
-      <a className="button primary compact week-add" href="#/plan/tasks">
-        Add a task
-      </a>
+      <div className="week-add">
+        {onAddEvent && (
+          <button className="button compact" type="button" onClick={onAddEvent}>
+            Add an event
+          </button>
+        )}
+        <a className="button primary compact" href="#/plan/tasks">
+          Add a task
+        </a>
+      </div>
     </header>
   );
 }
@@ -363,6 +416,8 @@ export function WeekScreen() {
   const now = useNow();
   const [selected, setSelected] = useState<CalendarEventSegment | null>(null);
   const [inspecting, setInspecting] = useState<string | null>(null);
+  const eventForm = useEventForm();
+  const canAddEvents = calendar.source === "local" && hasOwnerEventService();
 
   const data = calendar.data;
   const columns = useMemo(
@@ -372,6 +427,7 @@ export function WeekScreen() {
         : [],
     [data, approvals.pending, sleep, medications, now],
   );
+  const sleepWindows = useMemo(() => predictedSleep(data), [data]);
   const unplaced = approvals.pending.filter((proposal) => !proposal.startAt || !proposal.endAt);
   const suggestion = approvals.pending.find((proposal) => proposal.id === inspecting);
   const event = selected
@@ -387,7 +443,30 @@ export function WeekScreen() {
           Sample calendar. Nothing is read from your files or written anywhere.
         </PlaceholderNotice>
       )}
-      <WeekToolbar start={start} days={days} today={today} onStart={setStart} onDays={setDays} />
+      <WeekToolbar
+        start={start}
+        days={days}
+        today={today}
+        onStart={setStart}
+        onDays={setDays}
+        onAddEvent={canAddEvents ? () => eventForm.open() : undefined}
+      />
+      {eventForm.form && (
+        <OwnerEventForm
+          key={eventForm.form.key}
+          event={eventForm.form.event}
+          startWall={eventForm.form.startWall}
+          sleepWindows={sleepWindows}
+          onSaved={(_saved, message) => {
+            setSelected(null);
+            eventForm.close(message);
+          }}
+          onCancel={() => eventForm.close()}
+        />
+      )}
+      <p className="week-notice" role="status" aria-live="polite">
+        {eventForm.notice}
+      </p>
       <WeekNotes
         data={data}
         error={calendar.error}
@@ -408,6 +487,7 @@ export function WeekScreen() {
             setInspecting(id);
           }}
           onDecide={approvals.decide}
+          onAdd={canAddEvents ? (startWall) => eventForm.open({ startWall }) : undefined}
         />
       ) : (
         <p className="week-loading" role="status">
@@ -415,7 +495,18 @@ export function WeekScreen() {
         </p>
       )}
       <WeekFoot data={data} canExport={calendar.source === "local"} unplaced={unplaced.length} />
-      {event && <EventInspector event={event} onClose={() => setSelected(null)} />}
+      {event && (
+        <EventInspector
+          event={event}
+          sleepWindows={sleepWindows}
+          onClose={() => setSelected(null)}
+          onChange={canAddEvents ? (current) => eventForm.open({ event: current }) : undefined}
+          onDeleted={(message) => {
+            setSelected(null);
+            eventForm.close(message);
+          }}
+        />
+      )}
       {suggestion && (
         <SuggestionInspector
           proposal={suggestion}

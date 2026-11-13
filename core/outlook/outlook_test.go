@@ -1098,3 +1098,44 @@ func TestNoStretchIsShorterThanAMinute(t *testing.T) {
 		}
 	}
 }
+
+// TestConfidentWakingIsWhatTheTimelineCallsAwake holds the planner and a
+// shared link to the outlook: the waking time they are handed is exactly the
+// timeline's awake stretches, and none of it lies inside a sleep envelope.
+func TestConfidentWakingIsWhatTheTimelineCallsAwake(t *testing.T) {
+	f := newFixture(t)
+	end := outlook.ForecastEnd(f.estimate)
+	if !end.After(f.now) {
+		t.Fatal("the estimate forecasts nothing ahead of now")
+	}
+	awake := outlook.ConfidentWaking(f.estimate, nil, f.now, end)
+	if len(awake) == 0 {
+		t.Fatal("no confident waking time in a whole forecast")
+	}
+	for _, window := range awake {
+		for _, sleep := range f.estimate.PredictedSleepWindows {
+			if window.Interval.Start.UTC.Before(sleep.Interval.End.UTC) && sleep.Interval.Start.UTC.Before(window.Interval.End.UTC) {
+				t.Errorf("waking time %s to %s overlaps the sleep envelope %s to %s",
+					window.Interval.Start.UTC, window.Interval.End.UTC, sleep.Interval.Start.UTC, sleep.Interval.End.UTC)
+			}
+		}
+	}
+
+	// The estimator's own waking envelopes do overlap the sleep ones, which is
+	// why they cannot be planned in as they stand.
+	overlapping := false
+	for _, waking := range f.estimate.PredictedWakingWindows {
+		for _, sleep := range f.estimate.PredictedSleepWindows {
+			if waking.Interval.Start.UTC.Before(sleep.Interval.End.UTC) && sleep.Interval.Start.UTC.Before(waking.Interval.End.UTC) {
+				overlapping = true
+			}
+		}
+	}
+	if !overlapping {
+		t.Fatal("the fixture's envelopes do not overlap; this test would pass on nothing")
+	}
+
+	if got := outlook.ConfidentWaking(f.estimate, nil, end, f.now); got != nil {
+		t.Errorf("a range that ends before it starts gave %d windows", len(got))
+	}
+}

@@ -259,6 +259,12 @@ func (a *App) buildLocalProposals(now time.Time) (localProposalBuild, error) {
 		return result, nil
 	}
 
+	// Home withholds its forecast on records this old, and the planner must
+	// not be surer than Home.
+	if !planningEvidenceIsCurrent(state, planningNow) {
+		result.dto.Unplaced = unplacedForStaleEvidence(tasks)
+		return result, nil
+	}
 	availability := localPlanningAvailability(state, planningNow)
 	snapshotStart, snapshotEnd, ok := planningSnapshotRange(availability)
 	if !ok {

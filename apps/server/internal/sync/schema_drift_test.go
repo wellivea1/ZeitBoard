@@ -38,6 +38,21 @@ func TestPushValidatorAndSchemaDriftGuard(t *testing.T) {
 			valid: true,
 		},
 		{
+			name:  "valid event revision push",
+			body:  `{"schema_version":"v1","records":[{"recordId":"event_dentist_01_r2","kind":"event","createdAt":"2026-10-27T12:40:00Z","payload":{"event_id":"event_dentist_01","title":"Synthetic dentist","start_at":"2026-10-29T19:00:00Z","end_at":"2026-10-29T20:00:00Z","zone_id":"America/New_York","revision":2,"created_at":"2026-10-27T12:00:00Z","updated_at":"2026-10-27T12:02:00Z"}}]}`,
+			valid: true,
+		},
+		{
+			name:  "event with a field the contract does not name",
+			body:  `{"schema_version":"v1","records":[{"recordId":"event_dentist_01_r2","kind":"event","createdAt":"2026-10-27T12:40:00Z","payload":{"event_id":"event_dentist_01","location":"Synthetic clinic","title":"Synthetic dentist","start_at":"2026-10-29T19:00:00Z","end_at":"2026-10-29T20:00:00Z","zone_id":"America/New_York","revision":2,"created_at":"2026-10-27T12:00:00Z","updated_at":"2026-10-27T12:02:00Z"}}]}`,
+			valid: false,
+		},
+		{
+			name:  "event without a title",
+			body:  `{"schema_version":"v1","records":[{"recordId":"event_dentist_01_r2","kind":"event","createdAt":"2026-10-27T12:40:00Z","payload":{"event_id":"event_dentist_01","start_at":"2026-10-29T19:00:00Z","end_at":"2026-10-29T20:00:00Z","zone_id":"America/New_York","revision":2,"created_at":"2026-10-27T12:00:00Z","updated_at":"2026-10-27T12:02:00Z"}}]}`,
+			valid: false,
+		},
+		{
 			name:  "valid medication revision push",
 			body:  `{"schema_version":"v1","records":[{"recordId":"med_evening_01_r2","kind":"medication","createdAt":"2026-03-05T12:40:00Z","payload":{"medication_id":"med_evening_01","label":"Evening tablet","active":true,"schedule":{"kind":"fixed_clock","zone_id":"America/New_York","civil_times":["21:00"],"reminder_enabled":true},"created_at":"2026-03-01T12:00:00Z","revision":2,"updated_at":"2026-03-05T12:00:00Z"}}]}`,
 			valid: true,

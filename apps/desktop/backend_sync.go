@@ -384,7 +384,7 @@ func (a *App) syncRecords(ctx context.Context, cfg backendSyncConfig, token stri
 		return counts, err
 	}
 	for _, push := range []func(context.Context, *storage.Store, desktopBackendClient) (int, error){
-		a.pushSleepRecords, a.pushTaskRecords, a.pushPlacementRecords, a.pushMedicationRecords, a.pushMarkerRecords,
+		a.pushSleepRecords, a.pushTaskRecords, a.pushPlacementRecords, a.pushOwnerEventRecords, a.pushMedicationRecords, a.pushMarkerRecords,
 	} {
 		pushed, err := push(ctx, store, client)
 		counts.pushed += pushed
@@ -429,6 +429,40 @@ func (a *App) pushPlacementRecords(ctx context.Context, store *storage.Store, cl
 		func(record storage.PlacementSyncRecord) syncPushRecord {
 			return syncPushRecord{RecordID: record.RecordID, Kind: "placement", CreatedAt: record.CreatedAt.UTC(), Payload: record.Payload}
 		})
+}
+
+// pushOwnerEventRecords sends the owner's events (ADR-0068) one revision a
+// request. One that meets another computer's revision of the same number is
+// left for the pull that follows, which keeps the later edit, rather than
+// stopping the sync.
+func (a *App) pushOwnerEventRecords(ctx context.Context, store *storage.Store, client desktopBackendClient) (int, error) {
+	records, err := store.PendingOwnerEventSyncRecords(ctx, storage.MaxOwnerEventSyncPageSize)
+	if err != nil {
+		return 0, err
+	}
+	pushed := 0
+	for _, record := range records {
+		var response syncPushResponse
+		request := syncPushRequest{SchemaVersion: "v1", Records: []syncPushRecord{{
+			RecordID: record.RecordID, Kind: storage.SyncKindOwnerEvent, CreatedAt: record.CreatedAt.UTC(), Payload: record.Payload,
+		}}}
+		err := client.postJSON(ctx, "/v1/sync/push", request, &response)
+		var refused backendHTTPError
+		if errors.As(err, &refused) && refused.StatusCode == http.StatusConflict {
+			continue
+		}
+		if err != nil {
+			return pushed, err
+		}
+		if err := validateSyncAcknowledgment(response, 1); err != nil {
+			return pushed, err
+		}
+		if err := store.MarkOwnerEventSyncRecordsPushed(ctx, []storage.OwnerEventSyncRecord{record}, time.Now().UTC()); err != nil {
+			return pushed, err
+		}
+		pushed++
+	}
+	return pushed, nil
 }
 
 // pushErasures propagates local hard-deletes of any kind, including uncertain
@@ -633,6 +667,9 @@ func decodePulledRecord(record syncEnvelope) (storage.SyncPullRecord, error) {
 	case "placement":
 		// This computer authored it; pulling it back confirms the upload.
 		return storage.SyncPullPlacement{PlacementID: record.RecordID}, nil
+	case storage.SyncKindOwnerEvent:
+		var value storage.SyncPullOwnerEvent
+		return value, decode(&value.Event)
 	case storage.SyncKindMedication:
 		var value storage.SyncPullMedication
 		return value, decode(&value.Medication)
