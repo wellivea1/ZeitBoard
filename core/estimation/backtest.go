@@ -102,7 +102,8 @@ func (e RobustEstimator) Backtest(ctx context.Context, sessions []domain.SleepSe
 		}
 
 		lastModelOnset := modelEpisodes[len(modelEpisodes)-1].Intervals[0].Interval.Start.UTC
-		horizon, herr := cycleStep(actual.Sub(lastModelOnset))
+		lastModelZone := modelEpisodes[len(modelEpisodes)-1].Intervals[0].Interval.Start.ZoneID
+		horizon, herr := cycleStep(actual.Sub(lastModelOnset), model.period)
 		if herr != nil {
 			if appendBacktestRefusal(&report, k, actual, herr) {
 				continue
@@ -115,7 +116,7 @@ func (e RobustEstimator) Backtest(ctx context.Context, sessions []domain.SleepSe
 		var windowStart, windowEnd time.Time
 		var windowWidth float64
 		if horizon >= 1 && horizon <= normalized.ForecastCycles {
-			window, _ := forecastIntervals(model, normalized, horizon, modelEpisodes[len(modelEpisodes)-1].Intervals[0].Interval.Start.ZoneID)
+			window, _ := forecastIntervals(model, normalized, horizon, lastModelZone)
 			within = window.Contains(actual)
 			windowStart = window.Start.UTC
 			windowEnd = window.End.UTC

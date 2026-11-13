@@ -243,6 +243,12 @@ func (m Materializer) Snapshot(ctx context.Context) (portal.Snapshot, error) {
 func freshnessInputs(estimate domain.PhaseEstimate, sessions []domain.SleepSession, now time.Time) freshness.Inputs {
 	in := freshness.Inputs{Now: now}
 	for _, session := range sessions {
+		// A record the owner excluded says nothing about where they are now.
+		// Counted here, excluding a bad recent record put an old forecast
+		// back on the shared page as current.
+		if session.Suppressed {
+			continue
+		}
 		for _, interval := range session.Intervals {
 			end := interval.Interval.End.UTC
 			if end.After(in.LatestSleepEnd) {
@@ -282,24 +288,59 @@ func freshnessInputs(estimate domain.PhaseEstimate, sessions []domain.SleepSessi
 // one. Both rules now live where they belong — at render, in portal.BuildView
 // and the availability DTO — where they keep working as time passes instead of
 // being correct only at the instant of materialization.
+//
+// Each window is published without the parts a predicted sleep window also
+// covers. The estimator's windows are envelopes: a waking one opens before the
+// sleep before it is sure to have ended, and closes after the next may have
+// begun. Published whole, the page said "Likely awake right now" through
+// hours the owner's own Home draws as uncertain. What is left is the time the
+// model places outside every sleep envelope, as Home's outlook reads it.
 func wakingWindows(estimate domain.PhaseEstimate) []portal.Window {
 	windows := make([]portal.Window, 0, len(estimate.PredictedWakingWindows))
 	for _, window := range estimate.PredictedWakingWindows {
 		interval := window.Interval
-		if !interval.End.UTC.After(interval.Start.UTC) {
-			continue
-		}
 		zoneID := interval.Start.ZoneID
 		if zoneID == "" {
 			zoneID = "UTC"
 		}
-		windows = append(windows, portal.Window{
-			StartAt: interval.Start.UTC.UTC(),
-			EndAt:   interval.End.UTC.UTC(),
-			ZoneID:  zoneID,
-		})
+		for _, clear := range outsideSleep(interval.Start.UTC.UTC(), interval.End.UTC.UTC(), estimate.PredictedSleepWindows) {
+			windows = append(windows, portal.Window{StartAt: clear[0], EndAt: clear[1], ZoneID: zoneID})
+		}
 	}
 	return windows
+}
+
+// outsideSleep is the part of [start, end) no predicted sleep window covers,
+// as stretches in order.
+func outsideSleep(start, end time.Time, sleep []domain.AvailabilityWindow) [][2]time.Time {
+	clear := [][2]time.Time{{start, end}}
+	for _, window := range sleep {
+		from, to := window.Interval.Start.UTC.UTC(), window.Interval.End.UTC.UTC()
+		if !to.After(from) {
+			continue
+		}
+		var next [][2]time.Time
+		for _, stretch := range clear {
+			if !to.After(stretch[0]) || !from.Before(stretch[1]) {
+				next = append(next, stretch)
+				continue
+			}
+			if from.After(stretch[0]) {
+				next = append(next, [2]time.Time{stretch[0], from})
+			}
+			if to.Before(stretch[1]) {
+				next = append(next, [2]time.Time{to, stretch[1]})
+			}
+		}
+		clear = next
+	}
+	kept := clear[:0]
+	for _, stretch := range clear {
+		if stretch[1].After(stretch[0]) {
+			kept = append(kept, stretch)
+		}
+	}
+	return kept
 }
 
 // withCurrentWakingWindow adds the waking period already under way. The

@@ -4,7 +4,11 @@ import { timeOfDay } from "../utils/relativeTime";
 export const calendarDataChangedEvent = "zeitboard:calendar-data-changed";
 
 export type CalendarSourceKind = "ics" | "caldav" | "zeitboard";
-export type CalendarOwnership = "imported" | "app_owned";
+/**
+ * Whose an event is: read from a calendar, a time the owner accepted, or an
+ * event the owner added in ZeitBoard (ADR-0068).
+ */
+export type CalendarOwnership = "imported" | "app_owned" | "owner";
 
 /** A calendar kept by its private address (ADR-0062), named by host alone. */
 export interface CalendarSubscription {
@@ -227,7 +231,7 @@ function sourceKind(value: unknown): CalendarSourceKind | undefined {
 }
 
 function ownership(value: unknown): CalendarOwnership | undefined {
-  return value === "imported" || value === "app_owned" ? value : undefined;
+  return value === "imported" || value === "app_owned" || value === "owner" ? value : undefined;
 }
 
 function calendarEndpoint(value: unknown, kind: CalendarSourceKind): string | undefined {
@@ -364,7 +368,7 @@ function normalizeEvent(value: unknown): CalendarEventSegment | undefined {
     (value.busy && pointInTime) ||
     (value.allDay && pointInTime) ||
     (eventOwnership === "imported" && !value.readOnly) ||
-    (eventOwnership === "app_owned" && value.readOnly)
+    (eventOwnership !== "imported" && value.readOnly)
   ) {
     return undefined;
   }
@@ -524,7 +528,7 @@ export function normalizeCalendar(value: unknown): CalendarData | undefined {
         event.sourceKind !== source.kind ||
         event.readOnly !== source.readOnly ||
         (event.ownership === "imported" && source.kind === "zeitboard") ||
-        (event.ownership === "app_owned" && source.kind !== "zeitboard")
+        (event.ownership !== "imported" && source.kind !== "zeitboard")
       ) {
         return undefined;
       }

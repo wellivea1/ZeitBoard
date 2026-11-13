@@ -1,5 +1,5 @@
 {
-  "algorithm_version": "theil-sen-sleep-start/v1",
+  "algorithm_version": "theil-sen-sleep-start/v2",
   "confidence": {
     "level": "medium",
     "reasons": [

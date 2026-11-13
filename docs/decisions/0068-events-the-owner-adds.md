@@ -58,3 +58,11 @@ Asked whether events stay on the computer or go further, the owner chose: everyw
   record kind.
 - The work lands in three parts: the computer and server, then the owner's calendar, then the
   phone.
+
+## Progress
+
+- 2026-10-28: the computer keeps and syncs events, and the server relays them.
+- 2026-11-13: the window adds, changes and deletes them, from the week and from Home's diary.
+  Until then one such event made the window refuse the whole calendar, because its adapter did
+  not know the ownership the desktop answers with.
+- Still to come: writing events to the owner's calendar, and the phone.

@@ -152,8 +152,11 @@ func BuildView(snapshot Snapshot, now time.Time) AvailabilityView {
 		return view
 	case snapshot.Status == StatusInsufficientData || len(snapshot.Windows) == 0:
 		view.Unavailable = true
-		view.Headline = "Availability is not being shared right now"
-		view.Detail = "This link does not currently show waking windows."
+		// Nothing here is the link's doing: the grant stands, and the evidence
+		// is too old or too thin to claim a current state. Saying "this link
+		// does not show" sent the owner to check permissions that were fine.
+		view.Headline = "There are no current waking windows to show"
+		view.Detail = "This link is working. You can still reach out and agree on a time directly."
 		return view
 	case age >= UnavailableAfter:
 		view.Unavailable = true
@@ -195,7 +198,9 @@ func BuildView(snapshot Snapshot, now time.Time) AvailabilityView {
 	switch {
 	case view.LikelyAwake:
 		view.Headline = "Likely awake right now"
-		view.Detail = "Based on recent patterns, this is probably a reachable time."
+		// Awake is all the records can say. Whether this is a good time to call
+		// is the owner's to say, and nothing here knows it.
+		view.Detail = "Based on recent sleep records. Being awake does not mean being free to answer."
 	case len(upcoming) > 0:
 		view.Headline = "Likely not awake right now"
 		view.Detail = fmt.Sprintf("The next likely waking window starts %s.", lowerFirst(upcoming[0].DayLabel)+" at "+startOnly(snapshot.Windows, now, location))

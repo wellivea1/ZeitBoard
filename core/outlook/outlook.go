@@ -859,6 +859,58 @@ func overlapDuration(spans []span, from, to time.Time) time.Duration {
 	return total
 }
 
+// ConfidentWaking is the time from now to end that is inside a predicted
+// waking window and outside every predicted sleep window and every recorded
+// sleep: the stretches this package calls awake.
+//
+// The estimator's windows are envelopes, and a sleep envelope overlaps the
+// waking ones on both sides of it. Whoever plans or shares from the waking
+// envelopes alone therefore treats the hours where the model cannot say as
+// waking time. Every reader that needs "awake" takes it from here, so the
+// planner, the outlook and a shared link cannot disagree about those hours.
+func ConfidentWaking(estimate domain.PhaseEstimate, recorded []domain.TimeRange, now, end time.Time) []domain.AvailabilityWindow {
+	now, end = now.UTC(), end.UTC()
+	if !end.After(now) {
+		return nil
+	}
+	zoneID := estimate.AsOf.ZoneID
+	if zoneID == "" {
+		zoneID = "UTC"
+	}
+	return awakeAvailability(estimate, buildSegments(Input{Estimate: estimate, RecordedSleep: recorded}, now, end, zoneID))
+}
+
+// ForecastEnd is where the estimate's last window closes: the furthest a
+// reader can look.
+func ForecastEnd(estimate domain.PhaseEstimate) time.Time {
+	var end time.Time
+	for _, windows := range [][]domain.AvailabilityWindow{estimate.PredictedSleepWindows, estimate.PredictedWakingWindows} {
+		for _, window := range windows {
+			if window.Interval.End.UTC.After(end) {
+				end = window.Interval.End.UTC
+			}
+		}
+	}
+	return end
+}
+
+func awakeAvailability(estimate domain.PhaseEstimate, segments []Segment) []domain.AvailabilityWindow {
+	availability := make([]domain.AvailabilityWindow, 0, len(segments))
+	for _, segment := range segments {
+		if segment.Presence != PresenceAwake {
+			continue
+		}
+		availability = append(availability, domain.AvailabilityWindow{
+			ID:         domain.AvailabilityWindowID(fmt.Sprintf("outlook-awake-%d", len(availability)+1)),
+			Kind:       domain.AvailabilityPredictedWake,
+			Interval:   segment.Interval,
+			Confidence: estimate.Confidence,
+			EstimateID: estimate.ID,
+		})
+	}
+	return availability
+}
+
 // opportunities places tasks using the shared scheduler.
 //
 // Availability is the *confident* awake time, not the full predicted waking
@@ -874,19 +926,7 @@ func opportunities(in Input, segments []Segment, now time.Time) []Opportunity {
 		return []Opportunity{}
 	}
 
-	availability := make([]domain.AvailabilityWindow, 0, len(segments))
-	for _, segment := range segments {
-		if segment.Presence != PresenceAwake {
-			continue
-		}
-		availability = append(availability, domain.AvailabilityWindow{
-			ID:         domain.AvailabilityWindowID(fmt.Sprintf("outlook-awake-%d", len(availability)+1)),
-			Kind:       domain.AvailabilityPredictedWake,
-			Interval:   segment.Interval,
-			Confidence: in.Estimate.Confidence,
-			EstimateID: in.Estimate.ID,
-		})
-	}
+	availability := awakeAvailability(in.Estimate, segments)
 
 	scheduler := scheduling.Scheduler{}
 	result := make([]Opportunity, 0, limit)

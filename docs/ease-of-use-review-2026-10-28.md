@@ -125,6 +125,14 @@ history. Finding the night and reading the result are both good.
 
 ## Progress
 
+Updated 2026-11-13; see [`usability-review-2026-11-13.md`](usability-review-2026-11-13.md).
+
 | # | Recommendation | State |
 |---:|---|---|
 | 1 | Correct with pickers | Done on the computer; the phone is next |
+| 2 | Let the owner add an event | Done on the computer (ADR-0068). The owner's calendar and the phone are its later parts |
+| 3 | Say why the portal shows nothing | Done |
+| 4 | Make Home's sharing line true | Done |
+| 5 | Adjust right after a tap | Open |
+| 6 | Fix the setup guide's calendar check | Done |
+| 7 | Hold suggestions to the freshness Home keeps | Done (ADR-0069) |

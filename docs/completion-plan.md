@@ -1969,6 +1969,27 @@ in it. ADR-0067 closes it:
 - The history lists the approval once, as the assistant's, with Undo. Once undone, it reads
   "undone".
 
+### Two reviews, and one reading of the records — 2026-11-13
+
+A walk through everyday tasks in the running app, and an outside reviewer's reading of the code,
+found that parts of ZeitBoard drew different conclusions from the same records
+([`usability-review-2026-11-13.md`](usability-review-2026-11-13.md), ADR-0069).
+
+- The planner now plans only in the time Home's outlook draws as awake, and not on records Home
+  withholds on. The shared page leaves the uncertain hours out of "Likely awake".
+- An excluded night no longer makes old records current, on the computer or the server.
+- Cycles are counted in the rhythm's own period, a gap that cannot be counted is left behind after
+  seven nights, and a long nap is not a cycle. On the owner's history 809 forecasts became 921 with
+  errors unchanged (`verification.md`).
+- A shared page left open through an outage withdraws its claim, and keeps a message part way
+  written.
+- The window adds, changes and deletes the owner's events (ADR-0068). One such event had made the
+  whole calendar unreadable.
+
+Open, and waiting on the owner's choice or a device: a reported current status, freshness that
+follows the cycle length, provider deletions and travel on the phone, pickers on the phone, and
+the proxy-aware rate limit. The README no longer says every planned function is delivered.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and

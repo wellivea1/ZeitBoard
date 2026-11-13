@@ -1702,7 +1702,7 @@ func sleepReviewFixture() map[string]any {
 func companionFixture(refused bool) map[string]any {
 	result := map[string]any{
 		"schema_version": "v2", "contains_synthetic_data": true, "source_cursor": 2, "generated_at": "2026-09-02T12:00:00Z", "valid_until": "2026-09-02T12:15:00Z",
-		"algorithm_version": "theil-sen-sleep-start/v1", "provenance": "self_hosted_synced_sleep", "status": "estimated",
+		"algorithm_version": "theil-sen-sleep-start/v2", "provenance": "self_hosted_synced_sleep", "status": "estimated",
 		"freshness":  map[string]any{"state": "current", "reason": "", "explanation": "Based on recent synced sleep."},
 		"confidence": map[string]any{"level": "medium", "reasons": []string{"Synthetic contract example with explicit uncertainty."}},
 		"forecasts": []any{map[string]any{

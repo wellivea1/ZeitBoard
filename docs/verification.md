@@ -4004,3 +4004,70 @@ Checked in the running app:
 
 The window's tests cover each case. The whole web check passed: 682 and 6 tests, format, lint,
 types and builds.
+
+## One reading of the records — 2026-11-13
+
+Two reviews, one in the running app and one by an outside reviewer reading the code, are recorded
+in [`usability-review-2026-11-13.md`](usability-review-2026-11-13.md) with each finding's
+disposition. The decisions are ADR-0069.
+
+**The estimator, measured.** The aggregate backtest was run before and after on one validation
+database rebuilt from the owner's stored observation sets (953 observations; the database and its
+per-night detail stay private under `.cache/`):
+
+| | Forecasts | Refusals | Coverage | Median error | Mean error | P90 error | Hit rate | Mean window |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `theil-sen-sleep-start/v1` | 809 | 136 | 0.856 | 1.71 h | 2.40 h | 5.41 h | 0.78 | 14.71 h |
+| `/v2`: cycles counted in the rhythm's own period, gaps left behind | 909 | 36 | 0.962 | 1.71 h | 2.38 h | 5.36 h | 0.80 | 14.68 h |
+| `/v2`: and one sleep start for each cycle | 921 | 21 | 0.978 | 1.72 h | 2.38 h | 5.33 h | 0.80 | 14.68 h |
+
+The first row reproduces the baseline recorded above for ADR-0022. Every remaining refusal is
+`ambiguous_cycle_index`.
+
+How to read these, since the outside review found them easy to misread:
+- **Coverage** is the share of held-out nights the model gave a forecast for. It is not the share
+  of nights captured without typing.
+- **Hit rate** counts a night whose start fell anywhere in the predicted *sleep window*, which
+  includes the expected sleep itself. It is not the accuracy of a narrow onset range, and says
+  nothing about whether an "awake now" claim was right.
+- **Mean window** is the width of that whole sleep window, not of the uncertainty about its start.
+
+**Tests added**, each named for what it holds:
+- `core/estimation/cycles_test.go`: two missing nights and a six-cycle gap in a 27-hour rhythm, a
+  gap that cannot be counted (refused with "4 of the 7 nights", then fitted from the seven nights
+  since), the day as the fallback, and a long nap that is not a cycle.
+- `core/ingest/sleep_test.go`: three reports merge to their middle in any order, a confirmed
+  night keeps its times beside a wearable's, and sleeps that only touch stay separate.
+- `core/outlook`: `ConfidentWaking` overlaps no sleep window.
+- `apps/desktop/app_planning_agreement_test.go`: no suggestion on records Home withholds on, no
+  suggestion inside a predicted sleep window, and an excluded night that does not make old
+  records current.
+- `apps/server/internal/portalbridge`: an excluded record does not restore availability, and
+  shared windows leave out what may be sleep. Both excluded-record tests were run without their
+  fix and failed.
+- `apps/desktop/frontend/src/test/portalScript.test.ts` runs the shared page's own script: the
+  claim is withdrawn once it has expired without an answer, a failed refresh is tried again in
+  five seconds, a reconnecting stream starts the one-minute poll, a busy server is waited out,
+  and a message part way written keeps its text and cursor.
+- The window: the event form and its adapter, the calendar adapter reading an owner's event, the
+  week's two ways to add one, and Home's sharing line.
+- `TestHistoryOrdersEditsMadeInTheSameInstant`; the undo test it explains then passed 40 runs in
+  a row.
+
+**Checked in the running app**, on a throwaway profile with synthetic nights:
+- An event added from the week appeared on the board and in Home's diary, marked "Falls entirely
+  inside predicted sleep". Changing its end and deleting another both worked, and the calendar
+  stayed readable throughout.
+- The form said "This falls in a predicted sleep window, Today 11:02 AM – 8:17 PM. The event is
+  kept as entered." as soon as the times were in.
+- A new task was offered 8:17 to 8:47 PM, the minute Home's timeline turns from uncertain to
+  likely awake.
+- Home's lead stayed at the top of the page beside the Record column.
+
+**Checks.** `gofmt`, `go vet` and every Go test in core, the server and the desktop; the contract
+tools and the 31 regenerated fixtures; the Android unit tests and build; and the whole web check:
+format, lint with no warnings, types, 710 and 6 tests.
+
+**Not checked.** Nothing ran on a phone, a watch or the owner's server. The phone's dose fix was
+compiled and read, not run on a device. No live share link was opened: the portal was checked
+through its Go tests and its script's tests.

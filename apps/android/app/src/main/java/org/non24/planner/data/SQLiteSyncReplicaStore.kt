@@ -144,10 +144,14 @@ class SQLiteSyncReplicaStore(private val database: () -> SQLiteDatabase) : SyncR
         if (current.isEmpty()) return emptyList()
         val corrections = rows("SELECT target_id, payload FROM sync_replica WHERE kind = 'medication_correction'")
             .groupBy({ it.first }, { it.second })
-        val downloaded = rows("SELECT record_id, payload FROM sync_replica WHERE kind = 'medication_event' ORDER BY seq DESC LIMIT 500")
+        val downloadedRows = rows("SELECT record_id, payload FROM sync_replica WHERE kind = 'medication_event' ORDER BY seq DESC LIMIT 500")
+        // Every downloaded dose, whether or not a correction has since excluded
+        // it. Taken after the exclusions, the list let a dose excluded on the
+        // computer come back from the phone's own copy of the tap.
+        val downloadedIds = downloadedRows.map { it.first }.toSet()
+        val downloaded = downloadedRows
             .mapNotNull { (id, payload) -> effectiveDose(parseSyncedDose(id, payload), corrections[id].orEmpty()) }
             .map { CompanionDose(it.eventId, it.status, it.doseAt, it.zoneId, pending = false) to it.medicationId }
-        val downloadedIds = downloaded.map { it.first.eventId }.toSet()
         val tapped = db.rawQuery("SELECT record_id, payload, synced_at IS NULL FROM sync_outbox WHERE kind = 'medication_event'", null).use { cursor ->
             buildList {
                 while (cursor.moveToNext()) {

@@ -21,15 +21,20 @@ testdata                    Synthetic observations and projected sharing fixture
 
 ## Current status
 
-Every planned function is delivered; [docs/completion-plan.md](docs/completion-plan.md) records
-each one with its tests, and what remains needs the owner's machine, an independent reviewer or a
-release ceremony rather than code.
+The planned functions are built and tested on synthetic data;
+[docs/completion-plan.md](docs/completion-plan.md) records each one. That is not the same as
+finished. Reviews in use still find defects in everyday tasks
+([the latest](docs/usability-review-2026-11-13.md) lists what is open), and nothing here has been
+through the private pilot, an independent review or a clean-machine install, which remain the
+acceptance gate.
 
 - **Sleep and rhythm.** Manual nights and file imports keep raw records with append-only
   corrections, and a night's last edit is undone in one click. The Go estimator forecasts
   uncertain sleep and waking windows and refuses plainly when the evidence is thin. The clinical
   chart prints, saves as PDF, or saves as PNG.
-- **Planning.** Real tasks get suggested times that stay clear of busy events. Suggestions are
+- **Planning.** Real tasks get suggested times that stay clear of busy events and of the hours
+  around predicted sleep, and none on records too old to plan against (ADR-0069). The owner can
+  add an appointment as a fixed event (ADR-0068). Suggestions are
   reviewed and decided together, and each decision can be undone. Reaching hours can be set for
   several people, each on their own days.
 - **Calendars.** ZeitBoard reads ICS files, CalDAV, a calendar's private iCal address (read again
