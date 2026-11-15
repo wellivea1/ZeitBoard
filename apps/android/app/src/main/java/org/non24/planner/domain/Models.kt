@@ -126,6 +126,8 @@ data class AppSettings(
     val backgroundSyncEnabled: Boolean = false,
     /** Off by default: notices about time requests need their own consent. */
     val timeRequestNotices: Boolean = false,
+    /** Off by default: a status the owner reports stays on their own devices unless they say links may show it. */
+    val shareReportedStatus: Boolean = false,
 )
 
 enum class BackgroundReadState { UNKNOWN, UNAVAILABLE, REQUIRED, GRANTED }

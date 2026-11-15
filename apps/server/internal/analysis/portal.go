@@ -43,7 +43,9 @@ func (p Portal) Prepare(ctx context.Context, now time.Time) (recompute.Prepared,
 		// Skipped doses are inputs, so a new one is published, and not content,
 		// so publishing it does not restamp the page's forecast as fresh
 		// (ADR-0058): the stamp says how old the sleep evidence is.
-		Records: prep.DoseRecords,
+		// A reported status is an input for the same reason, and not content
+		// either: saying "trying to sleep" does not make old sleep records new.
+		Records: append(append([]string{}, prep.DoseRecords...), "status\x1f"+prep.StatusRecord),
 	}
 
 	return recompute.Prepared{
@@ -72,7 +74,8 @@ func consumerKeys(profiles []portal.Profile) []string {
 	keys := make([]string, 0, len(profiles))
 	for _, profile := range profiles {
 		keys = append(keys, profile.ID+"\x1f"+strconv.FormatBool(profile.Grants.WakingWindows)+
-			"\x1f"+strconv.FormatBool(profile.Grants.SkippedDoses))
+			"\x1f"+strconv.FormatBool(profile.Grants.SkippedDoses)+
+			"\x1f"+profile.Grants.ReportedStatus)
 	}
 	return keys
 }

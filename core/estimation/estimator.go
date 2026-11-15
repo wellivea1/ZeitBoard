@@ -141,7 +141,7 @@ func fitIndexedOnsets(episodes []domain.SleepSession, indices []int) onsetFit {
 	for i, episode := range episodes {
 		x[i] = float64(indices[i])
 		y[i] = episode.Intervals[0].Interval.Start.UTC.Sub(base).Hours()
-		durations[i] = episode.Intervals[0].Interval.Duration().Hours()
+		durations[i] = sleepSpan(episode).Hours()
 	}
 	slope := theilSenSlope(x, y)
 	intercepts := make([]float64, len(x))
@@ -322,7 +322,7 @@ func selectEpisodes(sessions []domain.SleepSession, maximum int) ([]domain.Sleep
 		if err := session.Intervals[0].Interval.Validate(); err != nil {
 			return nil, &EstimationRefusal{Code: RefusalUnsupportedInput, Message: fmt.Sprintf("sleep session %s: %v", session.ID, err)}
 		}
-		if session.Intervals[0].Interval.Duration() < 3*time.Hour {
+		if sleepSpan(session) < 3*time.Hour {
 			continue
 		}
 		episodes = append(episodes, session)
@@ -355,11 +355,26 @@ func oneOnsetPerCycle(ordered []domain.SleepSession) []domain.SleepSession {
 			kept = append(kept, episode)
 			continue
 		}
-		if next.Duration() > last.Duration() {
+		if sleepSpan(episode) > sleepSpan(kept[len(kept)-1]) {
 			kept[len(kept)-1] = episode
 		}
 	}
 	return kept
+}
+
+// sleepSpan is how long a sleep lasted, from its start to the end of its last
+// piece. A night recorded in pieces ends when the last piece does, and that is
+// the time a forecast of waking needs. Reading the first piece alone made a
+// night of eight and a half hours in two pieces a sleep of four.
+func sleepSpan(session domain.SleepSession) time.Duration {
+	start := session.Intervals[0].Interval.Start.UTC
+	end := session.Intervals[0].Interval.End.UTC
+	for _, piece := range session.Intervals[1:] {
+		if piece.Interval.End.UTC.After(end) {
+			end = piece.Interval.End.UTC
+		}
+	}
+	return end.Sub(start)
 }
 
 func boundedEpisodeWindow(episodes []domain.SleepSession, maximum int) []domain.SleepSession {

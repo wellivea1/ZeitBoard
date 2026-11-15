@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -107,6 +108,8 @@ import org.non24.planner.data.fixturePlans
 import org.non24.planner.data.SleepReview
 import org.non24.planner.data.SleepReviewState
 import org.non24.planner.data.formatReviewInput
+import org.non24.planner.data.CompanionStatus
+import org.non24.planner.data.StatusReporting
 import kotlinx.coroutines.delay
 import org.non24.planner.domain.BackgroundReadState
 import org.non24.planner.domain.DataMode
@@ -219,6 +222,8 @@ fun Non24App(
                         onRequestPermission = { onRequestHealthPermissions(requiredHealthPermissions) },
                         onRefreshHealth = viewModel::refreshHealthConnect,
                         onOpenHealthConnectListing = onOpenHealthConnectListing,
+                        onReportStatus = viewModel::reportStatus,
+                        onShareStatus = viewModel::setShareReportedStatus,
                     )
                 }
                 composable(Destination.CORRECT.route) {
@@ -270,6 +275,8 @@ private fun StatusScreen(
     onRequestPermission: () -> Unit,
     onRefreshHealth: () -> Unit,
     onOpenHealthConnectListing: () -> Unit,
+    onReportStatus: (String) -> Unit,
+    onShareStatus: (Boolean) -> Unit,
 ) {
     ScreenColumn {
         DurableLocalDataNotice(state.localDataState, onRetryLocalData)
@@ -283,6 +290,23 @@ private fun StatusScreen(
 
         if (state.localDataState != DurableLocalDataState.Loading) {
             NowDial(state = state, companion = companion, connected = connected, now = now)
+
+            // What the owner says about now (ADR-0070). It needs the owner's
+            // server to go anywhere, so it is offered once the phone is connected.
+            if (connected && state.settings.dataMode != DataMode.FIXTURE) {
+                SectionHeading("Your status")
+                // The screen's clock ticks every half minute. A report made
+                // since the last tick is dated after it, and would wait for the
+                // next one to appear, so it is read against the clock itself.
+                val moment = Instant.now().let { if (it.isAfter(now)) it else now }
+                ReportedStatusPanel(
+                    status = companion.reportedStatus?.takeIf { it.standsAt(moment) },
+                    share = state.settings.shareReportedStatus,
+                    use24HourTime = state.settings.use24HourTime,
+                    onReport = onReportStatus,
+                    onShare = onShareStatus,
+                )
+            }
 
             if (
                 state.latestSleepEpisode != null ||
@@ -335,6 +359,56 @@ private fun StatusScreen(
  * forecast comes from the server when there is one and from this device's
  * estimate otherwise; a withheld forecast draws no bands, as on the desktop.
  */
+/**
+ * The status the owner reports, and the three things they can say. A report is
+ * their word: it stands until the time shown or until cleared, and it records
+ * no sleep. Whether share links may show it is the switch beneath, off unless
+ * the owner turns it on.
+ */
+@Composable
+private fun ReportedStatusPanel(
+    status: CompanionStatus?,
+    share: Boolean,
+    use24HourTime: Boolean,
+    onReport: (String) -> Unit,
+    onShare: (Boolean) -> Unit,
+) {
+    val zone = ZoneId.systemDefault()
+    RuledSection {
+        if (status == null) {
+            Text("Nothing reported. The forecast speaks for itself.", style = MaterialTheme.typography.bodyMedium)
+        } else {
+            Text(StatusReporting.words(status.status), style = MaterialTheme.typography.titleLarge)
+            val until = status.expiresAt?.let { ", until " + dayClock(it.atZone(zone), use24HourTime) }.orEmpty()
+            Text(
+                "Said " + dayClock(status.reportedAt.atZone(zone), use24HourTime) + until + ". " +
+                    (if (status.shared) "Share links you allowed may show it. " else "Kept to your own devices. ") +
+                    (if (status.pending) "Not yet on your server." else "It has reached your server."),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        listOf(StatusReporting.AWAKE, StatusReporting.TRYING_TO_SLEEP, StatusReporting.DO_NOT_DISTURB).forEach { value ->
+            val standing = status?.status == value
+            SecondaryButton(
+                text = (if (standing) "● " else "") + StatusReporting.words(value),
+                onClick = { onReport(value) },
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        if (status != null) {
+            SecondaryButton("Clear my status", { onReport(StatusReporting.CLEARED) }, modifier = Modifier.fillMaxWidth())
+        }
+        SwitchRow(
+            "Let my share links show it",
+            checked = share,
+            onCheckedChange = onShare,
+            detail = "Off, what you report stays on your own devices. On, a link shows it only if you chose that for the link, on your computer.",
+            titleStyle = LocalTextStyle.current,
+        )
+    }
+}
+
 @Composable
 private fun NowDial(state: AppUiState, companion: CompanionState, connected: Boolean, now: Instant) {
     val zone = ZoneId.systemDefault()
@@ -349,8 +423,9 @@ private fun NowDial(state: AppUiState, companion: CompanionState, connected: Boo
     }
     // The dial draws 24 hours; the sentence reads further, so a waking band
     // that runs past the dial's edge is given whole rather than cut at it.
-    val segments = dialSegments(forecasts, now, now.plus(Duration.ofHours(24)))
-    val ahead = sleepAhead(dialSegments(forecasts, now, now.plus(Duration.ofHours(48))))
+    val wakingUntil = projection?.wakingUntil.takeUnless { withheld }
+    val segments = dialSegments(forecasts, now, now.plus(Duration.ofHours(24)), wakingUntil)
+    val ahead = sleepAhead(dialSegments(forecasts, now, now.plus(Duration.ofHours(48)), wakingUntil))
     // Accepted times from the desktop (ADR-0047); sample data brings its own.
     val plans = dialPlans(if (fixture) fixturePlans(now) else companion.plans, now, now.plus(Duration.ofHours(24)))
     val clock = DateTimeFormatter.ofPattern(if (use24) "HH:mm" else "h:mm a", LocalConfiguration.current.locales[0]).withZone(zone)
@@ -587,25 +662,25 @@ private fun ServerSleepReviewScreen(
     var classification by remember(review) { mutableStateOf(review?.classification ?: "principal") }
     var excluded by remember(review) { mutableStateOf(review?.excluded ?: false) }
     ScreenColumn {
-        ScreenHeader("Your records", "Correct sleep", "Review a synced observation and save a separate correction.")
+        ScreenHeader("Your records", "Correct sleep", "Choose a night and set the times it should have. The times first recorded are kept.")
         state.error?.let { InfoStrip(it) }
         if (state.pending) InfoStrip("Correction saved on this phone. Sync must finish before you edit this source again.")
         if (state.loading) InfoStrip("Loading the source and its manual edits…")
         if (state.stale) InfoStrip("This source changed while the form was open. Your draft is still here. Reloading replaces it with the latest review.")
         if (review != null) {
             RuledSection {
-                Text("Review in ${review.effective.zoneId}", style = MaterialTheme.typography.titleMedium)
-                Text("Source: ${formatReviewInput(review.source.start, review.source.zoneId)} → ${formatReviewInput(review.source.end, review.source.zoneId)}", style = MaterialTheme.typography.bodySmall)
-                Text("Snapshot: ${dayClock(review.generatedAt.atZone(ZoneId.of(review.source.zoneId)), use24HourTime, withZone = true)}", style = MaterialTheme.typography.labelSmall)
-                if (review.needsReview) InfoStrip("The source or manual edits disagree. Forecasts are withheld until you review all changes and save a resolution.")
+                Text("Times in ${review.effective.zoneId}", style = MaterialTheme.typography.titleMedium)
+                Text("As recorded: ${nightWords(review.source.start, review.source.end, review.source.zoneId, use24HourTime)}", style = MaterialTheme.typography.bodySmall)
+                Text("Read from your server ${dayClock(review.generatedAt.atZone(ZoneId.of(review.source.zoneId)), use24HourTime, withZone = true)}", style = MaterialTheme.typography.labelSmall)
+                if (review.needsReview) InfoStrip("This night has changes that disagree. Forecasts wait until you choose the times to keep and save them.")
                 review.edits.forEachIndexed { index, edit ->
                     val values = buildList {
-                        edit.start?.let { add("Sleep: ${formatReviewInput(it, review.source.zoneId)}") }
-                        edit.end?.let { add("Wake: ${formatReviewInput(it, review.source.zoneId)}") }
+                        edit.start?.let { add("Fell asleep: ${timeWords(it, review.source.zoneId, use24HourTime)}") }
+                        edit.end?.let { add("Woke up: ${timeWords(it, review.source.zoneId, use24HourTime)}") }
                         edit.classification?.let { add("Type: $it") }
                         edit.excluded?.let { add(if (it) "Excluded from estimates" else "Included in estimates") }
                     }
-                    Text("Edit ${index + 1} · ${formatReviewInput(edit.createdAt, review.source.zoneId)}\n${values.joinToString("\n")}", style = MaterialTheme.typography.bodySmall)
+                    Text("Edit ${index + 1}, made ${timeWords(edit.createdAt, review.source.zoneId, use24HourTime)}\n${values.joinToString("\n")}", style = MaterialTheme.typography.bodySmall)
                     SecondaryButton("Use edit ${index + 1}", {
                         start = formatReviewInput(edit.start ?: review.source.start, review.source.zoneId)
                         end = formatReviewInput(edit.end ?: review.source.end, review.source.zoneId)
@@ -613,8 +688,9 @@ private fun ServerSleepReviewScreen(
                         excluded = edit.excluded ?: review.excluded
                     }, enabled = !busy && !state.stale)
                 }
-                DenseTextField(start, { start = it }, "Sleep time", helper = "yyyy-MM-dd HH:mm:ss with UTC offset", imeAction = ImeAction.Next)
-                DenseTextField(end, { end = it }, "Wake time", helper = "The offset identifies repeated clock times", imeAction = ImeAction.Done)
+                val reviewZone = ZoneId.of(review.effective.zoneId)
+                SleepTimeField("Fell asleep", start, reviewZone, use24HourTime, { start = it }, enabled = !busy && !state.stale)
+                SleepTimeField("Woke up", end, reviewZone, use24HourTime, { end = it }, enabled = !busy && !state.stale)
                 Row(Modifier.fillMaxWidth().selectableGroup()) {
                     listOf("principal", "nap", "unknown").forEach { value ->
                         Text((if (classification == value) "● " else "○ ") + value.replaceFirstChar { it.uppercase() },
@@ -622,19 +698,71 @@ private fun ServerSleepReviewScreen(
                     }
                 }
                 SwitchRow("Exclude from estimates", excluded, { excluded = it }, titleStyle = LocalTextStyle.current)
-                PrimaryButton(if (review.needsReview) "Save reviewed resolution" else "Save correction", { onSave(review, start, end, classification, excluded) }, enabled = !busy && !state.loading && !state.stale && !state.pending)
+                PrimaryButton(if (review.needsReview) "Save the times to keep" else "Save correction", { onSave(review, start, end, classification, excluded) }, enabled = !busy && !state.loading && !state.stale && !state.pending)
             }
         }
-        state.selectedId?.let { id -> SecondaryButton(if (review == null) "Open saved review" else "Reload review (replace draft)", { onReview(id) }, enabled = !busy && !state.pending) }
+        state.selectedId?.let { id -> SecondaryButton(if (review == null) "Open this night again" else "Reload this night (drops your changes)", { onReview(id) }, enabled = !busy && !state.pending) }
         SecondaryButton("Sync records", onSync, enabled = !busy)
-        SectionHeading("Choose a source")
-        Text("Original observations, most recently synced first. Open a source to see its current corrections. Selecting another source replaces the open draft.", style = MaterialTheme.typography.bodySmall)
-        if (companion.sleepSources.isEmpty()) InfoStrip("No downloaded sleep observations. Sync records from your other devices or import permitted Health Connect sleep.")
-        companion.sleepSources.take(visibleCount).forEach { source ->
-            SecondaryButton("${formatReviewInput(source.start, source.zoneId)} → ${formatReviewInput(source.end, source.zoneId)}", { onReview(source.id) }, enabled = !busy)
+        SectionHeading("Choose a night")
+        Text("Nights as first recorded, newest first. Open one to see and change its times. Opening another drops changes you have not saved.", style = MaterialTheme.typography.bodySmall)
+        if (companion.sleepSources.isEmpty()) InfoStrip("No nights here yet. Sync from your other devices, or let ZeitBoard read sleep from Health Connect.")
+        Column(modifier = Modifier.fillMaxWidth()) {
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline)
+            companion.sleepSources.take(visibleCount).forEach { source ->
+                NightRow(
+                    night = nightWords(source.start, source.end, source.zoneId, use24HourTime),
+                    corrected = source.corrected,
+                    open = source.id == state.selectedId && review != null,
+                    enabled = !busy,
+                    onClick = { onReview(source.id) },
+                )
+            }
         }
-        if (visibleCount < companion.sleepSources.size) SecondaryButton("Show more sources", { visibleCount += 15 })
-        if (companion.totalSleepSourceCount > companion.sleepSources.size) InfoStrip("Showing the latest ${companion.sleepSources.size} of ${companion.totalSleepSourceCount} sources. Older records remain available on desktop.")
+        if (visibleCount < companion.sleepSources.size) SecondaryButton("Show more nights", { visibleCount += 15 })
+        if (companion.totalSleepSourceCount > companion.sleepSources.size) InfoStrip("Showing the latest ${companion.sleepSources.size} of ${companion.totalSleepSourceCount} nights. Older ones are on your computer.")
+    }
+}
+
+/**
+ * One night in the list, as a ruled line: when it was, and a word at the edge
+ * when it is open or has been corrected. The whole line opens it. A column of
+ * framed buttons, each as wide as its own text, read as twelve separate
+ * controls rather than one list.
+ */
+@Composable
+private fun NightRow(night: String, corrected: Boolean, open: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    val word = when {
+        open -> "Open"
+        corrected -> "Corrected"
+        else -> null
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, role = Role.Button, onClickLabel = "Open this night", onClick = onClick)
+            .semantics(mergeDescendants = true) {},
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp).padding(vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Text(
+                night,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleMedium,
+                color = if (enabled) Ink else Muted,
+            )
+            word?.let {
+                Text(
+                    it.uppercase(Locale.ROOT),
+                    modifier = Modifier.readAs(it),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Muted,
+                )
+            }
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     }
 }
 
@@ -702,20 +830,8 @@ private fun CorrectionScreen(
                     )
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                DenseTextField(
-                    value = startText,
-                    onValueChange = { startText = it },
-                    label = "Sleep time",
-                    helper = "yyyy-MM-dd HH:mm / add -04:00 or -05:00 when a time repeats",
-                    imeAction = ImeAction.Next,
-                )
-                DenseTextField(
-                    value = endText,
-                    onValueChange = { endText = it },
-                    label = "Wake time",
-                    helper = "yyyy-MM-dd HH:mm / add an offset only when needed",
-                    imeAction = ImeAction.Done,
-                )
+                SleepTimeField("Fell asleep", startText, startZone, state.settings.use24HourTime, { startText = it }, enabled = canSave)
+                SleepTimeField("Woke up", endText, endZone, state.settings.use24HourTime, { endText = it }, enabled = canSave)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
@@ -865,15 +981,11 @@ private fun MedicationScreen(
                 onValueChange = { name = it },
                 label = "Medication label",
                 placeholder = "Medication",
-                imeAction = ImeAction.Next,
-            )
-            DenseTextField(
-                value = occurredAt,
-                onValueChange = { occurredAt = it },
-                label = "Occurred at",
-                helper = "yyyy-MM-dd HH:mm [offset] / ${zone.id}",
                 imeAction = ImeAction.Done,
             )
+            // The phone's own day and clock pickers, as on the correction
+            // forms; this was the last time on the phone typed as text.
+            SleepTimeField("When it happened", occurredAt, zone, state.settings.use24HourTime, { occurredAt = it }, enabled = !savePending)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,

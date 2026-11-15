@@ -362,6 +362,25 @@ from the portal database. Open requests are closed rather than deleted, so
 nobody is left watching a status that never moves. What a recipient already
 saw, screenshotted, or remembers cannot be recalled.
 
+### A status the owner reports (ADR-0070)
+
+The owner can say they are awake, trying to sleep, or not to be disturbed. A report is their own
+word about now. It is not a sleep record, the estimator never reads it, and it always ends: each
+one lapses at a time it carries, at most 24 hours after it was made, and can be cleared sooner.
+
+Who sees a report is set at three points, and each starts private:
+
+- **Each link** shows nothing, or only "Not a good time right now" while the owner is trying to
+  sleep or has asked not to be disturbed, or the status and how long ago it was said. New links
+  show nothing, and what a link shows can be changed later without making a new link.
+- **Each report** says whether links may show it. One that does not never reaches a page.
+- **Each device** keeps whether new reports are shared by default. It is off until turned on,
+  and the computer and the phone each keep their own.
+
+A report syncs to the owner's server like any other record, so their other devices show it. Each
+device and the server erase a report seven days after it was made. A visitor who has seen a
+status cannot be made to forget it; a link at the middle level never shows them one.
+
 ### Asking for a time
 
 When a link allows it, a recipient can ask for a window that suits them and

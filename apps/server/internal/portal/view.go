@@ -56,6 +56,58 @@ type AvailabilityView struct {
 	// (ADR-0058). They do not depend on the forecast, so they are shown
 	// whatever it says.
 	Doses DosesView
+
+	// Reported is the status the owner reported, when the link may show one
+	// and one stands. It leads the page.
+	Reported *ReportedView
+}
+
+// ReportedView is a status the owner reported, in the page's words. It
+// leads the page, above the forecast, and is marked as the owner's own word.
+type ReportedView struct {
+	Headline string
+	Detail   string
+}
+
+// buildReported words the reported status that stands at now, or nothing.
+// It is read against the clock here, when the page is drawn, so a status
+// lapses on the page at the minute it was set to, with nobody refreshing
+// anything on the owner's side.
+func buildReported(snapshot Snapshot, now time.Time) *ReportedView {
+	reported := snapshot.Reported
+	if reported == nil || !reported.ExpiresAt.After(now) || reported.ReportedAt.After(now) {
+		return nil
+	}
+	said := "They said so " + describeAgo(now.Sub(reported.ReportedAt)) + "."
+	switch reported.Status {
+	case presenceTryingToSleep:
+		return &ReportedView{Headline: "Trying to sleep", Detail: said + " This is what they reported, not a forecast."}
+	case presenceAwake:
+		return &ReportedView{Headline: "Awake", Detail: said + " Being awake does not mean being free to answer."}
+	case presenceDoNotDisturb:
+		return &ReportedView{Headline: "Do not disturb", Detail: "They asked not to be disturbed " + describeAgo(now.Sub(reported.ReportedAt)) + "."}
+	case StatusUnavailable:
+		return &ReportedView{Headline: "Not a good time right now", Detail: "They have asked not to be contacted for now."}
+	default:
+		return nil
+	}
+}
+
+// describeAgo says how long ago something was said, to the minute, then the
+// hour: "just now", "12 minutes ago", "3 hours ago".
+func describeAgo(age time.Duration) string {
+	switch minutes := int(age.Minutes()); {
+	case minutes < 1:
+		return "just now"
+	case minutes == 1:
+		return "a minute ago"
+	case minutes < 60:
+		return fmt.Sprintf("%d minutes ago", minutes)
+	case minutes < 120:
+		return "an hour ago"
+	default:
+		return fmt.Sprintf("%d hours ago", minutes/60)
+	}
 }
 
 // DosesView is what a link with the skipped-doses grant shows.
@@ -129,6 +181,10 @@ func BuildView(snapshot Snapshot, now time.Time) AvailabilityView {
 	}
 	now = now.UTC()
 	view.Doses = buildDoses(snapshot, now)
+	// A reported status does not depend on the forecast, so it is set before
+	// the rules that withhold the forecast: old sleep records are no reason to
+	// hide what the owner said ten minutes ago.
+	view.Reported = buildReported(snapshot, now)
 	if view.Doses.Shared {
 		view.Notice = NoticeWithDoses
 	}
@@ -277,6 +333,9 @@ func nextChange(snapshot Snapshot, now time.Time) time.Time {
 		for _, dose := range snapshot.SkippedDoses {
 			consider(dose.At.Add(SkippedDoseWindow))
 		}
+	}
+	if snapshot.Reported != nil {
+		consider(snapshot.Reported.ExpiresAt)
 	}
 	return next
 }

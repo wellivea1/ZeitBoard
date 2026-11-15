@@ -13,7 +13,11 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.non24.planner.data.SQLiteLocalUserDataStore
 import org.non24.planner.data.SQLiteSyncOutboxStore
+import org.non24.planner.data.SourceCheck
+import org.non24.planner.data.SourceOutcome
+import org.non24.planner.data.StatusReporting
 import org.non24.planner.data.SyncContract
+import org.non24.planner.data.statusRecord
 import org.non24.planner.domain.*
 
 @RunWith(AndroidJUnit4::class)
@@ -52,6 +56,26 @@ class SQLiteSyncDurabilityTest {
             val queue = outbox(store).apply { activateScope("legacy") }
             assertEquals(0, queue.pendingCount())
             assertEquals(record.sourceRevision.plusNanos(1), queue.knownSources().getValue(record.recordId).revision)
+        }
+    }
+
+    /**
+     * A source report and a reported status carry no provenance. Reading the
+     * queue used to look for one in every record, so one queued report made
+     * every upload from the phone fail.
+     */
+    @Test
+    fun aQueuedReportOrStatusDoesNotStopTheQueueBeingRead() {
+        val at = Instant.parse("2026-09-02T08:00:00Z")
+        val report = SyncContract.sourceReport(SourceCheck(SourceOutcome.PERMISSION_MISSING, at, backgroundReads = false), 0)
+        val status = statusRecord("status-synthetic01", StatusReporting.TRYING_TO_SLEEP, at.plusSeconds(60), shared = false)
+        val sleep = SyncContract.map(listOf(original), ZoneId.of("UTC"), emptyMap(), Instant.EPOCH).records.single()
+        SQLiteLocalUserDataStore(context, databaseName).use { store ->
+            val queue = outbox(store).apply { activateScope("legacy"); enqueue(listOf(report, status, sleep)) }
+            val pending = queue.pending(10)
+            assertEquals(listOf(report.recordId, status.recordId, sleep.recordId), pending.map { it.recordId })
+            assertEquals(listOf(report.sourceRevision, status.sourceRevision, sleep.sourceRevision), pending.map { it.sourceRevision })
+            assertEquals(3, queue.prepareBatch(10, emptyMap()).size)
         }
     }
 

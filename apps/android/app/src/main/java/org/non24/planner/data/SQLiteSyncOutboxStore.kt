@@ -93,7 +93,7 @@ class SQLiteSyncOutboxStore(
                     recordId = cursor.getString(0),
                     kind = cursor.getString(1),
                     createdAt = Instant.ofEpochMilli(cursor.getLong(2)),
-                    sourceRevision = sourceRevisionFromPayload(cursor.getString(1), cursor.getString(4)),
+                    sourceRevision = queuedRevision(cursor.getString(1), cursor.getLong(3), cursor.getString(4)),
                     payload = cursor.getString(4),
                 )
             }
@@ -315,6 +315,16 @@ class SQLiteSyncOutboxStore(
     }
 }
 
+/**
+ * The revision of a queued record. Sleep sources and their corrections are
+ * compared to the nanosecond, so theirs is read back from the payload. A source
+ * report or a reported status carries no provenance to read: reading one that
+ * way threw, and a single queued report then stopped every upload from the
+ * phone. Those take the time they were queued with.
+ */
+internal fun queuedRevision(kind: String, storedMillis: Long, payload: String): Instant =
+    if (kind == "observation" || kind == "correction") sourceRevisionFromPayload(kind, payload) else Instant.ofEpochMilli(storedMillis)
+
 /** Source revision identity retains the full precision of the immutable payload. */
 internal fun sourceRevisionFromPayload(kind: String, payload: String): Instant {
     val json = Json.parseToJsonElement(payload).jsonObject
@@ -336,6 +346,7 @@ internal fun outboxObservationId(kind: String, payload: String): String =
             "medication_event" -> "medication_id"
             // A report belongs to nothing but itself.
             SourceReporting.KIND -> "report_id"
+            StatusReporting.KIND -> "status_id"
             else -> "observation_id"
         },
     )

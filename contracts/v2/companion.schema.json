@@ -101,6 +101,10 @@
         }
       }
     },
+    "waking_until": {
+      "description": "Where the waking stretch under way at generated_at stops being the likely state: the latest time the next sleep is likely to begin. Sent only with an estimate, and left out when sleep may already have begun.",
+      "$ref": "common.schema.json#/$defs/timestamp"
+    },
     "forecasts": {
       "type": "array",
       "maxItems": 14,

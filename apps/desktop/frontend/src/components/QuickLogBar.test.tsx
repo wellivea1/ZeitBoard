@@ -84,6 +84,86 @@ describe("QuickLogBar", () => {
     expect(screen.queryByRole("button", { name: /discard/i })).toBeNull();
   });
 
+  it("offers to adjust the night just recorded, and saves it as a correction", async () => {
+    const corrections: unknown[] = [];
+    const night = {
+      reviewToken: "review_1",
+      needsReview: false,
+      sourceWindowLabel: "Jul 7, 11:20 PM to Jul 8, 7:30 AM",
+      activeEdits: [],
+      canUndo: false,
+      observationId: "obs_1",
+      startLocal: "2026-07-07T23:20:00-04:00",
+      endLocal: "2026-07-08T07:30:00-04:00",
+      startLabel: "Jul 7, 11:20 PM",
+      endLabel: "Jul 8, 7:30 AM",
+      zoneId: "America/New_York",
+      classification: "principal",
+      effectiveStartLocal: "2026-07-07T23:20:00-04:00",
+      effectiveEndLocal: "2026-07-08T07:30:00-04:00",
+      effectiveStartLabel: "Jul 7, 11:20 PM",
+      effectiveEndLabel: "Jul 8, 7:30 AM",
+      effectiveClassification: "principal",
+      durationLabel: "8 hours 10 minutes",
+      suppressed: false,
+      sourceLabel: "Logged by you",
+      provenanceLabel: "manual / user reported",
+      history: [],
+    };
+    stub({
+      GetSleepLogPage: async () => ({
+        status: "ready",
+        empty: false,
+        message: "1 local sleep entry stored on this device.",
+        entries: [night],
+        total: 1,
+        page: 0,
+        pageSize: 25,
+      }),
+      CorrectSleepEntry: async (input: unknown) => {
+        corrections.push(input);
+        return night;
+      },
+    });
+    render(<QuickLogBar />);
+    fireEvent.click(await screen.findByRole("button", { name: /I woke up/ }));
+
+    // The late tap is put right where it was made.
+    fireEvent.click(await screen.findByRole("button", { name: "Adjust the times" }));
+    const form = await screen.findByRole("form", { name: "Adjust the times just recorded" });
+    expect(within(form).getByLabelText("Woke up")).toHaveValue("2026-07-08T07:30");
+    fireEvent.change(within(form).getByLabelText("Woke up"), {
+      target: { value: "2026-07-08T06:45" },
+    });
+    fireEvent.click(within(form).getByRole("button", { name: "Save the times" }));
+
+    expect(await screen.findByText(/Times adjusted\./)).toBeVisible();
+    expect(corrections).toEqual([
+      {
+        observationId: "obs_1",
+        reviewToken: "review_1",
+        // The time left alone goes back as stored; the changed one carries
+        // the offset of the hour meant.
+        startLocal: "2026-07-07T23:20:00-04:00",
+        endLocal: "2026-07-08T06:45:00-04:00",
+        zoneId: "America/New_York",
+        classification: "principal",
+        excluded: false,
+      },
+    ]);
+    expect(screen.queryByRole("button", { name: "Adjust the times" })).toBeNull();
+  });
+
+  it("tells the page around it what is marked", async () => {
+    stub();
+    const onState = vi.fn();
+    render(<QuickLogBar onState={onState} />);
+    fireEvent.click(await screen.findByRole("button", { name: /I am going to sleep/ }));
+    await waitFor(() =>
+      expect(onState).toHaveBeenLastCalledWith(expect.objectContaining({ pending: true })),
+    );
+  });
+
   it("stays out of the way when quick logging is unavailable", async () => {
     install({
       GetQuickLogState: async () => ({

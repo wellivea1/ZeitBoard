@@ -50,6 +50,9 @@ acceptance gate.
 - **Your own server.** The self-hosted backend provides encrypted sync, server-side projections,
   passcode-protected availability links, time requests and notifications. The Android companion
   syncs Health Connect sleep, shows forecasts and tasks, and records doses as taken or skipped.
+  The owner can report a status (awake, trying to sleep, do not disturb) from the computer or
+  the phone. It always ends, stays private unless the owner lets a link show it, and each link
+  can show it in full, as "not a good time" only, or not at all (ADR-0070).
 - **Assistants.** The assistant and agents propose and never apply. The assistant uses the
   server's own provider key, or the owner's ChatGPT plan through a sign-in the server holds
   (ADR-0066). ZeitBoard also offers a local MCP connector, a Claude Desktop extension and a skill.

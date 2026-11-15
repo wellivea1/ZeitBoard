@@ -91,13 +91,22 @@ func serve(configPath string, stop <-chan struct{}, ready chan<- struct{}) error
 		materializer := portalbridge.Materializer{
 			Sleep:    readmodel.SleepReader{Store: st},
 			Doses:    readmodel.MedicationReader{Store: st},
+			Statuses: readmodel.StatusReader{Store: st},
 			Profiles: portalStore,
 			Sink:     portalStore,
 		}
 		requestBridge := &portalbridge.RequestBridge{Portal: portalStore, Private: st}
+		// The configuration was checked when it was read; an entry that does
+		// not parse here would trust nothing, which is the safe reading.
+		trustedProxies, proxyErr := portal.ParseTrustedProxies(cfg.Portal.TrustedProxies)
+		if proxyErr != nil {
+			log.Printf("portal: trusted proxies ignored: %v", proxyErr)
+			trustedProxies = nil
+		}
 		portalHandler, handlerErr := portal.NewHandler(portal.HandlerConfig{
-			Store:        portalStore,
-			PublicOrigin: cfg.Portal.PublicOrigin,
+			Store:          portalStore,
+			PublicOrigin:   cfg.Portal.PublicOrigin,
+			TrustedProxies: trustedProxies,
 			NotifyRequestCreated: func() {
 				if err := requestBridge.Pump(context.Background()); err != nil {
 					log.Printf("portal: request bridge pump failed: %v", err)

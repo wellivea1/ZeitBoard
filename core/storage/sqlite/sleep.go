@@ -678,6 +678,11 @@ func (s *Store) DeleteAllSleepData(ctx context.Context) error {
 		_ = tx.Rollback()
 		return err
 	}
+	// So does what the owner said about being awake or asleep.
+	if err := eraseAllStatusReportsTx(ctx, tx); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
 	// What the phone said about reading its sleep goes with the sleep.
 	if err := eraseAllSourceReportsTx(ctx, tx); err != nil {
 		_ = tx.Rollback()

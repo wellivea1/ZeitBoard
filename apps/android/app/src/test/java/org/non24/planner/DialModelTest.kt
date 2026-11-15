@@ -86,6 +86,46 @@ class DialModelTest {
         assertEquals("This sleep is likely to end between 19:10 and 22:10 tonight.", sentence)
     }
 
+    // What a server sends: each waking window follows its sleep, so the hours
+    // before the first sleep have no window of their own.
+    private val fromServer = listOf(
+        ForecastPair(sleep = TimeWindow(at(3.0), at(13.0)), waking = TimeWindow(at(11.0), at(29.5))),
+        ForecastPair(sleep = TimeWindow(at(28.0), at(38.0)), waking = TimeWindow(at(36.0), at(54.5))),
+    )
+
+    @Test
+    fun theServersWakingStretchMakesTheFirstOnsetARange() {
+        val segments = dialSegments(fromServer, now, now.plus(Duration.ofHours(24)), wakingUntil = at(4.5))
+        assertEquals(
+            listOf(DialState.AWAKE, DialState.UNCERTAIN, DialState.ASLEEP, DialState.UNCERTAIN, DialState.AWAKE),
+            segments.map { it.state },
+        )
+        val sentence = leadParts(sleepAhead(segments), now, zone, use24HourTime = true).joinToString("") { it.text }
+        assertEquals(
+            "Sleep is likely to begin between 19:10 and 20:40 tonight, " +
+                "and you will probably wake between 03:10 and 05:10 tomorrow.",
+            sentence,
+        )
+        // A stretch that has already run out adds nothing.
+        assertEquals(
+            dialSegments(fromServer, now, now.plus(Duration.ofHours(24))),
+            dialSegments(fromServer, now, now.plus(Duration.ofHours(24)), wakingUntil = now.minusSeconds(60)),
+        )
+    }
+
+    // An older cached forecast has no such stretch. The sleep has still not
+    // begun, so it is not called "this sleep".
+    @Test
+    fun aSleepThatHasNotBegunIsNeverCalledThisSleep() {
+        val ahead = sleepAhead(dialSegments(fromServer, now, now.plus(Duration.ofHours(24))))
+        assertNull(ahead.onset)
+        val sentence = leadParts(ahead, now, zone, use24HourTime = true).joinToString("") { it.text }
+        assertEquals(
+            "Sleep is likely to begin after 19:10 tonight, and you will probably wake between 03:10 and 05:10 tomorrow.",
+            sentence,
+        )
+    }
+
     @Test
     fun aLocalSnapshotIsReadAsAnOnsetWindowAndAWakeWindow() {
         val pairs = snapshotPairs(onset = TimeWindow(at(7.75), at(9.25)), wake = TimeWindow(at(15.417), at(17.25)))

@@ -41,8 +41,16 @@
 {{define "dashboard-content"}}
 {{with .View}}
 <section class="now" aria-labelledby="state-title">
+{{if .Reported}}
+  <p class="kicker">Reported</p>
+  <h1 class="lead" id="state-title">{{.Reported.Headline}}</h1>
+  <p class="lead-detail">{{.Reported.Detail}}</p>
+  <p class="kicker">Forecast</p>
+  <p class="lead-detail">{{.Headline}}. {{.Detail}}</p>
+{{else}}
   <h1 class="lead" id="state-title">{{.Headline}}</h1>
   <p class="lead-detail">{{.Detail}}</p>
+{{end}}
   <p class="meta{{if .Stale}} is-stale{{end}}">{{.Freshness}}</p>
 </section>
 

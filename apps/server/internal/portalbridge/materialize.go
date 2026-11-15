@@ -18,6 +18,7 @@ import (
 	"non24.app/core/estimation"
 	"non24.app/core/freshness"
 	"non24.app/core/medication"
+	"non24.app/core/presence"
 	"non24.app/server/internal/portal"
 )
 
@@ -32,6 +33,12 @@ type SleepSource interface {
 // link has that grant.
 type DoseSource interface {
 	EffectiveDoses(ctx context.Context) ([]medication.EffectiveEvent, error)
+}
+
+// StatusSource is the private read model of the statuses the owner reported
+// (ADR-0070). It is read only when some link may show one.
+type StatusSource interface {
+	ReportedStatuses(ctx context.Context) ([]presence.Report, error)
 }
 
 // SnapshotSink is the portal store, narrowed to publication. Nothing here can
@@ -49,6 +56,7 @@ type ProfileSource interface {
 type Materializer struct {
 	Sleep     SleepSource
 	Doses     DoseSource
+	Statuses  StatusSource
 	Profiles  ProfileSource
 	Sink      SnapshotSink
 	Estimator estimation.RobustEstimator
@@ -90,6 +98,11 @@ type Preparation struct {
 	// page shows now, so the input fingerprint does not move with the clock
 	// and a new skip is published even when the forecast has not changed.
 	DoseRecords []string
+
+	// StatusRecord renders the reported status that stands, or nothing, for
+	// the same fingerprint: a new report is published though the forecast
+	// has not moved.
+	StatusRecord string
 }
 
 // Prepare computes the projection as of `now` without publishing it.
@@ -121,6 +134,23 @@ func (m Materializer) Prepare(ctx context.Context, now time.Time) (Preparation, 
 			return Preparation{}, fmt.Errorf("read doses: %w", err)
 		}
 		prep.Snapshot.SkippedDoses, prep.DoseRecords, prep.ExpiresAt = skippedDoses(doses, now)
+	}
+
+	// A reported status is the owner's word about now. Like the doses it is
+	// read before anything that can withhold the forecast, and only a report
+	// the owner marked as shared goes any further.
+	if m.Statuses != nil && showsStatus(prep.Profiles) {
+		reports, err := m.Statuses.ReportedStatuses(ctx)
+		if err != nil {
+			return Preparation{}, fmt.Errorf("read reported statuses: %w", err)
+		}
+		if current, ok := presence.Current(reports, now); ok && current.Shared {
+			prep.Snapshot.Reported = &portal.ReportedStatus{
+				Status: current.Status, ReportedAt: current.ReportedAt.UTC(), ExpiresAt: current.ExpiresAt.UTC(),
+			}
+			prep.StatusRecord = current.StatusID
+			prep.ExpiresAt = earliest(prep.ExpiresAt, current.ExpiresAt.UTC())
+		}
 	}
 
 	sessions, err := m.Sleep.EffectiveSleepSessions(ctx)
@@ -165,6 +195,37 @@ func (m Materializer) Prepare(ctx context.Context, now time.Time) (Preparation, 
 	prep.Snapshot.Windows = windows
 	prep.Snapshot.HorizonEnd = windows[len(windows)-1].EndAt
 	return prep, nil
+}
+
+// showsStatus reports whether any link may show a reported status. Without
+// one the reports are not read at all.
+func showsStatus(profiles []portal.Profile) bool {
+	for _, profile := range profiles {
+		if profile.Grants.ReportedStatus != portal.StatusGrantNone {
+			return true
+		}
+	}
+	return false
+}
+
+// reportedFor cuts a reported status down to what one link may show. A
+// contact-only link learns that now is not a good time while the owner is
+// trying to sleep or has asked not to be disturbed, and nothing else: not
+// which of the two, not when it was said, and nothing at all for "awake".
+func reportedFor(level string, reported *portal.ReportedStatus) *portal.ReportedStatus {
+	if reported == nil {
+		return nil
+	}
+	switch level {
+	case portal.StatusGrantFull:
+		copied := *reported
+		return &copied
+	case portal.StatusGrantContact:
+		if reported.Status == presence.TryingToSleep || reported.Status == presence.DoNotDisturb {
+			return &portal.ReportedStatus{Status: portal.StatusUnavailable, ExpiresAt: reported.ExpiresAt}
+		}
+	}
+	return nil
 }
 
 // showsDoses reports whether any link has the skipped-doses grant. Without one
@@ -389,6 +450,9 @@ func (m Materializer) Publish(ctx context.Context, prep Preparation) error {
 		if !published.DosesShared {
 			published.SkippedDoses = nil
 		}
+		// Each link gets as much of a reported status as its owner chose,
+		// and a link they did not choose for gets none.
+		published.Reported = reportedFor(profile.Grants.ReportedStatus, prep.Snapshot.Reported)
 		if !profile.Grants.WakingWindows {
 			// A link without the windows grant still gets a row so the page
 			// can render an honest "not shared" state rather than 404.

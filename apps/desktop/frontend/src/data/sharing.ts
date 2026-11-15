@@ -13,7 +13,29 @@ export interface ShareGrants {
   allowMessages: boolean;
   /** When a dose was logged as skipped, by time alone (ADR-0058). */
   skippedDoses: boolean;
+  /** How much of a status the owner reports the link shows (ADR-0070). */
+  reportedStatus: ShareStatusLevel;
 }
+
+/** None, only that now is not a good time, or the status itself. */
+export type ShareStatusLevel = "" | "contact" | "full";
+
+/** The levels in the order they are offered, least shared first. */
+export const statusLevels: { level: ShareStatusLevel; label: string; detail: string }[] = [
+  { level: "", label: "Not shown", detail: "They see the forecast, and nothing you report." },
+  {
+    level: "contact",
+    label: "Only that it is not a good time",
+    detail:
+      "While you are trying to sleep or ask not to be disturbed, they read “Not a good time right now”. Not which, and not since when.",
+  },
+  {
+    level: "full",
+    label: "The status, and when you said it",
+    detail:
+      "They read “Trying to sleep”, “Awake” or “Do not disturb”, and how long ago you said it.",
+  },
+];
 
 export interface ShareAccessEntry {
   event: string;
@@ -97,6 +119,11 @@ function normalizeGrants(value: unknown): ShareGrants {
     allowRequests: record.allowRequests === true,
     allowMessages: record.allowMessages === true,
     skippedDoses: record.skippedDoses === true,
+    // A level this window does not know is read as the one that shares least.
+    reportedStatus:
+      record.reportedStatus === "contact" || record.reportedStatus === "full"
+        ? record.reportedStatus
+        : "",
   };
 }
 
@@ -208,6 +235,23 @@ async function act(
   root: WailsRoot,
 ): Promise<ShareLinksData> {
   const method = findWailsMethod(root, names);
+  if (!method) throw new Error("Share links need the ZeitBoard desktop app.");
+  const normalized = normalizeShareLinks(await method(input));
+  if (!normalized) throw new Error("The link list could not be read back.");
+  return normalized;
+}
+
+/** Changes what an existing link shows. */
+export async function updateShareLink(
+  input: {
+    profileId: string;
+    wakingWindows: boolean;
+    skippedDoses: boolean;
+    reportedStatus: ShareStatusLevel;
+  },
+  root: WailsRoot = globalThis as unknown as WailsRoot,
+): Promise<ShareLinksData> {
+  const method = findWailsMethod(root, ["UpdateBackendShareLink"]);
   if (!method) throw new Error("Share links need the ZeitBoard desktop app.");
   const normalized = normalizeShareLinks(await method(input));
   if (!normalized) throw new Error("The link list could not be read back.");

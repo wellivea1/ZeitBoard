@@ -384,7 +384,7 @@ func (a *App) syncRecords(ctx context.Context, cfg backendSyncConfig, token stri
 		return counts, err
 	}
 	for _, push := range []func(context.Context, *storage.Store, desktopBackendClient) (int, error){
-		a.pushSleepRecords, a.pushTaskRecords, a.pushPlacementRecords, a.pushOwnerEventRecords, a.pushMedicationRecords, a.pushMarkerRecords,
+		a.pushSleepRecords, a.pushTaskRecords, a.pushPlacementRecords, a.pushOwnerEventRecords, a.pushMedicationRecords, a.pushMarkerRecords, a.pushStatusRecords,
 	} {
 		pushed, err := push(ctx, store, client)
 		counts.pushed += pushed
@@ -509,6 +509,15 @@ func (a *App) pushMarkerRecords(ctx context.Context, store *storage.Store, clien
 		store.PendingMarkerSyncRecords, store.MarkMarkerSyncRecordsPushed,
 		func(record storage.MarkerSyncRecord) syncPushRecord {
 			return syncPushRecord{RecordID: record.RecordID, Kind: storage.SyncKindContextMarker, CreatedAt: record.CreatedAt.UTC(), Payload: record.Payload}
+		})
+}
+
+// pushStatusRecords sends the statuses the owner reported here (ADR-0070).
+func (a *App) pushStatusRecords(ctx context.Context, store *storage.Store, client desktopBackendClient) (int, error) {
+	return pushPendingSyncRecords(ctx, client, storage.MaxStatusSyncPageSize,
+		store.PendingStatusSyncRecords, store.MarkStatusSyncRecordsPushed,
+		func(record storage.StatusSyncRecord) syncPushRecord {
+			return syncPushRecord{RecordID: record.RecordID, Kind: storage.SyncKindStatus, CreatedAt: record.CreatedAt.UTC(), Payload: record.Payload}
 		})
 }
 
@@ -684,6 +693,9 @@ func decodePulledRecord(record syncEnvelope) (storage.SyncPullRecord, error) {
 		return value, decode(&value.Marker)
 	case storage.SyncKindSourceReport:
 		value := storage.SyncPullSourceReport{DeviceID: record.DeviceID}
+		return value, decode(&value.Report)
+	case storage.SyncKindStatus:
+		var value storage.SyncPullStatus
 		return value, decode(&value.Report)
 	case "tombstone":
 		var payload syncTombstonePayload

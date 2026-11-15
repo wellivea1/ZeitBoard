@@ -93,6 +93,31 @@ func TestPushValidatorAndSchemaDriftGuard(t *testing.T) {
 			valid: false,
 		},
 		{
+			name:  "valid status push",
+			body:  `{"schema_version":"v1","records":[{"recordId":"status_0a1b2c3d4e5f6071","kind":"status","createdAt":"2026-03-05T12:40:00Z","payload":{"status_id":"status_0a1b2c3d4e5f6071","status":"trying_to_sleep","reported_at":"2026-03-05T12:40:00Z","expires_at":"2026-03-05T22:40:00Z","shared":true}}]}`,
+			valid: true,
+		},
+		{
+			name:  "valid cleared status push",
+			body:  `{"schema_version":"v1","records":[{"recordId":"status_1b2c3d4e5f607182","kind":"status","createdAt":"2026-03-05T12:40:00Z","payload":{"status_id":"status_1b2c3d4e5f607182","status":"cleared","reported_at":"2026-03-05T12:40:00Z","shared":false}}]}`,
+			valid: true,
+		},
+		{
+			name:  "status without an expiry",
+			body:  `{"schema_version":"v1","records":[{"recordId":"status_2c3d4e5f60718293","kind":"status","createdAt":"2026-03-05T12:40:00Z","payload":{"status_id":"status_2c3d4e5f60718293","status":"awake","reported_at":"2026-03-05T12:40:00Z","shared":true}}]}`,
+			valid: false,
+		},
+		{
+			name:  "status of an unknown kind",
+			body:  `{"schema_version":"v1","records":[{"recordId":"status_3d4e5f60718293a4","kind":"status","createdAt":"2026-03-05T12:40:00Z","payload":{"status_id":"status_3d4e5f60718293a4","status":"asleep","reported_at":"2026-03-05T12:40:00Z","expires_at":"2026-03-05T22:40:00Z","shared":true}}]}`,
+			valid: false,
+		},
+		{
+			name:  "cleared status with an expiry",
+			body:  `{"schema_version":"v1","records":[{"recordId":"status_4e5f60718293a4b5","kind":"status","createdAt":"2026-03-05T12:40:00Z","payload":{"status_id":"status_4e5f60718293a4b5","status":"cleared","reported_at":"2026-03-05T12:40:00Z","expires_at":"2026-03-05T22:40:00Z","shared":false}}]}`,
+			valid: false,
+		},
+		{
 			name:  "valid source report push",
 			body:  `{"schema_version":"v1","records":[{"recordId":"srcrep-0a1b2c3d4e5f60718293a4b5","kind":"source_report","createdAt":"2026-03-05T12:40:00Z","payload":{"report_id":"srcrep-0a1b2c3d4e5f60718293a4b5","source":"health_connect","outcome":"read","reported_at":"2026-03-05T12:40:00Z","background_reads":true,"covered":{"start_at":"2026-02-03T12:40:00Z","end_at":"2026-03-05T12:40:00Z"},"held":0}}]}`,
 			valid: true,

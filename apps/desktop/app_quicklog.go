@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"non24.app/core/presence"
 	"non24.app/core/quicklog"
 	"non24.app/core/recompute"
 	storage "non24.app/core/storage/sqlite"
@@ -124,6 +125,9 @@ func (a *App) BeginQuickSleep() (QuickLogResultDTO, error) {
 	}); err != nil {
 		return QuickLogResultDTO{}, err
 	}
+	// Where the owner asked for it, the tap also says "trying to sleep": an
+	// intention, kept apart from the night, which is recorded only on waking.
+	a.followSleepTap(presence.TryingToSleep)
 	return QuickLogResultDTO{
 		Outcome: "pending",
 		Reason:  decision.Reason,
@@ -213,6 +217,7 @@ func (a *App) CompleteQuickSleep() (QuickLogResultDTO, error) {
 	result.Recorded = true
 	result.Entry = entry
 	result.State = a.quickLogState(ctx, store)
+	a.followSleepTap(presence.Awake)
 	return result, nil
 }
 
@@ -261,6 +266,7 @@ func (a *App) ConfirmQuickSleep(input ConfirmQuickSleepInput) (QuickLogResultDTO
 	if err := store.ClearPendingSleep(ctx); err != nil {
 		return QuickLogResultDTO{}, err
 	}
+	a.followSleepTap(presence.Awake)
 	return QuickLogResultDTO{
 		Outcome:  "record",
 		Recorded: true,

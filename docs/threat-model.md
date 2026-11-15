@@ -57,7 +57,9 @@ availability.
 14. Private read model → **allowlisted portal snapshot**: the one inbound path to the portal
     database, owned by `portalbridge`, narrowing an estimate to windows, a generation time, a
     horizon, and a status, and, only for a link with that grant, the times of doses logged as
-    skipped in the last three days (ADR-0058). Confidence labels are withheld because ADR-0022 measured them inverted.
+    skipped in the last three days (ADR-0058), and, only for a link with that grant and a report the
+    owner let links show, the status they reported or the fact that now is not a good time (ADR-0070).
+    Confidence labels are withheld because ADR-0022 measured them inverted.
     Since ADR-0033 the stored windows are unfiltered and unclipped, with both rules applied at
     render, so the snapshot holds a few already-elapsed windows for the same profile that was
     already granted them. The generation time now means when the content last changed, so a
@@ -215,7 +217,10 @@ The availability portal adds residuals of its own, all of them accepted rather t
 solved. A recipient can screenshot or simply remember a window, which revocation cannot
 reach; the create-link response states this. Sharing a live projection is inherently
 observable — someone watching the link over time sees the user's rhythm shift, which is a
-consequence of the feature and not a defect. A link with the skipped-doses grant tells its
+consequence of the feature and not a defect. A link that shows the reported status tells its
+holder what the owner said about the present moment, which is more than a forecast says; it
+is off for every new link, has a middle level that shows no status, and each report can be
+kept from every link (ADR-0070). A link with the skipped-doses grant tells its
 holder that the owner takes a medication on a schedule, and when doses were logged as skipped;
 that is the grant's purpose, it is off unless chosen, and the screen says so before it can be
 chosen. The timing floor on link resolution bounds

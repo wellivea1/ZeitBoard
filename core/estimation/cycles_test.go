@@ -170,3 +170,28 @@ func TestALongNapDoesNotCountAsACycle(t *testing.T) {
 	}
 	wantPeriod(t, estimate, longCycle)
 }
+
+func TestANightInPiecesLastsUntilItsLastPieceEnds(t *testing.T) {
+	// Every night is four hours of sleep, half an hour awake, and four more.
+	// Read by its first piece alone, the typical sleep came out as four hours
+	// and every forecast of waking was four and a half hours early.
+	sessions := rhythmWithout(12, longCycle)
+	for index := range sessions {
+		first := sessions[index].Intervals[0]
+		start := first.Interval.Start.UTC
+		first.Interval.End = domain.MustZonedInstant(start.Add(4*time.Hour), "UTC")
+		second := first
+		second.Interval.Start = domain.MustZonedInstant(start.Add(4*time.Hour+30*time.Minute), "UTC")
+		second.Interval.End = domain.MustZonedInstant(start.Add(8*time.Hour+30*time.Minute), "UTC")
+		sessions[index].Intervals = []domain.SleepInterval{first, second}
+	}
+	last := sessions[len(sessions)-1].Intervals[1].Interval.End.UTC
+	estimate, err := RobustEstimator{}.Estimate(context.Background(), sessions, last)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantPeriod(t, estimate, longCycle)
+	if want := 8*time.Hour + 30*time.Minute; estimate.TypicalSleepDuration != want {
+		t.Fatalf("typical sleep %s, want %s from first start to last end", estimate.TypicalSleepDuration, want)
+	}
+}

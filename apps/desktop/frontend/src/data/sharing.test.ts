@@ -53,14 +53,27 @@ describe("normalizeShareLinks", () => {
   // default would show more than the owner chose.
   it("treats an unreadable grant as withheld", () => {
     const data = normalizeShareLinks(
-      payload({ links: [{ ...link, grants: { wakingWindows: "yes" } }] }),
+      payload({
+        links: [{ ...link, grants: { wakingWindows: "yes", reportedStatus: "everything" } }],
+      }),
     );
+    // A level this window does not know is read as the one that shares least.
     expect(data?.links[0]?.grants).toEqual({
       wakingWindows: false,
       allowRequests: false,
       allowMessages: false,
       skippedDoses: false,
+      reportedStatus: "",
     });
+  });
+
+  it("reads how much of a reported status a link shows", () => {
+    const level = (reportedStatus: unknown) =>
+      normalizeShareLinks(payload({ links: [{ ...link, grants: { reportedStatus } }] }))?.links[0]
+        ?.grants.reportedStatus;
+    expect(level("contact")).toBe("contact");
+    expect(level("full")).toBe("full");
+    expect(level(undefined)).toBe("");
   });
 });
 

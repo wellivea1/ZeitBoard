@@ -189,21 +189,31 @@ internal fun RhythmDial(
             val handEnd = pointAt(radius * 0.84f, nowDegrees)
             drawLine(
                 color = palette.accent,
-                start = pointAt(radius * 0.38f, nowDegrees),
+                start = pointAt(radius * 0.44f, nowDegrees),
                 end = handEnd,
                 strokeWidth = 2.dp.toPx(),
                 cap = StrokeCap.Round,
             )
             drawCircle(palette.accent, radius = 3.5.dp.toPx(), center = handEnd)
         }
+        // The words keep to the clear middle. With seven nights drawn, the
+        // innermost ring and the foot of the hand come to about a third of the
+        // way out; "13 h 34 m ago" at the size of "8 h 2 m" ran over both.
+        val long = reading.figure.length > 9
         Column(
+            modifier = Modifier.fillMaxWidth(0.66f),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Text(reading.kicker, style = MaterialTheme.typography.labelSmall, color = Muted, textAlign = TextAlign.Center)
             Text(
                 reading.figure,
-                style = MaterialTheme.typography.headlineMedium.copy(fontSize = 26.sp, lineHeight = 30.sp),
+                style = MaterialTheme.typography.headlineMedium.copy(
+                    fontSize = if (long) 20.sp else 26.sp,
+                    lineHeight = if (long) 24.sp else 30.sp,
+                ),
+                maxLines = 1,
+                softWrap = false,
                 color = Ink,
                 textAlign = TextAlign.Center,
             )

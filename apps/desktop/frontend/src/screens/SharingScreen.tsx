@@ -6,12 +6,14 @@ import { Icon } from "../components/Icon";
 import { PageHeader } from "../components/AppShell";
 import { ShareLinkForm } from "../components/ShareLinkForm";
 import { ShareLinkList } from "../components/ShareLinkList";
+import { StatusChoices } from "../components/StatusChoices";
 import {
   createShareLink,
   eraseShareLink,
   loadShareLinks,
   revokeShareLink,
   shareLinksUnavailable,
+  updateShareLink,
   type CreatedShareLink,
   type CreateShareLinkInput,
   type ShareLinksData,
@@ -156,6 +158,7 @@ export function SharingScreen() {
               onErase={(profileId, confirmation) =>
                 void run(() => eraseShareLink(profileId, confirmation))
               }
+              onUpdate={(input) => void run(() => updateShareLink(input))}
             />
 
             <ShareLinkForm
@@ -165,6 +168,8 @@ export function SharingScreen() {
               onDismissCreated={() => setCreated(null)}
               onSubmit={(input) => void submit(input)}
             />
+
+            <StatusChoices />
           </section>
 
           {/* The rules hold for every link, so they are a note to read once and

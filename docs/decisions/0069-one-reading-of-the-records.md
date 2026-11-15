@@ -88,14 +88,26 @@ labels stay withheld from shared pages and qualified on Home.
   also draws as awake.
 - A night the owner corrected keeps its times when a wearable reports the same night.
 
+## Settled the same day
+
+9. **A sleep in pieces lasts until its last piece ends.** The typical duration, the three-hour
+   floor and the choice between two sleeps in one cycle all read a night from its start to the end
+   of its last piece. Read by the first piece alone, a night of eight and a half hours in two
+   pieces was a sleep of four, and every forecast of waking came four and a half hours early. The
+   backtest above is unchanged by it: that history holds one piece for each night.
+10. **The portal counts a visitor behind a named proxy by the address the proxy reports.**
+    `portal.trustedProxies` names the reverse proxies whose `X-Forwarded-For` is believed, read
+    from the right. It is empty by default, and from any other address the header is ignored.
+    Everything through one proxy shares a wider allowance, so a header nobody checked cannot
+    unlimit a visitor.
+
 ## Not decided here
 
 These came from the same reviews and need the owner's choice or a device, so they are recorded
 in `usability-review-2026-11-13.md` and not built:
 
-- a reported current status ("trying to sleep", "awake", "do not disturb") that syncs and expires;
+- a reported current status ("trying to sleep", "awake", "do not disturb") that syncs and expires
+  (built since: [ADR-0070](0070-a-status-the-owner-reports.md));
 - freshness thresholds that follow the cycle length, so a healthy 27-hour source is not read as
   stale near the end of each waking day;
-- Health Connect sessions the provider deleted, and sessions recorded in another time zone;
-- how sleep in several pieces counts towards the typical duration;
-- the portal's rate limit behind a reverse proxy.
+- Health Connect sessions the provider deleted, and sessions recorded in another time zone.

@@ -61,6 +61,43 @@ func TestCompanionProjectsRealInstantsAndExpiryFromSyncedInputs(t *testing.T) {
 	}
 }
 
+// The forecasts pair each sleep with the waking window after it, so the hours
+// someone is in before the next sleep have no window. Without the end of that
+// stretch a companion draws the next sleep beginning sharply at its earliest
+// plausible onset, and has nothing to say the onset is a range with.
+func TestCompanionSaysHowLongTheWakingStretchUnderWayIsLikely(t *testing.T) {
+	h := newTestHarness(t)
+	token := h.registerDevice(t, "synthetic-phone")
+	// The newest night ends at 08:00 on the harness's day; its clock reads noon.
+	start := time.Date(2026, 2, 23, 16, 30, 0, 0, time.UTC)
+	h.pushRecords(t, token, driftingSleepRecords(10, start, 24*time.Hour+50*time.Minute, 8*time.Hour)...)
+	status, body := h.request(t, http.MethodGet, "/v2/companion", token, "")
+	var response projection.CompanionResponse
+	if status != http.StatusOK || json.Unmarshal(body, &response) != nil || response.Status != "estimated" {
+		t.Fatalf("companion response unavailable: %s", body)
+	}
+	next := response.Forecasts[0].Sleep
+	if !next.StartAt.After(response.GeneratedAt) {
+		t.Fatalf("the test needs the next sleep still ahead: %s", body)
+	}
+	until := response.WakingUntil
+	if until == nil {
+		t.Fatalf("no end to the waking stretch under way: %s", body)
+	}
+	// It ends inside the next sleep's envelope: after the earliest the sleep
+	// may begin, which is what makes the onset a range, and before its end.
+	if !until.After(next.StartAt) || !until.Before(next.EndAt) {
+		t.Fatalf("waking until %s is not inside the next sleep envelope %s to %s", until, next.StartAt, next.EndAt)
+	}
+
+	// A refusal has no forecast, so it has no stretch either.
+	refused := newTestHarness(t)
+	_, body = refused.request(t, http.MethodGet, "/v2/companion", refused.registerDevice(t, "synthetic-phone"), "")
+	if strings.Contains(string(body), "waking_until") {
+		t.Fatalf("a refusal carried a waking stretch: %s", body)
+	}
+}
+
 func TestCompanionReflectsErasureInsteadOfKeepingPriorEstimate(t *testing.T) {
 	h := newTestHarness(t)
 	token := h.registerDevice(t, "synthetic-phone")

@@ -569,3 +569,110 @@ func TestSharedWakingWindowsLeaveOutWhatMayBeSleep(t *testing.T) {
 		}
 	}
 }
+
+func (f *bridgeFixture) reportStatus(t *testing.T, device, id, status string, ago time.Duration, shared bool) {
+	t.Helper()
+	reportedAt := f.now.Add(-ago)
+	payload := fmt.Sprintf(`{"status_id":%q,"status":%q,"reported_at":%q,"expires_at":%q,"shared":%t}`,
+		id, status, reportedAt.UTC().Format(time.RFC3339), reportedAt.Add(8*time.Hour).UTC().Format(time.RFC3339), shared)
+	if status == "cleared" {
+		payload = fmt.Sprintf(`{"status_id":%q,"status":"cleared","reported_at":%q,"shared":false}`, id, reportedAt.UTC().Format(time.RFC3339))
+	}
+	f.push(t, device, []syncmodel.PushRecord{{RecordID: id, Kind: syncmodel.KindStatus, CreatedAt: reportedAt, Payload: json.RawMessage(payload)}})
+}
+
+// published materializes and publishes, then reads back what the fixture's
+// link holds.
+func (f *bridgeFixture) published(t *testing.T, level string) portal.Snapshot {
+	t.Helper()
+	ctx := context.Background()
+	grants := f.profile.Grants
+	grants.ReportedStatus = level
+	if err := f.portal.UpdateGrants(ctx, f.profile.ID, grants); err != nil {
+		t.Fatalf("update grants: %v", err)
+	}
+	materializer := portalbridge.Materializer{
+		Sleep:    readmodel.SleepReader{Store: f.private},
+		Statuses: readmodel.StatusReader{Store: f.private},
+		Profiles: f.portal,
+		Sink:     f.portal,
+		Now:      func() time.Time { return f.now },
+	}
+	prep, err := materializer.Prepare(ctx, f.now)
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	if err := materializer.Publish(ctx, prep); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	snapshot, err := f.portal.ReadSnapshot(ctx, f.profile.ID)
+	if err != nil {
+		t.Fatalf("read snapshot: %v", err)
+	}
+	return snapshot
+}
+
+// TestAReportedStatusReachesALinkOnlyAsFarAsTheOwnerChose walks the three
+// places the owner decides: the link's level, each report's own "shared", and
+// taking a report back.
+func TestAReportedStatusReachesALinkOnlyAsFarAsTheOwnerChose(t *testing.T) {
+	f := newBridgeFixture(t)
+	f.pushSleepHistory(t, "dev_status", 3*time.Hour)
+	f.reportStatus(t, "dev_status", "status_trying", "trying_to_sleep", 12*time.Minute, true)
+
+	// A link the owner has not chosen for shows no report at all.
+	if snapshot := f.published(t, portal.StatusGrantNone); snapshot.Reported != nil {
+		t.Fatalf("a link with no status grant was told %+v", snapshot.Reported)
+	}
+	// A full link shows the status and when it was said.
+	full := f.published(t, portal.StatusGrantFull)
+	if full.Reported == nil || full.Reported.Status != "trying_to_sleep" || !full.Reported.ReportedAt.Equal(f.now.Add(-12*time.Minute)) {
+		t.Fatalf("a full link was told %+v", full.Reported)
+	}
+	// A contact-only link learns that now is not a good time, and not why or since when.
+	contact := f.published(t, portal.StatusGrantContact)
+	if contact.Reported == nil || contact.Reported.Status != portal.StatusUnavailable || !contact.Reported.ReportedAt.IsZero() {
+		t.Fatalf("a contact-only link was told %+v", contact.Reported)
+	}
+
+	// "Awake" is nothing a contact-only link needs to hear.
+	f.reportStatus(t, "dev_status", "status_awake", "awake", 5*time.Minute, true)
+	if snapshot := f.published(t, portal.StatusGrantContact); snapshot.Reported != nil {
+		t.Fatalf("a contact-only link was told the owner is awake: %+v", snapshot.Reported)
+	}
+	if snapshot := f.published(t, portal.StatusGrantFull); snapshot.Reported == nil || snapshot.Reported.Status != "awake" {
+		t.Fatalf("a full link was told %+v, want the newer report", snapshot.Reported)
+	}
+
+	// A report the owner kept to themselves reaches no link, whatever its level,
+	// and it does not uncover the shared one before it.
+	f.reportStatus(t, "dev_status", "status_private", "do_not_disturb", 2*time.Minute, false)
+	if snapshot := f.published(t, portal.StatusGrantFull); snapshot.Reported != nil {
+		t.Fatalf("a private report reached a link: %+v", snapshot.Reported)
+	}
+
+	// Taking a report back leaves nothing.
+	f.reportStatus(t, "dev_status", "status_shared_again", "do_not_disturb", time.Minute, true)
+	if snapshot := f.published(t, portal.StatusGrantFull); snapshot.Reported == nil {
+		t.Fatal("a shared report did not reach a full link")
+	}
+	f.reportStatus(t, "dev_status", "status_cleared", "cleared", 0, false)
+	if snapshot := f.published(t, portal.StatusGrantFull); snapshot.Reported != nil {
+		t.Fatalf("a cleared status is still on the link: %+v", snapshot.Reported)
+	}
+}
+
+// TestAReportedStatusDoesNotWaitOnTheForecast: with sleep records too old to
+// forecast from, what the owner said ten minutes ago is still shown.
+func TestAReportedStatusDoesNotWaitOnTheForecast(t *testing.T) {
+	f := newBridgeFixture(t)
+	f.pushSleepHistory(t, "dev_old_status", 72*time.Hour)
+	f.reportStatus(t, "dev_old_status", "status_awake_now", "awake", 10*time.Minute, true)
+	snapshot := f.published(t, portal.StatusGrantFull)
+	if snapshot.Status == portal.StatusAvailable {
+		t.Fatal("three-day-old sleep records were published as a forecast")
+	}
+	if snapshot.Reported == nil || snapshot.Reported.Status != "awake" {
+		t.Fatalf("reported = %+v, want the owner's report though the forecast is withheld", snapshot.Reported)
+	}
+}

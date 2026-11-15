@@ -347,6 +347,15 @@ type rhythmMarkerSet struct {
 	Markers       []rhythmMarkerItem `json:"markers"`
 }
 
+// reportedStatus is a status the owner reported (ADR-0070).
+type reportedStatus struct {
+	StatusID   string `json:"status_id"`
+	Status     string `json:"status"`
+	ReportedAt string `json:"reported_at"`
+	ExpiresAt  string `json:"expires_at,omitempty"`
+	Shared     bool   `json:"shared"`
+}
+
 // sourceReport is what a device found when it checked a source (ADR-0054).
 type sourceReport struct {
 	ReportID        string              `json:"report_id"`
@@ -907,6 +916,17 @@ func Build() ([]File, error) {
 					ReportedAt: ts(generatedAt), BackgroundReads: true,
 					Covered: &sourceReportWindow{StartAt: ts(generatedAt.Add(-30 * 24 * time.Hour)), EndAt: ts(generatedAt)},
 					Held:    &syncHeld,
+				},
+			},
+			{
+				Seq:       8,
+				RecordID:  "status_6071829304a5b6c7",
+				Kind:      "status",
+				DeviceID:  "device_android_01",
+				CreatedAt: ts(generatedAt),
+				Payload: reportedStatus{
+					StatusID: "status_6071829304a5b6c7", Status: "trying_to_sleep",
+					ReportedAt: ts(generatedAt), ExpiresAt: ts(generatedAt.Add(10 * time.Hour)), Shared: true,
 				},
 			},
 		},
@@ -1709,9 +1729,11 @@ func companionFixture(refused bool) map[string]any {
 			"predicted_sleep_window":  map[string]any{"start_at": "2026-09-03T03:00:00Z", "end_at": "2026-09-03T04:00:00Z", "zone_id": "UTC"},
 			"predicted_waking_window": map[string]any{"start_at": "2026-09-03T12:00:00Z", "end_at": "2026-09-03T22:00:00Z", "zone_id": "UTC"},
 		}},
-		"sleep": []any{map[string]any{"row_id": "sleep_synthetic", "start_at": "2026-09-02T02:02:00Z", "end_at": "2026-09-02T10:00:00Z", "zone_id": "UTC", "classification": "principal", "corrected": true}},
+		"sleep":        []any{map[string]any{"row_id": "sleep_synthetic", "start_at": "2026-09-02T02:02:00Z", "end_at": "2026-09-02T10:00:00Z", "zone_id": "UTC", "classification": "principal", "corrected": true}},
+		"waking_until": "2026-09-03T03:30:00Z",
 	}
 	if refused {
+		delete(result, "waking_until")
 		result["status"] = "refused"
 		result["refusal"] = map[string]any{"code": "insufficient_data", "message": "More usable sleep history is needed."}
 		result["freshness"] = map[string]any{"state": "withheld", "reason": "insufficient_data", "explanation": "More usable sleep history is needed."}

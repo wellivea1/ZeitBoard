@@ -109,6 +109,7 @@ func (s *Server) Handler() http.Handler {
 		mux.Handle("GET /v1/portal/profiles", s.requireDevice(http.HandlerFunc(s.handleListPortalProfiles)))
 		mux.Handle("POST /v1/portal/profiles", s.requireDevice(http.HandlerFunc(s.handleCreatePortalProfile)))
 		mux.Handle("GET /v1/portal/profiles/{id}/preview", s.requireDevice(http.HandlerFunc(s.handlePreviewPortalProfile)))
+		mux.Handle("POST /v1/portal/profiles/{id}/grants", s.requireDevice(http.HandlerFunc(s.handleUpdatePortalGrants)))
 		mux.Handle("POST /v1/portal/profiles/{id}/revoke", s.requireDevice(http.HandlerFunc(s.handleRevokePortalProfile)))
 		mux.Handle("POST /v1/portal/profiles/{id}/erase", s.requireDevice(http.HandlerFunc(s.handleErasePortalProfile)))
 		mux.Handle("GET /v1/portal/requests", s.requireDevice(http.HandlerFunc(s.handleListVisitorRequests)))

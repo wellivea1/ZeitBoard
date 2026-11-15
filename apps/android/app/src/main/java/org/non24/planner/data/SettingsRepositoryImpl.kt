@@ -28,6 +28,7 @@ class SharedPreferencesSettingsRepository(
                 putBoolean(USE_24_HOUR_KEY, updated.use24HourTime)
                 putBoolean(BACKGROUND_SYNC_KEY, updated.backgroundSyncEnabled)
                 putBoolean(TIME_REQUEST_NOTICES_KEY, updated.timeRequestNotices)
+                putBoolean(SHARE_STATUS_KEY, updated.shareReportedStatus)
             }) { "Settings could not be saved on this device." }
             mutableSettings.value = updated
         }
@@ -42,12 +43,14 @@ class SharedPreferencesSettingsRepository(
             use24HourTime = preferences.getBoolean(USE_24_HOUR_KEY, true),
             backgroundSyncEnabled = preferences.getBoolean(BACKGROUND_SYNC_KEY, false),
             timeRequestNotices = preferences.getBoolean(TIME_REQUEST_NOTICES_KEY, false),
+            shareReportedStatus = preferences.getBoolean(SHARE_STATUS_KEY, false),
         )
     }
 
     private companion object {
         const val DATA_MODE_KEY = "data_mode"
         const val USE_24_HOUR_KEY = "use_24_hour_time"
+        const val SHARE_STATUS_KEY = "share_reported_status"
         const val BACKGROUND_SYNC_KEY = "background_sync"
         const val TIME_REQUEST_NOTICES_KEY = "time_request_notices"
     }

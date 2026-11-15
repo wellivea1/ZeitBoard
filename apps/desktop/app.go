@@ -135,11 +135,16 @@ type App struct {
 	reaching               ReachingHoursDTO
 	reachingRevision       uint64
 	reachingErr            string
-	regionalMu             sync.RWMutex
-	regional               RegionalSettingsDTO
-	regionalRevision       uint64
-	regionalErr            string
-	systemClock            civilfmt.Clock
+	// statusMu guards reporting a status and the owner's choices about it.
+	statusMu       sync.Mutex
+	statusSettings StatusSettingsDTO
+	statusRevision uint64
+
+	regionalMu       sync.RWMutex
+	regional         RegionalSettingsDTO
+	regionalRevision uint64
+	regionalErr      string
+	systemClock      civilfmt.Clock
 }
 
 type RefusalDTO struct {

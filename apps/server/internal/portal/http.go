@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/netip"
 	"strconv"
 	"strings"
 	"time"
@@ -36,11 +37,17 @@ type Handler struct {
 	resolutionFloor time.Duration
 	notifyCreated   func()
 	notifyMessage   func()
+	trustedProxies  []netip.Prefix
 }
 
 type HandlerConfig struct {
 	Store *Store
 	Now   func() time.Time
+
+	// TrustedProxies are the reverse proxies whose X-Forwarded-For is
+	// believed. Empty means none: every request is counted by the address
+	// it arrived from.
+	TrustedProxies []netip.Prefix
 
 	// PublicOrigin is the exact scheme://host[:port] the portal is served
 	// on. Mutating requests must carry it as Origin.
@@ -87,6 +94,7 @@ func NewHandler(cfg HandlerConfig) (*Handler, error) {
 		resolutionFloor: floor,
 		notifyCreated:   cfg.NotifyRequestCreated,
 		notifyMessage:   cfg.NotifyMessageAdded,
+		trustedProxies:  cfg.TrustedProxies,
 	}, nil
 }
 
@@ -153,7 +161,27 @@ func (h *Handler) securityHeaders(next http.Handler) http.Handler {
 func (h *Handler) throttle(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		sourceID, err := h.store.SourceID(ctx, r.RemoteAddr)
+		visitor, throughProxy := visitorAddr(r, h.trustedProxies)
+		if throughProxy {
+			// Everything one proxy forwards shares a wider allowance, so a
+			// forwarded address nobody checked cannot unlimit a visitor.
+			proxyID, err := h.store.SourceID(ctx, r.RemoteAddr)
+			if err != nil {
+				h.writeGeneric(w, r, http.StatusServiceUnavailable)
+				return
+			}
+			allowed, retryAfter, err := h.store.Allow(ctx, "proxy:"+proxyID, ReadLimitThroughProxyPerHour, ReadLimitWindow, h.now())
+			if err != nil {
+				h.writeGeneric(w, r, http.StatusServiceUnavailable)
+				return
+			}
+			if !allowed {
+				w.Header().Set("Retry-After", retryAfterSeconds(retryAfter))
+				h.writeGeneric(w, r, http.StatusTooManyRequests)
+				return
+			}
+		}
+		sourceID, err := h.store.SourceID(ctx, visitor)
 		if err != nil {
 			h.writeGeneric(w, r, http.StatusServiceUnavailable)
 			return

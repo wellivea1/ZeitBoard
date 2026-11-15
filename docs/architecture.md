@@ -75,6 +75,12 @@ Connect check found as a `source_report` record (ADR-0054), defined once in
 reads the reports into a status per source. Data Sources, the stale-estimate
 sentence on Home and Week, and the assistant snapshot all use that one status.
 
+What the owner says about now is a `status` record (ADR-0070), defined once in
+`core/presence` for the server, the desktop's store and the rule that the newest
+report stands. The estimator and the freshness policy do not read it. The server
+narrows it for each share link by that link's grant before it crosses to the
+portal.
+
 ### Self-hosted backend and agent connector
 
 `apps/server` ships two binaries the operator runs: `zeitboardd` (device

@@ -47,6 +47,10 @@ const (
 	// of sleep records (ADR-0054): read in full over a window, or not read
 	// and why. It holds no sleep, and the server reads none of it.
 	KindSourceReport Kind = "source_report"
+	// KindStatus carries a status the owner reported (ADR-0070): awake,
+	// trying to sleep, or do not disturb, with when it stops standing. The
+	// newest one stands; it is never an estimator input.
+	KindStatus Kind = "status"
 	// KindTombstone marks an erased record in the pull stream. Tombstones are
 	// minted only by the server's erase endpoint — clients cannot push them —
 	// and their metadata-only payload carries the erased id plus its original

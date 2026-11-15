@@ -76,6 +76,7 @@ func (a *App) GetStorageProtection() (StorageProtectionDTO, error) {
 		{"Display settings", filepath.Join(dir, appearanceFileName)},
 		{"Reaching hours", filepath.Join(dir, reachingFileName)},
 		{"Clock", filepath.Join(dir, regionalFileName)},
+		{"Status choices", filepath.Join(dir, statusSettingsFileName)},
 	}
 
 	report := StorageProtectionDTO{

@@ -59,7 +59,7 @@
         },
         "kind": {
           "type": "string",
-          "enum": ["observation", "correction", "task", "placement", "event", "medication", "medication_event", "medication_correction", "context_marker", "source_report"]
+          "enum": ["observation", "correction", "task", "placement", "event", "medication", "medication_event", "medication_correction", "context_marker", "source_report", "status"]
         },
         "createdAt": {
           "$ref": "common.schema.json#/$defs/timestamp"
@@ -88,7 +88,7 @@
         },
         "kind": {
           "type": "string",
-          "enum": ["observation", "correction", "task", "placement", "event", "medication", "medication_event", "medication_correction", "context_marker", "source_report", "tombstone"]
+          "enum": ["observation", "correction", "task", "placement", "event", "medication", "medication_event", "medication_correction", "context_marker", "source_report", "status", "tombstone"]
         },
         "deviceId": {
           "$ref": "common.schema.json#/$defs/identifier"
@@ -139,6 +139,9 @@
           "$ref": "source-report-set.schema.json#/$defs/report"
         },
         {
+          "$ref": "#/$defs/statusPayload"
+        },
+        {
           "$ref": "#/$defs/tombstonePayload"
         }
       ]
@@ -178,6 +181,56 @@
           "$ref": "common.schema.json#/$defs/timestamp"
         }
       }
+    },
+    "statusPayload": {
+      "description": "A status the owner reported (ADR-0070): awake, trying to sleep, or do not disturb, with when it was said and when it stops standing. Reports are immutable; the newest one stands, and \"cleared\" takes it back. It is the owner's word, never an estimator input.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status_id", "status", "reported_at", "shared"],
+      "properties": {
+        "status_id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "status": {
+          "enum": ["awake", "trying_to_sleep", "do_not_disturb", "cleared"]
+        },
+        "reported_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "expires_at": {
+          "description": "Required unless the status is cleared; at most 24 hours after reported_at.",
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "shared": {
+          "description": "Whether a share link the owner allowed may show this report.",
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "cleared"
+              }
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "shared": {
+                "const": false
+              }
+            },
+            "not": {
+              "required": ["expires_at"]
+            }
+          },
+          "else": {
+            "required": ["expires_at"]
+          }
+        }
+      ]
     },
     "eventPayload": {
       "description": "One revision of an event the owner added (ADR-0068). Each change is a new record, \"<event_id>_r<revision>\"; every device keeps the highest revision, and of two alike in number the later updated_at, then the greater bytes.",
@@ -224,7 +277,7 @@
         },
         "record_kind": {
           "type": "string",
-          "enum": ["observation", "correction", "task", "placement", "event", "medication", "medication_event", "medication_correction", "context_marker", "source_report"]
+          "enum": ["observation", "correction", "task", "placement", "event", "medication", "medication_event", "medication_correction", "context_marker", "source_report", "status"]
         }
       }
     },
@@ -379,6 +432,23 @@
             "properties": {
               "payload": {
                 "$ref": "source-report-set.schema.json#/$defs/report"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "status"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "$ref": "#/$defs/statusPayload"
               }
             }
           }

@@ -179,6 +179,26 @@ class BackendSyncRepository(
         }
     }
 
+    /**
+     * Keeps a status the owner reports on this phone and queues it for their
+     * server (ADR-0070). [status] may be "cleared", which takes the last one
+     * back. It shows at once as waiting, and uploads with the next sync.
+     */
+    suspend fun reportStatus(status: String, shared: Boolean): Result<Unit> = locked {
+        syncResult {
+            val config = configuration() ?: error("Not enrolled")
+            // The newest report stands, so this one is made later than any the
+            // phone already knows of, however the two clocks compare.
+            val newest = replica.state().reportedStatus
+            var at = now().truncatedTo(java.time.temporal.ChronoUnit.MILLIS)
+            if (newest != null && !at.isAfter(newest.reportedAt)) at = newest.reportedAt.plusMillis(1)
+            val record = statusRecord("status-" + UUID.randomUUID().toString().replace("-", "").take(24), status, at, shared)
+            outbox.enqueue(listOf(record))
+            companionState.value = replica.state()
+            publishIdle(config)
+        }
+    }
+
     suspend fun enqueue(episodes: List<SleepEpisode>): Int = locked {
         val config = configuration() ?: return@locked 0
         enqueueLocked(config, episodes)

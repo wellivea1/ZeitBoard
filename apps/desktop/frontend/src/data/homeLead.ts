@@ -8,6 +8,7 @@ import {
   civilDayOffset,
   clockTime,
   dayInSentence,
+  momentInSentence,
   roundToMinutes,
 } from "../utils/relativeTime";
 import { appLocale } from "../utils/appLocale";
@@ -91,10 +92,27 @@ export function leadParts(
   outlook: OutlookData,
   now = new Date(),
   sourceNote?: string,
+  /** When "I am going to sleep" was tapped and not yet answered by a wake. */
+  markedSleepAt?: string,
 ) {
   const parts: LeadPart[] = [];
   const say = (text: string) => parts.push({ text });
   const mark = (text: string) => parts.push({ text, strong: true });
+
+  // A tap is not a record, so the forecast does not move for it. But a page
+  // that says "you have been awake for nine hours" to someone who has just
+  // said they are going to sleep reads as not having heard.
+  const marked = markedSleepAt ? new Date(markedSleepAt) : undefined;
+  if (marked && Number.isFinite(marked.getTime()) && overview.status !== "unavailable") {
+    say("You marked going to sleep ");
+    mark(momentInSentence(marked, now));
+    say(". Tap “I woke up” when you get up, and the night is recorded.");
+    // Said only where a forecast is drawn: on records too old, none is.
+    if (overview.status === "estimated" && overview.freshness.state !== "withheld") {
+      say(" Until then the forecast below runs from your last recorded night.");
+    }
+    return parts;
+  }
 
   if (overview.status === "unavailable") {
     say("Your records could not be read just now. Nothing saved has changed.");

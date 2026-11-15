@@ -59,6 +59,7 @@ Keys:
 | `assistant.endpoint` | `ZEITBOARD_LLM_ENDPOINT` | Required for `opencode_zen` and `openai_compatible`, optional override otherwise | HTTPS, or plain HTTP only to this machine (`127.0.0.1`, `::1`, `localhost`): the assistant's context never crosses a network unencrypted. |
 | `portal.enabled` | `ZEITBOARD_PORTAL_ENABLED` | No | Defaults to `false`. Read the availability-portal section below before changing it. |
 | `portal.publicOrigin` | `ZEITBOARD_PORTAL_ORIGIN` | Required when the portal is enabled | Exact `scheme://host[:port]` visitors reach, e.g. `https://share.example.com`. Scheme and host only. |
+| `portal.trustedProxies` | `ZEITBOARD_PORTAL_TRUSTED_PROXIES` | No | Addresses or CIDR ranges of your reverse proxies, e.g. `["127.0.0.1", "10.0.0.0/8"]` (comma-separated in the environment). Empty by default. See the portal section. |
 
 Relative file and directory paths in a JSON config resolve from the directory
 containing that config file. Relative paths supplied through environment
@@ -277,6 +278,13 @@ When enabled:
   byte-for-byte against browser attestation on every state-changing request, so
   a mismatch between it and the reverse proxy's public URL breaks logins.
   Outside loopback it must be `https`.
+- **Name your reverse proxy in `trustedProxies`.** Behind a proxy every request reaches the
+  daemon from the proxy's own address, so without this every visitor shares one hourly
+  allowance and two open pages can use it up. With it, a request from a named proxy is counted
+  by the visitor address the proxy reports in `X-Forwarded-For`. The header is ignored from
+  any other address, since a visitor could otherwise choose a new address for each request.
+  Make sure the proxy sets or appends the header itself. Everything arriving through one
+  proxy still shares a wider allowance, 20 times a visitor's.
 - Terminate TLS at the edge and set HSTS there. The daemon serves the portal on
   the same listener as the device API.
 - **Disable raw request-URI logging for `/p/`** in the reverse proxy. Link

@@ -13,6 +13,7 @@ import (
 	"non24.app/core/markers"
 	"non24.app/core/medication"
 	"non24.app/core/ownerevents"
+	"non24.app/core/presence"
 	"non24.app/core/sleepv1"
 	"non24.app/core/sources"
 )
@@ -24,7 +25,7 @@ var identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{2,63}$`)
 func Pushable(kind Kind) bool {
 	switch kind {
 	case KindObservation, KindCorrection, KindTask, KindPlacement, KindEvent,
-		KindMedication, KindMedicationEvent, KindMedicationCorrection, KindContextMarker, KindSourceReport:
+		KindMedication, KindMedicationEvent, KindMedicationCorrection, KindContextMarker, KindSourceReport, KindStatus:
 		return true
 	default:
 		return false
@@ -125,6 +126,8 @@ func validatePayload(kind Kind, recordID string, payload json.RawMessage) error 
 		return validateContextMarker(recordID, payload)
 	case KindSourceReport:
 		return validateSourceReport(recordID, payload)
+	case KindStatus:
+		return validateStatus(recordID, payload)
 	default:
 		return errors.New("unsupported record kind")
 	}
@@ -207,6 +210,22 @@ func validateContextMarker(recordID string, payload json.RawMessage) error {
 	}
 	if record.MarkerID != recordID {
 		return errors.New("marker_id must match recordId")
+	}
+	return nil
+}
+
+// validateStatus accepts a reported status under its own id. The desktop's
+// store validates reports with the same code.
+func validateStatus(recordID string, payload json.RawMessage) error {
+	var report presence.Report
+	if err := decodeStrict(payload, &report); err != nil {
+		return errors.New("invalid status payload")
+	}
+	if err := report.Validate(); err != nil {
+		return fmt.Errorf("invalid status: %w", err)
+	}
+	if report.StatusID != recordID {
+		return errors.New("status_id must match recordId")
 	}
 	return nil
 }

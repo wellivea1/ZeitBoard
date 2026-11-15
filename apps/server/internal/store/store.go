@@ -1408,6 +1408,9 @@ func (s *Store) PullKindThrough(ctx context.Context, kind syncmodel.Kind, since,
 	// as skipped (ADR-0058). Medication definitions, which carry the names,
 	// stay unreadable here.
 	case syncmodel.KindMedicationEvent, syncmodel.KindMedicationCorrection:
+	// Statuses the owner reported, for a share link that may show one
+	// (ADR-0070).
+	case syncmodel.KindStatus:
 	default:
 		return nil, 0, errors.New("stored record kind is not supported")
 	}

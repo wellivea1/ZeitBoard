@@ -4071,3 +4071,102 @@ format, lint with no warnings, types, 710 and 6 tests.
 **Not checked.** Nothing ran on a phone, a watch or the owner's server. The phone's dose fix was
 compiled and read, not run on a device. No live share link was opened: the portal was checked
 through its Go tests and its script's tests.
+
+## What the two reviews left open — 2026-11-13
+
+The items `usability-review-2026-11-13.md` listed as open, except those that need the owner's
+decision or a device.
+
+- **Home says a marked "going to sleep" back**, and does not call the owner awake meanwhile. The
+  forecast is not moved by a tap; the sentence says it still runs from the last recorded night.
+- **"Adjust the times" under "Recorded"** opens the night just logged with the correction pickers
+  and saves a correction, so a late tap is put right where it was made.
+- **Log › Medications** puts the list and an open "Add a medication" first when none is listed.
+- **Type and navigation.** No text on Home is under 12px (it was 31 of about 60 elements), and at
+  phone width the navigation wraps to three lines, where its last link was cut off.
+- **The phone's correction forms** use the system's date and clock pickers, and list nights in
+  words ("Thu, Nov 12, 11:17 AM to 6:47 PM"). `SleepTimeFieldTest` holds the times they write: an
+  unchanged time goes back as stored, a picked time carries its day's offset, the hour that
+  happens twice offers both, and a skipped clock time moves to the next that exists.
+- **A sleep in pieces** lasts until its last piece ends. The aggregate backtest is unchanged: 921
+  forecasts, 21 refusals.
+- **`portal.trustedProxies`**, empty by default. Tests hold that a visitor's own header is
+  ignored, that the proxy's entry is read from the right, and that two visitors behind one named
+  proxy are limited apart.
+- **Tests that failed only under load.** The local agent's bridge no longer reuses a connection
+  from before the app restarted. Window tests that open a screen wait up to five seconds for it.
+
+**Checks.** `gofmt`, `go vet` and every Go test in core, the server and the desktop; the Android
+unit tests, lint and debug build; and the web check: format, lint with no warnings, types, builds,
+713 and 6 tests, run while the desktop and server Go suites ran beside them.
+
+**Checked on screen.** In the browser preview at 1280 and 375 pixels wide: Home, the week and the
+navigation with the larger type. In the running app on the throwaway profile: the marked-sleep
+sentence, "Adjust the times", and Medications with nothing listed.
+
+**Not checked.** The phone's pickers were compiled, linted and unit-tested, not run on a device or
+with TalkBack. The proxy setting was not run behind a real proxy.
+
+## A reported status, and the phone on the emulator — 2026-11-15
+
+What ADR-0070 decided, how it was run, and what the run found.
+
+**Held by tests.**
+
+- `core/presence`: a report must carry an end no more than 24 hours on; `cleared` shares nothing
+  and has no end; the newest report stands, and a lapsed, cleared or future-dated one does not.
+- The server: the `status` kind is validated against the contract, with five drift cases. A link
+  with no grant publishes nothing; `contact` publishes "unavailable" for trying to sleep and do
+  not disturb and nothing for awake; `full` publishes the status and when it was said; a report
+  the owner kept private reaches no link; a cleared report takes the status off; a new report
+  does not restamp an old forecast as fresh. A link's grants can be changed and the page follows.
+- The computer: a report is kept, ordered after the newest it knows, uploaded and marked
+  delivered; the sleep buttons report only when the owner chose that; settings saved against a
+  stale revision lose.
+- The window: `StatusBar` reports private unless ticked, shares one report when ticked, sends the
+  chosen length, and says where a report has got to. `ShareLinkShown` changes what a link shows.
+- The phone: a report made there is the record the server accepts; an out-of-contract status and
+  a broken event are refused; an event and a status do not stop a download.
+  `aQueuedReportOrStatusDoesNotStopTheQueueBeingRead` runs on a device and holds the upload fault
+  below. `DialModelTest` holds the two new sentences.
+- `/v2/companion`: `waking_until` falls inside the next sleep's envelope, and a refusal has none.
+
+**Run on the emulator** (`ZeitBoard_Completion_Test`, Android 16) against `zeitboardd` on this
+computer, with twelve synthetic nights and one synthetic link:
+
+- The phone enrolled, downloaded the nights and showed the forecast.
+- "Trying to sleep" with sharing off: the server held it as not shared and the link's page showed
+  no status.
+- "Do not disturb" with sharing on: the page read "Reported: Do not disturb. They asked not to be
+  disturbed just now." above the forecast. With the link set to `contact` it read "Not a good
+  time right now"; set to nothing, it showed the forecast alone; set back to `full`, the status.
+- "Clear my status": the page went back to the forecast within a few seconds.
+- A wake time changed with the clock picker and saved: it uploaded, and the night reads
+  "Corrected" in the list.
+- A dose saved with the day and clock pickers.
+- The 31 instrumented tests passed twice. The 5 that need a server's address were skipped.
+
+**Found by the run and fixed.**
+
+- A phone that had queued one source report could upload nothing: reading the queue looked for
+  `provenance` in a record that has none.
+- With the next sleep still ahead the phone said "This sleep is likely to end…" and drew the
+  sleep starting at its earliest time. It now says "Sleep is likely to begin between 08:10 and
+  09:40 today, and you will probably wake between 15:55 and 17:55 today."
+- A report took up to half a minute to appear on the phone that made it.
+- The date and time pickers were Material's lavender. They are paper and ink.
+- "13 h 34 m ago" in the middle of the dial ran over the rings and the hand.
+
+**Checked in the running computer app**, on the throwaway profile with sync off: Home's status
+control reports, says "Sync is off, so it stays on this computer", honours a chosen length of one
+hour, and clears; Sharing shows the two status choices, both off.
+
+**Checks.** `gofmt`, `go vet` and every Go test in core, the server and the desktop; the contract
+fixtures; the Android unit tests, lint and debug build; and the web check: format, lint, types,
+builds and 722 and 6 tests.
+
+**Not checked.** The window's "Change what it shows" was not used against a server in the running
+app; its component test and the server's endpoint were, separately. The browser pane could not
+take screenshots, so the computer's screens were read as text and styles, not looked at. Nothing
+was run with TalkBack. The assistant cannot read or propose a status yet.
+

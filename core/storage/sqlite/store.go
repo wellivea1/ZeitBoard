@@ -258,6 +258,18 @@ var localSchema = []string{
 		reported_at TEXT NOT NULL,
 		payload_json BLOB NOT NULL
 	)`,
+	// Statuses the owner reported (ADR-0070), kept as reported.
+	`CREATE TABLE IF NOT EXISTS local_status_reports (
+		status_id TEXT PRIMARY KEY,
+		status TEXT NOT NULL CHECK(status IN ('awake', 'trying_to_sleep', 'do_not_disturb', 'cleared')),
+		reported_at TEXT NOT NULL,
+		payload_json BLOB NOT NULL
+	)`,
+	`CREATE TRIGGER IF NOT EXISTS trg_local_status_reports_immutable
+		BEFORE UPDATE ON local_status_reports
+		BEGIN
+			SELECT RAISE(ABORT, 'status reports are immutable');
+		END`,
 	`CREATE TRIGGER IF NOT EXISTS trg_local_source_reports_immutable
 		BEFORE UPDATE ON local_source_reports
 		BEGIN

@@ -87,6 +87,7 @@ const (
 	preparedSyncPullMarker
 	preparedSyncPullSourceReport
 	preparedSyncPullOwnerEvent
+	preparedSyncPullStatus
 )
 
 type preparedSyncPullRecord struct {
@@ -98,6 +99,7 @@ type preparedSyncPullRecord struct {
 	marker      preparedMarkerSync
 	report      preparedSourceReport
 	event       preparedOwnerEvent
+	status      preparedStatusReport
 	recordID    string
 	recordKind  string
 }
@@ -245,6 +247,8 @@ func (record preparedSyncPullRecord) seenID() string {
 		return record.marker.record.MarkerID
 	case preparedSyncPullSourceReport:
 		return record.report.report.ReportID
+	case preparedSyncPullStatus:
+		return record.status.report.StatusID
 	case preparedSyncPullOwnerEvent:
 		return ownerevents.RecordID(record.event.record.EventID, record.event.record.Revision)
 	default:
@@ -274,6 +278,8 @@ func (a *syncPullApply) records(prepared []preparedSyncPullRecord) error {
 			applied, err = insertSyncedMarkerTx(a.ctx, a.tx, record.marker, a.syncedAt)
 		case preparedSyncPullSourceReport:
 			applied, err = insertSyncedSourceReportTx(a.ctx, a.tx, record.report)
+		case preparedSyncPullStatus:
+			applied, err = insertSyncedStatusTx(a.ctx, a.tx, record.status, a.syncedAt)
 		case preparedSyncPullOwnerEvent:
 			applied, err = applySyncedOwnerEventTx(a.ctx, a.tx, record.event, a.syncedAt)
 		default:
@@ -426,6 +432,8 @@ func (a *syncPullApply) erase(recordKind, recordID string) (bool, error) {
 		return eraseMarkerTx(a.ctx, a.tx, recordID, erasedElsewhere)
 	case SyncKindSourceReport:
 		return eraseSourceReportTx(a.ctx, a.tx, recordID, erasedElsewhere)
+	case SyncKindStatus:
+		return eraseStatusReportTx(a.ctx, a.tx, recordID, erasedElsewhere)
 	case SyncKindOwnerEvent:
 		return eraseSyncedOwnerEventTx(a.ctx, a.tx, recordID)
 	default:
@@ -499,6 +507,9 @@ func prepareSyncPullRecord(record SyncPullRecord) (preparedSyncPullRecord, error
 	case SyncPullSourceReport:
 		prepared, err := prepareSyncedSourceReport(value)
 		return preparedSyncPullRecord{kind: preparedSyncPullSourceReport, report: prepared}, err
+	case SyncPullStatus:
+		prepared, err := prepareStatusReport(value.Report)
+		return preparedSyncPullRecord{kind: preparedSyncPullStatus, status: prepared}, err
 	case SyncPullOwnerEvent:
 		prepared, err := prepareSyncedOwnerEvent(value.Event)
 		return preparedSyncPullRecord{kind: preparedSyncPullOwnerEvent, event: prepared}, err
@@ -884,7 +895,7 @@ func validateSyncPullTombstone(recordID, recordKind string) error {
 			return fmt.Errorf("%s tombstone record_id must identify a revision", recordKind)
 		}
 		return nil
-	case "placement", SyncKindMedicationEvent, SyncKindMedicationCorrection, SyncKindContextMarker, SyncKindSourceReport:
+	case "placement", SyncKindMedicationEvent, SyncKindMedicationCorrection, SyncKindContextMarker, SyncKindSourceReport, SyncKindStatus:
 		return nil
 	default:
 		return fmt.Errorf("unsupported tombstone record kind %q", recordKind)

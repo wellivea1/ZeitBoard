@@ -518,3 +518,22 @@ textarea {
     grid-template-columns: 5.25rem minmax(0, 1fr);
   }
 }
+
+/* Which kind of statement follows: what the owner reported, or the forecast.
+   The same small capitals as a section title, without its rule. */
+.kicker {
+  margin: 1.75rem 0 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.kicker + .lead {
+  margin-top: 0.35rem;
+}
+
+.kicker + .lead-detail {
+  margin-top: 0.3rem;
+}

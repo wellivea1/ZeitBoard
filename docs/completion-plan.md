@@ -1986,9 +1986,39 @@ found that parts of ZeitBoard drew different conclusions from the same records
 - The window adds, changes and deletes the owner's events (ADR-0068). One such event had made the
   whole calendar unreadable.
 
+Closed later the same day: the phone's correction pickers (compiled and unit-tested, not run on
+a device), "Adjust the times" after a wake tap, a marked sleep said back on Home, larger small
+type, a sleep in pieces counted to its last end, and `portal.trustedProxies`.
+
 Open, and waiting on the owner's choice or a device: a reported current status, freshness that
-follows the cycle length, provider deletions and travel on the phone, pickers on the phone, and
-the proxy-aware rate limit. The README no longer says every planned function is delivered.
+follows the cycle length, and provider deletions and travel on the phone. The README no longer
+says every planned function is delivered.
+
+### Reported status, and the phone on the emulator — 2026-11-15
+
+The owner asked for the reported status with privacy that can be set, a review of how settings
+are kept, and the phone tested on the emulator. All three are done and not committed.
+
+- **A status the owner reports** (ADR-0070): awake, trying to sleep or do not disturb, on the
+  computer's Home and the phone's Now. It syncs, always ends, and is never read by the estimator.
+  Each link shows nothing, "not a good time" only, or the status; each report can be kept
+  private; each device's default is private. What a link shows can be changed after it is made.
+  On the computer the owner also chooses how long a report lasts.
+- **Run on the emulator against a local server**, with synthetic data: enrolling, syncing,
+  reporting a private and a shared status, the three link levels, clearing, a correction made
+  with the pickers, and a dose. Five faults came out of it and are fixed: one queued source
+  report stopped every upload from the phone; the phone called a sleep that had not begun "this
+  sleep" and drew it starting sharply (the server now sends `waking_until`); a report took up to
+  half a minute to show; the pickers and dialogs were Material lavender, not paper; and the
+  dial's centre words ran over its rings when long.
+- **Phone review against the design language**: the night list is a ruled list that says which
+  nights are corrected, where it was a column of framed buttons; the dose form uses the day and
+  clock pickers, the last time on the phone that was typed.
+- **Settings architecture review**: `settings-architecture-review-2026-11-15.md`. Eight findings
+  and seven recommendations; none of the recommendations is built.
+
+Still open: the assistant cannot read or propose a status; the phone cannot choose how long one
+lasts; freshness that follows the cycle length; provider deletions and travel on the phone.
 
 ## Where the completion goal stands — 2026-09-27
 

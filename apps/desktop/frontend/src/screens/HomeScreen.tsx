@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { estimateSourceLabel } from "../data/estimateStatus";
 import { Diary, Doses, NeedsYou } from "../components/HomeColumns";
 import { HomeSetup } from "../components/HomeSetup";
@@ -7,6 +7,7 @@ import { HomeSetupGuide } from "../components/HomeSetupGuide";
 import { Notice } from "../components/Notice";
 import { OutlookPanel } from "../components/OutlookPanel";
 import { QuickLogBar } from "../components/QuickLogBar";
+import { StatusBar } from "../components/StatusBar";
 import { loadOverview } from "../data/backend";
 import {
   calendarDataChangedEvent,
@@ -28,6 +29,7 @@ import {
 import { loadOutlook, outlookUnavailable } from "../data/outlook";
 import { hasOwnerEventService } from "../data/ownerEvents";
 import { overviewUnavailable } from "../data/overview";
+import type { QuickLogState } from "../data/quickLog";
 import { sleepDataChangedEvent, notifySleepDataChanged } from "../data/sleepDataEvents";
 import { loadSourceStatuses, sourceNote } from "../data/sourceStatus";
 import { useLoaded } from "../state/useLoaded";
@@ -122,9 +124,15 @@ export function HomeScreen() {
     events: [sleepDataChangedEvent],
     fallback: () => [],
   });
+  const [markedSleepAt, setMarkedSleepAt] = useState("");
+  const onQuickLog = useCallback(
+    (state: QuickLogState) =>
+      setMarkedSleepAt(state.pending && !state.pendingStale ? (state.pendingSince ?? "") : ""),
+    [],
+  );
   const parts = loading
     ? [{ text: "Reading your records…" }]
-    : leadParts(overview, outlook, new Date(), sourceNote(sourceStatuses ?? []));
+    : leadParts(overview, outlook, new Date(), sourceNote(sourceStatuses ?? []), markedSleepAt);
 
   return (
     <div className="almanac">
@@ -155,7 +163,8 @@ export function HomeScreen() {
         {hasDesktopBridge() && (
           <aside className="home-record" aria-label="Record">
             <span className="section-kicker">Record</span>
-            <QuickLogBar />
+            <QuickLogBar onState={onQuickLog} />
+            <StatusBar />
           </aside>
         )}
       </section>

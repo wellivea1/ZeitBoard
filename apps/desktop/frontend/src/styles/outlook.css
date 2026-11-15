@@ -31,7 +31,7 @@
 .figure-number {
   color: var(--muted);
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: 12px;
   font-style: normal;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -59,7 +59,7 @@
 
 .outlook-row-label {
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -183,7 +183,7 @@
   position: relative;
   height: 16px;
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 16px;
   letter-spacing: 0.1em;
