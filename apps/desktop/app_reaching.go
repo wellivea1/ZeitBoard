@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -36,12 +35,6 @@ import (
 const (
 	reachingFileName = "reaching.json"
 	reachingSchema   = "v2"
-
-	// legacyReachingFileName held the single schedule kept before ADR-0056. It
-	// is read once, to carry that schedule over, and removed once the list has
-	// been written in its place.
-	legacyReachingFileName = "reaching-hours.json"
-	legacyReachingSchema   = "v1"
 
 	// maxReachingContacts is a display limit, not a data one: Home draws a row
 	// for each person shown.
@@ -326,11 +319,9 @@ func (a *App) loadReachingFromDisk() error {
 		return err
 	}
 	if !found {
-		stored, revision, found, err = a.migrateLegacyReaching()
-		if err != nil || !found {
-			return err
-		}
-	} else if recovered {
+		return nil
+	}
+	if recovered {
 		if err := store.restorePrimary(stored, revision); err != nil {
 			return err
 		}
@@ -343,80 +334,11 @@ func (a *App) loadReachingFromDisk() error {
 	return nil
 }
 
-// migrateLegacyReaching carries the single schedule kept before ADR-0056 over
-// as one person. The list is written before the old file is removed, so an
-// interruption leaves one or the other and never neither. If the list cannot
-// be written the hours are used all the same, and the move is tried again at
-// the next start.
-func (a *App) migrateLegacyReaching() (ReachingHoursDTO, uint64, bool, error) {
-	legacyPath := filepath.Join(a.configDir, legacyReachingFileName)
-	legacy, revision, found, _, err := legacyReachingStore(legacyPath).read()
-	if err != nil || !found {
-		return ReachingHoursDTO{}, 0, false, err
-	}
-	state := ReachingHoursDTO{Contacts: []ReachingContactDTO{legacy.contact()}}
-	if err := reachingStore(filepath.Join(a.configDir, reachingFileName)).write(state, revision); err == nil {
-		for _, path := range []string{legacyPath, legacyPath + ".bak"} {
-			_ = os.Remove(path)
-		}
-	}
-	return state, revision, true, nil
-}
-
 func (a *App) persistReachingLocked(state ReachingHoursDTO, revision uint64) error {
 	if a.configDir == "" {
 		return nil
 	}
 	return reachingStore(filepath.Join(a.configDir, reachingFileName)).write(state, revision)
-}
-
-// legacyReachingHours is the single schedule kept before ADR-0056: the same
-// hours on each chosen day, with one switch for the whole of it.
-type legacyReachingHours struct {
-	Enabled    bool   `json:"enabled"`
-	Label      string `json:"label"`
-	StartLocal string `json:"startLocal"`
-	EndLocal   string `json:"endLocal"`
-	Days       []int  `json:"days"`
-	ZoneID     string `json:"zoneId"`
-}
-
-// legacyReachingStore reads the old file. Its rules were a subset of a
-// person's, so a schedule that becomes a valid person was a valid schedule.
-func legacyReachingStore(path string) localSettingsStore[legacyReachingHours] {
-	return localSettingsStore[legacyReachingHours]{
-		Path:   path,
-		Schema: legacyReachingSchema,
-		Name:   "reaching-hours",
-		Validate: func(legacy legacyReachingHours) error {
-			return validateReachingContact(legacy.contact())
-		},
-	}
-}
-
-// contact is the old schedule as one person, with the same hours on each of
-// its days. A schedule that was off becomes a person who is off, so no hours
-// are lost.
-func (legacy legacyReachingHours) contact() ReachingContactDTO {
-	label := strings.TrimSpace(legacy.Label)
-	if label == "" {
-		label = "Reaching hours"
-	}
-	days := append([]int(nil), legacy.Days...)
-	sort.Ints(days)
-	contact := ReachingContactDTO{
-		ID:     newReachingContactID(),
-		Label:  label,
-		ZoneID: legacy.ZoneID,
-		Off:    !legacy.Enabled,
-		Hours:  make([]ReachingDayHoursDTO, 0, len(days)),
-	}
-	for _, day := range days {
-		contact.Hours = append(contact.Hours, ReachingDayHoursDTO{
-			Day: day, StartLocal: legacy.StartLocal, EndLocal: legacy.EndLocal,
-		})
-	}
-	return contact
 }
 
 var weekdayNames = [...]string{

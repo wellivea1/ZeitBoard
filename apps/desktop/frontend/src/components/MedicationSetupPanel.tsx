@@ -184,6 +184,7 @@ export function MedicationSetupPanel({
   const [editing, setEditing] = useState<MedicationDefinition | null>(null);
   const [schedulingID, setSchedulingID] = useState("");
   const [erasing, setErasing] = useState<MedicationDefinition | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
   const scheduling =
     medications.find((medication) => medication.medicationId === schedulingID) ?? null;
 
@@ -227,7 +228,9 @@ export function MedicationSetupPanel({
           </h2>
         </div>
         {medications.length === 0 ? (
-          <p className="medication-rail-empty">Add a label to enable quick logging.</p>
+          <p className="medication-rail-empty">
+            None yet. Name one below; the name stays on your own devices and server.
+          </p>
         ) : (
           <div className="medication-definition-list">
             {medications.map((medication) => (
@@ -337,7 +340,13 @@ export function MedicationSetupPanel({
           onCancel={() => setErasing(null)}
         />
       )}
-      <details className="medication-rail-section medication-add fold">
+      {/* With none listed, adding one is the only thing to do here, so the
+          form is already open. */}
+      <details
+        className="medication-rail-section medication-add fold"
+        open={medications.length === 0 || addOpen}
+        onToggle={(event) => setAddOpen(event.currentTarget.open)}
+      >
         <summary>Add a medication</summary>
         <form className="medication-definition-form" aria-label="Add medication" onSubmit={add}>
           <label>

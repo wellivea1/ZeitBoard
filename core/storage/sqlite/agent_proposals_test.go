@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"non24.app/core/presence"
 )
 
 // fixedID names the record an approval makes, whatever its kind.
@@ -231,5 +233,90 @@ func TestErasingAMedicationErasesItsDoseProposalsButNotTasks(t *testing.T) {
 	}
 	if listed, err := store.AgentProposals(ctx, now); err != nil || len(listed) != 1 || listed[0].ProposalID != "agent_proposal_kept" {
 		t.Fatalf("proposals after erasing the medication: %+v, %v", listed, err)
+	}
+}
+
+// A proposed status is no report until the owner accepts it. Accepting keeps
+// the report the caller builds, which is where the owner's sharing choice
+// comes in: the proposal itself cannot say who sees it.
+func TestAProposedStatusIsReportedOnlyWhenTheOwnerApprovesIt(t *testing.T) {
+	store, ctx := openCalendarTestStore(t)
+	now := time.Date(2026, 11, 15, 21, 0, 0, 0, time.UTC)
+	if err := store.ProposeStatus(ctx, "agent_proposal_01", ProposedStatus{Status: presence.TryingToSleep, Minutes: 90}, now); err != nil {
+		t.Fatal(err)
+	}
+	if reports, err := store.StatusReports(ctx); err != nil || len(reports) != 0 {
+		t.Fatalf("a proposal reported a status: %v %v", reports, err)
+	}
+	listed, err := store.AgentProposals(ctx, now)
+	if err != nil || len(listed) != 1 || listed[0].Status == nil || listed[0].Dose != nil || listed[0].Task != nil ||
+		listed[0].Status.Minutes != 90 || listed[0].State != AgentProposalPending {
+		t.Fatalf("waiting proposals = %+v, %v", listed, err)
+	}
+	// The general approval makes doses and tasks, and refuses this one.
+	if _, err := store.ApproveAgentProposal(ctx, "agent_proposal_01", now, fixedID("x")); err == nil {
+		t.Fatal("a status proposal was approved without a report to keep")
+	}
+
+	approved := now.Add(time.Minute)
+	expires := approved.Add(90 * time.Minute)
+	result, err := store.ApproveStatusProposal(ctx, "agent_proposal_01", approved, func(asked ProposedStatus) (presence.Report, error) {
+		return presence.Report{StatusID: "status_from_proposal", Status: asked.Status, ReportedAt: approved, ExpiresAt: &expires, Shared: false}, nil
+	})
+	if err != nil || result.State != AgentProposalApproved || result.ResultID != "status_from_proposal" {
+		t.Fatalf("approval = %+v, %v", result, err)
+	}
+	reports, err := store.StatusReports(ctx)
+	if err != nil || len(reports) != 1 || reports[0].Status != presence.TryingToSleep || reports[0].Shared {
+		t.Fatalf("kept reports = %+v, %v", reports, err)
+	}
+	if pending, err := store.PendingStatusSyncRecords(ctx, 10); err != nil || len(pending) != 1 {
+		t.Fatalf("the accepted report is not waiting to upload: %v %v", pending, err)
+	}
+	// Deciding twice changes nothing.
+	if _, err := store.ApproveStatusProposal(ctx, "agent_proposal_01", approved, func(ProposedStatus) (presence.Report, error) {
+		t.Fatal("a decided proposal asked for another report")
+		return presence.Report{}, nil
+	}); !errors.Is(err, ErrAgentProposalDecided) {
+		t.Fatalf("second approval: %v", err)
+	}
+
+	// Out of the contract, nothing is queued.
+	for name, bad := range map[string]ProposedStatus{
+		"a made-up status":     {Status: "asleep"},
+		"longer than a day":    {Status: presence.Awake, Minutes: 1441},
+		"clearing for a while": {Status: presence.Cleared, Minutes: 10},
+	} {
+		if err := store.ProposeStatus(ctx, "agent_proposal_bad", bad, now); err == nil {
+			t.Fatalf("%s was queued", name)
+		}
+	}
+}
+
+// A queue made before status proposals cannot hold one: its table names the
+// actions it accepts. It is made again, and what waited in it is let go.
+func TestAnOlderProposalTableIsMadeAgain(t *testing.T) {
+	store, ctx := openCalendarTestStore(t)
+	now := time.Date(2026, 11, 15, 21, 0, 0, 0, time.UTC)
+	for _, statement := range []string{
+		`DROP TABLE local_agent_proposals`,
+		`CREATE TABLE local_agent_proposals(
+			proposal_id TEXT PRIMARY KEY,
+			action_id TEXT NOT NULL CHECK(action_id IN ('propose_log_dose', 'propose_add_task')),
+			medication_id TEXT, payload_json BLOB NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL,
+			decision TEXT NOT NULL, decided_at TEXT NOT NULL DEFAULT '', result_id TEXT NOT NULL DEFAULT '')`,
+	} {
+		if _, err := store.db.ExecContext(ctx, statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := store.ProposeStatus(ctx, "agent_proposal_01", ProposedStatus{Status: presence.Awake}, now); err == nil {
+		t.Fatal("the older table took a status proposal")
+	}
+	if err := store.initializeAgentProposals(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.ProposeStatus(ctx, "agent_proposal_01", ProposedStatus{Status: presence.Awake}, now); err != nil {
+		t.Fatalf("the remade table refused a status proposal: %v", err)
 	}
 }

@@ -39,6 +39,13 @@ export interface SleepEntry {
   sourceLabel: string;
   provenanceLabel: string;
   history: SleepCorrection[];
+  /**
+   * The provider that reported the night has since deleted it. It is kept,
+   * and left out unless the owner's own correction stands on it.
+   */
+  removedAtSource?: boolean;
+  /** How far from the home clock a night away was recorded, in words. */
+  recordedAway?: string;
 }
 
 export interface SleepCorrection {
@@ -265,6 +272,8 @@ function normalizeEntry(value: unknown): SleepEntry | undefined {
     sourceLabel,
     provenanceLabel,
     history,
+    removedAtSource: value.removedAtSource === true,
+    recordedAway: str(value.recordedAway) || undefined,
   };
 }
 

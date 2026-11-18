@@ -84,6 +84,8 @@ var envelopeIDFields = map[string]string{
 	storage.SyncKindMedicationCorrection: "correction_id",
 	storage.SyncKindContextMarker:        "marker_id",
 	storage.SyncKindSourceReport:         "report_id",
+	storage.SyncKindStatus:               "status_id",
+	storage.SyncKindSetting:              "setting_id",
 	"tombstone":                          "record_id",
 }
 

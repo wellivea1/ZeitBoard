@@ -132,6 +132,23 @@ type SleepSession struct {
 	Suppressed  bool      `json:"suppressed,omitempty"`
 	SourceLabel string    `json:"sourceLabel,omitempty"`
 	CreatedAt   time.Time `json:"createdAt"`
+
+	// RemovedAtSource says the provider that reported this sleep has since
+	// deleted it (ADR-0072). The record is kept. It is left out, as
+	// Suppressed, unless the owner's own correction stands on it.
+	RemovedAtSource bool `json:"removedAtSource,omitempty"`
+
+	// SourceClock is the clock the sleep was recorded on, when that was not
+	// its zone's: a night away from home (ADR-0073). The instants are what
+	// every reader uses; this says only where the clock stood.
+	SourceClock *SourceClock `json:"sourceClock,omitempty"`
+}
+
+// SourceClock is the UTC offset a source recorded each end of a sleep on, in
+// seconds east of UTC.
+type SourceClock struct {
+	StartOffsetSeconds int `json:"startOffsetSeconds"`
+	EndOffsetSeconds   int `json:"endOffsetSeconds"`
 }
 
 // EffectiveClassification preserves compatibility with legacy sessions that

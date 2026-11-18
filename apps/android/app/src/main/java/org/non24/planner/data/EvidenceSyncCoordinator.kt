@@ -82,7 +82,7 @@ class EvidenceSyncCoordinator(
         if (settings.settings.value.dataMode == DataMode.HEALTH_CONNECT &&
             health.permissionState.value == HealthPermissionState.GRANTED && sync.isConfigured()
         ) {
-            sync.enqueue(health.sourceEpisodes.value)
+            sync.enqueue(health.sourceEpisodes.value, health.lastCompleteRead.value)
             if (sync.status.value.queuedCount > 0) scheduler.requestUpload()
         }
     }

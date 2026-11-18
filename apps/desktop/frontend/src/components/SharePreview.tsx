@@ -1,5 +1,7 @@
 import { useLayoutEffect, useRef } from "react";
+import { previewNote } from "../data/homeSharing";
 import { Loading } from "./Loading";
+import { loadOverview } from "../data/backend";
 import {
   loadPortalPreview,
   sanitizePortalMarkup,
@@ -30,12 +32,27 @@ function PortalPage({ preview }: { preview: PortalPreview }) {
 
 export function SharePreview({ profileId, label }: { profileId: string; label: string }) {
   const { data: preview } = useLoaded(() => loadPortalPreview(profileId));
+  // The page says only that there is nothing current to show. The owner is
+  // told why here, where it does not reach the link's reader.
+  const { data: freshness } = useLoaded(
+    () => loadOverview().then((result) => result.data.freshness),
+    {
+      expires: true,
+      fallback: () => undefined,
+    },
+  );
+  const note = preview?.status === "ok" ? previewNote(label, freshness) : undefined;
   return (
     <figure className="share-preview" aria-label={`What ${label} sees`}>
       <figcaption>
         What <strong>{label}</strong> sees now, after entering the passcode. Nothing here is
         recorded as a visit.
       </figcaption>
+      {note && (
+        <p className="share-preview-note" role="status">
+          {note}
+        </p>
+      )}
       {preview === undefined ? (
         <Loading>Asking your server for the page…</Loading>
       ) : preview.status === "ok" ? (

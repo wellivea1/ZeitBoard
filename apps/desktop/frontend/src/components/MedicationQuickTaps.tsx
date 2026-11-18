@@ -84,7 +84,9 @@ export function MedicationQuickTaps({
   if (active.length === 0) {
     return (
       <p className="plan-empty">
-        {available ? "Add a medication below to record doses." : "Recording needs the desktop app."}
+        {available
+          ? "Add a medication, and its doses are recorded here with one tap."
+          : "Recording needs the desktop app."}
       </p>
     );
   }

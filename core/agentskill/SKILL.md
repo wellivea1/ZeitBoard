@@ -14,6 +14,9 @@ connector installed in this client. These are the rules for using them.
   versioned document. `get_overview`, `get_rhythm_summary`, `list_tasks`, `get_medication_timing`,
   `list_rhythm_markers` and `get_appearance` are narrower views of the same data.
 - With ZeitBoard's server connector instead of this one, start with `get_overview`.
+- `get_reported_status` is what the owner has said about now: awake, trying to sleep, do not
+  disturb, or nothing. It is their word, not a forecast. When one stands, say it before the
+  forecast, and say which is which.
 - `get_status` says whether ZeitBoard is running and what it can offer. If it is not running, say
   so and stop. Never guess what it would have said.
 - Check `rhythm.freshness` before using any time. If it is `stale` or `withheld`, say so in the
@@ -49,9 +52,12 @@ connector installed in this client. These are the rules for using them.
     need the owner's ZeitBoard server.
   - `propose_log_dose`: a dose taken or skipped, by the medication's opaque id from the snapshot.
     Never guess an id, a medication or a time.
+  - `propose_report_status`: a status for the owner to report (`awake`, `trying_to_sleep`,
+    `do_not_disturb`), optionally for a number of minutes, or `cleared` to take the standing one
+    back. Who sees a status is the owner's own setting. Never offer to share one.
   - `set_appearance` is the one direct action: a reversible display preset.
 - After proposing, say that it waits for the owner in ZeitBoard, and that nothing changes until they
-  accept. Tasks and doses wait on Home, and schedule changes in Plan.
+  accept. Tasks, doses and a status wait on Home, and schedule changes in Plan.
 - Propose only what the person asked for, one change at a time.
 
 ## Privacy

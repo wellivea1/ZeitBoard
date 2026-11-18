@@ -14,6 +14,9 @@ interface SyncReplicaStore {
     fun cache(projection: JsonObject, receivedAt: Instant)
     fun state(): CompanionState
     fun knownSources(): Map<String, SourceSyncRevision>
+
+    /** The choice that stands for each name that travels between devices, downloaded or this phone's own (ADR-0074). */
+    fun standingChoices(): Map<String, SharedChoice> = emptyMap()
     fun cachedReview(observationId: String): SleepReview?
     fun cacheReview(review: JsonObject)
     fun clear()
@@ -62,6 +65,8 @@ class SQLiteSyncReplicaStore(private val database: () -> SQLiteDatabase) : SyncR
                     // targets its dose.
                     "medication", "medication_event" -> record.payload.string("medication_id")
                     "medication_correction" -> record.payload.string("target_event_id")
+                    // An event's revisions share its id, so erasing one finds them all.
+                    "event" -> record.payload.string("event_id")
                     else -> record.recordId
                 }
                 val erased = exists("sync_erased_records", "record_id", record.recordId) ||
@@ -99,11 +104,24 @@ class SQLiteSyncReplicaStore(private val database: () -> SQLiteDatabase) : SyncR
 
     override fun state(): CompanionState {
         val totalSleepSources = database().rawQuery("SELECT COUNT(*) FROM sync_replica WHERE observation_kind = 'sleep_episode'", null).use { it.moveToFirst(); it.getInt(0) }
+        // A night the owner has corrected says so in the list. A provider's own
+        // revision of its record is not the owner's correction, and is left out.
+        val corrected = database().rawQuery("SELECT target_id, payload FROM sync_replica WHERE kind = 'correction'", null).use { rows ->
+            buildSet {
+                while (rows.moveToNext()) {
+                    val payload = Json.parseToJsonElement(rows.getString(1)).jsonObject
+                    if (payload["acquisition_method"]?.toString() != "\"health_connect\"") add(rows.getString(0))
+                }
+            }
+        }
+        // The provider's last word, including one this phone has not uploaded yet.
+        val removed = providerWords(database()).filterValues { it }.keys
         val sources = database().rawQuery("SELECT record_id, payload FROM sync_replica WHERE observation_kind = 'sleep_episode' ORDER BY seq DESC LIMIT 500", null).use { rows ->
             buildList {
                 while (rows.moveToNext()) {
                     val payload = Json.parseToJsonElement(rows.getString(1)).jsonObject
-                    add(SyncedSleep(rows.getString(0), payload.instant("start_at"), payload.instant("end_at"), payload.string("zone_id"), false))
+                    val id = rows.getString(0)
+                    add(SyncedSleep(id, payload.instant("start_at"), payload.instant("end_at"), payload.string("zone_id"), id in corrected, id in removed))
                 }
             }
         }
@@ -124,6 +142,7 @@ class SQLiteSyncReplicaStore(private val database: () -> SQLiteDatabase) : SyncR
             totalTaskCount = database().rawQuery("SELECT COUNT(DISTINCT target_id) FROM sync_replica WHERE kind = 'task'", null).use { it.moveToFirst(); it.getInt(0) },
             sleepSources = sources, totalSleepSourceCount = totalSleepSources,
             medications = medications(),
+            reportedStatus = reportedStatus(),
         )
     }
 
@@ -144,10 +163,14 @@ class SQLiteSyncReplicaStore(private val database: () -> SQLiteDatabase) : SyncR
         if (current.isEmpty()) return emptyList()
         val corrections = rows("SELECT target_id, payload FROM sync_replica WHERE kind = 'medication_correction'")
             .groupBy({ it.first }, { it.second })
-        val downloaded = rows("SELECT record_id, payload FROM sync_replica WHERE kind = 'medication_event' ORDER BY seq DESC LIMIT 500")
+        val downloadedRows = rows("SELECT record_id, payload FROM sync_replica WHERE kind = 'medication_event' ORDER BY seq DESC LIMIT 500")
+        // Every downloaded dose, whether or not a correction has since excluded
+        // it. Taken after the exclusions, the list let a dose excluded on the
+        // computer come back from the phone's own copy of the tap.
+        val downloadedIds = downloadedRows.map { it.first }.toSet()
+        val downloaded = downloadedRows
             .mapNotNull { (id, payload) -> effectiveDose(parseSyncedDose(id, payload), corrections[id].orEmpty()) }
             .map { CompanionDose(it.eventId, it.status, it.doseAt, it.zoneId, pending = false) to it.medicationId }
-        val downloadedIds = downloaded.map { it.first.eventId }.toSet()
         val tapped = db.rawQuery("SELECT record_id, payload, synced_at IS NULL FROM sync_outbox WHERE kind = 'medication_event'", null).use { cursor ->
             buildList {
                 while (cursor.moveToNext()) {
@@ -162,6 +185,31 @@ class SQLiteSyncReplicaStore(private val database: () -> SQLiteDatabase) : SyncR
             CompanionMedication(it.medicationId, it.label, it.scheduleKind, it.civilTimes, it.scheduleZoneId, latest[it.medicationId])
         }
     }
+
+    /**
+     * The newest status the owner reported: the ones downloaded, and the ones
+     * said on this phone that are still waiting to upload.
+     */
+    private fun reportedStatus(): CompanionStatus? {
+        val db = database()
+        val downloaded = db.rawQuery("SELECT record_id, payload FROM sync_replica WHERE kind = 'status'", null).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) add(parseSyncedStatus(cursor.getString(0), Json.parseToJsonElement(cursor.getString(1)).jsonObject, pending = false))
+            }
+        }
+        val downloadedIds = downloaded.map { it.statusId }.toSet()
+        val queued = db.rawQuery("SELECT record_id, payload, synced_at IS NULL FROM sync_outbox WHERE kind = 'status'", null).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    if (cursor.getString(0) in downloadedIds) continue
+                    add(parseSyncedStatus(cursor.getString(0), Json.parseToJsonElement(cursor.getString(1)).jsonObject, pending = cursor.getInt(2) == 1))
+                }
+            }
+        }
+        return newestStatus(downloaded + queued)
+    }
+
+    override fun standingChoices(): Map<String, SharedChoice> = standingChoices(database())
 
     override fun cachedReview(observationId: String): SleepReview? = meta("review:$observationId")?.let { parseSleepReview(Json.parseToJsonElement(it).jsonObject) }
 
@@ -216,6 +264,10 @@ class SQLiteSyncReplicaStore(private val database: () -> SQLiteDatabase) : SyncR
             db.insertWithOnConflict("sync_erased_tasks", null, ContentValues().apply { put("task_id", revisionOf) }, SQLiteDatabase.CONFLICT_IGNORE)
             db.delete("sync_replica", "kind IN ('task', 'placement') AND target_id = ?", arrayOf(revisionOf))
         }
+        if (erasedKind == "event" && revisionOf != null) {
+            // Any erased revision means the event was deleted (ADR-0068).
+            db.delete("sync_replica", "kind = 'event' AND target_id = ?", arrayOf(revisionOf))
+        }
         if (erasedKind == "medication" && revisionOf != null) {
             // Any erased revision means the medication was deleted, with every
             // dose and dose correction of it (ADR-0048), including a dose
@@ -260,7 +312,7 @@ class SQLiteSyncReplicaStore(private val database: () -> SQLiteDatabase) : SyncR
 
     companion object {
         /** Mutable records that travel as revisions "<id>_r<n>"; the highest is current. */
-        private val REVISED_KINDS = setOf("task", "medication")
+        private val REVISED_KINDS = setOf("task", "medication", "event")
         private val CORRECTION_KINDS = setOf("correction", "medication_correction")
 
         internal fun createSchema(db: SQLiteDatabase) {

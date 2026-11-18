@@ -59,7 +59,7 @@
         },
         "kind": {
           "type": "string",
-          "enum": ["observation", "correction", "task", "placement", "medication", "medication_event", "medication_correction", "context_marker", "source_report"]
+          "enum": ["observation", "correction", "task", "placement", "event", "medication", "medication_event", "medication_correction", "context_marker", "source_report", "status", "setting"]
         },
         "createdAt": {
           "$ref": "common.schema.json#/$defs/timestamp"
@@ -88,7 +88,7 @@
         },
         "kind": {
           "type": "string",
-          "enum": ["observation", "correction", "task", "placement", "medication", "medication_event", "medication_correction", "context_marker", "source_report", "tombstone"]
+          "enum": ["observation", "correction", "task", "placement", "event", "medication", "medication_event", "medication_correction", "context_marker", "source_report", "status", "setting", "tombstone"]
         },
         "deviceId": {
           "$ref": "common.schema.json#/$defs/identifier"
@@ -121,6 +121,9 @@
           "$ref": "#/$defs/placementPayload"
         },
         {
+          "$ref": "#/$defs/eventPayload"
+        },
+        {
           "$ref": "../v2/medication-set.schema.json#/$defs/medication"
         },
         {
@@ -134,6 +137,12 @@
         },
         {
           "$ref": "source-report-set.schema.json#/$defs/report"
+        },
+        {
+          "$ref": "#/$defs/statusPayload"
+        },
+        {
+          "$ref": "#/$defs/settingPayload"
         },
         {
           "$ref": "#/$defs/tombstonePayload"
@@ -176,6 +185,138 @@
         }
       }
     },
+    "statusPayload": {
+      "description": "A status the owner reported (ADR-0070): awake, trying to sleep, or do not disturb, with when it was said and when it stops standing. Reports are immutable; the newest one stands, and \"cleared\" takes it back. It is the owner's word, never an estimator input.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status_id", "status", "reported_at", "shared"],
+      "properties": {
+        "status_id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "status": {
+          "enum": ["awake", "trying_to_sleep", "do_not_disturb", "cleared"]
+        },
+        "reported_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "expires_at": {
+          "description": "Required unless the status is cleared; at most 24 hours after reported_at.",
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "shared": {
+          "description": "Whether a share link the owner allowed may show this report.",
+          "type": "boolean"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "cleared"
+              }
+            },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "shared": {
+                "const": false
+              }
+            },
+            "not": {
+              "required": ["expires_at"]
+            }
+          },
+          "else": {
+            "required": ["expires_at"]
+          }
+        }
+      ]
+    },
+    "settingPayload": {
+      "description": "One choice the owner made on one device, which their other devices follow through their own server (ADR-0074). Each change is a new record; for each name, the one with the latest changed_at stands, and of two alike the greater setting_id.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["setting_id", "name", "value", "changed_at"],
+      "properties": {
+        "setting_id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "name": {
+          "enum": ["share_status_by_default", "follow_sleep_taps", "clock"]
+        },
+        "value": {
+          "description": "On or off, or for the clock: the device's own format, 12-hour or 24-hour.",
+          "type": ["boolean", "string"]
+        },
+        "changed_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "name": {
+                "const": "clock"
+              }
+            },
+            "required": ["name"]
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "enum": ["system", "12", "24"]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "value": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "eventPayload": {
+      "description": "One revision of an event the owner added (ADR-0068). Each change is a new record, \"<event_id>_r<revision>\"; every device keeps the highest revision, and of two alike in number the later updated_at, then the greater bytes.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["event_id", "title", "start_at", "end_at", "zone_id", "revision", "created_at", "updated_at"],
+      "properties": {
+        "event_id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "start_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "end_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "zone_id": {
+          "$ref": "common.schema.json#/$defs/zoneId"
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "created_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        },
+        "updated_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        }
+      }
+    },
     "tombstonePayload": {
       "type": "object",
       "additionalProperties": false,
@@ -186,7 +327,7 @@
         },
         "record_kind": {
           "type": "string",
-          "enum": ["observation", "correction", "task", "placement", "medication", "medication_event", "medication_correction", "context_marker", "source_report"]
+          "enum": ["observation", "correction", "task", "placement", "event", "medication", "medication_event", "medication_correction", "context_marker", "source_report", "status", "setting"]
         }
       }
     },
@@ -341,6 +482,57 @@
             "properties": {
               "payload": {
                 "$ref": "source-report-set.schema.json#/$defs/report"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "status"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "$ref": "#/$defs/statusPayload"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "setting"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "$ref": "#/$defs/settingPayload"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "event"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "$ref": "#/$defs/eventPayload"
               }
             }
           }

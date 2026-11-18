@@ -1,11 +1,13 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { estimateSourceLabel } from "../data/estimateStatus";
 import { Diary, Doses, NeedsYou } from "../components/HomeColumns";
 import { HomeSetup } from "../components/HomeSetup";
+import { HomeSharing } from "../components/HomeSharing";
 import { HomeSetupGuide } from "../components/HomeSetupGuide";
 import { Notice } from "../components/Notice";
 import { OutlookPanel } from "../components/OutlookPanel";
 import { QuickLogBar } from "../components/QuickLogBar";
+import { StatusBar } from "../components/StatusBar";
 import { loadOverview } from "../data/backend";
 import {
   calendarDataChangedEvent,
@@ -25,7 +27,9 @@ import {
   type MedicationsData,
 } from "../data/medications";
 import { loadOutlook, outlookUnavailable } from "../data/outlook";
+import { hasOwnerEventService } from "../data/ownerEvents";
 import { overviewUnavailable } from "../data/overview";
+import type { QuickLogState } from "../data/quickLog";
 import { sleepDataChangedEvent, notifySleepDataChanged } from "../data/sleepDataEvents";
 import { loadSourceStatuses, sourceNote } from "../data/sourceStatus";
 import { useLoaded } from "../state/useLoaded";
@@ -120,9 +124,15 @@ export function HomeScreen() {
     events: [sleepDataChangedEvent],
     fallback: () => [],
   });
+  const [markedSleepAt, setMarkedSleepAt] = useState("");
+  const onQuickLog = useCallback(
+    (state: QuickLogState) =>
+      setMarkedSleepAt(state.pending && !state.pendingStale ? (state.pendingSince ?? "") : ""),
+    [],
+  );
   const parts = loading
     ? [{ text: "Reading your records…" }]
-    : leadParts(overview, outlook, new Date(), sourceNote(sourceStatuses ?? []));
+    : leadParts(overview, outlook, new Date(), sourceNote(sourceStatuses ?? []), markedSleepAt);
 
   return (
     <div className="almanac">
@@ -148,10 +158,15 @@ export function HomeScreen() {
             {hasEstimate && <a href="#/rhythm">How this is worked out</a>}
           </p>
         </div>
-        <aside className="home-record" aria-label="Record">
-          <span className="section-kicker">Record</span>
-          <QuickLogBar />
-        </aside>
+        {/* The preview records nothing, and a title over nothing says less
+            than no title. */}
+        {hasDesktopBridge() && (
+          <aside className="home-record" aria-label="Record">
+            <span className="section-kicker">Record</span>
+            <QuickLogBar onState={onQuickLog} />
+            <StatusBar />
+          </aside>
+        )}
       </section>
 
       {hasEstimate ? (
@@ -160,7 +175,10 @@ export function HomeScreen() {
           <HomeSetupGuide />
           <section className="home-columns" aria-label="Today and the days ahead">
             <NeedsYou />
-            <Diary days={calendar && diaryDays(calendar, outlook, medications.data ?? null)} />
+            <Diary
+              days={calendar && diaryDays(calendar, outlook, medications.data ?? null)}
+              canAddEvent={hasOwnerEventService()}
+            />
             <Doses
               data={medications.data}
               busy={medications.busy}
@@ -179,11 +197,7 @@ export function HomeScreen() {
             </p>
             <p>Kept on this computer, and synced only to your own server if you turn sync on.</p>
           </Notice>
-          {overview.sharingStatus.active && (
-            <p className="home-sharing">
-              <a href="#/sharing">{overview.sharingStatus.label}</a>
-            </p>
-          )}
+          <HomeSharing freshness={overview.freshness} />
         </>
       ) : loading ? null : overview.status === "unavailable" ? (
         <HomeRecovery />

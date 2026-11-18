@@ -38,6 +38,21 @@ func TestPushValidatorAndSchemaDriftGuard(t *testing.T) {
 			valid: true,
 		},
 		{
+			name:  "valid event revision push",
+			body:  `{"schema_version":"v1","records":[{"recordId":"event_dentist_01_r2","kind":"event","createdAt":"2026-10-27T12:40:00Z","payload":{"event_id":"event_dentist_01","title":"Synthetic dentist","start_at":"2026-10-29T19:00:00Z","end_at":"2026-10-29T20:00:00Z","zone_id":"America/New_York","revision":2,"created_at":"2026-10-27T12:00:00Z","updated_at":"2026-10-27T12:02:00Z"}}]}`,
+			valid: true,
+		},
+		{
+			name:  "event with a field the contract does not name",
+			body:  `{"schema_version":"v1","records":[{"recordId":"event_dentist_01_r2","kind":"event","createdAt":"2026-10-27T12:40:00Z","payload":{"event_id":"event_dentist_01","location":"Synthetic clinic","title":"Synthetic dentist","start_at":"2026-10-29T19:00:00Z","end_at":"2026-10-29T20:00:00Z","zone_id":"America/New_York","revision":2,"created_at":"2026-10-27T12:00:00Z","updated_at":"2026-10-27T12:02:00Z"}}]}`,
+			valid: false,
+		},
+		{
+			name:  "event without a title",
+			body:  `{"schema_version":"v1","records":[{"recordId":"event_dentist_01_r2","kind":"event","createdAt":"2026-10-27T12:40:00Z","payload":{"event_id":"event_dentist_01","start_at":"2026-10-29T19:00:00Z","end_at":"2026-10-29T20:00:00Z","zone_id":"America/New_York","revision":2,"created_at":"2026-10-27T12:00:00Z","updated_at":"2026-10-27T12:02:00Z"}}]}`,
+			valid: false,
+		},
+		{
 			name:  "valid medication revision push",
 			body:  `{"schema_version":"v1","records":[{"recordId":"med_evening_01_r2","kind":"medication","createdAt":"2026-03-05T12:40:00Z","payload":{"medication_id":"med_evening_01","label":"Evening tablet","active":true,"schedule":{"kind":"fixed_clock","zone_id":"America/New_York","civil_times":["21:00"],"reminder_enabled":true},"created_at":"2026-03-01T12:00:00Z","revision":2,"updated_at":"2026-03-05T12:00:00Z"}}]}`,
 			valid: true,
@@ -75,6 +90,61 @@ func TestPushValidatorAndSchemaDriftGuard(t *testing.T) {
 		{
 			name:  "context marker of an unknown kind",
 			body:  `{"schema_version":"v1","records":[{"recordId":"marker_trip_01","kind":"context_marker","createdAt":"2026-03-05T12:40:00Z","payload":{"marker_id":"marker_trip_01","kind":"holiday","start_at":"2026-03-04T12:00:00Z","zone_id":"Europe/Lisbon","provenance":{"acquisition_method":"manual","evidence_status":"user_reported","recorded_at":"2026-03-05T12:00:00Z"}}}]}`,
+			valid: false,
+		},
+		{
+			name:  "valid status push",
+			body:  `{"schema_version":"v1","records":[{"recordId":"status_0a1b2c3d4e5f6071","kind":"status","createdAt":"2026-03-05T12:40:00Z","payload":{"status_id":"status_0a1b2c3d4e5f6071","status":"trying_to_sleep","reported_at":"2026-03-05T12:40:00Z","expires_at":"2026-03-05T22:40:00Z","shared":true}}]}`,
+			valid: true,
+		},
+		{
+			name:  "valid cleared status push",
+			body:  `{"schema_version":"v1","records":[{"recordId":"status_1b2c3d4e5f607182","kind":"status","createdAt":"2026-03-05T12:40:00Z","payload":{"status_id":"status_1b2c3d4e5f607182","status":"cleared","reported_at":"2026-03-05T12:40:00Z","shared":false}}]}`,
+			valid: true,
+		},
+		{
+			name:  "status without an expiry",
+			body:  `{"schema_version":"v1","records":[{"recordId":"status_2c3d4e5f60718293","kind":"status","createdAt":"2026-03-05T12:40:00Z","payload":{"status_id":"status_2c3d4e5f60718293","status":"awake","reported_at":"2026-03-05T12:40:00Z","shared":true}}]}`,
+			valid: false,
+		},
+		{
+			name:  "status of an unknown kind",
+			body:  `{"schema_version":"v1","records":[{"recordId":"status_3d4e5f60718293a4","kind":"status","createdAt":"2026-03-05T12:40:00Z","payload":{"status_id":"status_3d4e5f60718293a4","status":"asleep","reported_at":"2026-03-05T12:40:00Z","expires_at":"2026-03-05T22:40:00Z","shared":true}}]}`,
+			valid: false,
+		},
+		{
+			name:  "cleared status with an expiry",
+			body:  `{"schema_version":"v1","records":[{"recordId":"status_4e5f60718293a4b5","kind":"status","createdAt":"2026-03-05T12:40:00Z","payload":{"status_id":"status_4e5f60718293a4b5","status":"cleared","reported_at":"2026-03-05T12:40:00Z","expires_at":"2026-03-05T22:40:00Z","shared":false}}]}`,
+			valid: false,
+		},
+		{
+			name:  "valid clock setting push",
+			body:  `{"schema_version":"v1","records":[{"recordId":"setting-0a1b2c3d4e5f60718293a4b5","kind":"setting","createdAt":"2026-03-05T12:40:00Z","payload":{"setting_id":"setting-0a1b2c3d4e5f60718293a4b5","name":"clock","value":"24","changed_at":"2026-03-05T12:40:00Z"}}]}`,
+			valid: true,
+		},
+		{
+			name:  "valid sharing setting push",
+			body:  `{"schema_version":"v1","records":[{"recordId":"setting-0a1b2c3d4e5f60718293a4b5","kind":"setting","createdAt":"2026-03-05T12:40:00Z","payload":{"setting_id":"setting-0a1b2c3d4e5f60718293a4b5","name":"share_status_by_default","value":false,"changed_at":"2026-03-05T12:40:00Z"}}]}`,
+			valid: true,
+		},
+		{
+			name:  "a switch set to a word",
+			body:  `{"schema_version":"v1","records":[{"recordId":"setting-0a1b2c3d4e5f60718293a4b5","kind":"setting","createdAt":"2026-03-05T12:40:00Z","payload":{"setting_id":"setting-0a1b2c3d4e5f60718293a4b5","name":"follow_sleep_taps","value":"on","changed_at":"2026-03-05T12:40:00Z"}}]}`,
+			valid: false,
+		},
+		{
+			name:  "a clock set to a switch",
+			body:  `{"schema_version":"v1","records":[{"recordId":"setting-0a1b2c3d4e5f60718293a4b5","kind":"setting","createdAt":"2026-03-05T12:40:00Z","payload":{"setting_id":"setting-0a1b2c3d4e5f60718293a4b5","name":"clock","value":true,"changed_at":"2026-03-05T12:40:00Z"}}]}`,
+			valid: false,
+		},
+		{
+			name:  "a setting that stays on its device",
+			body:  `{"schema_version":"v1","records":[{"recordId":"setting-0a1b2c3d4e5f60718293a4b5","kind":"setting","createdAt":"2026-03-05T12:40:00Z","payload":{"setting_id":"setting-0a1b2c3d4e5f60718293a4b5","name":"theme","value":"dark","changed_at":"2026-03-05T12:40:00Z"}}]}`,
+			valid: false,
+		},
+		{
+			name:  "a setting without its time",
+			body:  `{"schema_version":"v1","records":[{"recordId":"setting-0a1b2c3d4e5f60718293a4b5","kind":"setting","createdAt":"2026-03-05T12:40:00Z","payload":{"setting_id":"setting-0a1b2c3d4e5f60718293a4b5","name":"clock","value":"12"}}]}`,
 			valid: false,
 		},
 		{

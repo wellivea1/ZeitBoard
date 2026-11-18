@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"non24.app/core/presence"
 )
 
 // Version names the registry. Adding, removing or reshaping an action is a new
@@ -42,6 +44,9 @@ const (
 	DoseSubject Subject = "dose"
 	// NewTaskSubject proposals name a NewTaskTarget, in the owner's words.
 	NewTaskSubject Subject = "new_task"
+	// StatusSubject proposals name a StatusTarget: what the owner says about
+	// now is theirs to say (ADR-0070), so it waits for them like a dose.
+	StatusSubject Subject = "status"
 )
 
 // Surface is a place an action is offered.
@@ -117,6 +122,15 @@ var registry = []Action{
 		CardTitle: "Add task",
 	},
 	{
+		ID: "propose_report_status", Kind: Proposal, Subject: StatusSubject, Surfaces: LocalMCP,
+		Title: "Propose Report Status",
+		Description: "Create a pending status for the owner to report: awake, trying_to_sleep or do_not_disturb, and " +
+			"optionally for how many minutes; or cleared, to take back the one that stands. Whether share links may show " +
+			"it is the owner's own setting and cannot be chosen here. Nothing is reported until the owner accepts it on " +
+			"their computer, and it lapses after a day." + approvalRequired,
+		CardTitle: "Report status",
+	},
+	{
 		ID: "set_appearance", Kind: Direct, Surfaces: LocalMCP,
 		Title:       "Set Appearance",
 		Description: "Directly set reversible local display state under ADR-0021. This does not change health or schedule data.",
@@ -189,6 +203,8 @@ func TargetSchema(subject Subject) map[string]any {
 		return DoseTargetSchema()
 	case NewTaskSubject:
 		return NewTaskTargetSchema()
+	case StatusSubject:
+		return StatusTargetSchema()
 	default:
 		return TaskTargetSchema()
 	}
@@ -352,6 +368,50 @@ func NewTaskTargetSchema() map[string]any {
 			"duration_minutes":  map[string]any{"type": "integer", "minimum": 5, "maximum": 720},
 			"earliest_start_at": map[string]any{"type": "string", "format": "date-time"},
 			"latest_finish_at":  map[string]any{"type": "string", "format": "date-time"},
+		},
+	}
+}
+
+// StatusTarget is what a status proposal names: one of the statuses the owner
+// can report, and optionally how long it should stand. It cannot say whether
+// share links may show the report: that stays the owner's own setting.
+type StatusTarget struct {
+	Status  string `json:"status"`
+	Minutes int    `json:"minutes,omitempty"`
+}
+
+// The shortest a proposed status may be asked to stand.
+const minStatusMinutes = 5
+
+// Validate checks the target. Zero minutes means the status's usual length.
+func (t StatusTarget) Validate() error {
+	switch {
+	case !presence.ValidStatus(t.Status):
+		return errors.New("status must be awake, trying_to_sleep, do_not_disturb or cleared")
+	case t.Status == presence.Cleared && t.Minutes != 0:
+		return errors.New("clearing a status takes no minutes")
+	case t.Minutes != 0 && (t.Minutes < minStatusMinutes || time.Duration(t.Minutes)*time.Minute > presence.MaxLifetime):
+		return errors.New("minutes must be between 5 and 1440")
+	}
+	return nil
+}
+
+// StatusTargetSchema is the JSON Schema of a StatusTarget, for tool input
+// schemas.
+func StatusTargetSchema() map[string]any {
+	return map[string]any{
+		"type":                 "object",
+		"additionalProperties": false,
+		"required":             []string{"status"},
+		"properties": map[string]any{
+			"status": map[string]any{
+				"type": "string",
+				"enum": []string{presence.Awake, presence.TryingToSleep, presence.DoNotDisturb, presence.Cleared},
+			},
+			"minutes": map[string]any{
+				"type": "integer", "minimum": minStatusMinutes, "maximum": int(presence.MaxLifetime / time.Minute),
+				"description": "How long the status stands. Leave it out for the usual length.",
+			},
 		},
 	}
 }

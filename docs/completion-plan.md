@@ -1969,6 +1969,90 @@ in it. ADR-0067 closes it:
 - The history lists the approval once, as the assistant's, with Undo. Once undone, it reads
   "undone".
 
+### Two reviews, and one reading of the records — 2026-11-13
+
+A walk through everyday tasks in the running app, and an outside reviewer's reading of the code,
+found that parts of ZeitBoard drew different conclusions from the same records
+([`usability-review-2026-11-13.md`](usability-review-2026-11-13.md), ADR-0069).
+
+- The planner now plans only in the time Home's outlook draws as awake, and not on records Home
+  withholds on. The shared page leaves the uncertain hours out of "Likely awake".
+- An excluded night no longer makes old records current, on the computer or the server.
+- Cycles are counted in the rhythm's own period, a gap that cannot be counted is left behind after
+  seven nights, and a long nap is not a cycle. On the owner's history 809 forecasts became 921 with
+  errors unchanged (`verification.md`).
+- A shared page left open through an outage withdraws its claim, and keeps a message part way
+  written.
+- The window adds, changes and deletes the owner's events (ADR-0068). One such event had made the
+  whole calendar unreadable.
+
+Closed later the same day: the phone's correction pickers (compiled and unit-tested, not run on
+a device), "Adjust the times" after a wake tap, a marked sleep said back on Home, larger small
+type, a sleep in pieces counted to its last end, and `portal.trustedProxies`.
+
+Open, and waiting on the owner's choice or a device: a reported current status, freshness that
+follows the cycle length, and provider deletions and travel on the phone. The README no longer
+says every planned function is delivered.
+
+### Reported status, and the phone on the emulator — 2026-11-15
+
+The owner asked for the reported status with privacy that can be set, a review of how settings
+are kept, and the phone tested on the emulator. All three are done and not committed.
+
+- **A status the owner reports** (ADR-0070): awake, trying to sleep or do not disturb, on the
+  computer's Home and the phone's Now. It syncs, always ends, and is never read by the estimator.
+  Each link shows nothing, "not a good time" only, or the status; each report can be kept
+  private; each device's default is private. What a link shows can be changed after it is made.
+  On the computer the owner also chooses how long a report lasts.
+- **Run on the emulator against a local server**, with synthetic data: enrolling, syncing,
+  reporting a private and a shared status, the three link levels, clearing, a correction made
+  with the pickers, and a dose. Five faults came out of it and are fixed: one queued source
+  report stopped every upload from the phone; the phone called a sleep that had not begun "this
+  sleep" and drew it starting sharply (the server now sends `waking_until`); a report took up to
+  half a minute to show; the pickers and dialogs were Material lavender, not paper; and the
+  dial's centre words ran over its rings when long.
+- **Phone review against the design language**: the night list is a ruled list that says which
+  nights are corrected, where it was a column of framed buttons; the dose form uses the day and
+  clock pickers, the last time on the phone that was typed.
+- **Settings architecture review**: `settings-architecture-review-2026-11-15.md`. Eight findings
+  and seven recommendations; none of the recommendations is built.
+
+Built after that, the same day:
+
+- **An assistant reads the status and proposes one** (`get_reported_status`,
+  `propose_report_status`). The proposal waits on Home like a dose and cannot say who sees the
+  report. The chat assistant's provider is not sent the status.
+- **The phone chooses how long a report lasts.**
+- **From the settings review**: one table of settings files with a test that keeps it complete;
+  closed notices kept by the desktop in `notices.json`; each sharing switch says it is that
+  device's alone; the old `reaching-hours.json` reader removed. One finding of the review was
+  wrong (appearance is already kept the right way round) and one recommendation is withdrawn.
+
+Still open: freshness that follows the cycle length; provider deletions and travel on the phone;
+settings that sync between devices; settings an assistant can propose changes to.
+
+### Freshness, removed nights, nights away and choices that travel — 2026-11-17
+
+The owner asked for the four left open above and chose each one's rule (ADR-0071 to ADR-0074).
+
+- **Freshness follows the forecast** (ADR-0071). The records are current through the waking
+  stretch and the sleep the forecast expects, whatever the cycle length. When the latest likely
+  wake passes with no record, Home adds its caution for six hours, then withholds. Each share-page
+  snapshot keeps both instants. A simulated 27-hour history walks through the materializer.
+- **A night Health Connect no longer has** (ADR-0072). The phone says so after a complete read,
+  for its own synced nights that began a day or more inside the window, and says so again if the
+  night comes back. The night is kept, left out, and marked on both devices; the owner's own
+  correction counts it again.
+- **A night recorded away** (ADR-0073). It syncs with its own clock's offsets, counts, and says
+  how far from home it was recorded. Only a night with no clock at all is held.
+- **Choices that travel** (ADR-0074). Sharing a status by default, the sleep buttons reporting
+  one, and the clock are `setting` records; the newest made anywhere stands. The phone gained the
+  computer's three clocks.
+- The phone writes the server's shared fixture for a removal and return of a night away byte for
+  byte, and its review reader accepts the server's new fields, which it had refused.
+
+Still open: settings an assistant can propose changes to.
+
 ## Where the completion goal stands — 2026-09-27
 
 Each milestone's own record above says what was done; this is the summary, with what remains and

@@ -196,6 +196,11 @@ func (c desktopLocalCapability) CallTool(ctx context.Context, name string, argum
 		if err == nil {
 			value, err = c.app.agentMarkerProjection(ctx)
 		}
+	case "get_reported_status":
+		err = requireEmptyToolArguments(arguments)
+		if err == nil {
+			value, err = c.app.agentReportedStatusProjection(ctx)
+		}
 	case "get_appearance":
 		err = requireEmptyToolArguments(arguments)
 		value = projectAgentAppearance(c.app.currentAppearance())
@@ -204,17 +209,7 @@ func (c desktopLocalCapability) CallTool(ctx context.Context, name string, argum
 	case "ask_zeitboard_facts":
 		value, err = c.app.answerLocalFacts(ctx, arguments)
 	default:
-		action, ok := agentactions.ProposalOn(name, agentactions.LocalMCP)
-		switch {
-		case !ok:
-			return nil, localagent.UserError("Unknown ZeitBoard tool.")
-		case action.Subject == agentactions.DoseSubject:
-			value, err = c.app.proposeDose(ctx, name, arguments)
-		case action.Subject == agentactions.NewTaskSubject:
-			value, err = c.app.proposeTask(ctx, name, arguments)
-		default:
-			value, err = c.app.createLocalAgentProposal(ctx, name, arguments)
-		}
+		value, err = c.app.proposeThroughTool(ctx, name, arguments)
 	}
 	if err != nil {
 		return nil, err
@@ -224,6 +219,26 @@ func (c desktopLocalCapability) CallTool(ctx context.Context, name string, argum
 		return nil, errors.New("encode local projection")
 	}
 	return encoded, nil
+}
+
+// proposeThroughTool makes the proposal a registered tool asks for. What it
+// is about decides where it waits: a dose, a new task or a status on this
+// computer, and a schedule change on the owner's server.
+func (a *App) proposeThroughTool(ctx context.Context, name string, arguments json.RawMessage) (localAgentProposalResult, error) {
+	action, ok := agentactions.ProposalOn(name, agentactions.LocalMCP)
+	if !ok {
+		return localAgentProposalResult{}, localagent.UserError("Unknown ZeitBoard tool.")
+	}
+	switch action.Subject {
+	case agentactions.DoseSubject:
+		return a.proposeDose(ctx, name, arguments)
+	case agentactions.NewTaskSubject:
+		return a.proposeTask(ctx, name, arguments)
+	case agentactions.StatusSubject:
+		return a.proposeStatus(ctx, name, arguments)
+	default:
+		return a.createLocalAgentProposal(ctx, name, arguments)
+	}
 }
 
 func requireEmptyToolArguments(arguments json.RawMessage) error {

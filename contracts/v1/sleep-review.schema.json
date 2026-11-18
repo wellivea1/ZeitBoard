@@ -13,6 +13,7 @@
     "effective_window",
     "sleep_classification",
     "excluded",
+    "removed_at_source",
     "needs_review",
     "manual_corrections"
   ],
@@ -26,6 +27,11 @@
     "effective_window": { "$ref": "#/$defs/window" },
     "sleep_classification": { "enum": ["principal", "nap", "unknown"] },
     "excluded": { "type": "boolean" },
+    "removed_at_source": {
+      "type": "boolean",
+      "description": "The provider that reported this sleep has since deleted it. The record is kept, and left out unless the owner's own correction stands on it."
+    },
+    "source_offset": { "$ref": "observation-set.schema.json#/$defs/observation/properties/source_offset" },
     "needs_review": { "type": "boolean" },
     "manual_corrections": {
       "type": "array",

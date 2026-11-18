@@ -328,6 +328,24 @@ func TestUndoKeepsTheSourcesOwnRevision(t *testing.T) {
 	}
 	if restored.EffectiveStartLocal != night.EffectiveStartLocal || restored.CanUndo ||
 		restored.History[0].Summary != "Restored the night as recorded" {
-		t.Fatalf("undo went past the provider's revision: starts %s, want %s", restored.EffectiveStartLocal, night.EffectiveStartLocal)
+		t.Fatalf("undo went past the provider's revision: starts %s, want %s; canUndo=%v history=%+v", restored.EffectiveStartLocal, night.EffectiveStartLocal, restored.CanUndo, restored.History)
+	}
+}
+
+// An edit and its undo can carry the same time on a clock that ticks coarsely.
+// The history still lists the undo first, however the edits are handed over.
+func TestHistoryOrdersEditsMadeInTheSameInstant(t *testing.T) {
+	at := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
+	edit := storage.SleepCorrectionRecord{CorrectionID: "corr_sleep_b", CreatedAt: at}
+	undo := storage.SleepCorrectionRecord{CorrectionID: "corr_sleep_a", CreatedAt: at, SupersedesCorrectionIDs: []string{edit.CorrectionID}}
+	unrelated := storage.SleepCorrectionRecord{CorrectionID: "corr_sleep_c", CreatedAt: at}
+	if !newerCorrection(undo, edit) || newerCorrection(edit, undo) {
+		t.Fatal("an edit that replaces another of the same instant is the later one")
+	}
+	if newerCorrection(edit, unrelated) == newerCorrection(unrelated, edit) {
+		t.Fatal("edits of the same instant that do not replace each other still need one order")
+	}
+	if !newerCorrection(storage.SleepCorrectionRecord{CorrectionID: "x", CreatedAt: at.Add(time.Second)}, undo) {
+		t.Fatal("a later edit comes first")
 	}
 }

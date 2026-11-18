@@ -5,6 +5,7 @@ import {
   proposalName,
   proposalSubject,
   proposedDoseWording,
+  proposedStatusWording,
   proposedTaskWording,
   type AgentProposal,
 } from "../data/agentProposals";
@@ -12,7 +13,7 @@ import { useAgentProposals } from "../state/agentProposals";
 import { clockTime, dayInSentence } from "../utils/relativeTime";
 
 // Something an assistant asked for that waits on this computer: a dose to
-// record, a task to add. It stays a question until the owner answers it:
+// record, a task to add, a status to report. It stays a question until the owner answers it:
 // accepting makes their own record of it, declining makes nothing, and a day
 // later it lapses (ADR-0051).
 
@@ -21,9 +22,27 @@ function sentence(value: string) {
 }
 
 function detail(proposal: AgentProposal, now: Date) {
-  return proposal.kind === "dose"
-    ? proposedDoseWording(proposal.dose, now)
-    : proposedTaskWording(proposal.task, now);
+  switch (proposal.kind) {
+    case "dose":
+      return proposedDoseWording(proposal.dose, now);
+    case "task":
+      return proposedTaskWording(proposal.task, now);
+    case "status":
+      return proposedStatusWording(proposal.reported);
+  }
+}
+
+const leads: Record<AgentProposal["kind"], string> = {
+  dose: "A dose your assistant asked to record,",
+  task: "A task your assistant asked to add,",
+  status: "A status your assistant asked you to report,",
+};
+
+/** "Recording…", "Adding…", "Reporting…": what accepting is doing, while it does. */
+function doing(proposal: AgentProposal) {
+  const { action } = proposalAction(proposal);
+  const stem = action.endsWith("e") ? action.slice(0, -1) : action;
+  return `${stem.charAt(0).toUpperCase()}${stem.slice(1)}ing…`;
 }
 
 function lapseWording(proposal: AgentProposal, now: Date) {
@@ -63,7 +82,7 @@ export function AgentProposalCard({ proposal, now }: { proposal: AgentProposal; 
       </p>
       <div className="approval-actions">
         <button className="button primary" {...button("approved")}>
-          {deciding ? "Recording…" : decisionButton("approved")}
+          {deciding ? doing(proposal) : decisionButton("approved")}
         </button>
         <button className="button secondary" {...button("rejected")}>
           {decisionButton("rejected")}
@@ -76,10 +95,7 @@ export function AgentProposalCard({ proposal, now }: { proposal: AgentProposal; 
 /** The entry under Home's "Waiting on you", beside suggested times. */
 export function AgentProposalEntry({ proposal, now }: { proposal: AgentProposal; now: Date }) {
   const { button, deciding } = useDecision(proposal, now);
-  const lead =
-    proposal.kind === "dose"
-      ? "A dose your assistant asked to record,"
-      : "A task your assistant asked to add,";
+  const lead = leads[proposal.kind];
   return (
     <article className="home-entry">
       <h3>{proposalName(proposal)}</h3>
@@ -88,7 +104,7 @@ export function AgentProposalEntry({ proposal, now }: { proposal: AgentProposal;
       </p>
       <div className="home-entry-actions">
         <button className="button ghost" {...button("approved")}>
-          {deciding ? "Recording…" : decisionButton("approved")}
+          {deciding ? doing(proposal) : decisionButton("approved")}
         </button>
         <button className="button ghost" data-quiet {...button("rejected")}>
           {decisionButton("rejected")}

@@ -1,4 +1,6 @@
 import { calendarDataChangedEvent } from "./calendar";
+import { clockChangedEvent } from "./clock";
+import { statusChangedEvent } from "./status";
 import { agentProposalsChangedEvent } from "./agentProposals";
 import { calendarWriteBackChangedEvent } from "./calendarWriteBack";
 import { medicationDataChangedEvent } from "./medications";
@@ -15,6 +17,8 @@ const announcements: Record<string, readonly string[]> = {
   "zeitboard:agent-proposed": [agentProposalsChangedEvent],
   "zeitboard:calendar-writes": [calendarWriteBackChangedEvent],
   "zeitboard:calendar-refreshed": [calendarDataChangedEvent],
+  // A choice made on the owner's phone is now in use here (ADR-0074).
+  "zeitboard:settings-followed": [statusChangedEvent, clockChangedEvent],
   "zeitboard:sync-applied": [
     sleepDataChangedEvent,
     medicationDataChangedEvent,

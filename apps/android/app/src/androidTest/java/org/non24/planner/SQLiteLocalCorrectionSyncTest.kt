@@ -58,19 +58,46 @@ class SQLiteLocalCorrectionSyncTest {
         }
     }
 
-    @Test fun heldSourceDoesNotStarveOtherCorrectionsAndCanUseANewHomeZone() = runBlocking {
+    // ADR-0073: a correction waits only when its source has no clock, and one
+    // held under the earlier rule, which held nights away, uploads with the
+    // night's own clock.
+    @Test fun aSourceWithNoClockWaitsWithoutStarvingOthersAndANightAwayUploads() = runBlocking {
         SQLiteLocalUserDataStore(context, name).use { store ->
-            val travelling = source.copy(id = "synthetic-travel", logicalSourceId = "synthetic-provider|travel", startZoneOffset = ZoneOffset.ofHours(9), endZoneOffset = ZoneOffset.ofHours(9))
-            store.replaceHealthConnectSleepSnapshot(listOf(travelling, source))
-            store.appendSleepCorrection(correction("cor_travel", target = travelling))
+            val unclocked = source.copy(id = "synthetic-unclocked", logicalSourceId = "synthetic-provider|unclocked", startZoneOffset = null, endZoneOffset = null)
+            val away = source.copy(id = "synthetic-travel", logicalSourceId = "synthetic-provider|travel", startZoneOffset = ZoneOffset.ofHours(9), endZoneOffset = ZoneOffset.ofHours(9))
+            store.replaceHealthConnectSleepSnapshot(listOf(unclocked, away, source))
+            store.appendSleepCorrection(correction("cor_unclocked", target = unclocked))
             store.appendSleepCorrection(correction("cor_home"))
+            store.appendSleepCorrection(correction("cor_away", target = away))
+            store.writableDatabase.execSQL("UPDATE sleep_corrections SET sync_hold_zone = 'UTC' WHERE id = 'cor_away'")
             val queue = outbox(store)
             assertEquals(1, queue.queueLocalCorrections(ZoneId.of("UTC"), emptyMap(), at, 1).held)
             assertTrue(queue.pending(100).isEmpty())
-            queue.queueLocalCorrections(ZoneId.of("UTC"), emptyMap(), at, 1)
-            assertTrue(queue.contains("cor_home")); assertFalse(queue.contains("cor_travel"))
-            assertEquals(0, queue.queueLocalCorrections(ZoneId.of("Asia/Tokyo"), emptyMap(), at, 100).held)
-            assertTrue(queue.contains("cor_travel"))
+            queue.queueLocalCorrections(ZoneId.of("UTC"), emptyMap(), at, 100)
+            assertTrue(queue.contains("cor_home")); assertTrue(queue.contains("cor_away")); assertFalse(queue.contains("cor_unclocked"))
+            val night = queue.pending(100).single { it.recordId == SyncContract.observationId(away.logicalSourceId) }
+            val clock = Json.parseToJsonElement(night.payload).jsonObject.getValue("source_offset").jsonObject
+            assertEquals(32400, clock.getValue("start_seconds").jsonPrimitive.int)
+            assertEquals(1, queue.queueLocalCorrections(ZoneId.of("Asia/Tokyo"), emptyMap(), at, 100).held)
+        }
+    }
+
+    // ADR-0072: only a source this phone read and synced can be found gone,
+    // and the provider's last word, uploaded or not, says whether it is.
+    @Test fun ownSourcesAreThisPhonesSyncedReadsWithTheProvidersLastWord() = runBlocking {
+        SQLiteLocalUserDataStore(context, name).use { store ->
+            val unsynced = source.copy(id = "synthetic-unsynced", logicalSourceId = "synthetic-provider|unsynced")
+            store.replaceHealthConnectSleepSnapshot(listOf(source, unsynced))
+            val queue = outbox(store)
+            val id = SyncContract.observationId(source.logicalSourceId)
+            queue.enqueue(SyncContract.map(listOf(source), ZoneId.of("UTC"), emptyMap(), at).records)
+            assertEquals(mapOf(id to OwnSource(source.start, removed = false)), queue.ownSources())
+            queue.enqueue(listOf(SyncContract.sourcePresence(id, removed = true, at)))
+            assertEquals(OwnSource(source.start, removed = true), queue.ownSources()[id])
+            // A record gone is no revision of its times.
+            assertEquals(source.provenance.sourceUpdatedAt, queue.knownSources()[id]?.revision)
+            queue.enqueue(listOf(SyncContract.sourcePresence(id, removed = false, at.plusSeconds(60))))
+            assertFalse(queue.ownSources().getValue(id).removed)
         }
     }
 

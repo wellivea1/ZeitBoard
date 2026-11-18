@@ -122,10 +122,17 @@ data class MedicationEvent(
 
 data class AppSettings(
     val dataMode: DataMode = DataMode.FIXTURE,
+    /** The clock in use: [clock] resolved against this phone's own format. */
     val use24HourTime: Boolean = true,
+    /** The clock chosen: "system", "12" or "24". It travels between the owner's devices (ADR-0074). */
+    val clock: String = "system",
+    /** When each choice that travels was made, here or on another device; absent when never (ADR-0074). */
+    val choiceTimes: Map<String, java.time.Instant> = emptyMap(),
     val backgroundSyncEnabled: Boolean = false,
     /** Off by default: notices about time requests need their own consent. */
     val timeRequestNotices: Boolean = false,
+    /** Off by default: a status the owner reports stays on their own devices unless they say links may show it. */
+    val shareReportedStatus: Boolean = false,
 )
 
 enum class BackgroundReadState { UNKNOWN, UNAVAILABLE, REQUIRED, GRANTED }

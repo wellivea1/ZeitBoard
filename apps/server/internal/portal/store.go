@@ -89,6 +89,40 @@ type Grants struct {
 	// SkippedDoses shows when the owner logged a dose as skipped, by time
 	// alone (ADR-0058). Off unless the owner turns it on for the link.
 	SkippedDoses bool `json:"skippedDoses"`
+
+	// ReportedStatus is how much of a status the owner reported this link
+	// may show (ADR-0070): nothing, only that it is not a good time, or the
+	// status itself with when it was said. Nothing unless the owner chooses.
+	ReportedStatus string `json:"reportedStatus"`
+}
+
+// How much of a reported status a link shows.
+const (
+	// StatusGrantNone: the link shows the forecast and no report.
+	StatusGrantNone = ""
+	// StatusGrantContact: the link says only that now is not a good time,
+	// while the owner is trying to sleep or has asked not to be disturbed.
+	// It does not say which, or when it was said.
+	StatusGrantContact = "contact"
+	// StatusGrantFull: the link shows the status and when it was said.
+	StatusGrantFull = "full"
+)
+
+// StatusUnavailable is all a contact-only link is told: not a good time.
+const StatusUnavailable = "unavailable"
+
+// ValidStatusGrant reports whether level is one a link can hold.
+func ValidStatusGrant(level string) bool {
+	return level == StatusGrantNone || level == StatusGrantContact || level == StatusGrantFull
+}
+
+// ReportedStatus is a status the owner reported, as far as one link may show
+// it. On a contact-only link Status is StatusUnavailable and ReportedAt is
+// unset.
+type ReportedStatus struct {
+	Status     string    `json:"status"`
+	ReportedAt time.Time `json:"reportedAt,omitzero"`
+	ExpiresAt  time.Time `json:"expiresAt"`
 }
 
 // Profile is the portal-side projection of a share profile. It has no label,
@@ -138,15 +172,56 @@ type Snapshot struct {
 	// empty on every other link.
 	DosesShared  bool
 	SkippedDoses []SkippedDose
+
+	// Reported is the status the owner reported, cut down to what this link
+	// may show, or nil. It is read against the clock when the page is drawn.
+	Reported *ReportedStatus
+
+	// CautionAt and WithheldAt are when this snapshot's forecast turns with
+	// no new record, as the shared freshness policy judged it when the
+	// snapshot was made (ADR-0071): from CautionAt the page adds its
+	// caution, and from WithheldAt it shows no windows. The page applies
+	// them itself, so a claim cannot outlive them if nothing republishes.
+	// They stay on the server. No reader is sent them.
+	CautionAt  time.Time
+	WithheldAt time.Time
+}
+
+// deadlines are when the page adds its caution and when it stops showing the
+// forecast. A snapshot published without them keeps the fixed hours from the
+// time it last changed.
+func (s Snapshot) deadlines() (cautionAt, withheldAt time.Time) {
+	if !s.WithheldAt.IsZero() {
+		return s.CautionAt, s.WithheldAt
+	}
+	if s.GeneratedAt.IsZero() {
+		return time.Time{}, time.Time{}
+	}
+	return s.GeneratedAt.Add(StaleAfter), s.GeneratedAt.Add(UnavailableAfter)
+}
+
+// cautionDue reports whether the forecast is shown with its caution at now.
+func (s Snapshot) cautionDue(now time.Time) bool {
+	cautionAt, _ := s.deadlines()
+	return !cautionAt.IsZero() && !now.Before(cautionAt)
+}
+
+// withheld reports whether the forecast is too old to show at now.
+func (s Snapshot) withheld(now time.Time) bool {
+	_, withheldAt := s.deadlines()
+	return !withheldAt.IsZero() && !now.Before(withheldAt)
 }
 
 // snapshotPayload is what is sealed in a snapshot row. A row written before
 // skipped doses existed holds a bare array of windows, which ReadSnapshot
 // still reads.
 type snapshotPayload struct {
-	Windows      []Window      `json:"windows"`
-	DosesShared  bool          `json:"dosesShared,omitempty"`
-	SkippedDoses []SkippedDose `json:"skippedDoses,omitempty"`
+	Windows      []Window        `json:"windows"`
+	DosesShared  bool            `json:"dosesShared,omitempty"`
+	SkippedDoses []SkippedDose   `json:"skippedDoses,omitempty"`
+	Reported     *ReportedStatus `json:"reported,omitempty"`
+	CautionAt    time.Time       `json:"cautionAt,omitzero"`
+	WithheldAt   time.Time       `json:"withheldAt,omitzero"`
 }
 
 type Store struct {
@@ -334,6 +409,9 @@ func (s *Store) migrate(ctx context.Context) error {
 	// Columns added after a table was first made are added here, for a new
 	// database as for an old one, so both end with the same table. A link
 	// from before ADR-0058 had no skipped-doses grant, which the default says.
+	if err := s.ensureColumn(ctx, "portal_profiles", "grant_reported_status", "TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
 	if err := s.ensureColumn(ctx, "portal_profiles", "grant_skipped_doses", "INTEGER NOT NULL DEFAULT 0"); err != nil {
 		return fmt.Errorf("portal migrate: %w", err)
 	}
@@ -389,6 +467,8 @@ func (s *Store) CreateProfile(ctx context.Context, input CreateProfileInput) err
 		return errors.New("portal link expiry must be in the future")
 	case input.ExpiresAt.Sub(input.CreatedAt) > MaxLinkLifetime:
 		return fmt.Errorf("portal link lifetime must not exceed %d days", int(MaxLinkLifetime.Hours()/24))
+	case !ValidStatusGrant(input.Grants.ReportedStatus):
+		return errors.New("portal link reported status must be empty, contact, or full")
 	}
 
 	salt := make([]byte, argonSaltLen)
@@ -400,12 +480,12 @@ func (s *Store) CreateProfile(ctx context.Context, input CreateProfileInput) err
 
 	_, err := s.db.ExecContext(ctx, `INSERT INTO portal_profiles
 		(profile_id, token_hash, grant_windows, grant_requests, grant_messages, grant_skipped_doses,
-		 created_at, expires_at, revoked_at,
+		 grant_reported_status, created_at, expires_at, revoked_at,
 		 passcode_hash, passcode_salt, passcode_time, passcode_memory, passcode_threads)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?)`,
 		input.ProfileID, tokenHash[:],
 		boolToInt(input.Grants.WakingWindows), boolToInt(input.Grants.AllowRequests), boolToInt(input.Grants.AllowMessages),
-		boolToInt(input.Grants.SkippedDoses),
+		boolToInt(input.Grants.SkippedDoses), input.Grants.ReportedStatus,
 		formatTime(input.CreatedAt), formatTime(input.ExpiresAt),
 		hash, salt, int64(argonTime), int64(argonMemory), int64(argonThreads))
 	if err != nil {
@@ -452,7 +532,7 @@ func (s *Store) LookupProfile(ctx context.Context, profileID string, now time.Ti
 
 // profileColumns are the columns every profile read selects, in the order
 // scanProfile reads them.
-const profileColumns = `profile_id, grant_windows, grant_requests, grant_messages, grant_skipped_doses,
+const profileColumns = `profile_id, grant_windows, grant_requests, grant_messages, grant_skipped_doses, grant_reported_status,
 		created_at, expires_at, revoked_at`
 
 type rowScanner interface {
@@ -467,7 +547,8 @@ func scanProfile(row rowScanner, now time.Time) (Profile, bool, bool, error) {
 		windows, requests, messages, skippedDoses int
 		createdAtRaw, expiresAtRaw, revoked       string
 	)
-	if err := row.Scan(&profile.ID, &windows, &requests, &messages, &skippedDoses,
+	var reportedStatus string
+	if err := row.Scan(&profile.ID, &windows, &requests, &messages, &skippedDoses, &reportedStatus,
 		&createdAtRaw, &expiresAtRaw, &revoked); err != nil {
 		return Profile{}, false, false, err
 	}
@@ -486,6 +567,10 @@ func scanProfile(row rowScanner, now time.Time) (Profile, bool, bool, error) {
 		AllowRequests: requests == 1,
 		AllowMessages: messages == 1,
 		SkippedDoses:  skippedDoses == 1,
+	}
+	// A level this build does not know shows nothing.
+	if ValidStatusGrant(reportedStatus) {
+		profile.Grants.ReportedStatus = reportedStatus
 	}
 	return profile, !expiresAt.After(now), revoked != "", nil
 }
@@ -634,6 +719,7 @@ func (s *Store) PublishSnapshot(ctx context.Context, profileID string, snapshot 
 	}
 	payload, err := json.Marshal(snapshotPayload{
 		Windows: snapshot.Windows, DosesShared: snapshot.DosesShared, SkippedDoses: snapshot.SkippedDoses,
+		Reported: snapshot.Reported, CautionAt: snapshot.CautionAt, WithheldAt: snapshot.WithheldAt,
 	})
 	if err != nil {
 		return err
@@ -704,6 +790,9 @@ func (s *Store) ReadSnapshot(ctx context.Context, profileID string) (Snapshot, e
 	snapshot.Windows = payload.Windows
 	snapshot.DosesShared = payload.DosesShared
 	snapshot.SkippedDoses = payload.SkippedDoses
+	snapshot.Reported = payload.Reported
+	snapshot.CautionAt = payload.CautionAt
+	snapshot.WithheldAt = payload.WithheldAt
 	return snapshot, nil
 }
 
@@ -731,6 +820,9 @@ func validateSnapshot(snapshot Snapshot) error {
 	if snapshot.GeneratedAt.IsZero() {
 		return errors.New("portal snapshot requires a generation time")
 	}
+	if snapshot.WithheldAt.IsZero() != snapshot.CautionAt.IsZero() || snapshot.WithheldAt.Before(snapshot.CautionAt) {
+		return errors.New("portal snapshot deadlines must both be set, the caution first")
+	}
 	for _, window := range snapshot.Windows {
 		if !window.EndAt.After(window.StartAt) {
 			return errors.New("portal snapshot windows must be non-empty half-open intervals")
@@ -749,6 +841,55 @@ func validateSnapshot(snapshot Snapshot) error {
 		if dose.At.IsZero() || dose.ZoneID == "" {
 			return errors.New("portal snapshot skipped doses require a time and a zone id")
 		}
+	}
+	if reported := snapshot.Reported; reported != nil {
+		switch reported.Status {
+		case presenceAwake, presenceTryingToSleep, presenceDoNotDisturb:
+			if reported.ReportedAt.IsZero() {
+				return errors.New("portal snapshot reported status requires when it was said")
+			}
+		case StatusUnavailable:
+			if !reported.ReportedAt.IsZero() {
+				return errors.New("portal snapshot contact-only status says when it was said")
+			}
+		default:
+			return fmt.Errorf("unsupported portal snapshot reported status %q", reported.Status)
+		}
+		if reported.ExpiresAt.IsZero() {
+			return errors.New("portal snapshot reported status requires an expiry")
+		}
+	}
+	return nil
+}
+
+// The statuses a full link may be told, as core/presence names them. They are
+// repeated here because the portal package imports nothing of the private
+// side, and a test holds them equal.
+const (
+	presenceAwake         = "awake"
+	presenceTryingToSleep = "trying_to_sleep"
+	presenceDoNotDisturb  = "do_not_disturb"
+)
+
+// UpdateGrants changes what an existing link shows: its waking windows, the
+// doses logged as skipped, and how much of a reported status. Whether a link
+// takes requests and messages is fixed when it is made, because requests and
+// threads already exist under it.
+func (s *Store) UpdateGrants(ctx context.Context, profileID string, grants Grants) error {
+	if !ValidStatusGrant(grants.ReportedStatus) {
+		return errors.New("portal link reported status must be empty, contact, or full")
+	}
+	result, err := s.db.ExecContext(ctx, `UPDATE portal_profiles
+		SET grant_windows = ?, grant_skipped_doses = ?, grant_reported_status = ?
+		WHERE profile_id = ?`,
+		boolToInt(grants.WakingWindows), boolToInt(grants.SkippedDoses), grants.ReportedStatus, profileID)
+	if err != nil {
+		return fmt.Errorf("update portal grants: %w", err)
+	}
+	if affected, err := result.RowsAffected(); err != nil {
+		return err
+	} else if affected == 0 {
+		return ErrProfileNotFound
 	}
 	return nil
 }

@@ -21,15 +21,20 @@ testdata                    Synthetic observations and projected sharing fixture
 
 ## Current status
 
-Every planned function is delivered; [docs/completion-plan.md](docs/completion-plan.md) records
-each one with its tests, and what remains needs the owner's machine, an independent reviewer or a
-release ceremony rather than code.
+The planned functions are built and tested on synthetic data;
+[docs/completion-plan.md](docs/completion-plan.md) records each one. That is not the same as
+finished. Reviews in use still find defects in everyday tasks
+([the latest](docs/usability-review-2026-11-13.md) lists what is open), and nothing here has been
+through the private pilot, an independent review or a clean-machine install, which remain the
+acceptance gate.
 
 - **Sleep and rhythm.** Manual nights and file imports keep raw records with append-only
   corrections, and a night's last edit is undone in one click. The Go estimator forecasts
   uncertain sleep and waking windows and refuses plainly when the evidence is thin. The clinical
   chart prints, saves as PDF, or saves as PNG.
-- **Planning.** Real tasks get suggested times that stay clear of busy events. Suggestions are
+- **Planning.** Real tasks get suggested times that stay clear of busy events and of the hours
+  around predicted sleep, and none on records too old to plan against (ADR-0069). The owner can
+  add an appointment as a fixed event (ADR-0068). Suggestions are
   reviewed and decided together, and each decision can be undone. Reaching hours can be set for
   several people, each on their own days.
 - **Calendars.** ZeitBoard reads ICS files, CalDAV, a calendar's private iCal address (read again
@@ -44,10 +49,18 @@ release ceremony rather than code.
   passes the backtest gate (ADR-0031).
 - **Your own server.** The self-hosted backend provides encrypted sync, server-side projections,
   passcode-protected availability links, time requests and notifications. The Android companion
-  syncs Health Connect sleep, shows forecasts and tasks, and records doses as taken or skipped.
+  syncs Health Connect sleep, including nights recorded away from home and word of nights the
+  source removed (ADR-0072, ADR-0073), shows forecasts and tasks, and records doses as taken or
+  skipped. The owner can report a status (awake, trying to sleep, do not disturb) from the
+  computer or the phone. It always ends, stays private unless the owner lets a link show it, and
+  each link can show it in full, as "not a good time" only, or not at all (ADR-0070). Sharing
+  that status by default and the clock follow the owner's newest choice on either device
+  (ADR-0074), and the records count as current for as long as the forecast holds (ADR-0071).
 - **Assistants.** The assistant and agents propose and never apply. The assistant uses the
   server's own provider key, or the owner's ChatGPT plan through a sign-in the server holds
   (ADR-0066). ZeitBoard also offers a local MCP connector, a Claude Desktop extension and a skill.
+  Through the local connector an agent can propose a task, a dose or a status to report; each
+  waits for the owner on Home.
 - **This computer.** Local files are restricted to the owner's account. Windows can encrypt them
   by choice (ADR-0063). Everything can be exported or erased.
 - Browser-only desktop preview data is synthetic and visibly labeled `Sample data`; it is not used

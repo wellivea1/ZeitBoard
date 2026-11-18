@@ -16,6 +16,7 @@ import (
 	"io"
 	"math/big"
 	"net"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -45,6 +46,7 @@ const (
 	EnvLLMEndpoint          = "ZEITBOARD_LLM_ENDPOINT"
 	EnvPortalEnabled        = "ZEITBOARD_PORTAL_ENABLED"
 	EnvPortalOrigin         = "ZEITBOARD_PORTAL_ORIGIN"
+	EnvPortalTrustedProxies = "ZEITBOARD_PORTAL_TRUSTED_PROXIES"
 )
 
 type Config struct {
@@ -72,6 +74,12 @@ type PortalConfig struct {
 	// required when the portal is enabled because mutating requests are
 	// accepted only with an exactly matching Origin header.
 	PublicOrigin string `json:"publicOrigin"`
+
+	// TrustedProxies are the addresses or CIDR ranges of the reverse proxies
+	// in front of the portal. A request from one of them is counted by the
+	// visitor address it reports in X-Forwarded-For; from anywhere else that
+	// header is ignored. Empty, the default, trusts no header at all.
+	TrustedProxies []string `json:"trustedProxies"`
 }
 
 type AssistantConfig struct {
@@ -113,6 +121,9 @@ func Load(path string) (Config, error) {
 	overrideString(&cfg.Assistant.APIKeyFile, EnvLLMAPIKeyFile)
 	overrideString(&cfg.Assistant.Endpoint, EnvLLMEndpoint)
 	overrideString(&cfg.Portal.PublicOrigin, EnvPortalOrigin)
+	if value := strings.TrimSpace(os.Getenv(EnvPortalTrustedProxies)); value != "" {
+		cfg.Portal.TrustedProxies = strings.Split(value, ",")
+	}
 	if err := overrideBool(&cfg.Portal.Enabled, EnvPortalEnabled); err != nil {
 		return Config{}, err
 	}
@@ -166,6 +177,18 @@ func Load(path string) (Config, error) {
 // start rather than serve with the check disabled.
 func validatePortal(portal *PortalConfig) error {
 	portal.PublicOrigin = strings.TrimSuffix(strings.TrimSpace(portal.PublicOrigin), "/")
+	for _, proxy := range portal.TrustedProxies {
+		proxy = strings.TrimSpace(proxy)
+		if proxy == "" {
+			continue
+		}
+		if _, err := netip.ParsePrefix(proxy); err == nil {
+			continue
+		}
+		if _, err := netip.ParseAddr(proxy); err != nil {
+			return fmt.Errorf("portal trustedProxies entry %q is neither an address nor a CIDR range", proxy)
+		}
+	}
 	if !portal.Enabled {
 		return nil
 	}

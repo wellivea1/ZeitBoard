@@ -181,7 +181,7 @@ function contextLine(rhythm: RhythmData, mode: RhythmSource): string | undefined
       : "The synced server is waiting for enough sleep data before drawing rhythm charts.";
   }
   if (mode === "fixture") {
-    return "Sample data: a read-only preview of imported, estimated and incomplete records.";
+    return "Sample data, dated June 2026: a read-only preview of imported, estimated and incomplete records.";
   }
   return undefined;
 }

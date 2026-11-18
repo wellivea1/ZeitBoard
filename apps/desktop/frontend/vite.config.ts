@@ -41,6 +41,8 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: "./src/test/setup.ts",
+    // Room for a query that waits its full five seconds (see setup.ts).
+    testTimeout: 20_000,
     // `npm run coverage` says how much of the window its tests run.
     coverage: {
       provider: "v8",

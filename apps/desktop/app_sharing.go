@@ -37,6 +37,37 @@ type ShareGrantsDTO struct {
 	// SkippedDoses shows when a dose was logged as skipped, by time alone
 	// (ADR-0058).
 	SkippedDoses bool `json:"skippedDoses"`
+
+	// ReportedStatus is how much of a status the owner reported the link
+	// shows (ADR-0070): "" for none, "contact" for only that now is not a
+	// good time, "full" for the status and when it was said.
+	ReportedStatus string `json:"reportedStatus"`
+}
+
+// The levels a link's reported status can have, as the server names them.
+const (
+	shareStatusNone    = ""
+	shareStatusContact = "contact"
+	shareStatusFull    = "full"
+)
+
+func knownShareStatus(level string) string {
+	if validShareStatus(level) {
+		return level
+	}
+	return shareStatusNone
+}
+
+func validShareStatus(level string) bool {
+	return level == shareStatusNone || level == shareStatusContact || level == shareStatusFull
+}
+
+// ShareLinkGrantsInput changes what an existing link shows.
+type ShareLinkGrantsInput struct {
+	ProfileID      string `json:"profileId"`
+	WakingWindows  bool   `json:"wakingWindows"`
+	SkippedDoses   bool   `json:"skippedDoses"`
+	ReportedStatus string `json:"reportedStatus"`
 }
 
 // ShareAccessDTO is the per-link access audit the instance keeps. It counts
@@ -113,10 +144,11 @@ type backendShareProfileRecord struct {
 	CreatedAt time.Time `json:"createdAt"`
 	ExpiresAt time.Time `json:"expiresAt"`
 	Grants    struct {
-		WakingWindows bool `json:"wakingWindows"`
-		AllowRequests bool `json:"allowRequests"`
-		AllowMessages bool `json:"allowMessages"`
-		SkippedDoses  bool `json:"skippedDoses"`
+		WakingWindows  bool   `json:"wakingWindows"`
+		AllowRequests  bool   `json:"allowRequests"`
+		AllowMessages  bool   `json:"allowMessages"`
+		SkippedDoses   bool   `json:"skippedDoses"`
+		ReportedStatus string `json:"reportedStatus"`
 	} `json:"grants"`
 	Access []struct {
 		Event      string    `json:"event"`
@@ -207,6 +239,8 @@ func shareLinkDTO(record backendShareProfileRecord) ShareLinkDTO {
 			AllowRequests: record.Grants.AllowRequests,
 			AllowMessages: record.Grants.AllowMessages,
 			SkippedDoses:  record.Grants.SkippedDoses,
+			// A level this build does not know is shown as none.
+			ReportedStatus: knownShareStatus(record.Grants.ReportedStatus),
 		},
 		Access: make([]ShareAccessDTO, 0, len(record.Access)),
 	}
@@ -258,6 +292,12 @@ func shareGrantSummary(grants ShareGrantsDTO) string {
 	}
 	if grants.SkippedDoses {
 		parts = append(parts, "when you log a dose as skipped")
+	}
+	switch grants.ReportedStatus {
+	case shareStatusFull:
+		parts = append(parts, "the status you report, and when you said it")
+	case shareStatusContact:
+		parts = append(parts, "that it is not a good time, while you are trying to sleep or ask not to be disturbed")
 	}
 	if grants.AllowRequests {
 		parts = append(parts, "can ask for a time")
@@ -323,11 +363,12 @@ func (a *App) CreateBackendShareLink(input CreateShareLinkInput) (CreatedShareLi
 		"label":         strings.TrimSpace(input.Label),
 		"passcode":      input.Passcode,
 		"expiresInDays": input.ExpiresInDays,
-		"grants": map[string]bool{
-			"wakingWindows": input.Grants.WakingWindows,
-			"allowRequests": input.Grants.AllowRequests,
-			"allowMessages": input.Grants.AllowMessages,
-			"skippedDoses":  input.Grants.SkippedDoses,
+		"grants": map[string]any{
+			"wakingWindows":  input.Grants.WakingWindows,
+			"allowRequests":  input.Grants.AllowRequests,
+			"allowMessages":  input.Grants.AllowMessages,
+			"skippedDoses":   input.Grants.SkippedDoses,
+			"reportedStatus": input.Grants.ReportedStatus,
 		},
 	}
 	if err := client.postJSON(ctx, "/v1/portal/profiles", payload, &created); err != nil {
@@ -356,8 +397,11 @@ func validateShareLinkInput(input CreateShareLinkInput) error {
 	if input.ExpiresInDays <= 0 || input.ExpiresInDays > MaxShareLinkDays {
 		return errors.New("Choose an expiry between 1 and 90 days. Links do not last forever.")
 	}
+	if !validShareStatus(input.Grants.ReportedStatus) {
+		return errors.New("Choose how much of your reported status the link shows: none, only that it is not a good time, or the status itself.")
+	}
 	if !input.Grants.WakingWindows && !input.Grants.AllowRequests && !input.Grants.AllowMessages &&
-		!input.Grants.SkippedDoses {
+		!input.Grants.SkippedDoses && input.Grants.ReportedStatus == shareStatusNone {
 		return errors.New("A link that shows nothing is not worth sending. Choose at least one thing to share.")
 	}
 	return nil
@@ -417,6 +461,46 @@ func (a *App) PreviewBackendShareLink(input ShareLinkActionInput) (ShareLinkPrev
 
 // RevokeBackendShareLink stops the link working. The record stays so the access
 // history remains readable; erasure is a separate, confirmed action.
+// UpdateBackendShareLink changes what an existing link shows: the waking
+// windows, the doses logged as skipped, and how much of a reported status.
+// Before this, what a link shared was fixed when it was made, and sharing less
+// meant revoking it and sending a new one round.
+func (a *App) UpdateBackendShareLink(input ShareLinkGrantsInput) (ShareLinksDTO, error) {
+	cfg, token, err := a.requireBackendSync()
+	if err != nil {
+		return shareLinksUnavailable("off",
+			"Sharing runs on your own server. Turn on backend sync in Settings to manage links."), nil
+	}
+	ctx := a.applicationContext()
+	fail := func(message string) (ShareLinksDTO, error) {
+		result := a.fetchBackendShareLinks(ctx, cfg, token)
+		result.Status, result.Message = "error", message
+		return result, nil
+	}
+	profileID := strings.TrimSpace(input.ProfileID)
+	if profileID == "" {
+		return fail("No link was selected.")
+	}
+	if !validShareStatus(input.ReportedStatus) {
+		return fail("Choose how much of your reported status the link shows.")
+	}
+	payload := map[string]any{
+		"schema_version": "v1",
+		"wakingWindows":  input.WakingWindows,
+		"skippedDoses":   input.SkippedDoses,
+		"reportedStatus": input.ReportedStatus,
+	}
+	var response struct {
+		SchemaVersion string `json:"schema_version"`
+		Status        string `json:"status"`
+	}
+	path := "/v1/portal/profiles/" + url.PathEscape(profileID) + "/grants"
+	if err := a.newDesktopBackendClient(cfg, token).postJSON(ctx, path, payload, &response); err != nil {
+		return fail(sanitizeBackendError(err))
+	}
+	return a.fetchBackendShareLinks(ctx, cfg, token), nil
+}
+
 func (a *App) RevokeBackendShareLink(input ShareLinkActionInput) (ShareLinksDTO, error) {
 	return a.shareLinkAction(input.ProfileID, "revoke", "")
 }

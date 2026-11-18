@@ -24,7 +24,7 @@ class CompanionContractTest {
         assertEquals("Server sample forecast", projection.estimate(beforeExpiry)?.label)
         assertEquals(Instant.parse("2026-09-03T03:00:00Z"), projection.estimate(beforeExpiry)?.predictedSleepWindow?.start)
         assertNull(projection.estimate(Instant.parse("2026-09-04T00:00:00Z")))
-        assertEquals("theil-sen-sleep-start/v1", projection.algorithm)
+        assertEquals("theil-sen-sleep-start/v2", projection.algorithm)
     }
 
     @Test fun `server refusal cannot leave an old forecast in the replacement projection`() {

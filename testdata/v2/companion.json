@@ -1,5 +1,5 @@
 {
-  "algorithm_version": "theil-sen-sleep-start/v1",
+  "algorithm_version": "theil-sen-sleep-start/v2",
   "confidence": {
     "level": "medium",
     "reasons": [
@@ -41,5 +41,6 @@
   ],
   "source_cursor": 2,
   "status": "estimated",
-  "valid_until": "2026-09-02T12:15:00Z"
+  "valid_until": "2026-09-02T12:15:00Z",
+  "waking_until": "2026-09-03T03:30:00Z"
 }

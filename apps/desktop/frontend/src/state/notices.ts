@@ -1,4 +1,5 @@
 import { useMemo, useSyncExternalStore } from "react";
+import { findWailsMethod, type WailsRoot } from "../data/wailsBridge";
 
 // Notes that explain how something works are useful once and noise after.
 // Each can be closed with its × and is then listed in Settings › Display,
@@ -8,6 +9,11 @@ import { useMemo, useSyncExternalStore } from "react";
 //
 // Every note is registered here, so Settings can name what is hidden and a
 // note cannot be added without a title to list it under.
+//
+// The desktop keeps the list, in a settings file of its own. The window's
+// storage holds a copy so the first page is drawn without the closed notes,
+// and stands in when there is no desktop. Kept in the window alone, the list
+// went whenever the webview's data was cleared, and every note came back.
 
 export const noticeCatalog = {
   "home.setup": {
@@ -76,7 +82,8 @@ function read(): NoticeId[] {
   }
 }
 
-function write(ids: NoticeId[]) {
+/** Keeps the list in this window and redraws; it does not tell the desktop. */
+function remember(ids: NoticeId[]) {
   memory = ids;
   try {
     window.localStorage.setItem(storageKey, JSON.stringify(ids));
@@ -84,6 +91,74 @@ function write(ids: NoticeId[]) {
     // Remembered for this session only.
   }
   window.dispatchEvent(new Event(noticesChangedEvent));
+}
+
+interface StoredNotices {
+  hidden: NoticeId[];
+  revision: number;
+  stored: boolean;
+}
+
+function normalizeStored(value: unknown): StoredNotices | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const { hidden, revision, stored } = value as Record<string, unknown>;
+  if (
+    !Array.isArray(hidden) ||
+    typeof revision !== "number" ||
+    !Number.isSafeInteger(revision) ||
+    revision < 0 ||
+    typeof stored !== "boolean"
+  )
+    return undefined;
+  // A note this build no longer has is dropped, as it is from the window's copy.
+  return { hidden: hidden.filter(isNoticeId), revision, stored };
+}
+
+async function storedOnDesktop(root: WailsRoot): Promise<StoredNotices | undefined> {
+  const load = findWailsMethod(root, ["GetClosedNotices"]);
+  return load ? normalizeStored(await load()) : undefined;
+}
+
+/**
+ * Hands the list to the desktop. The revision is read just before, so a note
+ * closed before the window first heard from the desktop is not turned away as
+ * out of date.
+ */
+async function keep(ids: NoticeId[], root: WailsRoot = globalThis as unknown as WailsRoot) {
+  const save = findWailsMethod(root, ["SaveClosedNotices"]);
+  if (!save) return;
+  try {
+    const stored = await storedOnDesktop(root);
+    if (stored) await save({ baseRevision: stored.revision, hidden: ids });
+  } catch {
+    // Remembered in this window; the next close or reopen hands it over again.
+  }
+}
+
+function write(ids: NoticeId[]) {
+  remember(ids);
+  void keep(ids);
+}
+
+/**
+ * Takes the desktop's list as the window opens. Where the desktop has none
+ * yet and this window remembers closed notes, they are handed over, so
+ * nothing the owner closed comes back.
+ */
+export async function syncNoticesWithDesktop(
+  root: WailsRoot = globalThis as unknown as WailsRoot,
+): Promise<void> {
+  try {
+    const stored = await storedOnDesktop(root);
+    if (!stored) return;
+    if (stored.stored) {
+      if (stored.hidden.join(" ") !== read().join(" ")) remember(stored.hidden);
+    } else if (read().length > 0) {
+      await keep(read(), root);
+    }
+  } catch {
+    // The window's own copy stands.
+  }
 }
 
 export function hideNotice(id: NoticeId) {

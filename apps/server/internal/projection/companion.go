@@ -10,6 +10,7 @@ import (
 	"non24.app/core/domain"
 	"non24.app/core/estimation"
 	"non24.app/core/freshness"
+	"non24.app/core/outlook"
 )
 
 // CompanionResponse is a private, authenticated device contract. It is never
@@ -27,7 +28,13 @@ type CompanionResponse struct {
 	Freshness             CompanionFreshness   `json:"freshness"`
 	Confidence            *CompanionConfidence `json:"confidence,omitempty"`
 	Forecasts             []CompanionForecast  `json:"forecasts"`
-	Sleep                 []CompanionSleep     `json:"sleep"`
+	// WakingUntil is where the waking stretch under way stops being the
+	// likely state. The first forecast's waking window is the one after
+	// the next sleep, so without this the companion has no window for the
+	// hours it is in, and draws the next sleep beginning sharply at its
+	// earliest plausible onset. Absent when sleep may already have begun.
+	WakingUntil *time.Time       `json:"waking_until,omitempty"`
+	Sleep       []CompanionSleep `json:"sleep"`
 }
 
 type CompanionFreshness struct {
@@ -115,6 +122,10 @@ func (s Service) Companion(ctx context.Context, sessions []domain.SleepSession, 
 	result.Freshness = CompanionFreshness{State: string(assessment.State), Reason: string(assessment.Reason), Explanation: assessment.Explanation}
 	if expiry := freshness.Default().NextChange(inputs); !expiry.IsZero() && expiry.Before(result.ValidUntil) {
 		result.ValidUntil = expiry
+	}
+	if until, ok := outlook.CurrentWakingEnd(estimate, now); ok {
+		until = until.UTC()
+		result.WakingUntil = &until
 	}
 	for i, sleep := range estimate.PredictedSleepWindows {
 		if i >= len(estimate.PredictedWakingWindows) {

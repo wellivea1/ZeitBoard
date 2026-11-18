@@ -14,7 +14,11 @@ data class SyncedTask(
     val earliestStart: Instant?, val deadline: Instant?, val preferredAfterWakeMinutes: Int?,
     val minimumConfidence: String? = null,
 )
-data class SyncedSleep(val id: String, val start: Instant, val end: Instant, val zoneId: String, val corrected: Boolean)
+data class SyncedSleep(
+    val id: String, val start: Instant, val end: Instant, val zoneId: String, val corrected: Boolean,
+    /** Health Connect no longer has it (ADR-0072); it is kept and left out unless the owner corrected it. */
+    val removed: Boolean = false,
+)
 data class ServerForecast(val sleep: TimeWindow, val waking: TimeWindow, val zoneId: String)
 data class CompanionProjection(
     val cursor: Long, val generatedAt: Instant, val validUntil: Instant, val algorithm: String,
@@ -22,6 +26,13 @@ data class CompanionProjection(
     val confidence: Confidence?, val confidenceReasons: List<String>,
     val forecasts: List<ServerForecast>, val sleep: List<SyncedSleep>,
     val containsSyntheticData: Boolean = false,
+    /**
+     * Where the waking stretch under way stops being the likely state: the
+     * latest time the next sleep is likely to begin. The forecasts hold no
+     * window for the hours before the next sleep, so this is what makes the
+     * start of that sleep a range rather than a sharp edge.
+     */
+    val wakingUntil: Instant? = null,
 ) {
     fun isCurrentSnapshot(now: Instant): Boolean = now.isBefore(validUntil) && !generatedAt.isAfter(now.plusSeconds(60))
     fun estimate(now: Instant): EstimateSnapshot? {
@@ -53,6 +64,8 @@ data class CompanionState(
     val totalSleepSourceCount: Int = sleepSources.size,
     /** Active medications from the owner's computer, for dose logging (ADR-0048). */
     val medications: List<CompanionMedication> = emptyList(),
+    /** The newest status the owner reported, on any device (ADR-0070). The screen reads it against the clock. */
+    val reportedStatus: CompanionStatus? = null,
 )
 
 internal fun JsonObject.integer(key: String): Long =
@@ -114,6 +127,9 @@ internal fun validatePulledPayload(id: String, kind: String, payload: JsonObject
         "medication_correction" -> validateSyncedDoseCorrection(id, payload)
         "context_marker" -> validateSyncedMarker(id, payload)
         SourceReporting.KIND -> validateSyncedSourceReport(id, payload)
+        StatusReporting.KIND -> validateSyncedStatus(id, payload)
+        "event" -> validateSyncedEvent(id, payload)
+        SharedChoices.KIND -> parseSharedChoice(id, payload)
         "tombstone" -> {
             payload.exactKeys(setOf("record_id"), setOf("record_kind"))
             require(payload.string("record_id") == id)
@@ -127,6 +143,7 @@ internal fun validatePulledPayload(id: String, kind: String, payload: JsonObject
 internal val SYNC_RECORD_KINDS = setOf(
     "observation", "correction", "task", "placement",
     "medication", "medication_event", "medication_correction", "context_marker", SourceReporting.KIND,
+    StatusReporting.KIND, "event", SharedChoices.KIND,
 )
 
 /** A source report a phone sent (ADR-0054): a read states its window and held count, nothing else does. */
@@ -193,7 +210,7 @@ internal fun parseSyncedTask(recordId: String, payload: JsonObject): SyncedTask 
 
 internal fun parseCompanion(json: JsonObject): CompanionProjection {
     json.exactKeys(setOf("schema_version", "source_cursor", "generated_at", "valid_until", "algorithm_version", "provenance",
-        "status", "freshness", "forecasts", "sleep", "contains_synthetic_data"), setOf("refusal", "confidence"))
+        "status", "freshness", "forecasts", "sleep", "contains_synthetic_data"), setOf("refusal", "confidence", "waking_until"))
     require(json.string("schema_version") == "v2" && json.string("provenance") == "self_hosted_synced_sleep")
     val generated = json.instant("generated_at")
     val expires = json.instant("valid_until")
@@ -238,7 +255,8 @@ internal fun parseCompanion(json: JsonObject): CompanionProjection {
         when (it) { "low" -> Confidence.LOW; "medium" -> Confidence.MODERATE; "high" -> Confidence.HIGH; else -> error("Unsupported confidence.") }
     }
     require(if (status == "estimated") level != null && forecasts.isNotEmpty() && !json.containsKey("refusal")
-        else level == null && forecasts.isEmpty() && json.containsKey("refusal"))
+        else level == null && forecasts.isEmpty() && json.containsKey("refusal") && !json.containsKey("waking_until"))
+    val wakingUntil = if (json.containsKey("waking_until")) json.instant("waking_until").also { require(it.isAfter(generated)) } else null
     return CompanionProjection(
         json.integer("source_cursor").also { require(it >= 0) }, generated, expires, json.boundedString("algorithm_version", 64),
         status, refusal, freshness, fresh.boundedString("explanation", 400),
@@ -253,5 +271,6 @@ internal fun parseCompanion(json: JsonObject): CompanionProjection {
                 obj.getValue("corrected").jsonPrimitive.boolean)
         },
         json.getValue("contains_synthetic_data").jsonPrimitive.boolean,
+        wakingUntil,
     )
 }

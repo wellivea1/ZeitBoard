@@ -247,6 +247,16 @@ type availabilityDTO struct {
 	// (ADR-0058), as a list even when it is empty, so a reader can tell
 	// "none logged" from "not shared".
 	SkippedDoses *[]skippedDoseDTO `json:"skippedDoses,omitempty"`
+
+	// Reported is the status the owner reported, on a link that may show
+	// one, while it stands (ADR-0070).
+	Reported *reportedDTO `json:"reported,omitempty"`
+}
+
+type reportedDTO struct {
+	Status     string `json:"status"`
+	ReportedAt string `json:"reportedAt,omitempty"`
+	ExpiresAt  string `json:"expiresAt"`
 }
 
 type skippedDoseDTO struct {
@@ -302,9 +312,17 @@ func toAvailabilityDTO(snapshot Snapshot, now time.Time) availabilityDTO {
 		}
 		dto.SkippedDoses = &doses
 	}
+	// A reported status lapses for a JSON reader at the minute it does on the
+	// page, and like the doses it does not wait on the forecast.
+	if reported := snapshot.Reported; reported != nil && reported.ExpiresAt.After(now) && !reported.ReportedAt.After(now) {
+		dto.Reported = &reportedDTO{Status: reported.Status, ExpiresAt: formatTime(reported.ExpiresAt)}
+		if !reported.ReportedAt.IsZero() {
+			dto.Reported.ReportedAt = formatTime(reported.ReportedAt)
+		}
+	}
 	// Apply the same age rules the rendered page applies, so a JSON consumer
 	// cannot present an out-of-date "awake now" the HTML would have withheld.
-	if !snapshot.GeneratedAt.IsZero() && now.Sub(snapshot.GeneratedAt) >= UnavailableAfter {
+	if snapshot.withheld(now) {
 		dto.Status = StatusInsufficientData
 		return dto
 	}

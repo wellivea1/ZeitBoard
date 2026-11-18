@@ -46,6 +46,9 @@ interface HealthConnectRepository : SleepRepository {
     /** What the newest check of Health Connect found, for the source report (ADR-0054). */
     val lastCheck: StateFlow<SourceCheck?>
 
+    /** The newest read that completed, which says what Health Connect no longer has (ADR-0072). */
+    val lastCompleteRead: StateFlow<CompleteRead?> get() = noCompleteRead
+
     suspend fun refreshPermissionState()
 
     suspend fun onPermissionResult(grantedPermissions: Set<String>)

@@ -35,6 +35,23 @@ class SQLiteSyncReplicaTest {
     })
     private fun tombstone(seq: Long, id: String) = PulledRecord(seq, id, "tombstone", buildJsonObject { put("record_id", id) })
 
+    // ADR-0072: the list says a night is gone from Health Connect, by the
+    // provider's last word, and stops saying so when it is back.
+    @Test fun aNightGoneAtItsSourceIsMarkedUntilItIsBack() {
+        SQLiteLocalUserDataStore(context, databaseName).use { store ->
+            val replica = replica(store)
+            val night = SyncContract.map(listOf(episode), ZoneId.of("UTC"), emptyMap(), at).records.single()
+            val gone = SyncContract.sourcePresence(night.recordId, removed = true, at.plusSeconds(3600))
+            val back = SyncContract.sourcePresence(night.recordId, removed = false, at.plusSeconds(7200))
+            fun pulled(seq: Long, record: OutboxRecord) = PulledRecord(seq, record.recordId, record.kind, Json.parseToJsonElement(record.payload).jsonObject)
+            replica.apply(PullPage(2, listOf(pulled(1, night), pulled(2, gone))), at)
+            val listed = replica.state().sleepSources.single()
+            assertTrue(listed.removed); assertFalse(listed.corrected)
+            replica.apply(PullPage(3, listOf(pulled(3, back))), at)
+            assertFalse(replica.state().sleepSources.single().removed)
+        }
+    }
+
     @Test fun revisionsAndTombstonesSurviveReopenWithoutTaskResurrection() {
         SQLiteLocalUserDataStore(context, databaseName).use { store ->
             val replica = replica(store)

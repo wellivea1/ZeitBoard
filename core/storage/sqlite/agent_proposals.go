@@ -10,10 +10,11 @@ import (
 	"time"
 
 	medicationcore "non24.app/core/medication"
+	"non24.app/core/presence"
 )
 
 // Proposals an agent made that wait on this computer for the owner (ADR-0051):
-// a dose to record, a task to add. Only the owner's acceptance makes the
+// a dose to record, a task to add, a status to report. Only the owner's acceptance makes the
 // record, and it makes the same record the owner's own entry would, in one
 // transaction. Proposals are never synced or exported, and erasing a
 // medication erases its dose proposals.
@@ -22,6 +23,8 @@ import (
 const (
 	AgentProposalLogDose = "propose_log_dose"
 	AgentProposalAddTask = "propose_add_task"
+	// AgentProposalReportStatus is a status to report, or to take back (ADR-0070).
+	AgentProposalReportStatus = "propose_report_status"
 )
 
 // The states of a proposal: the owner approved or rejected it, or it waits. A
@@ -70,13 +73,22 @@ type ProposedTask struct {
 	LatestFinishAt  *time.Time `json:"latest_finish_at,omitempty"`
 }
 
+// ProposedStatus is a status an agent asked the owner to report. Minutes is
+// zero for the status's usual length. Whether links may show it is not here:
+// it is decided by the owner's own setting when they accept.
+type ProposedStatus struct {
+	Status  string `json:"status"`
+	Minutes int    `json:"minutes,omitempty"`
+}
+
 // AgentProposal is one proposal waiting for, or decided by, the owner. Exactly
-// one of Dose and Task is set, by ActionID.
+// one of Dose, Task and Status is set, by ActionID.
 type AgentProposal struct {
 	ProposalID string
 	ActionID   string
 	Dose       *ProposedDose
 	Task       *ProposedTask
+	Status     *ProposedStatus
 	CreatedAt  time.Time
 	ExpiresAt  time.Time
 	State      string
@@ -87,13 +99,26 @@ type AgentProposal struct {
 }
 
 func (s *Store) initializeAgentProposals(ctx context.Context) error {
+	// The table names the actions it holds in a CHECK, which SQLite cannot
+	// alter. One made before status proposals is made again: a proposal waits
+	// a day at most and is never synced or exported, so nothing lasting is in it.
+	var made string
+	err := s.db.QueryRowContext(ctx, `SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'local_agent_proposals'`).Scan(&made)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("migrate agent proposals: %w", err)
+	}
+	if made != "" && !strings.Contains(made, AgentProposalReportStatus) {
+		if _, err := s.db.ExecContext(ctx, `DROP TABLE local_agent_proposals`); err != nil {
+			return fmt.Errorf("migrate agent proposals: %w", err)
+		}
+	}
 	for _, statement := range []string{
 		// Dose proposals lived in their own table before task proposals
 		// joined them, on the day both were built; nothing depends on it.
 		`DROP TABLE IF EXISTS local_dose_proposals`,
 		`CREATE TABLE IF NOT EXISTS local_agent_proposals(
 			proposal_id TEXT PRIMARY KEY,
-			action_id TEXT NOT NULL CHECK(action_id IN ('propose_log_dose', 'propose_add_task')),
+			action_id TEXT NOT NULL CHECK(action_id IN ('propose_log_dose', 'propose_add_task', 'propose_report_status')),
 			medication_id TEXT,
 			payload_json BLOB NOT NULL,
 			created_at TEXT NOT NULL,
@@ -146,6 +171,57 @@ func (s *Store) ProposeTask(ctx context.Context, proposalID string, task Propose
 		return fmt.Errorf("%w: %v", errAgentProposalMalformed, err)
 	}
 	return s.propose(ctx, proposalID, AgentProposalAddTask, "", task, now, nil)
+}
+
+// ProposeStatus queues a status for the owner to report, at now.
+func (s *Store) ProposeStatus(ctx context.Context, proposalID string, status ProposedStatus, now time.Time) error {
+	lifetime := time.Duration(status.Minutes) * time.Minute
+	if !presence.ValidStatus(status.Status) || status.Minutes < 0 || lifetime > presence.MaxLifetime ||
+		(status.Status == presence.Cleared && status.Minutes != 0) {
+		return errAgentProposalMalformed
+	}
+	return s.propose(ctx, proposalID, AgentProposalReportStatus, "", status, now, nil)
+}
+
+// ApproveStatusProposal makes a waiting status proposal the owner's report at
+// now, in one transaction. report builds the report from what was proposed:
+// the caller knows the owner's sharing choice and the reports already kept,
+// which decide whether links may show it and where it falls in order.
+// report runs inside the transaction and must not read the store, which has
+// one connection: the caller reads what it needs first.
+func (s *Store) ApproveStatusProposal(ctx context.Context, proposalID string, now time.Time, report func(ProposedStatus) (presence.Report, error)) (AgentProposal, error) {
+	now = now.UTC()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return AgentProposal{}, err
+	}
+	defer tx.Rollback()
+	proposal, err := pendingAgentProposalTx(ctx, tx, proposalID, now)
+	if err != nil {
+		return AgentProposal{}, err
+	}
+	if proposal.Status == nil {
+		return AgentProposal{}, errAgentProposalMalformed
+	}
+	made, err := report(*proposal.Status)
+	if err != nil {
+		return AgentProposal{}, err
+	}
+	prepared, err := prepareStatusReport(made)
+	if err != nil {
+		return AgentProposal{}, err
+	}
+	if _, err := insertStatusReportTx(ctx, tx, prepared); err != nil {
+		return AgentProposal{}, err
+	}
+	if err := decideAgentProposalTx(ctx, tx, proposalID, AgentProposalApproved, made.StatusID, now); err != nil {
+		return AgentProposal{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return AgentProposal{}, err
+	}
+	proposal.State, proposal.DecidedAt, proposal.ResultID = AgentProposalApproved, now, made.StatusID
+	return proposal, nil
 }
 
 func (s *Store) propose(ctx context.Context, proposalID, actionID, medicationID string, payload any, now time.Time, check func(*sql.Tx) error) error {
@@ -338,6 +414,9 @@ func scanAgentProposal(row rowScanner, now time.Time) (AgentProposal, error) {
 	case AgentProposalAddTask:
 		proposal.Task = &ProposedTask{}
 		err = json.Unmarshal(payload, proposal.Task)
+	case AgentProposalReportStatus:
+		proposal.Status = &ProposedStatus{}
+		err = json.Unmarshal(payload, proposal.Status)
 	default:
 		err = errAgentProposalMalformed
 	}

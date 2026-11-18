@@ -25,6 +25,7 @@
   ],
   "needs_review": true,
   "observation_id": "obs_review",
+  "removed_at_source": false,
   "schema_version": "v1",
   "sleep_classification": "principal",
   "source_cursor": 3,

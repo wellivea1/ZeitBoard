@@ -194,7 +194,9 @@ func prefixReferenceBacktest(ctx context.Context, estimator RobustEstimator, ses
 			}
 			return BacktestReport{}, selectErr
 		}
-		fit, fitErr := fitOnsetTrend(modelEpisodes)
+		normalized, _ := normalizedConfig(config)
+		model, fitErr := fitOrderedEpisodes(modelEpisodes, normalized)
+		fit := model.onset
 		if fitErr != nil {
 			if appendBacktestRefusal(&report, k, full[k].Intervals[0].Interval.Start.UTC, fitErr) {
 				continue
@@ -204,7 +206,7 @@ func prefixReferenceBacktest(ctx context.Context, estimator RobustEstimator, ses
 
 		actual := full[k].Intervals[0].Interval.Start.UTC
 		lastModelOnset := modelEpisodes[len(modelEpisodes)-1].Intervals[0].Interval.Start.UTC
-		horizon, horizonErr := cycleStep(actual.Sub(lastModelOnset))
+		horizon, horizonErr := cycleStep(actual.Sub(lastModelOnset), model.period)
 		if horizonErr != nil {
 			if appendBacktestRefusal(&report, k, actual, horizonErr) {
 				continue

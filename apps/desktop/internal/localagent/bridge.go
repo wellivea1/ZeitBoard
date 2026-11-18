@@ -53,11 +53,15 @@ func NewBridge(descriptor Descriptor) (*Bridge, error) {
 
 func newBridge(descriptor Descriptor, load func() (Descriptor, error)) *Bridge {
 	transport := &http.Transport{
-		Proxy:               nil,
-		DisableCompression:  true,
-		MaxIdleConns:        1,
-		MaxIdleConnsPerHost: 1,
-		IdleConnTimeout:     30 * time.Second,
+		Proxy:              nil,
+		DisableCompression: true,
+		// Each request dials afresh. A connection kept from before the app
+		// restarted fails with an end of stream, which cannot be told from a
+		// request that ran and lost its answer, so the bridge would report an
+		// error where it should have followed the app. A refused dial is
+		// certain not to have run anything. The endpoint is on this computer,
+		// so the dial costs nothing worth keeping a connection for.
+		DisableKeepAlives: true,
 		DialContext: (&net.Dialer{
 			Timeout:   5 * time.Second,
 			KeepAlive: 30 * time.Second,

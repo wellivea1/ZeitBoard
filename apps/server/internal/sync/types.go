@@ -28,6 +28,10 @@ const (
 	// and erases it on undo or when the task is deleted; the companion draws
 	// the next day's placements on its dial.
 	KindPlacement Kind = "placement"
+	// KindEvent carries one immutable revision of an event the owner added
+	// (ADR-0068), with id "<event_id>_r<revision>", as tasks sync. Deleting
+	// an event erases all its pushed revisions.
+	KindEvent Kind = "event"
 	// The medication kinds (ADR-0048). A definition is a mutable intention
 	// and syncs like a task, as immutable revisions "<medication_id>_r<n>";
 	// events and their corrections are append-only evidence whose record id
@@ -43,6 +47,15 @@ const (
 	// of sleep records (ADR-0054): read in full over a window, or not read
 	// and why. It holds no sleep, and the server reads none of it.
 	KindSourceReport Kind = "source_report"
+	// KindStatus carries a status the owner reported (ADR-0070): awake,
+	// trying to sleep, or do not disturb, with when it stops standing. The
+	// newest one stands; it is never an estimator input.
+	KindStatus Kind = "status"
+	// KindSetting carries one choice the owner made on one device, which
+	// their other devices follow (ADR-0074): sharing a status by default,
+	// the sleep buttons reporting one, and the clock. The newest record of
+	// each choice stands; the server reads none of them.
+	KindSetting Kind = "setting"
 	// KindTombstone marks an erased record in the pull stream. Tombstones are
 	// minted only by the server's erase endpoint — clients cannot push them —
 	// and their metadata-only payload carries the erased id plus its original

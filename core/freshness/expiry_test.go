@@ -25,7 +25,7 @@ func TestNextChangeIsNeverLate(t *testing.T) {
 		build func(now time.Time) freshness.Inputs
 	}{
 		{
-			name: "evidence ages out with no prediction",
+			name: "evidence ages out with no forecast",
 			build: func(now time.Time) freshness.Inputs {
 				return freshness.Inputs{
 					Now:            now,
@@ -35,24 +35,38 @@ func TestNextChangeIsNeverLate(t *testing.T) {
 			},
 		},
 		{
-			name: "sleep predicted and never recorded",
+			name: "a sleep forecast and never recorded",
 			build: func(now time.Time) freshness.Inputs {
 				return freshness.Inputs{
 					Now:                now,
 					NewestEvidence:     expiryNow,
 					LatestSleepEnd:     expiryNow,
 					ExpectedSleepOnset: expiryNow.Add(3 * time.Hour),
+					ExpectedSleepEnd:   expiryNow.Add(14 * time.Hour),
 				}
 			},
 		},
 		{
-			name: "sleep predicted before the stale threshold",
+			name: "a forecast sleep already under way",
+			build: func(now time.Time) freshness.Inputs {
+				return freshness.Inputs{
+					Now:                now,
+					NewestEvidence:     expiryNow.Add(-16 * time.Hour),
+					LatestSleepEnd:     expiryNow.Add(-16 * time.Hour),
+					ExpectedSleepOnset: expiryNow.Add(-30 * time.Minute),
+					ExpectedSleepEnd:   expiryNow.Add(10 * time.Hour),
+				}
+			},
+		},
+		{
+			name: "a forecast sleep already recorded",
 			build: func(now time.Time) freshness.Inputs {
 				return freshness.Inputs{
 					Now:                now,
 					NewestEvidence:     expiryNow,
 					LatestSleepEnd:     expiryNow,
-					ExpectedSleepOnset: expiryNow.Add(-30 * time.Minute),
+					ExpectedSleepOnset: expiryNow.Add(-9 * time.Hour),
+					ExpectedSleepEnd:   expiryNow.Add(2 * time.Hour),
 				}
 			},
 		},
@@ -106,14 +120,15 @@ func TestNoEvidenceNeverExpires(t *testing.T) {
 }
 
 // TestARecordedSleepDischargesItsOwnDeadline: once sleep is recorded at or after
-// the predicted onset, the unrecorded-sleep rule is spent and must not schedule
-// a wake that would find nothing changed.
+// the forecast onset, the forecast's deadline is spent and must not schedule a
+// wake that would find nothing changed.
 func TestARecordedSleepDischargesItsOwnDeadline(t *testing.T) {
 	onset := expiryNow.Add(-8 * time.Hour)
 	next := freshness.Default().NextChange(freshness.Inputs{
 		Now:                expiryNow,
 		NewestEvidence:     expiryNow.Add(-time.Hour),
 		ExpectedSleepOnset: onset,
+		ExpectedSleepEnd:   onset.Add(11 * time.Hour),
 		LatestSleepEnd:     onset.Add(7 * time.Hour),
 	})
 	// The only remaining deadlines are the age thresholds on the evidence.
@@ -126,64 +141,88 @@ func TestARecordedSleepDischargesItsOwnDeadline(t *testing.T) {
 // passed there is nothing left to wake up for.
 func TestAWithheldStateStopsScheduling(t *testing.T) {
 	policy := freshness.Default()
-	inputs := freshness.Inputs{
-		Now:            expiryNow,
-		NewestEvidence: expiryNow.Add(-3 * 24 * time.Hour),
-		LatestSleepEnd: expiryNow.Add(-3 * 24 * time.Hour),
-	}
-	if assessment := policy.Assess(inputs); assessment.State != freshness.StateWithheld {
-		t.Fatalf("state = %q, want withheld", assessment.State)
-	}
-	if next := policy.NextChange(inputs); !next.IsZero() {
-		t.Errorf("next change = %s, want none once everything has expired", next)
+	for name, inputs := range map[string]freshness.Inputs{
+		"by age": {
+			Now:            expiryNow,
+			NewestEvidence: expiryNow.Add(-3 * 24 * time.Hour),
+			LatestSleepEnd: expiryNow.Add(-3 * 24 * time.Hour),
+		},
+		"by the forecast": {
+			Now:                expiryNow,
+			NewestEvidence:     expiryNow.Add(-time.Hour),
+			LatestSleepEnd:     expiryNow.Add(-3 * 24 * time.Hour),
+			ExpectedSleepOnset: expiryNow.Add(-2*24*time.Hour - 10*time.Hour),
+			ExpectedSleepEnd:   expiryNow.Add(-2 * 24 * time.Hour),
+		},
+	} {
+		if assessment := policy.Assess(inputs); assessment.State != freshness.StateWithheld {
+			t.Fatalf("%s: state = %q, want withheld", name, assessment.State)
+		}
+		if next := policy.NextChange(inputs); !next.IsZero() {
+			t.Errorf("%s: next change = %s, want none once everything has expired", name, next)
+		}
 	}
 }
 
-// TestTheGracePeriodIsScheduledNotJustChecked pins the deadline against the
-// measured onset error ADR-0022 recorded, so a change to the grace period shows
-// up here as well as in the assessment.
-func TestTheGracePeriodIsScheduled(t *testing.T) {
-	// Evidence recorded just now about a night that ended long ago — a
-	// correction, say — with the predicted onset already behind us. The grace
-	// deadline is then the earliest of the three, so it is the one returned.
-	onset := expiryNow.Add(-5 * time.Hour)
-	next := freshness.Default().NextChange(freshness.Inputs{
+// TestTheForecastSetsBothDeadlines pins the deadlines to the forecast sleep's
+// latest likely wake and the grace ADR-0071 chose, and not to the age of the
+// evidence.
+func TestTheForecastSetsBothDeadlines(t *testing.T) {
+	policy := freshness.Default()
+	wake := expiryNow.Add(-time.Hour)
+	latestWake := wake.Add(29 * time.Hour)
+	inputs := freshness.Inputs{
 		Now:                expiryNow,
-		NewestEvidence:     expiryNow,
-		LatestSleepEnd:     expiryNow.Add(-10 * time.Hour),
-		ExpectedSleepOnset: onset,
-	})
-	if want := onset.Add(6 * time.Hour).Add(time.Nanosecond); !next.Equal(want) {
-		t.Errorf("next change = %s, want the onset plus the grace period (%s)", next, want)
+		NewestEvidence:     wake,
+		LatestSleepEnd:     wake,
+		ExpectedSleepOnset: wake.Add(17 * time.Hour),
+		ExpectedSleepEnd:   latestWake,
+	}
+	caution, withheld := policy.Deadlines(inputs)
+	if !caution.Equal(latestWake) || !withheld.Equal(latestWake.Add(6*time.Hour)) {
+		t.Fatalf("deadlines = %s and %s, want the latest likely wake (%s) and six hours on", caution, withheld, latestWake)
+	}
+	if next := policy.NextChange(inputs); !next.Equal(latestWake) {
+		t.Errorf("next change = %s, want the latest likely wake", next)
+	}
+	inputs.Now = latestWake.Add(time.Minute)
+	if next := policy.NextChange(inputs); !next.Equal(latestWake.Add(6 * time.Hour)) {
+		t.Errorf("next change inside the grace = %s, want its end", next)
 	}
 }
 
 // TestARunAtTheReturnedInstantSeesTheChange is the sharp edge the minute-by-
-// minute walk cannot see. The overdue rule is a strict comparison, so a wake
-// scheduled for the exact deadline would find nothing changed, re-derive its
-// next wake from the unchanged state, and leave the claim standing until some
-// unrelated threshold happened to catch it.
+// minute walk cannot see. A wake scheduled for a deadline that the assessment
+// treated as exclusive would find nothing changed, re-derive its next wake
+// from the unchanged state, and leave the claim standing.
 func TestARunAtTheReturnedInstantSeesTheChange(t *testing.T) {
 	policy := freshness.Default()
-	onset := expiryNow.Add(-5 * time.Hour)
 	inputs := freshness.Inputs{
 		Now:                expiryNow,
 		NewestEvidence:     expiryNow,
-		LatestSleepEnd:     expiryNow.Add(-10 * time.Hour),
-		ExpectedSleepOnset: onset,
+		LatestSleepEnd:     expiryNow,
+		ExpectedSleepOnset: expiryNow.Add(17 * time.Hour),
+		ExpectedSleepEnd:   expiryNow.Add(29 * time.Hour),
 	}
-	if state := policy.Assess(inputs).State; state == freshness.StateWithheld {
-		t.Fatalf("the fixture starts withheld (%q); there is nothing to observe changing", state)
+	want := []struct {
+		state  freshness.State
+		reason freshness.Reason
+	}{
+		{freshness.StateStale, freshness.ReasonSleepRecordDue},
+		{freshness.StateWithheld, freshness.ReasonExpectedSleepUnrecorded},
 	}
-
-	next := policy.NextChange(inputs)
-	at := inputs
-	at.Now = next
-	assessment := policy.Assess(at)
-	if assessment.State != freshness.StateWithheld {
-		t.Errorf("state at the predicted instant = %q, want withheld", assessment.State)
+	for _, step := range want {
+		next := policy.NextChange(inputs)
+		if next.IsZero() {
+			t.Fatalf("no change was scheduled before %q", step.state)
+		}
+		inputs.Now = next
+		assessment := policy.Assess(inputs)
+		if assessment.State != step.state || assessment.Reason != step.reason {
+			t.Fatalf("at %s: state = %q reason = %q, want %q for %q", next, assessment.State, assessment.Reason, step.state, step.reason)
+		}
 	}
-	if assessment.Reason != freshness.ReasonExpectedSleepUnrecorded {
-		t.Errorf("reason = %q, want the unrecorded-sleep rule", assessment.Reason)
+	if next := policy.NextChange(inputs); !next.IsZero() {
+		t.Errorf("a change is still scheduled after the claim was withheld: %s", next)
 	}
 }

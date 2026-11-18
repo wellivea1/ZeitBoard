@@ -1,6 +1,7 @@
 # ADR 0032: Android sleep synchronisation
 
-- Status: accepted
+- Status: accepted; holding a night recorded in another time zone is revised by
+  [ADR-0073](0073-a-night-recorded-away-from-home.md)
 - Date: 2026-08-06
 - Implements slice 2 of phase P7 in [`phase-goals.md`](../phase-goals.md), the
   change the [automaticity review](../automaticity-review-2026-08-04.md) rated

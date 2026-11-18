@@ -8,6 +8,12 @@ import { findWailsMethod, type WailsRoot } from "./wailsBridge";
 
 export type ClockPreference = "system" | Clock;
 
+/**
+ * Said when the clock changed without the window choosing it: one chosen on
+ * the owner's phone, followed here (ADR-0074).
+ */
+export const clockChangedEvent = "zeitboard:clock-changed";
+
 export interface ClockSetting {
   preference: ClockPreference;
   /** The clock in use. */

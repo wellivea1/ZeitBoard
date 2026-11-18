@@ -24,13 +24,18 @@ import org.non24.planner.domain.SleepEpisode
  * append-only correction chain instead: the same mechanism the desktop uses,
  * and it keeps the original evidence intact.
  *
- * **A record is never labelled with a time zone that contradicts its own
- * evidence.** Health Connect stores UTC offsets, not IANA zones, and a v1
- * observation requires an IANA zone. Rather than inventing one, an episode
- * syncs only when its stored offset matches the configured home zone at that
- * instant. Episodes that disagree — typically travel — are held back and
- * reported rather than guessed at or silently dropped. Extending offset support
- * must update the current observation contract and its consumers together.
+ * **A night keeps the clock it was recorded on.** Health Connect stores UTC
+ * offsets, not IANA zones. A v1 observation names the zone the owner reads
+ * their records in, the configured home zone, and a night recorded on another
+ * clock, typically while travelling, carries that clock's offsets beside it
+ * (`source_offset`, ADR-0073). It counts like any other night: the estimate
+ * runs on instants, and every device draws it on the home clock. Only an
+ * episode with no offsets at all is held back and reported, since nothing says
+ * which clock it was on.
+ *
+ * **A session Health Connect no longer has is said to be gone, not erased**
+ * (ADR-0072). The phone sends a provider correction that leaves the night out,
+ * and another if it comes back; see [SourcePresence].
  */
 object SyncContract {
 
@@ -44,10 +49,8 @@ object SyncContract {
     /** Why an episode cannot be represented in the v1 contract. */
     enum class HoldReason {
         UNSUPPORTED_SOURCE,
-        /** The stored offset disagrees with the configured home zone. */
-        ZONE_OFFSET_MISMATCH,
 
-        /** No offset was recorded, so it cannot be checked at all. */
+        /** No offset was recorded, so the clock it was on is unknown. */
         MISSING_OFFSET,
     }
 
@@ -65,18 +68,27 @@ object SyncContract {
      * it, so calling again with no source change produces nothing at all. That
      * is what makes this idempotent at the source rather than relying on the
      * far end to deduplicate.
+     *
+     * With [read], the newest complete read of Health Connect, the sources this
+     * phone read and synced ([own]) are also checked for presence (ADR-0072):
+     * one the read no longer returned is said to be gone, and one said to be
+     * gone that it returned again is said to be back. Each is said once.
      */
     fun map(
         episodes: List<SleepEpisode>,
         homeZone: ZoneId,
         alreadySynced: Map<String, SourceSyncRevision>,
         now: Instant,
+        read: CompleteRead? = null,
+        own: Map<String, OwnSource> = emptyMap(),
     ): Mapping {
         val records = mutableListOf<OutboxRecord>()
         val held = mutableListOf<HeldEpisode>()
 
+        if (read != null) records += presenceRecords(read, own)
+
         for (episode in episodes.sortedBy { it.start }) {
-            val hold = holdReason(episode, homeZone)
+            val hold = holdReason(episode)
             if (hold != null) {
                 held += HeldEpisode(episode, hold)
                 continue
@@ -98,20 +110,44 @@ object SyncContract {
         return Mapping(records, held)
     }
 
-    /** Reports why an episode cannot be placed in civil time, or null. */
-    fun holdReason(episode: SleepEpisode, homeZone: ZoneId): HoldReason? {
+    /**
+     * What the newest complete read says about the presence of the sources
+     * this phone synced: gone where it no longer returned one that began a day
+     * or more inside its window, and back where it returned one said to be
+     * gone. Each word is dated by the read, so it is minted once.
+     */
+    private fun presenceRecords(read: CompleteRead, own: Map<String, OwnSource>): List<OutboxRecord> {
+        val judgedFrom = read.window.start.plus(SourcePresence.MARGIN)
+        return own.entries.sortedBy { it.value.start }.mapNotNull { (recordId, source) ->
+            val returned = recordId in read.observationIds
+            when {
+                returned && source.removed -> sourcePresence(recordId, removed = false, read.window.end)
+                returned || source.removed -> null
+                source.start.isBefore(judgedFrom) || !source.start.isBefore(read.window.end) -> null
+                else -> sourcePresence(recordId, removed = true, read.window.end)
+            }
+        }
+    }
+
+    /** Reports why an episode cannot be placed in time, or null. */
+    fun holdReason(episode: SleepEpisode): HoldReason? {
         if (episode.provenance.acquisitionMethod != AcquisitionMethod.HEALTH_CONNECT ||
             episode.provenance.evidenceStatus != EvidenceStatus.IMPORTED
         ) return HoldReason.UNSUPPORTED_SOURCE
-        val startOffset = episode.startZoneOffset ?: return HoldReason.MISSING_OFFSET
-        val endOffset = episode.endZoneOffset ?: return HoldReason.MISSING_OFFSET
-        val homeStart = homeZone.rules.getOffset(episode.start)
-        val homeEnd = homeZone.rules.getOffset(episode.end)
-        return if (startOffset == homeStart && endOffset == homeEnd) {
-            null
-        } else {
-            HoldReason.ZONE_OFFSET_MISMATCH
-        }
+        if (episode.startZoneOffset == null || episode.endZoneOffset == null) return HoldReason.MISSING_OFFSET
+        return null
+    }
+
+    /**
+     * The clock an episode was recorded on, when it was not the home zone's at
+     * one end or the other: a night away (ADR-0073). Null at home, so a record
+     * never says the same thing two ways.
+     */
+    fun awayOffset(episode: SleepEpisode, homeZone: ZoneId): SourceOffset? {
+        val start = episode.startZoneOffset ?: return null
+        val end = episode.endZoneOffset ?: return null
+        if (start == homeZone.rules.getOffset(episode.start) && end == homeZone.rules.getOffset(episode.end)) return null
+        return SourceOffset(start.totalSeconds, end.totalSeconds)
     }
 
     /** Stable, contract-valid record id for one logical source episode. */
@@ -144,7 +180,14 @@ object SyncContract {
             append("\"evidence_status\":\"directly_observed\",")
             append("\"recorded_at\":").append(quote(RFC3339.format(revision))).append(",")
             append("\"source_record_id\":").append(quote(sourceRecordId(episode)))
-            append("}}")
+            append("}")
+            awayOffset(episode, homeZone)?.let { offset ->
+                append(",\"source_offset\":{")
+                append("\"start_seconds\":").append(offset.startSeconds).append(",")
+                append("\"end_seconds\":").append(offset.endSeconds)
+                append("}")
+            }
+            append("}")
         }
         return OutboxRecord(
             recordId = recordId,
@@ -187,6 +230,28 @@ object SyncContract {
             sourceRevision = revision,
             payload = payload,
         )
+    }
+
+    /**
+     * A provider's word that its record is gone ([removed]) or back, said at
+     * [at] (ADR-0072). It leaves the record out, or counts it again, and
+     * changes nothing else. The id follows from the record, the word and the
+     * moment, so one read says it once however often its records are mapped.
+     */
+    internal fun sourcePresence(observationRecordId: String, removed: Boolean, at: Instant): OutboxRecord {
+        val said = RFC3339.format(at)
+        val id = "cor-" + digest(observationRecordId + "|" + (if (removed) "removed" else "restored") + "|" + said)
+        val payload = buildString {
+            append("{")
+            append("\"correction_id\":").append(quote(id)).append(",")
+            append("\"target_observation_id\":").append(quote(observationRecordId)).append(",")
+            append("\"created_at\":").append(quote(said)).append(",")
+            append("\"reason\":").append(quote(if (removed) SourcePresence.DELETED else SourcePresence.RESTORED)).append(",")
+            append("\"acquisition_method\":\"health_connect\",")
+            append("\"changes\":{\"excluded\":").append(removed).append("}")
+            append("}")
+        }
+        return OutboxRecord(recordId = id, kind = "correction", createdAt = at, sourceRevision = at, payload = payload)
     }
 
     /**
@@ -235,7 +300,7 @@ object SyncContract {
      * whatever a source package name contains, and keeps that package name off
      * the wire.
      */
-    private fun digest(value: String): String {
+    internal fun digest(value: String): String {
         val bytes = MessageDigest.getInstance("SHA-256").digest(value.toByteArray(Charsets.UTF_8))
         val hex = "0123456789abcdef"
         val builder = StringBuilder(24)

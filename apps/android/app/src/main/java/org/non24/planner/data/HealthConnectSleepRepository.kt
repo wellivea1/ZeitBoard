@@ -57,6 +57,8 @@ internal class HealthConnectSleepRepository(
     override val backgroundReadState: StateFlow<BackgroundReadState> = mutableBackgroundReadState.asStateFlow()
     private val mutableLastCheck = MutableStateFlow<SourceCheck?>(null)
     override val lastCheck: StateFlow<SourceCheck?> = mutableLastCheck.asStateFlow()
+    private val mutableLastCompleteRead = MutableStateFlow<CompleteRead?>(null)
+    override val lastCompleteRead: StateFlow<CompleteRead?> = mutableLastCompleteRead.asStateFlow()
 
     /** Records what a check found, for the source report (ADR-0054). */
     private fun checked(outcome: SourceOutcome, covered: ReadWindow? = null, at: Instant = clock.instant()) {
@@ -156,6 +158,12 @@ internal class HealthConnectSleepRepository(
             val window = ReadWindow(until.minus(SourceReporting.LOOKBACK), until)
             val episodes = client.readSleep(window).sortedByDescending { it.start }
             localUserDataRepository.replaceHealthConnectSleepSnapshot(episodes)
+            // Kept with its window, so what it no longer returned is read
+            // against what it covered and never against a later snapshot.
+            mutableLastCompleteRead.value = CompleteRead(
+                window,
+                episodes.mapTo(HashSet()) { SyncContract.observationId(it.logicalSourceId) },
+            )
             mutableLastRefreshError.value = null
             checked(SourceOutcome.READ, window, at = until)
         } catch (_: SecurityException) {

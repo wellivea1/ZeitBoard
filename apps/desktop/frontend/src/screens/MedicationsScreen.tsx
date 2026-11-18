@@ -169,11 +169,34 @@ function MedicationWorkspaceView({
   mutate: MedicationMutation;
 }) {
   const loggedMessage = logged(data);
+  // With no medication listed there is nothing to record or look back on, so
+  // the list and its form come first; adding one was at the foot of the page.
+  const firstUse = Boolean(data) && data!.medications.length === 0;
+  const setup = (
+    <MedicationSetupPanel
+      medications={data?.medications ?? []}
+      available={available}
+      busy={busy}
+      onAdd={(input: MedicationInput) =>
+        mutate(() => addMedication(input), "Private medication label added.")
+      }
+      onUpdate={(input: MedicationUpdateInput) =>
+        mutate(() => updateMedication(input), "Medication definition revision saved.")
+      }
+      onSchedule={(input: MedicationScheduleInput) =>
+        mutate(() => updateMedicationSchedule(input), "Medication schedule revision saved.")
+      }
+      onDelete={(medicationId: string) =>
+        mutate(() => deleteMedication(medicationId), "Medication and its history deleted.")
+      }
+    />
+  );
   return (
     // One column, in the order the work happens: record today's dose, look
     // back, manage the list. Schedules against predicted sleep and the
     // clinician report are further down because they are occasional.
     <section className="medication-workspace">
+      {firstUse && setup}
       <section className="medication-today" aria-labelledby="medication-today-title">
         <div className="plan-section-head">
           <h2 id="medication-today-title">Record a dose</h2>
@@ -216,23 +239,7 @@ function MedicationWorkspaceView({
         />
       )}
 
-      <MedicationSetupPanel
-        medications={data?.medications ?? []}
-        available={available}
-        busy={busy}
-        onAdd={(input: MedicationInput) =>
-          mutate(() => addMedication(input), "Private medication label added.")
-        }
-        onUpdate={(input: MedicationUpdateInput) =>
-          mutate(() => updateMedication(input), "Medication definition revision saved.")
-        }
-        onSchedule={(input: MedicationScheduleInput) =>
-          mutate(() => updateMedicationSchedule(input), "Medication schedule revision saved.")
-        }
-        onDelete={(medicationId: string) =>
-          mutate(() => deleteMedication(medicationId), "Medication and its history deleted.")
-        }
-      />
+      {!firstUse && setup}
 
       <MedicationFeasibility
         medications={data?.medications ?? []}

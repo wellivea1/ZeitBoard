@@ -39,10 +39,15 @@ internal data class ForecastPair(val sleep: TimeWindow, val waking: TimeWindow)
  * windows overlap on purpose: an instant inside both is one the model cannot
  * place, so it is uncertain rather than whichever window was drawn last.
  * Instants in neither are left out.
+ *
+ * [wakingUntil] is where the server says the waking stretch under way stops
+ * being likely. A forecast's waking window is the one after its sleep, so the
+ * hours before the first sleep have none of their own; this gives them one,
+ * and with it the first sleep begins in a range, as every later one does.
  */
-internal fun dialSegments(forecasts: List<ForecastPair>, from: Instant, to: Instant): List<DialSegment> {
+internal fun dialSegments(forecasts: List<ForecastPair>, from: Instant, to: Instant, wakingUntil: Instant? = null): List<DialSegment> {
     val sleeps = forecasts.map { it.sleep }
-    val wakes = forecasts.map { it.waking }
+    val wakes = forecasts.map { it.waking } + listOfNotNull(wakingUntil?.takeIf { it.isAfter(from) }?.let { TimeWindow(from, it) })
     val bounds = (sleeps + wakes)
         .flatMap { listOf(it.start, it.end) }
         .plus(listOf(from, to))
@@ -86,7 +91,13 @@ internal fun snapshotPairs(onset: TimeWindow, wake: TimeWindow): List<ForecastPa
     return listOf(ForecastPair(sleep, before), ForecastPair(sleep, after))
 }
 
-internal data class SleepAhead(val onset: DialSegment?, val wake: DialSegment?)
+/**
+ * [begins] is the earliest the sleep may begin. It matters when there is no
+ * onset band: a sleep that has not begun and has no band before it is one the
+ * forecast gives only an earliest time for, and calling it "this sleep" would
+ * say the person is asleep when they are not.
+ */
+internal data class SleepAhead(val onset: DialSegment?, val wake: DialSegment?, val begins: Instant? = null)
 
 /**
  * The uncertain band in which the next sleep is likely to begin, and the one
@@ -101,7 +112,7 @@ internal fun sleepAhead(segments: List<DialSegment>): SleepAhead {
         ?.takeIf { it.state == DialState.UNCERTAIN && it.end == night.start }
     val wake = segments.getOrNull(asleep + 1)
         ?.takeIf { it.state == DialState.UNCERTAIN && it.start == night.end }
-    return SleepAhead(onset, wake)
+    return SleepAhead(onset, wake, night.start)
 }
 
 internal data class LeadPart(val text: String, val strong: Boolean = false)
@@ -183,6 +194,11 @@ internal fun leadParts(ahead: SleepAhead, now: Instant, zone: ZoneId, use24HourT
             parts += LeadPart(b, strong = true)
         }
         parts += LeadPart(" ${dayInSentence(onset.start, now, zone)}")
+        if (wake != null) wakeClause(", and you will probably wake between ") else parts += LeadPart(".")
+    } else if (ahead.begins != null && ahead.begins.isAfter(now.plusSeconds(300))) {
+        parts += LeadPart("Sleep is likely to begin after ")
+        parts += LeadPart(clock(roundToFive(ahead.begins).atZone(zone), use24HourTime), strong = true)
+        parts += LeadPart(" ${dayInSentence(ahead.begins, now, zone)}")
         if (wake != null) wakeClause(", and you will probably wake between ") else parts += LeadPart(".")
     } else if (wake != null) {
         wakeClause("This sleep is likely to end between ")

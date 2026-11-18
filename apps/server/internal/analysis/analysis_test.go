@@ -164,8 +164,13 @@ func TestAQuietDayWithholdsAvailabilityWithNobodyPushing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first run: %v", err)
 	}
-	if got := f.snapshot(t, f.profileID).Status; got != portal.StatusAvailable {
+	published := f.snapshot(t, f.profileID)
+	if got := published.Status; got != portal.StatusAvailable {
 		t.Fatalf("status = %q, want the history to produce availability", got)
+	}
+	// The page is told when its own claim turns, and the caution comes first.
+	if published.WithheldAt.IsZero() || !published.CautionAt.Before(published.WithheldAt) {
+		t.Fatalf("the snapshot's deadlines are %s and %s", published.CautionAt, published.WithheldAt)
 	}
 	if first.ValidUntil.IsZero() {
 		t.Fatal("nothing was scheduled to expire; the claim would stand forever")
@@ -199,8 +204,14 @@ func TestAQuietDayWithholdsAvailabilityWithNobodyPushing(t *testing.T) {
 	if len(final.Windows) != 0 {
 		t.Errorf("%d windows survived the withholding", len(final.Windows))
 	}
-	if at.Sub(f.clock) > 24*time.Hour {
-		t.Errorf("the claim took %s to be withdrawn, longer than the policy's own ceiling", at.Sub(f.clock))
+	// The claim goes when the policy said it would: six hours after the latest
+	// likely wake of the sleep the forecast expected, and never as much as two
+	// days after the last record (ADR-0071).
+	if !at.Equal(published.WithheldAt) {
+		t.Errorf("the claim was withdrawn at %s, and the snapshot said %s", at, published.WithheldAt)
+	}
+	if at.Sub(f.clock) > 48*time.Hour {
+		t.Errorf("the claim took %s to be withdrawn", at.Sub(f.clock))
 	}
 }
 

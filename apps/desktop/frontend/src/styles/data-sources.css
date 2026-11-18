@@ -599,6 +599,16 @@
   margin: 0 0 var(--space-2);
 }
 
+/* A night its source deleted: what happened to it and what puts it back. */
+.sleep-night-note {
+  margin: var(--space-2) 0 0 30px;
+  color: var(--muted);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-style: italic;
+  line-height: 1.5;
+}
+
 @media (max-width: 720px) {
   .sleep-night-main {
     grid-template-columns: 18px minmax(0, 1fr);
@@ -609,7 +619,8 @@
     justify-self: start;
   }
 
-  .sleep-night-review {
+  .sleep-night-review,
+  .sleep-night-note {
     margin-left: 0;
   }
 }

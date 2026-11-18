@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Icon } from "./Icon";
+import { QuickLogAdjust } from "./QuickLogAdjust";
 import {
   beginQuickSleep,
   completeQuickSleep,
@@ -10,6 +11,7 @@ import {
   type QuickLogResult,
   type QuickLogState,
 } from "../data/quickLog";
+import { statusChangedEvent } from "../data/status";
 
 // Two taps instead of a four-field form. The app records the night when the
 // pair is plausible and asks one question when it is not — it never fills in a
@@ -40,12 +42,20 @@ function questionFrom(result: QuickLogResult): Question | null {
   };
 }
 
-export function QuickLogBar() {
+export function QuickLogBar({
+  onState,
+}: {
+  /** Told what is marked, so the page around the buttons can say so too. */
+  onState?: (state: QuickLogState) => void;
+} = {}) {
   const [state, setState] = useState<QuickLogState>(quickLogUnavailable);
   const [question, setQuestion] = useState<Question | null>(null);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  // The night just recorded, which can be adjusted while the tap is fresh.
+  const [recorded, setRecorded] = useState("");
+  const [adjusting, setAdjusting] = useState(false);
 
   useEffect(() => {
     let current = true;
@@ -57,6 +67,10 @@ export function QuickLogBar() {
     };
   }, []);
 
+  useEffect(() => {
+    onState?.(state);
+  }, [state, onState]);
+
   const run = async (action: () => Promise<QuickLogResult>) => {
     setBusy(true);
     setError("");
@@ -64,6 +78,10 @@ export function QuickLogBar() {
       const result = await action();
       setState(result.state);
       setQuestion(questionFrom(result));
+      setRecorded(result.recorded && result.entry ? result.entry : "");
+      setAdjusting(false);
+      // Where the owner asked for it, a tap also reports a status.
+      window.dispatchEvent(new Event(statusChangedEvent));
       setNotice(result.outcome.startsWith("confirm_") ? "" : result.reason);
       if (result.outcome === "reject") setError(result.reason);
     } catch (reason) {
@@ -125,6 +143,27 @@ export function QuickLogBar() {
         <p className="quick-log-notice" role="status">
           {notice}
         </p>
+      )}
+      {/* A late tap is easiest to put right now, not after a search of the log. */}
+      {recorded && !question && !state.pending && !adjusting && (
+        <button
+          className="text-link quick-log-adjust"
+          type="button"
+          onClick={() => setAdjusting(true)}
+        >
+          Adjust the times
+        </button>
+      )}
+      {recorded && adjusting && (
+        <QuickLogAdjust
+          observationId={recorded}
+          onDone={(message) => {
+            setNotice(message);
+            setRecorded("");
+            setAdjusting(false);
+          }}
+          onCancel={() => setAdjusting(false)}
+        />
       )}
       {error && (
         <p className="form-error" role="alert">

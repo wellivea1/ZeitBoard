@@ -45,6 +45,8 @@ class BackendSyncRepository(
     private val io: CoroutineDispatcher = Dispatchers.IO,
     private val replica: SyncReplicaStore,
     private val onRecordsChanged: suspend (Boolean) -> Unit = {},
+    /** The phone's own copy of the choices that travel between devices (ADR-0074). */
+    private val choices: ChoiceKeeper? = null,
 ) {
     private val mutex = Mutex()
     private val statusState = MutableStateFlow(SyncStatus())
@@ -179,15 +181,82 @@ class BackendSyncRepository(
         }
     }
 
-    suspend fun enqueue(episodes: List<SleepEpisode>): Int = locked {
-        val config = configuration() ?: return@locked 0
-        enqueueLocked(config, episodes)
+    /**
+     * Keeps a status the owner reports on this phone and queues it for their
+     * server (ADR-0070). [status] may be "cleared", which takes the last one
+     * back. [minutes] is how long it stands; zero is the usual length. It shows at once as waiting, and uploads with the next sync.
+     */
+    suspend fun reportStatus(status: String, shared: Boolean, minutes: Int = 0): Result<Unit> = locked {
+        syncResult {
+            val config = configuration() ?: error("Not enrolled")
+            // The newest report stands, so this one is made later than any the
+            // phone already knows of, however the two clocks compare.
+            val newest = replica.state().reportedStatus
+            var at = now().truncatedTo(java.time.temporal.ChronoUnit.MILLIS)
+            if (newest != null && !at.isAfter(newest.reportedAt)) at = newest.reportedAt.plusMillis(1)
+            val record = statusRecord("status-" + UUID.randomUUID().toString().replace("-", "").take(24), status, at, shared, minutes)
+            outbox.enqueue(listOf(record))
+            companionState.value = replica.state()
+            publishIdle(config)
+        }
     }
 
-    private fun enqueueLocked(config: SyncConfig, episodes: List<SleepEpisode>): Int {
+    /**
+     * When a choice made on this phone now is dated: after the one that
+     * stands, so it is the newest wherever it arrives (ADR-0074).
+     */
+    suspend fun nextChoiceAt(name: String): Instant = locked {
+        SharedChoices.nextChangeAt(now(), if (configuration() == null) null else replica.standingChoices()[name])
+    }
+
+    /**
+     * Sends the choices made on this phone that are newer than any standing,
+     * and takes those made later elsewhere. Returns how many were queued.
+     */
+    suspend fun shareChoices(): Int = locked {
+        val config = configuration() ?: return@locked 0
+        val queued = reconcileChoicesLocked()
+        publishIdle(config)
+        queued
+    }
+
+    /**
+     * Brings this phone's shared choices and the standing ones together
+     * (ADR-0074): one made later elsewhere is taken, and one made here later
+     * than any standing is queued for the owner's other devices.
+     */
+    private suspend fun reconcileChoicesLocked(): Int {
+        val keeper = choices ?: return 0
+        val standing = replica.standingChoices()
+        var queued = 0
+        for (held in keeper.held()) {
+            val newest = standing[held.name]
+            val mine = held.changedAt
+            when {
+                mine != null && (newest == null || mine.isAfter(newest.changedAt)) -> {
+                    outbox.enqueue(listOf(SharedChoices.record(held.name, held.value, mine)))
+                    queued++
+                }
+                newest != null && (mine == null || newest.changedAt.isAfter(mine)) -> keeper.adopt(newest)
+            }
+        }
+        return queued
+    }
+
+    /**
+     * Queues what [episodes] add or revise and, with [read], what Health
+     * Connect no longer has or has again (ADR-0072).
+     */
+    suspend fun enqueue(episodes: List<SleepEpisode>, read: CompleteRead? = null): Int = locked {
+        val config = configuration() ?: return@locked 0
+        enqueueLocked(config, episodes, read)
+    }
+
+    private fun enqueueLocked(config: SyncConfig, episodes: List<SleepEpisode>, read: CompleteRead?): Int {
         val known = replica.knownSources().toMutableMap()
         outbox.knownSources().forEach { (id, revision) -> if (known[id]?.revision?.isAfter(revision.revision) != true) known[id] = revision }
-        val mapping = SyncContract.map(episodes, config.homeZone(), known, now())
+        val own = if (read == null) emptyMap() else outbox.ownSources()
+        val mapping = SyncContract.map(episodes, config.homeZone(), known, now(), read, own)
         val before = outbox.pendingCount()
         outbox.enqueue(mapping.records)
         publishIdle(config, mapping.held.size)
@@ -221,6 +290,7 @@ class BackendSyncRepository(
                 throw SyncMorePagesException()
             }
             pullUntilCaughtUp()
+            reconcileChoicesLocked()
             // Validate server generation before replaying locally accepted data.
             val beforeUpload = parseCompanion(client.companion(config.server(), config.token).getOrThrow())
             if (beforeUpload.cursor < cache.cursor()) throw SyncServerResetException()

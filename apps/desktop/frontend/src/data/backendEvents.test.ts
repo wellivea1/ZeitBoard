@@ -3,9 +3,11 @@ import { subscribeBackendEvents } from "./backendEvents";
 import { calendarDataChangedEvent } from "./calendar";
 import { agentProposalsChangedEvent } from "./agentProposals";
 import { calendarWriteBackChangedEvent } from "./calendarWriteBack";
+import { clockChangedEvent } from "./clock";
 import { medicationDataChangedEvent } from "./medications";
 import { rhythmMarkersChangedEvent } from "./rhythmMarkers";
 import { sleepDataChangedEvent } from "./sleepDataEvents";
+import { statusChangedEvent } from "./status";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -25,6 +27,8 @@ function bridge() {
     calendarDataChangedEvent,
     agentProposalsChangedEvent,
     calendarWriteBackChangedEvent,
+    statusChangedEvent,
+    clockChangedEvent,
   ];
   const listeners = views.map((view) => {
     const listener = (event: Event) => heard.push(event.type);
@@ -64,7 +68,19 @@ it("refreshes every synced view when a sync downloads or erases records", () => 
   ]);
   release();
   // Every announcement subscribed to is let go of.
-  expect(dispose).toHaveBeenCalledTimes(5);
+  expect(dispose).toHaveBeenCalledTimes(6);
+});
+
+// ADR-0074: a choice made on the owner's phone is in use here, so the views
+// that show the status choices and the clock read them again.
+it("reads the status choices and the clock again when a choice from the phone is followed", () => {
+  const { heard, announce, release } = bridge();
+  try {
+    announce("zeitboard:settings-followed");
+    expect(heard).toEqual([statusChangedEvent, clockChangedEvent]);
+  } finally {
+    release();
+  }
 });
 
 it("shows what an agent proposed without waiting for a refresh", () => {

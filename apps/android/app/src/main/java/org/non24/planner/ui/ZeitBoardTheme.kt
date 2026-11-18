@@ -143,6 +143,15 @@ private fun colorsFor(palette: AlmanacPalette, dark: Boolean) =
             onSurface = palette.ink,
             surfaceVariant = palette.panelAlt,
             onSurfaceVariant = palette.muted,
+            // Dialogs, menus and the date and time pickers take their ground
+            // from these. Left unset they are Material's own lavender, which
+            // is not a colour this paper has.
+            surfaceContainerLowest = palette.paper,
+            surfaceContainerLow = palette.paper,
+            surfaceContainer = palette.paper,
+            surfaceContainerHigh = palette.paper,
+            surfaceContainerHighest = palette.panelAlt,
+            surfaceTint = palette.paper,
             outline = palette.line,
             outlineVariant = palette.divider,
             error = palette.danger,
@@ -166,6 +175,15 @@ private fun colorsFor(palette: AlmanacPalette, dark: Boolean) =
             onSurface = palette.ink,
             surfaceVariant = palette.panelAlt,
             onSurfaceVariant = palette.muted,
+            // Dialogs, menus and the date and time pickers take their ground
+            // from these. Left unset they are Material's own lavender, which
+            // is not a colour this paper has.
+            surfaceContainerLowest = palette.paper,
+            surfaceContainerLow = palette.paper,
+            surfaceContainer = palette.paper,
+            surfaceContainerHigh = palette.paper,
+            surfaceContainerHighest = palette.panelAlt,
+            surfaceTint = palette.paper,
             outline = palette.line,
             outlineVariant = palette.divider,
             error = palette.danger,

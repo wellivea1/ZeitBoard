@@ -334,6 +334,8 @@ func (a *App) syncNowLocked(parent context.Context) (BackendSyncStatusDTO, error
 	}
 	counts, syncErr := a.syncRecords(ctx, cfg, token)
 	if counts.pulled > 0 || counts.tombstonesApplied > 0 {
+		// A choice made on another device is followed here (ADR-0074).
+		_, _ = a.followSharedSettings(ctx)
 		a.announce("zeitboard:sync-applied")
 	}
 	a.backendConfigMu.Lock()
@@ -384,7 +386,8 @@ func (a *App) syncRecords(ctx context.Context, cfg backendSyncConfig, token stri
 		return counts, err
 	}
 	for _, push := range []func(context.Context, *storage.Store, desktopBackendClient) (int, error){
-		a.pushSleepRecords, a.pushTaskRecords, a.pushPlacementRecords, a.pushMedicationRecords, a.pushMarkerRecords,
+		a.pushSleepRecords, a.pushTaskRecords, a.pushPlacementRecords, a.pushOwnerEventRecords, a.pushMedicationRecords, a.pushMarkerRecords, a.pushStatusRecords,
+		a.pushSettingRecords,
 	} {
 		pushed, err := push(ctx, store, client)
 		counts.pushed += pushed
@@ -431,6 +434,40 @@ func (a *App) pushPlacementRecords(ctx context.Context, store *storage.Store, cl
 		})
 }
 
+// pushOwnerEventRecords sends the owner's events (ADR-0068) one revision a
+// request. One that meets another computer's revision of the same number is
+// left for the pull that follows, which keeps the later edit, rather than
+// stopping the sync.
+func (a *App) pushOwnerEventRecords(ctx context.Context, store *storage.Store, client desktopBackendClient) (int, error) {
+	records, err := store.PendingOwnerEventSyncRecords(ctx, storage.MaxOwnerEventSyncPageSize)
+	if err != nil {
+		return 0, err
+	}
+	pushed := 0
+	for _, record := range records {
+		var response syncPushResponse
+		request := syncPushRequest{SchemaVersion: "v1", Records: []syncPushRecord{{
+			RecordID: record.RecordID, Kind: storage.SyncKindOwnerEvent, CreatedAt: record.CreatedAt.UTC(), Payload: record.Payload,
+		}}}
+		err := client.postJSON(ctx, "/v1/sync/push", request, &response)
+		var refused backendHTTPError
+		if errors.As(err, &refused) && refused.StatusCode == http.StatusConflict {
+			continue
+		}
+		if err != nil {
+			return pushed, err
+		}
+		if err := validateSyncAcknowledgment(response, 1); err != nil {
+			return pushed, err
+		}
+		if err := store.MarkOwnerEventSyncRecordsPushed(ctx, []storage.OwnerEventSyncRecord{record}, time.Now().UTC()); err != nil {
+			return pushed, err
+		}
+		pushed++
+	}
+	return pushed, nil
+}
+
 // pushErasures propagates local hard-deletes of any kind, including uncertain
 // uploads, to the backend, which hard-deletes the synced copies and mints
 // tombstones so every other device erases too (ADR-0017).
@@ -475,6 +512,15 @@ func (a *App) pushMarkerRecords(ctx context.Context, store *storage.Store, clien
 		store.PendingMarkerSyncRecords, store.MarkMarkerSyncRecordsPushed,
 		func(record storage.MarkerSyncRecord) syncPushRecord {
 			return syncPushRecord{RecordID: record.RecordID, Kind: storage.SyncKindContextMarker, CreatedAt: record.CreatedAt.UTC(), Payload: record.Payload}
+		})
+}
+
+// pushStatusRecords sends the statuses the owner reported here (ADR-0070).
+func (a *App) pushStatusRecords(ctx context.Context, store *storage.Store, client desktopBackendClient) (int, error) {
+	return pushPendingSyncRecords(ctx, client, storage.MaxStatusSyncPageSize,
+		store.PendingStatusSyncRecords, store.MarkStatusSyncRecordsPushed,
+		func(record storage.StatusSyncRecord) syncPushRecord {
+			return syncPushRecord{RecordID: record.RecordID, Kind: storage.SyncKindStatus, CreatedAt: record.CreatedAt.UTC(), Payload: record.Payload}
 		})
 }
 
@@ -633,6 +679,9 @@ func decodePulledRecord(record syncEnvelope) (storage.SyncPullRecord, error) {
 	case "placement":
 		// This computer authored it; pulling it back confirms the upload.
 		return storage.SyncPullPlacement{PlacementID: record.RecordID}, nil
+	case storage.SyncKindOwnerEvent:
+		var value storage.SyncPullOwnerEvent
+		return value, decode(&value.Event)
 	case storage.SyncKindMedication:
 		var value storage.SyncPullMedication
 		return value, decode(&value.Medication)
@@ -648,6 +697,12 @@ func decodePulledRecord(record syncEnvelope) (storage.SyncPullRecord, error) {
 	case storage.SyncKindSourceReport:
 		value := storage.SyncPullSourceReport{DeviceID: record.DeviceID}
 		return value, decode(&value.Report)
+	case storage.SyncKindStatus:
+		var value storage.SyncPullStatus
+		return value, decode(&value.Report)
+	case storage.SyncKindSetting:
+		var value storage.SyncPullSetting
+		return value, decode(&value.Record)
 	case "tombstone":
 		var payload syncTombstonePayload
 		if err := decode(&payload); err != nil {

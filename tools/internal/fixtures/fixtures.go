@@ -56,6 +56,7 @@ var fixtureManifest = []fixtureSpec{
 	{"v1/sleep-data-export", ManifestEntry{Version: "v1", Name: "sleep-data-export.json", Schema: "sleep-data-export.schema.json"}},
 	{"v1/sync-batch", ManifestEntry{Version: "v1", Name: "sync-batch.json", Schema: "sync-batch.schema.json"}},
 	{"v1/sync-android-source-revision", ManifestEntry{Version: "v1", Name: "sync-android-source-revision.json", Schema: "sync-batch.schema.json"}},
+	{"v1/sync-android-source-presence", ManifestEntry{Version: "v1", Name: "sync-android-source-presence.json", Schema: "sync-batch.schema.json"}},
 	{"v1/sync-erase", ManifestEntry{Version: "v1", Name: "sync-erase.json", Schema: "sync-erase.schema.json"}},
 	{"v1/task-set", ManifestEntry{Version: "v1", Name: "task-set.json", Schema: "task-set.schema.json"}},
 	{"v1/calendar-event-set", ManifestEntry{Version: "v1", Name: "calendar-event-set.json", Schema: "calendar-event-set.schema.json"}},
@@ -180,6 +181,18 @@ type syncPlacementPayload struct {
 	EndAt       string `json:"end_at"`
 	ZoneID      string `json:"zone_id"`
 	CreatedAt   string `json:"created_at"`
+}
+
+// syncEventPayload is one revision of an event the owner added (ADR-0068).
+type syncEventPayload struct {
+	EventID   string `json:"event_id"`
+	Title     string `json:"title"`
+	StartAt   string `json:"start_at"`
+	EndAt     string `json:"end_at"`
+	ZoneID    string `json:"zone_id"`
+	Revision  int    `json:"revision"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
 }
 
 type syncTombstonePayload struct {
@@ -333,6 +346,24 @@ type rhythmMarkerSet struct {
 	SchemaVersion string             `json:"schema_version"`
 	GeneratedAt   string             `json:"generated_at"`
 	Markers       []rhythmMarkerItem `json:"markers"`
+}
+
+// reportedStatus is a status the owner reported (ADR-0070).
+type reportedStatus struct {
+	StatusID   string `json:"status_id"`
+	Status     string `json:"status"`
+	ReportedAt string `json:"reported_at"`
+	ExpiresAt  string `json:"expires_at,omitempty"`
+	Shared     bool   `json:"shared"`
+}
+
+// sharedSetting is one choice the owner made, which their other devices
+// follow (ADR-0074).
+type sharedSetting struct {
+	SettingID string `json:"setting_id"`
+	Name      string `json:"name"`
+	Value     any    `json:"value"`
+	ChangedAt string `json:"changed_at"`
 }
 
 // sourceReport is what a device found when it checked a source (ADR-0054).
@@ -869,6 +900,23 @@ func Build() ([]File, error) {
 			},
 			{
 				Seq:       6,
+				RecordID:  "event_synthetic_dentist_r2",
+				Kind:      "event",
+				DeviceID:  "device_desktop_01",
+				CreatedAt: ts(generatedAt),
+				Payload: syncEventPayload{
+					EventID:   "event_synthetic_dentist",
+					Title:     "Synthetic dentist, moved",
+					StartAt:   ts(generatedAt.Add(minutes(48 * 60))),
+					EndAt:     ts(generatedAt.Add(minutes(48*60 + 45))),
+					ZoneID:    "America/New_York",
+					Revision:  2,
+					CreatedAt: ts(generatedAt.Add(-time.Hour)),
+					UpdatedAt: ts(generatedAt),
+				},
+			},
+			{
+				Seq:       7,
 				RecordID:  "srcrep-5f60718293a4b5c6d7e8f90a",
 				Kind:      "source_report",
 				DeviceID:  "device_android_01",
@@ -878,6 +926,27 @@ func Build() ([]File, error) {
 					ReportedAt: ts(generatedAt), BackgroundReads: true,
 					Covered: &sourceReportWindow{StartAt: ts(generatedAt.Add(-30 * 24 * time.Hour)), EndAt: ts(generatedAt)},
 					Held:    &syncHeld,
+				},
+			},
+			{
+				Seq:       8,
+				RecordID:  "status_6071829304a5b6c7",
+				Kind:      "status",
+				DeviceID:  "device_android_01",
+				CreatedAt: ts(generatedAt),
+				Payload: reportedStatus{
+					StatusID: "status_6071829304a5b6c7", Status: "trying_to_sleep",
+					ReportedAt: ts(generatedAt), ExpiresAt: ts(generatedAt.Add(10 * time.Hour)), Shared: true,
+				},
+			},
+			{
+				Seq:       9,
+				RecordID:  "setting-718293a4b5c6d7e8f90a1b2c",
+				Kind:      "setting",
+				DeviceID:  "device_desktop_01",
+				CreatedAt: ts(generatedAt),
+				Payload: sharedSetting{
+					SettingID: "setting-718293a4b5c6d7e8f90a1b2c", Name: "clock", Value: "24", ChangedAt: ts(generatedAt),
 				},
 			},
 		},
@@ -1496,6 +1565,7 @@ func Build() ([]File, error) {
 		"v1/sleep-data-export":            sleepDataExportFixture,
 		"v1/sync-batch":                   syncBatchFixture,
 		"v1/sync-android-source-revision": androidSourceRevisionFixture(),
+		"v1/sync-android-source-presence": androidSourcePresenceFixture(),
 		"v2/companion":                    companionFixture(false),
 		"v1/sleep-review":                 sleepReviewFixture(),
 		"v2/companion-refused":            companionFixture(true),
@@ -1657,12 +1727,34 @@ func androidSourceRevisionFixture() syncBatch {
 	}}
 }
 
+// A night recorded on another clock, which the provider then removed and
+// put back (ADR-0072, ADR-0073). Android and Go tests consume this fixture too.
+func androidSourcePresenceFixture() syncBatch {
+	const observationID = "hc-90cd6e64cc7f8482c378e0dd"
+	presence := func(seq int, id, at, reason string, removed bool) syncRecord {
+		return syncRecord{Seq: seq, RecordID: id, Kind: "correction", DeviceID: "device_android_synthetic", CreatedAt: at, Payload: map[string]any{
+			"correction_id": id, "target_observation_id": observationID, "created_at": at, "reason": reason, "acquisition_method": "health_connect",
+			"changes": map[string]any{"excluded": removed},
+		}}
+	}
+	return syncBatch{SchemaVersion: "v1", Cursor: 3, Records: []syncRecord{
+		{Seq: 1, RecordID: observationID, Kind: "observation", DeviceID: "device_android_synthetic", CreatedAt: "2026-09-05T05:11:00Z", Payload: map[string]any{
+			"observation_id": observationID, "kind": "sleep_episode", "start_at": "2026-09-04T21:00:00Z", "end_at": "2026-09-05T05:00:00Z", "zone_id": "America/New_York",
+			"sleep":         map[string]any{"classification": "principal"},
+			"provenance":    map[string]any{"acquisition_method": "health_connect", "evidence_status": "directly_observed", "recorded_at": "2026-09-05T05:10:00Z", "source_record_id": "sleep-away"},
+			"source_offset": map[string]any{"start_seconds": 7200, "end_seconds": 7200},
+		}},
+		presence(2, "cor-d77ebd1eed7eac99ad73ecb0", "2026-09-06T12:00:00Z", "source_deleted", true),
+		presence(3, "cor-7f285d0794ca0fabb80f1c6c", "2026-09-07T12:00:00Z", "source_restored", false),
+	}}
+}
+
 func sleepReviewFixture() map[string]any {
 	window := map[string]any{"start_at": "2026-03-05T04:30:00.123456789Z", "end_at": "2026-03-05T12:30:00.987654321Z", "zone_id": zoneID}
 	return map[string]any{
 		"schema_version": "v1", "source_cursor": 3, "generated_at": "2026-03-05T14:00:00Z",
 		"observation_id": "obs_review", "source_revision": "2026-03-05T12:35:00Z",
-		"source_window": window, "effective_window": window, "sleep_classification": "principal", "excluded": false, "needs_review": true,
+		"source_window": window, "effective_window": window, "sleep_classification": "principal", "excluded": false, "removed_at_source": false, "needs_review": true,
 		"manual_corrections": []any{
 			map[string]any{"correction_id": "cor_review_1", "created_at": "2026-03-05T13:00:00Z", "changes": map[string]any{"start_at": "2026-03-05T04:10:00Z"}},
 			map[string]any{"correction_id": "cor_review_2", "created_at": "2026-03-05T13:00:00Z", "changes": map[string]any{"start_at": "2026-03-05T04:20:00Z", "excluded": true}},
@@ -1673,16 +1765,18 @@ func sleepReviewFixture() map[string]any {
 func companionFixture(refused bool) map[string]any {
 	result := map[string]any{
 		"schema_version": "v2", "contains_synthetic_data": true, "source_cursor": 2, "generated_at": "2026-09-02T12:00:00Z", "valid_until": "2026-09-02T12:15:00Z",
-		"algorithm_version": "theil-sen-sleep-start/v1", "provenance": "self_hosted_synced_sleep", "status": "estimated",
+		"algorithm_version": "theil-sen-sleep-start/v2", "provenance": "self_hosted_synced_sleep", "status": "estimated",
 		"freshness":  map[string]any{"state": "current", "reason": "", "explanation": "Based on recent synced sleep."},
 		"confidence": map[string]any{"level": "medium", "reasons": []string{"Synthetic contract example with explicit uncertainty."}},
 		"forecasts": []any{map[string]any{
 			"predicted_sleep_window":  map[string]any{"start_at": "2026-09-03T03:00:00Z", "end_at": "2026-09-03T04:00:00Z", "zone_id": "UTC"},
 			"predicted_waking_window": map[string]any{"start_at": "2026-09-03T12:00:00Z", "end_at": "2026-09-03T22:00:00Z", "zone_id": "UTC"},
 		}},
-		"sleep": []any{map[string]any{"row_id": "sleep_synthetic", "start_at": "2026-09-02T02:02:00Z", "end_at": "2026-09-02T10:00:00Z", "zone_id": "UTC", "classification": "principal", "corrected": true}},
+		"sleep":        []any{map[string]any{"row_id": "sleep_synthetic", "start_at": "2026-09-02T02:02:00Z", "end_at": "2026-09-02T10:00:00Z", "zone_id": "UTC", "classification": "principal", "corrected": true}},
+		"waking_until": "2026-09-03T03:30:00Z",
 	}
 	if refused {
+		delete(result, "waking_until")
 		result["status"] = "refused"
 		result["refusal"] = map[string]any{"code": "insufficient_data", "message": "More usable sleep history is needed."}
 		result["freshness"] = map[string]any{"state": "withheld", "reason": "insufficient_data", "explanation": "More usable sleep history is needed."}

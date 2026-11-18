@@ -1,5 +1,5 @@
 import { decisionLabel } from "../data/decisionWords";
-import { useEffect, useRef, type CSSProperties } from "react";
+import { useEffect, useRef, type CSSProperties, type MouseEvent } from "react";
 import type { CalendarEventSegment } from "../data/calendar";
 import type { ProposalDecision } from "../state/approvals";
 import { Icon } from "./Icon";
@@ -169,8 +169,26 @@ function Block({
   );
 }
 
-function Day({ column, ...handlers }: BlockHandlers & { column: WeekColumn }) {
+/** Where a new event starts out: a day and a time, as a wall-clock value. */
+type AddAt = (startWall: string) => void;
+
+function Day({
+  column,
+  onAdd,
+  ...handlers
+}: BlockHandlers & { column: WeekColumn; onAdd?: AddAt }) {
   const px = (minutes: number) => `${(minutes / 60) * handlers.hour}px`;
+  // A click on an empty part of the day, sleep bands included, starts an event
+  // there, to the half hour. The same form opens from "Add an event", which is
+  // how a keyboard reaches it.
+  const addHere = (click: MouseEvent<HTMLDivElement>) => {
+    if (!onAdd || (click.target as HTMLElement).closest(".week-block, .week-dose")) return;
+    const top = click.currentTarget.getBoundingClientRect().top;
+    const minute = Math.round((((click.clientY - top) / handlers.hour) * 60) / 30) * 30;
+    const clamped = Math.min(Math.max(minute, 0), 23 * 60 + 30);
+    const pad = (value: number) => String(value).padStart(2, "0");
+    onAdd(`${column.civilDate}T${pad(Math.floor(clamped / 60))}:${pad(clamped % 60)}`);
+  };
   return (
     <div
       className="week-day"
@@ -178,6 +196,8 @@ function Day({ column, ...handlers }: BlockHandlers & { column: WeekColumn }) {
       aria-label={column.spokenDate}
       data-today={column.isToday || undefined}
       data-past={column.isPast || undefined}
+      data-addable={onAdd ? true : undefined}
+      onClick={addHere}
     >
       {column.bands.map((band) => (
         <Band band={band} px={px} key={band.key} />
@@ -211,7 +231,8 @@ export function WeekBoard({
   onSelect,
   onInspect,
   onDecide,
-}: BlockHandlers & { columns: WeekColumn[] }) {
+  onAdd,
+}: BlockHandlers & { columns: WeekColumn[]; onAdd?: AddAt }) {
   const scroller = useRef<HTMLDivElement>(null);
   const anchor = columns[0]?.civilDate;
   const hasToday = columns.some((column) => column.isToday);
@@ -293,6 +314,7 @@ export function WeekBoard({
               onSelect={onSelect}
               onInspect={onInspect}
               onDecide={onDecide}
+              onAdd={onAdd}
               key={column.civilDate}
             />
           ))}

@@ -115,9 +115,9 @@ func freshnessOf(snapshot Snapshot, now time.Time) string {
 	switch {
 	case snapshot.GeneratedAt.IsZero():
 		return "none"
-	case now.Sub(snapshot.GeneratedAt) >= UnavailableAfter:
+	case snapshot.withheld(now):
 		return "unavailable"
-	case now.Sub(snapshot.GeneratedAt) >= StaleAfter:
+	case snapshot.cautionDue(now):
 		return "stale"
 	default:
 		return "current"

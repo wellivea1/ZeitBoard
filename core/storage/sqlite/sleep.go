@@ -50,6 +50,9 @@ type SleepObservationProvenance = sleepv1.Provenance
 type SleepCorrectionRecord = sleepv1.Correction
 type SleepCorrectionChanges = sleepv1.CorrectionChanges
 
+// SleepSourceOffset is the clock a night away was recorded on (ADR-0073).
+type SleepSourceOffset = sleepv1.SourceOffset
+
 type SleepObservationSet struct {
 	SchemaVersion string                   `json:"schema_version"`
 	GeneratedAt   time.Time                `json:"generated_at"`
@@ -675,6 +678,11 @@ func (s *Store) DeleteAllSleepData(ctx context.Context) error {
 	if _, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO local_sleep_erasures(record_id, erased_at)
 		SELECT observation_id, ? FROM local_sleep_observations
 		UNION ALL SELECT correction_id, ? FROM local_sleep_corrections`, erasedAt, erasedAt); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	// So does what the owner said about being awake or asleep.
+	if err := eraseAllStatusReportsTx(ctx, tx); err != nil {
 		_ = tx.Rollback()
 		return err
 	}

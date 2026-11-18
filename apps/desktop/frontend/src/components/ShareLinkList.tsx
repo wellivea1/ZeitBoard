@@ -1,7 +1,8 @@
 import { SharePreview } from "./SharePreview";
 import { ConfirmDelete } from "./ConfirmDelete";
 import { useState } from "react";
-import type { ShareLinksData } from "../data/sharing";
+import { ShareLinkShown } from "./ShareLinkShown";
+import type { ShareLinksData, ShareStatusLevel } from "../data/sharing";
 
 // Revoking and deleting are deliberately not one click apart. Revocation stops
 // the link working and keeps its access history readable; deletion removes the
@@ -12,12 +13,21 @@ export function ShareLinkList({
   busy,
   onRevoke,
   onErase,
+  onUpdate,
 }: {
   data: ShareLinksData;
   busy: boolean;
   onRevoke: (profileId: string) => void;
   onErase: (profileId: string, confirmation: string) => void;
+  /** Changes what a link shows; absent where that cannot be done. */
+  onUpdate?: (input: {
+    profileId: string;
+    wakingWindows: boolean;
+    skippedDoses: boolean;
+    reportedStatus: ShareStatusLevel;
+  }) => void;
 }) {
+  const [changing, setChanging] = useState<string | null>(null);
   const [erasing, setErasing] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState<string | null>(null);
 
@@ -79,6 +89,18 @@ export function ShareLinkList({
             >
               {previewing === link.profileId ? "Hide preview" : "Preview"}
             </button>
+            {link.state === "active" && onUpdate && (
+              <button
+                className="button secondary compact"
+                type="button"
+                disabled={busy}
+                aria-expanded={changing === link.profileId}
+                aria-label={`Change what ${link.label} sees`}
+                onClick={() => setChanging(changing === link.profileId ? null : link.profileId)}
+              >
+                Change what it shows
+              </button>
+            )}
             {link.state === "active" && (
               <button
                 className="button secondary compact"
@@ -98,6 +120,18 @@ export function ShareLinkList({
               Delete record
             </button>
           </div>
+
+          {changing === link.profileId && onUpdate && (
+            <ShareLinkShown
+              link={link}
+              busy={busy}
+              onSave={(shown) => {
+                onUpdate({ profileId: link.profileId, ...shown });
+                setChanging(null);
+              }}
+              onCancel={() => setChanging(null)}
+            />
+          )}
 
           {previewing === link.profileId && (
             <SharePreview profileId={link.profileId} label={link.label} />

@@ -10,7 +10,9 @@
 .home-now {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 260px;
-  align-items: end;
+  /* The sentence stays where it is when the column beside it grows to ask a
+     question; aligned to the bottom, it dropped down the page. */
+  align-items: start;
   gap: 28px 64px;
   padding-top: 10px;
 }
@@ -127,7 +129,7 @@
   padding: 14px 0 4px;
   color: var(--muted);
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -472,4 +474,93 @@
   .home-columns {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+/* The diary's two ways on: the week itself, and a new event in it. */
+.home-more-row {
+  margin: 12px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+}
+
+.home-more-row .home-more {
+  margin-top: 0;
+}
+
+/* Offered under "Recorded": the night just logged, open to adjust. */
+.quick-log-adjust {
+  justify-self: start;
+  font-size: var(--type-label);
+}
+
+/* What the owner reports about now, under the buttons that record sleep: a
+   small-capital title, the status as a word, and its actions as underlined
+   words on one line. */
+.status-bar {
+  margin-top: 14px;
+  padding-top: 12px;
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--divider);
+}
+
+.status-bar .section-kicker {
+  margin: 0;
+}
+
+.status-standing {
+  margin: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.status-standing strong {
+  font-family: var(--font-serif);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.status-standing small,
+.status-share,
+.status-lasting,
+.status-choices-link {
+  color: var(--muted);
+  font-size: var(--type-label);
+  line-height: 1.45;
+}
+
+.status-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+}
+
+.status-actions .button[aria-pressed="true"] {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.status-share {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.status-lasting {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.status-lasting select {
+  width: auto;
+  min-height: 0;
+  padding: 2px 6px;
+  font-size: var(--type-label);
+}
+
+.status-choices-link {
+  justify-self: start;
 }

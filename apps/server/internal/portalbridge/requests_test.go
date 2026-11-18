@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"non24.app/core/domain"
+	"non24.app/core/estimation"
 	"non24.app/server/internal/auth"
 	"non24.app/server/internal/portal"
 	"non24.app/server/internal/portalbridge"
@@ -451,5 +452,227 @@ func TestStaleSleepEvidenceIsNotPublishedAsAvailability(t *testing.T) {
 	// it says when the row was made, not that the rhythm is current.
 	if snapshot.GeneratedAt.IsZero() {
 		t.Error("the snapshot lost its generation time")
+	}
+}
+
+// freshHistory pushes a fittable rhythm whose newest sleep ended the given
+// time before now, and returns the id of that newest record.
+func (f *bridgeFixture) pushSleepHistory(t *testing.T, device string, newestEndedAgo time.Duration) string {
+	t.Helper()
+	ctx := context.Background()
+	if err := f.private.RegisterDevice(ctx, device, "desktop", auth.HashToken("tok-"+device), f.now.Add(-30*24*time.Hour)); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	cycle := 24*time.Hour + 50*time.Minute
+	lastEnd := f.now.Add(-newestEndedAgo)
+	records := make([]syncmodel.PushRecord, 0, 12)
+	var newest string
+	for i := 0; i < 12; i++ {
+		end := lastEnd.Add(-time.Duration(11-i) * cycle)
+		start := end.Add(-8 * time.Hour)
+		newest = fmt.Sprintf("%s-obs-%02d", device, i)
+		records = append(records, syncmodel.PushRecord{
+			RecordID:  newest,
+			Kind:      syncmodel.KindObservation,
+			CreatedAt: end,
+			Payload: json.RawMessage(fmt.Sprintf(
+				`{"observation_id":%q,"kind":"sleep_episode","start_at":%q,"end_at":%q,"zone_id":"UTC","sleep":{"classification":"principal"},"provenance":{"acquisition_method":"synthetic","evidence_status":"directly_observed","recorded_at":%q,"source_record_id":%q}}`,
+				newest, start.UTC().Format(time.RFC3339), end.UTC().Format(time.RFC3339), end.UTC().Format(time.RFC3339), newest)),
+		})
+	}
+	f.push(t, device, records)
+	return newest
+}
+
+func (f *bridgeFixture) push(t *testing.T, device string, records []syncmodel.PushRecord) {
+	t.Helper()
+	request := syncmodel.PushRequest{SchemaVersion: syncmodel.SchemaVersion, Records: records}
+	if err := syncmodel.ValidatePushRequest(&request); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if _, _, err := f.private.Append(context.Background(), device, request.Records); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+}
+
+func (f *bridgeFixture) snapshot(t *testing.T) portal.Snapshot {
+	t.Helper()
+	snapshot, err := portalbridge.Materializer{
+		Sleep: readmodel.SleepReader{Store: f.private},
+		Now:   func() time.Time { return f.now },
+	}.Snapshot(context.Background())
+	if err != nil {
+		t.Fatalf("snapshot: %v", err)
+	}
+	return snapshot
+}
+
+// TestAnExcludedRecordDoesNotRestoreAvailability: the estimator ignores a
+// record the owner excluded, and the age of the evidence must too. Counted, a
+// recent record added by mistake and then excluded put a three-day-old forecast
+// back on the shared page as "Likely awake right now".
+func TestAnExcludedRecordDoesNotRestoreAvailability(t *testing.T) {
+	f := newBridgeFixture(t)
+	f.pushSleepHistory(t, "dev_old", 72*time.Hour)
+	if snapshot := f.snapshot(t); snapshot.Status == portal.StatusAvailable {
+		t.Fatal("three-day-old evidence was published before anything was excluded")
+	}
+
+	end := f.now.Add(-time.Hour)
+	start := end.Add(-8 * time.Hour)
+	stamp := func(value time.Time) string { return value.UTC().Format(time.RFC3339) }
+	f.push(t, "dev_old", []syncmodel.PushRecord{
+		{
+			RecordID: "mistaken-obs", Kind: syncmodel.KindObservation, CreatedAt: end,
+			Payload: json.RawMessage(fmt.Sprintf(
+				`{"observation_id":"mistaken-obs","kind":"sleep_episode","start_at":%q,"end_at":%q,"zone_id":"UTC","sleep":{"classification":"principal"},"provenance":{"acquisition_method":"synthetic","evidence_status":"directly_observed","recorded_at":%q,"source_record_id":"mistaken-src"}}`,
+				stamp(start), stamp(end), stamp(end))),
+		},
+		{
+			RecordID: "mistaken-excluded", Kind: syncmodel.KindCorrection, CreatedAt: end.Add(10 * time.Minute),
+			Payload: json.RawMessage(fmt.Sprintf(
+				`{"correction_id":"mistaken-excluded","target_observation_id":"mistaken-obs","created_at":%q,"reason":"user_edit","changes":{"excluded":true}}`,
+				stamp(end.Add(10*time.Minute)))),
+		},
+	})
+
+	snapshot := f.snapshot(t)
+	if snapshot.Status == portal.StatusAvailable || len(snapshot.Windows) != 0 {
+		t.Fatalf("an excluded record made three-day-old evidence current: status %q, %d windows", snapshot.Status, len(snapshot.Windows))
+	}
+}
+
+// TestSharedWakingWindowsLeaveOutWhatMayBeSleep: the estimator's waking
+// windows overlap its sleep windows, and a page that calls the overlap "Likely
+// awake" is surer than the owner's own Home.
+func TestSharedWakingWindowsLeaveOutWhatMayBeSleep(t *testing.T) {
+	f := newBridgeFixture(t)
+	f.pushSleepHistory(t, "dev_fresh", 3*time.Hour)
+	snapshot := f.snapshot(t)
+	if snapshot.Status != portal.StatusAvailable || len(snapshot.Windows) < 2 {
+		t.Fatalf("status %q with %d windows; fresh evidence should publish", snapshot.Status, len(snapshot.Windows))
+	}
+	sessions, err := readmodel.SleepReader{Store: f.private}.EffectiveSleepSessions(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	estimate, err := estimation.RobustEstimator{}.Estimate(context.Background(), sessions, f.now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, window := range snapshot.Windows {
+		for _, sleep := range estimate.PredictedSleepWindows {
+			if window.StartAt.Before(sleep.Interval.End.UTC) && sleep.Interval.Start.UTC.Before(window.EndAt) {
+				t.Errorf("shared window %s to %s overlaps the predicted sleep window %s to %s",
+					window.StartAt, window.EndAt, sleep.Interval.Start.UTC, sleep.Interval.End.UTC)
+			}
+		}
+	}
+}
+
+func (f *bridgeFixture) reportStatus(t *testing.T, device, id, status string, ago time.Duration, shared bool) {
+	t.Helper()
+	reportedAt := f.now.Add(-ago)
+	payload := fmt.Sprintf(`{"status_id":%q,"status":%q,"reported_at":%q,"expires_at":%q,"shared":%t}`,
+		id, status, reportedAt.UTC().Format(time.RFC3339), reportedAt.Add(8*time.Hour).UTC().Format(time.RFC3339), shared)
+	if status == "cleared" {
+		payload = fmt.Sprintf(`{"status_id":%q,"status":"cleared","reported_at":%q,"shared":false}`, id, reportedAt.UTC().Format(time.RFC3339))
+	}
+	f.push(t, device, []syncmodel.PushRecord{{RecordID: id, Kind: syncmodel.KindStatus, CreatedAt: reportedAt, Payload: json.RawMessage(payload)}})
+}
+
+// published materializes and publishes, then reads back what the fixture's
+// link holds.
+func (f *bridgeFixture) published(t *testing.T, level string) portal.Snapshot {
+	t.Helper()
+	ctx := context.Background()
+	grants := f.profile.Grants
+	grants.ReportedStatus = level
+	if err := f.portal.UpdateGrants(ctx, f.profile.ID, grants); err != nil {
+		t.Fatalf("update grants: %v", err)
+	}
+	materializer := portalbridge.Materializer{
+		Sleep:    readmodel.SleepReader{Store: f.private},
+		Statuses: readmodel.StatusReader{Store: f.private},
+		Profiles: f.portal,
+		Sink:     f.portal,
+		Now:      func() time.Time { return f.now },
+	}
+	prep, err := materializer.Prepare(ctx, f.now)
+	if err != nil {
+		t.Fatalf("prepare: %v", err)
+	}
+	if err := materializer.Publish(ctx, prep); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	snapshot, err := f.portal.ReadSnapshot(ctx, f.profile.ID)
+	if err != nil {
+		t.Fatalf("read snapshot: %v", err)
+	}
+	return snapshot
+}
+
+// TestAReportedStatusReachesALinkOnlyAsFarAsTheOwnerChose walks the three
+// places the owner decides: the link's level, each report's own "shared", and
+// taking a report back.
+func TestAReportedStatusReachesALinkOnlyAsFarAsTheOwnerChose(t *testing.T) {
+	f := newBridgeFixture(t)
+	f.pushSleepHistory(t, "dev_status", 3*time.Hour)
+	f.reportStatus(t, "dev_status", "status_trying", "trying_to_sleep", 12*time.Minute, true)
+
+	// A link the owner has not chosen for shows no report at all.
+	if snapshot := f.published(t, portal.StatusGrantNone); snapshot.Reported != nil {
+		t.Fatalf("a link with no status grant was told %+v", snapshot.Reported)
+	}
+	// A full link shows the status and when it was said.
+	full := f.published(t, portal.StatusGrantFull)
+	if full.Reported == nil || full.Reported.Status != "trying_to_sleep" || !full.Reported.ReportedAt.Equal(f.now.Add(-12*time.Minute)) {
+		t.Fatalf("a full link was told %+v", full.Reported)
+	}
+	// A contact-only link learns that now is not a good time, and not why or since when.
+	contact := f.published(t, portal.StatusGrantContact)
+	if contact.Reported == nil || contact.Reported.Status != portal.StatusUnavailable || !contact.Reported.ReportedAt.IsZero() {
+		t.Fatalf("a contact-only link was told %+v", contact.Reported)
+	}
+
+	// "Awake" is nothing a contact-only link needs to hear.
+	f.reportStatus(t, "dev_status", "status_awake", "awake", 5*time.Minute, true)
+	if snapshot := f.published(t, portal.StatusGrantContact); snapshot.Reported != nil {
+		t.Fatalf("a contact-only link was told the owner is awake: %+v", snapshot.Reported)
+	}
+	if snapshot := f.published(t, portal.StatusGrantFull); snapshot.Reported == nil || snapshot.Reported.Status != "awake" {
+		t.Fatalf("a full link was told %+v, want the newer report", snapshot.Reported)
+	}
+
+	// A report the owner kept to themselves reaches no link, whatever its level,
+	// and it does not uncover the shared one before it.
+	f.reportStatus(t, "dev_status", "status_private", "do_not_disturb", 2*time.Minute, false)
+	if snapshot := f.published(t, portal.StatusGrantFull); snapshot.Reported != nil {
+		t.Fatalf("a private report reached a link: %+v", snapshot.Reported)
+	}
+
+	// Taking a report back leaves nothing.
+	f.reportStatus(t, "dev_status", "status_shared_again", "do_not_disturb", time.Minute, true)
+	if snapshot := f.published(t, portal.StatusGrantFull); snapshot.Reported == nil {
+		t.Fatal("a shared report did not reach a full link")
+	}
+	f.reportStatus(t, "dev_status", "status_cleared", "cleared", 0, false)
+	if snapshot := f.published(t, portal.StatusGrantFull); snapshot.Reported != nil {
+		t.Fatalf("a cleared status is still on the link: %+v", snapshot.Reported)
+	}
+}
+
+// TestAReportedStatusDoesNotWaitOnTheForecast: with sleep records too old to
+// forecast from, what the owner said ten minutes ago is still shown.
+func TestAReportedStatusDoesNotWaitOnTheForecast(t *testing.T) {
+	f := newBridgeFixture(t)
+	f.pushSleepHistory(t, "dev_old_status", 72*time.Hour)
+	f.reportStatus(t, "dev_old_status", "status_awake_now", "awake", 10*time.Minute, true)
+	snapshot := f.published(t, portal.StatusGrantFull)
+	if snapshot.Status == portal.StatusAvailable {
+		t.Fatal("three-day-old sleep records were published as a forecast")
+	}
+	if snapshot.Reported == nil || snapshot.Reported.Status != "awake" {
+		t.Fatalf("reported = %+v, want the owner's report though the forecast is withheld", snapshot.Reported)
 	}
 }

@@ -65,6 +65,7 @@ func ToolDefinitions(taskProposals bool) []ToolDefinition {
 		{Name: "list_tasks", Title: "List Tasks", Description: "Read allowlisted task planning fields. Private task titles and notes are omitted.", InputSchema: emptySchema()},
 		{Name: "get_medication_timing", Title: "Get Medication Timing Facts", Description: "Read neutral schedule, collision, and aggregate logged-event facts using opaque medication ids. Labels, notes, strengths, clinician text, exact logged timestamps, and event rows are omitted.", InputSchema: emptySchema()},
 		{Name: "list_rhythm_markers", Title: "List Rhythm Markers", Description: "Read marker kind and coarse civil-date ranges. Private notes and exact record timestamps are omitted.", InputSchema: emptySchema()},
+		{Name: "get_reported_status", Title: "Get Reported Status", Description: "Read the status the owner has reported about now (awake, trying to sleep, do not disturb, or none), when it lapses, whether their share links may show it, and their two reporting choices. It is the owner's own word, not a forecast.", InputSchema: emptySchema()},
 		{Name: "get_appearance", Title: "Get Appearance", Description: "Read the current appearance preset, reduced-stimulation state, and rhythm-linked night rule.", InputSchema: emptySchema()},
 		actionTool("set_appearance", appearanceSchema()),
 		{Name: "ask_zeitboard_facts", Title: "Ask ZeitBoard Facts", Description: "Return allowlisted local facts for a question. Medical decisions are refused with the canonical ZeitBoard response.", InputSchema: questionSchema()},

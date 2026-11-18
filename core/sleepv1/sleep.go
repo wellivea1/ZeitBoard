@@ -37,7 +37,17 @@ const (
 	CorrectionDuplicate      = "duplicate"
 	CorrectionInvalidRange   = "invalid_range"
 	CorrectionSourceConflict = "source_conflict"
+
+	// CorrectionSourceDeleted and CorrectionSourceRestored are a provider
+	// saying its record is gone, or back (ADR-0072). They change nothing
+	// but whether the record is left out, and they are no revision of its
+	// times: a correction the owner made stays reviewed.
+	CorrectionSourceDeleted  = "source_deleted"
+	CorrectionSourceRestored = "source_restored"
 )
+
+// MaxSourceOffsetSeconds is the widest UTC offset a clock can stand on.
+const MaxSourceOffsetSeconds = 18 * 60 * 60
 
 var ErrCorrectionReviewRequired = errors.New("sleep corrections require review of the current source and manual edits")
 
@@ -51,6 +61,18 @@ type Observation struct {
 	ZoneID        string     `json:"zone_id"`
 	Sleep         Details    `json:"sleep"`
 	Provenance    Provenance `json:"provenance"`
+
+	// SourceOffset is the clock the source recorded the sleep on, sent only
+	// when it was not the zone's own at one end or the other (ADR-0073).
+	// ZoneID stays the zone the owner reads their records in.
+	SourceOffset *SourceOffset `json:"source_offset,omitempty"`
+}
+
+// SourceOffset is a UTC offset for each end of a sleep, in seconds east of
+// UTC.
+type SourceOffset struct {
+	StartSeconds int `json:"start_seconds"`
+	EndSeconds   int `json:"end_seconds"`
 }
 
 type Details struct {
@@ -89,6 +111,21 @@ func DecodeObservation(payload []byte) (Observation, error) {
 	}
 	if err := ValidateObservation(observation); err != nil {
 		return Observation{}, err
+	}
+	// Zero is an offset like any other, so an end left out must not read as
+	// one recorded on UTC.
+	var fields struct {
+		SourceOffset *map[string]json.RawMessage `json:"source_offset"`
+	}
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		return Observation{}, err
+	}
+	if offsets := fields.SourceOffset; offsets != nil {
+		for _, end := range []string{"start_seconds", "end_seconds"} {
+			if raw, present := (*offsets)[end]; !present || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
+				return Observation{}, errors.New("source_offset requires both ends")
+			}
+		}
 	}
 	return observation, nil
 }
@@ -155,6 +192,35 @@ func ValidateObservation(record Observation) error {
 	if err := (domain.TimeRange{Start: start, End: end}).Validate(); err != nil {
 		return fmt.Errorf("interval: %w", err)
 	}
+	return validateSourceOffset(record, start, end)
+}
+
+// validateSourceOffset checks the clock a sleep says it was recorded on. It
+// is sent only when it differs from the zone's, so a record cannot say the
+// same thing two ways.
+func validateSourceOffset(record Observation, start, end domain.ZonedInstant) error {
+	offsets := record.SourceOffset
+	if offsets == nil {
+		return nil
+	}
+	for _, seconds := range []int{offsets.StartSeconds, offsets.EndSeconds} {
+		if seconds < -MaxSourceOffsetSeconds || seconds > MaxSourceOffsetSeconds {
+			return errors.New("source_offset must be within 18 hours of UTC")
+		}
+	}
+	localStart, err := start.InLocation()
+	if err != nil {
+		return err
+	}
+	localEnd, err := end.InLocation()
+	if err != nil {
+		return err
+	}
+	_, zoneStart := localStart.Zone()
+	_, zoneEnd := localEnd.Zone()
+	if offsets.StartSeconds == zoneStart && offsets.EndSeconds == zoneEnd {
+		return errors.New("source_offset is sent only when it differs from the zone's")
+	}
 	return nil
 }
 
@@ -212,11 +278,48 @@ func validateCorrectionProvenance(record Correction) error {
 	if record.AcquisitionMethod != "" && record.AcquisitionMethod != AcquisitionManual && record.AcquisitionMethod != AcquisitionHealthConnect {
 		return errors.New("correction acquisition_method must be manual or health_connect")
 	}
-	if record.AcquisitionMethod == AcquisitionHealthConnect &&
-		(record.Reason != CorrectionSourceConflict || record.Changes.SleepClassification != nil || record.Changes.Excluded != nil) {
+	return validateProviderCorrection(record)
+}
+
+// validateProviderCorrection holds a provider to the three things it can say:
+// its record's times changed, its record is gone, or its record is back. A
+// person can say none of those for it.
+func validateProviderCorrection(record Correction) error {
+	changes := record.Changes
+	timed := changes.StartAt != nil || changes.EndAt != nil
+	if record.AcquisitionMethod != AcquisitionHealthConnect {
+		if record.Reason == CorrectionSourceDeleted || record.Reason == CorrectionSourceRestored {
+			return errors.New("only a provider can say its record was removed or restored")
+		}
+		return nil
+	}
+	if changes.SleepClassification != nil {
+		return errors.New("Health Connect revisions cannot change a classification")
+	}
+	switch record.Reason {
+	case CorrectionSourceConflict:
+		if changes.Excluded != nil {
+			return errors.New("Health Connect revisions may only correct source-conflict timestamps")
+		}
+	case CorrectionSourceDeleted:
+		if timed || changes.Excluded == nil || !*changes.Excluded {
+			return errors.New("a removed source record is left out, and nothing else about it changes")
+		}
+	case CorrectionSourceRestored:
+		if timed || changes.Excluded == nil || *changes.Excluded {
+			return errors.New("a restored source record is counted again, and nothing else about it changes")
+		}
+	default:
 		return errors.New("Health Connect revisions may only correct source-conflict timestamps")
 	}
 	return nil
+}
+
+// IsSourcePresence reports whether a correction is a provider saying its
+// record is gone or back, as opposed to a revision of its times.
+func IsSourcePresence(record Correction) bool {
+	return record.AcquisitionMethod == AcquisitionHealthConnect &&
+		(record.Reason == CorrectionSourceDeleted || record.Reason == CorrectionSourceRestored)
 }
 
 // validateCorrectionChanges checks that a correction changes something, and
@@ -266,6 +369,20 @@ func Fold(observations []Observation, corrections []Correction) ([]domain.SleepS
 		position, ok := targets.index[correction.TargetObservationID]
 		if !ok {
 			return nil, fmt.Errorf("correction %s targets unknown sleep observation %s", correction.CorrectionID, correction.TargetObservationID)
+		}
+		session := &targets.sessions[position]
+		// A provider's corrections come first and in order, so the last word
+		// on whether its record is gone is the one that stands when the
+		// owner's correction is reached.
+		if IsSourcePresence(correction) {
+			session.RemovedAtSource = *correction.Changes.Excluded
+			session.Suppressed = session.RemovedAtSource
+			continue
+		}
+		// The owner's own correction stands on a record the provider removed
+		// (ADR-0072): the night counts again unless they left it out too.
+		if correction.AcquisitionMethod != AcquisitionHealthConnect && session.RemovedAtSource {
+			session.Suppressed = false
 		}
 		// A night takes one user correction at a time, and only one made
 		// against the source as it stands now.
@@ -337,7 +454,9 @@ func checkedCorrections(corrections []Correction, targets foldTargets) (map[stri
 			if targets.acquisitions[correction.TargetObservationID] != AcquisitionHealthConnect {
 				return nil, nil, errors.New("Health Connect revision targets a different observation source")
 			}
-			if correction.CreatedAt.After(latestSourceRevision[correction.TargetObservationID]) {
+			// Only a change to the times is a revision the owner must have
+			// reviewed. A record that is gone or back has the times it had.
+			if !IsSourcePresence(correction) && correction.CreatedAt.After(latestSourceRevision[correction.TargetObservationID]) {
 				latestSourceRevision[correction.TargetObservationID] = correction.CreatedAt
 			}
 		}
@@ -428,7 +547,15 @@ func SessionFromObservation(observation Observation) (domain.SleepSession, error
 			StartEvidence: evidence,
 			EndEvidence:   evidence,
 		}},
+		SourceClock: sourceClock(observation.SourceOffset),
 	}, nil
+}
+
+func sourceClock(offsets *SourceOffset) *domain.SourceClock {
+	if offsets == nil {
+		return nil
+	}
+	return &domain.SourceClock{StartOffsetSeconds: offsets.StartSeconds, EndOffsetSeconds: offsets.EndSeconds}
 }
 
 // ResolveOverlaps retains the existing overlap resolver while preventing
@@ -630,7 +757,8 @@ func ValidEvidenceStatus(value string) bool {
 
 func ValidCorrectionReason(value string) bool {
 	switch value {
-	case CorrectionUserEdit, CorrectionDuplicate, CorrectionInvalidRange, CorrectionSourceConflict:
+	case CorrectionUserEdit, CorrectionDuplicate, CorrectionInvalidRange, CorrectionSourceConflict,
+		CorrectionSourceDeleted, CorrectionSourceRestored:
 		return true
 	default:
 		return false

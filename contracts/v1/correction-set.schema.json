@@ -36,18 +36,11 @@
           "then": {
             "properties": {
               "reason": {
-                "const": "source_conflict"
+                "enum": ["source_conflict", "source_deleted", "source_restored"]
               },
               "changes": {
                 "not": {
-                  "anyOf": [
-                    {
-                      "required": ["excluded"]
-                    },
-                    {
-                      "required": ["sleep_classification"]
-                    }
-                  ]
+                  "required": ["sleep_classification"]
                 }
               }
             },
@@ -60,6 +53,88 @@
                   "required": ["supersedes_correction_ids"]
                 }
               ]
+            }
+          },
+          "else": {
+            "properties": {
+              "reason": {
+                "enum": ["user_edit", "duplicate", "invalid_range", "source_conflict"]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["reason"],
+            "properties": {
+              "reason": {
+                "const": "source_conflict"
+              }
+            }
+          },
+          "then": {
+            "if": {
+              "required": ["acquisition_method"],
+              "properties": {
+                "acquisition_method": {
+                  "const": "health_connect"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "changes": {
+                  "not": {
+                    "required": ["excluded"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["reason"],
+            "properties": {
+              "reason": {
+                "const": "source_deleted"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "changes": {
+                "required": ["excluded"],
+                "maxProperties": 1,
+                "properties": {
+                  "excluded": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "required": ["reason"],
+            "properties": {
+              "reason": {
+                "const": "source_restored"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "changes": {
+                "required": ["excluded"],
+                "maxProperties": 1,
+                "properties": {
+                  "excluded": {
+                    "const": false
+                  }
+                }
+              }
             }
           }
         }
@@ -76,7 +151,8 @@
         },
         "reason": {
           "type": "string",
-          "enum": ["user_edit", "duplicate", "invalid_range", "source_conflict"]
+          "enum": ["user_edit", "duplicate", "invalid_range", "source_conflict", "source_deleted", "source_restored"],
+          "description": "source_deleted and source_restored are a provider saying its record is gone, or back. They leave the record out or count it again and change nothing else, and only a provider gives them."
         },
         "acquisition_method": {
           "type": "string",

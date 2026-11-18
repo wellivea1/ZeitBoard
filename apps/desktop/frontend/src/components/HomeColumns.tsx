@@ -146,9 +146,12 @@ export function NeedsYou() {
 // A diary not yet read, or one that could not be, is not an empty one.
 export function Diary({
   days,
+  canAddEvent = false,
 }: {
   /** Undefined while the calendar is read; null when it could not be. */
   days: DiaryDay[] | null | undefined;
+  /** Whether events can be added here: in the desktop app, not its preview. */
+  canAddEvent?: boolean;
 }) {
   return (
     <section className="home-column" aria-labelledby="diary-title">
@@ -179,9 +182,16 @@ export function Diary({
           </div>
         ))
       )}
-      <a className="home-more" href="#/plan/week">
-        Open the week
-      </a>
+      <p className="home-more-row">
+        <a className="home-more" href="#/plan/week">
+          Open the week
+        </a>
+        {canAddEvent && (
+          <a className="home-more" href="#/plan/week/add-event">
+            Add an event
+          </a>
+        )}
+      </p>
     </section>
   );
 }

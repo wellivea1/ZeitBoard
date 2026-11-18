@@ -18,6 +18,7 @@ import {
   type SleepEntry,
   type SleepLogPage,
 } from "../data/sleepEntries";
+import { hasDesktopBridge } from "../data/wailsBridge";
 import { civilMinute, localZone } from "../utils/civilTime";
 import { correctionForm, sleepFormInput, type SleepForm } from "../utils/sleepForm";
 
@@ -247,7 +248,12 @@ export function SleepLogPanel() {
           <Loading />
         ) : entriesData.status === "unavailable" ? (
           <div className="sleep-log-empty">
-            <h2>The sleep log could not be read</h2>
+            {/* The browser preview has no log to fail to read. */}
+            <h2>
+              {hasDesktopBridge()
+                ? "The sleep log could not be read"
+                : "The sleep log opens in the desktop app"}
+            </h2>
             <p>{entriesData.message} Nothing saved has changed.</p>
           </div>
         ) : total === 0 ? (

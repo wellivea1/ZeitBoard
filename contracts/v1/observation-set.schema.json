@@ -64,6 +64,24 @@
         },
         "provenance": {
           "$ref": "common.schema.json#/$defs/provenance"
+        },
+        "source_offset": {
+          "type": "object",
+          "description": "The clock the source recorded a sleep on, in seconds east of UTC at each end. Sent only when it is not zone_id's own at one end or the other: a night recorded away from home. zone_id stays the zone the owner reads their records in.",
+          "additionalProperties": false,
+          "required": ["start_seconds", "end_seconds"],
+          "properties": {
+            "start_seconds": {
+              "type": "integer",
+              "minimum": -64800,
+              "maximum": 64800
+            },
+            "end_seconds": {
+              "type": "integer",
+              "minimum": -64800,
+              "maximum": 64800
+            }
+          }
         }
       },
       "oneOf": [
@@ -79,7 +97,9 @@
             "kind": {"const": "activity_interval"}
           },
           "required": ["activity"],
-          "not": {"required": ["sleep"]}
+          "not": {
+            "anyOf": [{"required": ["sleep"]}, {"required": ["source_offset"]}]
+          }
         }
       ]
     }

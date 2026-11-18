@@ -18,6 +18,7 @@ import (
 	"non24.app/core/estimation"
 	"non24.app/core/freshness"
 	"non24.app/core/medication"
+	"non24.app/core/presence"
 	"non24.app/server/internal/portal"
 )
 
@@ -32,6 +33,12 @@ type SleepSource interface {
 // link has that grant.
 type DoseSource interface {
 	EffectiveDoses(ctx context.Context) ([]medication.EffectiveEvent, error)
+}
+
+// StatusSource is the private read model of the statuses the owner reported
+// (ADR-0070). It is read only when some link may show one.
+type StatusSource interface {
+	ReportedStatuses(ctx context.Context) ([]presence.Report, error)
 }
 
 // SnapshotSink is the portal store, narrowed to publication. Nothing here can
@@ -49,6 +56,7 @@ type ProfileSource interface {
 type Materializer struct {
 	Sleep     SleepSource
 	Doses     DoseSource
+	Statuses  StatusSource
 	Profiles  ProfileSource
 	Sink      SnapshotSink
 	Estimator estimation.RobustEstimator
@@ -90,6 +98,11 @@ type Preparation struct {
 	// page shows now, so the input fingerprint does not move with the clock
 	// and a new skip is published even when the forecast has not changed.
 	DoseRecords []string
+
+	// StatusRecord renders the reported status that stands, or nothing, for
+	// the same fingerprint: a new report is published though the forecast
+	// has not moved.
+	StatusRecord string
 }
 
 // Prepare computes the projection as of `now` without publishing it.
@@ -123,6 +136,23 @@ func (m Materializer) Prepare(ctx context.Context, now time.Time) (Preparation, 
 		prep.Snapshot.SkippedDoses, prep.DoseRecords, prep.ExpiresAt = skippedDoses(doses, now)
 	}
 
+	// A reported status is the owner's word about now. Like the doses it is
+	// read before anything that can withhold the forecast, and only a report
+	// the owner marked as shared goes any further.
+	if m.Statuses != nil && showsStatus(prep.Profiles) {
+		reports, err := m.Statuses.ReportedStatuses(ctx)
+		if err != nil {
+			return Preparation{}, fmt.Errorf("read reported statuses: %w", err)
+		}
+		if current, ok := presence.Current(reports, now); ok && current.Shared {
+			prep.Snapshot.Reported = &portal.ReportedStatus{
+				Status: current.Status, ReportedAt: current.ReportedAt.UTC(), ExpiresAt: current.ExpiresAt.UTC(),
+			}
+			prep.StatusRecord = current.StatusID
+			prep.ExpiresAt = earliest(prep.ExpiresAt, current.ExpiresAt.UTC())
+		}
+	}
+
 	sessions, err := m.Sleep.EffectiveSleepSessions(ctx)
 	if err != nil {
 		return Preparation{}, fmt.Errorf("read sleep sessions: %w", err)
@@ -151,6 +181,10 @@ func (m Materializer) Prepare(ctx context.Context, now time.Time) (Preparation, 
 	policy := freshness.Default()
 	inputs := freshnessInputs(estimate, sessions, now)
 	prep.ExpiresAt = earliest(prep.ExpiresAt, policy.NextChange(inputs))
+	// The page is handed the same two instants, so what it shows turns when
+	// the policy says even if nothing republishes. They follow the forecast
+	// and not the hour this snapshot was written (ADR-0071).
+	prep.Snapshot.CautionAt, prep.Snapshot.WithheldAt = policy.Deadlines(inputs)
 	if !policy.Assess(inputs).MayClaimCurrentState() {
 		prep.Snapshot.Status = portal.StatusInsufficientData
 		return prep, nil
@@ -165,6 +199,37 @@ func (m Materializer) Prepare(ctx context.Context, now time.Time) (Preparation, 
 	prep.Snapshot.Windows = windows
 	prep.Snapshot.HorizonEnd = windows[len(windows)-1].EndAt
 	return prep, nil
+}
+
+// showsStatus reports whether any link may show a reported status. Without
+// one the reports are not read at all.
+func showsStatus(profiles []portal.Profile) bool {
+	for _, profile := range profiles {
+		if profile.Grants.ReportedStatus != portal.StatusGrantNone {
+			return true
+		}
+	}
+	return false
+}
+
+// reportedFor cuts a reported status down to what one link may show. A
+// contact-only link learns that now is not a good time while the owner is
+// trying to sleep or has asked not to be disturbed, and nothing else: not
+// which of the two, not when it was said, and nothing at all for "awake".
+func reportedFor(level string, reported *portal.ReportedStatus) *portal.ReportedStatus {
+	if reported == nil {
+		return nil
+	}
+	switch level {
+	case portal.StatusGrantFull:
+		copied := *reported
+		return &copied
+	case portal.StatusGrantContact:
+		if reported.Status == presence.TryingToSleep || reported.Status == presence.DoNotDisturb {
+			return &portal.ReportedStatus{Status: portal.StatusUnavailable, ExpiresAt: reported.ExpiresAt}
+		}
+	}
+	return nil
 }
 
 // showsDoses reports whether any link has the skipped-doses grant. Without one
@@ -243,6 +308,12 @@ func (m Materializer) Snapshot(ctx context.Context) (portal.Snapshot, error) {
 func freshnessInputs(estimate domain.PhaseEstimate, sessions []domain.SleepSession, now time.Time) freshness.Inputs {
 	in := freshness.Inputs{Now: now}
 	for _, session := range sessions {
+		// A record the owner excluded says nothing about where they are now.
+		// Counted here, excluding a bad recent record put an old forecast
+		// back on the shared page as current.
+		if session.Suppressed {
+			continue
+		}
 		for _, interval := range session.Intervals {
 			end := interval.Interval.End.UTC
 			if end.After(in.LatestSleepEnd) {
@@ -266,6 +337,7 @@ func freshnessInputs(estimate domain.PhaseEstimate, sessions []domain.SleepSessi
 	}
 	if len(estimate.PredictedSleepWindows) > 0 {
 		in.ExpectedSleepOnset = estimate.PredictedSleepWindows[0].Interval.Start.UTC
+		in.ExpectedSleepEnd = estimate.PredictedSleepWindows[0].Interval.End.UTC
 	}
 	return in
 }
@@ -282,24 +354,59 @@ func freshnessInputs(estimate domain.PhaseEstimate, sessions []domain.SleepSessi
 // one. Both rules now live where they belong — at render, in portal.BuildView
 // and the availability DTO — where they keep working as time passes instead of
 // being correct only at the instant of materialization.
+//
+// Each window is published without the parts a predicted sleep window also
+// covers. The estimator's windows are envelopes: a waking one opens before the
+// sleep before it is sure to have ended, and closes after the next may have
+// begun. Published whole, the page said "Likely awake right now" through
+// hours the owner's own Home draws as uncertain. What is left is the time the
+// model places outside every sleep envelope, as Home's outlook reads it.
 func wakingWindows(estimate domain.PhaseEstimate) []portal.Window {
 	windows := make([]portal.Window, 0, len(estimate.PredictedWakingWindows))
 	for _, window := range estimate.PredictedWakingWindows {
 		interval := window.Interval
-		if !interval.End.UTC.After(interval.Start.UTC) {
-			continue
-		}
 		zoneID := interval.Start.ZoneID
 		if zoneID == "" {
 			zoneID = "UTC"
 		}
-		windows = append(windows, portal.Window{
-			StartAt: interval.Start.UTC.UTC(),
-			EndAt:   interval.End.UTC.UTC(),
-			ZoneID:  zoneID,
-		})
+		for _, clear := range outsideSleep(interval.Start.UTC.UTC(), interval.End.UTC.UTC(), estimate.PredictedSleepWindows) {
+			windows = append(windows, portal.Window{StartAt: clear[0], EndAt: clear[1], ZoneID: zoneID})
+		}
 	}
 	return windows
+}
+
+// outsideSleep is the part of [start, end) no predicted sleep window covers,
+// as stretches in order.
+func outsideSleep(start, end time.Time, sleep []domain.AvailabilityWindow) [][2]time.Time {
+	clear := [][2]time.Time{{start, end}}
+	for _, window := range sleep {
+		from, to := window.Interval.Start.UTC.UTC(), window.Interval.End.UTC.UTC()
+		if !to.After(from) {
+			continue
+		}
+		var next [][2]time.Time
+		for _, stretch := range clear {
+			if !to.After(stretch[0]) || !from.Before(stretch[1]) {
+				next = append(next, stretch)
+				continue
+			}
+			if from.After(stretch[0]) {
+				next = append(next, [2]time.Time{stretch[0], from})
+			}
+			if to.Before(stretch[1]) {
+				next = append(next, [2]time.Time{to, stretch[1]})
+			}
+		}
+		clear = next
+	}
+	kept := clear[:0]
+	for _, stretch := range clear {
+		if stretch[1].After(stretch[0]) {
+			kept = append(kept, stretch)
+		}
+	}
+	return kept
 }
 
 // withCurrentWakingWindow adds the waking period already under way. The
@@ -348,6 +455,9 @@ func (m Materializer) Publish(ctx context.Context, prep Preparation) error {
 		if !published.DosesShared {
 			published.SkippedDoses = nil
 		}
+		// Each link gets as much of a reported status as its owner chose,
+		// and a link they did not choose for gets none.
+		published.Reported = reportedFor(profile.Grants.ReportedStatus, prep.Snapshot.Reported)
 		if !profile.Grants.WakingWindows {
 			// A link without the windows grant still gets a row so the page
 			// can render an honest "not shared" state rather than 404.

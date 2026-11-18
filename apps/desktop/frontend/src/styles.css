@@ -118,8 +118,10 @@
   /* Type scale. Body text used to be 13px with 10-11px labels (and some 8-9px
      axis text): too small to read at a glance for someone who is tired, which
      is when this app gets opened. Nothing renders below --type-micro. */
-  --type-micro: 11px;
-  --type-label: 12px;
+  /* The smallest type is 12px. Labels were 10.5 to 11.5px, small for a page
+     read by someone short of sleep. */
+  --type-micro: 12px;
+  --type-label: 13px;
   --type-body: 14px;
   --type-body-strong: 16px;
   --type-section: 17px;
@@ -625,7 +627,7 @@ textarea {
   background: none;
   border: 0;
   font-family: var(--font-sans);
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-decoration: none;
@@ -704,7 +706,7 @@ textarea {
   color: var(--ink);
   border-bottom: 1px solid var(--ink);
   font-family: var(--font-sans);
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -1412,7 +1414,7 @@ textarea {
   border: 0;
   cursor: pointer;
   font-family: var(--font-sans);
-  font-size: 11.5px;
+  font-size: 12.5px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -2156,12 +2158,13 @@ textarea {
   .masthead {
     position: static;
   }
+  /* The links wrap. Scrolled sideways with the bar hidden, the last of them
+     was cut off with nothing to say there was more. */
   .primary-nav,
   .utility-nav {
     max-width: 100%;
-    gap: 16px;
-    overflow-x: auto;
-    scrollbar-width: none;
+    flex-wrap: wrap;
+    gap: 2px 16px;
   }
   .main-content {
     padding: 22px 18px 42px;
@@ -2788,4 +2791,19 @@ textarea {
 }
 .task-review-history h3 {
   font-size: var(--type-body);
+}
+
+/* At phone width the wordmark, the utility links and the five destinations
+   each take a line. */
+@media (max-width: 520px) {
+  .masthead {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "mark"
+      "utility"
+      "primary";
+  }
+  .utility-nav {
+    justify-self: start;
+  }
 }

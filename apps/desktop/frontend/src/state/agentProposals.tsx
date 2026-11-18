@@ -20,6 +20,7 @@ import {
 } from "../data/agentProposals";
 import { proposalDecisionDone } from "../data/decisionWords";
 import { medicationDataChangedEvent, notifyMedicationDataChanged } from "../data/medications";
+import { statusChangedEvent } from "../data/status";
 import { notifySleepDataChanged } from "../data/sleepDataEvents";
 import { createCoalescedRefresh, type CoalescedRefresh } from "../utils/coalescedRefresh";
 
@@ -59,7 +60,8 @@ export function AgentProposalsProvider({ children }: { children: ReactNode }) {
     queue.request();
     // An agent's proposal, or a deleted or renamed medication, changes what
     // waits.
-    const events = [agentProposalsChangedEvent, medicationDataChangedEvent];
+    // The owner's sharing choice changes what a waiting status says it will do.
+    const events = [agentProposalsChangedEvent, medicationDataChangedEvent, statusChangedEvent];
     for (const event of events) window.addEventListener(event, queue.request);
     return () => {
       for (const event of events) window.removeEventListener(event, queue.request);
@@ -85,7 +87,9 @@ export function AgentProposalsProvider({ children }: { children: ReactNode }) {
         if (decision === "approved") {
           // The new record shows where the owner's own entry would: a dose in
           // Medications, a task in Plan with a suggested time.
+          // A status shows on Home, beside the sleep buttons.
           if (proposal.kind === "dose") notifyMedicationDataChanged();
+          else if (proposal.kind === "status") window.dispatchEvent(new Event(statusChangedEvent));
           else notifySleepDataChanged();
         }
       } catch (reason) {

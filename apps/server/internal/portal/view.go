@@ -7,9 +7,12 @@ import (
 	"time"
 )
 
-// Freshness thresholds from docs/portal-design.md section 1. Past StaleAfter
-// the page says so; past UnavailableAfter it stops making a current-state
-// claim entirely rather than presenting an old "awake now".
+// Freshness thresholds from docs/portal-design.md section 1, for a snapshot
+// published without deadlines of its own: past StaleAfter the page says so,
+// and past UnavailableAfter it stops making a current-state claim entirely
+// rather than presenting an old "awake now". A snapshot made from the shared
+// freshness policy carries its own two instants, which follow the forecast
+// (ADR-0071), and the page keeps to those.
 const (
 	StaleAfter       = 6 * time.Hour
 	UnavailableAfter = 24 * time.Hour
@@ -56,6 +59,58 @@ type AvailabilityView struct {
 	// (ADR-0058). They do not depend on the forecast, so they are shown
 	// whatever it says.
 	Doses DosesView
+
+	// Reported is the status the owner reported, when the link may show one
+	// and one stands. It leads the page.
+	Reported *ReportedView
+}
+
+// ReportedView is a status the owner reported, in the page's words. It
+// leads the page, above the forecast, and is marked as the owner's own word.
+type ReportedView struct {
+	Headline string
+	Detail   string
+}
+
+// buildReported words the reported status that stands at now, or nothing.
+// It is read against the clock here, when the page is drawn, so a status
+// lapses on the page at the minute it was set to, with nobody refreshing
+// anything on the owner's side.
+func buildReported(snapshot Snapshot, now time.Time) *ReportedView {
+	reported := snapshot.Reported
+	if reported == nil || !reported.ExpiresAt.After(now) || reported.ReportedAt.After(now) {
+		return nil
+	}
+	said := "They said so " + describeAgo(now.Sub(reported.ReportedAt)) + "."
+	switch reported.Status {
+	case presenceTryingToSleep:
+		return &ReportedView{Headline: "Trying to sleep", Detail: said + " This is what they reported, not a forecast."}
+	case presenceAwake:
+		return &ReportedView{Headline: "Awake", Detail: said + " Being awake does not mean being free to answer."}
+	case presenceDoNotDisturb:
+		return &ReportedView{Headline: "Do not disturb", Detail: "They asked not to be disturbed " + describeAgo(now.Sub(reported.ReportedAt)) + "."}
+	case StatusUnavailable:
+		return &ReportedView{Headline: "Not a good time right now", Detail: "They have asked not to be contacted for now."}
+	default:
+		return nil
+	}
+}
+
+// describeAgo says how long ago something was said, to the minute, then the
+// hour: "just now", "12 minutes ago", "3 hours ago".
+func describeAgo(age time.Duration) string {
+	switch minutes := int(age.Minutes()); {
+	case minutes < 1:
+		return "just now"
+	case minutes == 1:
+		return "a minute ago"
+	case minutes < 60:
+		return fmt.Sprintf("%d minutes ago", minutes)
+	case minutes < 120:
+		return "an hour ago"
+	default:
+		return fmt.Sprintf("%d hours ago", minutes/60)
+	}
 }
 
 // DosesView is what a link with the skipped-doses grant shows.
@@ -129,6 +184,10 @@ func BuildView(snapshot Snapshot, now time.Time) AvailabilityView {
 	}
 	now = now.UTC()
 	view.Doses = buildDoses(snapshot, now)
+	// A reported status does not depend on the forecast, so it is set before
+	// the rules that withhold the forecast: old sleep records are no reason to
+	// hide what the owner said ten minutes ago.
+	view.Reported = buildReported(snapshot, now)
 	if view.Doses.Shared {
 		view.Notice = NoticeWithDoses
 	}
@@ -152,17 +211,20 @@ func BuildView(snapshot Snapshot, now time.Time) AvailabilityView {
 		return view
 	case snapshot.Status == StatusInsufficientData || len(snapshot.Windows) == 0:
 		view.Unavailable = true
-		view.Headline = "Availability is not being shared right now"
-		view.Detail = "This link does not currently show waking windows."
+		// Nothing here is the link's doing: the grant stands, and the evidence
+		// is too old or too thin to claim a current state. Saying "this link
+		// does not show" sent the owner to check permissions that were fine.
+		view.Headline = "There are no current waking windows to show"
+		view.Detail = "This link is working. You can still reach out and agree on a time directly."
 		return view
-	case age >= UnavailableAfter:
+	case snapshot.withheld(now):
 		view.Unavailable = true
 		view.Headline = "This availability is out of date"
-		view.Detail = "The last update is more than a day old, so it is not shown. An out-of-date estimate is worse than none."
+		view.Detail = "The last update is too old to go by, so it is not shown. An out-of-date estimate is worse than none."
 		return view
 	}
 
-	view.Stale = age >= StaleAfter
+	view.Stale = snapshot.cautionDue(now)
 	location := windowLocation(snapshot.Windows[0].ZoneID)
 	view.ZoneLabel = zoneLabel(snapshot.Windows[0].ZoneID, now.In(location))
 
@@ -195,7 +257,9 @@ func BuildView(snapshot Snapshot, now time.Time) AvailabilityView {
 	switch {
 	case view.LikelyAwake:
 		view.Headline = "Likely awake right now"
-		view.Detail = "Based on recent patterns, this is probably a reachable time."
+		// Awake is all the records can say. Whether this is a good time to call
+		// is the owner's to say, and nothing here knows it.
+		view.Detail = "Based on recent sleep records. Being awake does not mean being free to answer."
 	case len(upcoming) > 0:
 		view.Headline = "Likely not awake right now"
 		view.Detail = fmt.Sprintf("The next likely waking window starts %s.", lowerFirst(upcoming[0].DayLabel)+" at "+startOnly(snapshot.Windows, now, location))
@@ -264,14 +328,16 @@ func nextChange(snapshot Snapshot, now time.Time) time.Time {
 		consider(window.StartAt)
 		consider(window.EndAt)
 	}
-	if !snapshot.GeneratedAt.IsZero() {
-		consider(snapshot.GeneratedAt.Add(StaleAfter))
-		consider(snapshot.GeneratedAt.Add(UnavailableAfter))
-	}
+	cautionAt, withheldAt := snapshot.deadlines()
+	consider(cautionAt)
+	consider(withheldAt)
 	if snapshot.DosesShared {
 		for _, dose := range snapshot.SkippedDoses {
 			consider(dose.At.Add(SkippedDoseWindow))
 		}
+	}
+	if snapshot.Reported != nil {
+		consider(snapshot.Reported.ExpiresAt)
 	}
 	return next
 }
@@ -425,10 +491,10 @@ func describeFreshness(age time.Duration) string {
 		return fmt.Sprintf("Updated %d minutes ago.", int(age.Minutes()))
 	case age < 2*time.Hour:
 		return "Updated about an hour ago."
-	case age < UnavailableAfter:
+	case age < 48*time.Hour:
 		return fmt.Sprintf("Updated about %d hours ago.", int(age.Hours()))
 	default:
-		return "Last updated more than a day ago."
+		return fmt.Sprintf("Last updated %d days ago.", int(age.Hours()/24))
 	}
 }
 

@@ -278,6 +278,60 @@ func profileState(state portal.ProfileState) string {
 	}
 }
 
+type updatePortalGrantsRequest struct {
+	SchemaVersion string `json:"schema_version"`
+	// What the link shows. Whether it takes requests and messages is fixed
+	// when the link is made and is not read here.
+	WakingWindows  bool   `json:"wakingWindows"`
+	SkippedDoses   bool   `json:"skippedDoses"`
+	ReportedStatus string `json:"reportedStatus"`
+}
+
+// handleUpdatePortalGrants changes what an existing link shows. Until this
+// existed, what a link shared was fixed when it was made: to share less, or a
+// little more, the owner had to revoke it, make another and send that round.
+func (s *Server) handleUpdatePortalGrants(w http.ResponseWriter, r *http.Request) {
+	profileID := strings.TrimSpace(r.PathValue("id"))
+	if profileID == "" {
+		writeError(w, http.StatusBadRequest, "share profile id is required")
+		return
+	}
+	var req updatePortalGrantsRequest
+	if err := decodeBody(w, r, maxDeviceBodyBytes, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid share grants request")
+		return
+	}
+	if req.SchemaVersion != syncmodel.SchemaVersion {
+		writeError(w, http.StatusBadRequest, "unsupported schema version")
+		return
+	}
+	if !portal.ValidStatusGrant(req.ReportedStatus) {
+		writeError(w, http.StatusBadRequest, "reportedStatus must be empty, contact, or full")
+		return
+	}
+	err := s.portal.store.UpdateGrants(r.Context(), profileID, portal.Grants{
+		WakingWindows: req.WakingWindows, SkippedDoses: req.SkippedDoses, ReportedStatus: req.ReportedStatus,
+	})
+	if errors.Is(err, portal.ErrProfileNotFound) {
+		writeError(w, http.StatusNotFound, "share profile not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "share grants update failed")
+		return
+	}
+	// Sharing less must not wait: the page is rewritten before this answers,
+	// so what was taken away is gone from the link when the owner is told so.
+	if err := s.portal.recompute.RunNow(r.Context(), recompute.ReasonSharing); err != nil {
+		writeError(w, http.StatusInternalServerError, "share grants update failed")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{
+		"schema_version": syncmodel.SchemaVersion,
+		"status":         "updated",
+	})
+}
+
 func (s *Server) handleRevokePortalProfile(w http.ResponseWriter, r *http.Request) {
 	profileID := strings.TrimSpace(r.PathValue("id"))
 	if profileID == "" {

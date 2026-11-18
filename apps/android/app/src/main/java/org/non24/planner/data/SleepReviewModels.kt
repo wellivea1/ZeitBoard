@@ -11,7 +11,24 @@ data class SleepReview(
     val observationId: String, val cursor: Long, val generatedAt: Instant, val sourceRevision: Instant,
     val source: SleepReviewWindow, val effective: SleepReviewWindow, val classification: String,
     val excluded: Boolean, val needsReview: Boolean, val edits: List<SleepReviewEdit>,
+    /** Health Connect no longer has the night (ADR-0072). It is kept, and left out unless the owner's correction stands. */
+    val removedAtSource: Boolean = false,
+    /** The clock a night away was recorded on (ADR-0073); null for a night at home. */
+    val sourceOffset: SourceOffset? = null,
 )
+
+/** A UTC offset for each end of a sleep, in seconds east of UTC (ADR-0073). */
+data class SourceOffset(val startSeconds: Int, val endSeconds: Int) {
+    init {
+        require(startSeconds in -MAX_OFFSET_SECONDS..MAX_OFFSET_SECONDS && endSeconds in -MAX_OFFSET_SECONDS..MAX_OFFSET_SECONDS) {
+            "A clock stands within 18 hours of UTC."
+        }
+    }
+
+    companion object {
+        const val MAX_OFFSET_SECONDS = 18 * 60 * 60
+    }
+}
 data class SleepReviewState(
     val selectedId: String? = null, val context: SleepReview? = null, val loading: Boolean = false,
     val stale: Boolean = false, val pending: Boolean = false, val error: String? = null,
@@ -26,7 +43,10 @@ internal fun JsonObject.boolean(key: String): Boolean =
     (get(key) as? JsonPrimitive)?.takeUnless { it.isString }?.booleanOrNull ?: error("Invalid boolean field.")
 
 internal fun parseSleepReview(json: JsonObject): SleepReview {
-    json.exactKeys(setOf("schema_version", "source_cursor", "generated_at", "observation_id", "source_revision", "source_window", "effective_window", "sleep_classification", "excluded", "needs_review", "manual_corrections"))
+    json.exactKeys(
+        setOf("schema_version", "source_cursor", "generated_at", "observation_id", "source_revision", "source_window", "effective_window", "sleep_classification", "excluded", "removed_at_source", "needs_review", "manual_corrections"),
+        setOf("source_offset"),
+    )
     require(json.string("schema_version") == "v1" && validSyncId(json.string("observation_id")))
     fun window(name: String): SleepReviewWindow {
         val value = json.getValue(name).jsonObject
@@ -54,8 +74,33 @@ internal fun parseSleepReview(json: JsonObject): SleepReview {
         SleepReviewEdit(id, row.instant("created_at"), changes.optionalInstant("start_at"), changes.optionalInstant("end_at"), kind,
             if (changes.containsKey("excluded")) changes.boolean("excluded") else null)
     }
+    val offset = json["source_offset"]?.jsonObject?.let {
+        it.exactKeys(setOf("start_seconds", "end_seconds"))
+        SourceOffset(it.integer("start_seconds").toInt(), it.integer("end_seconds").toInt())
+    }
     return SleepReview(json.string("observation_id"), json.integer("source_cursor"), json.instant("generated_at"), json.instant("source_revision"),
-        source, effective, classification, json.boolean("excluded"), json.boolean("needs_review"), edits)
+        source, effective, classification, json.boolean("excluded"), json.boolean("needs_review"), edits,
+        removedAtSource = json.boolean("removed_at_source"), sourceOffset = offset)
+}
+
+/**
+ * How far from the home clock a night away was recorded, in words: "Recorded
+ * 6 hours ahead of home". Said by the start, or by the end when the clock
+ * changed during the night. Null for a night at home.
+ */
+internal fun recordedAway(offset: SourceOffset?, start: Instant, end: Instant, homeZone: ZoneId): String? {
+    offset ?: return null
+    var apart = offset.startSeconds - homeZone.rules.getOffset(start).totalSeconds
+    if (apart == 0) apart = offset.endSeconds - homeZone.rules.getOffset(end).totalSeconds
+    if (apart == 0) return null
+    val minutes = kotlin.math.abs(apart) / 60
+    val hours = minutes / 60
+    val rest = minutes % 60
+    val length = listOfNotNull(
+        hours.takeIf { it > 0 }?.let { if (it == 1) "1 hour" else "$it hours" },
+        rest.takeIf { it > 0 }?.let { if (it == 1) "1 minute" else "$it minutes" },
+    ).joinToString(" ")
+    return "Recorded $length " + (if (apart > 0) "ahead of" else "behind") + " home"
 }
 
 internal fun manualCorrection(review: SleepReview, id: String, at: Instant, start: Instant, end: Instant, classification: String, excluded: Boolean): OutboxRecord {

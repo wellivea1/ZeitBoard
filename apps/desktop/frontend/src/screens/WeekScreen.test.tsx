@@ -58,6 +58,73 @@ describe("Plan › Week", () => {
     expect(screen.getByRole("table")).toBeVisible();
   });
 
+  it("offers no way to add an event in the read-only preview", async () => {
+    const { container } = render(<WeekScreen />);
+    await screen.findByRole("region", { name: "Days with sleep and plans" });
+    expect(screen.queryByRole("button", { name: "Add an event" })).toBeNull();
+    fireEvent.click(container.querySelector(".week-day")!, { clientY: 400 });
+    expect(screen.queryByRole("heading", { name: "Add an event" })).toBeNull();
+  });
+
+  it("adds an event from the toolbar or from an empty part of a day", async () => {
+    const zoneId = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const GetCalendar = vi.fn(async (query: { startCivilDate: string; days: number }) => {
+      const first = new Date(`${query.startCivilDate}T00:00:00Z`);
+      const days = Array.from({ length: query.days }, (_unused, index) => {
+        const day = new Date(first);
+        day.setUTCDate(first.getUTCDate() + index);
+        const civilDate = day.toISOString().slice(0, 10);
+        return { civilDate, label: civilDate, isToday: index === 0, events: [], predictions: [] };
+      });
+      return {
+        status: "empty",
+        message: "No calendar events in this range.",
+        fixtureMode: false,
+        zoneId,
+        startCivilDate: days[0]!.civilDate,
+        endCivilDate: days[days.length - 1]!.civilDate,
+        updatedLabel: "Updated just now",
+        sources: [],
+        days,
+        warnings: [],
+      };
+    });
+    const AddOwnerEvent = vi.fn(
+      async (input: { title: string; startLocal: string; endLocal: string; zoneId: string }) => ({
+        ...input,
+        eventId: "event_synthetic",
+        revision: 1,
+        startLabel: "Start",
+        endLabel: "End",
+      }),
+    );
+    (globalThis as { go?: unknown }).go = { main: { App: { GetCalendar, AddOwnerEvent } } };
+
+    const { container } = render(<WeekScreen />);
+    await screen.findByRole("region", { name: "Days with sleep and plans" });
+
+    // A click on an empty part of a day starts an event there, to the half hour.
+    const firstDay = container.querySelector(".week-day")!;
+    fireEvent.click(firstDay, { clientY: 610 });
+    expect(screen.getByRole("heading", { name: "Add an event" })).toBeVisible();
+    const day = GetCalendar.mock.calls[0]![0].startCivilDate;
+    expect(screen.getByLabelText("Starts")).toHaveValue(`${day}T15:30`);
+    expect(screen.getByLabelText("Ends")).toHaveValue(`${day}T16:30`);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("heading", { name: "Add an event" })).toBeNull();
+
+    // The toolbar opens the same form, which is how a keyboard reaches it.
+    fireEvent.click(screen.getByRole("button", { name: "Add an event" }));
+    fireEvent.change(screen.getByLabelText("What it is"), {
+      target: { value: "Dentist (synthetic)" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add event" }));
+    expect(await screen.findByText("Added Dentist (synthetic).")).toBeVisible();
+    expect(AddOwnerEvent.mock.calls[0]![0]).toMatchObject({ title: "Dentist (synthetic)", zoneId });
+    // The board reads the calendar again, where the event now is.
+    await waitFor(() => expect(GetCalendar.mock.calls.length).toBeGreaterThan(1));
+  });
+
   it("decides a suggestion on the board, and sends one with no time to Tasks", async () => {
     pending = [suggestion("p1", "Deep work", 1), suggestion("p2", "Call the bank")];
     render(<WeekScreen />);

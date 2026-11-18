@@ -112,6 +112,30 @@ describe("the lead sentence", () => {
     expect(text(leadParts(awake, outlook, now, cause))).not.toContain("Health Connect");
   });
 
+  it("says a marked going-to-sleep back, and does not call the owner awake", () => {
+    // Forty minutes ago, as the desktop writes a pending onset: a wall-clock time.
+    const marked = "2026-09-24T15:30";
+    const said = text(leadParts(awake, outlook, now, undefined, marked));
+    expect(said).toMatch(/^You marked going to sleep today at 3:30 PM\./);
+    expect(said).toContain("Tap “I woke up” when you get up");
+    expect(said).toContain("the forecast below runs from your last recorded night");
+    expect(said).not.toContain("You have been awake");
+    expect(said).not.toContain("Sleep is likely to begin");
+
+    // On records too old to draw a forecast, the sentence does not point at one.
+    const old: OverviewData = {
+      ...awake,
+      freshness: { ...awake.freshness, trusted: false, state: "withheld" },
+    };
+    const saidOnOld = text(leadParts(old, outlook, now, undefined, marked));
+    expect(saidOnOld).toMatch(/^You marked going to sleep today at 3:30 PM\./);
+    expect(saidOnOld).not.toContain("forecast below");
+
+    // Nothing marked, or a time that cannot be read, leaves the lead as it was.
+    expect(text(leadParts(awake, outlook, now, undefined, ""))).toMatch(/^You have been awake/);
+    expect(text(leadParts(awake, outlook, now, undefined, "soon"))).toMatch(/^You have been awake/);
+  });
+
   it("does not look ahead without an estimate", () => {
     expect(text(leadParts({ ...awake, status: "empty" }, outlook, now))).toBe(
       "There is not enough recorded sleep to look ahead yet.",

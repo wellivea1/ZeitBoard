@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { CreatedShareLink, CreateShareLinkInput, ShareLinksData } from "../data/sharing";
+import { statusLevels, type ShareStatusLevel } from "../data/sharing";
 
 // The disclosure is shown *above* the button, not after the link exists: an
 // owner must not be able to create one without having seen what it reveals and
@@ -15,6 +16,7 @@ const emptyForm = {
   allowRequests: false,
   allowMessages: false,
   skippedDoses: false,
+  reportedStatus: "" as ShareStatusLevel,
 };
 
 export function ShareLinkForm({
@@ -87,6 +89,7 @@ export function ShareLinkForm({
         allowRequests: form.allowRequests,
         allowMessages: form.allowMessages,
         skippedDoses: form.skippedDoses,
+        reportedStatus: form.reportedStatus,
       },
     });
   };
@@ -112,7 +115,7 @@ export function ShareLinkForm({
       )}
 
       <label>
-        <span>Name (stays on this device)</span>
+        <span>Name (kept on your own server; the link never shows it)</span>
         <input
           value={form.label}
           onChange={(event) => setForm({ ...form, label: event.target.value })}
@@ -191,6 +194,27 @@ export function ShareLinkForm({
               They learn that you take a medication on a schedule, and when you logged a dose as
               skipped in the last three days: the times only, never which medication. A dose you did
               not log is not shown.
+            </small>
+          </span>
+        </label>
+        <label className="sharing-grant-described sharing-grant-level">
+          <span>
+            A status you report
+            <select
+              value={form.reportedStatus}
+              onChange={(event) =>
+                setForm({ ...form, reportedStatus: event.target.value as ShareStatusLevel })
+              }
+            >
+              {statusLevels.map((level) => (
+                <option key={level.level} value={level.level}>
+                  {level.label}
+                </option>
+              ))}
+            </select>
+            <small>
+              {statusLevels.find((level) => level.level === form.reportedStatus)?.detail} You can
+              change this later, and each report can still be kept to yourself.
             </small>
           </span>
         </label>

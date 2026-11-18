@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net/http"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -22,6 +23,7 @@ import (
 	"non24.app/core/estimation"
 	"non24.app/core/freshness"
 	"non24.app/core/ingest"
+	"non24.app/core/outlook"
 	"non24.app/core/platform/activity"
 	"non24.app/core/recompute"
 	"non24.app/core/scheduling"
@@ -133,11 +135,21 @@ type App struct {
 	reaching               ReachingHoursDTO
 	reachingRevision       uint64
 	reachingErr            string
-	regionalMu             sync.RWMutex
-	regional               RegionalSettingsDTO
-	regionalRevision       uint64
-	regionalErr            string
-	systemClock            civilfmt.Clock
+	// statusMu guards reporting a status and the owner's choices about it.
+	statusMu       sync.Mutex
+	statusSettings StatusSettingsDTO
+	statusRevision uint64
+
+	// noticesMu guards the notes the owner closed.
+	noticesMu       sync.Mutex
+	closedNotices   []string
+	noticesRevision uint64
+
+	regionalMu       sync.RWMutex
+	regional         RegionalSettingsDTO
+	regionalRevision uint64
+	regionalErr      string
+	systemClock      civilfmt.Clock
 }
 
 type RefusalDTO struct {
@@ -314,6 +326,13 @@ type SleepEntryDTO struct {
 	SourceLabel             string               `json:"sourceLabel"`
 	ProvenanceLabel         string               `json:"provenanceLabel"`
 	History                 []SleepCorrectionDTO `json:"history"`
+	// RemovedAtSource says the provider that reported the night has since
+	// deleted it (ADR-0072). It is kept, and left out unless the owner's own
+	// correction stands on it.
+	RemovedAtSource bool `json:"removedAtSource"`
+	// RecordedAway says in words how far from the home clock a night away
+	// was recorded (ADR-0073). Empty for a night at home.
+	RecordedAway string `json:"recordedAway,omitempty"`
 }
 
 type SleepCorrectionDTO struct {
@@ -352,6 +371,9 @@ func NewApp() *App {
 	// The clock is put in use even without a data directory: it is then the
 	// computer's own.
 	app.startClock()
+	// A choice another device made while this one was closed is in use from
+	// the first window (ADR-0074).
+	_, _ = app.followSharedSettings(context.Background())
 	return app
 }
 
@@ -813,8 +835,14 @@ func desktopFreshnessInputs(
 	nextSleep domain.TimeRange,
 	now time.Time,
 ) freshness.Inputs {
-	in := freshness.Inputs{Now: now, ExpectedSleepOnset: nextSleep.Start.UTC}
+	in := freshness.Inputs{Now: now, ExpectedSleepOnset: nextSleep.Start.UTC, ExpectedSleepEnd: nextSleep.End.UTC}
 	for _, session := range state.Sessions {
+		// A record the owner excluded says nothing about where they are now.
+		// Counted here, excluding a bad recent record made an old forecast
+		// read as current again.
+		if session.Suppressed {
+			continue
+		}
 		for _, interval := range session.Intervals {
 			end := interval.Interval.End.UTC
 			if end.After(in.LatestSleepEnd) {
@@ -1247,7 +1275,7 @@ func sleepEntryDTO(observation storage.SleepObservationRecord, rawSession, corre
 	rawInterval := rawSession.Intervals[0].Interval
 	effectiveInterval := correctedSession.Intervals[0].Interval
 	sort.Slice(corrections, func(i, j int) bool {
-		return corrections[i].CreatedAt.After(corrections[j].CreatedAt)
+		return newerCorrection(corrections[i], corrections[j])
 	})
 	history := make([]SleepCorrectionDTO, 0, len(corrections))
 	for _, correction := range corrections {
@@ -1276,7 +1304,51 @@ func sleepEntryDTO(observation storage.SleepObservationRecord, rawSession, corre
 		SourceLabel:             correctedSession.SourceLabel,
 		ProvenanceLabel:         provenanceLabel(observation.Provenance),
 		History:                 history,
+		RemovedAtSource:         correctedSession.RemovedAtSource,
+		RecordedAway:            recordedAway(observation),
 	}
+}
+
+// recordedAway says how far from the home clock a night was recorded, from
+// the clock the source put on it: "Recorded 6 hours ahead of home". The night
+// itself is drawn on the home clock like every other.
+func recordedAway(observation storage.SleepObservationRecord) string {
+	offsets := observation.SourceOffset
+	if offsets == nil {
+		return ""
+	}
+	location := locationOrUTC(observation.ZoneID)
+	_, homeStart := observation.StartAt.In(location).Zone()
+	_, homeEnd := observation.EndAt.In(location).Zone()
+	apart := time.Duration(offsets.StartSeconds-homeStart) * time.Second
+	if apart == 0 {
+		// The clock changed during the night; the end is where it differs.
+		apart = time.Duration(offsets.EndSeconds-homeEnd) * time.Second
+	}
+	switch {
+	case apart > 0:
+		return "Recorded " + formatDuration(apart) + " ahead of home"
+	case apart < 0:
+		return "Recorded " + formatDuration(apart) + " behind home"
+	}
+	return ""
+}
+
+// newerCorrection orders a night's history, latest first. Two edits can carry
+// the same time, as an edit and its undo do on a clock that ticks coarsely.
+// The one that replaces the other is then the later, and failing that the
+// order is fixed by id, so the history never reads differently between reads.
+func newerCorrection(left, right storage.SleepCorrectionRecord) bool {
+	if !left.CreatedAt.Equal(right.CreatedAt) {
+		return left.CreatedAt.After(right.CreatedAt)
+	}
+	if slices.Contains(left.SupersedesCorrectionIDs, right.CorrectionID) {
+		return true
+	}
+	if slices.Contains(right.SupersedesCorrectionIDs, left.CorrectionID) {
+		return false
+	}
+	return left.CorrectionID > right.CorrectionID
 }
 
 func correctionDTO(correction storage.SleepCorrectionRecord, zoneID string) SleepCorrectionDTO {
@@ -1285,11 +1357,19 @@ func correctionDTO(correction storage.SleepCorrectionRecord, zoneID string) Slee
 		SupersedesCorrectionIDs: correction.SupersedesCorrectionIDs,
 		CreatedLabel:            displayClock().Format(correction.CreatedAt.In(locationOrUTC(zoneID)), "Jan 2, 3:04 PM"),
 		Reason:                  strings.ReplaceAll(correction.Reason, "_", " "),
-		Summary:                 correctionSummary(correction.Changes, zoneID),
+		Summary:                 correctionSummary(correction, zoneID),
 	}
 }
 
-func correctionSummary(changes storage.SleepCorrectionChanges, zoneID string) string {
+func correctionSummary(correction storage.SleepCorrectionRecord, zoneID string) string {
+	// A provider's word that its record is gone, or back, is no edit.
+	if sleepv1.IsSourcePresence(correction) {
+		if *correction.Changes.Excluded {
+			return "Removed at the source"
+		}
+		return "Back at the source"
+	}
+	changes := correction.Changes
 	var parts []string
 	location := locationOrUTC(zoneID)
 	if changes.StartAt != nil {
@@ -1372,26 +1452,55 @@ func requireDeleteConfirmation(value string) error {
 	return nil
 }
 
-// localPlanningAvailability builds the availability windows the scheduler and
-// the assistant context share: the current functional window (now until the
-// next predicted sleep) followed by the predicted waking windows.
+// localPlanningAvailability is the time the scheduler and the assistant
+// context may plan in: the stretches Home's outlook draws as awake, from now
+// to the end of the forecast.
+//
+// It used to be the estimator's waking envelopes as they stand. Those overlap
+// the sleep envelopes, so a task could be offered in hours the outlook draws
+// as uncertain, and nothing asked how old the records were, so the planner
+// went on suggesting times at full confidence days after Home had stopped
+// saying anything about the present. Both rules are now the outlook's: no
+// planning on evidence too old to say where the person is in their cycle, and
+// none in a stretch that may be sleep.
 func localPlanningAvailability(state localEstimateState, now time.Time) []domain.AvailabilityWindow {
-	zoneID := state.Estimate.AsOf.ZoneID
-	availability := append([]domain.AvailabilityWindow{}, state.Estimate.PredictedWakingWindows...)
-	if len(state.Estimate.PredictedSleepWindows) > 0 {
-		nextSleep := state.Estimate.PredictedSleepWindows[0].Interval
-		current := domain.AvailabilityWindow{
-			ID:         "current-functional-window",
-			Kind:       domain.AvailabilityFunctional,
-			Interval:   domain.TimeRange{Start: domain.MustZonedInstant(now, zoneID), End: nextSleep.Start},
-			Confidence: state.Estimate.Confidence,
-			EstimateID: state.Estimate.ID,
+	if !planningEvidenceIsCurrent(state, now) {
+		return nil
+	}
+	var recorded []domain.TimeRange
+	for _, session := range state.Sessions {
+		if session.Suppressed {
+			continue
 		}
-		if current.Interval.End.UTC.After(current.Interval.Start.UTC) {
-			availability = append([]domain.AvailabilityWindow{current}, availability...)
+		for _, interval := range session.Intervals {
+			if interval.Interval.End.UTC.After(now) {
+				recorded = append(recorded, interval.Interval)
+			}
 		}
 	}
-	return availability
+	return outlook.ConfidentWaking(state.Estimate, recorded, now, outlook.ForecastEnd(state.Estimate))
+}
+
+// planningEvidenceIsCurrent reports whether the sleep records are recent
+// enough to plan against, by the policy every other surface uses.
+func planningEvidenceIsCurrent(state localEstimateState, now time.Time) bool {
+	return assessFreshness(state, now).MayClaimCurrentState()
+}
+
+// unplacedForStaleEvidence says why nothing is suggested when the records are
+// too old, and the one thing that brings suggestions back.
+func unplacedForStaleEvidence(tasks []domain.FlexibleTask) []UnplacedDTO {
+	result := make([]UnplacedDTO, 0, len(tasks))
+	for _, task := range tasks {
+		result = append(result, UnplacedDTO{
+			TaskID:     string(task.ID),
+			Title:      task.Title,
+			Reason:     "Your newest sleep record is too old to plan against",
+			ReasonCode: string(scheduling.ReasonEstimateUnavailable),
+			NextAction: "Record your latest sleep, and suggested times return.",
+		})
+	}
+	return result
 }
 
 const (

@@ -55,6 +55,102 @@ func TestFreshnessLadder(t *testing.T) {
 	}
 }
 
+// A snapshot made from the freshness policy says when its own claim turns
+// (ADR-0071), and the page, the JSON and the live stream keep to that and not
+// to the hours since it was written. A 27-hour day goes as forecast for longer
+// than a day, and a night that went unrecorded is overdue sooner than six
+// hours after a late record.
+func TestThePageKeepsToTheSnapshotsOwnDeadlines(t *testing.T) {
+	now := time.Date(2026, 8, 3, 15, 0, 0, 0, time.UTC)
+	window := Window{StartAt: now.Add(-time.Hour), EndAt: now.Add(4 * time.Hour), ZoneID: "UTC"}
+	with := func(written, cautionAt, withheldAt time.Duration) Snapshot {
+		snapshot := snapshotAt(now.Add(written), window)
+		snapshot.CautionAt, snapshot.WithheldAt = now.Add(cautionAt), now.Add(withheldAt)
+		return snapshot
+	}
+
+	// Written 26 hours ago, and the day is still going as forecast.
+	onTrack := with(-26*time.Hour, 3*time.Hour, 9*time.Hour)
+	if view := BuildView(onTrack, now); view.Stale || view.Unavailable || !view.LikelyAwake {
+		t.Errorf("a day going as forecast: stale=%v unavailable=%v awake=%v", view.Stale, view.Unavailable, view.LikelyAwake)
+	}
+	if got := freshnessOf(onTrack, now); got != "current" {
+		t.Errorf("stream freshness = %q", got)
+	}
+	if dto := toAvailabilityDTO(onTrack, now); dto.Status != StatusAvailable || len(dto.Windows) != 1 {
+		t.Errorf("JSON withheld a day going as forecast: %+v", dto)
+	}
+	if next := nextChange(onTrack, now); !next.Equal(now.Add(3 * time.Hour)) {
+		t.Errorf("the page next changes at %s, want its caution", next)
+	}
+
+	// Written an hour ago, and the record it waits for is already overdue.
+	overdue := with(-time.Hour, -time.Minute, 5*time.Hour)
+	if view := BuildView(overdue, now); !view.Stale || view.Unavailable {
+		t.Errorf("an overdue record: stale=%v unavailable=%v", view.Stale, view.Unavailable)
+	}
+	if got := freshnessOf(overdue, now); got != "stale" {
+		t.Errorf("stream freshness = %q", got)
+	}
+
+	// The deadlines are inclusive: at the instant itself the claim has turned.
+	gone := with(-time.Hour, -6*time.Hour, 0)
+	if view := BuildView(gone, now); !view.Unavailable || view.LikelyAwake || len(view.Windows) != 0 {
+		t.Errorf("past its deadline: unavailable=%v awake=%v windows=%d", view.Unavailable, view.LikelyAwake, len(view.Windows))
+	}
+	if got := freshnessOf(gone, now); got != "unavailable" {
+		t.Errorf("stream freshness = %q", got)
+	}
+	if dto := toAvailabilityDTO(gone, now); dto.Status != StatusInsufficientData || len(dto.Windows) != 0 {
+		t.Errorf("JSON showed a forecast past its deadline: %+v", dto)
+	}
+
+	// The deadlines are kept with the snapshot and sent to no reader.
+	encoded, err := json.Marshal(toAvailabilityDTO(onTrack, now))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, private := range []string{"caution", "withheld"} {
+		if strings.Contains(strings.ToLower(string(encoded)), private) {
+			t.Errorf("the JSON carries %q: %s", private, encoded)
+		}
+	}
+	for name, bad := range map[string]Snapshot{
+		"only a caution":       {Version: 1, GeneratedAt: now, Status: StatusAvailable, CautionAt: now},
+		"only a deadline":      {Version: 1, GeneratedAt: now, Status: StatusAvailable, WithheldAt: now},
+		"the deadline earlier": {Version: 1, GeneratedAt: now, Status: StatusAvailable, CautionAt: now, WithheldAt: now.Add(-time.Minute)},
+	} {
+		if validateSnapshot(bad) == nil {
+			t.Errorf("a snapshot with %s was accepted", name)
+		}
+	}
+}
+
+// The deadlines survive being sealed and read back.
+func TestASnapshotsDeadlinesAreStoredWithIt(t *testing.T) {
+	h := newHarness(t)
+	now := h.clock.Now()
+	snapshot := snapshotAt(now.Add(-26*time.Hour), Window{StartAt: now.Add(-time.Hour), EndAt: now.Add(3 * time.Hour), ZoneID: "UTC"})
+	snapshot.CautionAt, snapshot.WithheldAt = now.Add(2*time.Hour), now.Add(8*time.Hour)
+	h.publish(h.profile.ID, snapshot)
+
+	read, err := h.store.ReadSnapshot(context.Background(), h.profile.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !read.CautionAt.Equal(snapshot.CautionAt) || !read.WithheldAt.Equal(snapshot.WithheldAt) {
+		t.Fatalf("read back %s and %s", read.CautionAt, read.WithheldAt)
+	}
+	cookie := h.sessionCookie(h.login(h.token, testPasscode, testOrigin))
+	var decoded availabilityDTO
+	if err := json.Unmarshal(h.get("/p/"+h.token+"/availability", cookie).Body.Bytes(), &decoded); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if decoded.Status != StatusAvailable || len(decoded.Windows) != 1 {
+		t.Errorf("a 26-hour-old snapshot inside its deadlines was withheld: %+v", decoded)
+	}
+}
+
 // TestEveryViewCarriesTheQualifier enforces the honesty budget: no rendered
 // state may omit the measured-uncertainty line.
 func TestEveryViewCarriesTheQualifier(t *testing.T) {
