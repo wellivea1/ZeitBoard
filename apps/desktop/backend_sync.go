@@ -334,6 +334,8 @@ func (a *App) syncNowLocked(parent context.Context) (BackendSyncStatusDTO, error
 	}
 	counts, syncErr := a.syncRecords(ctx, cfg, token)
 	if counts.pulled > 0 || counts.tombstonesApplied > 0 {
+		// A choice made on another device is followed here (ADR-0074).
+		_, _ = a.followSharedSettings(ctx)
 		a.announce("zeitboard:sync-applied")
 	}
 	a.backendConfigMu.Lock()
@@ -385,6 +387,7 @@ func (a *App) syncRecords(ctx context.Context, cfg backendSyncConfig, token stri
 	}
 	for _, push := range []func(context.Context, *storage.Store, desktopBackendClient) (int, error){
 		a.pushSleepRecords, a.pushTaskRecords, a.pushPlacementRecords, a.pushOwnerEventRecords, a.pushMedicationRecords, a.pushMarkerRecords, a.pushStatusRecords,
+		a.pushSettingRecords,
 	} {
 		pushed, err := push(ctx, store, client)
 		counts.pushed += pushed
@@ -697,6 +700,9 @@ func decodePulledRecord(record syncEnvelope) (storage.SyncPullRecord, error) {
 	case storage.SyncKindStatus:
 		var value storage.SyncPullStatus
 		return value, decode(&value.Report)
+	case storage.SyncKindSetting:
+		var value storage.SyncPullSetting
+		return value, decode(&value.Record)
 	case "tombstone":
 		var payload syncTombstonePayload
 		if err := decode(&payload); err != nil {

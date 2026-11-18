@@ -50,22 +50,35 @@ func waitAnalysis(t *testing.T, app *App, check func(*storage.SleepAnalysis) boo
 
 func TestBackgroundAnalysisPublishesAndExpiresWithNoViews(t *testing.T) {
 	a := newTestApp(t)
-	base := time.Date(2026, 9, 8, 12, 0, 1, 0, time.UTC)
+	seeded := time.Date(2026, 9, 8, 12, 0, 1, 0, time.UTC)
 	var clock atomic.Int64
-	clock.Store(base.UnixNano())
+	clock.Store(seeded.UnixNano())
 	a.nowFn = func() time.Time { return time.Unix(0, clock.Load()).UTC() }
-	seedAnalysisEvidence(t, a, base, base.Add(-6*time.Hour).Add(500*time.Millisecond))
+	seedAnalysisEvidence(t, a, seeded, seeded.Add(-6*time.Hour))
+	// The records are current until the latest likely wake of the sleep the
+	// forecast expects (ADR-0071), however long ago the last one arrived. The
+	// run starts half a second before that.
+	forecast, err := a.localEstimate(context.Background(), seeded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	latestWake := forecast.Estimate.PredictedSleepWindows[0].Interval.End.UTC
+	if latestWake.Sub(seeded) < 6*time.Hour {
+		t.Fatalf("the fixture's forecast sleep ends %s after the records; it tests nothing the fixed hours did not", latestWake.Sub(seeded))
+	}
+	base := latestWake.Add(-500 * time.Millisecond)
+	clock.Store(base.UnixNano())
 	a.startLocalAnalysis()
 	t.Cleanup(a.stopLocalAnalysis)
 	first := waitAnalysis(t, a, func(v *storage.SleepAnalysis) bool {
-		return v.Freshness != nil && v.Freshness.State == freshness.StateCurrent
+		return v.Freshness != nil && v.Freshness.State == freshness.StateCurrent && v.ValidUntil.Equal(latestWake)
 	})
-	if !first.ValidUntil.Equal(base.Add(500 * time.Millisecond)) {
+	if !first.ValidUntil.Equal(latestWake) {
 		t.Fatalf("expiry ignored policy: %v", first.ValidUntil)
 	}
-	clock.Store(base.Add(time.Second).UnixNano())
+	clock.Store(latestWake.Add(500 * time.Millisecond).UnixNano())
 	aged := waitAnalysis(t, a, func(v *storage.SleepAnalysis) bool {
-		return v.Freshness != nil && v.Freshness.State == freshness.StateStale
+		return v.Freshness != nil && v.Freshness.State == freshness.StateStale && v.Freshness.Reason == freshness.ReasonSleepRecordDue
 	})
 	if !aged.ChangedAt.After(first.ChangedAt) {
 		t.Fatal("expiry did not change materialized content stamp")

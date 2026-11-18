@@ -1,6 +1,7 @@
 # ADR 0031: Evidence freshness, real activity evidence, and shadow sleep inference
 
-- Status: accepted
+- Status: accepted; its freshness thresholds are revised by
+  [ADR-0071](0071-freshness-follows-the-forecast.md)
 - Date: 2026-08-04
 - Implements the first three slices of phase P7 in [`phase-goals.md`](../phase-goals.md),
   redirected by [`automaticity-review-2026-08-04.md`](../automaticity-review-2026-08-04.md).

@@ -359,7 +359,7 @@ func rhythmBandDTO(row estimation.RhythmBand) RhythmBandDTO {
 // freshnessInputs derives the shared policy's inputs. The newest evidence is
 // when a record was recorded, not when the sleep it describes occurred.
 func freshnessInputs(sessions []domain.SleepSession, nextSleep domain.TimeRange, now time.Time) freshness.Inputs {
-	in := freshness.Inputs{Now: now, ExpectedSleepOnset: nextSleep.Start.UTC}
+	in := freshness.Inputs{Now: now, ExpectedSleepOnset: nextSleep.Start.UTC, ExpectedSleepEnd: nextSleep.End.UTC}
 	for _, session := range sessions {
 		for _, interval := range session.Intervals {
 			end := interval.Interval.End.UTC

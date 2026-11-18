@@ -115,7 +115,7 @@ export function ShareLinkForm({
       )}
 
       <label>
-        <span>Name (stays on this device)</span>
+        <span>Name (kept on your own server; the link never shows it)</span>
         <input
           value={form.label}
           onChange={(event) => setForm({ ...form, label: event.target.value })}

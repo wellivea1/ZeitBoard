@@ -26,7 +26,7 @@ func TestEveryActionIsCompleteAndProposalsCannotApplyThemselves(t *testing.T) {
 			}
 			switch action.Subject {
 			case ScheduleSubject:
-			case DoseSubject, NewTaskSubject:
+			case DoseSubject, NewTaskSubject, StatusSubject:
 				// The server resolves only schedule changes, and the chat
 				// model sees no medication or titles: these wait on the
 				// owner's computer.
@@ -229,4 +229,39 @@ func union(lists ...[]string) []string {
 	}
 	sort.Strings(ids)
 	return ids
+}
+
+// What the owner says about now is theirs to say (ADR-0070): an agent can ask
+// for one of the statuses and a length, and nothing about who sees it.
+func TestStatusTargetRules(t *testing.T) {
+	for name, target := range map[string]StatusTarget{
+		"the usual length": {Status: "trying_to_sleep"},
+		"an hour":          {Status: "do_not_disturb", Minutes: 60},
+		"a day":            {Status: "awake", Minutes: 1440},
+		"taking it back":   {Status: "cleared"},
+	} {
+		if err := target.Validate(); err != nil {
+			t.Fatalf("%s was refused: %v", name, err)
+		}
+	}
+	for name, target := range map[string]StatusTarget{
+		"no status":            {},
+		"a made-up status":     {Status: "asleep"},
+		"too short":            {Status: "awake", Minutes: 4},
+		"longer than a day":    {Status: "awake", Minutes: 1441},
+		"clearing for a while": {Status: "cleared", Minutes: 30},
+	} {
+		if err := target.Validate(); err == nil {
+			t.Fatalf("%s was accepted", name)
+		}
+	}
+	schema := StatusTargetSchema()
+	properties := schema["properties"].(map[string]any)
+	if len(properties) != 2 || schema["additionalProperties"] != false {
+		t.Fatalf("the status target offers more than a status and a length: %v", properties)
+	}
+	action, ok := ProposalOn("propose_report_status", LocalMCP)
+	if !ok || !action.WaitsOnDesktop() || action.On(ChatAssistant|ServerMCP) {
+		t.Fatal("a status proposal must wait on the owner's computer and nowhere else")
+	}
 }

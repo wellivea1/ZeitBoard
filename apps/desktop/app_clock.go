@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 
 	"non24.app/core/civilfmt"
+	"non24.app/core/sharedsetting"
 	"non24.app/desktop/platform/regional"
 )
 
@@ -149,6 +150,13 @@ func (a *App) SaveClockSetting(input ClockSettingInput) (ClockSettingDTO, error)
 	defer a.regionalMu.Unlock()
 	if input.BaseRevision != a.regionalRevision {
 		return a.clockSettingLocked(true), nil
+	}
+	// Kept for the owner's other devices first (ADR-0074).
+	if state.Clock != a.regional.Clock {
+		if err := a.recordSharedSetting(a.applicationContext(), sharedsetting.Clock, sharedsetting.Word(state.Clock)); err != nil {
+			a.regionalErr = "The clock could not be stored, so the previous one is still in use."
+			return a.clockSettingLocked(false), errors.New("the clock could not be stored")
+		}
 	}
 	next := a.regionalRevision + 1
 	if a.configDir != "" {

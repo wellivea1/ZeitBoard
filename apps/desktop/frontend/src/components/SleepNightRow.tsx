@@ -13,6 +13,53 @@ import { nightWording, sourceWording } from "../utils/sleepWording";
 
 const correctionHistoryPerPage = 50;
 
+function isCorrected(entry: SleepEntry): boolean {
+  return (
+    entry.startLocal !== entry.effectiveStartLocal ||
+    entry.endLocal !== entry.effectiveEndLocal ||
+    entry.classification !== entry.effectiveClassification
+  );
+}
+
+/**
+ * The small-capital word beside a night. A night its source deleted is kept,
+ * and left out unless a correction of the owner's stands on it (ADR-0072).
+ */
+function nightState(entry: SleepEntry, corrected: boolean): string {
+  if (entry.needsReview) return "Needs review";
+  if (entry.removedAtSource && entry.suppressed) return "Removed at the source";
+  if (entry.suppressed) return "Excluded";
+  return corrected ? "Corrected" : "";
+}
+
+/** The line under a night: its length, its kind, its source, and its clock when away (ADR-0073). */
+function nightDetails(entry: SleepEntry): string[] {
+  const kind =
+    entry.effectiveClassification === "nap"
+      ? "Nap"
+      : entry.effectiveClassification === "unknown"
+        ? "Unclassified"
+        : "";
+  return [
+    entry.durationLabel,
+    kind,
+    sourceWording(entry.provenanceLabel),
+    entry.recordedAway ?? "",
+  ].filter(Boolean);
+}
+
+/** Why a night its source deleted is left out, or why it still counts. */
+function RemovedNote({ entry }: { entry: SleepEntry }) {
+  if (!entry.removedAtSource || entry.needsReview) return null;
+  return (
+    <p className="sleep-night-note">
+      {entry.suppressed
+        ? "Health Connect no longer has this night, so it is left out of estimates. Edit it to count it again."
+        : "Health Connect no longer has this night. It still counts, because your correction stands."}
+    </p>
+  );
+}
+
 export function SleepNightRow({
   entry,
   editing,
@@ -53,10 +100,7 @@ export function SleepNightRow({
 }) {
   const [historyPage, setHistoryPage] = useState(0);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const corrected =
-    entry.startLocal !== entry.effectiveStartLocal ||
-    entry.endLocal !== entry.effectiveEndLocal ||
-    entry.classification !== entry.effectiveClassification;
+  const corrected = isCorrected(entry);
   const historyPageCount = Math.max(1, Math.ceil(entry.history.length / correctionHistoryPerPage));
   const safeHistoryPage = Math.min(historyPage, historyPageCount - 1);
   const historyStart = safeHistoryPage * correctionHistoryPerPage;
@@ -68,22 +112,8 @@ export function SleepNightRow({
     endLabel: entry.effectiveEndLabel,
   });
   const name = `${night.day}, ${night.time}`;
-  const state = entry.needsReview
-    ? "Needs review"
-    : entry.suppressed
-      ? "Excluded"
-      : corrected
-        ? "Corrected"
-        : "";
-  const details = [
-    entry.durationLabel,
-    entry.effectiveClassification === "nap"
-      ? "Nap"
-      : entry.effectiveClassification === "unknown"
-        ? "Unclassified"
-        : "",
-    sourceWording(entry.provenanceLabel),
-  ].filter(Boolean);
+  const state = nightState(entry, corrected);
+  const details = nightDetails(entry);
 
   return (
     <li
@@ -151,6 +181,8 @@ export function SleepNightRow({
           </div>
         )}
       </div>
+
+      <RemovedNote entry={entry} />
 
       {entry.needsReview && (
         <div role="status" className="sleep-night-review">

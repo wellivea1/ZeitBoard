@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"non24.app/core/presence"
 	storage "non24.app/core/storage/sqlite"
 )
 
@@ -184,5 +185,92 @@ func TestAnAgentCannotProposeAnInvalidDoseOrTask(t *testing.T) {
 	}
 	if queue, err := app.GetAgentProposals(); err != nil || len(queue.Pending) != 0 {
 		t.Fatalf("an invalid proposal was queued: %+v, %v", queue, err)
+	}
+}
+
+// "Tell them I am trying to sleep": the status waits for the owner, as a dose
+// does. Accepting it is the owner's report, kept private unless their own
+// setting shares it; the agent cannot ask for it to be shared.
+func TestAnAgentProposesAStatusAndOnlyTheOwnerReportsIt(t *testing.T) {
+	app := newTestApp(t)
+	now := time.Date(2026, 11, 15, 21, 0, 0, 0, time.UTC)
+	app.nowFn = func() time.Time { return now }
+	capability := desktopLocalCapability{app: app}
+
+	var read agentReportedStatusDTO
+	if err := json.Unmarshal([]byte(callLocalAgentTool(t, capability, "get_reported_status", `{}`)), &read); err != nil || read.Status != "none" || read.ShareByDefault {
+		t.Fatalf("nothing reported should read as none and private: %+v %v", read, err)
+	}
+
+	proposed := proposeThroughTheEndpoint(t, capability, "propose_report_status", `{"target":{"status":"trying_to_sleep","minutes":90}}`)
+	if standing, err := app.GetReportedStatus(); err != nil || standing.Reported != "" {
+		t.Fatalf("a proposal reported a status: %+v %v", standing, err)
+	}
+	queue, err := app.GetAgentProposals()
+	if err != nil || len(queue.Pending) != 1 || queue.Pending[0].Reported == nil || queue.Pending[0].Dose != nil || queue.Pending[0].Task != nil {
+		t.Fatalf("queue = %+v, %v", queue, err)
+	}
+	waiting := queue.Pending[0]
+	if waiting.Title != "Report status" || waiting.Reported.Status != presence.TryingToSleep || waiting.Reported.Label != "Trying to sleep" ||
+		waiting.Reported.Minutes != 90 || waiting.Reported.Shared {
+		t.Fatalf("waiting status = %+v", waiting.Reported)
+	}
+
+	if _, err := app.DecideAgentProposal(AgentProposalDecisionInput{ProposalID: proposed.Proposals[0].ProposalID, Decision: "approved"}); err != nil {
+		t.Fatal(err)
+	}
+	standing, err := app.GetReportedStatus()
+	if err != nil || standing.Reported != presence.TryingToSleep || standing.Shared ||
+		standing.ExpiresAt != now.Add(90*time.Minute).Format(time.RFC3339) {
+		t.Fatalf("standing status = %+v, %v", standing, err)
+	}
+	if err := json.Unmarshal([]byte(callLocalAgentTool(t, capability, "get_reported_status", `{}`)), &read); err != nil ||
+		read.Status != presence.TryingToSleep || read.MayShowOnShareLinks || read.ExpiresAt == "" {
+		t.Fatalf("the agent reads %+v, %v", read, err)
+	}
+
+	// With the owner's setting on, an accepted proposal is shared as a tap would be.
+	if _, err := app.SaveStatusSettings(StatusSettingsInput{BaseRevision: standing.SettingsRevision, ShareByDefault: true}); err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(time.Minute)
+	again := proposeThroughTheEndpoint(t, capability, "propose_report_status", `{"target":{"status":"do_not_disturb"}}`)
+	if queue, err = app.GetAgentProposals(); err != nil || len(queue.Pending) != 1 || !queue.Pending[0].Reported.Shared || queue.Pending[0].Reported.Minutes != 120 {
+		t.Fatalf("the card should say it will be shared, for the usual two hours: %+v %v", queue.Pending, err)
+	}
+	if _, err := app.DecideAgentProposal(AgentProposalDecisionInput{ProposalID: again.Proposals[0].ProposalID, Decision: "approved"}); err != nil {
+		t.Fatal(err)
+	}
+	if standing, err = app.GetReportedStatus(); err != nil || standing.Reported != presence.DoNotDisturb || !standing.Shared {
+		t.Fatalf("standing status = %+v, %v", standing, err)
+	}
+
+	// Taking it back is a proposal too, and declining one changes nothing.
+	now = now.Add(time.Minute)
+	clear := proposeThroughTheEndpoint(t, capability, "propose_report_status", `{"target":{"status":"cleared"}}`)
+	if _, err := app.DecideAgentProposal(AgentProposalDecisionInput{ProposalID: clear.Proposals[0].ProposalID, Decision: "rejected"}); err != nil {
+		t.Fatal(err)
+	}
+	if standing, err = app.GetReportedStatus(); err != nil || standing.Reported != presence.DoNotDisturb {
+		t.Fatalf("declining cleared the status: %+v, %v", standing, err)
+	}
+	clear = proposeThroughTheEndpoint(t, capability, "propose_report_status", `{"target":{"status":"cleared"}}`)
+	if _, err := app.DecideAgentProposal(AgentProposalDecisionInput{ProposalID: clear.Proposals[0].ProposalID, Decision: "approved"}); err != nil {
+		t.Fatal(err)
+	}
+	if standing, err = app.GetReportedStatus(); err != nil || standing.Reported != "" {
+		t.Fatalf("accepting did not clear the status: %+v, %v", standing, err)
+	}
+
+	// Nothing about who sees it, and nothing out of the contract, can be asked.
+	for name, arguments := range map[string]string{
+		"sharing":            `{"target":{"status":"awake","shared":true}}`,
+		"a made-up status":   `{"target":{"status":"asleep"}}`,
+		"longer than a day":  `{"target":{"status":"awake","minutes":2000}}`,
+		"clearing for a bit": `{"target":{"status":"cleared","minutes":30}}`,
+	} {
+		if _, err := capability.CallTool(context.Background(), "propose_report_status", json.RawMessage(arguments)); err == nil {
+			t.Fatalf("%s was proposed", name)
+		}
 	}
 }

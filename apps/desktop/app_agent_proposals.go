@@ -8,12 +8,13 @@ import (
 	"time"
 
 	"non24.app/core/agentactions"
+	"non24.app/core/presence"
 	storage "non24.app/core/storage/sqlite"
 	"non24.app/desktop/internal/localagent"
 )
 
 // Proposals an agent makes that wait on this computer (ADR-0051): a dose to
-// record, a task to add. The local endpoint queues them; only the owner
+// record, a task to add, a status to report (ADR-0070). The local endpoint queues them; only the owner
 // approves one, from Home or Plan, and approving makes the same record the
 // owner's own entry would.
 
@@ -77,6 +78,29 @@ func (a *App) proposeTask(ctx context.Context, action string, arguments json.Raw
 	}, "The task is waiting for the owner to add it in ZeitBoard. Nothing is added until they accept it, and it lapses after a day.")
 }
 
+type localAgentStatusArguments struct {
+	Target agentactions.StatusTarget `json:"target"`
+}
+
+// proposeStatus queues a status an agent asked the owner to report, or to
+// take back. The proposal says nothing about who sees it: accepting it shares
+// the report or not by the owner's own setting, as a tap on Home would.
+func (a *App) proposeStatus(ctx context.Context, action string, arguments json.RawMessage) (localAgentProposalResult, error) {
+	var input localAgentStatusArguments
+	if err := decodeStrictJSON(arguments, &input); err != nil {
+		return localAgentProposalResult{}, localagent.UserError("Proposal arguments are invalid. Nothing was proposed.")
+	}
+	target := input.Target
+	target.Status = strings.TrimSpace(target.Status)
+	if err := target.Validate(); err != nil {
+		return localAgentProposalResult{}, invalidTarget(err)
+	}
+	now := a.currentTime().UTC().Truncate(time.Second)
+	return a.queueAgentProposal(action, func(store *storage.Store, id string) error {
+		return store.ProposeStatus(ctx, id, storage.ProposedStatus{Status: target.Status, Minutes: target.Minutes}, now)
+	}, "The status is waiting for the owner to report it in ZeitBoard. Nothing is reported until they accept it, and it lapses after a day.")
+}
+
 func invalidTarget(err error) error {
 	return localagent.UserError("The proposal target is invalid: " + err.Error() + ". Nothing was proposed.")
 }
@@ -123,13 +147,23 @@ type AgentProposalDTO struct {
 	ProposalID string `json:"proposalId"`
 	ActionID   string `json:"actionId"`
 	// Title is the card's title, from the action registry: "Record dose".
-	Title     string           `json:"title"`
-	State     string           `json:"state"`
-	CreatedAt string           `json:"createdAt"`
-	ExpiresAt string           `json:"expiresAt"`
-	DecidedAt string           `json:"decidedAt,omitempty"`
-	Dose      *ProposedDoseDTO `json:"dose,omitempty"`
-	Task      *ProposedTaskDTO `json:"task,omitempty"`
+	Title     string             `json:"title"`
+	State     string             `json:"state"`
+	CreatedAt string             `json:"createdAt"`
+	ExpiresAt string             `json:"expiresAt"`
+	DecidedAt string             `json:"decidedAt,omitempty"`
+	Dose      *ProposedDoseDTO   `json:"dose,omitempty"`
+	Task      *ProposedTaskDTO   `json:"task,omitempty"`
+	Reported  *ProposedStatusDTO `json:"reported,omitempty"`
+}
+
+// ProposedStatusDTO is a proposed status. Shared is what accepting it now
+// would do, by the owner's own setting; the proposal cannot ask for it.
+type ProposedStatusDTO struct {
+	Status  string `json:"status"`
+	Label   string `json:"label"`
+	Minutes int    `json:"minutes"`
+	Shared  bool   `json:"shared"`
 }
 
 // ProposedDoseDTO is a proposed dose: the instant, and the zone it was
@@ -186,6 +220,10 @@ func (a *App) DecideAgentProposal(input AgentProposalDecisionInput) (AgentPropos
 	proposalID := strings.TrimSpace(input.ProposalID)
 	switch input.Decision {
 	case storage.AgentProposalApproved:
+		if a.isStatusProposal(ctx, store, proposalID, now) {
+			err = a.approveStatusProposal(ctx, store, proposalID)
+			break
+		}
 		_, err = store.ApproveAgentProposal(ctx, proposalID, now, newLocalID)
 	case storage.AgentProposalRejected:
 		err = store.RejectAgentProposal(ctx, proposalID, now)
@@ -205,6 +243,50 @@ func (a *App) DecideAgentProposal(input AgentProposalDecisionInput) (AgentPropos
 	return a.agentProposals(ctx, store, now)
 }
 
+// isStatusProposal reports whether a listed proposal is a status to report.
+// One that is not listed is left to the general approval, which says why.
+func (a *App) isStatusProposal(ctx context.Context, store *storage.Store, proposalID string, now time.Time) bool {
+	proposals, err := store.AgentProposals(ctx, now)
+	if err != nil {
+		return false
+	}
+	for _, proposal := range proposals {
+		if proposal.ProposalID == proposalID {
+			return proposal.Status != nil
+		}
+	}
+	return false
+}
+
+// approveStatusProposal makes an accepted proposal the owner's report: the
+// same report a tap on Home makes, shared or not by the owner's own setting,
+// and in the same transaction as the decision.
+func (a *App) approveStatusProposal(ctx context.Context, store *storage.Store, proposalID string) error {
+	a.statusMu.Lock()
+	defer a.statusMu.Unlock()
+	settings, _ := a.loadStatusSettings()
+	// Read before the transaction opens: the store has one connection, and a
+	// read inside the approval would wait on the approval itself.
+	at, err := a.nextStatusTime(ctx, store)
+	if err != nil {
+		return err
+	}
+	_, err = store.ApproveStatusProposal(ctx, proposalID, at, func(asked storage.ProposedStatus) (presence.Report, error) {
+		if asked.Status == presence.Cleared {
+			return statusReportAt(at, presence.Cleared, 0, false), nil
+		}
+		lifetime := presence.DefaultLifetime(asked.Status)
+		if asked.Minutes != 0 {
+			lifetime = time.Duration(asked.Minutes) * time.Minute
+		}
+		return statusReportAt(at, asked.Status, lifetime, settings.ShareByDefault), nil
+	})
+	if err == nil {
+		a.wakeDesktopBackground()
+	}
+	return err
+}
+
 func (a *App) agentProposals(ctx context.Context, store *storage.Store, now time.Time) (AgentProposalsDTO, error) {
 	proposals, err := store.AgentProposals(ctx, now)
 	if err != nil {
@@ -219,8 +301,12 @@ func (a *App) agentProposals(ctx context.Context, store *storage.Store, now time
 		labels[medication.MedicationID] = medication.Label
 	}
 	result := AgentProposalsDTO{SchemaVersion: "v1", Pending: []AgentProposalDTO{}, History: []AgentProposalDTO{}}
+	shareStatus, _ := a.loadStatusSettings()
 	for _, proposal := range proposals {
 		dto := agentProposalDTO(proposal, labels)
+		if dto.Reported != nil && dto.Reported.Status != presence.Cleared {
+			dto.Reported.Shared = shareStatus.ShareByDefault
+		}
 		if proposal.State != storage.AgentProposalPending {
 			if len(result.History) < agentProposalHistoryShown {
 				result.History = append(result.History, dto)
@@ -261,6 +347,13 @@ func agentProposalDTO(proposal storage.AgentProposal, labels map[string]string) 
 		if task.LatestFinishAt != nil {
 			dto.Task.LatestFinishAt = task.LatestFinishAt.UTC().Format(time.RFC3339)
 		}
+	}
+	if status := proposal.Status; status != nil {
+		minutes := status.Minutes
+		if minutes == 0 && status.Status != presence.Cleared {
+			minutes = int(presence.DefaultLifetime(status.Status) / time.Minute)
+		}
+		dto.Reported = &ProposedStatusDTO{Status: status.Status, Label: statusWords(status.Status), Minutes: minutes}
 	}
 	return dto
 }

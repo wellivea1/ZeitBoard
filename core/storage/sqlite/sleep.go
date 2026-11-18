@@ -50,6 +50,9 @@ type SleepObservationProvenance = sleepv1.Provenance
 type SleepCorrectionRecord = sleepv1.Correction
 type SleepCorrectionChanges = sleepv1.CorrectionChanges
 
+// SleepSourceOffset is the clock a night away was recorded on (ADR-0073).
+type SleepSourceOffset = sleepv1.SourceOffset
+
 type SleepObservationSet struct {
 	SchemaVersion string                   `json:"schema_version"`
 	GeneratedAt   time.Time                `json:"generated_at"`

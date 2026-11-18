@@ -14,6 +14,9 @@ interface SyncReplicaStore {
     fun cache(projection: JsonObject, receivedAt: Instant)
     fun state(): CompanionState
     fun knownSources(): Map<String, SourceSyncRevision>
+
+    /** The choice that stands for each name that travels between devices, downloaded or this phone's own (ADR-0074). */
+    fun standingChoices(): Map<String, SharedChoice> = emptyMap()
     fun cachedReview(observationId: String): SleepReview?
     fun cacheReview(review: JsonObject)
     fun clear()
@@ -111,11 +114,14 @@ class SQLiteSyncReplicaStore(private val database: () -> SQLiteDatabase) : SyncR
                 }
             }
         }
+        // The provider's last word, including one this phone has not uploaded yet.
+        val removed = providerWords(database()).filterValues { it }.keys
         val sources = database().rawQuery("SELECT record_id, payload FROM sync_replica WHERE observation_kind = 'sleep_episode' ORDER BY seq DESC LIMIT 500", null).use { rows ->
             buildList {
                 while (rows.moveToNext()) {
                     val payload = Json.parseToJsonElement(rows.getString(1)).jsonObject
-                    add(SyncedSleep(rows.getString(0), payload.instant("start_at"), payload.instant("end_at"), payload.string("zone_id"), rows.getString(0) in corrected))
+                    val id = rows.getString(0)
+                    add(SyncedSleep(id, payload.instant("start_at"), payload.instant("end_at"), payload.string("zone_id"), id in corrected, id in removed))
                 }
             }
         }
@@ -202,6 +208,8 @@ class SQLiteSyncReplicaStore(private val database: () -> SQLiteDatabase) : SyncR
         }
         return newestStatus(downloaded + queued)
     }
+
+    override fun standingChoices(): Map<String, SharedChoice> = standingChoices(database())
 
     override fun cachedReview(observationId: String): SleepReview? = meta("review:$observationId")?.let { parseSleepReview(Json.parseToJsonElement(it).jsonObject) }
 

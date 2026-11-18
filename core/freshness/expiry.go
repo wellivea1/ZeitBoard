@@ -18,47 +18,17 @@ import "time"
 // answer and publishes it idempotently, which costs a few milliseconds. A late
 // one would leave a stale claim standing, which is the defect.
 //
-// A zero return means nothing further changes on its own — either there is no
-// evidence at all, or the state is already withheld and no threshold remains.
+// Both deadlines are inclusive, so a run scheduled for the returned instant
+// finds the state changed. A zero return means nothing further changes on its
+// own: either there is no evidence at all, or the state is already withheld.
 func (p Policy) NextChange(in Inputs) time.Time {
-	if p.StaleAfter <= 0 || p.WithholdAfter <= 0 {
-		p = Default()
-	}
-	if in.NewestEvidence.IsZero() {
-		// No evidence never becomes fresh by waiting. Only an arrival changes
-		// this, and an arrival is an input change, not an expiry.
-		return time.Time{}
-	}
+	cautionAt, withheldAt := p.Deadlines(in)
 	now := in.Now.UTC()
-	evidence := in.NewestEvidence.UTC()
-
-	var next time.Time
-	consider := func(candidate time.Time) {
-		if candidate.IsZero() || !candidate.After(now) {
-			return
-		}
-		if next.IsZero() || candidate.Before(next) {
-			next = candidate
-		}
+	switch {
+	case cautionAt.After(now):
+		return cautionAt
+	case withheldAt.After(now):
+		return withheldAt
 	}
-
-	consider(evidence.Add(p.StaleAfter))
-	consider(evidence.Add(p.WithholdAfter))
-
-	// The unrecorded-sleep deadline only exists while the expectation is still
-	// outstanding. Sleep recorded at or after the predicted onset discharges it
-	// permanently, matching sleepIsOverdue.
-	if !in.ExpectedSleepOnset.IsZero() {
-		onset := in.ExpectedSleepOnset.UTC()
-		if in.LatestSleepEnd.IsZero() || in.LatestSleepEnd.UTC().Before(onset) {
-			// One tick past the deadline, not on it. The age thresholds are
-			// inclusive (`age >= StaleAfter`) but sleepIsOverdue is strict, so
-			// a run scheduled for the exact instant would find nothing changed
-			// and schedule its next wake from the wrong state — leaving the
-			// claim standing until some later threshold happened to catch it.
-			consider(onset.Add(p.SleepOverdueGrace).Add(time.Nanosecond))
-		}
-	}
-
-	return next
+	return time.Time{}
 }

@@ -4170,3 +4170,132 @@ app; its component test and the server's endpoint were, separately. The browser 
 take screenshots, so the computer's screens were read as text and styles, not looked at. Nothing
 was run with TalkBack. The assistant cannot read or propose a status yet.
 
+## What was left after the reported status — 2026-11-15
+
+The items the entry above listed as not built or not checked, and the recommendations of
+`settings-architecture-review-2026-11-15.md`.
+
+**Held by tests.**
+
+- **A status proposal.** The registry test holds that `propose_report_status` waits on the
+  owner's computer and is offered to no model and no server. Its target takes a status and a
+  length and nothing else. In the store, a proposed status is no report until it is approved, the
+  general approval refuses it, approving twice changes nothing, and the accepted report waits to
+  upload. On the computer, through the local endpoint's own dispatch: an agent reads "none",
+  proposes, and nothing stands until the owner accepts; the accepted report is private while the
+  owner's setting is off and shared once it is on, and the card says which beforehand; a proposed
+  `cleared` takes the status back only when accepted; a proposal that names `shared` is refused.
+- **An older proposal queue is made again**, since its table could not hold the new action.
+- **The window** reads a proposed status, words it ("for 1 hour 30 minutes, kept to your own
+  devices"), and refuses one out of the contract.
+- **The phone** makes a report of the chosen length and refuses one over a day, under five
+  minutes, or a length on taking a status back.
+- **Settings files.** `TestEverySettingsFileIsInTheTable` reads the desktop package's source and
+  fails for a `.json` file name the table does not list. The readout checks each file's last
+  good copy.
+- **Closed notices.** On the computer: the list survives a restart, an empty stored list is kept
+  as the owner's choice to see every note, a stale save loses, and only note ids are stored. In
+  the window: the desktop's list is taken at start, the window's is handed over only where the
+  desktop has none, and a close is saved against the revision the desktop holds.
+
+**Run in the computer app against a local server** (throwaway profile, synthetic link):
+
+- The computer enrolled with the server and listed the link.
+- "Change what it shows" set the link from the status to "only that it is not a good time". The
+  list read "that it is not a good time, while you are trying to sleep or ask not to be
+  disturbed".
+- "Do not disturb", shared, from Home: "It has reached your server", and the link's page read
+  "Reported: Not a good time right now" a few seconds later.
+- A note closed on Home was stored by the desktop. With the window's storage cleared and the
+  page reloaded, the note stayed closed.
+- **A status proposed through the local endpoint itself**, over MCP with the token from the
+  app's own `local-agent.json`. `get_reported_status` and `propose_report_status` were listed.
+  The first read the status the phone had reported a minute before. The second queued a
+  proposal, and Home showed "Trying to sleep: a status your assistant asked you to report, for
+  1 hour 30 minutes, kept to your own devices". Accept made the report, standing for those 90
+  minutes and kept private, and announced "Reported the status". A proposal that named
+  `shared` was refused.
+
+**Run on the emulator.** The phone showed "The next one lasts" with Usual, 1 h, 2 h, 4 h and 8 h. With 1 h chosen, "Trying to sleep" stood from 05:21 until 06:21 and reached the server, and the choice went back to Usual.
+
+**Found on the way and fixed.** The new-link form said a link's name "stays on this device". It
+is kept on the owner's server, encrypted, and every enrolled device lists it. The form now says
+so. The first version of the status approval read the store from inside its own transaction and
+waited on itself; the reports are read before the transaction opens.
+
+**Checks.** `gofmt`, `go vet` and every Go test in core, the server and the desktop; the contract
+fixtures; the Android unit tests, lint and debug build; and the web check: format, lint, types,
+builds and 728 and 6 tests.
+
+**Not checked.** The proposal was made by a script speaking MCP to the endpoint, not by an
+assistant deciding to. The browser pane still could not take screenshots, so the computer's
+screens were read as text. Nothing was run with TalkBack.
+
+
+## Freshness, removed nights, nights away and choices that travel — 2026-11-17
+
+The four items left open on 2026-11-15, each built to the rule the owner chose (ADR-0071 to
+ADR-0074). Begun in one session and finished in another; the records below are of the code as
+committed.
+
+**Held by tests.**
+
+- **Freshness follows the forecast** (ADR-0071). `core/freshness`: the records are current until
+  the latest likely wake of the forecast sleep, a caution follows for six hours, then the state is
+  withheld; sleep recorded since the forecast onset discharges it, and without a forecast the
+  fixed hours stand. `NextChange` is never late and a run at the returned instant sees the change.
+  The share page keeps a snapshot's own two instants and applies them itself, and a snapshot
+  without them keeps the fixed hours. `TestA27HourDayIsSharedForAsLongAsItGoesAsForecast` walks a
+  simulated 27-hour history through the materializer.
+- **A night its source removed** (ADR-0072). In `core/sleepv1`, only a provider may say a record
+  is gone or back, and only by leaving it out or counting it again; the word moves no source
+  revision, so the owner's reviewed correction stays reviewed; the owner's correction counts a
+  removed night again. The phone writes `testdata/v1/sync-android-source-presence.json` byte for
+  byte and the server validates and folds it. On the phone, a source is said to be gone once, and
+  only one this phone read and synced, that began a day or more inside a complete read's window;
+  without a complete read nothing is judged. The phone's own stores list its synced reads with
+  the provider's last word, and its list marks a night gone until it is back (instrumented). The
+  computer's log marks a removed night, says how to count it again, and keeps it out of the
+  estimate until the owner's correction counts it.
+- **A night recorded away** (ADR-0073). The contract and the server refuse an offset with one end,
+  an offset that is the zone's own, and one on an activity record. The phone sends a night away
+  with its offsets and a night at home without, follows daylight saving, holds only a night with
+  no clock, and looks again at a correction held under the old rule. The computer and the phone
+  say "Recorded 6 hours ahead of home", or behind, by the end that differs.
+- **Choices that travel** (ADR-0074). `core/sharedsetting` takes only the three choices and the
+  values each can have, and settles two made in one instant the same way everywhere. The
+  computer records a change before storing it, sends it once, follows a newer one from another
+  device, ignores an older one, and dates its own after the one standing when its clock is
+  behind; the store keeps, uploads, follows and erases them. The phone takes a newer choice made
+  elsewhere, sends its own when newer, and sends it once. The server's drift tests refuse a
+  switch set to a word, a clock set to a switch, a choice that stays on its device, and one with
+  no time. The window reads the status choices and the clock again when a choice from the phone
+  is followed.
+- **The phone's review reader** accepts the server's `removed_at_source` and `source_offset`,
+  which it had refused, and still refuses keys it does not know.
+
+**Run end to end** on a throwaway server built from this tree, with synthetic records only. A
+second synthetic device pushed a night recorded six hours ahead of home, a night its source then
+removed, and a 24-hour clock chosen there.
+
+- **The phone** (emulator, new build) synced and took the 24-hour clock, which it had never
+  chosen itself. Its list marked the removed night "Removed at the source". Its review of the
+  night away said "Recorded 6 hours ahead of home", read from the server's review. Its review of
+  the removed night said that Health Connect no longer has it, that it is left out, and how to
+  count it again. Choosing 12-hour on the phone uploaded at once.
+- **The computer** (the real app, on a throwaway profile enrolled with that server) followed the
+  phone's 12-hour clock in its first sync; the profile had no clock file before. Its log showed
+  the night away with "Recorded 6 hours ahead of home", and the removed night marked, left out,
+  with its note and with Exclude unavailable.
+- **Sharing travelled back.** Ticking "Let links show what I report" on the computer's Sharing
+  screen, which now says the phone follows it, turned the phone's switch on after its next sync.
+- **The owner's correction counts a removed night again.** Editing it on the computer and
+  unticking Exclude left it counting, with "It still counts, because your correction stands." The
+  phone, after syncing, said its open review was out of date; reloaded, it said the same.
+
+**Found on the way and fixed.** The phone's review reader refused the server's new
+`removed_at_source` field, so every review on the phone would have failed. The store's erase-all
+left status reports and source reports behind; only tests call it. The changed files had been
+written with Windows line endings, which `gofmt` flagged; they are LF again, as `.gitattributes`
+asks. The pull preparation and the night row each went over the complexity limits, and were
+split.

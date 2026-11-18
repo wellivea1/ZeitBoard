@@ -176,6 +176,40 @@ type Snapshot struct {
 	// Reported is the status the owner reported, cut down to what this link
 	// may show, or nil. It is read against the clock when the page is drawn.
 	Reported *ReportedStatus
+
+	// CautionAt and WithheldAt are when this snapshot's forecast turns with
+	// no new record, as the shared freshness policy judged it when the
+	// snapshot was made (ADR-0071): from CautionAt the page adds its
+	// caution, and from WithheldAt it shows no windows. The page applies
+	// them itself, so a claim cannot outlive them if nothing republishes.
+	// They stay on the server. No reader is sent them.
+	CautionAt  time.Time
+	WithheldAt time.Time
+}
+
+// deadlines are when the page adds its caution and when it stops showing the
+// forecast. A snapshot published without them keeps the fixed hours from the
+// time it last changed.
+func (s Snapshot) deadlines() (cautionAt, withheldAt time.Time) {
+	if !s.WithheldAt.IsZero() {
+		return s.CautionAt, s.WithheldAt
+	}
+	if s.GeneratedAt.IsZero() {
+		return time.Time{}, time.Time{}
+	}
+	return s.GeneratedAt.Add(StaleAfter), s.GeneratedAt.Add(UnavailableAfter)
+}
+
+// cautionDue reports whether the forecast is shown with its caution at now.
+func (s Snapshot) cautionDue(now time.Time) bool {
+	cautionAt, _ := s.deadlines()
+	return !cautionAt.IsZero() && !now.Before(cautionAt)
+}
+
+// withheld reports whether the forecast is too old to show at now.
+func (s Snapshot) withheld(now time.Time) bool {
+	_, withheldAt := s.deadlines()
+	return !withheldAt.IsZero() && !now.Before(withheldAt)
 }
 
 // snapshotPayload is what is sealed in a snapshot row. A row written before
@@ -186,6 +220,8 @@ type snapshotPayload struct {
 	DosesShared  bool            `json:"dosesShared,omitempty"`
 	SkippedDoses []SkippedDose   `json:"skippedDoses,omitempty"`
 	Reported     *ReportedStatus `json:"reported,omitempty"`
+	CautionAt    time.Time       `json:"cautionAt,omitzero"`
+	WithheldAt   time.Time       `json:"withheldAt,omitzero"`
 }
 
 type Store struct {
@@ -683,7 +719,7 @@ func (s *Store) PublishSnapshot(ctx context.Context, profileID string, snapshot 
 	}
 	payload, err := json.Marshal(snapshotPayload{
 		Windows: snapshot.Windows, DosesShared: snapshot.DosesShared, SkippedDoses: snapshot.SkippedDoses,
-		Reported: snapshot.Reported,
+		Reported: snapshot.Reported, CautionAt: snapshot.CautionAt, WithheldAt: snapshot.WithheldAt,
 	})
 	if err != nil {
 		return err
@@ -755,6 +791,8 @@ func (s *Store) ReadSnapshot(ctx context.Context, profileID string) (Snapshot, e
 	snapshot.DosesShared = payload.DosesShared
 	snapshot.SkippedDoses = payload.SkippedDoses
 	snapshot.Reported = payload.Reported
+	snapshot.CautionAt = payload.CautionAt
+	snapshot.WithheldAt = payload.WithheldAt
 	return snapshot, nil
 }
 
@@ -781,6 +819,9 @@ func validateSnapshot(snapshot Snapshot) error {
 	}
 	if snapshot.GeneratedAt.IsZero() {
 		return errors.New("portal snapshot requires a generation time")
+	}
+	if snapshot.WithheldAt.IsZero() != snapshot.CautionAt.IsZero() || snapshot.WithheldAt.Before(snapshot.CautionAt) {
+		return errors.New("portal snapshot deadlines must both be set, the caution first")
 	}
 	for _, window := range snapshot.Windows {
 		if !window.EndAt.After(window.StartAt) {

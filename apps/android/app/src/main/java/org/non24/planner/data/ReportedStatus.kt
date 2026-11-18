@@ -36,6 +36,15 @@ object StatusReporting {
         else -> Duration.ofHours(4)
     }
 
+    /**
+     * The lengths the phone offers for the next report, in minutes. Zero is
+     * the status's own usual length.
+     */
+    val LIFETIME_CHOICES: List<Int> = listOf(0, 60, 120, 240, 480)
+
+    /** "Usual", "1 h", "8 h": a length as its choice reads. */
+    fun lifetimeWords(minutes: Int): String = if (minutes == 0) "Usual" else "${minutes / 60} h"
+
     fun words(status: String): String = when (status) {
         AWAKE -> "Awake"
         TRYING_TO_SLEEP -> "Trying to sleep"
@@ -104,16 +113,21 @@ internal fun validateSyncedEvent(recordId: String, payload: JsonObject) {
 internal fun newestStatus(reports: List<CompanionStatus>): CompanionStatus? =
     reports.maxWithOrNull(compareBy<CompanionStatus>({ it.reportedAt }, { it.statusId }))
 
-/** A report made on this phone, ready to queue for the owner's server. */
-internal fun statusRecord(statusId: String, status: String, at: Instant, shared: Boolean): OutboxRecord {
+/**
+ * A report made on this phone, ready to queue for the owner's server.
+ * [minutes] is how long it stands; zero is the status's usual length.
+ */
+internal fun statusRecord(statusId: String, status: String, at: Instant, shared: Boolean, minutes: Int = 0): OutboxRecord {
     require(validSyncId(statusId) && status in StatusReporting.STATUSES)
+    require(minutes == 0 || (status != StatusReporting.CLEARED && minutes in 5..StatusReporting.MAX_LIFETIME.toMinutes().toInt()))
+    val lifetime = if (minutes == 0) StatusReporting.defaultLifetime(status) else Duration.ofMinutes(minutes.toLong())
     val reported = at.truncatedTo(ChronoUnit.MILLIS)
     val payload = buildJsonObject {
         put("status_id", statusId)
         put("status", status)
         put("reported_at", reported.toString())
         if (status != StatusReporting.CLEARED) {
-            put("expires_at", reported.plus(StatusReporting.defaultLifetime(status)).toString())
+            put("expires_at", reported.plus(lifetime).toString())
         }
         put("shared", status != StatusReporting.CLEARED && shared)
     }

@@ -11,6 +11,22 @@
 // The rule is therefore keyed on evidence, not computation, and it is shared by
 // the desktop, the server projection, the local agent, and the portal so the
 // four cannot drift apart.
+//
+// # The forecast says when the next record is due
+//
+// The first rule counted hours from the newest record: caution after six,
+// nothing after twenty-four, and nothing six hours after sleep was forecast to
+// begin. A source that reports a night once it is over, as a watch does, made
+// that most of every waking day and the second half of every sleep, and a
+// longer cycle made it worse. Hours since the last record say little; what
+// matters is whether a record that should have arrived has not.
+//
+// So the rule follows the forecast (ADR-0071). The records are current
+// through the waking stretch and the sleep the forecast expects, whatever the
+// cycle length. Once the latest likely wake of that sleep has passed with no
+// record of it, the claim carries a caution for a grace period, and after
+// that no claim is made. The fixed hours remain for the one case with no
+// forecast to follow.
 package freshness
 
 import (
@@ -44,17 +60,25 @@ const (
 	// ReasonNoEvidence: nothing has ever been recorded.
 	ReasonNoEvidence Reason = "no_evidence"
 
-	// ReasonEvidenceAging: past the stale threshold but still usable.
+	// ReasonEvidenceAging: past the stale threshold but still usable. Only
+	// where there is no forecast to follow.
 	ReasonEvidenceAging Reason = "evidence_aging"
 
-	// ReasonEvidenceStale: past the withhold threshold.
+	// ReasonEvidenceStale: past the withhold threshold. Only where there is
+	// no forecast to follow.
 	ReasonEvidenceStale Reason = "evidence_stale"
 
-	// ReasonExpectedSleepUnrecorded: the estimate said sleep should already
-	// have happened and nothing recorded it. This is the case a pure age
+	// ReasonSleepRecordDue: the latest likely wake of the forecast sleep has
+	// passed and no record of that sleep has arrived yet. A watch that has
+	// not synced looks like this, and so does a night nobody recorded, so the
+	// claim stands with a caution for the grace period.
+	ReasonSleepRecordDue Reason = "sleep_record_due"
+
+	// ReasonExpectedSleepUnrecorded: the forecast sleep is over, the grace
+	// has run out, and nothing recorded it. This is the case a pure age
 	// threshold misses, and it is exactly how "Likely awake" survives for
-	// days: the last wake is old but not old enough to trip a 24-hour rule,
-	// while the sleep that must have occurred since is simply absent.
+	// days: the sleep that must have occurred since the last record is
+	// simply absent.
 	ReasonExpectedSleepUnrecorded Reason = "expected_sleep_unrecorded"
 
 	// ReasonNoSourcesReporting: sources are configured but none is delivering.
@@ -63,29 +87,31 @@ const (
 
 // Policy is the threshold set. The zero value is not usable; use Default.
 type Policy struct {
+	// RecordOverdueGrace is how long a claim may stand, with its caution,
+	// after the latest likely wake of the forecast sleep has passed with no
+	// record of that sleep. It absorbs ordinary forecast error and a source
+	// that syncs late; ADR-0022 measured a 5.41 h P90 error, so a grace
+	// shorter than that would withhold on correct behaviour.
+	RecordOverdueGrace time.Duration
+
 	// StaleAfter is how old the newest evidence may be before a claim must
-	// carry its age.
+	// carry its age, where there is no forecast to follow.
 	StaleAfter time.Duration
 
 	// WithholdAfter is how old the newest evidence may be before no
-	// current-state claim may be made at all.
+	// current-state claim may be made at all, where there is no forecast to
+	// follow.
 	WithholdAfter time.Duration
-
-	// SleepOverdueGrace is how far past a predicted sleep onset the user may
-	// be before an unrecorded sleep withholds the claim. It absorbs ordinary
-	// forecast error rather than firing on every late night; ADR-0022
-	// measured a 1.71 h median and 5.41 h P90 onset error, so a grace shorter
-	// than the P90 would withhold constantly on correct behaviour.
-	SleepOverdueGrace time.Duration
 }
 
-// Default matches the thresholds the availability portal already publishes, so
-// adopting the shared policy does not silently change what visitors were told.
+// Default is the owner's choice of 2026-11-17 (ADR-0071): follow the
+// forecast, with six hours of caution once a record is overdue. The fixed
+// hours are ADR-0031's, kept for evidence that has no forecast beside it.
 func Default() Policy {
 	return Policy{
-		StaleAfter:        6 * time.Hour,
-		WithholdAfter:     24 * time.Hour,
-		SleepOverdueGrace: 6 * time.Hour,
+		RecordOverdueGrace: 6 * time.Hour,
+		StaleAfter:         6 * time.Hour,
+		WithholdAfter:      24 * time.Hour,
 	}
 }
 
@@ -98,12 +124,16 @@ type Inputs struct {
 	// to one. It is deliberately not the time the estimate was computed.
 	NewestEvidence time.Time
 
-	// ExpectedSleepOnset is the start of the next predicted sleep window as of
-	// the last analysis. Zero when the estimator refused or none exists.
+	// ExpectedSleepOnset and ExpectedSleepEnd are the first predicted sleep
+	// window of the last analysis: its earliest likely onset and its latest
+	// likely wake. That window is the first sleep after the newest recorded
+	// one, so it is the sleep whose record is awaited. Both are zero when
+	// the estimator refused or there is no forecast.
 	ExpectedSleepOnset time.Time
+	ExpectedSleepEnd   time.Time
 
-	// LatestSleepEnd is the end of the newest recorded principal sleep. It is
-	// used to tell "sleep already recorded since the prediction" from "sleep
+	// LatestSleepEnd is the end of the newest recorded sleep. It is used to
+	// tell "sleep already recorded since the prediction" from "sleep
 	// predicted and never recorded".
 	LatestSleepEnd time.Time
 
@@ -141,9 +171,7 @@ func (a Assessment) MayClaimCurrentState() bool {
 
 // Assess applies the policy. It is pure: no clock, no I/O, no storage.
 func (p Policy) Assess(in Inputs) Assessment {
-	if p.StaleAfter <= 0 || p.WithholdAfter <= 0 {
-		p = Default()
-	}
+	p = p.orDefault()
 	now := in.Now.UTC()
 
 	if in.NewestEvidence.IsZero() {
@@ -161,59 +189,101 @@ func (p Policy) Assess(in Inputs) Assessment {
 		age = 0
 	}
 	assessment := Assessment{EvidenceAge: age, HasEvidence: true}
+	due := p.deadlines(in)
+	withheld := !now.Before(due.withheldAt)
 
 	switch {
-	case age >= p.WithholdAfter:
+	case withheld && due.forecast:
+		assessment.State = StateWithheld
+		assessment.Reason = ReasonExpectedSleepUnrecorded
+		assessment.Explanation = "A sleep was expected to be over by now and no record of it has arrived, so the current state is unknown."
+
+	case withheld:
 		assessment.State = StateWithheld
 		assessment.Reason = ReasonEvidenceStale
 		assessment.Explanation = fmt.Sprintf(
 			"The newest sleep record is %s old, so the current state is not shown. An out-of-date answer is worse than none.",
 			describeAge(age))
-		return assessment
-
-	case p.sleepIsOverdue(in, now):
-		// Deliberately checked before the aging branch: an unrecorded sleep is
-		// a stronger signal than an age threshold, and the reason is more
-		// useful to the person reading it.
-		assessment.State = StateWithheld
-		assessment.Reason = ReasonExpectedSleepUnrecorded
-		assessment.Explanation = "Sleep was expected by now and none has been recorded, so the current state is unknown rather than awake."
-		return assessment
 
 	case in.SourcesConfigured > 0 && in.SourcesReporting == 0:
 		assessment.State = StateWithheld
 		assessment.Reason = ReasonNoSourcesReporting
 		assessment.Explanation = "No configured source is reporting, so the current state cannot be confirmed."
-		return assessment
 
-	case age >= p.StaleAfter:
+	case now.Before(due.cautionAt):
+		assessment.State = StateCurrent
+		assessment.Reason = ReasonFresh
+		assessment.Explanation = "Based on recent records."
+
+	case due.forecast:
+		assessment.State = StateStale
+		assessment.Reason = ReasonSleepRecordDue
+		assessment.Explanation = "A sleep was expected to be over by now and no record of it has arrived yet, so treat this with extra caution."
+
+	default:
 		assessment.State = StateStale
 		assessment.Reason = ReasonEvidenceAging
 		assessment.Explanation = fmt.Sprintf(
 			"The newest sleep record is %s old, so treat this with extra caution.",
 			describeAge(age))
-		return assessment
 	}
-
-	assessment.State = StateCurrent
-	assessment.Reason = ReasonFresh
-	assessment.Explanation = "Based on recent records."
 	return assessment
 }
 
-// sleepIsOverdue reports whether the estimate predicted a sleep onset that has
-// comfortably passed with no sleep recorded since.
-func (p Policy) sleepIsOverdue(in Inputs, now time.Time) bool {
-	if in.ExpectedSleepOnset.IsZero() {
-		return false
+func (p Policy) orDefault() Policy {
+	if p.RecordOverdueGrace <= 0 || p.StaleAfter <= 0 || p.WithholdAfter <= 0 {
+		return Default()
 	}
-	deadline := in.ExpectedSleepOnset.UTC().Add(p.SleepOverdueGrace)
-	if !now.After(deadline) {
-		return false
+	return p
+}
+
+// deadlines are the two instants the verdict turns on, for evidence that has
+// already arrived: from cautionAt the claim carries its caution, and from
+// withheldAt no claim is made. Both are inclusive.
+type deadlines struct {
+	cautionAt  time.Time
+	withheldAt time.Time
+
+	// forecast says the deadlines follow the forecast sleep, and not the age
+	// of the evidence.
+	forecast bool
+}
+
+func (p Policy) deadlines(in Inputs) deadlines {
+	if awaited, ok := awaitedSleepEnd(in); ok {
+		return deadlines{cautionAt: awaited, withheldAt: awaited.Add(p.RecordOverdueGrace), forecast: true}
 	}
-	// Sleep recorded at or after the predicted onset discharges the
-	// expectation: the user slept, and the estimate simply has not caught up.
-	return in.LatestSleepEnd.IsZero() || in.LatestSleepEnd.UTC().Before(in.ExpectedSleepOnset.UTC())
+	evidence := in.NewestEvidence.UTC()
+	return deadlines{cautionAt: evidence.Add(p.StaleAfter), withheldAt: evidence.Add(p.WithholdAfter)}
+}
+
+// awaitedSleepEnd is the latest likely wake of the forecast sleep, while no
+// record of that sleep has arrived.
+//
+// Sleep recorded at or after the forecast onset discharges the expectation:
+// the person slept, and the estimate has not caught up. Until it does there is
+// no forecast to follow, and the age of the evidence decides.
+func awaitedSleepEnd(in Inputs) (time.Time, bool) {
+	if in.ExpectedSleepOnset.IsZero() || !in.ExpectedSleepEnd.After(in.ExpectedSleepOnset) {
+		return time.Time{}, false
+	}
+	if !in.LatestSleepEnd.IsZero() && !in.LatestSleepEnd.UTC().Before(in.ExpectedSleepOnset.UTC()) {
+		return time.Time{}, false
+	}
+	return in.ExpectedSleepEnd.UTC(), true
+}
+
+// Deadlines reports when the verdict on these inputs turns with no new
+// evidence: from cautionAt a claim carries its caution, and from withheldAt
+// none is made. A reader that cannot ask again, such as a published page,
+// keeps them beside what it shows. Both are zero when there is no evidence,
+// which never becomes fresh by waiting.
+func (p Policy) Deadlines(in Inputs) (cautionAt, withheldAt time.Time) {
+	if in.NewestEvidence.IsZero() {
+		return time.Time{}, time.Time{}
+	}
+	found := p.orDefault().deadlines(in)
+	return found.cautionAt, found.withheldAt
 }
 
 // describeAge renders a duration the way a person would say it.

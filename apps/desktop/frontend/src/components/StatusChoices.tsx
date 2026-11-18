@@ -12,7 +12,9 @@ import { useLoaded } from "../state/useLoaded";
 // The owner's standing choices about a reported status (ADR-0070), set beside
 // the links they govern. Both start off: a report stays on the owner's own
 // devices, and the sleep buttons say nothing to anyone. What one link shows is
-// chosen on that link; each report can still be kept back or shared.
+// chosen on that link; each report can still be kept back or shared. Both
+// choices travel to the owner's other devices through their server, and the
+// newest one made anywhere stands (ADR-0074).
 
 export function StatusChoices() {
   const { data: loaded, set } = useLoaded<ReportedStatus>(loadReportedStatus, {
@@ -56,7 +58,10 @@ export function StatusChoices() {
         />
         <span>
           Let links show what I report, unless I untick it
-          <small>Off, each report stays on your own devices unless you tick it at the time.</small>
+          <small>
+            Off, each report stays on your own devices unless you tick it at the time. Your phone
+            follows this choice through your own server, and a change made there is followed here.
+          </small>
         </span>
       </label>
       <label className="status-choice">

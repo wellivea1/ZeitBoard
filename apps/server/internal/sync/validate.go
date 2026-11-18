@@ -14,6 +14,7 @@ import (
 	"non24.app/core/medication"
 	"non24.app/core/ownerevents"
 	"non24.app/core/presence"
+	"non24.app/core/sharedsetting"
 	"non24.app/core/sleepv1"
 	"non24.app/core/sources"
 )
@@ -25,7 +26,7 @@ var identifierPattern = regexp.MustCompile(`^[a-z][a-z0-9_-]{2,63}$`)
 func Pushable(kind Kind) bool {
 	switch kind {
 	case KindObservation, KindCorrection, KindTask, KindPlacement, KindEvent,
-		KindMedication, KindMedicationEvent, KindMedicationCorrection, KindContextMarker, KindSourceReport, KindStatus:
+		KindMedication, KindMedicationEvent, KindMedicationCorrection, KindContextMarker, KindSourceReport, KindStatus, KindSetting:
 		return true
 	default:
 		return false
@@ -128,6 +129,8 @@ func validatePayload(kind Kind, recordID string, payload json.RawMessage) error 
 		return validateSourceReport(recordID, payload)
 	case KindStatus:
 		return validateStatus(recordID, payload)
+	case KindSetting:
+		return validateSetting(recordID, payload)
 	default:
 		return errors.New("unsupported record kind")
 	}
@@ -226,6 +229,22 @@ func validateStatus(recordID string, payload json.RawMessage) error {
 	}
 	if report.StatusID != recordID {
 		return errors.New("status_id must match recordId")
+	}
+	return nil
+}
+
+// validateSetting accepts one choice the owner made, under its own id. The
+// desktop's store validates settings with the same code.
+func validateSetting(recordID string, payload json.RawMessage) error {
+	var record sharedsetting.Record
+	if err := decodeStrict(payload, &record); err != nil {
+		return errors.New("invalid setting payload")
+	}
+	if err := record.Validate(); err != nil {
+		return fmt.Errorf("invalid setting: %w", err)
+	}
+	if record.SettingID != recordID {
+		return errors.New("setting_id must match recordId")
 	}
 	return nil
 }
@@ -349,6 +368,8 @@ type observationPayload struct {
 	Sleep         *sleepPayload    `json:"sleep,omitempty"`
 	Activity      *activityPayload `json:"activity,omitempty"`
 	Provenance    provenance       `json:"provenance"`
+	// SourceOffset is a sleep's own clock (ADR-0073); sleepv1 checks it.
+	SourceOffset json.RawMessage `json:"source_offset,omitempty"`
 }
 
 type sleepPayload struct {
@@ -403,7 +424,7 @@ func validateObservation(recordID string, payload json.RawMessage) error {
 	}
 	switch obs.Kind {
 	case "activity_interval":
-		if obs.Activity == nil || obs.Sleep != nil {
+		if obs.Activity == nil || obs.Sleep != nil || obs.SourceOffset != nil {
 			return errors.New("activity_interval requires activity and forbids sleep")
 		}
 		if !oneOf(obs.Activity.Level, "idle", "active", "unknown") {

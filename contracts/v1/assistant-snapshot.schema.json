@@ -65,7 +65,7 @@
         "freshness": { "type": "string", "enum": ["current", "stale", "withheld"] },
         "freshness_reason": {
           "type": "string",
-          "enum": ["no_evidence", "evidence_aging", "evidence_stale", "expected_sleep_unrecorded", "no_sources_reporting"]
+          "enum": ["no_evidence", "evidence_aging", "evidence_stale", "sleep_record_due", "expected_sleep_unrecorded", "no_sources_reporting"]
         },
         "freshness_explanation": { "$ref": "#/$defs/sentence" },
         "presence": { "type": "string", "enum": ["awake", "asleep", "unknown"] },

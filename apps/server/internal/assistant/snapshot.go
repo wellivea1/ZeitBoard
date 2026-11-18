@@ -240,7 +240,7 @@ func boundedValue(value *int, low, high int) *int {
 
 // freshnessReasons are why a snapshot's freshness may not be current. The
 // model's policy says what each one means for the owner.
-var freshnessReasons = []string{"no_evidence", "evidence_aging", "evidence_stale", "expected_sleep_unrecorded", "no_sources_reporting"}
+var freshnessReasons = []string{"no_evidence", "evidence_aging", "evidence_stale", "sleep_record_due", "expected_sleep_unrecorded", "no_sources_reporting"}
 
 // rhythm keeps the rhythm's allowlisted states and bounded numbers. An
 // unreadable value reads as the least trusting one, and what is happening

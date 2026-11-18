@@ -270,6 +270,18 @@ var localSchema = []string{
 		BEGIN
 			SELECT RAISE(ABORT, 'status reports are immutable');
 		END`,
+	// Choices that travel between the owner's devices (ADR-0074), kept as made.
+	`CREATE TABLE IF NOT EXISTS local_setting_records (
+		setting_id TEXT PRIMARY KEY,
+		name TEXT NOT NULL CHECK(name IN ('share_status_by_default', 'follow_sleep_taps', 'clock')),
+		changed_at TEXT NOT NULL,
+		payload_json BLOB NOT NULL
+	)`,
+	`CREATE TRIGGER IF NOT EXISTS trg_local_setting_records_immutable
+		BEFORE UPDATE ON local_setting_records
+		BEGIN
+			SELECT RAISE(ABORT, 'setting records are immutable');
+		END`,
 	`CREATE TRIGGER IF NOT EXISTS trg_local_source_reports_immutable
 		BEFORE UPDATE ON local_source_reports
 		BEGIN
@@ -607,7 +619,10 @@ func (s *Store) DeleteAll(ctx context.Context) error {
 	for _, table := range []string{"local_calendar_write_target", "local_calendar_writes", "local_placement_sync_records", "local_sync_connection", "local_sync_seen", "local_sync_deferred_corrections", "local_sleep_analysis", "local_recompute_runs", "source_collection_preferences", "source_observations", "manual_corrections", "phase_estimates", "medication_events", "share_profiles", "local_sleep_corrections", "local_sleep_observations", "local_medication_sync_records", "local_evidence_sync_records", "local_sync_deferred_medication", "local_medication_reminder_claims", "local_medication_event_corrections", "local_medication_events", "local_medications", "local_rhythm_markers", "local_proposal_decisions", "local_calendar_subscriptions", "local_calendar_account_calendars", "local_calendar_accounts", "local_calendar_events", "local_calendar_sources", "local_account_activity_minutes", "local_account_activity_imports",
 		// The owner's events go as the rest of this computer's copy does; the
 		// server keeps its own, as it keeps the nights.
-		"local_owner_events", "local_owner_event_sync_records", "local_sync_erased_events"} {
+		"local_owner_events", "local_owner_event_sync_records", "local_sync_erased_events",
+		// So do the statuses, the checks of sources and the choices kept for
+		// the owner's other devices.
+		"local_status_reports", "local_source_reports", "local_setting_records"} {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM "+table); err != nil {
 			_ = tx.Rollback()
 			return err

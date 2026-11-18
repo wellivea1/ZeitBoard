@@ -118,6 +118,36 @@ func TestPushValidatorAndSchemaDriftGuard(t *testing.T) {
 			valid: false,
 		},
 		{
+			name:  "valid clock setting push",
+			body:  `{"schema_version":"v1","records":[{"recordId":"setting-0a1b2c3d4e5f60718293a4b5","kind":"setting","createdAt":"2026-03-05T12:40:00Z","payload":{"setting_id":"setting-0a1b2c3d4e5f60718293a4b5","name":"clock","value":"24","changed_at":"2026-03-05T12:40:00Z"}}]}`,
+			valid: true,
+		},
+		{
+			name:  "valid sharing setting push",
+			body:  `{"schema_version":"v1","records":[{"recordId":"setting-0a1b2c3d4e5f60718293a4b5","kind":"setting","createdAt":"2026-03-05T12:40:00Z","payload":{"setting_id":"setting-0a1b2c3d4e5f60718293a4b5","name":"share_status_by_default","value":false,"changed_at":"2026-03-05T12:40:00Z"}}]}`,
+			valid: true,
+		},
+		{
+			name:  "a switch set to a word",
+			body:  `{"schema_version":"v1","records":[{"recordId":"setting-0a1b2c3d4e5f60718293a4b5","kind":"setting","createdAt":"2026-03-05T12:40:00Z","payload":{"setting_id":"setting-0a1b2c3d4e5f60718293a4b5","name":"follow_sleep_taps","value":"on","changed_at":"2026-03-05T12:40:00Z"}}]}`,
+			valid: false,
+		},
+		{
+			name:  "a clock set to a switch",
+			body:  `{"schema_version":"v1","records":[{"recordId":"setting-0a1b2c3d4e5f60718293a4b5","kind":"setting","createdAt":"2026-03-05T12:40:00Z","payload":{"setting_id":"setting-0a1b2c3d4e5f60718293a4b5","name":"clock","value":true,"changed_at":"2026-03-05T12:40:00Z"}}]}`,
+			valid: false,
+		},
+		{
+			name:  "a setting that stays on its device",
+			body:  `{"schema_version":"v1","records":[{"recordId":"setting-0a1b2c3d4e5f60718293a4b5","kind":"setting","createdAt":"2026-03-05T12:40:00Z","payload":{"setting_id":"setting-0a1b2c3d4e5f60718293a4b5","name":"theme","value":"dark","changed_at":"2026-03-05T12:40:00Z"}}]}`,
+			valid: false,
+		},
+		{
+			name:  "a setting without its time",
+			body:  `{"schema_version":"v1","records":[{"recordId":"setting-0a1b2c3d4e5f60718293a4b5","kind":"setting","createdAt":"2026-03-05T12:40:00Z","payload":{"setting_id":"setting-0a1b2c3d4e5f60718293a4b5","name":"clock","value":"12"}}]}`,
+			valid: false,
+		},
+		{
 			name:  "valid source report push",
 			body:  `{"schema_version":"v1","records":[{"recordId":"srcrep-0a1b2c3d4e5f60718293a4b5","kind":"source_report","createdAt":"2026-03-05T12:40:00Z","payload":{"report_id":"srcrep-0a1b2c3d4e5f60718293a4b5","source":"health_connect","outcome":"read","reported_at":"2026-03-05T12:40:00Z","background_reads":true,"covered":{"start_at":"2026-02-03T12:40:00Z","end_at":"2026-03-05T12:40:00Z"},"held":0}}]}`,
 			valid: true,

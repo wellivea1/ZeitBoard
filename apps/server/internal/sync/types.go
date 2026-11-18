@@ -51,6 +51,11 @@ const (
 	// trying to sleep, or do not disturb, with when it stops standing. The
 	// newest one stands; it is never an estimator input.
 	KindStatus Kind = "status"
+	// KindSetting carries one choice the owner made on one device, which
+	// their other devices follow (ADR-0074): sharing a status by default,
+	// the sleep buttons reporting one, and the clock. The newest record of
+	// each choice stands; the server reads none of them.
+	KindSetting Kind = "setting"
 	// KindTombstone marks an erased record in the pull stream. Tombstones are
 	// minted only by the server's erase endpoint — clients cannot push them —
 	// and their metadata-only payload carries the erased id plus its original

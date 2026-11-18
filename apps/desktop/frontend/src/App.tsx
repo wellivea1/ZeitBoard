@@ -9,8 +9,9 @@ import { AgentProposalsProvider } from "./state/agentProposals";
 import { HomeScreen } from "./screens/HomeScreen";
 import { ScreenErrorBoundary } from "./components/ScreenErrorBoundary";
 import { subscribeBackendEvents } from "./data/backendEvents";
-import { loadClockSetting } from "./data/clock";
+import { clockChangedEvent, loadClockSetting } from "./data/clock";
 import { setWindowClock, useWindowClock } from "./utils/windowClock";
+import { syncNoticesWithDesktop } from "./state/notices";
 
 const PlanScreen = lazy(() =>
   import("./screens/PlanScreen").then((module) => ({ default: module.PlanScreen })),
@@ -46,9 +47,19 @@ export default function App() {
   // The remembered clock draws the first page; the desktop's answer replaces
   // it if the owner or Windows has since changed it (ADR-0057).
   useEffect(() => {
-    void loadClockSetting().then((setting) => {
-      if (setting) setWindowClock(setting.clock);
-    });
+    const load = () =>
+      void loadClockSetting().then((setting) => {
+        if (setting) setWindowClock(setting.clock);
+      });
+    load();
+    // A clock chosen on the owner's phone is followed here (ADR-0074).
+    window.addEventListener(clockChangedEvent, load);
+    return () => window.removeEventListener(clockChangedEvent, load);
+  }, []);
+  // The notes closed for good are the desktop's to keep; the window's copy
+  // drew this first page.
+  useEffect(() => {
+    void syncNoticesWithDesktop();
   }, []);
   const clock = useWindowClock();
 

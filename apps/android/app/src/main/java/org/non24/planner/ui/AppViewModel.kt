@@ -34,6 +34,7 @@ import org.non24.planner.data.safeSyncError
 import org.non24.planner.data.normalizeSyncUrl
 import org.non24.planner.data.SleepRepository
 import org.non24.planner.data.SleepReview
+import org.non24.planner.data.SharedChoices
 import org.non24.planner.data.StatusReporting
 import org.non24.planner.data.formatReviewInput
 import org.non24.planner.domain.AcquisitionMethod
@@ -340,15 +341,33 @@ class AppViewModel(
         }
     }
 
-    /** Whether a status reported on this phone may be shown by the share links the owner allowed. */
-    fun setShareReportedStatus(enabled: Boolean) {
+    /**
+     * Whether a status reported may be shown by the share links the owner
+     * allowed. The choice travels to the owner's other devices (ADR-0074).
+     */
+    fun setShareReportedStatus(enabled: Boolean) = choose(SharedChoices.SHARE_STATUS, "Your choice could not be saved. Try again.") {
+        it.copy(shareReportedStatus = enabled)
+    }
+
+    /** The clock times are written on: this phone's own format, or 12- or 24-hour. It travels too. */
+    fun setClock(clock: String) = choose(SharedChoices.CLOCK, "The display setting could not be saved. Try again.") {
+        it.copy(clock = clock)
+    }
+
+    /**
+     * Keeps a choice that travels, dated after the one standing, and sends it
+     * with the next sync when this phone is connected.
+     */
+    private fun choose(name: String, failure: String, change: (AppSettings) -> AppSettings) {
         viewModelScope.launch {
             try {
-                container.settingsRepository.update { it.copy(shareReportedStatus = enabled) }
+                val at = container.backendSyncRepository.nextChoiceAt(name)
+                container.settingsRepository.update { change(it).copy(choiceTimes = it.choiceTimes + (name to at)) }
+                if (container.backendSyncRepository.shareChoices() > 0) container.backgroundScheduler.requestUpload()
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                mutableMessage.value = "Your choice could not be saved. Try again."
+                mutableMessage.value = failure
             }
         }
     }
@@ -358,12 +377,12 @@ class AppViewModel(
      * then asks for an upload. It is saved on the phone first, so an upload
      * that cannot run yet loses nothing.
      */
-    fun reportStatus(status: String) {
+    fun reportStatus(status: String, minutes: Int = 0) {
         if (!statusGuard.compareAndSet(false, true)) return
         viewModelScope.launch {
             try {
                 val shared = container.settingsRepository.settings.value.shareReportedStatus
-                container.backendSyncRepository.reportStatus(status, shared).getOrThrow()
+                container.backendSyncRepository.reportStatus(status, shared, if (status == StatusReporting.CLEARED) 0 else minutes).getOrThrow()
                 mutableMessage.value = if (status == StatusReporting.CLEARED) {
                     "Status cleared. It uploads with the next sync."
                 } else {
@@ -387,17 +406,6 @@ class AppViewModel(
         }
     }
 
-    fun setUse24HourTime(enabled: Boolean) {
-        viewModelScope.launch {
-            try {
-                container.settingsRepository.update { it.copy(use24HourTime = enabled) }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (_: Exception) {
-                mutableMessage.value = "The display setting could not be saved. Try again."
-            }
-        }
-    }
 
     fun refreshHealthConnect() {
         syncOperation {

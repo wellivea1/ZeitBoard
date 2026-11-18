@@ -103,6 +103,12 @@ interface SyncOutboxStore {
     /** Observation id to latest durably queued or uploaded source revision. */
     fun knownSources(): Map<String, SourceSyncRevision>
 
+    /**
+     * The sources this phone read from its own Health Connect and synced, and
+     * the provider's last word on each (ADR-0072). Only these can be found gone.
+     */
+    fun ownSources(): Map<String, OwnSource> = emptyMap()
+
     fun pendingCount(): Int
 
     fun lastSyncedAt(): Instant?

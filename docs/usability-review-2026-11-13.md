@@ -77,9 +77,9 @@ helps, and the README's "every planned function is delivered" was too strong.
 | Every Health Connect session is imported as main sleep | True | **Fixed in the estimator**, not the phone: one sleep start opens each cycle. The phone still labels every session main sleep |
 | An excluded dose can come back on the phone | True by reading | **Fixed**. Not run on a device |
 | "Going to sleep" does not reach the people sharing a link | True | **Built on 2026-11-15** (ADR-0070): a status that syncs and always ends, private unless the owner lets a link show it, with three levels for each link |
-| A healthy 27-hour source reads as stale near the end of each waking day | True of the policy | **Not changed.** The thresholds are ADR-0031's. Making them follow the cycle length is a decision |
-| A session the provider deleted stays in the estimate | True | **Not built.** Needs Health Connect's change log and a device |
-| Sleep recorded in another time zone is held | True, and deliberate (ADR-0032) | **Not changed.** Keeping the instants with their own offsets is a contract change |
+| A healthy 27-hour source reads as stale near the end of each waking day | True of the policy | **Built on 2026-11-17** (ADR-0071), the owner's choice: freshness follows the forecast, and a caution starts only when a record is due and missing |
+| A session the provider deleted stays in the estimate | True | **Built on 2026-11-17** (ADR-0072): the phone finds it gone from a complete read and says so; the night is kept and left out |
+| Sleep recorded in another time zone is held | True, and deliberate (ADR-0032) | **Built on 2026-11-17** (ADR-0073): it syncs with its own clock, counts, and is drawn on the home clock |
 | Sleep in several pieces counts only its first piece towards duration | True | **Fixed**: a night lasts until its last piece ends (ADR-0069). Neutral on the owner's history |
 | The portal's rate limit counts everyone behind a proxy as one visitor | True | **Fixed**, off by default: `portal.trustedProxies` (ADR-0069). The exposure review should still read it |
 | The backtest's "hit rate" is easy to misread | Agreed | Clarified in `verification.md` |

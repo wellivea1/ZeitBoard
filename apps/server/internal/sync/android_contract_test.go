@@ -153,3 +153,76 @@ func TestAndroidAcquisitionMethodIsInTheClosedEnum(t *testing.T) {
 		t.Fatal("an acquisition method outside the closed enum was accepted")
 	}
 }
+
+// The phone's word that a provider removed a record, and put it back, on a
+// night recorded on another clock (ADR-0072, ADR-0073). SyncContractTest emits
+// the same bytes.
+func TestSharedAndroidPresenceFixtureValidatesAndFolds(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "testdata", "v1", "sync-android-source-presence.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pulled PullResponse
+	if err := json.Unmarshal(data, &pulled); err != nil {
+		t.Fatal(err)
+	}
+	request := PushRequest{SchemaVersion: pulled.SchemaVersion}
+	for _, envelope := range pulled.Records {
+		request.Records = append(request.Records, PushRecord{RecordID: envelope.RecordID, Kind: envelope.Kind, CreatedAt: envelope.CreatedAt, Payload: envelope.Payload})
+	}
+	if err := ValidatePushRequest(&request); err != nil {
+		t.Fatal(err)
+	}
+	observation, err := sleepv1.DecodeObservation(request.Records[0].Payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	removed, err := sleepv1.DecodeCorrection(request.Records[1].Payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	restored, err := sleepv1.DecodeCorrection(request.Records[2].Payload)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	gone, err := sleepv1.Fold([]sleepv1.Observation{observation}, []sleepv1.Correction{removed})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !gone[0].RemovedAtSource || !gone[0].Suppressed {
+		t.Fatal("a removed record still counts")
+	}
+	back, err := sleepv1.Fold([]sleepv1.Observation{observation}, []sleepv1.Correction{removed, restored})
+	if err != nil {
+		t.Fatal(err)
+	}
+	night := back[0]
+	if night.RemovedAtSource || night.Suppressed || !night.IsPrincipalSleep() {
+		t.Fatal("a restored record is still left out")
+	}
+	if night.SourceClock == nil || night.SourceClock.StartOffsetSeconds != 7200 || night.Intervals[0].Interval.Start.ZoneID != "America/New_York" {
+		t.Fatalf("the night away lost its clock or its zone: %+v", night.SourceClock)
+	}
+
+	// The server refuses what the contract does.
+	for name, payload := range map[string]string{
+		"a person removing it": strings.Replace(string(request.Records[1].Payload), `"health_connect"`, `"manual"`, 1),
+		"removed but counted":  strings.Replace(string(request.Records[1].Payload), `true`, `false`, 1),
+		"one end of a clock":   strings.Replace(string(request.Records[0].Payload), `"end_seconds":7200,`, ``, 1),
+		"the zone's own clock": strings.Replace(strings.Replace(string(request.Records[0].Payload), `"end_seconds":7200`, `"end_seconds":-14400`, 1), `"start_seconds":7200`, `"start_seconds":-14400`, 1),
+	} {
+		index := 1
+		if strings.Contains(name, "clock") {
+			index = 0
+		}
+		if payload == string(request.Records[index].Payload) {
+			t.Fatalf("%s: the fixture did not change", name)
+		}
+		bad := PushRequest{SchemaVersion: pulled.SchemaVersion, Records: []PushRecord{request.Records[index]}}
+		bad.Records[0].Payload = json.RawMessage(payload)
+		if err := ValidatePushRequest(&bad); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+}

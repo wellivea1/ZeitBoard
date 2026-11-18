@@ -41,7 +41,8 @@ func Review(observation Observation, corrections []Correction) (ReviewContext, e
 		byID[correction.CorrectionID] = correction
 		if correction.AcquisitionMethod == AcquisitionHealthConnect {
 			provider = append(provider, correction)
-			if correction.CreatedAt.After(result.SourceRevision) {
+			// A record gone or back is no revision of its times (ADR-0072).
+			if !IsSourcePresence(correction) && correction.CreatedAt.After(result.SourceRevision) {
 				result.SourceRevision = correction.CreatedAt
 			}
 		}

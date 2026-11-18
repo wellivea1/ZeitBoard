@@ -238,6 +238,78 @@ describe("SleepLogPanel", () => {
     expect(screen.queryByRole("heading", { name: "Connected" })).toBeNull();
   });
 
+  // ADR-0072 and ADR-0073: a night Health Connect deleted stays in the log and
+  // says why it no longer counts, or that it still does; a night recorded on
+  // another clock says how far from home.
+  it("says when a night was removed at its source or recorded away", async () => {
+    const night = (number: number, extra: Record<string, unknown>) => ({
+      observationId: `observation_${number}`,
+      startLocal: `2026-09-0${number}T22:00:00-04:00`,
+      endLocal: `2026-09-0${number + 1}T06:00:00-04:00`,
+      startLabel: "Start",
+      endLabel: "End",
+      zoneId: "America/New_York",
+      classification: "principal",
+      effectiveStartLocal: `2026-09-0${number}T22:00:00-04:00`,
+      effectiveEndLocal: `2026-09-0${number + 1}T06:00:00-04:00`,
+      effectiveStartLabel: "Sep 1, 10:00 PM",
+      effectiveEndLabel: "Sep 2, 6:00 AM",
+      effectiveClassification: "principal",
+      reviewToken: "synthetic-review-token",
+      needsReview: false,
+      sourceWindowLabel: "Synthetic source window",
+      activeEdits: [],
+      durationLabel: "8 hours 0 minutes",
+      suppressed: false,
+      sourceLabel: "Health Connect",
+      provenanceLabel: "health connect / directly observed",
+      history: [],
+      ...extra,
+    });
+    (globalThis as { go?: unknown }).go = {
+      main: {
+        App: {
+          GetSleepLogPage: async () => ({
+            status: "ready",
+            empty: false,
+            message: "3 local sleep entries stored on this device.",
+            entries: [
+              night(1, { removedAtSource: true, suppressed: true }),
+              night(3, { removedAtSource: true }),
+              night(5, { recordedAway: "Recorded 6 hours ahead of home" }),
+            ],
+            total: 3,
+            page: 0,
+            pageSize: 50,
+          }),
+        },
+      },
+    };
+
+    render(<SleepLogPanel />);
+
+    const nights = (await screen.findAllByRole("listitem")).filter((item) =>
+      item.classList.contains("sleep-night"),
+    );
+    expect(nights).toHaveLength(3);
+    const [gone, kept, away] = nights as [HTMLElement, HTMLElement, HTMLElement];
+    expect(within(gone).getByText("Removed at the source")).toBeVisible();
+    expect(
+      within(gone).getByText(
+        "Health Connect no longer has this night, so it is left out of estimates. Edit it to count it again.",
+      ),
+    ).toBeVisible();
+    // The owner's correction stands on it, so it counts and is not called excluded.
+    expect(within(kept).queryByText("Removed at the source")).toBeNull();
+    expect(
+      within(kept).getByText(
+        "Health Connect no longer has this night. It still counts, because your correction stands.",
+      ),
+    ).toBeVisible();
+    expect(within(away).getByText(/Recorded 6 hours ahead of home/)).toBeVisible();
+    expect(within(away).queryByText(/Health Connect no longer has/)).toBeNull();
+  });
+
   it("opens the past-night form when it is the address", () => {
     window.location.hash = "#/log/sleep";
     const { container } = render(<SleepLogPanel />);

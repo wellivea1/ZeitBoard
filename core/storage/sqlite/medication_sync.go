@@ -224,6 +224,7 @@ var evidenceTables = map[string]struct{ table, column string }{
 	SyncKindMedicationCorrection: {"local_medication_event_corrections", "correction_id"},
 	SyncKindContextMarker:        {"local_rhythm_markers", "marker_id"},
 	SyncKindStatus:               {"local_status_reports", "status_id"},
+	SyncKindSetting:              {"local_setting_records", "setting_id"},
 }
 
 // acknowledgeEvidenceTx records that the server holds an immutable record,

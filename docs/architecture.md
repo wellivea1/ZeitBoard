@@ -81,6 +81,20 @@ report stands. The estimator and the freshness policy do not read it. The server
 narrows it for each share link by that link's grant before it crosses to the
 portal.
 
+The choices that travel between devices are `setting` records (ADR-0074), defined
+once in `core/sharedsetting` with the rule that the newest choice stands. The
+desktop keeps the value in use in its settings files and follows the record that
+stands after each sync; the phone keeps each choice with the time it was made.
+
+Freshness follows the forecast (ADR-0071): `core/freshness` reads the latest likely
+wake of the forecast sleep and says when a missing record brings a caution, and
+when it withholds the state. Each share-page snapshot keeps those two instants.
+
+A sleep observation may carry `source_offset`, the clock it was recorded on when
+that was not the home zone's (ADR-0073), and a provider may say its record is gone
+or back with `source_deleted` and `source_restored` corrections (ADR-0072). Both
+are folded in `core/sleepv1`.
+
 ### Self-hosted backend and agent connector
 
 `apps/server` ships two binaries the operator runs: `zeitboardd` (device

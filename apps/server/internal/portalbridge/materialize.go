@@ -181,6 +181,10 @@ func (m Materializer) Prepare(ctx context.Context, now time.Time) (Preparation, 
 	policy := freshness.Default()
 	inputs := freshnessInputs(estimate, sessions, now)
 	prep.ExpiresAt = earliest(prep.ExpiresAt, policy.NextChange(inputs))
+	// The page is handed the same two instants, so what it shows turns when
+	// the policy says even if nothing republishes. They follow the forecast
+	// and not the hour this snapshot was written (ADR-0071).
+	prep.Snapshot.CautionAt, prep.Snapshot.WithheldAt = policy.Deadlines(inputs)
 	if !policy.Assess(inputs).MayClaimCurrentState() {
 		prep.Snapshot.Status = portal.StatusInsufficientData
 		return prep, nil
@@ -333,6 +337,7 @@ func freshnessInputs(estimate domain.PhaseEstimate, sessions []domain.SleepSessi
 	}
 	if len(estimate.PredictedSleepWindows) > 0 {
 		in.ExpectedSleepOnset = estimate.PredictedSleepWindows[0].Interval.Start.UTC
+		in.ExpectedSleepEnd = estimate.PredictedSleepWindows[0].Interval.End.UTC
 	}
 	return in
 }

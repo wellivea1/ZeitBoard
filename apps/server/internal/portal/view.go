@@ -7,9 +7,12 @@ import (
 	"time"
 )
 
-// Freshness thresholds from docs/portal-design.md section 1. Past StaleAfter
-// the page says so; past UnavailableAfter it stops making a current-state
-// claim entirely rather than presenting an old "awake now".
+// Freshness thresholds from docs/portal-design.md section 1, for a snapshot
+// published without deadlines of its own: past StaleAfter the page says so,
+// and past UnavailableAfter it stops making a current-state claim entirely
+// rather than presenting an old "awake now". A snapshot made from the shared
+// freshness policy carries its own two instants, which follow the forecast
+// (ADR-0071), and the page keeps to those.
 const (
 	StaleAfter       = 6 * time.Hour
 	UnavailableAfter = 24 * time.Hour
@@ -214,14 +217,14 @@ func BuildView(snapshot Snapshot, now time.Time) AvailabilityView {
 		view.Headline = "There are no current waking windows to show"
 		view.Detail = "This link is working. You can still reach out and agree on a time directly."
 		return view
-	case age >= UnavailableAfter:
+	case snapshot.withheld(now):
 		view.Unavailable = true
 		view.Headline = "This availability is out of date"
-		view.Detail = "The last update is more than a day old, so it is not shown. An out-of-date estimate is worse than none."
+		view.Detail = "The last update is too old to go by, so it is not shown. An out-of-date estimate is worse than none."
 		return view
 	}
 
-	view.Stale = age >= StaleAfter
+	view.Stale = snapshot.cautionDue(now)
 	location := windowLocation(snapshot.Windows[0].ZoneID)
 	view.ZoneLabel = zoneLabel(snapshot.Windows[0].ZoneID, now.In(location))
 
@@ -325,10 +328,9 @@ func nextChange(snapshot Snapshot, now time.Time) time.Time {
 		consider(window.StartAt)
 		consider(window.EndAt)
 	}
-	if !snapshot.GeneratedAt.IsZero() {
-		consider(snapshot.GeneratedAt.Add(StaleAfter))
-		consider(snapshot.GeneratedAt.Add(UnavailableAfter))
-	}
+	cautionAt, withheldAt := snapshot.deadlines()
+	consider(cautionAt)
+	consider(withheldAt)
 	if snapshot.DosesShared {
 		for _, dose := range snapshot.SkippedDoses {
 			consider(dose.At.Add(SkippedDoseWindow))
@@ -489,10 +491,10 @@ func describeFreshness(age time.Duration) string {
 		return fmt.Sprintf("Updated %d minutes ago.", int(age.Minutes()))
 	case age < 2*time.Hour:
 		return "Updated about an hour ago."
-	case age < UnavailableAfter:
+	case age < 48*time.Hour:
 		return fmt.Sprintf("Updated about %d hours ago.", int(age.Hours()))
 	default:
-		return "Last updated more than a day ago."
+		return fmt.Sprintf("Last updated %d days ago.", int(age.Hours()/24))
 	}
 }
 

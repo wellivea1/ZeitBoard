@@ -108,7 +108,9 @@ import org.non24.planner.data.fixturePlans
 import org.non24.planner.data.SleepReview
 import org.non24.planner.data.SleepReviewState
 import org.non24.planner.data.formatReviewInput
+import org.non24.planner.data.recordedAway
 import org.non24.planner.data.CompanionStatus
+import org.non24.planner.data.SharedChoices
 import org.non24.planner.data.StatusReporting
 import kotlinx.coroutines.delay
 import org.non24.planner.domain.BackgroundReadState
@@ -256,7 +258,7 @@ fun Non24App(
                         onRequestBackgroundPermission = onRequestBackgroundPermission,
                         onEnableNotices = onEnableNotices,
                         onDataModeChanged = viewModel::setDataMode,
-                        onUse24HourChanged = viewModel::setUse24HourTime,
+                        onClockChanged = viewModel::setClock,
                     )
                 }
             }
@@ -275,7 +277,7 @@ private fun StatusScreen(
     onRequestPermission: () -> Unit,
     onRefreshHealth: () -> Unit,
     onOpenHealthConnectListing: () -> Unit,
-    onReportStatus: (String) -> Unit,
+    onReportStatus: (String, Int) -> Unit,
     onShareStatus: (Boolean) -> Unit,
 ) {
     ScreenColumn {
@@ -370,10 +372,13 @@ private fun ReportedStatusPanel(
     status: CompanionStatus?,
     share: Boolean,
     use24HourTime: Boolean,
-    onReport: (String) -> Unit,
+    onReport: (String, Int) -> Unit,
     onShare: (Boolean) -> Unit,
 ) {
     val zone = ZoneId.systemDefault()
+    // How long the next report stands. It is for that one report, and goes
+    // back to the usual length once it is made.
+    var minutes by remember { mutableIntStateOf(0) }
     RuledSection {
         if (status == null) {
             Text("Nothing reported. The forecast speaks for itself.", style = MaterialTheme.typography.bodyMedium)
@@ -392,18 +397,35 @@ private fun ReportedStatusPanel(
             val standing = status?.status == value
             SecondaryButton(
                 text = (if (standing) "● " else "") + StatusReporting.words(value),
-                onClick = { onReport(value) },
+                onClick = {
+                    onReport(value, minutes)
+                    minutes = 0
+                },
                 modifier = Modifier.fillMaxWidth(),
             )
         }
         if (status != null) {
-            SecondaryButton("Clear my status", { onReport(StatusReporting.CLEARED) }, modifier = Modifier.fillMaxWidth())
+            SecondaryButton("Clear my status", { onReport(StatusReporting.CLEARED, 0) }, modifier = Modifier.fillMaxWidth())
+        }
+        Text("The next one lasts", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(Modifier.fillMaxWidth().selectableGroup()) {
+            StatusReporting.LIFETIME_CHOICES.forEach { choice ->
+                val words = StatusReporting.lifetimeWords(choice)
+                Text(
+                    (if (minutes == choice) "● " else "○ ") + words,
+                    modifier = Modifier
+                        .weight(1f)
+                        .selectable(minutes == choice, role = Role.RadioButton) { minutes = choice }
+                        .semantics { contentDescription = when (choice) { 0 -> "The usual length"; 60 -> "1 hour"; else -> "${choice / 60} hours" } }
+                        .padding(vertical = 12.dp),
+                )
+            }
         }
         SwitchRow(
             "Let my share links show it",
             checked = share,
             onCheckedChange = onShare,
-            detail = "Off, what you report stays on your own devices. On, a link shows it only if you chose that for the link, on your computer.",
+            detail = "Applies to the next status you report. Your computer follows this choice through your own server, and a change made there is followed here. On, a link shows a status only if you chose that for the link, on your computer.",
             titleStyle = LocalTextStyle.current,
         )
     }
@@ -671,8 +693,17 @@ private fun ServerSleepReviewScreen(
             RuledSection {
                 Text("Times in ${review.effective.zoneId}", style = MaterialTheme.typography.titleMedium)
                 Text("As recorded: ${nightWords(review.source.start, review.source.end, review.source.zoneId, use24HourTime)}", style = MaterialTheme.typography.bodySmall)
+                // A night away is drawn on the home clock like any other (ADR-0073).
+                recordedAway(review.sourceOffset, review.source.start, review.source.end, ZoneId.of(review.source.zoneId))?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall)
+                }
                 Text("Read from your server ${dayClock(review.generatedAt.atZone(ZoneId.of(review.source.zoneId)), use24HourTime, withZone = true)}", style = MaterialTheme.typography.labelSmall)
                 if (review.needsReview) InfoStrip("This night has changes that disagree. Forecasts wait until you choose the times to keep and save them.")
+                // Kept and left out, unless the owner's own correction stands on it (ADR-0072).
+                if (review.removedAtSource && !review.needsReview) InfoStrip(
+                    if (review.excluded) "Health Connect no longer has this night, so it is left out of estimates. Turn off Exclude from estimates and save to count it again."
+                    else "Health Connect no longer has this night. It still counts, because your correction stands.",
+                )
                 review.edits.forEachIndexed { index, edit ->
                     val values = buildList {
                         edit.start?.let { add("Fell asleep: ${timeWords(it, review.source.zoneId, use24HourTime)}") }
@@ -712,6 +743,7 @@ private fun ServerSleepReviewScreen(
                 NightRow(
                     night = nightWords(source.start, source.end, source.zoneId, use24HourTime),
                     corrected = source.corrected,
+                    removed = source.removed,
                     open = source.id == state.selectedId && review != null,
                     enabled = !busy,
                     onClick = { onReview(source.id) },
@@ -725,15 +757,17 @@ private fun ServerSleepReviewScreen(
 
 /**
  * One night in the list, as a ruled line: when it was, and a word at the edge
- * when it is open or has been corrected. The whole line opens it. A column of
- * framed buttons, each as wide as its own text, read as twelve separate
- * controls rather than one list.
+ * when it is open, has been corrected, or is gone from Health Connect. The
+ * whole line opens it. A column of framed buttons, each as wide as its own
+ * text, read as twelve separate controls rather than one list.
  */
 @Composable
-private fun NightRow(night: String, corrected: Boolean, open: Boolean, enabled: Boolean, onClick: () -> Unit) {
+private fun NightRow(night: String, corrected: Boolean, removed: Boolean, open: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    // A night the owner corrected counts on their word, removed or not (ADR-0072).
     val word = when {
         open -> "Open"
         corrected -> "Corrected"
+        removed -> "Removed at the source"
         else -> null
     }
     Column(
@@ -1033,7 +1067,7 @@ private fun SettingsScreen(
     onRequestBackgroundPermission: () -> Unit,
     onEnableNotices: () -> Unit,
     onDataModeChanged: (DataMode) -> Unit,
-    onUse24HourChanged: (Boolean) -> Unit,
+    onClockChanged: (String) -> Unit,
 ) {
     ScreenColumn {
         ScreenHeader(
@@ -1060,11 +1094,28 @@ private fun SettingsScreen(
 
         SectionHeading("Display")
         RuledSection {
-            SwitchRow(
-                "24-hour time",
-                checked = state.settings.use24HourTime,
-                onCheckedChange = onUse24HourChanged,
-                detail = "Use 24-hour labels for displayed times.",
+            Text("Clock", style = MaterialTheme.typography.titleMedium)
+            Column(Modifier.fillMaxWidth().selectableGroup()) {
+                listOf(
+                    SharedChoices.CLOCK_SYSTEM to "As this phone is set",
+                    SharedChoices.CLOCK_12 to "12-hour",
+                    SharedChoices.CLOCK_24 to "24-hour",
+                ).forEach { (clock, words) ->
+                    val chosen = state.settings.clock == clock
+                    Text(
+                        (if (chosen) "● " else "○ ") + words,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(chosen, role = Role.RadioButton) { onClockChanged(clock) }
+                            .padding(vertical = 12.dp),
+                    )
+                }
+            }
+            // ADR-0074: the clock travels between the owner's devices.
+            Text(
+                "Your computer follows the clock you choose here through your own server, and a clock chosen there is followed here.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
@@ -1157,8 +1208,8 @@ private fun BackendConnectionSection(
                 style = MaterialTheme.typography.bodySmall,
             )
             if (status.heldCount > 0 || status.heldLocalCorrectionCount > 0) InfoStrip(
-                "Held records lack offsets or disagree with the configured home zone. " +
-                    "Travel zones are never guessed; these records remain local.",
+                "Held records have no clock recorded with them, so the time they were on is unknown. " +
+                    "They stay on this phone. Nights recorded on another clock, as when travelling, upload with that clock and are drawn on your home clock.",
             )
             Text(
                 "Uploads, downloaded records and cached forecasts are separate. See Now for forecast age and uncertainty, and Plan for downloaded task state.",

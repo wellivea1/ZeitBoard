@@ -22,6 +22,7 @@ import org.non24.planner.data.LocalUserDataRepository
 import org.non24.planner.data.MedicationRepository
 import org.non24.planner.data.SQLiteLocalUserDataStore
 import org.non24.planner.data.SharedPreferencesSettingsRepository
+import org.non24.planner.data.SettingsChoiceKeeper
 import org.non24.planner.data.SleepRepository
 import org.non24.planner.data.SettingsRepository
 import org.non24.planner.data.fixtureEstimateRepository
@@ -81,6 +82,7 @@ class AppContainer(context: Context) : AppDependencies {
         client = HttpBackendSyncClient(),
         replica = SQLiteSyncReplicaStore { localDataStore.writableDatabase },
         onRecordsChanged = localUserDataRepository::reloadAfterSync,
+        choices = SettingsChoiceKeeper(settingsRepository),
     )
     override val syncStatus: StateFlow<SyncStatus> = backendSyncRepository.status
     private val noticePoster = AndroidNoticePoster(applicationContext)

@@ -97,10 +97,37 @@ In the order I would do them.
    with the person.
 7. **Put the encryption choice on the shared store.**
 
-## Changed with this review
+## What was done about it
 
-- `status.json` is kept through `localSettingsStore` and is in the storage-protection list.
-- What a link shows can be changed after it is made.
+Built on 2026-11-15, after the review:
 
-Nothing else above is changed. Recommendations 1 to 3 and 7 are contained and can be done without
-a decision; 4 to 6 need the owner's.
+1. **One table of settings files** (`apps/desktop/app_settings_files.go`). The protection
+   readout reads it. `TestEverySettingsFileIsInTheTable` reads the package's own source for
+   every constant that names a `.json` file and fails when the table does not list it. The
+   readout now also checks each file's last good copy and the encryption choice, which it had
+   missed.
+2. **Finding 2 was wrong, and nothing was changed.** Appearance already works the way the clock
+   does. When the window opens it asks the desktop, and a stored `appearance.json` wins; the
+   window's copy is handed over only when the desktop has none. I read the theme code and not
+   the code that loads it.
+3. **Closed notices are kept by the desktop**, in `notices.json`. The window takes that list as
+   it opens, and hands over its own only where the desktop has none. An empty stored list means
+   the owner chose to see every note again, and is kept as that.
+4. **Each sharing switch says it is that device's alone**, on the computer and on the phone.
+5. **The `reaching-hours.json` reader is removed.** The owner's own data folder holds no such
+   file, so nothing was carried by it.
+6. **An assistant can read the status choices**, with the status that stands, through
+   `get_reported_status`, and can propose a status. It cannot yet propose a change to a
+   setting.
+7. **Recommendation 7 is withdrawn.** Moving the encryption choice to the shared store would
+   make the owner's saved choice unreadable, for one boolean that is already written atomically.
+
+Built on 2026-11-17, after the owner chose which choices travel:
+
+8. **Sharing and the clock travel between devices** ([ADR-0074](decisions/0074-choices-that-travel-between-devices.md)).
+   Whether a status may show on links by default, whether the sleep buttons report one, and the
+   clock go to the owner's server as `setting` records, and the newest choice made on any device
+   stands. Each switch now says the other device follows it, where it said each device kept its
+   own. This closes finding 4.
+
+Still open: settings an assistant can propose changes to.

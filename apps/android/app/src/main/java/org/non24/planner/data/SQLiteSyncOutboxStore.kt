@@ -36,17 +36,17 @@ class SQLiteSyncOutboxStore(
                     AND NOT EXISTS (SELECT 1 FROM sync_outbox o WHERE o.record_id = e.sync_observation_id)))
             AND NOT EXISTS (SELECT 1 FROM sync_erased_records d WHERE d.record_id IN (c.id, e.sync_observation_id))
             AND NOT EXISTS (SELECT 1 FROM erased_health_sources d WHERE d.observation_id = e.sync_observation_id)
-            AND (c.sync_hold_zone IS NULL OR c.sync_hold_zone != ?)"""
+            AND (c.sync_hold_zone IS NULL OR c.sync_hold_zone != '$HELD_WITHOUT_CLOCK')"""
         val held = db.transaction {
-            val corrections = db.rawQuery("SELECT c.* $candidates ORDER BY c.sequence LIMIT ?", arrayOf(homeZone.id, limit.toString())).use { rows ->
+            val corrections = db.rawQuery("SELECT c.* $candidates ORDER BY c.sequence LIMIT ?", arrayOf(limit.toString())).use { rows ->
                 buildList { while (rows.moveToNext()) add(readSleepCorrection(rows)) }
             }
             val known = knownSources.toMutableMap()
             this@SQLiteSyncOutboxStore.knownSources().forEach { (id, revision) -> if (known[id]?.revision?.isAfter(revision.revision) != true) known[id] = revision }
             corrections.forEach { correction ->
                 val source = db.rawQuery("SELECT * FROM health_sleep_episodes WHERE id = ?", arrayOf(correction.targetEpisodeId)).use { check(it.moveToFirst()); readSleepEpisode(it) }
-                if (SyncContract.holdReason(source, homeZone) != null) {
-                    db.update("sleep_corrections", ContentValues().apply { put("sync_hold_zone", homeZone.id) }, "id = ?", arrayOf(correction.id))
+                if (SyncContract.holdReason(source) != null) {
+                    db.update("sleep_corrections", ContentValues().apply { put("sync_hold_zone", HELD_WITHOUT_CLOCK) }, "id = ?", arrayOf(correction.id))
                 } else {
                     val sourceId = SyncContract.observationId(source.logicalSourceId)
                     val hasSource = db.rawQuery("SELECT 1 FROM sync_replica WHERE record_id = ? UNION ALL SELECT 1 FROM sync_outbox WHERE record_id = ?", arrayOf(sourceId, sourceId)).use { it.moveToFirst() }
@@ -59,11 +59,11 @@ class SQLiteSyncOutboxStore(
                     db.update("sleep_corrections", ContentValues().apply { putNull("sync_hold_zone") }, "id = ?", arrayOf(correction.id))
                 }
             }
-            db.rawQuery("SELECT COUNT(*) FROM sleep_corrections WHERE sync_hold_zone IS NOT NULL", null).use { it.moveToFirst(); it.getInt(0) }
+            db.rawQuery("SELECT COUNT(*) FROM sleep_corrections WHERE sync_hold_zone = '$HELD_WITHOUT_CLOCK'", null).use { it.moveToFirst(); it.getInt(0) }
         }
         // Asked once this page is committed, as it was marked kept before: a
         // failure to ask does not undo the page.
-        val hasMore = db.rawQuery("SELECT 1 $candidates LIMIT 1", arrayOf(homeZone.id)).use { it.moveToFirst() }
+        val hasMore = db.rawQuery("SELECT 1 $candidates LIMIT 1", null).use { it.moveToFirst() }
         return LocalCorrectionQueueResult(hasMore, held)
     }
 
@@ -223,6 +223,8 @@ class SQLiteSyncOutboxStore(
                 val kind = cursor.getString(1)
                 val payload = Json.parseToJsonElement(cursor.getString(2)).jsonObject
                 if (kind == "correction" && payload["acquisition_method"]?.toString() != "\"health_connect\"") continue
+                // A record gone or back is no revision of its times (ADR-0072).
+                if (kind == "correction" && SourcePresence.isWord(payload)) continue
                 val observationId = payload.string(if (kind == "correction") "target_observation_id" else "observation_id")
                 val revision = SourceSyncRevision(
                     sourceRevisionFromPayload(kind, cursor.getString(2)),
@@ -235,6 +237,27 @@ class SQLiteSyncOutboxStore(
             }
         }
         return revisions
+    }
+
+    override fun ownSources(): Map<String, OwnSource> {
+        val db = readable()
+        val starts = HashMap<String, Instant>()
+        // Every revision this phone read of a source it synced; the earliest
+        // start is the one a read's window must hold.
+        db.rawQuery(
+            """SELECT e.sync_observation_id, e.start_epoch_second, e.start_nano FROM health_sleep_episodes e
+                WHERE e.acquisition_method = 'HEALTH_CONNECT' AND e.evidence_status = 'IMPORTED'
+                AND (EXISTS (SELECT 1 FROM sync_replica r WHERE r.record_id = e.sync_observation_id)
+                    OR EXISTS (SELECT 1 FROM sync_outbox o WHERE o.record_id = e.sync_observation_id))""",
+            null,
+        ).use { cursor ->
+            while (cursor.moveToNext()) {
+                val start = Instant.ofEpochSecond(cursor.getLong(1), cursor.getLong(2))
+                starts.merge(cursor.getString(0), start) { a, b -> if (b.isBefore(a)) b else a }
+            }
+        }
+        val words = providerWords(db)
+        return starts.mapValues { (id, start) -> OwnSource(start, words[id] == true) }
     }
 
     override fun pendingCount(): Int {
@@ -287,6 +310,14 @@ class SQLiteSyncOutboxStore(
     }
 
     companion object {
+        /**
+         * Marks a correction whose source has no clock recorded, so it waits
+         * on this phone (ADR-0073). A night away is not held, so a correction
+         * held under an earlier rule, marked with the home zone, is looked at
+         * again.
+         */
+        const val HELD_WITHOUT_CLOCK = "no_clock"
+
         const val OUTBOX_TABLE = "sync_outbox"
         const val COLUMN_RECORD_ID = "record_id"
         const val COLUMN_KIND = "kind"
@@ -347,6 +378,7 @@ internal fun outboxObservationId(kind: String, payload: String): String =
             // A report belongs to nothing but itself.
             SourceReporting.KIND -> "report_id"
             StatusReporting.KIND -> "status_id"
+            SharedChoices.KIND -> "setting_id"
             else -> "observation_id"
         },
     )

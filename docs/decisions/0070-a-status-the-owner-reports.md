@@ -59,6 +59,9 @@ what a report is, who may see it, and who decides.
   owner's state, and learns it only while the owner has said so.
 - The projection that crosses to the portal gains one optional object, `reported`, built by
   `reportedFor` from the link's level. The private record never crosses.
+- The queue of agent proposals names the actions it holds in a table constraint. A queue made
+  before status proposals is made again, and what waited in it is let go: a proposal waits a day
+  at most and is never synced.
 - A phone must accept the `status` kind to keep syncing. It also now accepts `event`
   ([ADR-0068](0068-events-the-owner-adds.md)): refusing either stopped its downloads at the
   first one.
@@ -82,13 +85,27 @@ data. That run found faults that were not about status, and they are fixed with 
 11. **A report shows the moment it is made.** The phone's screen clock ticks every half minute,
     and a report made since the last tick was dated after it and waited for the next.
 
+## Built the same week
+
+12. **An assistant reads the status and proposes one; only the owner reports it.**
+    `get_reported_status` on the computer's own endpoint gives the status that stands, when it
+    lapses, whether links may show it, and the owner's two choices. `propose_report_status` is
+    a registered proposal (ADR-0050) that waits on the computer like a dose (ADR-0051): a status
+    and optionally its length, or `cleared`. It cannot say who sees the report. Accepting it
+    shares the report or not by the owner's own setting, and the card says which before the
+    owner accepts. The report and the decision are made in one transaction.
+13. **The chat assistant's provider is not sent the status.** It is not in the assistant
+    snapshot, and the action is not offered to the chat model or the server's connector. A
+    statement about the owner at this moment stays on the owner's computer unless they connect
+    an agent to its local endpoint themselves.
+14. **The phone chooses how long a report lasts**: the usual length, or 1, 2, 4 or 8 hours, for
+    the next report only. Its share switch applies to the next report and stays as left, and
+    says that the computer keeps its own.
+
 ## Not built here
 
-- **The assistant cannot yet read or propose a status.** `AGENTS.md` asks every feature for an
-  agent-operable interface. The assistant's snapshot and its allowlisted actions do not include
-  the reported status, so a person using ZeitBoard by voice cannot set one. It needs a snapshot
-  field, a propose-only action through the approval gate and their contract tests.
-- **The phone cannot choose how long a status lasts or share one report differently from the
-  rest.** It uses the default lifetimes and its one share setting. The computer has both.
-- **Settings do not sync.** The share default is kept separately on each device. See
-  `docs/settings-architecture-review-2026-11-15.md`.
+- **Settings do not sync.** The share default is kept separately on each device, and each
+  switch now says so. See `docs/settings-architecture-review-2026-11-15.md`. (Built since:
+  [ADR-0074](0074-choices-that-travel-between-devices.md) makes the share default and the sleep
+  buttons' choice travel, and each switch says the other device follows it.)
+- **An assistant cannot propose a change to a setting**, such as the share default.

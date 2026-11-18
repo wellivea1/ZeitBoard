@@ -88,6 +88,7 @@ const (
 	preparedSyncPullSourceReport
 	preparedSyncPullOwnerEvent
 	preparedSyncPullStatus
+	preparedSyncPullSetting
 )
 
 type preparedSyncPullRecord struct {
@@ -100,6 +101,7 @@ type preparedSyncPullRecord struct {
 	report      preparedSourceReport
 	event       preparedOwnerEvent
 	status      preparedStatusReport
+	setting     preparedSettingRecord
 	recordID    string
 	recordKind  string
 }
@@ -249,6 +251,8 @@ func (record preparedSyncPullRecord) seenID() string {
 		return record.report.report.ReportID
 	case preparedSyncPullStatus:
 		return record.status.report.StatusID
+	case preparedSyncPullSetting:
+		return record.setting.record.SettingID
 	case preparedSyncPullOwnerEvent:
 		return ownerevents.RecordID(record.event.record.EventID, record.event.record.Revision)
 	default:
@@ -280,6 +284,8 @@ func (a *syncPullApply) records(prepared []preparedSyncPullRecord) error {
 			applied, err = insertSyncedSourceReportTx(a.ctx, a.tx, record.report)
 		case preparedSyncPullStatus:
 			applied, err = insertSyncedStatusTx(a.ctx, a.tx, record.status, a.syncedAt)
+		case preparedSyncPullSetting:
+			applied, err = insertSyncedSettingTx(a.ctx, a.tx, record.setting, a.syncedAt)
 		case preparedSyncPullOwnerEvent:
 			applied, err = applySyncedOwnerEventTx(a.ctx, a.tx, record.event, a.syncedAt)
 		default:
@@ -434,6 +440,8 @@ func (a *syncPullApply) erase(recordKind, recordID string) (bool, error) {
 		return eraseSourceReportTx(a.ctx, a.tx, recordID, erasedElsewhere)
 	case SyncKindStatus:
 		return eraseStatusReportTx(a.ctx, a.tx, recordID, erasedElsewhere)
+	case SyncKindSetting:
+		return eraseSettingRecordTx(a.ctx, a.tx, recordID, erasedElsewhere)
 	case SyncKindOwnerEvent:
 		return eraseSyncedOwnerEventTx(a.ctx, a.tx, recordID)
 	default:
@@ -492,27 +500,6 @@ func prepareSyncPullRecord(record SyncPullRecord) (preparedSyncPullRecord, error
 		}
 		prepared, err := prepareSyncedTask(value.Task)
 		return preparedSyncPullRecord{kind: preparedSyncPullTask, task: prepared}, err
-	case SyncPullMedication:
-		prepared, err := prepareSyncedMedication(value.Medication)
-		return preparedSyncPullRecord{kind: preparedSyncPullMedication, medication: prepared}, err
-	case SyncPullMedicationEvent:
-		prepared, err := prepareSyncedMedicationEvent(value.Event)
-		return preparedSyncPullRecord{kind: preparedSyncPullMedicationEvent, medication: prepared}, err
-	case SyncPullMedicationCorrection:
-		prepared, err := prepareSyncedMedicationCorrection(value.Correction)
-		return preparedSyncPullRecord{kind: preparedSyncPullMedicationCorrection, medication: prepared}, err
-	case SyncPullMarker:
-		prepared, err := prepareSyncedMarker(value.Marker)
-		return preparedSyncPullRecord{kind: preparedSyncPullMarker, marker: prepared}, err
-	case SyncPullSourceReport:
-		prepared, err := prepareSyncedSourceReport(value)
-		return preparedSyncPullRecord{kind: preparedSyncPullSourceReport, report: prepared}, err
-	case SyncPullStatus:
-		prepared, err := prepareStatusReport(value.Report)
-		return preparedSyncPullRecord{kind: preparedSyncPullStatus, status: prepared}, err
-	case SyncPullOwnerEvent:
-		prepared, err := prepareSyncedOwnerEvent(value.Event)
-		return preparedSyncPullRecord{kind: preparedSyncPullOwnerEvent, event: prepared}, err
 	case SyncPullPlacement:
 		if !contractIdentifier.MatchString(value.PlacementID) {
 			return preparedSyncPullRecord{}, errors.New("placement record id is not a valid identifier")
@@ -531,6 +518,40 @@ func prepareSyncPullRecord(record SyncPullRecord) (preparedSyncPullRecord, error
 			return preparedSyncPullRecord{}, err
 		}
 		return preparedSyncPullRecord{kind: preparedSyncPullTombstone, recordID: value.RecordID, recordKind: value.RecordKind}, nil
+	default:
+		return prepareOwnSyncPullRecord(record)
+	}
+}
+
+// prepareOwnSyncPullRecord prepares the records that stand on their own:
+// medications and their doses, markers, reports, statuses, settings and the
+// owner's events.
+func prepareOwnSyncPullRecord(record SyncPullRecord) (preparedSyncPullRecord, error) {
+	switch value := record.(type) {
+	case SyncPullMedication:
+		prepared, err := prepareSyncedMedication(value.Medication)
+		return preparedSyncPullRecord{kind: preparedSyncPullMedication, medication: prepared}, err
+	case SyncPullMedicationEvent:
+		prepared, err := prepareSyncedMedicationEvent(value.Event)
+		return preparedSyncPullRecord{kind: preparedSyncPullMedicationEvent, medication: prepared}, err
+	case SyncPullMedicationCorrection:
+		prepared, err := prepareSyncedMedicationCorrection(value.Correction)
+		return preparedSyncPullRecord{kind: preparedSyncPullMedicationCorrection, medication: prepared}, err
+	case SyncPullMarker:
+		prepared, err := prepareSyncedMarker(value.Marker)
+		return preparedSyncPullRecord{kind: preparedSyncPullMarker, marker: prepared}, err
+	case SyncPullSourceReport:
+		prepared, err := prepareSyncedSourceReport(value)
+		return preparedSyncPullRecord{kind: preparedSyncPullSourceReport, report: prepared}, err
+	case SyncPullStatus:
+		prepared, err := prepareStatusReport(value.Report)
+		return preparedSyncPullRecord{kind: preparedSyncPullStatus, status: prepared}, err
+	case SyncPullSetting:
+		prepared, err := prepareSettingRecord(value.Record)
+		return preparedSyncPullRecord{kind: preparedSyncPullSetting, setting: prepared}, err
+	case SyncPullOwnerEvent:
+		prepared, err := prepareSyncedOwnerEvent(value.Event)
+		return preparedSyncPullRecord{kind: preparedSyncPullOwnerEvent, event: prepared}, err
 	default:
 		return preparedSyncPullRecord{}, fmt.Errorf("unsupported sync pull record type %T", record)
 	}
@@ -895,7 +916,7 @@ func validateSyncPullTombstone(recordID, recordKind string) error {
 			return fmt.Errorf("%s tombstone record_id must identify a revision", recordKind)
 		}
 		return nil
-	case "placement", SyncKindMedicationEvent, SyncKindMedicationCorrection, SyncKindContextMarker, SyncKindSourceReport, SyncKindStatus:
+	case "placement", SyncKindMedicationEvent, SyncKindMedicationCorrection, SyncKindContextMarker, SyncKindSourceReport, SyncKindStatus, SyncKindSetting:
 		return nil
 	default:
 		return fmt.Errorf("unsupported tombstone record kind %q", recordKind)

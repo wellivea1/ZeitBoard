@@ -298,6 +298,21 @@ the strict v1 marker set, which includes private notes. Individual erasure
 requires typed `DELETE`, then checkpoints the WAL and vacuums SQLite; tests
 assert that a unique private-note marker no longer exists in either file.
 
+### A night Health Connect no longer has (ADR-0072)
+
+When a sleep session the phone synced is no longer in Health Connect, the phone tells the owner's
+server so, and so again if it comes back. The word carries which record and when the phone found
+it, and nothing else: no reason, and no times. The record is kept and left out of estimates, so
+nothing is erased by it; erasing a night is still the owner's own act.
+
+### A night recorded away from home (ADR-0073)
+
+A night recorded while the phone's clock was on another time zone syncs with that clock's UTC
+offset at each end. An offset says roughly how far from home the owner slept. It goes to the
+owner's own server and devices with the night, appears in their own sleep log ("Recorded 6 hours
+ahead of home") and their own export, and no share link, visitor or assistant is sent it. A night
+with no clock recorded at all stays on the phone.
+
 ## Logging
 
 Logs may contain component names, error categories, counts, durations, and
@@ -375,11 +390,25 @@ Who sees a report is set at three points, and each starts private:
   show nothing, and what a link shows can be changed later without making a new link.
 - **Each report** says whether links may show it. One that does not never reaches a page.
 - **Each device** keeps whether new reports are shared by default. It is off until turned on,
-  and the computer and the phone each keep their own.
+  and the choice travels to the owner's other devices, where the newest one made stands
+  (ADR-0074).
+
+An agent the owner connects to the computer's own endpoint can read the status that stands and
+propose one. A proposal waits for the owner like a proposed dose, and cannot say who sees the
+report. The status is not part of what the chat assistant's provider is sent.
 
 A report syncs to the owner's server like any other record, so their other devices show it. Each
 device and the server erase a report seven days after it was made. A visitor who has seen a
 status cannot be made to forget it; a link at the middle level never shows them one.
+
+### Choices that travel between devices (ADR-0074)
+
+Three choices go from one of the owner's devices to the others: whether a status may show on
+share links by default, whether the computer's sleep buttons also report one, and the clock. Each
+change is a small record of which choice, its value and when it was made. It goes to the owner's
+own server, encrypted like their records, and to their other devices, and nowhere else: no link,
+visitor or assistant reads it. Both devices say beside the switch that the other follows it.
+Every other choice stays on the device it was made on.
 
 ### Asking for a time
 
@@ -447,8 +476,9 @@ unreachable backend configuration exposes no tools.
 loopback while it runs, so an agent on the same machine can read state and change
 appearance without the backend. It exposes allowlisted read projections, one direct
 display action (`set_appearance`, reversible and non-health per ADR-0021),
-propose-only scheduling tools that require an enrolled backend, and `propose_log_dose` and
-`propose_add_task` (ADR-0051). It has no approve/apply tool either.
+propose-only scheduling tools that require an enrolled backend, and `propose_log_dose`,
+`propose_add_task` (ADR-0051) and `propose_report_status` (ADR-0070). It has no approve/apply
+tool either.
 
 A proposed dose names a medication by its opaque id, taken or skipped, and optionally when. It
 carries no label, note or amount. A proposed task carries the title the owner spoke, its length

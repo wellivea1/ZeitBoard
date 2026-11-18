@@ -322,7 +322,7 @@ func toAvailabilityDTO(snapshot Snapshot, now time.Time) availabilityDTO {
 	}
 	// Apply the same age rules the rendered page applies, so a JSON consumer
 	// cannot present an out-of-date "awake now" the HTML would have withheld.
-	if !snapshot.GeneratedAt.IsZero() && now.Sub(snapshot.GeneratedAt) >= UnavailableAfter {
+	if snapshot.withheld(now) {
 		dto.Status = StatusInsufficientData
 		return dto
 	}

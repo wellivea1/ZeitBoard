@@ -96,7 +96,7 @@ func buildRedactedContext(input PlanningContext, compact bool) (json.RawMessage,
 			"Create proposals only; never apply schedule changes.",
 			"Use civil-time ranges and confidence.",
 			"No diagnosis, dosing, treatment timing, or exact phase claims.",
-			"If the snapshot's freshness is not current, say why by its freshness_reason (no_evidence: no sleep is recorded yet; evidence_aging or evidence_stale: the records are getting old; expected_sleep_unrecorded: sleep was expected and none is recorded; no_sources_reporting: no source is reporting) and state no current state; if it is withheld, state no time ahead either.",
+			"If the snapshot's freshness is not current, say why by its freshness_reason (no_evidence: no sleep is recorded yet; evidence_aging or evidence_stale: the records are getting old; sleep_record_due: a sleep was expected to be over by now and its record has not arrived yet; expected_sleep_unrecorded: a sleep was expected to be over some hours ago and none is recorded; no_sources_reporting: no source is reporting) and state no current state; if it is withheld, state no time ahead either.",
 		},
 		Snapshot: sanitizeSnapshot(input.Snapshot, input.Now, zoneID, compact),
 	}

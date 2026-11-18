@@ -140,6 +140,11 @@ type App struct {
 	statusSettings StatusSettingsDTO
 	statusRevision uint64
 
+	// noticesMu guards the notes the owner closed.
+	noticesMu       sync.Mutex
+	closedNotices   []string
+	noticesRevision uint64
+
 	regionalMu       sync.RWMutex
 	regional         RegionalSettingsDTO
 	regionalRevision uint64
@@ -321,6 +326,13 @@ type SleepEntryDTO struct {
 	SourceLabel             string               `json:"sourceLabel"`
 	ProvenanceLabel         string               `json:"provenanceLabel"`
 	History                 []SleepCorrectionDTO `json:"history"`
+	// RemovedAtSource says the provider that reported the night has since
+	// deleted it (ADR-0072). It is kept, and left out unless the owner's own
+	// correction stands on it.
+	RemovedAtSource bool `json:"removedAtSource"`
+	// RecordedAway says in words how far from the home clock a night away
+	// was recorded (ADR-0073). Empty for a night at home.
+	RecordedAway string `json:"recordedAway,omitempty"`
 }
 
 type SleepCorrectionDTO struct {
@@ -359,6 +371,9 @@ func NewApp() *App {
 	// The clock is put in use even without a data directory: it is then the
 	// computer's own.
 	app.startClock()
+	// A choice another device made while this one was closed is in use from
+	// the first window (ADR-0074).
+	_, _ = app.followSharedSettings(context.Background())
 	return app
 }
 
@@ -820,7 +835,7 @@ func desktopFreshnessInputs(
 	nextSleep domain.TimeRange,
 	now time.Time,
 ) freshness.Inputs {
-	in := freshness.Inputs{Now: now, ExpectedSleepOnset: nextSleep.Start.UTC}
+	in := freshness.Inputs{Now: now, ExpectedSleepOnset: nextSleep.Start.UTC, ExpectedSleepEnd: nextSleep.End.UTC}
 	for _, session := range state.Sessions {
 		// A record the owner excluded says nothing about where they are now.
 		// Counted here, excluding a bad recent record made an old forecast
@@ -1289,7 +1304,34 @@ func sleepEntryDTO(observation storage.SleepObservationRecord, rawSession, corre
 		SourceLabel:             correctedSession.SourceLabel,
 		ProvenanceLabel:         provenanceLabel(observation.Provenance),
 		History:                 history,
+		RemovedAtSource:         correctedSession.RemovedAtSource,
+		RecordedAway:            recordedAway(observation),
 	}
+}
+
+// recordedAway says how far from the home clock a night was recorded, from
+// the clock the source put on it: "Recorded 6 hours ahead of home". The night
+// itself is drawn on the home clock like every other.
+func recordedAway(observation storage.SleepObservationRecord) string {
+	offsets := observation.SourceOffset
+	if offsets == nil {
+		return ""
+	}
+	location := locationOrUTC(observation.ZoneID)
+	_, homeStart := observation.StartAt.In(location).Zone()
+	_, homeEnd := observation.EndAt.In(location).Zone()
+	apart := time.Duration(offsets.StartSeconds-homeStart) * time.Second
+	if apart == 0 {
+		// The clock changed during the night; the end is where it differs.
+		apart = time.Duration(offsets.EndSeconds-homeEnd) * time.Second
+	}
+	switch {
+	case apart > 0:
+		return "Recorded " + formatDuration(apart) + " ahead of home"
+	case apart < 0:
+		return "Recorded " + formatDuration(apart) + " behind home"
+	}
+	return ""
 }
 
 // newerCorrection orders a night's history, latest first. Two edits can carry
@@ -1315,11 +1357,19 @@ func correctionDTO(correction storage.SleepCorrectionRecord, zoneID string) Slee
 		SupersedesCorrectionIDs: correction.SupersedesCorrectionIDs,
 		CreatedLabel:            displayClock().Format(correction.CreatedAt.In(locationOrUTC(zoneID)), "Jan 2, 3:04 PM"),
 		Reason:                  strings.ReplaceAll(correction.Reason, "_", " "),
-		Summary:                 correctionSummary(correction.Changes, zoneID),
+		Summary:                 correctionSummary(correction, zoneID),
 	}
 }
 
-func correctionSummary(changes storage.SleepCorrectionChanges, zoneID string) string {
+func correctionSummary(correction storage.SleepCorrectionRecord, zoneID string) string {
+	// A provider's word that its record is gone, or back, is no edit.
+	if sleepv1.IsSourcePresence(correction) {
+		if *correction.Changes.Excluded {
+			return "Removed at the source"
+		}
+		return "Back at the source"
+	}
+	changes := correction.Changes
 	var parts []string
 	location := locationOrUTC(zoneID)
 	if changes.StartAt != nil {

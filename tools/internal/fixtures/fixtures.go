@@ -56,6 +56,7 @@ var fixtureManifest = []fixtureSpec{
 	{"v1/sleep-data-export", ManifestEntry{Version: "v1", Name: "sleep-data-export.json", Schema: "sleep-data-export.schema.json"}},
 	{"v1/sync-batch", ManifestEntry{Version: "v1", Name: "sync-batch.json", Schema: "sync-batch.schema.json"}},
 	{"v1/sync-android-source-revision", ManifestEntry{Version: "v1", Name: "sync-android-source-revision.json", Schema: "sync-batch.schema.json"}},
+	{"v1/sync-android-source-presence", ManifestEntry{Version: "v1", Name: "sync-android-source-presence.json", Schema: "sync-batch.schema.json"}},
 	{"v1/sync-erase", ManifestEntry{Version: "v1", Name: "sync-erase.json", Schema: "sync-erase.schema.json"}},
 	{"v1/task-set", ManifestEntry{Version: "v1", Name: "task-set.json", Schema: "task-set.schema.json"}},
 	{"v1/calendar-event-set", ManifestEntry{Version: "v1", Name: "calendar-event-set.json", Schema: "calendar-event-set.schema.json"}},
@@ -354,6 +355,15 @@ type reportedStatus struct {
 	ReportedAt string `json:"reported_at"`
 	ExpiresAt  string `json:"expires_at,omitempty"`
 	Shared     bool   `json:"shared"`
+}
+
+// sharedSetting is one choice the owner made, which their other devices
+// follow (ADR-0074).
+type sharedSetting struct {
+	SettingID string `json:"setting_id"`
+	Name      string `json:"name"`
+	Value     any    `json:"value"`
+	ChangedAt string `json:"changed_at"`
 }
 
 // sourceReport is what a device found when it checked a source (ADR-0054).
@@ -927,6 +937,16 @@ func Build() ([]File, error) {
 				Payload: reportedStatus{
 					StatusID: "status_6071829304a5b6c7", Status: "trying_to_sleep",
 					ReportedAt: ts(generatedAt), ExpiresAt: ts(generatedAt.Add(10 * time.Hour)), Shared: true,
+				},
+			},
+			{
+				Seq:       9,
+				RecordID:  "setting-718293a4b5c6d7e8f90a1b2c",
+				Kind:      "setting",
+				DeviceID:  "device_desktop_01",
+				CreatedAt: ts(generatedAt),
+				Payload: sharedSetting{
+					SettingID: "setting-718293a4b5c6d7e8f90a1b2c", Name: "clock", Value: "24", ChangedAt: ts(generatedAt),
 				},
 			},
 		},
@@ -1545,6 +1565,7 @@ func Build() ([]File, error) {
 		"v1/sleep-data-export":            sleepDataExportFixture,
 		"v1/sync-batch":                   syncBatchFixture,
 		"v1/sync-android-source-revision": androidSourceRevisionFixture(),
+		"v1/sync-android-source-presence": androidSourcePresenceFixture(),
 		"v2/companion":                    companionFixture(false),
 		"v1/sleep-review":                 sleepReviewFixture(),
 		"v2/companion-refused":            companionFixture(true),
@@ -1706,12 +1727,34 @@ func androidSourceRevisionFixture() syncBatch {
 	}}
 }
 
+// A night recorded on another clock, which the provider then removed and
+// put back (ADR-0072, ADR-0073). Android and Go tests consume this fixture too.
+func androidSourcePresenceFixture() syncBatch {
+	const observationID = "hc-90cd6e64cc7f8482c378e0dd"
+	presence := func(seq int, id, at, reason string, removed bool) syncRecord {
+		return syncRecord{Seq: seq, RecordID: id, Kind: "correction", DeviceID: "device_android_synthetic", CreatedAt: at, Payload: map[string]any{
+			"correction_id": id, "target_observation_id": observationID, "created_at": at, "reason": reason, "acquisition_method": "health_connect",
+			"changes": map[string]any{"excluded": removed},
+		}}
+	}
+	return syncBatch{SchemaVersion: "v1", Cursor: 3, Records: []syncRecord{
+		{Seq: 1, RecordID: observationID, Kind: "observation", DeviceID: "device_android_synthetic", CreatedAt: "2026-09-05T05:11:00Z", Payload: map[string]any{
+			"observation_id": observationID, "kind": "sleep_episode", "start_at": "2026-09-04T21:00:00Z", "end_at": "2026-09-05T05:00:00Z", "zone_id": "America/New_York",
+			"sleep":         map[string]any{"classification": "principal"},
+			"provenance":    map[string]any{"acquisition_method": "health_connect", "evidence_status": "directly_observed", "recorded_at": "2026-09-05T05:10:00Z", "source_record_id": "sleep-away"},
+			"source_offset": map[string]any{"start_seconds": 7200, "end_seconds": 7200},
+		}},
+		presence(2, "cor-d77ebd1eed7eac99ad73ecb0", "2026-09-06T12:00:00Z", "source_deleted", true),
+		presence(3, "cor-7f285d0794ca0fabb80f1c6c", "2026-09-07T12:00:00Z", "source_restored", false),
+	}}
+}
+
 func sleepReviewFixture() map[string]any {
 	window := map[string]any{"start_at": "2026-03-05T04:30:00.123456789Z", "end_at": "2026-03-05T12:30:00.987654321Z", "zone_id": zoneID}
 	return map[string]any{
 		"schema_version": "v1", "source_cursor": 3, "generated_at": "2026-03-05T14:00:00Z",
 		"observation_id": "obs_review", "source_revision": "2026-03-05T12:35:00Z",
-		"source_window": window, "effective_window": window, "sleep_classification": "principal", "excluded": false, "needs_review": true,
+		"source_window": window, "effective_window": window, "sleep_classification": "principal", "excluded": false, "removed_at_source": false, "needs_review": true,
 		"manual_corrections": []any{
 			map[string]any{"correction_id": "cor_review_1", "created_at": "2026-03-05T13:00:00Z", "changes": map[string]any{"start_at": "2026-03-05T04:10:00Z"}},
 			map[string]any{"correction_id": "cor_review_2", "created_at": "2026-03-05T13:00:00Z", "changes": map[string]any{"start_at": "2026-03-05T04:20:00Z", "excluded": true}},

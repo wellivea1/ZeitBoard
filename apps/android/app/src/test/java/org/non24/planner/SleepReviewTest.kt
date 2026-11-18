@@ -18,6 +18,8 @@ class SleepReviewTest {
     @Test fun `resolution retains reviewed heads source revision exact instants and exclusion`() {
         val review = parseSleepReview(sleepReviewFixture())
         assertTrue(review.needsReview)
+        assertFalse(review.removedAtSource)
+        assertNull(review.sourceOffset)
         assertEquals(2, review.edits.size)
         assertEquals("2026-03-04 23:30:00.123456789 -05:00", formatReviewInput(review.source.start, review.source.zoneId))
         val record = manualCorrection(review, "cor_resolution", review.generatedAt, review.effective.start, review.effective.end, "nap", true)
@@ -39,7 +41,28 @@ class SleepReviewTest {
             JsonObject(valid + ("schema_version" to JsonPrimitive("v99"))),
             JsonObject(valid + ("manual_corrections" to JsonArray(List(2) { valid.getValue("manual_corrections").jsonArray.first() }))),
             JsonObject(valid + ("unexpected_notes" to JsonPrimitive("synthetic private note"))),
+            JsonObject(valid - "removed_at_source"),
+            JsonObject(valid + ("source_offset" to buildJsonObject { put("start_seconds", 7200) })),
+            JsonObject(valid + ("source_offset" to buildJsonObject { put("start_seconds", 90000); put("end_seconds", 0) })),
         ).forEach { assertTrue(runCatching { parseSleepReview(it) }.isFailure) }
+    }
+
+    // ADR-0072 and ADR-0073: the review says a night is gone from Health
+    // Connect, and how far from home a night away was recorded.
+    @Test fun `a review says a night is gone at its source and how far from home it was recorded`() {
+        val valid = sleepReviewFixture()
+        val review = parseSleepReview(JsonObject(valid + mapOf(
+            "removed_at_source" to JsonPrimitive(true),
+            "source_offset" to buildJsonObject { put("start_seconds", 3600); put("end_seconds", 3600) },
+        )))
+        assertTrue(review.removedAtSource)
+        assertEquals(SourceOffset(3600, 3600), review.sourceOffset)
+        // March 5 2026 in New York is UTC-5, so UTC+1 is six hours ahead.
+        val zone = java.time.ZoneId.of("America/New_York")
+        assertEquals("Recorded 6 hours ahead of home", recordedAway(review.sourceOffset, review.source.start, review.source.end, zone))
+        assertEquals("Recorded 5 hours 30 minutes behind home",
+            recordedAway(SourceOffset(-18000, -37800), review.source.start, review.source.end, zone))
+        assertNull(recordedAway(null, review.source.start, review.source.end, zone))
     }
 
     @Test fun `cached offline review saves once without hiding a provider revision`() = runTest {

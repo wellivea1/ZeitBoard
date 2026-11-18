@@ -235,3 +235,61 @@ func TestRejectsMalformedDateTime(t *testing.T) {
 		t.Fatal("expected rejection: generated_at is not a valid date-time")
 	}
 }
+
+// A provider says its record is gone or back, and nothing else with it
+// (ADR-0072); a night away carries both ends of its own clock (ADR-0073).
+func TestSleepContractHoldsProviderRemovalAndTheSourceClock(t *testing.T) {
+	set, root := testSet(t)
+	if err := set.ValidateFile("sync-batch.schema.json", filepath.Join(root, "testdata", "v1", "sync-android-source-presence.json")); err != nil {
+		t.Fatalf("the provider presence fixture does not validate: %v", err)
+	}
+	correction := func(fields string) []byte {
+		return []byte(`{"schema_version": "v1", "generated_at": "2026-09-08T00:00:00Z", "corrections": [{
+			"correction_id": "cor-bad-01", "target_observation_id": "hc-synthetic-01", "created_at": "2026-09-06T12:00:00Z", ` + fields + `}]}`)
+	}
+	for name, good := range map[string][]byte{
+		"removed":         correction(`"reason": "source_deleted", "acquisition_method": "health_connect", "changes": {"excluded": true}`),
+		"restored":        correction(`"reason": "source_restored", "acquisition_method": "health_connect", "changes": {"excluded": false}`),
+		"a revision":      correction(`"reason": "source_conflict", "acquisition_method": "health_connect", "changes": {"start_at": "2026-09-05T02:00:00Z"}`),
+		"the owner's own": correction(`"reason": "source_conflict", "changes": {"excluded": true}`),
+	} {
+		if err := set.ValidateBytes("correction-set.schema.json", good); err != nil {
+			t.Errorf("%s was refused: %v", name, err)
+		}
+	}
+	for name, bad := range map[string][]byte{
+		"a person removing it":      correction(`"reason": "source_deleted", "acquisition_method": "manual", "changes": {"excluded": true}`),
+		"nobody removing it":        correction(`"reason": "source_deleted", "changes": {"excluded": true}`),
+		"removed but counted":       correction(`"reason": "source_deleted", "acquisition_method": "health_connect", "changes": {"excluded": false}`),
+		"removed with new times":    correction(`"reason": "source_deleted", "acquisition_method": "health_connect", "changes": {"excluded": true, "start_at": "2026-09-05T02:00:00Z"}`),
+		"removed without saying":    correction(`"reason": "source_deleted", "acquisition_method": "health_connect", "changes": {"start_at": "2026-09-05T02:00:00Z"}`),
+		"restored but left out":     correction(`"reason": "source_restored", "acquisition_method": "health_connect", "changes": {"excluded": true}`),
+		"a revision leaving it out": correction(`"reason": "source_conflict", "acquisition_method": "health_connect", "changes": {"excluded": true}`),
+		"a provider's user edit":    correction(`"reason": "user_edit", "acquisition_method": "health_connect", "changes": {"start_at": "2026-09-05T02:00:00Z"}`),
+	} {
+		if err := set.ValidateBytes("correction-set.schema.json", bad); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+
+	observation := func(extra string) []byte {
+		return []byte(`{"schema_version": "v1", "generated_at": "2026-09-08T00:00:00Z", "observations": [{
+			"observation_id": "hc-synthetic-01", "start_at": "2026-09-04T21:00:00Z", "end_at": "2026-09-05T05:00:00Z", "zone_id": "America/New_York",
+			"provenance": {"acquisition_method": "health_connect", "evidence_status": "directly_observed", "recorded_at": "2026-09-05T05:10:00Z"}, ` + extra + `}]}`)
+	}
+	sleep := `"kind": "sleep_episode", "sleep": {"classification": "principal"}`
+	if err := set.ValidateBytes("observation-set.schema.json", observation(sleep+`, "source_offset": {"start_seconds": 7200, "end_seconds": -14400}`)); err != nil {
+		t.Errorf("a night away was refused: %v", err)
+	}
+	for name, bad := range map[string][]byte{
+		"one end":             observation(sleep + `, "source_offset": {"start_seconds": 7200}`),
+		"a zone name":         observation(sleep + `, "source_offset": {"start_seconds": 7200, "end_seconds": 7200, "zone_id": "Europe/Berlin"}`),
+		"past any clock":      observation(sleep + `, "source_offset": {"start_seconds": 7200, "end_seconds": 64801}`),
+		"a fraction":          observation(sleep + `, "source_offset": {"start_seconds": 7200.5, "end_seconds": 7200}`),
+		"activity on a clock": observation(`"kind": "activity_interval", "activity": {"level": "idle"}, "source_offset": {"start_seconds": 7200, "end_seconds": 7200}`),
+	} {
+		if err := set.ValidateBytes("observation-set.schema.json", bad); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+}

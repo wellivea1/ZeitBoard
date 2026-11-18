@@ -59,7 +59,7 @@
         },
         "kind": {
           "type": "string",
-          "enum": ["observation", "correction", "task", "placement", "event", "medication", "medication_event", "medication_correction", "context_marker", "source_report", "status"]
+          "enum": ["observation", "correction", "task", "placement", "event", "medication", "medication_event", "medication_correction", "context_marker", "source_report", "status", "setting"]
         },
         "createdAt": {
           "$ref": "common.schema.json#/$defs/timestamp"
@@ -88,7 +88,7 @@
         },
         "kind": {
           "type": "string",
-          "enum": ["observation", "correction", "task", "placement", "event", "medication", "medication_event", "medication_correction", "context_marker", "source_report", "status", "tombstone"]
+          "enum": ["observation", "correction", "task", "placement", "event", "medication", "medication_event", "medication_correction", "context_marker", "source_report", "status", "setting", "tombstone"]
         },
         "deviceId": {
           "$ref": "common.schema.json#/$defs/identifier"
@@ -140,6 +140,9 @@
         },
         {
           "$ref": "#/$defs/statusPayload"
+        },
+        {
+          "$ref": "#/$defs/settingPayload"
         },
         {
           "$ref": "#/$defs/tombstonePayload"
@@ -232,6 +235,53 @@
         }
       ]
     },
+    "settingPayload": {
+      "description": "One choice the owner made on one device, which their other devices follow through their own server (ADR-0074). Each change is a new record; for each name, the one with the latest changed_at stands, and of two alike the greater setting_id.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["setting_id", "name", "value", "changed_at"],
+      "properties": {
+        "setting_id": {
+          "$ref": "common.schema.json#/$defs/identifier"
+        },
+        "name": {
+          "enum": ["share_status_by_default", "follow_sleep_taps", "clock"]
+        },
+        "value": {
+          "description": "On or off, or for the clock: the device's own format, 12-hour or 24-hour.",
+          "type": ["boolean", "string"]
+        },
+        "changed_at": {
+          "$ref": "common.schema.json#/$defs/timestamp"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "name": {
+                "const": "clock"
+              }
+            },
+            "required": ["name"]
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "enum": ["system", "12", "24"]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "value": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      ]
+    },
     "eventPayload": {
       "description": "One revision of an event the owner added (ADR-0068). Each change is a new record, \"<event_id>_r<revision>\"; every device keeps the highest revision, and of two alike in number the later updated_at, then the greater bytes.",
       "type": "object",
@@ -277,7 +327,7 @@
         },
         "record_kind": {
           "type": "string",
-          "enum": ["observation", "correction", "task", "placement", "event", "medication", "medication_event", "medication_correction", "context_marker", "source_report", "status"]
+          "enum": ["observation", "correction", "task", "placement", "event", "medication", "medication_event", "medication_correction", "context_marker", "source_report", "status", "setting"]
         }
       }
     },
@@ -449,6 +499,23 @@
             "properties": {
               "payload": {
                 "$ref": "#/$defs/statusPayload"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "setting"
+              }
+            },
+            "required": ["kind"]
+          },
+          "then": {
+            "properties": {
+              "payload": {
+                "$ref": "#/$defs/settingPayload"
               }
             }
           }

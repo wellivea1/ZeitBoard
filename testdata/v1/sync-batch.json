@@ -132,6 +132,19 @@
         "expires_at": "2026-03-15T10:00:00Z",
         "shared": true
       }
+    },
+    {
+      "seq": 9,
+      "recordId": "setting-718293a4b5c6d7e8f90a1b2c",
+      "kind": "setting",
+      "deviceId": "device_desktop_01",
+      "createdAt": "2026-03-15T00:00:00Z",
+      "payload": {
+        "setting_id": "setting-718293a4b5c6d7e8f90a1b2c",
+        "name": "clock",
+        "value": "24",
+        "changed_at": "2026-03-15T00:00:00Z"
+      }
     }
   ]
 }

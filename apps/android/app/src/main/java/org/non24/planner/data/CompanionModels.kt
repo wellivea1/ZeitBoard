@@ -14,7 +14,11 @@ data class SyncedTask(
     val earliestStart: Instant?, val deadline: Instant?, val preferredAfterWakeMinutes: Int?,
     val minimumConfidence: String? = null,
 )
-data class SyncedSleep(val id: String, val start: Instant, val end: Instant, val zoneId: String, val corrected: Boolean)
+data class SyncedSleep(
+    val id: String, val start: Instant, val end: Instant, val zoneId: String, val corrected: Boolean,
+    /** Health Connect no longer has it (ADR-0072); it is kept and left out unless the owner corrected it. */
+    val removed: Boolean = false,
+)
 data class ServerForecast(val sleep: TimeWindow, val waking: TimeWindow, val zoneId: String)
 data class CompanionProjection(
     val cursor: Long, val generatedAt: Instant, val validUntil: Instant, val algorithm: String,
@@ -125,6 +129,7 @@ internal fun validatePulledPayload(id: String, kind: String, payload: JsonObject
         SourceReporting.KIND -> validateSyncedSourceReport(id, payload)
         StatusReporting.KIND -> validateSyncedStatus(id, payload)
         "event" -> validateSyncedEvent(id, payload)
+        SharedChoices.KIND -> parseSharedChoice(id, payload)
         "tombstone" -> {
             payload.exactKeys(setOf("record_id"), setOf("record_kind"))
             require(payload.string("record_id") == id)
@@ -138,7 +143,7 @@ internal fun validatePulledPayload(id: String, kind: String, payload: JsonObject
 internal val SYNC_RECORD_KINDS = setOf(
     "observation", "correction", "task", "placement",
     "medication", "medication_event", "medication_correction", "context_marker", SourceReporting.KIND,
-    StatusReporting.KIND, "event",
+    StatusReporting.KIND, "event", SharedChoices.KIND,
 )
 
 /** A source report a phone sent (ADR-0054): a read states its window and held count, nothing else does. */

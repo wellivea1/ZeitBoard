@@ -109,5 +109,8 @@ in `usability-review-2026-11-13.md` and not built:
 - a reported current status ("trying to sleep", "awake", "do not disturb") that syncs and expires
   (built since: [ADR-0070](0070-a-status-the-owner-reports.md));
 - freshness thresholds that follow the cycle length, so a healthy 27-hour source is not read as
-  stale near the end of each waking day;
-- Health Connect sessions the provider deleted, and sessions recorded in another time zone.
+  stale near the end of each waking day (built since:
+  [ADR-0071](0071-freshness-follows-the-forecast.md));
+- Health Connect sessions the provider deleted, and sessions recorded in another time zone
+  (built since: [ADR-0072](0072-a-night-its-source-removed.md) and
+  [ADR-0073](0073-a-night-recorded-away-from-home.md)).

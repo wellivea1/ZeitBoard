@@ -3,9 +3,12 @@ import {
   decideAgentProposal,
   loadAgentProposals,
   normalizeAgentProposals,
+  proposalAction,
   proposalIsWaiting,
+  proposalName,
   proposalSubject,
   proposedDoseWording,
+  proposedStatusWording,
   proposedTaskWording,
 } from "./agentProposals";
 
@@ -103,5 +106,72 @@ describe("assistant proposals", () => {
     expect(proposedTaskWording({ title: "Taxes", durationMinutes: 120 }, at)).toBe("2 hours");
     expect(proposalSubject(readDose!)).toBe("the dose of Synthetic evening tablet");
     expect(proposalSubject(readTask!)).toBe("the task “Call the pharmacy”");
+  });
+
+  // A status the assistant asked the owner to report (ADR-0070). The card
+  // says how long it would stand and who would see it before it is accepted,
+  // because the assistant cannot choose either beyond the length.
+  it("reads a proposed status, and says what accepting it does", () => {
+    const reported = {
+      status: "trying_to_sleep",
+      label: "Trying to sleep",
+      minutes: 90,
+      shared: false,
+    };
+    const status = {
+      ...base,
+      proposalId: "agent_proposal_status",
+      title: "Report status",
+      reported,
+    };
+    const read = normalizeAgentProposals({ pending: [status], history: [], nextExpiryAt: "" });
+    const proposal = read?.pending[0];
+    if (proposal?.kind !== "status") throw new Error("a status proposal did not read as one");
+    expect(proposalName(proposal)).toBe("Trying to sleep");
+    expect(proposalSubject(proposal)).toBe("the status “Trying to sleep”");
+    expect(proposalAction(proposal)).toEqual({ action: "report", done: "Reported" });
+    expect(proposedStatusWording(proposal.reported)).toBe(
+      "for 1 hour 30 minutes, kept to your own devices",
+    );
+    expect(proposedStatusWording({ ...proposal.reported, minutes: 120, shared: true })).toBe(
+      "for 2 hours, and share links you allowed may show it",
+    );
+
+    const cleared = { status: "cleared", label: "Cleared", minutes: 0, shared: false };
+    const taken = normalizeAgentProposals({
+      pending: [{ ...status, reported: cleared }],
+      history: [],
+      nextExpiryAt: "",
+    })?.pending[0];
+    if (taken?.kind !== "status") throw new Error("taking a status back did not read");
+    expect(proposalName(taken)).toBe("Clear your status");
+    expect(proposalAction(taken)).toEqual({ action: "clear", done: "Cleared" });
+    expect(proposedStatusWording(taken.reported)).toBe("takes back the status you reported");
+
+    // Out of the contract, the whole queue is refused.
+    for (const bad of [
+      { ...reported, status: "asleep" },
+      { ...reported, minutes: 0 },
+      { ...reported, minutes: 2000 },
+      { ...cleared, minutes: 10 },
+      { ...cleared, shared: true },
+      { status: "awake", label: "Awake", minutes: 60 },
+    ]) {
+      expect(
+        normalizeAgentProposals({
+          pending: [{ ...status, reported: bad }],
+          history: [],
+          nextExpiryAt: "",
+        }),
+      ).toBeUndefined();
+    }
+    // A proposal is one thing: a status that is also a task is refused.
+    expect(
+      normalizeAgentProposals({
+        pending: [{ ...status, task: task.task }],
+        history: [],
+        nextExpiryAt: "",
+      }),
+    ).toBeUndefined();
   });
 });

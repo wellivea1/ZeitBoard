@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  clockChangedEvent,
   loadClockSetting,
   saveClockSetting,
   type ClockPreference,
@@ -46,15 +47,20 @@ export function ClockSettings() {
 
   useEffect(() => {
     let current = true;
-    void loadClockSetting().then((loaded) => {
-      if (!current) return;
-      // A desktop that does not answer is not stood in for, as the browser's
-      // clock would claim to be Windows' on any system.
-      if (loaded) setSetting(loaded);
-      else setError("The clock setting could not be read. The window keeps the clock it has.");
-    });
+    const load = () =>
+      void loadClockSetting().then((loaded) => {
+        if (!current) return;
+        // A desktop that does not answer is not stood in for, as the browser's
+        // clock would claim to be Windows' on any system.
+        if (loaded) setSetting(loaded);
+        else setError("The clock setting could not be read. The window keeps the clock it has.");
+      });
+    load();
+    // A clock chosen on the owner's phone is followed here (ADR-0074).
+    window.addEventListener(clockChangedEvent, load);
     return () => {
       current = false;
+      window.removeEventListener(clockChangedEvent, load);
     };
   }, []);
 
@@ -83,7 +89,8 @@ export function ClockSettings() {
         <h2 id="clock-title">Clock</h2>
         <p className="settings-copy">
           How every time is written, in the window and in what ZeitBoard prepares for you. Records
-          are kept the same either way.
+          are kept the same either way. Your phone follows the clock you choose here through your
+          own server, and a clock chosen there is followed here.
         </p>
       </div>
       {setting && (

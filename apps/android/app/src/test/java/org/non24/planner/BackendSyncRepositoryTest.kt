@@ -407,16 +407,19 @@ class BackendSyncRepositoryTest {
         assertFalse(config.load() != null)
     }
 
+    // ADR-0073: a night away uploads with its own clock; only a night with no
+    // clock recorded stays on the phone.
     @Test
-    fun `travelling episodes are counted as held rather than pushed`() = runTest {
+    fun `travelling episodes upload and only an episode with no clock is held`() = runTest {
         val (repository, outbox, _) = repository()
         val travelling = episode(0).copy(
             startZoneOffset = ZoneOffset.ofHours(9),
             endZoneOffset = ZoneOffset.ofHours(9),
         )
-        repository.enqueue(listOf(travelling, episode(1)))
+        val unclocked = episode(2).copy(startZoneOffset = null, endZoneOffset = null)
+        repository.enqueue(listOf(travelling, episode(1), unclocked))
 
-        assertEquals(1, outbox.pendingCount())
+        assertEquals(2, outbox.pendingCount())
         assertEquals(1, repository.status.value.heldCount)
     }
 

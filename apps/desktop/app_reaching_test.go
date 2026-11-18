@@ -1,9 +1,6 @@
 package main
 
 import (
-	"errors"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -377,85 +374,5 @@ func TestASavedListSurvivesARestart(t *testing.T) {
 	}
 	if envelope.Revision == 0 {
 		t.Error("the restored list has no revision, so the next edit cannot detect a conflict")
-	}
-}
-
-// The single schedule kept before ADR-0056 becomes one person with the same
-// hours on each of its days, and the old file goes once the list is written.
-func TestTheOldScheduleCarriesOverAsOnePerson(t *testing.T) {
-	for _, testCase := range []struct {
-		name   string
-		legacy legacyReachingHours
-		label  string
-	}{
-		{
-			name: "a schedule that was on",
-			legacy: legacyReachingHours{
-				Enabled: true, Label: "The clinic", StartLocal: "22:00", EndLocal: "06:00",
-				Days: []int{4, 2}, ZoneID: "Europe/Berlin",
-			},
-			label: "The clinic",
-		},
-		{
-			name: "a schedule that was off, with no name",
-			legacy: legacyReachingHours{
-				StartLocal: "09:00", EndLocal: "17:00", Days: []int{1, 2, 3, 4, 5}, ZoneID: defaultZoneID,
-			},
-			label: "Reaching hours",
-		},
-	} {
-		t.Run(testCase.name, func(t *testing.T) {
-			app := newTestApp(t)
-			legacyPath := filepath.Join(app.configDir, legacyReachingFileName)
-			if err := legacyReachingStore(legacyPath).write(testCase.legacy, 3); err != nil {
-				t.Fatal(err)
-			}
-			if err := app.loadReachingFromDisk(); err != nil {
-				t.Fatalf("load: %v", err)
-			}
-			envelope, err := app.GetReachingHours()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if len(envelope.State.Contacts) != 1 || envelope.Revision != 3 {
-				t.Fatalf("carried over %+v at revision %d", envelope.State, envelope.Revision)
-			}
-			contact := envelope.State.Contacts[0]
-			if contact.Label != testCase.label || contact.Off == testCase.legacy.Enabled ||
-				contact.ZoneID != testCase.legacy.ZoneID || len(contact.Hours) != len(testCase.legacy.Days) {
-				t.Fatalf("carried over as %+v", contact)
-			}
-			for index, day := range contact.Hours {
-				if day.StartLocal != testCase.legacy.StartLocal || day.EndLocal != testCase.legacy.EndLocal ||
-					(index > 0 && day.Day <= contact.Hours[index-1].Day) {
-					t.Errorf("day %+v", day)
-				}
-			}
-			if _, err := os.Stat(filepath.Join(app.configDir, reachingFileName)); err != nil {
-				t.Errorf("the list was not written: %v", err)
-			}
-			if _, err := os.Stat(legacyPath); !errors.Is(err, os.ErrNotExist) {
-				t.Errorf("the old file is still there: %v", err)
-			}
-		})
-	}
-}
-
-// If the old file outlived the move, the list wins, and the old schedule is
-// not carried over a second time.
-func TestTheListWinsOverAnOldFileThatOutlivedTheMove(t *testing.T) {
-	app := newTestApp(t)
-	saveReaching(t, app, ReachingContactDTO{Label: "The pharmacy", ZoneID: defaultZoneID, Hours: everyDay("08:00", "20:00")})
-	legacy := legacyReachingHours{Enabled: true, Label: "The clinic", StartLocal: "09:00", EndLocal: "17:00", Days: []int{1}, ZoneID: defaultZoneID}
-	if err := legacyReachingStore(filepath.Join(app.configDir, legacyReachingFileName)).write(legacy, 9); err != nil {
-		t.Fatal(err)
-	}
-	restarted := newTestApp(t)
-	restarted.configDir = app.configDir
-	if err := restarted.loadReachingFromDisk(); err != nil {
-		t.Fatal(err)
-	}
-	if contacts := restarted.currentReachingHours().Contacts; len(contacts) != 1 || contacts[0].Label != "The pharmacy" {
-		t.Fatalf("restored %+v", contacts)
 	}
 }

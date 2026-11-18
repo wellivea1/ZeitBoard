@@ -69,15 +69,11 @@ func (a *App) GetStorageProtection() (StorageProtectionDTO, error) {
 		}, nil
 	}
 
-	candidates := []struct{ name, path string }{
+	candidates := append([]struct{ name, path string }{
 		{"Data folder", dir},
 		{"Local database and backend credential", filepath.Join(dir, desktopDatabaseFile)},
 		{"Write-ahead log", filepath.Join(dir, desktopDatabaseFile+"-wal")},
-		{"Display settings", filepath.Join(dir, appearanceFileName)},
-		{"Reaching hours", filepath.Join(dir, reachingFileName)},
-		{"Clock", filepath.Join(dir, regionalFileName)},
-		{"Status choices", filepath.Join(dir, statusSettingsFileName)},
-	}
+	}, settingsFilePaths(dir)...)
 
 	report := StorageProtectionDTO{
 		State:    "ok",

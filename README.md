@@ -49,13 +49,18 @@ acceptance gate.
   passes the backtest gate (ADR-0031).
 - **Your own server.** The self-hosted backend provides encrypted sync, server-side projections,
   passcode-protected availability links, time requests and notifications. The Android companion
-  syncs Health Connect sleep, shows forecasts and tasks, and records doses as taken or skipped.
-  The owner can report a status (awake, trying to sleep, do not disturb) from the computer or
-  the phone. It always ends, stays private unless the owner lets a link show it, and each link
-  can show it in full, as "not a good time" only, or not at all (ADR-0070).
+  syncs Health Connect sleep, including nights recorded away from home and word of nights the
+  source removed (ADR-0072, ADR-0073), shows forecasts and tasks, and records doses as taken or
+  skipped. The owner can report a status (awake, trying to sleep, do not disturb) from the
+  computer or the phone. It always ends, stays private unless the owner lets a link show it, and
+  each link can show it in full, as "not a good time" only, or not at all (ADR-0070). Sharing
+  that status by default and the clock follow the owner's newest choice on either device
+  (ADR-0074), and the records count as current for as long as the forecast holds (ADR-0071).
 - **Assistants.** The assistant and agents propose and never apply. The assistant uses the
   server's own provider key, or the owner's ChatGPT plan through a sign-in the server holds
   (ADR-0066). ZeitBoard also offers a local MCP connector, a Claude Desktop extension and a skill.
+  Through the local connector an agent can propose a task, a dose or a status to report; each
+  waits for the owner on Home.
 - **This computer.** Local files are restricted to the owner's account. Windows can encrypt them
   by choice (ADR-0063). Everything can be exported or erased.
 - Browser-only desktop preview data is synthetic and visibly labeled `Sample data`; it is not used

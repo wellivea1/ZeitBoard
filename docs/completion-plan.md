@@ -2017,8 +2017,41 @@ are kept, and the phone tested on the emulator. All three are done and not commi
 - **Settings architecture review**: `settings-architecture-review-2026-11-15.md`. Eight findings
   and seven recommendations; none of the recommendations is built.
 
-Still open: the assistant cannot read or propose a status; the phone cannot choose how long one
-lasts; freshness that follows the cycle length; provider deletions and travel on the phone.
+Built after that, the same day:
+
+- **An assistant reads the status and proposes one** (`get_reported_status`,
+  `propose_report_status`). The proposal waits on Home like a dose and cannot say who sees the
+  report. The chat assistant's provider is not sent the status.
+- **The phone chooses how long a report lasts.**
+- **From the settings review**: one table of settings files with a test that keeps it complete;
+  closed notices kept by the desktop in `notices.json`; each sharing switch says it is that
+  device's alone; the old `reaching-hours.json` reader removed. One finding of the review was
+  wrong (appearance is already kept the right way round) and one recommendation is withdrawn.
+
+Still open: freshness that follows the cycle length; provider deletions and travel on the phone;
+settings that sync between devices; settings an assistant can propose changes to.
+
+### Freshness, removed nights, nights away and choices that travel — 2026-11-17
+
+The owner asked for the four left open above and chose each one's rule (ADR-0071 to ADR-0074).
+
+- **Freshness follows the forecast** (ADR-0071). The records are current through the waking
+  stretch and the sleep the forecast expects, whatever the cycle length. When the latest likely
+  wake passes with no record, Home adds its caution for six hours, then withholds. Each share-page
+  snapshot keeps both instants. A simulated 27-hour history walks through the materializer.
+- **A night Health Connect no longer has** (ADR-0072). The phone says so after a complete read,
+  for its own synced nights that began a day or more inside the window, and says so again if the
+  night comes back. The night is kept, left out, and marked on both devices; the owner's own
+  correction counts it again.
+- **A night recorded away** (ADR-0073). It syncs with its own clock's offsets, counts, and says
+  how far from home it was recorded. Only a night with no clock at all is held.
+- **Choices that travel** (ADR-0074). Sharing a status by default, the sleep buttons reporting
+  one, and the clock are `setting` records; the newest made anywhere stands. The phone gained the
+  computer's three clocks.
+- The phone writes the server's shared fixture for a removal and return of a night away byte for
+  byte, and its review reader accepts the server's new fields, which it had refused.
+
+Still open: settings an assistant can propose changes to.
 
 ## Where the completion goal stands — 2026-09-27
 

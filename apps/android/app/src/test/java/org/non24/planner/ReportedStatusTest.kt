@@ -35,6 +35,18 @@ class ReportedStatusTest {
     }
 
     @Test
+    fun aReportLastsAsLongAsTheOwnerChose() {
+        val hour = statusRecord("status-0a1b2c3e", StatusReporting.TRYING_TO_SLEEP, noon, shared = false, minutes = 60)
+        assertEquals(noon.plusSeconds(3600), parseSyncedStatus(hour.recordId, payload(hour.payload), pending = true).expiresAt)
+        // Zero is the usual length, and the choices offered are all within a day.
+        assertEquals(listOf("Usual", "1 h", "2 h", "4 h", "8 h"), StatusReporting.LIFETIME_CHOICES.map(StatusReporting::lifetimeWords))
+        assertThrows(Exception::class.java) { statusRecord("status-0a1b2c3f", StatusReporting.AWAKE, noon, shared = false, minutes = 1441) }
+        assertThrows(Exception::class.java) { statusRecord("status-0a1b2c40", StatusReporting.AWAKE, noon, shared = false, minutes = 3) }
+        // Taking a status back lasts no time.
+        assertThrows(Exception::class.java) { statusRecord("status-0a1b2c41", StatusReporting.CLEARED, noon, shared = false, minutes = 60) }
+    }
+
+    @Test
     fun takingAStatusBackSharesNothingAndHasNoExpiry() {
         val record = statusRecord("status-cleared1", StatusReporting.CLEARED, noon, shared = true)
         val sent = payload(record.payload)
